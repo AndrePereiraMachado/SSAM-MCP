@@ -4,6 +4,7 @@
 // do not, and the section never changes the model part at any budget. Index checks need the lane CLI and skip otherwise.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireBytes } from './fixtures/answer-wire.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -175,11 +176,13 @@ const NON_SCREEN = ['renomear o atributo Email da entidade Contact', 'criar uma 
 for (const lane of ['odc', 'o11']) {
   test(`${lane}: a screen intent carries the lane's OutSystems UI section; other intents do not`, { skip: cliSkip(lane), timeout: 600000 }, async () => {
     const sources = sourcesOf(lane);
-    const a = await discoverAll({ lane, intent: SCREEN[lane], sources });
+    // This assertion asks for the full library lines; the first-answer default is
+    // deliberately compact and its counts form is covered by the budget tests.
+    const a = await discoverAll({ lane, intent: SCREEN[lane], sources, budgetBytes: 40960 });
     assert.ok(a.outsystemsUi, JSON.stringify(a.size));
     assert.equal(a.outsystemsUi.lane, lane); assert.deepEqual(a.outsystemsUi.appTypes, APP_TYPES[lane]); assert.equal(a.outsystemsUi.level, 'lines');
     assert.ok(a.outsystemsUi.libraries.every(l => l.patterns > 0 && Object.keys(l.categories).length > 0));
-    assert.ok(a.size.bytes <= a.size.budgetBytes);
+    assert.ok(wireBytes(a) <= a.size.budgetBytes);
     if (lane === 'o11') {
       const t = await discover({ lane, intent: 'criar uma tela Traditional de pedidos com tabs', sources, budgetBytes: 120000 });
       assert.deepEqual(t.outsystemsUi.appTypes, ['o11-traditional']); assert.equal(t.outsystemsUi.appTypeFrom, 'intent');
@@ -191,7 +194,7 @@ for (const lane of ['odc', 'o11']) {
       assert.ok(!(n.size?.truncated ?? []).some(t => t.section === 'outsystemsUi'), intent);
     }
     const x = await discover({ lane, expand: 'osui:Tabs,osui:Navigation', sources, budgetBytes: 4096 });
-    assert.equal(x.ok, true); assert.ok(x.size.bytes <= 4096, JSON.stringify(x.size)); assert.equal(x.size.status === 'insufficient', false);
+    assert.equal(x.ok, true); assert.ok(wireBytes(x, { budgetBytes: 4096 }) <= 4096, JSON.stringify(x.size)); assert.equal(x.size.status === 'insufficient', false);
     assert.deepEqual(Object.keys(x.expansions).sort(), ['osui:Navigation', 'osui:Tabs']);
   });
 
@@ -199,16 +202,18 @@ for (const lane of ['odc', 'o11']) {
     const sources = sourcesOf(lane);
     const model = a => ({ matches: a.matches, contracts: a.contracts, examples: a.examples, bindings: a.bindings, context: a.context, composition: a.composition, unavailable: a.unavailable });
     for (const intent of [SCREEN[lane], 'criar uma tela de cadastro de clientes com formulário']) for (const budgetBytes of [4096, 8000, 12000, 24576, 40960, 131072]) {
-      const withSection = await discover({ lane, intent, sources, budgetBytes });
+      // The text route of a screen intent (B2 of the plan "Texto do SSAM") is fitted after this section with a floor of its
+      // own (size.reserved.textRoute): left out here, so the comparison is about this section alone.
+      const withSection = await discover({ lane, intent, sources, budgetBytes, textRoutes: false });
       // The model part is budgeted under the floor the answer declares (size.reserved.outsystemsUi, C07): it is exactly
       // the answer without the section at the budget minus that floor.
       const reserved = withSection.size.reserved?.outsystemsUi ?? 0;
-      const without = await discover({ lane, intent, sources, budgetBytes: budgetBytes - reserved, outsystemsUi: false });
+      const without = await discover({ lane, intent, sources, budgetBytes: budgetBytes - reserved, outsystemsUi: false, textRoutes: false });
       assert.equal('outsystemsUi' in without, false);
       if (withSection.size.status !== 'insufficient') assert.ok(withSection.outsystemsUi || withSection.size.truncated.some(t => t.section === 'outsystemsUi'), `${lane} ${budgetBytes}: the section or its note`);
       // identity, relatedJobs and notes may yield to the compact list; the model part may not.
       assert.deepEqual(model(withSection), model(without), `${lane} ${budgetBytes} ${intent}`);
-      assert.ok(withSection.size.bytes <= budgetBytes, `${lane} ${budgetBytes}: ${withSection.size.bytes}`);
+      assert.ok(wireBytes(withSection, { budgetBytes }) <= budgetBytes, `${lane} ${budgetBytes}: ${withSection.size.bytes}`);
       const sections = a => (a.size.truncated ?? []).map(t => t.section);
       const left = sections(withSection).filter(s => !sections(without).includes(s));
       // c07: the proven example, step grammar and values fitted after the model part (2026-10-05), never a model reduction.

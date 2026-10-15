@@ -1,0 +1,30 @@
+{
+  "schema": "ssam-recorded-fixture/1",
+  "source": "recorded",
+  "tool": "mcp__ssam__studio_deliver",
+  "result": {
+    "outcome": "uncertain",
+    "code": "MERGE_UNCERTAIN",
+    "problemCodes": [],
+    "publishFailedAfterDelivery": false,
+    "shape": {
+      "keys": [
+        "code",
+        "error",
+        "evidence",
+        "failed",
+        "gate",
+        "job",
+        "ok",
+        "outcome"
+      ],
+      "code": "MERGE_UNCERTAIN",
+      "failed": "merge",
+      "outcome": "uncertain"
+    }
+  },
+  "records": 1,
+  "bytes": 2186,
+  "shrunk": [],
+  "removed": []
+}

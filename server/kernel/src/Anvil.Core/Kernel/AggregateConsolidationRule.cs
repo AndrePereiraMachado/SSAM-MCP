@@ -112,7 +112,17 @@ public sealed partial class ModelSession
         var expressions = owner.GetAllDescendantsOfType<IObjectSignature>().OfType<IExpression>().Select(e => ((IObjectSignature)e, AggregateShape.Text(e))).Where(e => e.Item2.Length > 0).ToList();
         var inside = shapes.ToDictionary(s => s, s => new HashSet<IObjectSignature>(s.Node.GetAllDescendantsOfType<IObjectSignature>(), ReferenceEqualityComparer.Instance));
         bool Reads(string text, AggregateShape s) => Regex.IsMatch(text, @"(?<![\w.])" + Regex.Escape(s.Name) + @"\.", RegexOptions.IgnoreCase);
-        var used = shapes.Where(s => expressions.Any(e => !inside[s].Contains(e.Item1) && Reads(e.Item2, s))).ToHashSet();
+        // gen-screen (2026-10-13): the options of a Dropdown (its List) are a lookup of every record of the target, not data used
+        // with the page's: merged into the page's aggregate by a join they would lose the options no row references. An
+        // aggregate read only there is not used together with the others.
+        // The expression of a widget property sits in its custom property (named as the property) under the widget.
+        static bool Options(IObjectSignature expression)
+        {
+            var property = expression.Parent as IObjectSignature;
+            if (property == null || ModelHost.Prop(property, "Name") as string != "List") return false;
+            return property.Parent is IObjectSignature widget && widget.GetType().GetInterfaces().Any(i => i.Name is "IDropdown" or "IDropdownSignature");
+        }
+        var used = shapes.Where(s => expressions.Any(e => !inside[s].Contains(e.Item1) && !Options(e.Item1) && Reads(e.Item2, s))).ToHashSet();
         // The related pairs among the used ones: the same entity, or a reference attribute between their main entities.
         var edges = new List<(AggregateShape A, AggregateShape B, AggregateShape.Link? Link)>();
         for (var i = 0; i < shapes.Count; i++)

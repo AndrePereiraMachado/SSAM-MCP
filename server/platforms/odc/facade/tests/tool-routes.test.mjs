@@ -133,7 +133,8 @@ test('tools.json routes every live tool and verb of the ssam MCP server, and not
 test('the effect of every route agrees with the live readOnlyHint/destructiveHint annotations', async () => {
   const live = new Map((await liveTools()).map(x => [x.name, x]));
   const problems = [];
-  const DELIVERY = ['o11_deliver', 'studio_deliver', 'ssam_job', 'o11_job'];
+  // ssam_code writes through o11_deliver/studio_deliver (its read and grammar verbs are 'read').
+  const DELIVERY = ['o11_deliver', 'studio_deliver', 'ssam_job', 'o11_job', 'ssam_code'];
   for (const [name, entry] of Object.entries(data.tools)) {
     const ann = live.get(name)?.annotations ?? {};
     const verbs = Object.entries(entry.verbs ?? {});

@@ -1,0 +1,357 @@
+{
+  "source": "recorded",
+  "records": 28,
+  "bytes": 22801,
+  "evidence": [
+    {
+      "type": "event_msg",
+      "payloadType": "token_count",
+      "timestamp": "2026-10-13T12:31:00.265Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "custom_tool_call",
+      "timestamp": "2026-10-13T12:31:01.880Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "token_usage_record",
+      "timestamp": "2026-10-13T12:31:01.911Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": {
+        "input_tokens": 72716,
+        "cached_input_tokens": 66944,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 141,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 72857
+      },
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "custom_tool_call_output",
+      "timestamp": "2026-10-13T12:31:32.925Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": [
+        "Script running with cell ID"
+      ]
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "token_count",
+      "timestamp": "2026-10-13T12:31:32.936Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "function_call",
+      "timestamp": "2026-10-13T12:31:34.165Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "token_usage_record",
+      "timestamp": "2026-10-13T12:31:34.230Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": {
+        "input_tokens": 72885,
+        "cached_input_tokens": 72576,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 31,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 72916
+      },
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "function_call_output",
+      "timestamp": "2026-10-13T12:31:35.193Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": [
+        "Script running with cell ID"
+      ]
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "token_count",
+      "timestamp": "2026-10-13T12:31:35.208Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "item_completed",
+      "timestamp": "2026-10-13T12:31:36.669Z",
+      "started": 1791894696465,
+      "completed": 1791894696669,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "reasoning",
+      "timestamp": "2026-10-13T12:31:36.683Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "item_completed",
+      "timestamp": "2026-10-13T12:31:36.801Z",
+      "started": 1791894696699,
+      "completed": 1791894696801,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "message",
+      "timestamp": "2026-10-13T12:31:36.815Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "function_call",
+      "timestamp": "2026-10-13T12:31:36.900Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "token_usage_record",
+      "timestamp": "2026-10-13T12:31:36.942Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": {
+        "input_tokens": 72944,
+        "cached_input_tokens": 72704,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 103,
+        "reasoning_output_tokens": 39,
+        "total_tokens": 73047
+      },
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "function_call_output",
+      "timestamp": "2026-10-13T12:31:37.914Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": [
+        "Script running with cell ID"
+      ]
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "token_count",
+      "timestamp": "2026-10-13T12:31:37.923Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "item_completed",
+      "timestamp": "2026-10-13T12:31:39.653Z",
+      "started": 1791894699281,
+      "completed": 1791894699653,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "reasoning",
+      "timestamp": "2026-10-13T12:31:39.669Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "function_call",
+      "timestamp": "2026-10-13T12:31:39.745Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "token_usage_record",
+      "timestamp": "2026-10-13T12:31:39.781Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": {
+        "input_tokens": 73075,
+        "cached_input_tokens": 72704,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 72,
+        "reasoning_output_tokens": 39,
+        "total_tokens": 73147
+      },
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "function_call_output",
+      "timestamp": "2026-10-13T12:31:40.772Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": [
+        "Script running with cell ID"
+      ]
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "token_count",
+      "timestamp": "2026-10-13T12:31:40.786Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "item_completed",
+      "timestamp": "2026-10-13T12:31:42.007Z",
+      "started": 1791894701947,
+      "completed": 1791894702007,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "reasoning",
+      "timestamp": "2026-10-13T12:31:42.022Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "function_call",
+      "timestamp": "2026-10-13T12:31:42.113Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "token_usage_record",
+      "timestamp": "2026-10-13T12:31:42.144Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": {
+        "input_tokens": 73175,
+        "cached_input_tokens": 72960,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 48,
+        "reasoning_output_tokens": 15,
+        "total_tokens": 73223
+      },
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "function_call_output",
+      "timestamp": "2026-10-13T12:31:53.136Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": [
+        "Script running with cell ID"
+      ]
+    }
+  ],
+  "shrunk": [],
+  "removed": []
+}

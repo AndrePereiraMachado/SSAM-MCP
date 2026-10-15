@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PortalMetadata } from './portal-metadata.mjs';
 import { PORTAL_READS, checkSecretRefs, pointerValue, routeOf, screenservice, wirePointer } from './portal-routes.mjs';
-import { fail, redact } from './errors.mjs';
+import { fail } from './errors.mjs';
 import { readCheckpoint } from '../../facade/read-budget.mjs';
 
 const SESSION_CODES = new Set(['HEADLESS_AUTH_UNAVAILABLE', 'WEB_SIGN_IN_REQUIRED', 'STUDIO_NOT_SIGNED_IN', 'NOT_ALLOWED', 'HOST_MISMATCH', 'UNCERTAIN', 'BAD_REQUEST', 'REMOTE_ERROR']);
@@ -65,14 +65,18 @@ export class StudioPortalBroker {
     if (!expected || expected[0] !== request.module || expected[1] !== request.view || expected[2] !== request.action || expected[3] !== request.discoveryView) fail('PORTAL_ACCESS_DENIED', 'Internal operation is not allowlisted for this action/view.');
     const body = await screenservice(this.transport, { module: request.module, view: request.view, action: request.action, discoveryView: request.discoveryView ?? request.view,
       inputParameters: request.inputParameters, screenVariables: request.screenVariables, clientVariables: request.clientVariables, signal: request.signal });
-    return { target: this.target, origin: this.origin, body: redact(body) };
+    // Keep the wire body intact for PortalReadAdapter scope/pagination checks;
+    // that adapter redacts the completed remote projection.
+    return { target: this.target, origin: this.origin, body };
   }
 
   async callScreenservice({ operationId, write = false, input, secretRefs = [], operationUuid, authorizeSha256, confirmTenant, signal }) {
     const route = routeOf(operationId, write);
     const body = await screenservice(this.transport, { ...route, ...input, signal,
       extra: write ? { write: true, operationUuid, authorizeSha256, confirmTenant, secretRefs } : {} });
-    return redact(body);
+    // Access validates typed identities and write read-backs before envelope()
+    // projects remote data. Redacting here would alter those validators' input.
+    return body;
   }
 }
 

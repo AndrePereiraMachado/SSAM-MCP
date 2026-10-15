@@ -59,8 +59,8 @@ public sealed partial class ModelSession
         foreach(var obsolete in ObsoleteUiCode(screens,logic)) ops.Add(obsolete!.DeepClone());
         if (authored != null) foreach (var obsolete in ObsoleteCSharpStructures(contract, changes, authored.RetiredStructures ?? [])) ops.Add(obsolete!.DeepClone());
         if(runtime!=null && !CheckFrameworkDependencies(runtime)["accepted"]!.GetValue<bool>())
-            return new JsonArray(runtime.ReferenceOperations().Concat(ops).Select(op=>op!.DeepClone()).ToArray());
-        return ops;
+            return RememberPlanned(new JsonArray(runtime.ReferenceOperations().Concat(ops).Select(op=>op!.DeepClone()).ToArray()));
+        return RememberPlanned(ops);
     }
 
     public JsonObject CheckModuleSpecification(JsonObject specification, JsonObject? expectedTypes = null, Anvil.Core.Delivery.FrozenFrameworkDependencies? runtime = null)

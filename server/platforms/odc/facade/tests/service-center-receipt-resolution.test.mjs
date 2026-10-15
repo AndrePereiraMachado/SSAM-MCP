@@ -16,6 +16,42 @@ import { main, runServiceCenter } from '../service-center/index.mjs';
 import { fingerprint } from '../service-center/util.mjs';
 import { temp, files, uuid } from './fixtures/sc-fake-bridge.mjs';
 
+test('Run Now without an AJAX acknowledgment reads back in the same call and never replays its UUID',async()=>{
+  const journal=new Journal(temp()),client=new Timers({timer:timerPage({lastRun:'never'})});
+  client.http.request=async function(url,fields){
+    this.requests.push([url,fields]);
+    client.timer=timerPage({lastRun:'2026-10-14 19:30:01',status:'The timer is OK.'});
+    return page('<div>response received</div>','x.aspx');
+  };
+  const operationId=uuid();
+  const first=await client.mutate('timer-run','545',TIMER,{execute:true,words:'run',operationId,journal});
+  assert.equal(first.outcome,'execution-observed');assert.equal(first.ok,true);
+  assert.equal(first.requestStatus,'unconfirmed');assert.equal(first.executionCompleted,null);
+  assert.equal(first.attributedToRequest,false);assert.equal(first.evidence.lastRunAfter,'2026-10-14 19:30:01');
+  assert.equal(client.http.requests.length,1);
+  const repeated=await client.mutate('timer-run','545',TIMER,{execute:true,words:'run',operationId,journal});
+  assert.equal(repeated.outcome,'execution-observed');assert.equal(repeated.existingReceipt,true);
+  assert.equal(client.http.requests.length,1);
+});
+
+test('an unacknowledged run with no observed execution has an explicit unknown code and a read-only continuation',async()=>{
+  const journal=new Journal(temp()),client=new Timers({replies:[page('<div>response received</div>','x.aspx')]});
+  const result=await client.mutate('timer-run','545',TIMER,{execute:true,words:'run',operationId:uuid(),journal});
+  assert.equal(result.outcome,'unknown');assert.equal(result.code,'TIMER_RUN_OUTCOME_UNKNOWN');assert.equal(result.ok,false);
+  assert.equal(result.executionObserved,false);assert.equal(result.continuation.arguments.action,'verify');
+  assert.equal(client.http.requests.length,1);
+});
+
+test('an in-flight UUID returns its explicit pending evidence without reading or resending',async()=>{
+  const journal=new Journal(temp()),client=new Timers(),operationId=uuid();
+  journal.create(operationId,{host:HOST,action:'timer-run',moduleId:'545',name:TIMER},'run',{});
+  client.detail=async()=>assert.fail('a live sender is not reconciled by a repeated mutation');
+  const result=await client.mutate('timer-run','545',TIMER,{execute:true,words:'run',operationId,journal});
+  assert.equal(result.outcome,'unknown');assert.equal(result.code,'TIMER_RUN_OUTCOME_UNKNOWN');
+  assert.equal(result.readback.status,'sender-active');assert.equal(result.existingReceipt,true);
+  assert.equal(client.http.requests.length,0);assert.equal(journal.rawState(operationId),'sending');
+});
+
 const HOST = 'personal-2qqw9srv.outsystemscloud.com';
 const BASE = `https://${HOST}/ServiceCenter/`;
 const TIMER = 'SeedSurvivorDemoDocumentTimer';

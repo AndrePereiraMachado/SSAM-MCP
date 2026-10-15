@@ -62,6 +62,7 @@ public static partial class Delivery
             return "The Studio showed the dependencies dialog for " + module + " (answered: Cancel) and the Refresh References of its producers failed: "
                 + text + ". Next call: o11_studio {command:\"refresh-references\", args:{module:\"" + module + "\"}}, then resume this task.";
         }
+        if (RefreshBlocked(result, refreshed, stage) is { } waiting) return waiting;
         var entry = new JsonObject
         {
             ["stage"] = stage, ["module"] = module, ["moduleKey"] = key, ["dialog"] = answered.DeepClone(),
@@ -73,6 +74,24 @@ public static partial class Delivery
         else result["referencesRefreshed"] = new JsonArray(entry);
         log?.Invoke($"deliver: dependencies dialog answered (Cancel) at {stage}; refresh_references of every producer changed={refreshed["changed"]}");
         return null;
+    }
+
+    /// <summary>fam-deps (finding 8): a refresh_references the Studio stopped with a dialog only the person answers (the bridge
+    /// with refresh_references:dialog_watch answers blocked in seconds, the refresh waiting in the Studio): the delivery stops
+    /// with STUDIO_DIALOG_PENDING, the one question with the exact text, and nothing merged; resume after the answer. The
+    /// certain dialogs the bridge closed during the refresh are kept in the result (refreshDialogs). Null when not blocked.</summary>
+    internal static string? RefreshBlocked(JsonObject result, JsonObject refreshed, string stage)
+    {
+        foreach (var field in new[] { "dialogs", "dialogsBefore" })
+            if (refreshed[field] is JsonArray { Count: > 0 } closed)
+            {
+                if (result["refreshDialogs"] is not JsonArray list) result["refreshDialogs"] = list = new JsonArray();
+                foreach (var d in closed) list.Add(d!.DeepClone());
+            }
+        if (refreshed["blocked"]?.GetValue<bool>() != true || refreshed["blockedBy"] is not JsonObject dialog) return null;
+        result["code"] = StudioDialogPending; result["blockedBy"] = dialog.DeepClone(); result["question"] = dialog["question"]?.DeepClone();
+        return "The Studio opened \"" + dialog["title"] + "\" during the Refresh References (" + stage + ") and only the person can answer it. "
+            + dialog["question"] + " Nothing was merged; after the answer, resume this task.";
     }
 
     private static JsonObject RefreshNext(string module) => new()

@@ -35,11 +35,16 @@ import { registerO11Environment } from './o11-environment.mjs';
 import { registerPreviewTools } from './preview/mcp.mjs';
 import { registerSsamReference } from './ssam-reference.mjs';
 import { registerSsamEvidence } from './ssam-evidence.mjs';
+import { pagedShape, missingCall } from './paged-answer.mjs';
 import { jobTool } from './job-runner.mjs';
 import { prototypeDeliveryDefaults, readJobDocument, PROTOTYPE_DELIVER_TEXT } from './prototype-op.mjs';
+import { textFormRefusal, partReader } from './text-routes.mjs';
+import { CODE_JOB_TEXT, normalizeCodeOps } from './ssam-code.mjs';
+import { mergeNormalizations } from './normalizations.mjs';
 import { resolvePatchedJob, jobIdentity, failedOpOf, patchJsonSchema, basedOnJsonSchema, withNamedPatches } from './job-patch.mjs';
 import { createWorkerFirstRunner } from './anvil-worker.mjs';
-import { shapeToolResult } from './responses.mjs';
+import { shapeToolResult, VERBATIM } from './responses.mjs';
+import { keepAnswer, fitResult } from './answer-size.mjs';
 import { boundedRead, readOptions, readCheckpoint } from './read-budget.mjs';
 import { withStudioWriteLock, busyToolResult, isWrite, isPhased, declaresPhases, PHASES_META, processAlive } from './studio-write-lock.mjs';
 import { registerO11Access } from './o11-access.mjs';
@@ -419,7 +424,10 @@ export const HOSTED_INSTRUCTIONS = 'This SSAM server is hosted: it runs on the S
   + 'exactly as returned. A file from the user\'s machine reaches SSAM when the user puts it in the agent inbox folder and you '
   + 'pass agent:inbox/<file>. Before any O11 tool, connect the Service Studio with ssam_connect {lane:"o11"}. When the agent is '
   + 'not connected, tools that need the user\'s Studio answer AGENT_NOT_CONNECTED; ssam_doctor shows the agent and the Studio '
-  + 'versions of both sides.';
+  + 'versions of both sides. ssam_code is unavailable here too: read a module as text with ssam_map (views ddl, flow, html) and deliver '
+  + 'the change as ONE job of o11_deliver or studio_deliver. The generator ops still waiting for their blind test (entity-actions, '
+  + 'rest-consume, screen with data.generate) are refused (GENERATOR_PENDING). No credential window opens here: odc_portal_login '
+  + 'prompt and focus answer HOSTED_PROMPT_UNAVAILABLE.';
 // The working rules a hosted session adds (servidor/fase4: C26, C03 and the model behaviour of the first client session).
 // fase4-24 (production test of 2026-10-11): a job goes INLINE, the job itself as compact JSON in the job argument. The MCP
 // request goes straight to this server (up to 16 MiB), while a job file in the agent inbox costs one more upload from the
@@ -454,12 +462,13 @@ export function hostedInstructions(hosted) {
 const servedGates = new WeakMap();
 // kernelRefused (startupKernel): the lanes this server image refused at start; the gate refuses every tool of such a
 // lane, the server-only ones included (KERNEL_UNAVAILABLE, cause KERNEL_VERSION_MISSING).
-async function hostedGate({ context, session, run, kernelRefused = null }) {
+// tools: the hosted classification (default hosted/tools.json); tests pass another one.
+async function hostedGate({ context, session, run, kernelRefused = null, tools }) {
   const { wrapHostedTool } = await import('./hosted/policy.mjs');
   const runner = run ?? (await import('./executor.mjs')).runWithExecutor;
   const link = session?.agent ?? context.agent;
   const lanes = session?.lanes ?? context.lanes ?? [];
-  return (name, config, handler, { argsOf = null } = {}) => wrapHostedTool(name, config, handler, { context, link, lanes, run: runner, argsOf, kernelRefused });
+  return (name, config, handler, { argsOf = null } = {}) => wrapHostedTool(name, config, handler, { context, link, lanes, run: runner, argsOf, kernelRefused, ...(tools ? { tools } : {}) });
 }
 // The lanes the hosted server warms at start: the served lanes, without a lane its image refused (its kernel never runs).
 export const hostedWarmLanes = (lanes = {}, refused = null) => ['odc', 'o11'].filter(l => lanes[l] !== false && !refused?.[l]);
@@ -569,7 +578,8 @@ export function writeInlineJob(root, job) {
   const directory = path.join(root, '.local', 'jobs', 'inline');
   fs.mkdirSync(directory, { recursive: true });
   const file = path.join(directory, randomUUID() + '.json');
-  fs.writeFileSync(file, JSON.stringify(job, null, 2));
+  // The ssam_code op aliases (op "ddl", logic data.text) in their kernel form (ssam-code.mjs normalizeCodeOps).
+  fs.writeFileSync(file, JSON.stringify(normalizeCodeOps(job).job, null, 2));
   return file;
 }
 const inlineJobSchema = { anyOf: [{ type: 'string' }, { type: 'object' }, { type: 'array' }],
@@ -644,29 +654,26 @@ export function pageAnswer(result, { root = anvilRoot, directory = path.join(roo
     if (texts.length === 1) { try { full = JSON.parse(texts[0].text); } catch { full = { text: texts[0].text }; } }
     else full = { content: result.content };
   }
-  const body = JSON.stringify(full);
-  const sha256 = createHash('sha256').update(body, 'utf8').digest('hex');
-  const file = path.join(directory, sha256 + '.json');
-  fs.mkdirSync(directory, { recursive: true });
-  if (!fs.existsSync(file)) { const temporary = file + '.' + process.pid + '.tmp'; fs.writeFileSync(temporary, body, 'utf8'); fs.renameSync(temporary, file); }
-  // What stays inline: the top-level scalars (texts cut at 500 characters) and the small objects (<= 512 bytes: a code,
-  // a continuation, links), in their order, within PAGED_INLINE_BYTES; the answer's own continuation moves to
-  // answerContinuation (the paging continuation reads the whole answer first).
-  const top = {};
-  let used = 0;
-  if (full && typeof full === 'object' && !Array.isArray(full)) {
-    for (const [k, v] of Object.entries(full)) {
-      if (k === 'paged') continue;
-      const kept = typeof v === 'string' && v.length > 500 ? v.slice(0, 500) + '…' : v;
-      const size = Buffer.byteLength(JSON.stringify(kept) ?? '', 'utf8') + k.length + 4;
-      const small = kept === null || ['string', 'number', 'boolean'].includes(typeof kept) || size <= 512;
-      if (!small || used + size > PAGED_INLINE_BYTES) continue;
-      top[k === 'continuation' ? 'answerContinuation' : k] = kept; used += size;
-    }
+  const { file, sha256 } = keepAnswer(full, root, directory);
+  // What stays inline (paged-answer.mjs pagedShape): the top-level scalars (texts cut at 500 characters) and the small
+  // parts, in their order, within PAGED_INLINE_BYTES (the answer's own continuation moves to answerContinuation); every
+  // large array as a table in paged.tables, whole or without its opaque columns, in the room under the ceiling; the parts
+  // that are not inline whole in paged.outline; and ONE ssam_evidence call that returns what is still missing (the
+  // owner's re-test of 2026-10-12: the 85 KB producer listing took five ssam_evidence calls).
+  const shape = pagedShape(full, { roomBytes: maxBytes - 1600 - Buffer.byteLength(file, 'utf8') * 4, inlineBytes: PAGED_INLINE_BYTES });
+  let { tables, outline, missing } = shape;
+  const build = () => {
+    const call = missingCall(file, missing);
+    return { ...shape.top, paged: { bytes, file, sha256, ...(outline.length ? { outline } : {}), ...(tables.length ? { tables } : {}), complete: !call },
+      ...(call ? { continuation: { ...call, why: 'the whole answer (' + bytes + ' bytes, above the ' + maxBytes + '-byte ceiling) is in this file; ' + call.why } } : {}) };
+  };
+  let value = build();
+  // Never above the ceiling: the tables go first (their rows become the call), then the outline.
+  const size = v => Buffer.byteLength(JSON.stringify(v), 'utf8');
+  if (size(value) > maxBytes && tables.length) {
+    missing = [...tables.map(t => ({ at: t.at, rows: t.rows.length })), ...missing.filter(m => !tables.some(t => t.at === m.at))]; tables = []; value = build();
   }
-  const value = { ...top, paged: { bytes, file, sha256 },
-    continuation: { tool: 'ssam_evidence', arguments: { file, budgetBytes: 20000 },
-      why: 'the whole answer (' + bytes + ' bytes, above the ' + maxBytes + '-byte ceiling) is in this file: read it by pointer, where and fields' } };
+  if (size(value) > maxBytes && outline.length) { outline = []; value = build(); }
   if (value.ok === undefined) value.ok = result.isError !== true;
   return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(result.isError || value.ok === false ? { isError: true } : {}) };
 }
@@ -713,7 +720,7 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
     instructions: 'SSAM Hybrid controls OutSystems O11 (Service Studio) and ODC (ODC Studio and the ODC public REST APIs) from '
       + 'this one server, both lanes the same way. Every step is a tool of this server; never a shell command, script or CLI. '
       + 'A client that defers tool schemas loads the core ones in ONE search: '
-      + '"select:mcp__ssam__ssam_doctor,mcp__ssam__ssam_connect,mcp__ssam__ssam_discover,mcp__ssam__ssam_map,mcp__ssam__ssam_reference,'
+      + '"select:mcp__ssam__ssam_doctor,mcp__ssam__ssam_connect,mcp__ssam__ssam_discover,mcp__ssam__ssam_map,' + (hosted ? '' : 'mcp__ssam__ssam_code,') + 'mcp__ssam__ssam_reference,'
       + 'mcp__ssam__ssam_evidence,mcp__ssam__ssam_task,mcp__ssam__o11_inspect,mcp__ssam__o11_deliver,mcp__ssam__o11_publish,mcp__ssam__o11_studio,'
       + 'mcp__ssam__studio_deliver,mcp__ssam__studio_inspect,mcp__ssam__studio_status" (mcp__<name>__: the prefix your client gave this server). '
       + 'Start with ssam_doctor (which Studio is open in each lane); ssam_connect (no lane) attaches every Studio already open in one call. '
@@ -726,6 +733,11 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
       + 'entities, structures and every action with its signature, calls and callers); read it once and work in context. '
       + 'ssam_map {lane, target} lists every element with its @key; inspect only to go deeper into an @key with the expected sha256 '
       + '(o11_inspect or studio_inspect, path:"@<key>", expectedSourceSha256), as the continuations say. '
+      + 'One action whole, every node with its @id: ssam_map {lane, target, view:"flow", element}. '
+      // servidor/fase4-25: ssam_code is unavailable hosted (D1 a), so a hosted session is never told to use it.
+      + (hosted ? '' : 'The module AS CODE, read and written with one word: ssam_code {lane, action: grammar|read|check|write, part: ddl (SQL DDL) | logic (pseudocode) | html (screens)}; grammar first on an empty module. '
+      + 'With subagents, each writes its part to a file and first runs ssam_code check on its file (no Studio, parallel-safe); ONE ssam_code write {files:[...]} sends them all. '
+      + 'A request with 6 or more elements: ssam_code plan; launch its subagents in parallel, then its final write. ')
       + 'Cross-cutting questions (where an element, a site property or a text is used, who calls an action, the impact of a change, '
       + 'uses across modules): ONE ssam_map call, view "search" {text} or view "uses" {element}, target the capture or the list of '
       + 'the app\'s modules, instead of inspecting element by element. '
@@ -771,6 +783,7 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
   const maxBytes = deps.maxAnswerBytes ?? maxAnswerBytes();
   // Paged answers: <anvilRoot>/.local/answers; hosted, the customer's <ws>/o11/answers (the visible area, read back by
   // ssam_evidence of the same customer only), whatever deps say.
+  const answersRoot = deps.answersRoot ?? anvilRoot;
   const answersDirectory = () => (hosted ? workspaceOf('o11', 'answers') : path.join(deps.answersRoot ?? anvilRoot, '.local', 'answers'));
   const writeLock = deps.writeLock ?? withStudioWriteLock; // tests observe what reaches the lock (I7)
   const onBusy = lane => refusal => busyToolResult(served.has(refusal.continuation?.tool) ? refusal
@@ -784,6 +797,9 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
   const identityStarted = deps.identity?.started ?? (deps.identity?.read ? readIdentity() : serverIdentity({ loaded: true }));
   const release = releaseWatch({ started: identityStarted, read: readIdentity, cacheMs: deps.identity?.cacheMs ?? 2000 });
   const releaseExempt = (name, args) => name === 'ssam_doctor' || name === 'ssam_evidence' || (name === 'ssam_task' && args?.close == null);
+  // The registered handler of every tool, as a client call reaches it (lock, release check, shaper, ceiling): ssam_code
+  // writes through the delivery tool of its lane by this handler, never by a path of its own.
+  const handlers = new Map();
   server.registerTool = (name, config, handler) => {
     // Lane wp: only a handler that declares its build and apply phases (config._meta, studio-write-lock.mjs PHASES_META)
     // builds without the Studio lock; any other write holds the Studio for its whole call.
@@ -818,7 +834,9 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
         const value = { ok: false, code: 'RELEASE_CHANGED', tool: name, outcome: 'not-sent',
           error: 'The SSAM release under this MCP server changed since it started (' + changed.changed.join(', ') + '); nothing was run. The server must restart to load it.',
           release: changed, next: hosted ? HOSTED_RESTART_NEXT : RESTART_NEXT, continuation: { tool: 'ssam_doctor', arguments: {}, why: 'shows the server root and release; after the restart it confirms the new release' } };
-        return shapeToolResult(name, args, { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, isError: true }, { lane });
+        const answer = shapeToolResult(name, args, { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, isError: true }, { lane });
+        return VERBATIM.has(name) ? answer : pageAnswer(fitResult(name, args, answer, { root: answersRoot, directory: answersDirectory(), budgets: deps.answerBudgets }),
+          { root: answersRoot, directory: answersDirectory(), maxBytes });
       }
       const signal = ctx && typeof ctx === 'object' ? ctx.mcpReq?.signal : undefined;
       // Lane wp: a delivery runs its build phase without the Studio lock and takes it at its first Studio write (phased).
@@ -831,17 +849,23 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
           return handler(...params);
         });
       };
-      let result = bounded ? await boundedRead({ scope: 'mcp:' + name, args }, execute, { timeoutMs: deps.readTimeoutMs ?? 29000 }) : await execute();
+      const readTimeoutMs = name.startsWith('o11_service_center_') || (name === 'odc_portal_login' && (!args.action || args.action === 'open')) ? 90000 : 29000;
+      let result = bounded ? await boundedRead({ scope: 'mcp:' + name, args }, execute, { timeoutMs: deps.readTimeoutMs ?? readTimeoutMs }) : await execute();
       if (result?.code === 'READ_DEADLINE_EXCEEDED') result.continuation = { tool: name, arguments: args,
         why: 'Check the original pending read without resending it. Its eventual result belongs to the original request context.' };
       if (bounded && result?.ok === false && !result.content) result = reply(result);
       if (result?.resultType === 'input_required') return result;
       const answer = shapeToolResult(name, args, result, { lane });
       if (qualityKey) { try { noteAnswer(qualityKey, name, args, answer); } catch { /* the record never changes an answer */ } }
-      return name === 'ssam_evidence' ? answer : pageAnswer(answer, { directory: answersDirectory(), maxBytes });
+      return VERBATIM.has(name) ? answer : pageAnswer(fitResult(name, args, answer, { root: answersRoot, directory: answersDirectory(), budgets: deps.answerBudgets }),
+        { root: answersRoot, directory: answersDirectory(), maxBytes });
     };
-    // R1: the gate reads argsOf, so what it confines is what the tool runs.
-    return register(name, config, gate ? gate(name, config, shaped, { argsOf }) : shaped);
+    // R1: the gate reads argsOf, so what it confines is what the tool runs. servidor/fase4-25: the handler map (ssam_code
+    // writes through the delivery tool of its lane by it) keeps the GATED handler, the same one the client reaches: hosted,
+    // no path of the server runs a tool around the gate.
+    const final = gate ? gate(name, config, shaped, { argsOf }) : shaped;
+    handlers.set(name, final);
+    return register(name, config, final);
   };
   registerPreviewTools(server, { workspace: workspaceRoot, ...(deps.previewOptions ?? {}) });
   const clients = {}; const closers = [];
@@ -972,7 +996,7 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
       const description = (needsLane ? '[o11 | odc] ' : ownLane ? '' : '[' + laneName + '] ') + (tool.description ?? '')
         + (inlineJob ? ' Every answer with a job names nextBasedOn {job, sha256}; a refusal also job, jobSha256, failedOp and each patch by name (patchByName). '
           + 'Correct it with patch + basedOn (paths by index or by name: actions/<Action>/steps/<as>/...), or with only the changed actions as a partial job + basedOn; never rewrite the whole job. '
-          + PROTOTYPE_DELIVER_TEXT : '');
+          + PROTOTYPE_DELIVER_TEXT + ' ' + CODE_JOB_TEXT : '');
       // A tool with its own byte budget answers within the ceiling: an omitted budget is the ceiling (less the shaper's room).
       const budgeted = schema?.properties?.budgetBytes != null;
       server.registerTool(proxyName(tool.name, laneName), {
@@ -987,6 +1011,8 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
         let forwarded = needsLane ? rest : { ...args };
         if (budgeted && forwarded.budgetBytes == null) forwarded = { ...forwarded, budgetBytes: budgetCeiling(maxBytes) };
         let partial = null;
+        // The op shapes of the job taken as meant (ssam-code.mjs normalizeCodeOps), listed on the answer.
+        let jobNotes = [];
         if (inlineJob && (forwarded.patch != null || forwarded.basedOn != null)) {
           // The corrected job is a new file under <odcRoot>/.local/jobs/inline; the base never changes. The ODC server
           // is strict: patch/basedOn never travel to it (a partial job travels as the whole job it completes).
@@ -996,6 +1022,7 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
           if (!patched.ok) return reply(patched);
           forwarded = { ...others, job: patched.path };
           partial = patched.partial ?? null;
+          jobNotes = patched.normalizations ?? [];
         }
         // fase4-24: the job as its JSON text is the job itself (a hosted session sends jobs inline), never a path of the ODC root.
         if (inlineJob && typeof forwarded.job === 'string' && /^\s*[[{]/.test(forwarded.job)) {
@@ -1004,8 +1031,16 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
         }
         // A job with a prototype op: feature, owners and changes default to the prototype's prefix (one call, 1.1).
         if (inlineJob) {
-          const document = forwarded.job != null && typeof forwarded.job === 'object' ? forwarded.job
+          const given = forwarded.job != null && typeof forwarded.job === 'object' ? forwarded.job
             : typeof forwarded.job === 'string' ? readJobDocument(path.resolve(odcLaneRoot, forwarded.job)) : null;
+          // The ssam_code op aliases (op "ddl", logic data.text): a job file that has them runs as a new inline file.
+          const aliased = given ? normalizeCodeOps(given) : { job: given, changed: false };
+          if (aliased.normalizations?.length) jobNotes = [...jobNotes, ...aliased.normalizations];
+          const document = aliased.job;
+          if (aliased.changed && typeof forwarded.job === 'string') forwarded = { ...forwarded, job: writeInlineJob(odcLaneRoot, document) };
+          // WIRED (text-routes.mjs): a text form whose way back is not wired is refused before the delivery runs.
+          const unwired = document ? textFormRefusal(document, undefined, typeof forwarded.job === 'string' ? { readPart: partReader(path.resolve(odcLaneRoot, forwarded.job), fs, path) } : {}) : null;
+          if (unwired) return reply(unwired);
           const defaults = document ? prototypeDeliveryDefaults(document, forwarded) : null;
           if (defaults) forwarded = { ...forwarded, ...defaults };
           if (!(typeof forwarded.feature === 'string' && forwarded.feature.trim()))
@@ -1023,21 +1058,44 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
         // by name) for the next patch; a success names nextBasedOn; an uncertain one never does (it is settled from its
         // receipts, never corrected).
         const value = result?.structuredContent;
+        // One field (normalizations.mjs): the relayed answer's kernel object {total, byRule, items} or list keeps its
+        // entries; the job notes join it, never replace it.
+        const notes = jobNotes.length ? { normalizations: mergeNormalizations(value?.normalizations, jobNotes) } : {};
         if (inlineJob && typeof forwarded.job === 'string' && value && typeof value === 'object' && !Array.isArray(value) && value.outcome !== 'uncertain') {
           const file = path.resolve(odcLaneRoot, forwarded.job);
           let named;
           if (result?.isError) {
             const failedOp = failedOpOf(value.error ?? value.refusal?.error, file);
-            named = withNamedPatches({ ...value, ...jobIdentity(file), ...(failedOp != null ? { failedOp } : {}), ...(partial ? { partial } : {}) }, file);
+            named = withNamedPatches({ ...value, ...jobIdentity(file), ...(failedOp != null ? { failedOp } : {}), ...(partial ? { partial } : {}), ...notes }, file);
           } else if (value.ok === true) {
             const { nextBasedOn } = jobIdentity(file);
-            if (nextBasedOn || partial) named = { ...value, ...(nextBasedOn ? { nextBasedOn } : {}), ...(partial ? { partial } : {}) };
+            if (nextBasedOn || partial || jobNotes.length) named = { ...value, ...(nextBasedOn ? { nextBasedOn } : {}), ...(partial ? { partial } : {}), ...notes };
           }
           if (named) return { ...result, structuredContent: named, content: [{ type: 'text', text: JSON.stringify(named) }] };
         }
+        if (jobNotes.length && value && typeof value === 'object' && !Array.isArray(value)) { const noted = { ...value, ...notes }; return { ...result, structuredContent: noted, content: [{ type: 'text', text: JSON.stringify(noted) }] }; }
         return result;
       });
     }
+  }
+
+  // ssam_code (ssam-code.mjs): the module as code, both lanes; read is ssam_map, write is the registered handler of the
+  // lane's delivery tool above (o11_deliver, studio_deliver proxy), the same call a client makes.
+  {
+    const { registerSsamCode } = await import('./ssam-code.mjs');
+    // An omitted budget is the answer ceiling (less the shaper's room), as the ssam_map relay does.
+    const codeMap = deps.codeMap ?? (async input => (await import('./module-map.mjs')).moduleMap({ ...input, budgetBytes: input.budgetBytes ?? budgetCeiling(maxBytes) }));
+    registerSsamCode(server, { fromJsonSchema, map: codeMap, lanes: laneNames,
+      check: deps.codeCheck ?? (async input => (await import('./code-check.mjs')).codeCheck(input, {})),
+      plan: deps.codePlan ?? (async input => (await import('./code-plan.mjs')).codePlan(input, {})),
+      deliver: async (tool, args, ctx) => {
+        const handler = handlers.get(tool);
+        if (!handler) {
+          const value = { ok: false, code: 'LANE_NOT_SERVED', tool: 'ssam_code', error: `${tool} is not served here: this server does not serve that lane` };
+          return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, isError: true };
+        }
+        return handler(args, ctx ?? {});
+      } });
   }
 
   // The O11 job runner, which the Anvil MCP does not expose: one fixture proof per call, no Studio and no merge.
@@ -1069,7 +1127,7 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
     + 'Only when the person asks for a headless proof: a normal change goes straight to o11_deliver (O11) or studio_deliver with job/module/feature/owners/changes (ODC), '
     + 'which validate inside the call and refuse before any change; studio_manifest prepares an existing candidate. '
     + 'A refused run answers ONCE with every problem of every phase over the base (problems[]: phase, op, pointer, code, fix, patch when certain, identical ones grouped; verifyRan). '
-    + 'A failed run also returns `discovery` (contract of the failing op, catalog capability of its element, proven refusal, next step); ssam_discover gives the contracts before writing the job.', inputSchema: fromJsonSchema({ type: 'object',
+    + 'A failed run also returns `discovery` (contract of the failing op, catalog capability of its element, proven refusal, next step); ssam_discover gives the contracts before writing the job. ' + CODE_JOB_TEXT, inputSchema: fromJsonSchema({ type: 'object',
       properties: { job: inlineJobSchema, patch: patchJsonSchema, basedOn: basedOnJsonSchema, lane: { type: 'string', enum: laneNames, description: 'o11 (default) or odc.' },
         base: { type: 'string' }, out: { type: 'string' }, ...producerSchema }, additionalProperties: false }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true } },

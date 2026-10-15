@@ -109,7 +109,10 @@ public sealed class LogicConstructionTests
         };
         var test = JsonNode.Parse(File.ReadAllText(Path.Combine(Root, "tests/contracts/action-coverage", template + ".json")))!.AsObject();
         var action = test["contract"]!["logic"]!["actions"]![0]!.AsObject(); var input = action["inputs"]![0]!;
-        action["vars"] = new JsonArray(new JsonObject { ["name"] = "Prepared", ["type"] = input["type"]!.DeepClone() });
+        // The JavaScript case keeps its client action isolated (decision 6, judged since the 24.1 re-check on the raw ops of the
+        // sequential job too): the value it prepares is an output the action assigns, not a local.
+        if (name == "javascript") action["outputs"]!.AsArray().Add(new JsonObject { ["name"] = "Prepared", ["type"] = input["type"]!.DeepClone() });
+        else action["vars"] = new JsonArray(new JsonObject { ["name"] = "Prepared", ["type"] = input["type"]!.DeepClone() });
         var steps = action["steps"]!.AsArray();
         steps.Insert(0, new JsonObject { ["assign"] = new JsonObject { ["Prepared"] = input["name"]!.ToString() } });
         if (name == "json") steps[1]!["properties"]!["Data"] = "Prepared";

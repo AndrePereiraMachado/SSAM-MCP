@@ -4,6 +4,7 @@
 // widget -> event -> action binding, the hard byte budget, expansions). Index checks need the lane CLI and skip otherwise.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireBytes } from './fixtures/answer-wire.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -87,7 +88,7 @@ test('contexts are not inferred: Traditional Web lives on O11 only, O11 events a
 
 test('ODC: widget -> event -> action is answered by the event binding capability with current evidence and the proven binding rule', { skip: !odcCli && 'anvil-odc CLI not built', timeout: 240000 }, async () => {
   const a = await discover({ lane: 'odc', intent: COMPOSITE, sources: odc });
-  assert.equal(a.ok, true); assert.ok(a.size.bytes <= DEFAULT_BUDGET_BYTES);
+  assert.equal(a.ok, true); assert.ok(wireBytes(a, { budgetBytes: DEFAULT_BUDGET_BYTES }) <= DEFAULT_BUDGET_BYTES);
   for (const id of ['ui.event', 'ui.screen']) assert.ok(direct(a).includes(id), id + ' in ' + direct(a).join(','));
   const ev = match(a, 'ui.event');
   assert.equal(ev.operations.set.roles['widget event'].evidence, 'proven-current');
@@ -152,7 +153,7 @@ test('the form pattern answers the same way on both lanes: a direct match that r
 
 test('under a small budget a UI answer keeps, per role, the status and evidence of the focused operations; expansions return the full statement', { skip: !odcCli && 'anvil-odc CLI not built', timeout: 240000 }, async () => {
   const small = await discover({ lane: 'odc', intent: COMPOSITE, sources: odc, budgetBytes: 12000 });
-  assert.ok(small.size.bytes <= 12000); assert.ok(['reduced', 'insufficient'].includes(small.size.status));
+  assert.ok(wireBytes(small, { budgetBytes: 12000 }) <= 12000); assert.ok(['reduced', 'insufficient'].includes(small.size.status));
   if (small.size.status === 'reduced') {
     const ev = match(small, 'ui.event');
     assert.ok(ev?.operations?.set?.roles?.['widget event']?.status, JSON.stringify(ev?.operations ?? null).slice(0, 300));

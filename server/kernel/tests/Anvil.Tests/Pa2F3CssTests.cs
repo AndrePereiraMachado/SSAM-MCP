@@ -115,8 +115,12 @@ public sealed class Pa2F3CssTests
         Assert.Contains("background: #800080", patched);
         Assert.Contains("@media (prefers-color-scheme: dark)", patched);
         Assert.Null(problems[1]["patch"]);
-        // The preflight finds the rule by the I1 convention and reports it in its own list.
+        // Familias (2026-10-12): the preflight writes the mechanical change itself (CSS_FUNCTION_REWRITTEN, listed) instead of
+        // refusing it; the rule, found by the I1 convention, refuses only what has no single rendering.
         var analysis = JobPreflight.Analyze(ops);
-        Assert.Contains(analysis["problems"]!.AsArray(), p => p!["code"]?.ToString() == "CSS_FUNCTION_UNSUPPORTED" && p["pointer"]?.ToString() == "/ops/0/value");
+        Assert.DoesNotContain(analysis["problems"]!.AsArray(), p => p!["code"]?.ToString() == "CSS_FUNCTION_UNSUPPORTED" && p["pointer"]?.ToString() == "/ops/0/value");
+        Assert.Contains(analysis["normalizations"]!.AsArray(), n => n!["rule"]?.ToString() == "CSS_FUNCTION_REWRITTEN" && n["path"]?.ToString() == "/ops/0/value");
+        Assert.Contains("background: #800080", ops[0]!["value"]!.ToString());
+        Assert.Contains(analysis["problems"]!.AsArray(), p => p!["code"]?.ToString() == "CSS_FUNCTION_UNSUPPORTED" && p["pointer"]?.ToString() == "/ops/1/value");
     }
 }

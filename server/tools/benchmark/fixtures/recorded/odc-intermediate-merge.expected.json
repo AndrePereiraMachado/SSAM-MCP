@@ -1,0 +1,35 @@
+{
+  "schema": "ssam-recorded-fixture/1",
+  "source": "recorded",
+  "tool": "mcp__ssam__studio_deliver",
+  "result": {
+    "outcome": "staged",
+    "code": null,
+    "problemCodes": [],
+    "publishFailedAfterDelivery": false,
+    "shape": {
+      "keys": [
+        "appLinks",
+        "evidence",
+        "feature",
+        "job",
+        "kernelReceipt",
+        "manifest",
+        "merged",
+        "module",
+        "ok",
+        "publishInvoked",
+        "snapshot",
+        "source",
+        "until"
+      ],
+      "code": null,
+      "failed": null,
+      "outcome": null
+    }
+  },
+  "records": 1,
+  "bytes": 5142,
+  "shrunk": [],
+  "removed": []
+}

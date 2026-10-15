@@ -1,0 +1,156 @@
+{
+ "request": "Criar entidades, atributos, relacionamentos User Identifier, indice unico, estatica com registros, estruturas e a carga inicial (Haiku_CS, transcript-mcp-2026-10-10, 04:19-04:21)",
+ "baseline": {
+  "calls": 20,
+  "errors": 4,
+  "deliveries": 5,
+  "refused": 4,
+  "seconds": 86,
+  "source": "PLANO.md 6.6"
+ },
+ "base": {
+  "oml": "C:\\Users\\andre\\SSAM-Hybrid-novo\\kernel\\.local\\snapshots\\Haiku_CS-20261010041930-ababe29a.oml",
+  "sha": "62233602ab22d364e357bf126cf58800530eb5cedb9c6af8fe9aa8463f92be7d"
+ },
+ "note": "The data and the timer are the module data text (ssam-ddl/1, spec op ddl form); the roles and the logic are the transcript ops in the form it finally delivered (the logic is lane LG). Two calls: ssam_map view ddl of the base, then one deliver of this job.",
+ "job": {
+  "ops": [
+   {
+    "op": "spec",
+    "data": {
+     "ddl": "/// Estados possíveis do pedido simulado.\ncreate static entity StatusPedido public (\n  Id Integer identifier required,\n  Label Text(50) required,\n  Order Integer required\n)\nvalues\n  Recebido (Id = 1, Label = \"Recebido\", Order = 1),\n  EmSeparacao (Id = 2, Label = \"EmSeparacao\", Order = 2),\n  Concluido (Id = 3, Label = \"Concluido\", Order = 3),\n  Cancelado (Id = 4, Label = \"Cancelado\", Order = 4);\n\n/// Agrupa produtos do catálogo.\ncreate entity Categoria public label Nome (\n  Id Long Integer identifier auto required,\n  /// Nome exibido ao usuário.\n  Nome Text(100) required,\n  /// Dados de Ativa para a FarmaVirtual.\n  Ativa Boolean default True\n);\n\n/// Produto comercializado na farmácia virtual.\ncreate entity Produto public label Nome (\n  Id Long Integer identifier auto required,\n  /// Dados de CategoriaId para a FarmaVirtual.\n  CategoriaId Categoria Identifier required references Categoria on delete Protect,\n  /// Nome exibido ao usuário.\n  Nome Text(200) required,\n  /// Dados de Descricao para a FarmaVirtual.\n  Descricao Text(2000),\n  /// Dados de ImagemUrl para a FarmaVirtual.\n  ImagemUrl Text(2048),\n  /// Preço atual de venda.\n  Preco Decimal(18,2),\n  /// Dados de Estoque para a FarmaVirtual.\n  Estoque Integer,\n  /// Dados de Destaque para a FarmaVirtual.\n  Destaque Boolean,\n  /// Dados de Ativo para a FarmaVirtual.\n  Ativo Boolean default True\n);\n\n/// Um produto por usuário no carrinho.\ncreate entity CarrinhoItem public (\n  Id Long Integer identifier auto required,\n  /// Dados de UserId para a FarmaVirtual.\n  UserId User Identifier required references User on delete Delete,\n  /// Dados de ProdutoId para a FarmaVirtual.\n  ProdutoId Produto Identifier required references Produto on delete Protect,\n  /// Dados de Quantidade para a FarmaVirtual.\n  Quantidade Integer required default 1\n);\ncreate unique index UQ_CarrinhoItem_UserProduto on CarrinhoItem (UserId, ProdutoId);\n\n/// Cabeçalho da compra simulada com dados de entrega.\ncreate entity Pedido public (\n  Id Long Integer identifier auto required,\n  /// Dados de UserId para a FarmaVirtual.\n  UserId User Identifier required references User on delete Protect,\n  /// Dados de StatusPedidoId para a FarmaVirtual.\n  StatusPedidoId StatusPedido Identifier required references StatusPedido on delete Protect default Entities.StatusPedido.Recebido,\n  /// Dados de CriadoEm para a FarmaVirtual.\n  CriadoEm Date Time required default CurrDateTime(),\n  /// Dados de Total para a FarmaVirtual.\n  Total Decimal(18,2),\n  /// Dados de NomeDestinatario para a FarmaVirtual.\n  NomeDestinatario Text(200) required,\n  /// Dados de EnderecoEntrega para a FarmaVirtual.\n  EnderecoEntrega Text(1000) required,\n  /// Dados de Observacao para a FarmaVirtual.\n  Observacao Text(2000)\n);\n\n/// Guarda nome e preço históricos, independentes de mudanças no produto.\ncreate entity PedidoItem public (\n  Id Long Integer identifier auto required,\n  /// Dados de PedidoId para a FarmaVirtual.\n  PedidoId Pedido Identifier required references Pedido on delete Delete,\n  /// Dados de ProdutoId para a FarmaVirtual.\n  ProdutoId Produto Identifier required references Produto on delete Protect,\n  /// Nome registrado na compra simulada.\n  NomeProduto Text(200) required,\n  /// Dados de Quantidade para a FarmaVirtual.\n  Quantidade Integer required,\n  /// Preço unitário registrado na compra simulada.\n  PrecoUnitario Decimal(18,2),\n  /// Valor dos itens calculado na compra simulada.\n  Subtotal Decimal(18,2)\n);\n\n/// Critérios de pesquisa no catálogo.\ntype FiltroCatalogo public = {\n  /// Dados de Busca para a FarmaVirtual.\n  Busca: Text(200);\n  /// Dados de CategoriaId para a FarmaVirtual.\n  CategoriaId: Categoria Identifier;\n  /// Dados de ApenasDisponiveis para a FarmaVirtual.\n  ApenasDisponiveis: Boolean;\n}\n\n/// Dados do produto e valores calculados para exibir o carrinho.\ntype ItemCarrinhoDetalhe public = {\n  /// Dados de CarrinhoItemId para a FarmaVirtual.\n  CarrinhoItemId: CarrinhoItem Identifier;\n  /// Dados de ProdutoId para a FarmaVirtual.\n  ProdutoId: Produto Identifier;\n  /// Nome exibido ao usuário.\n  Nome: Text(200);\n  /// Dados de ImagemUrl para a FarmaVirtual.\n  ImagemUrl: Text(2048);\n  /// Dados de Quantidade para a FarmaVirtual.\n  Quantidade: Integer;\n  /// Preço unitário registrado na compra simulada.\n  PrecoUnitario: Decimal(18,2);\n  /// Valor dos itens calculado na compra simulada.\n  Subtotal: Decimal(18,2);\n  /// Dados de EstoqueDisponivel para a FarmaVirtual.\n  EstoqueDisponivel: Integer;\n}\n\n/// Itens e totais de um carrinho.\ntype ResumoCarrinho public = {\n  /// Dados de Itens para a FarmaVirtual.\n  Itens: ItemCarrinhoDetalhe List;\n  /// Dados de QuantidadeTotal para a FarmaVirtual.\n  QuantidadeTotal: Integer;\n  /// Dados de Total para a FarmaVirtual.\n  Total: Decimal(18,2);\n}\n\n/// Informações fornecidas para entregar o pedido.\ntype DadosEntrega public = {\n  /// Dados de NomeDestinatario para a FarmaVirtual.\n  NomeDestinatario: Text(200);\n  /// Dados de EnderecoEntrega para a FarmaVirtual.\n  EnderecoEntrega: Text(1000);\n  /// Dados de Observacao para a FarmaVirtual.\n  Observacao: Text(2000);\n}\n"
+    }
+   },
+   {
+    "op": "create",
+    "parent": "@espace",
+    "type": "IRole",
+    "name": "FarmaVirtual_Cliente",
+    "as": "$cliente"
+   },
+   {
+    "op": "set",
+    "target": "$cliente",
+    "prop": "Public",
+    "value": true
+   },
+   {
+    "op": "set",
+    "target": "$cliente",
+    "prop": "Description",
+    "value": "Mantém seu carrinho, registra pedidos e consulta seus próprios pedidos. Verificar role e usuário no servidor nas actions de negócio."
+   },
+   {
+    "op": "create",
+    "parent": "@espace",
+    "type": "IRole",
+    "name": "FarmaVirtual_Admin",
+    "as": "$admin"
+   },
+   {
+    "op": "set",
+    "target": "$admin",
+    "prop": "Public",
+    "value": true
+   },
+   {
+    "op": "set",
+    "target": "$admin",
+    "prop": "Description",
+    "value": "Cadastra produtos, ajusta estoque, consulta pedidos e altera seus status. Verificar role no servidor nas actions administrativas."
+   },
+   {
+    "op": "logic",
+    "data": {
+     "actions": [
+      {
+       "name": "InicializarCategorias",
+       "kind": "server",
+       "description": "Inclui somente as categorias iniciais ausentes, preservando registros existentes.",
+       "steps": [
+        {
+         "get": "Categoria",
+         "as": "GetCategorias",
+         "where": "Categoria.Nome = \"Higiene\" or Categoria.Nome = \"Beleza\" or Categoria.Nome = \"Bem-estar\"",
+         "max": "3"
+        },
+        {
+         "call": "ListAny",
+         "as": "ExisteCategoria1",
+         "args": {
+          "List": "GetCategorias.List",
+          "Condition": "GetCategorias.List.Current.Categoria.Nome = \"Higiene\""
+         }
+        },
+        {
+         "if": "not ExisteCategoria1.Result",
+         "label": "Categoria Higiene ausente?",
+         "then": [
+          {
+           "create": "Categoria",
+           "as": "CriarCategoria1",
+           "record": {
+            "Nome": "\"Higiene\"",
+            "Ativa": "True"
+           }
+          }
+         ]
+        },
+        {
+         "call": "ListAny",
+         "as": "ExisteCategoria2",
+         "args": {
+          "List": "GetCategorias.List",
+          "Condition": "GetCategorias.List.Current.Categoria.Nome = \"Beleza\""
+         }
+        },
+        {
+         "if": "not ExisteCategoria2.Result",
+         "label": "Categoria Beleza ausente?",
+         "then": [
+          {
+           "create": "Categoria",
+           "as": "CriarCategoria2",
+           "record": {
+            "Nome": "\"Beleza\"",
+            "Ativa": "True"
+           }
+          }
+         ]
+        },
+        {
+         "call": "ListAny",
+         "as": "ExisteCategoria3",
+         "args": {
+          "List": "GetCategorias.List",
+          "Condition": "GetCategorias.List.Current.Categoria.Nome = \"Bem-estar\""
+         }
+        },
+        {
+         "if": "not ExisteCategoria3.Result",
+         "label": "Categoria Bem-estar ausente?",
+         "then": [
+          {
+           "create": "Categoria",
+           "as": "CriarCategoria3",
+           "record": {
+            "Nome": "\"Bem-estar\"",
+            "Ativa": "True"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "op": "spec",
+    "data": {
+     "ddl": "/// Carga inicial idempotente de Higiene, Beleza e Bem-estar após publicação.\ntimer InicializarCategorias action InicializarCategorias schedule \"When Published\" timeout 5\n"
+    }
+   }
+  ]
+ }
+}

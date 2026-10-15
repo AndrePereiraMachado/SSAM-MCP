@@ -24,7 +24,8 @@ public static partial class JobRunner
         { "Text", "Integer", "Long Integer", "Decimal", "Currency", "Boolean", "Date", "Date Time", "Time", "Identifier", "Binary Data", "Email", "Phone Number" };
     // The codes of a problem that makes its op fail at apply: an op-level apply failure of the same op says it again.
     private static readonly HashSet<string> FailsTheOp = new(StringComparer.Ordinal)
-        { "REFERENCE_UNRESOLVED", "CHILD_NOT_FOUND", "PROPERTY_NOT_WRITABLE", "ENUM_VALUE_INVALID", "TYPE_UNRESOLVED", "SQL_UNRESOLVED", "JSON_SHAPE", "OP_NOT_OBJECT", "LOGIC_DUPLICATE_ACTION" };
+        { "REFERENCE_UNRESOLVED", "CHILD_NOT_FOUND", "PROPERTY_NOT_WRITABLE", "ENUM_VALUE_INVALID", "TYPE_UNRESOLVED", "SQL_UNRESOLVED", "JSON_SHAPE", "OP_NOT_OBJECT", "LOGIC_DUPLICATE_ACTION",
+          Preflight.NodeRules.Code };
 
     /// <summary>The ops the preflight refused whole: their JSON could not be read as the op (JSON_SHAPE, OP_NOT_OBJECT), or an
     /// html op the structural pass refused (H3 of docs/PROTOTIPO-NATIVO.md: HTML_* and the CSS the html op carries, found
@@ -37,11 +38,34 @@ public static partial class JobRunner
         return ops.Count == 0 ? null : ops;
     }
 
+    /// <summary>The ops refused whole, but the document form (B1) still runs: its compile says the rules again with the names
+    /// only the module can check, and the refusal brings both together (the same problem at the same line once).</summary>
+    private static IReadOnlySet<int>? RefusedWholeButDocuments(JsonObject? preflight, JsonArray jobOps)
+    {
+        var ops = RefusedWhole(preflight)?.Where(i => !(StructuralHtmlOnly(preflight, i) && i < jobOps.Count && ScreenDocument.IsDocumentOp(jobOps[i]))
+            && !(RulesOnly(preflight, i) && i < jobOps.Count && jobOps[i] is JsonObject edit && Anvil.Reading.ScreenHtmlEdit.IsEdit(edit))).ToHashSet();
+        return ops is { Count: > 0 } ? ops : null;
+    }
+
+    // B3: the edit form of an html op that the preflight refused only for the owner's rules on what is new (a <script>, a
+    // javascript: event, a foreign iteration, a Visible): its plan says them again with the reading (what the element already
+    // had is kept, never refused) beside everything else that is wrong with it, each with its patch: one refusal, not one per wave.
+    private static readonly HashSet<string> RuleCodes = new(StringComparer.Ordinal) { "HTML_SCRIPT", "HTML_FOREACH", "HTML_VISIBLE", "HTML_JSON" };
+    private static bool RulesOnly(JsonObject? preflight, int op)
+        => (preflight?["problems"] as JsonArray ?? new JsonArray()).OfType<JsonObject>()
+            .Where(p => p["op"] is JsonValue v && v.TryGetValue<int>(out var at) && at == op).All(p => RuleCodes.Contains(p["code"]?.ToString() ?? ""));
+
+    // Every problem the preflight found in this op is a module-free html one (none is the shape of the op itself).
+    private static bool StructuralHtmlOnly(JsonObject? preflight, int op)
+        => (preflight?["problems"] as JsonArray ?? new JsonArray()).OfType<JsonObject>()
+            .Where(p => p["op"] is JsonValue v && v.TryGetValue<int>(out var at) && at == op).All(StructuralHtml);
+
     /// <summary>A problem of the module-free pass of an html op: its code is an HTML_* code (or the CSS one of the op), its pointer
     /// inside an op, and it is an error of the preflight (no base was loaded to find it).</summary>
     private static bool StructuralHtml(JsonObject problem)
         => problem["severity"]?.ToString() is null or "error" && problem["phase"]?.ToString() is null or "preflight"
-           && problem["code"]?.ToString() is { } code && (code.StartsWith("HTML_", StringComparison.Ordinal) || code == CssCompat.Code && problem["pointer"]?.ToString()?.Contains("/data/css", StringComparison.Ordinal) == true);
+           && problem["code"]?.ToString() is { } code && (code.StartsWith("HTML_", StringComparison.Ordinal) || code == CssCompat.Code && problem["pointer"]?.ToString() is { } pointer
+               && (pointer.Contains("/data/css", StringComparison.Ordinal) || pointer.Contains("/data/html", StringComparison.Ordinal)));
 
     /// <summary>The refusal of a job with problems in any phase: the Verify of the candidate as applied (never saved), its
     /// blocking messages mapped to the job, and the union of every phase. One phase alone keeps the refusal tools already
@@ -53,6 +77,11 @@ public static partial class JobRunner
     {
         var preflightInvalid = preflight?["valid"]?.GetValue<bool>() == false;
         var kept = session.Kept;
+        // The envelope reports phases executed; each problem's phase still reports where that problem was found.
+        var phases = new List<string>();
+        if (preflight != null) phases.Add("preflight");
+        phases.Add("base");
+        phases.Add("apply");
         // The Verify of what did apply: its blocking messages (errors, security warnings) are problems of the job too. A job
         // that expects an invalid module asks the Verify for that verdict: its errors are not problems.
         var verify = new List<JsonObject>();
@@ -66,6 +95,8 @@ public static partial class JobRunner
             verifyReason = "the Studio's check at the end of the apply failed on what the failed op(s) left half-built (" + broken + "): the Verify did not run; fix the failed op(s) and the next refusal brings the Verify";
         }
         else
+        {
+            phases.Add("verify");
             try
             {
                 var after = ModelHost.Messages(espace);
@@ -76,8 +107,32 @@ public static partial class JobRunner
                 if (expectedValid) verify = session.VerifyProblems(policy.Unexpected, ops, opsPointer, MessageExpectations.Lane, VerifyHints.TryRead());
             }
             catch (Exception ex) { verifyFailed = Errors.Text(ex); log?.Invoke("  verify of the diagnosis failed: " + verifyFailed); }
+        }
         var verifyNotes = verify.Where(p => p["severity"]?.ToString() == "warning").ToList();
         verify = verify.Except(verifyNotes).ToList();
+        // motor2 (C16): what a failed op left half-built is not a fault of its own: the Verify's messages on the actions a
+        // failed logic op declares (InvalidFlow_NoStart of a screen action born empty by its document) go with that failure.
+        string? cascadeLine = null;
+        if (kept != null && CascadeOfFailedOps(verify, kept.Problems, ops, opsPointer) is { Count: > 0 } cascade)
+        {
+            verify = verify.Except(cascade).ToList();
+            var note = JobPreflight.Problem(null, null, "VERIFY_OF_FAILED_OP", "warning",
+                $"{cascade.Count} message(s) of the Verify are on actions a failed op declares ({string.Join(", ", cascade.Select(c => c["message"]?.ToString() ?? "").Select(Element).Distinct().Take(6))}): what the failure left half-built, left out of the problems",
+                "fix the failed op; its actions are built whole the next time", null, "verify");
+            verifyNotes.Add(note);
+            cascadeLine = JobPreflight.Text(note);
+        }
+        // motor2 review: the apply and the Verify point into the ops as normalized (and as patched for the diagnosis); the
+        // answer points into the job as sent (after the cascade, which reads the ops as they are). A patch this round applied
+        // for its diagnosis (NODE_NOT_ALLOWED) says whether the round proved it.
+        if (kept != null)
+        {
+            Preflight.SentJob.TranslateAll(kept.Problems, ops, opsPointer);
+            Preflight.SentJob.TranslateAll(kept.Warnings.OfType<JsonObject>(), ops, opsPointer);
+        }
+        Preflight.SentJob.TranslateAll(verify, ops, opsPointer);
+        Preflight.SentJob.TranslateAll(verifyNotes, ops, opsPointer);
+        Preflight.NodeRules.Proven(baseCheck.Problems, kept?.Problems ?? [], verify, opsPointer);
         verifyReason ??= verifyFailed != null ? "the Verify of the candidate failed: " + verifyFailed
             : expectedValid ? null : "expectValid is false: the Verify's errors are the verdict the job expects, not problems";
         if (!preflightInvalid && baseCheck.Problems.Count == 0 && verify.Count == 0)
@@ -87,14 +142,14 @@ public static partial class JobRunner
             if (kept == null && upgrade.Count > 0)
             {
                 var refused = new InvalidOperationException(string.Join(Environment.NewLine, upgrade));
-                Errors.Annotate(refused, verifyFailed == null, verifyReason, ["apply"],
+                Errors.Annotate(refused, verifyFailed == null, verifyReason, phases,
                     new JsonArray(UpgradeProblems(upgrade, opsPointer).Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray()));
                 return refused;
             }
             if (kept?.Refusal != null && upgrade.Count == 0)
             {
-                Errors.Annotate(kept.Refusal, verifyFailed == null, verifyReason, ["apply"],
-                    new JsonArray(kept.Problems.Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray()));
+                Errors.Annotate(kept.Refusal, verifyFailed == null, verifyReason, phases,
+                    new JsonArray(FoldCascade(kept.Problems.ToList(), ops, opsPointer).Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray()));
                 return kept.Refusal;
             }
         }
@@ -109,7 +164,22 @@ public static partial class JobRunner
         if (kept != null) all.AddRange(kept.Problems);
         all.AddRange(UpgradeProblems(upgrade, opsPointer));
         all.AddRange(verify);
-        var problems = Union(all, opsPointer);
+        var united = Union(all, opsPointer);
+        // Integration 24-1 familias (review): every problem of one html document carries one patch, every correction composed and
+        // proved by its compile (JobRunner.DocumentPatches), never two whole texts where the last undoes the first.
+        DocumentPatches(united, ops, opsPointer, (op, html, css) => session.CheckComposedDocument(ops, op, html, css), log);
+        // Familias: the cascade of a failed part of the job (a name it declares, not found elsewhere) leaves the problems; its
+        // root says blocks: N.
+        var problems = FoldCascade(united, ops, opsPointer);
+        string? foldedLine = null;
+        if (problems.Count < united.Count)
+        {
+            var folded = JobPreflight.Problem(null, null, "CASCADE_FOLDED", "warning",
+                $"{united.Count - problems.Count} problem(s) of the apply and the Verify name what a failed part of this job declares: left out of the problems, counted in blocks of their {problems.Count(p => p["blocks"] is JsonValue)} root(s)",
+                "fix the roots (the problems with blocks); what they declare is built the next time", null, "verify");
+            verifyNotes.Add(folded);
+            foldedLine = JobPreflight.Text(folded);
+        }
         // The text: the lines of the preflight and of the base as tools read them, then the failures of the apply that are
         // not the same place again, the database upgrade and the Verify.
         var lines = new List<string>();
@@ -121,15 +191,65 @@ public static partial class JobRunner
             lines.AddRange(kept.Lines.Where(l => UpgradePrefix.Match(l) is not { Success: true } m || applyOps.Contains(int.Parse(m.Groups[1].Value)) || l.Contains(" skipped: ", StringComparison.Ordinal)));
         lines.AddRange(upgrade);
         lines.AddRange(problems.Where(p => p["phase"]?.ToString() == "verify").Select(JobPreflight.Text));
+        if (cascadeLine != null) lines.Add(cascadeLine);
+        if (foldedLine != null) lines.Add(foldedLine);
         var warnings = new JsonArray((preflight?["warnings"] as JsonArray ?? new JsonArray()).Select(w => w?.DeepClone())
             .Concat((kept?.Warnings ?? []).Select(w => (JsonNode?)w)).Concat(verifyNotes.Select(w => (JsonNode?)JobPreflight.PublicProblem(w))).ToArray());
-        var phases = problems.Select(p => p["phase"]?.ToString()).OfType<string>().Distinct().ToList();
         return new JobPreflightException(string.Join(Environment.NewLine, lines), new JsonArray(problems.Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray()), warnings)
         {
             VerifyRan = verifyFailed == null,
             VerifyReason = verifyReason,
             Phases = phases,
         };
+    }
+
+    private static readonly Regex VerifyPath = new(@" @ (?<path>.+?)\s*$", RegexOptions.Compiled);
+    private static readonly Regex PathLevel = new(@"^(?<name>.+?) \((?<kind>[A-Za-z]+)\)$", RegexOptions.Compiled);
+
+    /// <summary>The "Screen / Action" a Verify message names at the end of its path (or the message when it names none).</summary>
+    private static string Element(string message)
+    {
+        if (VerifyPath.Match(message) is not { Success: true } m) return message.Length > 60 ? message[..60] : message;
+        var levels = m.Groups["path"].Value.Split(" / ");
+        return string.Join(".", levels.TakeLast(2).Select(l => PathLevel.Match(l) is { Success: true } lm ? lm.Groups["name"].Value : l));
+    }
+
+    /// <summary>motor2: the Verify problems whose element is an action a logic op declares (by owner and name), when that op
+    /// failed whole at apply (its op-level APPLY_FAILED, or the op skipped): the cascade of that failure.</summary>
+    internal static List<JsonObject> CascadeOfFailedOps(IReadOnlyList<JsonObject> verify, IReadOnlyList<JsonObject> applied, JsonArray ops, string? opsPointer)
+    {
+        if (opsPointer == null) return [];
+        var declared = new HashSet<(string Owner, string Name)>();
+        void Declare(JsonNode? action)
+        {
+            if (action is JsonObject a && a["name"]?.ToString() is { Length: > 0 } name && a["owner"]?.ToString() is { } owner && owner.Contains(':'))
+                declared.Add((owner[(owner.IndexOf(':') + 1)..].ToUpperInvariant(), name.ToUpperInvariant()));
+        }
+        foreach (var p in applied)
+        {
+            if (p["op"] is not JsonValue v || !v.TryGetValue<int>(out var op) || op >= ops.Count || ops[op] is not JsonObject logic
+                || logic["op"]?.ToString() != "logic" || logic["data"]?["actions"] is not JsonArray actions) continue;
+            var pointer = p["pointer"]?.ToString() ?? "";
+            // The op failed whole: every action it declares; one action failed: that one.
+            if (pointer == $"{opsPointer}/{op}") foreach (var action in actions) Declare(action);
+            else if (Regex.Match(pointer, "^" + Regex.Escape($"{opsPointer}/{op}/data/actions/") + @"(\d+)$") is { Success: true } one && int.Parse(one.Groups[1].Value) < actions.Count)
+                Declare(actions[int.Parse(one.Groups[1].Value)]);
+        }
+        if (declared.Count == 0) return [];
+        var cascade = new List<JsonObject>();
+        foreach (var p in verify)
+        {
+            if (VerifyPath.Match(p["message"]?.ToString() ?? "") is not { Success: true } m) continue;
+            var levels = m.Groups["path"].Value.Split(" / ").Select(l => PathLevel.Match(l)).Where(l => l.Success).ToList();
+            // The action is a level of the path (the message may name a node inside it); its screen or block is the level above.
+            for (var k = levels.Count - 1; k >= 1; k--)
+            {
+                if (!levels[k].Groups["kind"].Value.EndsWith("Action", StringComparison.Ordinal)) continue;
+                if (declared.Contains((levels[k - 1].Groups["name"].Value.ToUpperInvariant(), levels[k].Groups["name"].Value.ToUpperInvariant()))) cascade.Add(p);
+                break;
+            }
+        }
+        return cascade;
     }
 
     /// <summary>The lines of the database upgrade refusal as problems (phase apply, code DATABASE_UPGRADE_REFUSED).</summary>
@@ -167,14 +287,35 @@ public static partial class JobRunner
             }
             if (p["phase"]?.ToString() is "apply" or "verify" && result.FirstOrDefault(q => SamePlace(q, p, opsPointer)) is { } same)
             {
-                if (same["pointer"]?.ToString() == p["pointer"]?.ToString() && same["patch"] is not JsonArray && p["patch"] is JsonArray)
+                // A problem of an html document said by the preflight and again by the compile: the compile's word stands, its
+                // patch the corrected document it compiled and checked (the names too, which only the module knows), or none when
+                // that check refused it (B4: a patch that does not compile is never offered).
+                var document = same["phase"]?.ToString() == "preflight" && p["line"] is JsonValue && same["line"] is JsonValue && Html(p) && Html(same);
+                // A logic text's problem said by the preflight and again by the apply: the apply's patch was written with the
+                // module (the type of a list of the screen, the order of a record's attributes), and stands.
+                var text = same["phase"]?.ToString() == "preflight" && p["phase"]?.ToString() == "apply" && (WholeFlowPatch(p["patch"]) || WholeFlowPatch(same["patch"]));
+                if (same["pointer"]?.ToString() == p["pointer"]?.ToString() && (same["patch"] is not JsonArray && p["patch"] is JsonArray || document || text))
                     result[result.IndexOf(same)] = p;
                 continue;
             }
             result.Add(p);
         }
+        // The patch of a logic op's text form writes its whole data.flow (FlowTextForm.Patch: every certain fix of every text of
+        // the op): the one the apply wrote, with the read of every action, stands for every problem of that op that has one, so
+        // the patches of one refusal never undo each other.
+        foreach (var group in result.Where(p => p["op"] is JsonValue && WholeFlowPatch(p["patch"])).GroupBy(p => p["op"]!.ToJsonString()))
+        {
+            var best = group.LastOrDefault(p => p["phase"]?.ToString() == "apply") ?? group.Last();
+            foreach (var p in group) if (!ReferenceEquals(p, best)) p["patch"] = best["patch"]!.DeepClone();
+        }
         return result;
     }
+
+    private static bool WholeFlowPatch(JsonNode? patch)
+        => patch is JsonArray { Count: 1 } steps && steps[0] is JsonObject step && step["op"]?.ToString() == "replace"
+           && step["path"]?.ToString() is { } path && (path.EndsWith("/data/flow", StringComparison.Ordinal) || path.EndsWith("/data", StringComparison.Ordinal) && step["value"]?["flow"] != null);
+
+    private static bool Html(JsonObject problem) => problem["code"]?.ToString()?.StartsWith("HTML_", StringComparison.Ordinal) == true;
 
     private static bool SamePlace(JsonObject q, JsonObject p, string? opsPointer)
     {
@@ -183,9 +324,35 @@ public static partial class JobRunner
         // went under the CustomObjectError of the same Labels), unless the same message on the same element came twice.
         if (q["phase"]?.ToString() == "verify" && p["phase"]?.ToString() == "verify"
             && (q["key"]?.ToString() != p["key"]?.ToString() || q["message"]?.ToString() != p["message"]?.ToString())) return false;
+        // motor2 review: a problem whose patch this round's apply ran (NODE_NOT_ALLOWED) did not fail its op; what the apply or
+        // the Verify found at its place is a fault of the patched op, never the same refusal again.
+        if (q["_diagnosisPatch"] is JsonValue) return false;
+        // Familias: a preflight rule that predicts a Verify message names it (verifyCode) and the element it is on (element):
+        // the Verify's message of that id on that element (a level of its path) is the same fault.
+        if (q["verifyCode"]?.ToString() is { Length: > 0 } predicted && p["phase"]?.ToString() == "verify" && p["code"]?.ToString() == predicted
+            && q["op"]?.ToJsonString() == p["op"]?.ToJsonString() && q["element"]?.ToString() is { Length: > 0 } element
+            && VerifyPath.Match(p["message"]?.ToString() ?? "") is { Success: true } verifyPath
+            && verifyPath.Groups["path"].Value.Split(" / ").Any(level => PathLevel.Match(level) is { Success: true } lm && lm.Groups["name"].Value.Equals(element, StringComparison.OrdinalIgnoreCase)))
+            return true;
         var qo = q["op"] is JsonValue qv && qv.TryGetValue<int>(out var a) ? a : (int?)null;
         var po = p["op"] is JsonValue pv && pv.TryGetValue<int>(out var b) ? b : (int?)null;
         if (qo == null || po == null || qo != po) return false;
+        // Problems of one logic text (ssam-flow/1) all point at the text and name the element by its id: one place is the same
+        // rule on the same element, never the next rule on another node of the same text.
+        if (q["id"] is JsonValue && p["id"] is JsonValue)
+            return q["code"]?.ToString() == p["code"]?.ToString() && q["id"]!.ToJsonString() == p["id"]!.ToJsonString() && q["pointer"]?.ToString() == p["pointer"]?.ToString();
+        // Problems of the edit of a reading (C2) all point at their edit string: one place there is the same rule on the same
+        // element (its k; a new element or a <script>, which have none, by the message), never every problem of the same edit,
+        // nor an html rule and another check of the same string (an unknown function of the base beside the L6 rule).
+        if (!(q["line"] is JsonValue && p["line"] is JsonValue) && (Html(q) || Html(p)) && q["pointer"]?.ToString() is { } edit && edit == p["pointer"]?.ToString()
+            && (edit.Contains("/data/edit", StringComparison.Ordinal) || edit.EndsWith("/data/html", StringComparison.Ordinal)))
+            return q["code"]?.ToString() == p["code"]?.ToString()
+                && (q["k"] is JsonValue && q["k"]!.ToString() == p["k"]?.ToString() || q["message"]?.ToString() == p["message"]?.ToString());
+        // Problems of one text (the html document of an op) carry their line and column: two of them are one place only when
+        // they say the same thing there. One refusal brings every wrong name of the document (B1), not the first of them.
+        if (q["line"] is JsonValue && p["line"] is JsonValue && Html(q) && Html(p))
+            return q["line"]!.ToJsonString() == p["line"]!.ToJsonString() && q["column"]?.ToJsonString() == p["column"]?.ToJsonString()
+                && q["message"]?.ToString() == p["message"]?.ToString();
         var qp = q["pointer"]?.ToString(); var pp = p["pointer"]?.ToString();
         var sameCode = q["code"]?.ToString() == p["code"]?.ToString();
         if (qp == null || pp == null) return sameCode || Subjects(q).Overlaps(Subjects(p));

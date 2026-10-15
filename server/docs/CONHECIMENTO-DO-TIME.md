@@ -44,6 +44,8 @@ cai para shell ou script. A primeira chamada dele é `ssam_discover {intent, lan
 elementos do módulo, o contrato, um exemplo provado, as regras que valem e o próximo passo. Ele trabalha a partir do
 pacote, sem reler docs nem o módulo.
 
+Cada subagente grava sua parte num arquivo UTF-8 próprio e responde só o caminho: `.flow` pode conter várias actions, cada uma com sua descrição `///` e cabeçalho na coluna 0, separadas por linha em branco; dados em `.ddl`, telas em `.html` e ops JSON em `.json`. O agente principal envia todos os caminhos numa única chamada `ssam_code {lane, action:"write", module, files:["C:\\...\\parte-1.flow", ...]}`, sem copiar ou redigitar os textos. O SSAM parte as actions; uma recusa aponta todos os problemas por arquivo (`files/<i>`).
+
 ### Mudança de fachada: quando reconectar o MCP
 
 O servidor MCP recarrega sozinho quando a fachada ou o catálogo mudam: a próxima chamada já usa o código novo, e o
@@ -99,6 +101,17 @@ Dentro do laço, `ListFilter(GetOrdersWithLines.List, OrderLine.OrderId = GetOrd
   neles, viram aviso HIGH (`legacy: true`), nunca recusa.
 - Escape explícito, só quando a consulta precisa mesmo rodar por item: `"allowQueryInLoop": {"why": "<15+ caracteres>"}`
   no op que cria a consulta. É aceito e fica no recibo (`QUERY_IN_LOOP_ALLOWED` em `highWarnings`), nunca em silêncio.
+- **Sort de aggregate (recusa, `AGGREGATE_SORT_NOT_ATTRIBUTE`)**: o sort é UM atributo de uma fonte (`Fonte.Atributo`) ou
+  uma coluna do aggregate; a ordem decrescente é `desc` (no texto) ou `SortDirection` Descending. Nunca expressão: o
+  Verify aceita e a publicação quebra no compilador (VisitaCerta_CS, 2026-10-12). `X DESC`, `-X`,
+  `IdentifierToLongInteger(X)` e `If(C, 0, 1)` são escritos como o atributo com a direção e listados no recibo; ordem
+  calculada (If sobre variável, conta) vira coluna `CALC SortKey=<expressão>` com `SORT SortKey`, ou sort dinâmico.
+  Aggregate agrupado (GROUP BY ou AGG) só ordena por atributo que o GROUP BY lê. GROUP BY e AGG sobre expressão são recusados:
+  `CALC NomeRow=<expressão>` e a coluna pelo nome (`AGG Total=Sum(TotalRow)`). Join é Inner, Left ou Full (Right de duas
+  fontes vira Left trocado, listado); fonte sem join é recusada. Cliente SOAP só nasce da importação nativa do WSDL (op soap
+  pelo o11_deliver): criado por verbos, é recusado com a chamada pronta. A checagem de compilação recusa tudo isso antes de
+  entregar, inclusive o que a base já tinha (`preexisting`, com os ops que corrigem quando é certo): nenhuma entrega sobre
+  uma base que não compila compila.
 - **AGGREGATES_MERGEABLE (aviso HIGH)**: dois ou mais aggregates no mesmo fluxo ou na mesma tela, sobre a mesma entidade
   ou entidades ligadas por atributo de referência, usados juntos. O aviso nomeia os aggregates, a relação
   (`Entidade.Atributo -> Entidade`) e sugere o aggregate único (fontes + join + filtros). A03: não bloqueia, mas vem
@@ -149,9 +162,13 @@ recusou na sessão do QuizLive (04/10):
 
 ### O11: agenda de timer em texto
 
-O `Schedule` do timer O11 é texto, como o Service Studio grava: `Every 60 minutes`, `Every day at 00:00`,
-`Every Monday at 00:05` (provado por `kernel/tests/jobs/pacote-laneE-timer-schedule.json`). O ODC usa `CronSchedule` de
-cinco campos.
+O `Schedule` do timer O11 usa horários nativos: `03:00` significa todos os dias às 03:00;
+`00:05 Mon` significa segunda-feira às 00:05. Para todos os dias a cada cinco minutos,
+use `{ "everyMinutes": 5 }` no setter, que gera os 288 horários de `00:00` a `23:55`.
+Em ssam-ddl/1, escreva essa lista de horários no `schedule`. Frases como `Every 60 minutes`
+ou `Every day at 00:00` são inválidas, mesmo que o setter permissivo do Studio as aceite.
+O compilador DDL e o setter recusam essas frases com `TIMER_SCHEDULE_INVALID`.
+O ODC usa `CronSchedule` de cinco campos.
 
 ### ODC (client) e O11 (server): lambda de list action só com atributo direto
 

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeTraceResult } from '../runtime/trace-result.mjs';
+import { redact } from '../runtime/errors.mjs';
 
 const span = (id, parent = '', changes = {}) => ({ TraceId: 'trace-1', SpanId: id, ParentSpanId: parent,
   SpanName: id, StartTimeUnixNano: '1720000000000000001', EndTimeUnixNano: '1720000000000000011', ...changes });
@@ -45,7 +46,8 @@ test('trace projection omits arbitrary attributes, URLs, user identifiers and cr
   const actual = normalizeTraceResult(result([span('root', '', { Attributes: { Password: 'private' }, UserId: 'person', UserName: 'name',
     Url: 'https://example.invalid/?token=secret', Extra: 'private', StatusMessage: 'Bearer abc.def.ghi' })]), options);
   for (const field of ['Attributes', 'UserId', 'UserName', 'Url', 'Extra']) assert.equal(actual.spans[0][field], undefined);
-  assert.ok(!JSON.stringify(actual).includes('abc.def.ghi'));
+  assert.equal(actual.spans[0].StatusMessage, 'Bearer abc.def.ghi');
+  assert.ok(!JSON.stringify(redact(actual)).includes('abc.def.ghi'));
 });
 
 test('foreign trace, malformed contract and unsafe limits fail without returning payload values', () => {

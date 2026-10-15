@@ -122,6 +122,81 @@ export function slotRunner(slot, { root, env, lane, workspace }) {
 // the hosted server builds in one pool, a customer with ten builds queued never holds back another's single build),
 // SSAM_CUSTOMER, else the lane root.
 export const buildCustomer = ctx => ctx?.customer ?? hostedContext()?.tokenId ?? ctx?.env?.SSAM_CUSTOMER ?? ctx?.root;
+// The validation contract of a candidate the kernel did not accept (JobRunner: isValid against expectedValid, the message
+// expectations of the job, the data contract), as a refusal names it: which part said no, with its counts (VisitaCerta
+// 2026-10-12: two refusals said only "job rejected by validation contract" and their records kept no problem). Null without
+// the kernel's apply data.
+// The Verify's errors the module already had before the job (validation.preexisting), when the job added none of its own:
+// the only reason the candidate is invalid (re-check of 2026-10-12, probe K1: the refusal said "0 errors" and named nothing).
+const errorsOf = list => (Array.isArray(list) ? list : []).filter(m => m && String(m.type ?? '').toLowerCase() === 'error');
+const countsOf = list => { const byCode = {}; for (const p of list) { const code = String(p.code ?? p.id ?? 'unknown'); byCode[code] = (byCode[code] ?? 0) + 1; } return byCode; };
+const countsText = byCode => Object.entries(byCode).map(([code, n]) => code + ' ' + n).join(', ');
+function preexistingOnly(apply, errors) {
+  const expectedValid = apply.expectedValid !== false;
+  return expectedValid && apply.isValid === false && errors.length === 0 ? errorsOf(apply.validation?.preexisting) : [];
+}
+
+export function validationContract(apply) {
+  if (!apply || typeof apply !== 'object') return null;
+  const expectedValid = apply.expectedValid !== false;
+  const verify = (Array.isArray(apply.problems) ? apply.problems : []).filter(p => p && p.phase === 'verify' && p.severity !== 'warning');
+  const fresh = errorsOf(apply.validation?.new);
+  const errors = verify.length ? verify : fresh;
+  const byCode = countsOf(errors);
+  const had = preexistingOnly(apply, errors);
+  const unexpected = Array.isArray(apply.validation?.unexpected) ? apply.validation.unexpected.length : 0;
+  const dataRefused = apply.dataContract?.accepted === false;
+  const refactorRefused = apply.refactorProof?.accepted === false;
+  const parts = [];
+  if (apply.isValid !== undefined && apply.isValid !== expectedValid)
+    parts.push(!expectedValid ? 'the Verify found the module valid and the job expects it invalid'
+      : had.length ? 'the module already had ' + had.length + ' error' + (had.length === 1 ? '' : 's') + ' (' + countsText(countsOf(had)) + '), the job added none'
+      : 'the Verify of the candidate: ' + errors.length + ' error' + (errors.length === 1 ? '' : 's') + (errors.length ? ' (' + countsText(byCode) + ')' : ''));
+  if (unexpected) parts.push(unexpected + ' message' + (unexpected === 1 ? '' : 's') + ' no expectedMessages entry covers');
+  if (dataRefused) parts.push('the data contract');
+  // JobRunner: the references a refactor of the job relies on, compared after the save and a reload (Delivery.cs ValidationVerdict).
+  if (refactorRefused) parts.push('the refactor proof (reference sets changed after save/reload)');
+  return { name: 'validation', valid: apply.isValid ?? null, expectedValid, accepted: apply.accepted ?? null, verifyRan: apply.verifyRan ?? null,
+    verifyErrors: errors.length, ...(errors.length ? { byCode } : {}), ...(had.length ? { preexistingErrors: had.length } : {}),
+    unexpectedMessages: unexpected, ...(dataRefused ? { dataContract: 'refused' } : {}),
+    ...(refactorRefused ? { refactorProof: 'refused' } : {}), summary: parts.join('; ') || 'the candidate was not accepted' };
+}
+
+// The kernel's policy messages that are no message of the Verify (JobRunner): each part of the contract with its own code
+// and the fix that resolves it; anything else is a Verify message no expectation covers.
+const POLICY = [
+  [/^Data property mismatch: /, 'DATA_CONTRACT', 'the data the candidate holds differs from the job\'s dataContract (the expected and actual values are in the message): correct the data the job writes, or the dataContract entry when it is the contract that is wrong'],
+  [/^Refactor reference sets changed after save\/reload/, 'REFACTOR_PROOF', 'the elements that reference what the job renames or moves are not the same after save and reload (the differences are in the message): deliver the rename or move in a job of its own, then the rest'],
+  [/^expectValid=False, but Verify isValid=True/i, 'VALIDITY_EXPECTATION', 'the job says expectValid:false and the Verify found the module valid: remove expectValid:false, or make the change the job expects the Verify to refuse'],
+];
+
+// The problems of a refused candidate when the kernel gave none of its own (an older kernel, a refusal of the expectations
+// alone): one per new error of the Verify, per difference of the data contract and of the refactor proof, and per message no
+// expectation covers, never an empty list. A candidate the Verify refuses only for errors the module already had (the job
+// added none): one per such error, with its element and key.
+export function contractProblems(apply) {
+  if (!apply || typeof apply !== 'object') return [];
+  const out = [];
+  const problem = (m, fix) => ({ phase: 'verify', op: null, pointer: null, code: String(m.id ?? 'VerifyError'), severity: 'error',
+    message: String(m.detail ?? m.id ?? '') + (m.path ? ' @ ' + m.path : ''), fix,
+    ...(m.path ? { element: String(m.path) } : {}), ...(m.ownerKey ? { key: String(m.ownerKey) } : {}) });
+  const fresh = errorsOf(apply.validation?.new);
+  for (const m of fresh)
+    out.push(problem(m, 'fix the element as the Verify says (`anvil verify-message --name ' + String(m.id ?? '') + '` explains the message)'));
+  const verifyProblems = (Array.isArray(apply.problems) ? apply.problems : []).filter(p => p && p.phase === 'verify' && p.severity !== 'warning');
+  for (const m of preexistingOnly(apply, verifyProblems.length ? verifyProblems : fresh))
+    out.push(problem(m, 'the module already had this error before the job (the job did not add it): fix it in the job or in the Studio, then validate again'
+      + ' (`anvil verify-message --name ' + String(m.id ?? '') + '` explains the message)'));
+  const verify = out.length > 0;
+  for (const text of Array.isArray(apply.policyMessages) ? apply.policyMessages : []) {
+    const [, code, fix] = POLICY.find(([pattern]) => pattern.test(String(text))) ?? [];
+    // A message of the Verify (an uncovered one, `expectValid=True, but ...`) is already one of the errors above.
+    if (!code && (verify || /^expectValid=/i.test(String(text)))) continue;
+    out.push({ phase: 'verify', op: null, pointer: null, code: code ?? 'UNEXPECTED_MESSAGE', severity: 'error',
+      message: String(text), fix: fix ?? 'correct the element, or declare the message in expectedMessages with why' });
+  }
+  return out;
+}
 
 // The build of one delivery (see the header): null (no build phase: deliver as before), {answer} (the kernel refused the
 // job on the live module, or the pool's turn did not come: nothing reached the Studio), or {args, manifest} (append args
@@ -160,7 +235,10 @@ export async function buildBeforeApply({ input, job, ctx, lane, task, signal }) 
     && (run.envelope.code === 'PREFLIGHT_REFUSED' || (Array.isArray(run.envelope.problems) && run.envelope.problems.length))) { notePhase({ built: true }); return { refused: run }; }
   if (data && typeof data === 'object' && (data.isValid === false || data.accepted === false)) {
     notePhase({ built: true });
-    return { refused: { ...run, envelope: { ...run.envelope, data: { stage: 'apply', apply: data, writeState: 'not-sent', error: 'job rejected by validation contract; merge was not attempted' } } } };
+    // The error names the part of the contract that refused and its counts: the task record and the journal keep it.
+    const contract = validationContract(data);
+    return { refused: { ...run, envelope: { ...run.envelope, data: { stage: 'apply', apply: data, writeState: 'not-sent',
+      error: 'job rejected by validation contract (' + contract.summary + '); merge was not attempted' } } } };
   }
   const result = candidate.replace(/\.oml$/i, '.result.json');
   // Anything else (no candidate, an exception, a timeout): the delivery builds inside the Studio lock, as before.

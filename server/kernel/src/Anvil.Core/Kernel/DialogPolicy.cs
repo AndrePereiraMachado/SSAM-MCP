@@ -16,6 +16,9 @@ public static class DialogPolicy
     public const string Progress = "Progress";
     /// <summary>DialogWindow com conteudo web cujo texto a arvore visual nao expoe (recuperacao, Manage Dependencies): le-se pelo CDP.</summary>
     public const string WebDialog = "WebDialog";
+    /// <summary>fam-deps (2026-10-12): the Studio's crash report "Unexpected Error" (a web DialogWindow), shown when an exception
+    /// leaves a Studio command; it asks nothing, the command was already rolled back (OperationDialogPolicy).</summary>
+    public const string UnexpectedError = "UnexpectedError";
 
     private static readonly string[] ProgressWords = { "opening", "loading", "downloading", "uploading", "please wait", "connecting", "checking", "publishing", "preparing" };
 
@@ -39,6 +42,7 @@ public static class DialogPolicy
         var hasButton = all.Contains("[Button]", StringComparison.Ordinal);
         if (!hasButton && string.Equals(title?.Trim(), "Progress", StringComparison.OrdinalIgnoreCase)) return Progress;
         if (!hasButton && (ProgressWords.Any(w => all.Contains(w, StringComparison.OrdinalIgnoreCase)) || all.Contains('%'))) return Progress;
+        if (string.Equals(title?.Trim(), "Unexpected Error", StringComparison.OrdinalIgnoreCase)) return UnexpectedError;
         if (all.Contains("Discard", StringComparison.OrdinalIgnoreCase) && all.Contains("Open", StringComparison.OrdinalIgnoreCase)) return Recovery;
         // "Incompatible or missing dependencies found" (DialogWindow web com botoes Manage Dependencies | Cancel, visiveis so pelo CDP):
         // o dialogo do incidente das 15:13 depois de republicar um produtor; reproduzido em 2026-09-04 20:02 no Davitest_UI

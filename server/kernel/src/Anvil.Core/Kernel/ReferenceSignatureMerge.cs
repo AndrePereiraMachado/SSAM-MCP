@@ -112,10 +112,19 @@ public static class ReferenceSignatureMerge
     /// caller's Command so native rollback restores the complete operation.</summary>
     public static ReferenceSignatureMergeResult MergeInCurrentCommand(ESpace local, ESpace foreign, ESpace basis,
         ReferenceSignatureMergePlan plan, Action<MatchTree> mergeTree, bool matchByStructure = false)
+        => MergeInCurrentCommandStaged(local, foreign, basis, plan, mergeTree, matchByStructure, null);
+
+    /// <summary>fam-deps R7: MergeInCurrentCommand where <paramref name="stage"/> hears each step as it starts (plan,
+    /// structural-tree, structural-merge, replan, reference-tree, reference-selection, reference-merge, verify), so a failure
+    /// names where it happened. A separate name keeps MergeInCurrentCommand's signature for its callers.</summary>
+    public static ReferenceSignatureMergeResult MergeInCurrentCommandStaged(ESpace local, ESpace foreign, ESpace basis,
+        ReferenceSignatureMergePlan plan, Action<MatchTree> mergeTree, bool matchByStructure, Action<string>? stage)
     {
         ArgumentNullException.ThrowIfNull(mergeTree);
+        stage?.Invoke("plan");
         var current = ValidatePlan(local, foreign, basis, plan);
         var nativeMergeCount = 0; var selectedReferences = 0;
+        stage?.Invoke("structural-tree");
         using (var tree = new MatchTree(local, foreign, basis, matchByStructure, true))
         {
             if (tree.HasConflicts)
@@ -125,19 +134,25 @@ public static class ReferenceSignatureMerge
             ValidatePairs(local, foreign, basis, current, requireReachability: false);
             if (!tree.HasNoDifferences)
             {
+                stage?.Invoke("structural-merge");
                 mergeTree(tree);
                 if (tree.CanMerge) throw new InvalidOperationException("The native structural merge callback did not merge its tree.");
                 nativeMergeCount++;
             }
         }
+        stage?.Invoke("replan");
         current = ValidatePlan(local, foreign, basis, plan);
         if (current.HasChanges)
         {
+            stage?.Invoke("reference-tree");
             using var tree = CreateReferenceTree(local, foreign, basis, current);
+            stage?.Invoke("reference-selection");
             selectedReferences = ApplySelection(local, foreign, basis, plan);
+            stage?.Invoke("reference-merge");
             mergeTree(tree);
             if (tree.CanMerge) throw new InvalidOperationException("The native reference merge callback did not merge its tree.");
             nativeMergeCount++;
+            stage?.Invoke("verify");
             VerifyApplied(local, foreign, basis, plan);
         }
         return new(selectedReferences, nativeMergeCount);
@@ -146,8 +161,11 @@ public static class ReferenceSignatureMerge
     /// its cleanup may roll back after the merge delegate has already completed.</summary>
     public static void VerifyApplied(ESpace local, ESpace foreign, ESpace basis, ReferenceSignatureMergePlan plan)
     {
-        if (ValidatePlan(local, foreign, basis, plan).HasChanges)
-            throw new InvalidOperationException("Native merge did not retain all validated producer signature selections.");
+        var current = ValidatePlan(local, foreign, basis, plan);
+        // fam-deps R7: the exact references, never the symptom alone.
+        if (current.HasChanges)
+            throw new InvalidOperationException("Native merge did not retain all validated producer signature selections: "
+                + string.Join("; ", current.Changes.Select(c => "producer " + c.ProducerKey + " stays at " + c.LocalHash + " (selected " + c.ForeignHash + ", base " + c.BaseHash + ")")));
     }
 
     /// <summary>Builds a single native tree whose roots include the changed references. Use only

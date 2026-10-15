@@ -74,6 +74,7 @@ export async function connect(host, { services = {} } = {}) {
   const auth = nativeSession ? new OdcStudioSessionAuth({ host: key,
     acquire: services.getNativeSession ?? (async input => (await import('./debug-odc-session.mjs')).getOdcNativeSession(input)) }) : configured.bridge.auth;
   const bridge = nativeSession ? new m.OdcBridge({ config: { ...configured.bridge.config, allowedWriteOperations: new Set() }, auth }) : configured.bridge;
+  if (nativeSession) configured.bridge.auth.dispose?.();
   const writer = new m.OdcBridge({ config: { ...bridge.config, allowedWriteOperations: new Set(nativeSession ? [] : WRITES) }, auth });
   const origin = bridge.config.origin;
   // Signed links (source download, upload) are redacted by the generic bridge on purpose; these two calls go direct.
@@ -106,7 +107,8 @@ export async function connect(host, { services = {} } = {}) {
         authority && reply.metadata.developerKey?.toLowerCase() !== authority.developerKey) throw new Error('debug_odc_session_application_binding_changed');
     return reply.metadata;
   };
-  return { host: key, tenant, origin, bridge, read, write, direct, nativeSession, readApplication };
+  return { host: key, tenant, origin, bridge, read, write, direct, nativeSession, readApplication,
+    release: async () => { auth.dispose?.(); return { released: true }; } };
 }
 
 export async function latestRevision(portal, assetKey) {

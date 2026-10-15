@@ -309,7 +309,7 @@ public static class CssCompat
         foreach (var (start, end) in Calls(css, "color-mix"))
         {
             var text = css[start..(end + 1)];
-            var substitute = Mix(css[(start + "color-mix(".Length)..end]);
+            var substitute = MixText(css[(start + "color-mix(".Length)..end]);
             var (line, column) = Position(css, start);
             var fix = substitute != null
                 ? $"write {substitute} (the color {text} computes) instead"
@@ -324,8 +324,292 @@ public static class CssCompat
         var calls = Calls(css, "color-mix");
         var sb = new StringBuilder(css);
         foreach (var (start, end) in calls.OrderByDescending(c => c.Start))
-            if (Mix(css[(start + "color-mix(".Length)..end]) is { } substitute) sb.Remove(start, end - start + 1).Insert(start, substitute);
+            if (MixText(css[(start + "color-mix(".Length)..end]) is { } substitute) sb.Remove(start, end - start + 1).Insert(start, substitute);
         return sb.ToString();
+    }
+
+    /// <summary>One function the theme does not render, written as what it renders: the text as it was, as it is, where, why.</summary>
+    public sealed record Rendered(string From, string To, int Line, int Column, string Why);
+
+    /// <summary>Familias (2026-10-12): the stylesheet with every color-mix whose color can be computed written as that color
+    /// (MixText) and, with <paramref name="expandLightDark"/>, every light-dark() expanded into the light value and a
+    /// @media (prefers-color-scheme: dark) block: the CSS the theme renders the same way. Nothing else changes (comments,
+    /// selectors, @import); a color-mix with no single color stays as written (CSS_FUNCTION_UNSUPPORTED says it).</summary>
+    public static (string Css, IReadOnlyList<Rendered> Done) Render(string css, bool expandLightDark)
+    {
+        var done = new List<Rendered>();
+        var sb = new StringBuilder(css);
+        foreach (var (start, end) in Calls(css, "color-mix").OrderByDescending(c => c.Start))
+        {
+            if (MixText(css[(start + "color-mix(".Length)..end]) is not { } substitute) continue;
+            var (line, column) = Position(css, start);
+            done.Insert(0, new Rendered(css[start..(end + 1)], substitute, line, column, "the color it computes"));
+            sb.Remove(start, end - start + 1).Insert(start, substitute);
+        }
+        var text = sb.ToString();
+        if (expandLightDark)
+        {
+            var (expanded, count) = ExpandLightDark(text);
+            if (count > 0)
+            {
+                done.Add(new Rendered("light-dark(...)", "@media (prefers-color-scheme: dark)", 0, 0,
+                    $"{count} light-dark() value(s): the light value in the rule, the dark one in a @media (prefers-color-scheme: dark) block"));
+                text = expanded;
+            }
+        }
+        return (text, done);
+    }
+
+    /// <summary>The stylesheet with every light-dark(a, b) expanded (the light value in the rule, the dark one in a
+    /// @media (prefers-color-scheme: dark) block), and how many: before the custom properties are resolved, so a property
+    /// written light-dark(...) has its two definitions.</summary>
+    public static (string Css, int Count) ExpandLightDarkValues(string css) => ExpandLightDark(css);
+
+    /// <summary>The color a color-mix computes (its arguments as written), or null. Familias (2026-10-12): one side transparent
+    /// leaves the other color with its share as alpha in every space, whatever the color's syntax (oklch(...), a hex, a name):
+    /// the color is written as it came with that alpha (premultiplied interpolation: a transparent side adds no color and no
+    /// hue). Otherwise <see cref="Mix"/> (both literals, srgb, srgb-linear or oklab).</summary>
+    public static string? MixText(string inner)
+    {
+        var args = Arguments(inner);
+        if (args.Count == 3 && Regex.IsMatch(args[0].Trim(), @"^in\s+[a-z0-9-]+(\s+(shorter|longer|increasing|decreasing)\s+hue)?$", RegexOptions.IgnoreCase)
+            && Share(args[1]) is { } first && Share(args[2]) is { } second)
+        {
+            var transparentFirst = first.Color.Trim().Equals("transparent", StringComparison.OrdinalIgnoreCase);
+            var transparentSecond = second.Color.Trim().Equals("transparent", StringComparison.OrdinalIgnoreCase);
+            if (transparentFirst != transparentSecond)
+            {
+                double? p1 = first.Percent, p2 = second.Percent;
+                if (p1 == null && p2 == null) { p1 = 50; p2 = 50; }
+                else if (p1 == null) p1 = 100 - p2;
+                else if (p2 == null) p2 = 100 - p1;
+                var sum = p1!.Value + p2!.Value;
+                if (sum <= 0 || p1 < 0 || p2 < 0 || p1 > 100 || p2 > 100) return null;
+                var weight = (transparentFirst ? p2.Value : p1.Value) / sum * (sum < 100 ? sum / 100 : 1);
+                return ColorWithAlpha(transparentFirst ? second.Color : first.Color, weight);
+            }
+        }
+        return Mix(inner);
+    }
+
+    private sealed record Shared(string Color, double? Percent);
+
+    private static Shared? Share(string text)
+    {
+        var value = text.Trim(); double? percent = null;
+        var m = Regex.Match(value, @"^(.*?)\s+([0-9.]+)%$|^([0-9.]+)%\s+(.*)$", RegexOptions.Singleline);
+        if (m.Success)
+        {
+            var number = m.Groups[2].Success ? m.Groups[2].Value : m.Groups[3].Value;
+            value = (m.Groups[1].Success ? m.Groups[1].Value : m.Groups[4].Value).Trim();
+            if (!double.TryParse(number, NumberStyles.Float, CultureInfo.InvariantCulture, out var p)) return null;
+            percent = p;
+        }
+        return value.Length == 0 || value.Contains("var(", StringComparison.OrdinalIgnoreCase) ? null : new Shared(value, percent);
+    }
+
+    private static readonly Regex ColorFunction = new(@"^(oklch|oklab|lch|lab|hsla?|hwb|rgba?)\(\s*([^/()]*?)\s*(?:/\s*([0-9.]+%?)\s*)?\)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary><paramref name="color"/> (a literal color as written) with its alpha multiplied by <paramref name="factor"/>,
+    /// or null when it is no color this reads (a var(), a keyword other than the named colors).</summary>
+    private static string? ColorWithAlpha(string color, double factor)
+    {
+        color = color.Trim();
+        if (Literal(color) is { } rgba) return Format(rgba with { A = rgba.A * factor });
+        var m = ColorFunction.Match(color);
+        if (!m.Success) return null;
+        var fn = m.Groups[1].Value.ToLowerInvariant();
+        // The legacy comma forms (rgba(r, g, b, a), hsla(...)) are read by Literal or not at all.
+        if (m.Groups[2].Value.Contains(',')) return null;
+        var alpha = 1.0;
+        if (m.Groups[3].Success)
+        {
+            var a = m.Groups[3].Value;
+            if (!double.TryParse(a.TrimEnd('%'), NumberStyles.Float, CultureInfo.InvariantCulture, out alpha)) return null;
+            if (a.EndsWith('%')) alpha /= 100;
+        }
+        var name = fn is "rgba" ? "rgb" : fn is "hsla" ? "hsl" : fn;
+        var written = Math.Round(Math.Clamp(alpha * factor, 0, 1), 3).ToString(CultureInfo.InvariantCulture);
+        return $"{name}({HtmlNode.CollapseSpaces(m.Groups[2].Value.Trim())} / {written})";
+    }
+
+    // ---- var() inside color-mix (familias, 2026-10-12) ---------------------------------------------------------------------
+
+    /// <summary>One var() of a color-mix written otherwise: the call as it was, what it became, and why.</summary>
+    public sealed record VarRewrite(string From, string To, string Why, int Line, int Column);
+
+    /// <summary>A custom property definition: its name, value, the rule that holds it (selector and enclosing at-rules) and
+    /// where its declaration ends in the text (after its ';', or the end of the rule's body).</summary>
+    private sealed record Definition(string Name, string Value, string Selector, IReadOnlyList<string> AtRules, int DeclarationEnd, bool Important, bool Terminated, int ValueEnd);
+
+    /// <summary>
+    /// The stylesheet with every color-mix that reads var(--x) written so the theme renders it with the same colors
+    /// (VisitaCerta_UI, 20:33: color-mix(in oklch, var(--card) 60%, transparent) x3, refused without a substitute, then written
+    /// as one fixed rgba by hand, which lost the dark theme). The definitions are the custom properties of this stylesheet
+    /// (and of <paramref name="others"/>, the job's other CSS, read only for a property defined once in all of them):
+    /// <list type="bullet">
+    /// <item>every var() the call reads has one definition (a var() inside it resolved the same way): the call with the values
+    /// in place, whose color MixText computes, becomes that color;</item>
+    /// <item>one var(--x) has several definitions, all in this stylesheet (a :root and a [data-theme="dark"], a @media dark),
+    /// each computable: a custom property --x-mix-&lt;hash&gt; is defined next to each definition of --x (the same rule, so the same
+    /// selector, cascade and inheritance pick it wherever --x is picked) with the color computed for that definition, and
+    /// the call becomes var(--x-mix-&lt;hash&gt;).</item>
+    /// </list>
+    /// Anything else (a property the OutSystems UI tokens or another CSS may define, two properties with several definitions,
+    /// a definition that is no color) is left as written: CSS_FUNCTION_UNSUPPORTED says it, without a substitute.
+    /// </summary>
+    public static (string Css, IReadOnlyList<VarRewrite> Rewrites) ResolveMixVars(string css, IEnumerable<string>? others = null)
+    {
+        var calls = Calls(css, "color-mix").Where(c => css.AsSpan(c.Start, c.End - c.Start + 1).Contains("var(", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (calls.Count == 0) return (css, []);
+        var own = Definitions(css);
+        var all = own.Concat((others ?? []).SelectMany(o => { try { return Definitions(o); } catch { return []; } })).ToList();
+        var byName = all.GroupBy(d => d.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+        var ownByName = own.GroupBy(d => d.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+        var replacements = new List<(int Start, int End, string Text)>();
+        var insertions = new List<(int At, string Text)>();
+        var rewrites = new List<VarRewrite>();
+        var derivedNames = new Dictionary<string, string>(StringComparer.Ordinal);
+        string? Global(string name) => Single(name, byName) is { } value && byName[name][0] is { AtRules.Count: 0 } d && RootSelector(d.Selector) ? value : null;
+        foreach (var (start, end) in calls)
+        {
+            var text = css[start..(end + 1)];
+            var inner = css[(start + "color-mix(".Length)..end];
+            var (line, column) = Position(css, start);
+            // Every var() it reads (and every var() inside their values) is defined once, on the root: the values in place.
+            if (Substitute(inner, Global, 0) is { } resolved && MixText(resolved) is { } color)
+            {
+                replacements.Add((start, end, color));
+                rewrites.Add(new VarRewrite(text, color, "each custom property it reads is defined once, on :root: the color it computes", line, column));
+                continue;
+            }
+            // The scoped ones (several definitions, or one in a rule other than the root) all in this stylesheet, defined in the
+            // same rules (selector and at-rules), once in each: a derived property in each of those rules, with the color
+            // computed there, so the cascade and inheritance pick it wherever they pick the properties it reads.
+            var names = VarNames(inner).Distinct(StringComparer.Ordinal).ToList();
+            var scoped = names.Where(n => Global(n) == null).ToList();
+            if (scoped.Count == 0 || scoped.Any(n => Platform(n) || !ownByName.TryGetValue(n, out var o) || !byName.TryGetValue(n, out var b) || o.Count != b.Count)) continue;
+            static string Context(Definition d) => string.Join(" ", d.AtRules) + "|" + d.Selector;
+            var contexts = ownByName[scoped[0]].Select(Context).ToList();
+            if (contexts.Distinct(StringComparer.Ordinal).Count() != contexts.Count
+                || scoped.Any(n => ownByName[n].Select(Context).ToList() is var c && (c.Count != contexts.Count || c.Distinct(StringComparer.Ordinal).Count() != c.Count || !c.All(contexts.Contains)))) continue;
+            var computed = new List<(Definition Anchor, string Color)>();
+            foreach (var context in contexts)
+            {
+                var here = scoped.ToDictionary(n => n, n => ownByName[n].First(d => Context(d) == context), StringComparer.Ordinal);
+                string? Lookup(string name) => here.TryGetValue(name, out var d) ? d.Value : Global(name);
+                if (Substitute(inner, Lookup, 0) is not { } each || MixText(each) is not { } eachColor) { computed.Clear(); break; }
+                computed.Add((here.Values.OrderBy(d => d.DeclarationEnd).Last(), eachColor));
+            }
+            if (computed.Count != contexts.Count) continue;
+            var x = scoped[0];
+            var shape = HtmlNode.CollapseSpaces(inner);
+            var key = derivedNames.TryGetValue(shape, out var known) ? known : null;
+            if (key == null)
+            {
+                var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(shape))).ToLowerInvariant()[..6];
+                key = derivedNames[shape] = $"{x}-mix-{hash}";
+                foreach (var (anchor, eachColor) in computed)
+                    insertions.Add((anchor.Terminated ? anchor.DeclarationEnd : anchor.ValueEnd, $"{(anchor.Terminated ? "" : ";")} {key}: {eachColor}{(anchor.Important ? " !important" : "")};"));
+            }
+            replacements.Add((start, end, $"var({key})"));
+            var where = string.Join(", ", contexts.Select(c => c.TrimStart('|').Replace("|", " ")));
+            rewrites.Add(new VarRewrite(text, $"var({key})", $"{string.Join(", ", scoped)} {(scoped.Count == 1 ? "is" : "are")} defined in {where}: {key} is defined there with the color it computes in each ({string.Join(", ", computed.Select(c => c.Color))})", line, column));
+        }
+        if (replacements.Count == 0) return (css, []);
+        var edits = replacements.Select(r => (r.Start, Length: r.End - r.Start + 1, r.Text)).Concat(insertions.Select(i => (Start: i.At, Length: 0, i.Text)))
+            .OrderByDescending(e => e.Start).ThenBy(e => e.Length).ToList();
+        var sb = new StringBuilder(css);
+        foreach (var (s, length, written) in edits) sb.Remove(s, length).Insert(s, written);
+        return (sb.ToString(), rewrites);
+    }
+
+    /// <summary>A selector that matches the document's root element only (:root, html), whose custom properties every element inherits.</summary>
+    private static bool RootSelector(string selector) => selector.Split(',').Select(s => s.Trim()).All(s => s is ":root" or "html" or "html:root");
+
+    /// <summary>The value of a custom property defined once (null: none, several, or an OutSystems UI token the base theme may define).</summary>
+    private static string? Single(string name, IReadOnlyDictionary<string, List<Definition>> byName)
+        => !Platform(name) && byName.TryGetValue(name, out var d) && d.Count == 1 ? d[0].Value : null;
+
+    // The custom properties a theme gets from OutSystems UI and the platform (PreflightRules.StyleSheetRules.PlatformTokens).
+    private static readonly string[] PlatformPrefixes = ["--color-", "--space-", "--font-", "--border-", "--shadow-", "--osui-", "--os-",
+        "--header-", "--footer-", "--side-menu-", "--bottom-bar-", "--layout-", "--menu-", "--overlay-", "--z-index-", "--blur-"];
+    private static bool Platform(string name) => PlatformPrefixes.Any(p => name.StartsWith(p, StringComparison.Ordinal));
+
+    private static readonly Regex VarCall = new(@"var\(\s*(--[A-Za-z0-9_-]+)\s*(?:,\s*([^()]*(?:\([^()]*\)[^()]*)*))?\)", RegexOptions.Compiled);
+
+    private static IEnumerable<string> VarNames(string text) => VarCall.Matches(text).Select(m => m.Groups[1].Value);
+
+    /// <summary>The text with every var() replaced by its value (recursively, at most 8 deep); a var() with no value takes its
+    /// fallback; null when one has neither.</summary>
+    private static string? Substitute(string text, Func<string, string?> value, int depth)
+    {
+        if (depth > 8) return null;
+        if (text.IndexOf("var(", StringComparison.OrdinalIgnoreCase) < 0) return text;
+        var failed = false;
+        var written = VarCall.Replace(text, m =>
+        {
+            var v = value(m.Groups[1].Value) ?? (m.Groups[2].Success ? m.Groups[2].Value.Trim() : null);
+            if (v == null) { failed = true; return m.Value; }
+            if (Substitute(v, value, depth + 1) is { } resolved) return resolved;
+            failed = true;
+            return m.Value;
+        });
+        return failed ? null : written;
+    }
+
+    /// <summary>Every custom property definition of the style rules of <paramref name="css"/> (inside @media, @supports,
+    /// @container and @layer too), with where its declaration ends.</summary>
+    private static List<Definition> Definitions(string css)
+    {
+        var found = new List<Definition>();
+        void Walk(int from, int to, IReadOnlyList<string> atRules)
+        {
+            var i = from;
+            while (i < to)
+            {
+                i = SkipTrivia(css, i);
+                if (i >= to) break;
+                if (css[i] == '}') { i++; continue; }
+                var end = PreludeEnd(css, i);
+                if (end >= to) break;
+                if (css[end] == ';' || css[end] == '}') { i = end + 1; continue; }
+                var prelude = HtmlNode.CollapseSpaces(css[i..end].Trim());
+                var close = BlockEnd(css, end + 1);
+                if (prelude.StartsWith('@'))
+                {
+                    if (IsNesting(prelude)) Walk(end + 1, close - 1, [.. atRules, prelude]);
+                }
+                else Declarations(end + 1, close - 1, prelude, atRules);
+                i = close;
+            }
+        }
+        void Declarations(int from, int to, string selector, IReadOnlyList<string> atRules)
+        {
+            var i = from;
+            while (i < to)
+            {
+                i = SkipTrivia(css, i);
+                if (i >= to) break;
+                var end = PreludeEnd(css, i);
+                if (end > to) end = to;
+                if (end < to && css[end] == '{') { i = BlockEnd(css, end + 1); continue; }   // a nested rule: not a definition of this one
+                var declaration = css[i..end];
+                var colon = declaration.IndexOf(':');
+                if (colon > 0 && declaration[..colon].Trim() is var property && property.StartsWith("--", StringComparison.Ordinal))
+                {
+                    var value = declaration[(colon + 1)..].Trim();
+                    var important = Regex.IsMatch(value, @"!\s*important\s*$", RegexOptions.IgnoreCase);
+                    if (important) value = Regex.Replace(value, @"\s*!\s*important\s*$", "", RegexOptions.IgnoreCase);
+                    var valueEnd = end;
+                    while (valueEnd > i && char.IsWhiteSpace(css[valueEnd - 1])) valueEnd--;
+                    found.Add(new Definition(property, value, selector, atRules, end < to ? end + 1 : end, important, end < to, valueEnd));
+                }
+                i = end + 1;
+            }
+        }
+        Walk(0, css.Length, []);
+        return found;
     }
 
     /// <summary>Every call of <paramref name="function"/> outside comments and strings: (start of the name, index of ")").</summary>

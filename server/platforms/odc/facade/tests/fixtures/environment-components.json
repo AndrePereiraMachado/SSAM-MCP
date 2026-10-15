@@ -1,0 +1,57 @@
+{
+  "_doc": "A fixture O11 environment for environment-components.mjs: the producer listing (dependencies producers), the public elements of each producer (dependencies list), the XIF spec of each extension (o11_extension read) and the module digest of each eSpace (ssam_map digest of the published OML). Names and signatures are made up; the shapes are those of the live answers.",
+  "host": "fixture.outsystemscloud.com",
+  "stderr": ["connected through the Studio on bridge 4516 to fixture.outsystemscloud.com; no credential file", "14 referenceable producers"],
+  "producers": [
+    { "Key": "uXCIR2Atc0+es3zYuZSnNw", "Name": "(System)", "Kind": "eSpace", "SignatureHash": "eee5a39e-be64-035a-9b30-34e14570177b", "IsSystem": true, "ApplicationKey": "0jY4sKq0Q0ScEpGq9cG2bA" },
+    { "Key": "2torJQ8gwkSTKSWw2t38Yw", "Name": "BinaryData", "Kind": "Extension", "SignatureHash": "3cd1d5d5-0a2a-66f3-e0e2-a1e6e84a0be0", "IsSystem": true, "ApplicationKey": "TZGvlRpo3EqyvfVG3iPkEQ" },
+    { "Key": "aN5qQ1nDl0uSAD7cY1qkSw", "Name": "Text", "Kind": "Extension", "SignatureHash": "1a2b3c4d-0000-1111-2222-333344445555", "IsSystem": true, "ApplicationKey": "TZGvlRpo3EqyvfVG3iPkEQ" },
+    { "Key": "Q8bRk7l5wEyT0xrS9m1c3A", "Name": "HTTPRequestHandler", "Kind": "Extension", "SignatureHash": "2b3c4d5e-0000-1111-2222-333344445555", "IsSystem": true, "ApplicationKey": "TZGvlRpo3EqyvfVG3iPkEQ" },
+    { "Key": "9UVL7GpgN0egvnR4Fnf9iA", "Name": "PdfTools", "Kind": "eSpace", "SignatureHash": "839a36a5-54fc-d7d2-80a3-aea50d7ca0db", "IsSystem": false, "ApplicationKey": "AAAAAAAAAAAAAABvdGhlcg" },
+    { "Key": "nS+za6hi7kK+w0yojmazXg", "Name": "HtmlToPdfExt", "Kind": "Extension", "SignatureHash": "110c3aa5-6d35-6db0-d22b-fef85ad8654a", "IsSystem": false, "ApplicationKey": "vG6L88b+dk2j_hdvBKC0+Q" },
+    { "Key": "kY0q7f3m8UqfQd6b2n9sXg", "Name": "ExcelTools", "Kind": "Extension", "SignatureHash": "4d5e6f70-0000-1111-2222-333344445555", "IsSystem": false, "ApplicationKey": "c0FyS2dJ8k6mH3r5w7v9xA" },
+    { "Key": "Mx3pQ9rT2vW5yZ8b1d4f6h", "Name": "MailHelper", "Kind": "eSpace", "SignatureHash": "5e6f7081-0000-1111-2222-333344445555", "IsSystem": false, "ApplicationKey": "j2L4n6P8r0T2v4X6z8B0dA" },
+    { "Key": "Zp8Lk2Jh5Gf9Ds1Aq3Ww7e", "Name": "ZipUtils", "Kind": "Extension", "SignatureHash": "6f708192-0000-1111-2222-333344445555", "IsSystem": false, "ApplicationKey": "h1J3k5M7o9Q1s3U5w7Y9aB" },
+    { "Key": "Im4Ge7Tl2Sx9Rc6Vb3Nm1q", "Name": "ImageTools", "Kind": "Extension", "SignatureHash": "708192a3-0000-1111-2222-333344445555", "IsSystem": false, "ApplicationKey": "g2H4j6L8n0P2r4T6v8X0zC" },
+    { "Key": "Qr5Cd8Gn3Bx6Vz9Lm2Kp4j", "Name": "QrCodeGen", "Kind": "Extension", "SignatureHash": "8192a3b4-0000-1111-2222-333344445555", "IsSystem": false, "ApplicationKey": "f3G5h7K9m1O3q5S7u9W1yD" },
+    { "Key": "Cr7Yp2Th5Gs8Ha1Sh4Mk6e", "Name": "CryptoAPI", "Kind": "Extension", "SignatureHash": "92a3b4c5-0000-1111-2222-333344445555", "IsSystem": false, "ApplicationKey": "e4F6g8J0l2N4p6R8t0V2xE" },
+    { "Key": "Vd2Cs5Xr8Pq1Wn4Kj7Mh0g", "Name": "Vendas_CS", "Kind": "eSpace", "SignatureHash": "a3b4c5d6-0000-1111-2222-333344445555", "IsSystem": false, "ApplicationKey": "d5E7f9H1k3M5o7Q9s1U3wF" },
+    { "Key": "Os7Ui2Xp5Lm8Nb1Vc4Kz6r", "Name": "OutSystemsUI", "Kind": "eSpace", "SignatureHash": "b4c5d6e7-0000-1111-2222-333344445555", "IsSystem": false, "ApplicationKey": "c6D8e0G2j4L6n8P0r2T4vG" }
+  ],
+  "extensions": {
+    "BinaryData": { "name": "BinaryData", "description": "Actions to manipulate Binary Data contents.", "actions": [
+      { "name": "BinaryDataSize", "description": "Returns the size of a binary content, in bytes.", "isFunction": true, "inputs": [{ "name": "BinaryData", "type": "Binary Data" }], "outputs": [{ "name": "Size", "type": "Integer" }] },
+      { "name": "BinaryDataToText", "description": "Reads the content of a text file using a given encoding.", "inputs": [{ "name": "BinaryData", "type": "Binary Data" }, { "name": "Encoding", "type": "Text", "mandatory": false }], "outputs": [{ "name": "Text", "type": "Text" }] },
+      { "name": "TextToBinaryData", "description": "Writes a text into a binary content with a given encoding.", "inputs": [{ "name": "Text", "type": "Text" }, { "name": "Encoding", "type": "Text", "mandatory": false }], "outputs": [{ "name": "BinaryData", "type": "Binary Data" }] }
+    ] },
+    "HtmlToPdfExt": { "name": "HtmlToPdfExt", "description": "Renders HTML as PDF.", "actions": [
+      { "name": "HtmlToPdf", "description": "Renders an HTML document as a PDF file.", "inputs": [{ "name": "Html", "type": "Text" }, { "name": "PageSize", "type": "Text", "mandatory": false }, { "name": "Landscape", "type": "Boolean", "mandatory": false }], "outputs": [{ "name": "Pdf", "type": "Binary Data" }] },
+      { "name": "UrlToPdf", "description": "Renders a page of a URL as a PDF file.", "inputs": [{ "name": "Url", "type": "Text" }], "outputs": [{ "name": "Pdf", "type": "Binary Data" }] }
+    ] },
+    "ExcelTools": { "name": "ExcelTools", "description": "Excel workbooks.", "actions": [
+      { "name": "Workbook_Create", "inputs": [], "outputs": [{ "name": "Workbook", "type": "Object" }] },
+      { "name": "Worksheet_WriteRange", "inputs": [{ "name": "Workbook", "type": "Object" }, { "name": "Sheet", "type": "Text" }, { "name": "Cell", "type": "Text" }, { "name": "Values", "type": "Text List" }], "outputs": [] },
+      { "name": "Workbook_ToBinary", "inputs": [{ "name": "Workbook", "type": "Object" }], "outputs": [{ "name": "Excel", "type": "Binary Data" }] }
+    ] },
+    "ZipUtils": { "name": "ZipUtils", "actions": [{ "name": "ZipFiles", "inputs": [{ "name": "Files", "type": "FileEntry List" }], "outputs": [{ "name": "Zip", "type": "Binary Data" }] }] },
+    "ImageTools": { "name": "ImageTools", "actions": [{ "name": "ResizeImage", "inputs": [{ "name": "Image", "type": "Binary Data" }, { "name": "Width", "type": "Integer" }, { "name": "Height", "type": "Integer" }], "outputs": [{ "name": "Resized", "type": "Binary Data" }] }] },
+    "QrCodeGen": { "name": "QrCodeGen", "actions": [{ "name": "QrCode_Generate", "inputs": [{ "name": "Text", "type": "Text" }], "outputs": [{ "name": "Png", "type": "Binary Data" }] }] },
+    "CryptoAPI": { "name": "CryptoAPI", "actions": [{ "name": "Sha256Hash", "inputs": [{ "name": "Text", "type": "Text" }], "outputs": [{ "name": "Hash", "type": "Text" }] }] },
+    "Text": { "name": "Text", "actions": [{ "name": "Regex_Search", "inputs": [{ "name": "Text", "type": "Text" }, { "name": "Pattern", "type": "Text" }], "outputs": [{ "name": "Found", "type": "Boolean" }] }] },
+    "HTTPRequestHandler": { "name": "HTTPRequestHandler", "actions": [{ "name": "Download", "inputs": [{ "name": "Content", "type": "Binary Data" }, { "name": "FileName", "type": "Text" }], "outputs": [] }] }
+  },
+  "digests": {
+    "PdfTools": { "module": { "name": "PdfTools" }, "actions": [
+      { "name": "PrintToPdf", "kind": "ServerAction", "public": true, "in": "Url: Text; Landscape?: Boolean", "out": "PdfFile: Binary Data" },
+      { "name": "PdfMerge", "kind": "ServerAction", "public": true, "in": "Pdfs: BinaryData List", "out": "Merged: Binary Data" },
+      { "name": "Internal_Render", "kind": "ServerAction", "public": false, "in": "X: Text", "out": "" }
+    ] },
+    "MailHelper": { "module": { "name": "MailHelper" }, "actions": [
+      { "name": "SendMail", "kind": "ServerAction", "public": true, "in": "To: Text; Subject: Text; Body: Text; Attachments?: Attachment List", "out": "" }
+    ] }
+  },
+  "elements": {
+    "PdfTools": [{ "type": "IServerActionSignature", "name": "PrintToPdf" }, { "type": "IServerActionSignature", "name": "PdfMerge" }, { "type": "IStructureSignature", "name": "PdfOptions" }],
+    "MailHelper": [{ "type": "IServerActionSignature", "name": "SendMail" }]
+  }
+}

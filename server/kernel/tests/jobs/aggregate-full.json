@@ -1,5 +1,5 @@
 {
- "description": "Aggregate com join, filtro, ordenacao e group by Count.",
+ "description": "Aggregate com join, filtro, ordenacao e group by Count. A ordenacao de um aggregate agrupado e por um atributo do GROUP BY (Order.CustomerName): o sort vive antes do agrupamento e o SQL so ordena linhas agrupadas pelo que o GROUP BY da (CompileCheck, AGGREGATE_SORT_NOT_ATTRIBUTE).",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "expectedMessages": [
@@ -244,7 +244,7 @@
    "op": "set",
    "target": "$sort",
    "prop": "Attribute",
-   "value": "Order.Total"
+   "value": "Order.CustomerName"
   },
   {
    "op": "set",

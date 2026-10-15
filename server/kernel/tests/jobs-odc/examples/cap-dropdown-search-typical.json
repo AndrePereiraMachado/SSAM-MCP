@@ -11,7 +11,7 @@
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "SelectedCategoryId", "as": "$sel"},
   {"op": "set", "target": "$sel", "prop": "DataType", "value": "Category Identifier"},
 
-  {"op": "logic", "data": {"actions": [
+  {"op": "logic", "allowForEach": { "why": "proof job written before the owner's rules judged the JSON form of the logic op (T1/T2, 2026-10-12); kept as the regression it already proves" }, "data": {"actions": [
    {"name": "GetCategoryOptions", "kind": "data", "owner": "IMobileScreen:CategoryPicker", "fetch": "AtStart",
     "outputs": [{"name": "Options", "type": "DropdownOption List"}],
     "vars": [{"name": "Option", "type": "DropdownOption"}],

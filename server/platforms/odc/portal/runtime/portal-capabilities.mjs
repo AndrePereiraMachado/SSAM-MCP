@@ -7,6 +7,11 @@ import { API_CLIENT_VAULT_STATUS } from './api-client-vault-status.mjs';
 
 const source = new URL('../catalog/portal-capabilities.json', import.meta.url);
 const kinds = new Set(['public', 'internal', 'gap']);
+const STOPWORDS = new Set(['a', 'o', 'as', 'os', 'da', 'de', 'do', 'das', 'dos', 'na', 'no', 'nas', 'nos', 'em', 'um', 'uma', 'e', 'para', 'pra', 'com',
+  'the', 'of', 'to', 'in', 'on', 'for', 'and', 'an']);
+// Under the facade's 4096-byte answer budget for a tool (answer-size.mjs ANSWER_BUDGETS.other), with room for its envelope.
+const PAGE_BUDGET_BYTES = 3600;
+const ROW_LIST_MAX = 12;
 
 // Evidence is independent of execution. Registering a description must never
 // make an unavailable backend appear authenticated or live-tested.
@@ -69,15 +74,54 @@ export class PortalCapabilities {
     };
   }
 
-  list({ search = '', kind, offset = 0, limit = 30 } = {}) {
+  // Every word of the search must appear in the id, title or keywords; articles and prepositions ("release da lib",
+  // "liberar a biblioteca") never filter.
+  matching({ search = '', kind, offset = 0, limit = 30 } = {}) {
     if (typeof search !== 'string' || search.length > 500 || (kind !== undefined && !kinds.has(kind))
       || !Number.isInteger(offset) || offset < 0 || !Number.isInteger(limit) || limit < 1 || limit > 100) {
       fail('INPUT_INVALID', 'Invalid capability search or pagination.');
     }
     const normalize = value => value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
-    const words = normalize(search).split(/\s+/).filter(Boolean);
-    const entries = [...this.entries.values()].filter(entry => (!kind || entry.kind === kind)
+    const words = normalize(search).split(/[\s,;:!?()"']+/).filter(word => word && !STOPWORDS.has(word));
+    return [...this.entries.values()].filter(entry => (!kind || entry.kind === kind)
       && words.every(word => normalize([entry.id, entry.title, entry.keywords].join(' ')).includes(word)));
+  }
+
+  // The answer of odc_portal_capabilities: compact rows (id, title, kind, implementation, tools, reads, writes) of the
+  // matching capabilities, as many as fit the byte budget (the facade's 4 KB answer budget never moves the list out), and
+  // the next offset. `id` answers the full detail of one capability (the same as odc_describe_capability).
+  page({ search, query, kind, id, offset = 0, limit = 30, budgetBytes = PAGE_BUDGET_BYTES } = {}) {
+    if (id !== undefined) return this.describe(id);
+    if (query !== undefined && search !== undefined && query !== search) fail('INPUT_INVALID', 'Pass search or query, not both.');
+    const text = query ?? search ?? '';
+    const entries = this.matching({ search: text, kind, offset, limit });
+    const size = value => Buffer.byteLength(JSON.stringify(value), 'utf8');
+    const answer = { total: entries.length, offset, returned: 0, capabilities: [],
+      detail: 'odc_portal_capabilities {id} or odc_describe_capability {capabilityId}: full evidence, input contracts and limitations.' };
+    for (const entry of entries.slice(offset, offset + limit)) {
+      const row = this.row(entry);
+      if (answer.capabilities.length && size(answer) + size(row) + 160 > budgetBytes) break;
+      answer.capabilities.push(row); answer.returned++;
+    }
+    const next = offset + answer.returned;
+    if (next < entries.length) {
+      answer.nextOffset = next;
+      answer.continuation = { tool: 'odc_portal_capabilities', arguments: { ...(text ? { search: text } : {}), ...(kind ? { kind } : {}), offset: next, limit },
+        why: 'More capabilities match; this page holds what fits the answer budget.' };
+    }
+    return answer;
+  }
+
+  row(entry) {
+    const cap = (list, key) => list.length > ROW_LIST_MAX ? { [key]: list.slice(0, ROW_LIST_MAX), [key + 'Total']: list.length } : list.length ? { [key]: list } : {};
+    const access = entry.access;
+    const tools = access?.tools ?? (entry.kind === 'public' ? ['odc_read', 'odc_write'] : []);
+    return { id: entry.id, title: entry.title, kind: entry.kind, implementation: entry.implementation, ...(tools.length ? { tools } : {}),
+      ...(access ? { ...cap([...(access.reads ?? []), ...(access.typedReads ?? [])], 'reads'), ...cap(access.writes ?? [], 'writes') } : {}) };
+  }
+
+  list({ search = '', kind, offset = 0, limit = 30 } = {}) {
+    const entries = this.matching({ search, kind, offset, limit });
     return { total: entries.length, offset, limit, capabilities: entries.slice(offset, offset + limit).map(entry => ({
       id: entry.id, title: entry.title, kind: entry.kind, publicCoverage: entry.publicCoverage,
       implementation: entry.implementation, execution: this.execution(entry, { brief: true }),

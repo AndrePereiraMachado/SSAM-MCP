@@ -28,7 +28,7 @@
   {"op": "create", "parent": "$api", "type": "IRestStructure", "name": "DelGenRestSpare", "as": "$restSpare"},
   {"op": "create", "parent": "$api", "type": "IRestStaticEntity", "name": "DelGenRestStatic", "as": "$restStatic"},
 
-  {"op": "create", "parent": "@espace", "type": "ISOAPClient", "name": "DelGenSoap", "as": "$soap"},
+  {"op": "create", "parent": "@espace", "type": "ISOAPClient", "name": "DelGenSoap", "as": "$soap", "allowSoapWithoutImport": {"why": "lab: mede o delete das structures SOAP geradas; um cliente SOAP feito por verbos nunca e entregue (CompileCheck, COMPILE_SOAP_DEFINITION)"}},
   {"op": "create", "parent": "$soap", "type": "ISOAPStructure", "name": "DelGenSoapStructure", "as": "$soapStructure"},
   {"op": "create", "parent": "$soap", "type": "ISOAPStructurePolymorphic", "name": "DelGenSoapPolymorphic", "as": "$soapPoly"},
   {"op": "create", "parent": "$soap", "type": "ISOAPStaticEntity", "name": "DelGenSoapStatic", "as": "$soapStatic"},

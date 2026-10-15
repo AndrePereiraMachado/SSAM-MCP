@@ -297,8 +297,11 @@ test('jobIdentity names an array job (jobShape), whose patch paths are /<i>/...'
 });
 
 test('the JSON Schemas of patch and basedOn match the zod shape the tools declare', () => {
-  assert.equal(patchJsonSchema.maxItems, 50); assert.deepEqual(patchJsonSchema.items.properties.op.enum, ['add', 'remove', 'replace', 'test']);
-  assert.equal(patchJsonSchema.items.additionalProperties, false); assert.deepEqual(patchJsonSchema.items.required, ['op', 'path']);
+  // A written patch (at most 50), or "verified": every verified patch of the refusal of that job.
+  const written = patchJsonSchema.anyOf.find(x => x.type === 'array');
+  assert.deepEqual(patchJsonSchema.anyOf.find(x => x.type === 'string').enum, ['verified']);
+  assert.equal(written.maxItems, 50); assert.deepEqual(written.items.properties.op.enum, ['add', 'remove', 'replace', 'test']);
+  assert.equal(written.items.additionalProperties, false); assert.deepEqual(written.items.required, ['op', 'path']);
   assert.deepEqual(basedOnJsonSchema.anyOf.map(s => s.required), [['job', 'sha256'], ['taskId']]);
   assert.ok(basedOnJsonSchema.anyOf.every(s => s.additionalProperties === false));
 });

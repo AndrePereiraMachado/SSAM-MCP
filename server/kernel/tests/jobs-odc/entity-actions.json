@@ -1,0 +1,38 @@
+{
+ "description": "entity-actions: the standard actions of a data model GENERATED from the module (owner decision 2026-10-13). The spec op writes a data model with every shape the generator decides on (an owner attribute, an active attribute, two references to one entity, a reference named after its entity, a self reference, a text identifier, unique keys, a date index, a static entity); ONE op entity-actions writes, per entity, Get<E>List (joins, filters, search, sort, paging), Get<E>ById, Save<E> (required, lengths, references, unique keys, owner, typed errors), Remove<E> (owner, records that still reference it; the active attribute set to False on Customer) and a service action each (ODC app: the server actions stay private, the service actions are its public entry); then a business action written as a logic text calls the generated ones. Everything reads back as its text (the text form of the logic op writes it). The corpus battery is tests/Shared/EntityActionsCorpusTests.cs.",
+ "base": "tests/fixtures/odc/blank-mobile.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "ddl": "/// The states of a ticket.\ncreate static entity TicketState public (\n  Id Integer identifier required,\n  Label Text(50) required,\n  Order Integer required\n)\nvalues\n  Open (Id = 1, Label = \"Open\", Order = 1),\n  Closed (Id = 2, Label = \"Closed\", Order = 2);\n\n/// A customer of the help desk; deleting it is refused while its tickets exist.\ncreate entity Customer public label Name active IsActive (\n  Id Long Integer identifier auto required,\n  Name Text(120) required,\n  Email Email(250) required,\n  IsActive Boolean required default True,\n  CreatedBy User Identifier references User on delete Ignore\n);\ncreate unique index UX_Customer_Email on Customer (Email);\n\n/// A ticket opened by a customer; two references to the same entity (opened by, assigned to), a reference named after its\n/// entity, a reference to itself and a date range filter on its index.\ncreate entity Ticket public label Title (\n  Id Long Integer identifier auto required,\n  Title Text(200) required,\n  CustomerId Customer Identifier required references Customer on delete Protect,\n  TicketState TicketState Identifier required references TicketState on delete Protect,\n  ParentTicketId Ticket Identifier references Ticket on delete Protect,\n  OpenedBy User Identifier required references User on delete Ignore,\n  AssignedTo User Identifier references User on delete Ignore,\n  OpenedOn Date Time required default CurrDateTime(),\n  DueDate Date,\n  Notes Text(2000)\n);\ncreate index IX_Ticket_OpenedOn on Ticket (OpenedOn);\ncreate unique index UX_Ticket_Customer_Title on Ticket (CustomerId, Title);\n\n/// A comment of a ticket, deleted with it.\ncreate entity TicketComment public (\n  Id Long Integer identifier auto required,\n  TicketId Ticket Identifier required references Ticket on delete Delete,\n  Body Text(1000) required,\n  CreatedBy User Identifier references User on delete Ignore\n);\n\n/// A tag with a natural key (a text identifier, no auto number).\ncreate entity Tag public label Code (\n  Code Text(30) identifier required,\n  Description Text(200)\n);\n"
+   }
+  },
+  {
+   "op": "entity-actions",
+   "data": {
+    "entities": "all",
+    "owner": {
+     "attribute": [
+      "CreatedBy",
+      "OpenedBy"
+     ]
+    },
+    "expose": {
+     "server": true,
+     "service": true
+    }
+   }
+  },
+  {
+   "op": "logic",
+   "data": {
+    "flow": [
+     "/// Closes a ticket of the signed-in user: the generated read checks that it exists and is the user's, the generated save runs the data rules again.\nserver action CloseTicket\n  /// The ticket to close.\n  in TicketId: Ticket Identifier\n  /// The ticket as read, closed and saved.\n  local Ticket: Ticket\n  GetTicketById(Id=TicketId)\n  assign  # Mark the ticket closed\n    Ticket = GetTicketById.TicketRecord\n    Ticket.TicketState = Entities.TicketState.Closed\n  SaveTicket(TicketRecord=Ticket)\n  end\n"
+    ]
+   }
+  }
+ ]
+}

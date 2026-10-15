@@ -16,9 +16,15 @@ const ORDER = ['create', 'set', 'read', 'usages', 'rename', 'move', 'duplicate',
 // Two proofs per role statement: enough for the scope to name the job of each fact it states (the independent review of
 // 2026-09-23 found scopes describing jobs a one-proof cut had dropped). The scope must only state what the kept proofs do.
 const MAX_PROOFS = () => 2;
+// The stamped results live in an unversioned folder the kernel suites write: a checkout where a suite never ran (a new
+// worktree) has none, and the written order stands (as the discovery's index reads an absent folder).
+const stampedJobs = dir => {
+  if (!fs.existsSync(dir)) return new Set();
+  return new Set(fs.readdirSync(dir).filter(n => n.endsWith('.result.json')).map(n => n.replace(/\.result\.json$/, '')));
+};
 const stamped = {
-  odc: new Set(fs.readdirSync(path.join(root, 'kernel', '.local', 'lane-odc', 'test-work')).filter(n => n.endsWith('.result.json')).map(n => n.replace(/\.result\.json$/, ''))),
-  o11: new Set(fs.readdirSync(path.join(root, 'kernel', '.local', 'test-work')).filter(n => n.endsWith('.result.json')).map(n => n.replace(/\.result\.json$/, ''))),
+  odc: stampedJobs(path.join(root, 'kernel', '.local', 'lane-odc', 'test-work')),
+  o11: stampedJobs(path.join(root, 'kernel', '.local', 'test-work')),
 };
 let changed = 0; const check = process.argv.includes('--check');
 for (const name of fs.readdirSync(dir).filter(n => n.endsWith('.json') && n !== 'accounting.json').sort()) {

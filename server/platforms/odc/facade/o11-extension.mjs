@@ -35,6 +35,7 @@ import { authorizationContext } from './authorization-context.mjs';
 import { consumerNames } from './o11-publish.mjs';
 import { CAPABILITY, studioReads } from './service-center/integration-studio.mjs';
 import { hostClass as registeredHostClass } from './service-center/auth.mjs';
+import { recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
 
 export const TOOL = 'o11_extension';
 export const ACTIONS = Object.freeze(['read', 'publish', 'delete']);
@@ -52,11 +53,12 @@ const refusal = (code, error, problems = [], extra = {}) => ({ ok: false, code, 
 const next = (tool, args, why) => ({ tool, arguments: args, why });
 
 export const extensionSchema = z.object({
-  action: z.enum(ACTIONS).describe('read: the current spec, keys and consumers; publish: create or edit from spec; delete: remove the extension'),
+  action: z.enum(ACTIONS).describe('read: spec, keys, consumers and exported resources (local files and reusable DLL references); publish: create or edit from spec; delete: remove the extension'),
   host: z.string().trim().toLowerCase().max(253).regex(HOST, 'bare DNS name of the environment (no scheme, port or path)').describe('The O11 environment (bare host) the connected Studio is signed in to'),
   extension: z.string().trim().min(1).max(200).optional().describe('read and delete: the extension name, exactly as in the environment'),
   spec: z.record(z.string(), z.unknown()).optional().describe('publish: {name, description?, structures?, actions:[{name, isFunction?, inputs?, outputs?, body}], sources?:[{path:"Helpers.cs", text|file}], references?:["<absolute .NET Framework .dll>"] (plus every DLL they need), resources?:[{path, text|file, deploy}], remove?}; bodies use the declared names (or ss<Name>) and may call the classes of sources'),
   specFile: z.string().max(1024).optional().describe('publish: absolute path of a JSON file with the spec (in place of spec)'),
+  referencesFrom: z.array(z.string().trim().regex(NAME).max(200)).max(20).optional().describe('publish: existing extensions on this host whose non-platform code-reference DLLs and license notices are reused automatically. Downloads, exports, checks dependency closure and records pinned source versions in this same call; no local paths needed.'),
   application: z.string().trim().min(1).max(200).optional().describe('publish, new extension: the application it joins'),
   applicationKey: z.string().trim().min(1).max(100).optional().describe('publish, new extension: the key of that application'),
   commitMessage: z.string().trim().min(1).max(2000).optional().describe('publish: the version comment'),
@@ -206,6 +208,11 @@ async function publish(input, ctx) {
     if (!fs.existsSync(base)) return refusal('EXTENSION_READ_FAILED', `The active version of ${name} came back empty; nothing was sent.`);
   }
 
+  // Resolve libraries from the same live environment inside the delivery, not by asking the caller to move DLLs.
+  const imported = await importReferences(input.referencesFrom ?? [], spec, input.host, ctx, reads, extensions);
+  if (imported.ok === false) return imported;
+  spec = imported.spec;
+
   // 3. The spec, every problem at once.
   const specFile = path.join(work, 'spec.json');
   fs.writeFileSync(specFile, JSON.stringify(spec));
@@ -213,7 +220,8 @@ async function publish(input, ctx) {
   const checked = await kernel(ctx, ['check', '--spec', specFile, ...baseArgs]);
   if (checked.ok === false) return checked;
   // K1-f: what the kernel accepted in another shape (sources, references or resources as one object) goes to the receipt.
-  const normalized = Array.isArray(checked.specNormalized) && checked.specNormalized.length ? { specNormalized: checked.specNormalized } : {};
+  const normalized = { ...(Array.isArray(checked.specNormalized) && checked.specNormalized.length ? { specNormalized: checked.specNormalized } : {}),
+    ...(imported.sources.length ? { referenceSources: imported.sources } : {}) };
 
   // 4. The model, then the handshake with the engine version.
   const model = await kernel(ctx, ['build', '--stage', 'model', '--spec', specFile, ...baseArgs, '--work', work]);
@@ -246,7 +254,7 @@ async function publish(input, ctx) {
   // 6. Merge, compile, final XIF (read again and audited by the kernel).
   const final = await kernel(ctx, ['build', '--stage', 'final', '--spec', specFile, '--model', model.xif, '--stubs', stubsZip, '--deps', deps.zip, ...baseArgs, '--work', work]);
   if (final.ok === false) return final;
-  const summary = { extension: name, extensionKey: final.key, xifSha256: final.xifSha256, dllSha256: final.dllSha256, contractDiff: final.contractDiff ?? null, ...normalized };
+  const summary = { extension: name, extensionKey: final.key, xif: final.xif, xifSha256: final.xifSha256, dllSha256: final.dllSha256, contractDiff: final.contractDiff ?? null, ...normalized };
 
   // 7. Already running?
   let needed;
@@ -280,7 +288,7 @@ async function publish(input, ctx) {
     try { contextual = authorizationContext(input.authorizationContext, words, {lane:'o11',host,operation:'extension-publish',targets:[name],constraints:{createOnly:true}}); }
     catch (error) { return refusal(error.code, error.message); }
   }
-  const repeat = { action: 'publish', host, spec: input.spec ? '<the same spec>' : undefined, specFile: input.specFile, words: '<the user\'s words naming ' + name + (affected.length ? ' and ' + affected.join(', ') : '') + '>' };
+  const repeat = { action: 'publish', host, spec: input.spec ? '<the same spec>' : undefined, specFile: input.specFile, referencesFrom: input.referencesFrom, words: '<the user\'s words naming ' + name + (affected.length ? ' and ' + affected.join(', ') : '') + '>' };
   const because = { ...summary, consumers };
   if (!words.trim() || (authorization && breaking))
     return refusal('WORDS_REQUIRED', breaking && authorization ? `A breaking change of ${name} needs the user's own words; a standing grant never covers it. Nothing was sent.`
@@ -308,6 +316,7 @@ async function publish(input, ctx) {
   const operationId = input.operationId ?? randomUUID();
   const created = !current;
   writeReceipt(ctx, { operationId, state: 'sending', host, extension: name, key: final.key, hash: final.hash, xifSha256: final.xifSha256, created,
+    xif: final.xif, referenceSources: imported.sources,
     wordsSha256: sha256(words), ...(authorization?.grantId ? { grantId: authorization.grantId } : {}) });
   const argv = ['extension-publish', '--host=' + host, '--xif-file=' + final.xif, '--extension=' + name, '--expected-version-id=' + (observedVersion ?? 'none'),
     ...(input.applicationKey ? ['--application-key=' + input.applicationKey] : input.application ? ['--application=' + input.application] : []),
@@ -315,10 +324,14 @@ async function publish(input, ctx) {
     '--words=' + words, '--operation-id=' + operationId, '--execute', ...(input.confirmHost ? ['--confirm-host=' + input.confirmHost] : []),
     ...(contextual ? ['--authorization-context=' + input.authorizationContext] : [])];
   let sent;
+  // F5 (producer-signatures.mjs): the extension is a producer; no observation of it made before the end of this
+  // publication counts (an uncertain one stays running for the ledger).
+  const publication = recordPublished(path.join(ctx.root, '.local', 'producer-cache'), { environment: host, module: name, key: final.key ?? null, source: TOOL, id: operationId });
   try { sent = await ctx.serviceCenter(argv); } catch (error) { sent = { ok: false, state: 'uncertain', error: String(error?.message ?? error) }; }
   const outcome = interpret(sent, { name, created, operationId, summary, current, host });
+  if (!publicationOpen(outcome)) recordPublicationEnded(publication);
   writeReceipt(ctx, { operationId, state: outcome.state ?? (outcome.ok === false ? 'refused' : 'unknown'), host, extension: name, key: final.key, hash: final.hash,
-    xifSha256: final.xifSha256, created, versionId: outcome.versionId ?? null, extensionId: outcome.extensionId ?? null, wordsSha256: sha256(words) });
+    xifSha256: final.xifSha256, xif: final.xif, referenceSources: imported.sources, created, versionId: outcome.versionId ?? null, extensionId: outcome.extensionId ?? null, wordsSha256: sha256(words) });
   if (!STATES.includes(outcome.state) || outcome.state === 'uncertain') return { ...outcome, consumers };
   const answer = { ...outcome, consumers, ...(contextual ? {authorization:{source:'human-context',context:contextual}} : authorization ? { authorization } : {}), ...referenceContinuation(ctx, work, name, (spec.actions ?? []).map(a => a?.name).filter(Boolean)) };
   if (!input.consumers) return answer;
@@ -351,7 +364,8 @@ function interpret(sent, { name, created, operationId, summary, current, host })
 // The same operationId again: the recorded hash read through UploadNeeded. Running = the publication happened; otherwise
 // it stays uncertain. Never a second send.
 async function reconcile(receipt, reads, ctx) {
-  const base = { extension: receipt.extension, extensionKey: receipt.key, xifSha256: receipt.xifSha256, operationId: receipt.operationId, reconciled: true, sent: false };
+  const base = { extension: receipt.extension, extensionKey: receipt.key, xifSha256: receipt.xifSha256, xif: receipt.xif,
+    referenceSources: receipt.referenceSources, operationId: receipt.operationId, reconciled: true, sent: false };
   if (['created', 'updated', 'already-running'].includes(receipt.state))
     return { ok: true, state: receipt.state, ...base, extensionId: receipt.extensionId ?? null, versionId: receipt.versionId ?? null };
   if (receipt.state === 'refused') return refusal('OPERATION_REFUSED', `The operation ${receipt.operationId} was refused before; use a new operationId for a new publication.`, [], base);
@@ -367,13 +381,52 @@ async function reconcile(receipt, reads, ctx) {
     problems: [problem('EXTENSION_PUBLISH_UNCERTAIN', 'The publication is not confirmed by the environment.', 'Check the extension in the Service Center; repeat this call later with the same operationId (it only reads).')] };
 }
 
-async function read(input, ctx) {
+async function importReferences(names, original, host, ctx, reads, extensions) {
+  if (!names.length) return { spec: original, sources: [] };
+  const documents = await Promise.all([...new Set(names)].map(extension => read({ host, extension }, ctx, reads, extensions)));
+  const failed = documents.filter(d => d.ok === false);
+  if (failed.length) return refusal('XIF_REFERENCE_SOURCE_FAILED', 'A library source could not be read; nothing was built or sent.',
+    failed.flatMap(d => d.problems ?? [problem(d.code, d.error, null)]));
+  const spec = structuredClone(original);
+  const list = value => value == null ? [] : Array.isArray(value) ? value : [value];
+  const references = list(spec.references), resources = list(spec.resources), sources = [];
+  const seen = new Map();
+  for (const file of references) {
+    if (typeof file !== 'string' || !fs.existsSync(file)) continue; // the spec checker reports malformed author references
+    seen.set(path.basename(file).toLowerCase(), { file, hash: sha256(fs.readFileSync(file)) });
+  }
+  for (const d of documents) {
+    if (!d.exported || !Array.isArray(d.exported.references) || !Array.isArray(d.exported.resources))
+      return refusal('XIF_REFERENCE_EXPORT_UNAVAILABLE', 'The kernel did not export the library resources; nothing was built or sent.',
+        [problem('XIF_REFERENCE_EXPORT_UNAVAILABLE', d.extension, 'Update the CLI so xif read supports --resources-out.')]);
+    for (const file of d.exported.references) {
+      const hash = sha256(fs.readFileSync(file)), key = path.basename(file).toLowerCase(), previous = seen.get(key);
+      if (previous && previous.hash !== hash)
+        return refusal('XIF_REFERENCE_CONFLICT', `Different libraries have the same filename ${path.basename(file)}; nothing was built or sent.`,
+          [problem('XIF_REFERENCE_CONFLICT', 'DLL contents differ.', 'Use source extensions with compatible library versions.')]);
+      if (!previous) { references.push(file); seen.set(key, { file, hash }); }
+    }
+    // Preserve redistribution notices automatically, under the source name to avoid collisions.
+    for (const r of d.exported.resources.filter(r => /license|notice|copying/i.test(r.path))) {
+      const target = 'Licenses\\' + d.extension + '\\' + r.path;
+      if (resources.some(r => String(r?.path).toLowerCase() === target.toLowerCase()))
+        return refusal('XIF_REFERENCE_CONFLICT', `A supplied resource collides with ${target}; nothing was built or sent.`);
+      resources.push({ path: target, file: r.file, deploy: 'Ignore' });
+    }
+    sources.push({ extension: d.extension, versionId: d.versionId, xifSha256: d.xifSha256, references: d.exported.references.length });
+  }
+  spec.references = references;
+  spec.resources = resources;
+  return { spec, sources };
+}
+
+async function read(input, ctx, connected = null, listed = null) {
   const name = input.extension;
   if (!name) return refusal('EXTENSION_REQUIRED', 'read needs extension (its exact name).', [problem('EXTENSION_REQUIRED', 'extension is required.', 'Pass extension: "<Name>".', { path: 'extension' })]);
   let reads;
-  try { reads = await ctx.reads(input.host); } catch (error) { return authRefusal(error); }
+  try { reads = connected ?? await ctx.reads(input.host); } catch (error) { return authRefusal(error); }
   let extensions;
-  try { extensions = await reads.extensions(); } catch (error) { return readFailure(error, 'the extensions could not be read'); }
+  try { extensions = listed ?? await reads.extensions(); } catch (error) { return readFailure(error, 'the extensions could not be read'); }
   const variants = extensions.filter(r => fold(r.name) === fold(name));
   const exact = variants.filter(r => r.name === name);
   if (variants.length > 1 || (variants.length === 1 && !exact.length))
@@ -385,12 +438,12 @@ async function read(input, ctx) {
   const work = path.join(ctx.root, '.local', 'xif', 'read', input.host, name, ctx.now().toISOString().replace(/[:.]/g, '-') + '-' + randomUUID().slice(0, 8));
   const file = path.join(work, name + '-v' + row.versionId + '.xif');
   try { await reads.download(row.key, row.versionId, file); } catch (error) { return readFailure(error, `the active version of ${name} could not be downloaded`); }
-  const document = await kernel(ctx, ['read', '--xif', file]);
+  const document = await kernel(ctx, ['read', '--xif', file, '--resources-out', path.join(work, 'resources')]);
   if (document.ok === false) return document;
   let consumers;
   try { consumers = consumerNames(await reads.consumers(row.key, ''), name); } catch { consumers = 'unknown'; }
   return { ok: true, extension: name, extensionKey: row.key, extensionId: row.id ?? null, versionId: row.versionId ?? null, xif: file, xifSha256: document.sha256,
-    hash: document.hash, signatureHash: document.signatureHash, spec: document.spec, resources: document.resources, consumers,
+    hash: document.hash, signatureHash: document.signatureHash, spec: document.spec, resources: document.resources, exported: document.exported, consumers,
     continuation: next(TOOL, { action: 'publish', host: input.host, spec: '<this spec, changed>', expectedVersionId: String(row.versionId ?? 'none'), words: '<the user\'s words naming ' + name + '>' }, 'edite o spec e publique numa chamada') };
 }
 
@@ -444,7 +497,12 @@ export function registerO11Extension(server, deps = {}) {
     title: 'O11 .NET extension without Integration Studio',
     description: '[o11] A .NET extension (XIF) of an O11 environment, built here and published through the connected Service Studio\'s own '
       + 'session; no Integration Studio login and no credential file. read {host, extension}: the current spec (structures, actions, '
-      + 'parameter keys, bodies), versionId, signatureHash and consumers. publish {host, spec, words}: one call creates or edits it (what the '
+      + 'parameter keys, bodies), versionId, signatureHash and consumers. Read also exports resources into a new private local folder: '
+      + 'exported.resources has path, file, sha256, deploy and codeReference; exported.references gives the non-platform DLL paths for '
+      + 'a new spec.references. Keep relevant license resources in spec.resources and let the spec check verify the dependency closure. '
+      + 'For an end-to-end publication use referencesFrom:["ExistingExtension"]: it acquires that extension\'s library DLLs '
+      + 'and license notices inside this call, with source versions and hashes in referenceSources. No manual DLL paths are needed. '
+      + 'publish {host, spec, words}: one call creates or edits it (what the '
       + 'spec names is created or updated in place by name, keys kept; remove lists what goes); every problem comes back at once before '
       + 'anything is sent (XIF_SPEC_INVALID, XIF_COMPILE_FAILED, XIF_STUBS_REFUSED...). The answer is created, updated, already-running '
       + 'or uncertain (never sent again: the same call with the same operationId reconciles by reading). An edit that breaks consumers '

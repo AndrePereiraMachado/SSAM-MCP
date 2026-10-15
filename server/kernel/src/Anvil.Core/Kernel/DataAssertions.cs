@@ -310,6 +310,11 @@ public sealed partial class ModelSession
         foreach (var a in dataAssertions.Values)
         {
             if (a["key"]?.ToString() is { } chave && _apagados.Contains(chave)) continue;   // o job apagou-o de proposito
+            // ... ou um elemento por onde o endereco passa: o valor de um registo e ancorado na chave do registo E na do
+            // atributo, e um atributo (ou registo) que o job apagou leva os valores com ele. Prova cumprida, nao perdida: o
+            // Order que a spec cria e escreve e o texto de dados nao tem (apagado no mesmo op, VisitaCerta_CS 2026-10-12),
+            // ou um atributo apagado depois de os registos o preencherem, em qualquer faixa e entidade.
+            if (a["reference"]?.ToString() is { } referencia && PassaPorApagado(referencia)) continue;
             try {
                 var target = ResolveAssertion(a["reference"]?.ToString() ?? "@" + a["key"]!.ToString());
                 if (UiCatalog.Prop(target, "WasDeleted") is true) continue;
@@ -318,6 +323,20 @@ public sealed partial class ModelSession
         }
         return CheckDataContract(assertions);
     }
+
+    /// <summary>Um endereco "@chave/@chave/..." ou "@chave/Nome" (ResolveAssertion) passa por um elemento que este job apagou:
+    /// o dono do endereco ou um segmento por chave.</summary>
+    private bool PassaPorApagado(string reference)
+    {
+        if (!reference.StartsWith('@')) return false;
+        var slash = reference.IndexOf('/');
+        if (slash < 0) return false;
+        if (_apagados.Contains(reference[1..slash])) return true;
+        foreach (var segment in reference[(slash + 1)..].Split('/', StringSplitOptions.RemoveEmptyEntries))
+            if (segment.StartsWith('@') && _apagados.Contains(segment[1..])) return true;
+        return false;
+    }
+
     public JsonObject CheckDataContract(JsonArray assertions)
     {
         var differences = new JsonArray();

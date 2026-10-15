@@ -71,7 +71,7 @@ public static class OdcMergeNormalizationRules
         // deleteRule the kernel writes Ignore (Verbs.Spec, which also judges references to other apps' entities on the base).
         // An entity the job itself declares under that name is its own, not the system's.
         var declaredEntities = ops.OfType<JsonObject>().Where(o => Text(o["op"]) == "spec").SelectMany(o => new[] { "entities", "clientEntities", "static" }
-            .SelectMany(s => (o["data"]?[s] as JsonArray ?? new JsonArray()).Select(x => Text(x?["name"])))).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .SelectMany(s => (SpecExpander.Sections(o["data"] as JsonObject)[s] as JsonArray ?? new JsonArray()).Select(x => Text(x?["name"])))).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < ops.Count; i++)
         {
             if (ops[i] is not JsonObject op || Text(op["op"]) != "spec" || op["data"] is not JsonObject data) continue;

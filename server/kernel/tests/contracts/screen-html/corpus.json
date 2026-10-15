@@ -1,0 +1,398 @@
+{
+ "schema": "ssam-html-corpus/1",
+ "plan": "C:/Users/andre/SSAM-analises/html-do-ssam/PLANO.md, sections 4.1-4.2 and 8 (E0, C1); the module list is C:/t/html-plan/unique.json",
+ "note": "The captures stay where they are (absolute paths): many are client modules and are never committed. A capture that is absent skips its module with a warning (and the floors of its group); a capture whose sha256 differs fails: the floors are of these bytes.",
+ "floors": {
+  "O11 apps reais": {
+   "modules": 21,
+   "screens": 140,
+   "blocks": 329,
+   "widgets": 38076,
+   "represented": 38024
+  },
+  "O11 templates (fixtures)": {
+   "modules": 1,
+   "screens": 3,
+   "blocks": 8,
+   "widgets": 148,
+   "represented": 148
+  },
+  "O11 Traditional (fixture)": {
+   "modules": 1,
+   "screens": 4,
+   "blocks": 7,
+   "widgets": 161,
+   "represented": 0,
+   "note": "Traditional Web is D2: every Traditional widget reads as os-opaque with its subtree (the plan counted 51 widgets of shared kinds inside them). Only the fixed point applies."
+  },
+  "ODC apps reais": {
+   "modules": 4,
+   "screens": 45,
+   "blocks": 76,
+   "widgets": 4621,
+   "represented": 4580
+  }
+ },
+ "acceptance": {
+  "groups": [
+   "O11 apps reais",
+   "ODC apps reais"
+  ],
+  "fixedPoint": "every screen and block of every group: the text read decodes back to what was read (no difference), no problem, the same text when read again",
+  "readP90MsMax": 1000,
+  "screenHtmlMedianBytesMax": 6144,
+  "nonOpaqueMin": 0.995,
+  "nonOpaqueNote": "Over both lanes: (38024 + 4580) / 42697 = 99.78% follows from the two lane floors (represented), each asserted by its lane."
+ },
+ "c2": {
+  "plan": "C:/Users/andre/SSAM-analises/html-do-ssam/PLANO.md, sections 3.2-3.5 and 8 (C2)",
+  "note": "The synthetic edits of every screen and block of the groups (ScreenHtmlEditBattery: class, text, expression, new child, leaf removal, sibling swap, event), each applied by the html op in its edit form and rolled back: the module reads back the edited text in 100% of them, every element the edit kept keeps its ObjectKey (the op's own Verify), and after the rollback the screen reads as before. minEdits is the number of edits these bytes give with this seed and perKind (both lanes together must be >= minEditsTotal, the plan's floor).",
+  "groups": [
+   "O11 apps reais",
+   "ODC apps reais"
+  ],
+  "seed": 1,
+  "perKind": 1,
+  "minEdits": {
+   "o11": 2690,
+   "odc": 676
+  },
+  "minEditsTotal": 3000,
+  "transcript": [
+   {
+    "name": "0280-ajuste",
+    "note": "2026-10-10 20:48-20:51, the correction of the FarmaVirtual screen in the same turn (35 calls, 2 refused): the session's raw ops 8-19 as one html edit (its Visible written as If), the client variable, the two assignments and the theme as the session wrote them",
+    "base": "C:\\t\\html-replay\\corpus\\bases\\2d1143719a68d9cc1ecf06afc489c12b6a27343eb073bdcbadbff6fbb8edf190.oml",
+    "baseSha256": "2d1143719a68d9cc1ecf06afc489c12b6a27343eb073bdcbadbff6fbb8edf190",
+    "job": "C:\\t\\html-replay\\corpus\\cases\\0280-o11-Haiku_UI-0a1381b6\\job.json"
+   },
+   {
+    "name": "0285-sem-css",
+    "note": "\"ta tudo sem css\" (turn 2, 27 calls): the stylesheet of the screen as its <style>, the theme as the session wrote it",
+    "base": "C:\\t\\html-replay\\corpus\\bases\\066cfba7568eaa6f1df3f505bdf941e3829d5810f3aa97c07b4f2455d3015c7f.oml",
+    "baseSha256": "066cfba7568eaa6f1df3f505bdf941e3829d5810f3aa97c07b4f2455d3015c7f",
+    "job": "C:\\t\\html-replay\\corpus\\cases\\0285-o11-Haiku_UI-a53d1fc7\\job.json"
+   }
+  ],
+  "transcriptLimits": {
+   "calls": 2,
+   "refusals": 0,
+   "secondsPerCall": 60
+  }
+ },
+ "modules": [
+  {
+   "label": "AgentOps_Core_CS",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-plan\\omls\\o11\\AgentOps_Core_CS-v5585.oml",
+   "sha256": "2173965d22589290e68d0f99d6d9b63295cba2ef962dac5554f0abf9348ffcd5",
+   "screens": false
+  },
+  {
+   "label": "DCIPS_Case_CS",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-plan\\omls\\o11\\DCIPS_Case_CS-20261008182941-58fb6aa1.oml",
+   "sha256": "aa989d3a6eb4b20d5f0ff4f0275f89756541d8df1a1f7ed3c4168ce08ac6aea0",
+   "screens": false
+  },
+  {
+   "label": "DCIPS_Integrations_CS",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-plan\\omls\\o11\\DCIPS_Integrations_CS-20261008221034-55d1bb67.oml",
+   "sha256": "df679dae1cdb3642b26534cd5caa0f6791e7117f21069bbf609818df7c361f4b",
+   "screens": false
+  },
+  {
+   "label": "DCIPS_Staff_Mortuary",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-plan\\omls\\o11\\DCIPS_Staff_Mortuary-20261009013858-a7b5e5f9.oml",
+   "sha256": "b1814acb779117bf2f790609d0be4e2280f885ab84948117183d258b44acf614",
+   "screens": true
+  },
+  {
+   "label": "Haiku_CS",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-plan\\omls\\o11\\Haiku_CS-20261010051236-6112e4c8.oml",
+   "sha256": "7dc3ad41a38c22f98744ba1857e48cd82a2522c7766b263d2b98d12a6834ca05",
+   "screens": false
+  },
+  {
+   "label": "Haiku_UI-live",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-plan\\omls\\o11\\Haiku_UI-live.oml",
+   "sha256": "d130d2b3714c7f674ae3dd9cc8d07e22a7f60a43d592bee4217fc0acc2d0c97f",
+   "screens": true
+  },
+  {
+   "label": "HMISJHA_CS",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-plan\\omls\\o11\\HMISJHA_CS-v5578.oml",
+   "sha256": "497c8bda97d47b1862e8099b1f4cdb4b7b80cf279f897320a841ddcb75287f66",
+   "screens": false
+  },
+  {
+   "label": "mobile-ui",
+   "lane": "o11",
+   "group": "O11 templates (fixtures)",
+   "oml": "C:\\t\\html-plan\\omls\\o11\\mobile-ui.oml",
+   "sha256": "d4434e34bf3a4697fba246409c114b329c9db82eeb9493b3833ed9bb427dae09",
+   "screens": true
+  },
+  {
+   "label": "traditional-ui",
+   "lane": "o11",
+   "group": "O11 Traditional (fixture)",
+   "oml": "C:\\t\\html-plan\\omls\\o11\\traditional-ui.oml",
+   "sha256": "d8f5e5078763f09bad487a220644c530d2c5b1d8ff60d611460023056a438b92",
+   "screens": true
+  },
+  {
+   "label": "blank-mobile",
+   "lane": "odc",
+   "group": "ODC template (fixture)",
+   "oml": "C:\\t\\html-plan\\omls\\odc\\blank-mobile.oml",
+   "sha256": "d0eeae2691d263c86bee1c65b5d43612ef018b2feb0995cff9a233cbce670c1c",
+   "screens": false
+  },
+  {
+   "label": "FloodQuotes",
+   "lane": "odc",
+   "group": "ODC apps reais",
+   "oml": "C:\\t\\html-plan\\omls\\odc\\FloodQuotes-revision-338.oml",
+   "sha256": "00f19852417fa78b2ee14271a21dfdaf7a7d68a5ab709f2fb324faf562f2776d",
+   "screens": true
+  },
+  {
+   "label": "FloodServices",
+   "lane": "odc",
+   "group": "ODC apps reais",
+   "oml": "C:\\t\\html-plan\\omls\\odc\\FloodServices-revision-98.oml",
+   "sha256": "b2e3a3d96f6d20ce27b62216484e5cefe79a4c4236e4cd7c6a34c8274d6247c4",
+   "screens": false
+  },
+  {
+   "label": "insurance-reactive",
+   "lane": "odc",
+   "group": "ODC apps reais",
+   "oml": "C:\\t\\html-plan\\omls\\odc\\insurance-reactive-r8.oml",
+   "sha256": "7529b2ad588e217e583c0beb2d5510f2d728715265ab40939d18589ff101f7d1",
+   "screens": true
+  },
+  {
+   "label": "DCIPS_Staff_Cases",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\218bd3804cea0f25c8e95a0f881cd34b31b7e43b14a0dd41e6694ea0fee3d349.oml",
+   "sha256": "218bd3804cea0f25c8e95a0f881cd34b31b7e43b14a0dd41e6694ea0fee3d349",
+   "screens": true
+  },
+  {
+   "label": "OfficePetMobile",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\40a86da9483a482803adca46b71720e391f69f101da848f6e32a96567e79a31d.oml",
+   "sha256": "40a86da9483a482803adca46b71720e391f69f101da848f6e32a96567e79a31d",
+   "screens": true
+  },
+  {
+   "label": "SS360_Backoffice",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\927b91ab55d86ea023e054a6c81fa5cdaf681a61e697c6c24201a69c9a769b27.oml",
+   "sha256": "927b91ab55d86ea023e054a6c81fa5cdaf681a61e697c6c24201a69c9a769b27",
+   "screens": true
+  },
+  {
+   "label": "Horsie_UI",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\eeb73026f38ea5d54c3e9c139503330f887bbe2545c05b185b36df0459ae898c.oml",
+   "sha256": "eeb73026f38ea5d54c3e9c139503330f887bbe2545c05b185b36df0459ae898c",
+   "screens": true
+  },
+  {
+   "label": "DCIPS_Staff_Admin",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\78086a1fc7dcc14e3cf5d42e8adf8a71549d1541dfbde705d4908b728b274672.oml",
+   "sha256": "78086a1fc7dcc14e3cf5d42e8adf8a71549d1541dfbde705d4908b728b274672",
+   "screens": true
+  },
+  {
+   "label": "DCIPS_Staff_LTCM",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\1890f658bf0547695bfeca6abb3729eb5140f34c6aea517f73ab81ec232a8140.oml",
+   "sha256": "1890f658bf0547695bfeca6abb3729eb5140f34c6aea517f73ab81ec232a8140",
+   "screens": true
+  },
+  {
+   "label": "Cardapio_BackOffice",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\0e30420c42850f6dc6d3aa5faddcd9854a43116a348a0da724bf7af12ff6d860.oml",
+   "sha256": "0e30420c42850f6dc6d3aa5faddcd9854a43116a348a0da724bf7af12ff6d860",
+   "screens": true
+  },
+  {
+   "label": "GameStore_UI",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\18d2ab2c23372ff85ccc7fe3a7ba3bb69b57eca72e46301ecdc1bf456cd6c742.oml",
+   "sha256": "18d2ab2c23372ff85ccc7fe3a7ba3bb69b57eca72e46301ecdc1bf456cd6c742",
+   "screens": true
+  },
+  {
+   "label": "DCIPS_Staff_Reports",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\a59cd1f4b77b892f37b1217b2820fa9ad5c32b6204fd72b03d3aca4dc500718d.oml",
+   "sha256": "a59cd1f4b77b892f37b1217b2820fa9ad5c32b6204fd72b03d3aca4dc500718d",
+   "screens": true
+  },
+  {
+   "label": "DCIPS_FHRequestor",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\aa727f5a048e80cc5f2ba9e19f7ded47720edea9c2635571151f02e726d417fa.oml",
+   "sha256": "aa727f5a048e80cc5f2ba9e19f7ded47720edea9c2635571151f02e726d417fa",
+   "screens": true
+  },
+  {
+   "label": "DCIPS_Staff_Reporting",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\fcb06444b020634ad93d28ee1f0acc1aa02a3f4de38fb65abf4b86e781e1f9e1.oml",
+   "sha256": "fcb06444b020634ad93d28ee1f0acc1aa02a3f4de38fb65abf4b86e781e1f9e1",
+   "screens": true
+  },
+  {
+   "label": "DCIPS_SurvivorPortal",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\981127c810ff638cc7651141a90c29956fb94a53b608c8fde391aedb5bebecee.oml",
+   "sha256": "981127c810ff638cc7651141a90c29956fb94a53b608c8fde391aedb5bebecee",
+   "screens": true
+  },
+  {
+   "label": "DCIPS_Staff_PastConflicts",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\f06d7c652b5b4408d204b26832cc759cdf4fa77a411c9c330e316190d72f1461.oml",
+   "sha256": "f06d7c652b5b4408d204b26832cc759cdf4fa77a411c9c330e316190d72f1461",
+   "screens": true
+  },
+  {
+   "label": "DCIPS_Staff_Kiosk",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\c24bc860ad6ff015c6a7e2003dd511b8d05cab0913f4ed08cba04459a40b4789.oml",
+   "sha256": "c24bc860ad6ff015c6a7e2003dd511b8d05cab0913f4ed08cba04459a40b4789",
+   "screens": true
+  },
+  {
+   "label": "Cardapio_UI",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\55e93531f79cc5d1f0ca0f8b74b115b8af46465c6e37af10dcae26588fe74541.oml",
+   "sha256": "55e93531f79cc5d1f0ca0f8b74b115b8af46465c6e37af10dcae26588fe74541",
+   "screens": true
+  },
+  {
+   "label": "OfficePet",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\fba4c4b7d1b0a37d08731be49ab58cf4743b1e08114bd854692ca6a3f6466045.oml",
+   "sha256": "fba4c4b7d1b0a37d08731be49ab58cf4743b1e08114bd854692ca6a3f6466045",
+   "screens": true
+  },
+  {
+   "label": "DCIPS_Staff_Common",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\4b7e6db80cb759b8fcab21669f18a70a785ed3e41ddb93de663a18e454332552.oml",
+   "sha256": "4b7e6db80cb759b8fcab21669f18a70a785ed3e41ddb93de663a18e454332552",
+   "screens": true
+  },
+  {
+   "label": "SS360_Tech",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\4ac5db89589d6c3713c215c1e182c6d62ef0fbb8a0413664dcfc12794a7fdbd8.oml",
+   "sha256": "4ac5db89589d6c3713c215c1e182c6d62ef0fbb8a0413664dcfc12794a7fdbd8",
+   "screens": true
+  },
+  {
+   "label": "DCIPS_Staff_Benefits",
+   "lane": "o11",
+   "group": "O11 apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\3a09ff7aeac609d5edb973e869ffd76a167b182365f6fb3230cdee91747c0f6b.oml",
+   "sha256": "3a09ff7aeac609d5edb973e869ffd76a167b182365f6fb3230cdee91747c0f6b",
+   "screens": true
+  },
+  {
+   "label": "EscalaViva",
+   "lane": "odc",
+   "group": "ODC apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\119202ea2575a27ec8059c8bf810b3cd94079c7aba65c6e96d33f2f972b6d1ef.oml",
+   "sha256": "119202ea2575a27ec8059c8bf810b3cd94079c7aba65c6e96d33f2f972b6d1ef",
+   "screens": true
+  },
+  {
+   "label": "QuizLiveWeb",
+   "lane": "odc",
+   "group": "ODC apps reais",
+   "oml": "C:\\t\\html-replay\\corpus\\bases\\22948920993909e910a0c67f6fdd0e1e228f5a69feba0e6ddf68f9281ba9e834.oml",
+   "sha256": "22948920993909e910a0c67f6fdd0e1e228f5a69feba0e6ddf68f9281ba9e834",
+   "screens": true
+  }
+ ],
+ "recreation": {
+  "stage": "B1: every screen of the groups read by ssam-html/1 is compiled again by the document form of the html op in the loaded copy without it (its actions moved in, its consumers repointed); the text read again equals the text read before (keys mapped by k) and the Verify gains no error",
+  "groups": [
+   "O11 apps reais",
+   "ODC apps reais"
+  ],
+  "minSame": 0.95,
+  "buildMedianMsMax": 15000,
+  "known": [
+   {
+    "module": "Horsie_UI",
+    "root": "Splash",
+    "cause": "HTML_RECORD_LITERAL: the ProgressBar argument OptionalConfigs is a record literal, which the O11 expression parser does not read (the Service Studio builds it in its own editor)"
+   },
+   {
+    "module": "OfficePetMobile",
+    "root": "Splash",
+    "cause": "HTML_RECORD_LITERAL: the same ProgressBar record literal of the template"
+   },
+   {
+    "module": "SS360_Tech",
+    "root": "Splash",
+    "cause": "HTML_RECORD_LITERAL: the same ProgressBar record literal of the template"
+   },
+   {
+    "module": "mobile-ui",
+    "root": "Splash",
+    "cause": "HTML_RECORD_LITERAL: the same ProgressBar record literal (template fixture, outside the groups)"
+   },
+   {
+    "module": "DCIPS_Staff_Common",
+    "root": "DcipsLogin",
+    "cause": "HTML_NAME_UNKNOWN: the instance of LayoutDCIPSLogin holds content for a placeholder its block no longer has (Header); a new instance only has the placeholders of its block"
+   },
+   {
+    "module": "FloodQuotes",
+    "root": "PropertyCoverage",
+    "cause": "different: os-MarginTop=\"0\" of SingleFamilyImage reads back empty (the ODC Model API does not keep a margin of 0 written to a new image)"
+   }
+  ]
+ }
+}

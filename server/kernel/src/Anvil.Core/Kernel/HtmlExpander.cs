@@ -7,8 +7,10 @@ namespace Anvil.Core;
 public sealed record HtmlCompilation(List<JsonObject> Ops, JsonObject Report, string? ScopedCss, string ScopeClass);
 
 /// <summary>An action a logic op of the same job declares, as the html page op sees it (H2, H10 of docs/PROTOTIPO-NATIVO.md):
-/// its name, kind (server, service, client, screen), owner (@espace or the screen), inputs and the op that declares it.</summary>
-public sealed record HtmlJobAction(string Name, string Kind, string Owner, IReadOnlyList<UiParam> Inputs, IReadOnlyList<UiParam> Outputs, int Op);
+/// its name, kind (server, service, client, screen), owner (@espace or the screen), inputs and the op that declares it.
+/// Flow: declared by a flow text (ssam-flow/1, a header with its owner and no @key: "action Home.Save"); its owner is written
+/// as the text writes it (the screen's name, or Flow/Name).</summary>
+public sealed record HtmlJobAction(string Name, string Kind, string Owner, IReadOnlyList<UiParam> Inputs, IReadOnlyList<UiParam> Outputs, int Op, bool Flow = false);
 
 /// <summary>The job around an html page op: its index and the actions its logic ops declare (before or after it).</summary>
 public sealed record HtmlJob(int Op, IReadOnlyList<HtmlJobAction> Actions)
@@ -30,6 +32,32 @@ public sealed record HtmlJob(int Op, IReadOnlyList<HtmlJobAction> Actions)
             }
         }
         return new HtmlJob(htmlOp, actions);
+    }
+
+    /// <summary>The screen, block and data actions the flow texts of the job's logic ops create (a header that names its owner,
+    /// without @key: "action Home.Save", "data action Home.GetOrders"), as the document form sees them: name, kind (screen or
+    /// data), owner as the text writes it, inputs and outputs, and the op. A text that does not read is the logic op's own
+    /// problem (FLOW_SYNTAX), never this list's.</summary>
+    public static IReadOnlyList<HtmlJobAction> FlowActions(JsonArray? ops)
+    {
+        var actions = new List<HtmlJobAction>();
+        if (ops == null) return actions;
+        for (var i = 0; i < ops.Count; i++)
+        {
+            if (ops[i] is not JsonObject op || op["op"]?.ToString() != "logic" || op["data"] is not JsonObject data || !data.ContainsKey("flow")) continue;
+            List<(string Text, string? BasedOn, string Pointer)> texts;
+            try { texts = FlowTextForm.Texts(data); } catch (Exception) { continue; }
+            foreach (var (text, _, _) in texts)
+            {
+                Anvil.Reading.FlowItem item;
+                try { item = Anvil.Reading.ModuleFlow.Read(text); } catch (FormatException) { continue; }
+                if (item.Key.Length > 0 || item.Owner.Length == 0 || !Anvil.Reading.FlowOwners.Owned(item.Kind)) continue;
+                static UiParam Param(Anvil.Reading.FlowItem p) => new(p.Name, p.Prop("DataType") ?? "Text", p.Role == "in" && p.Prop("IsMandatory") != "False", p.Prop("DefaultValue"), null);
+                actions.Add(new(item.Name, item.Kind == "DataAction" ? "data" : "screen", item.Owner,
+                    item.Items.Where(p => p.Role == "in").Select(Param).ToArray(), item.Items.Where(p => p.Role == "out").Select(Param).ToArray(), i, Flow: true));
+            }
+        }
+        return actions;
     }
 
     private static UiParam[] Params(JsonNode? node, bool inputs) => (node as JsonArray ?? new JsonArray()).OfType<JsonObject>()
@@ -151,6 +179,8 @@ public static class HtmlExpander
         ["stylesheet"] = new JsonArray(StylesheetModes.Select(m => (JsonNode)m).ToArray()),
         ["css"] = "scoped under the page root class; @import statements go to the top of the theme (cssImportsHoisted); #id selectors are refused (OutSystems reserves the id attribute)",
         ["layout"] = new JsonArray("theme", "blank"),
+        // The document form (B1 of the plan "Texto do SSAM"): one whole <screen> or <block> in ssam-html/1.
+        ["document"] = ScreenDocument.Schema(),
     };
 
     /// <param name="existing">Description of the screen when it already exists (variables by name and type); null for a new screen.

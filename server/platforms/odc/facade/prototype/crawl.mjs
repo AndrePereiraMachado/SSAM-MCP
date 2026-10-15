@@ -3,7 +3,7 @@
 // mapping.routes. States: S0 and, for each global dimension and each of its values, S0 with only that dimension
 // changed, plus mapping.states. Then templates, fallback, canonical states, the default view and the names.
 import { alignTrees, renderKey, alignSequences } from './align.mjs';
-import { attr, classes, elementsWithPath, isElement, matchIndex, textOf, walk, sha256, canonical } from './ir.mjs';
+import { attr, classes, elementsWithPath, isElement, isModalNode, matchIndex, textOf, walk, sha256, canonical } from './ir.mjs';
 import { pascal, slug, readmeRoutes } from './names.mjs';
 
 export const LIMITS = Object.freeze({ routes: 64, states: 32, depth: 4, probes: 1500 });
@@ -185,6 +185,24 @@ export function structurallyDifferent(a, b) {
   return false;
 }
 
+// The deepest element under a mount whose content still differs between the bodies while everything around it is the
+// same: a React app re-renders its screen inside a frame of plain divs (stage > scale > phone > screen), and the frame is
+// shell, never screen. Descends while the node has the same number of element children in every body and exactly one of
+// them differs.
+export function deepenMount(bodies, path) {
+  let current = path;
+  for (let depth = 0; depth < 12; depth++) {
+    const nodes = bodies.map(body => nodeAtPath(body, current));
+    if (nodes.some(node => !isElement(node))) break;
+    const kids = nodes.map(node => (node.c ?? []).map((child, index) => ({ child, index })).filter(({ child }) => isElement(child) && !isModalNode(child)));
+    if (kids.some(list => list.length !== kids[0].length) || !kids[0].length) break;
+    const differing = kids[0].filter(({ child, index }, position) => kids.some(list => list[position].index !== index || list[position].child.t !== child.t || structurallyDifferent(child, list[position].child)));
+    if (differing.length !== 1) break;
+    current = current.concat(differing[0].index);
+  }
+  return current;
+}
+
 // The element of a body whose content is rewritten per route (app root) and, inside it, the mount point.
 export function findMount(bodies, { modalContainer = () => false } = {}) {
   const first = bodies[0];
@@ -338,6 +356,7 @@ export async function crawlRoutes(session, s0) {
 
   const states = [{ key: 'S0', assign: {} }];
   for (const [viewKey, assign] of Object.entries(mapping.states ?? {})) {
+    if (!assign || typeof assign !== 'object' || typeof assign.click === 'string') continue;
     for (const dimKey of Object.keys(assign)) if (!session.dims.some(dim => dim.key === dimKey)) { const dim = mappingDimension(s0.body, dimKey); if (dim) session.dims.push(dim); }
     const key = stateKey(assign);
     if (!states.some(state => state.key === key)) states.push({ key, assign: { ...assign }, mapping: viewKey });
@@ -361,7 +380,7 @@ export async function crawlRoutes(session, s0) {
     const checks = [];
     // With screens as fixed sections, the other route of a check shows another section (two routes of one screen, the empty
     // hash and its default route, say nothing about a global dimension).
-    const sectionsNow = toggledSections(routes.list().map(item => renders.get('S0|' + item.route)?.body).filter(Boolean), { modalContainer: node => node.t === 'dialog' || attr(node, 'role') === 'dialog' || attr(node, 'aria-modal') === 'true' });
+    const sectionsNow = toggledSections(routes.list().map(item => renders.get('S0|' + item.route)?.body).filter(Boolean), { modalContainer: isModalNode });
     const otherScreen = (a, b) => sectionsNow ? sectionsNow.visible(a) !== sectionsNow.visible(b) : visibleKey(a) !== visibleKey(b);
     const screenKey = body => { if (!sectionsNow) return visibleKey(body); const index = sectionsNow.visible(body); const parent = nodeAtPath(body, sectionsNow.parent); return renderKey(index == null ? parent : parent?.c?.[index]); };
     for (const [id, snap] of renders) {
@@ -554,7 +573,7 @@ export function currentRoute(snap, kind) {
 export function viewsFromCrawl(session, crawl) {
   const { routes, states, renders, weak, readme } = crawl;
   const kind = session.kind;
-  const modalContainer = node => node.t === 'dialog' || attr(node, 'role') === 'dialog' || attr(node, 'aria-modal') === 'true';
+  const modalContainer = isModalNode;
   // Mount per state from the renders of all routes in that state; the mount path must agree across states.
   const mountVotes = new Map();
   for (const state of states) {
@@ -788,11 +807,18 @@ export function skeleton(node, depth = 2) {
   return parts.join(',');
 }
 
-// The skeleton of a page without its modal containers: opening a dialog is a modal (2.4), never a view (2.2 spa-state).
-const isModalContainer = node => isElement(node) && (node.t === 'dialog' || attr(node, 'role') === 'dialog' || attr(node, 'role') === 'alertdialog' || attr(node, 'aria-modal') === 'true');
+// The skeleton of a page without its modal containers: opening a dialog is a modal (2.4), never a view (2.2 spa-state). A
+// transient notice is out too (a toast a click shows, never hidden again because its timer does not run here: VisitaCerta
+// 2026-10-12 got a second "Locais salvos" for the toast "Local removido"): a toast/snackbar by name, or a live region.
+const isModalContainer = isModalNode;
+export function isTransientNotice(node) {
+  if (!isElement(node)) return false;
+  if (attr(node, 'aria-live') != null && attr(node, 'aria-live') !== 'off') return true;
+  return /(^|[\s_-])(toast|toaster|snackbar)([\s_-]|$)/i.test(String(attr(node, 'class') ?? '') + ' ' + String(attr(node, 'id') ?? ''));
+}
 function withoutModals(node) {
   if (!isElement(node)) return node;
-  return { ...node, c: (node.c ?? []).filter(child => !isModalContainer(child)).map(withoutModals) };
+  return { ...node, c: (node.c ?? []).filter(child => !isModalContainer(child) && !isTransientNotice(child)).map(withoutModals) };
 }
 export function pageSkeleton(body, depth = 4) { return skeleton(withoutModals(body), depth); }
 
@@ -814,6 +840,140 @@ function stateTriggers(body) {
   return out;
 }
 
+// ---- screen switches (2.2 spa-state without classes) ------------------------------------------------------------------
+// A React prototype styled inline has no classes, so the skeleton of four levels never sees its screen change: the screen
+// is five levels down (stage > scale > phone > screen). A switch is a parameterless trigger whose click changes the deep
+// skeleton of the page (every level, modal containers and overlays out) and in whose result a trigger of the same tag under
+// a parent of the same shape (the other tab of the same tab bar) brings the page back to where it was. A click that only adds
+// a toast or writes data has no way back and is no switch.
+
+export function deepSkeleton(body) { return skeleton(withoutModals(body), 64); }
+
+function parentSignature(body, path) {
+  const parent = nodeAtPath(body, path.slice(0, -1));
+  return isElement(parent) ? parent.t + '|' + skeleton(parent, 1) + '|' + (parent.c ?? []).filter(isElement).length : '';
+}
+
+// The words of an element, its text nodes joined by a space ("Bater ponto Saída almoço"), never glued together.
+export function ownText(node) {
+  const parts = [];
+  walk(node, current => { if (!isElement(current) && String(current.x ?? '').trim()) parts.push(String(current.x).trim()); });
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+async function screenSwitches(session, s0, candidates, probes, results) {
+  const base = deepSkeleton(s0.body);
+  const moved = [];
+  probes.forEach((probe, index) => {
+    const snap = results.get(probe.key)?.snaps?.[0];
+    if (!snap || snap.url !== s0.url || deepSkeleton(snap.body) === base) return;
+    moved.push({ item: candidates[index], snap, steps: probe.steps.filter(step => step.do !== 'snap'), parent: parentSignature(s0.body, candidates[index].path) });
+  });
+  if (!moved.length) return null;
+  const back = [];
+  moved.forEach((entry, m) => {
+    stateTriggers(entry.snap.body).forEach((other, r) => {
+      if (other.node.t !== entry.item.node.t || parentSignature(entry.snap.body, other.path) !== entry.parent) return;
+      back.push({ key: 'sw|' + String(m).padStart(3, '0') + '|' + String(r).padStart(3, '0'), prefix: entry.steps, steps: [{ do: 'click', target: targetFor(entry.snap.body, other.node) ?? { path: other.path } }, { do: 'snap', tag: 'back' }], m, other });
+    });
+  });
+  const answers = back.length ? await session.run(back.map(({ key, prefix, steps }) => ({ key, prefix, steps }))) : new Map();
+  const switches = [];
+  for (const probe of back) {
+    const snap = answers.get(probe.key)?.snaps?.[0];
+    if (!snap || snap.url !== s0.url || deepSkeleton(snap.body) !== base) continue;
+    const entry = moved[probe.m];
+    if (!switches.some(item => item.entry === entry)) switches.push({ entry, back: probe.other.node, parent: entry.parent });
+  }
+  return switches.length ? switches : null;
+}
+
+// The views of a prototype of screen switches: breadth-first over the switch-like triggers only (same tag, parent of the
+// shape of a known switch), every new deep skeleton a view named by the text of the trigger that shows it; the first view by
+// the trigger that brings it back. The mount is the element whose content differs between the views (deepenMount).
+async function switchViews(session, s0) {
+  const switches = session.switches;
+  const parents = new Set(switches.map(item => item.parent));
+  const tags = new Set(switches.map(item => item.entry.item.node.t));
+  const base = deepSkeleton(s0.body);
+  const seen = new Map([[base, { steps: [], snap: s0, label: ownText(switches[0].back) }]]);
+  let frontier = [...seen.values()];
+  for (let depth = 0; depth < LIMITS.depth && frontier.length; depth++) {
+    const probes = [];
+    for (const [index, state] of frontier.entries()) {
+      for (const [triggerIndex, item] of stateTriggers(state.snap.body).entries()) {
+        if (!tags.has(item.node.t) || !parents.has(parentSignature(state.snap.body, item.path))) continue;
+        probes.push({ key: 'sv|' + depth + '|' + String(index).padStart(3, '0') + '|' + String(triggerIndex).padStart(3, '0'), prefix: state.steps,
+          steps: [{ do: 'click', target: targetFor(state.snap.body, item.node) ?? { path: item.path } }, { do: 'snap', tag: 'after' }], via: item });
+      }
+    }
+    const results = probes.length ? await session.run(probes.map(({ key, prefix, steps }) => ({ key, prefix, steps }))) : new Map();
+    const next = [];
+    for (const probe of probes) {
+      const snap = results.get(probe.key)?.snaps?.[0];
+      if (!snap || snap.url !== s0.url) continue;
+      const key = deepSkeleton(snap.body);
+      if (seen.has(key) || seen.size >= LIMITS.routes) continue;
+      const entry = { steps: probe.prefix.concat(probe.steps.filter(step => step.do !== 'snap')), snap, label: ownText(probe.via.node), trigger: probe.via.node };
+      seen.set(key, entry);
+      next.push(entry);
+    }
+    frontier = next;
+  }
+  return viewsOfStates([...seen.values()]);
+}
+
+// mapping.states of a prototype without routes: {"<view>": {"click": "<words of the trigger or a CSS selector>"}} names a
+// view reached from the first page by one click (what a refusal asks for when a click rewrites the screen with no way back).
+export function mappedClicks(mapping) {
+  return Object.entries(mapping?.states ?? {}).filter(([, value]) => value && typeof value === 'object' && !Array.isArray(value) && typeof value.click === 'string' && value.click.trim());
+}
+const fold = text => String(text ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+// The target of a click named by words or by a selector: the clickable element whose own words (or title, aria-label) are
+// exactly those words, else the selector as written.
+export function clickTarget(body, wanted) {
+  const words = fold(wanted);
+  const hit = stateTriggers(body).find(({ node }) => fold(ownText(node)) === words || fold(attr(node, 'title')) === words || fold(attr(node, 'aria-label')) === words);
+  if (hit) return targetFor(body, hit.node) ?? { path: hit.path };
+  return { sel: wanted };
+}
+async function mappedViews(session, s0, clicks) {
+  const probes = clicks.map(([viewKey, value], index) => ({ key: 'mv|' + String(index).padStart(3, '0'), steps: [{ do: 'click', target: clickTarget(s0.body, value.click) }, { do: 'snap', tag: 'after' }], viewKey }));
+  const results = await session.run(probes.map(({ key, steps }) => ({ key, steps })));
+  const entries = [{ steps: [], snap: s0, label: firstHeading(s0.body) || 'inicio' }];
+  const problems = [];
+  const base = deepSkeleton(s0.body);
+  for (const probe of probes) {
+    const snap = results.get(probe.key)?.snaps?.[0];
+    if (!snap || snap.url !== s0.url || deepSkeleton(snap.body) === base) { problems.push({ key: 'mappedClick', view: probe.viewKey, message: 'mapping.states.' + probe.viewKey + ': the click on ' + JSON.stringify(clicks.find(([key]) => key === probe.viewKey)[1].click) + ' did not change the screen (no such element, or nothing changed)' }); continue; }
+    entries.push({ steps: probe.steps.filter(step => step.do !== 'snap'), snap, label: probe.viewKey, key: probe.viewKey });
+  }
+  return { ...viewsOfStates(entries), problems };
+}
+
+// The views of a set of rendered states (screen switches or mapped clicks): names, keys, the mount and how a page is told
+// apart (the deep skeleton of what is at the mount).
+function viewsOfStates(states) {
+  const taken = new Set();
+  const views = states.map((entry, index) => {
+    const label = entry.label || firstHeading(entry.snap.body) || (index === 0 ? 'inicio' : 'tela ' + (index + 1));
+    let name = pascal(label) || 'View' + (index + 1);
+    while (taken.has(name)) name += String(index + 1);
+    taken.add(name);
+    return viewBase({ key: entry.key ?? (slug(label) || 'view-' + (index + 1)), template: entry.key ?? slug(label), route: null, name, nameSource: entry.key ? 'mapping' : 'trigger', state: { key: 'S0', assign: {} }, render: entry.snap, reach: { prefix: entry.steps }, default: index === 0, steps: entry.steps });
+  });
+  const keys = new Set();
+  for (const view of views) { let key = view.key; let n = 2; while (keys.has(key)) key = view.key + '-' + n++; view.key = key; keys.add(key); }
+  const found = findMount(views.map(view => view.render.body), { modalContainer: isModalNode });
+  const mount = found?.mount ? deepenMount(views.map(view => view.render.body), found.mount) : found?.mount ?? null;
+  for (const view of views) view.mountPath = mount ?? [];
+  // the view of a page: the deep skeleton of what is at the mount (a toast or an overlay outside or inside it is no view)
+  const signatureAt = body => deepSkeleton(nodeAtPath(body, mount ?? []) ?? body);
+  const signatures = new Map(views.map(view => [signatureAt(view.render.body), view]));
+  return { kind: 'spa-state', views, problems: [], states: [{ key: 'S0', assign: {} }], mount, renderOf: () => null, switches: true,
+    viewOf: snap => signatures.get(signatureAt(snap.body)) ?? null };
+}
+
 function firstHeading(node) {
   let found = null;
   walk(node, current => { if (found) return false; if (isElement(current) && /^h[12]$/.test(current.t)) found = textOf(current).trim(); });
@@ -823,6 +983,8 @@ function firstHeading(node) {
 export async function discoverViews(session, decided) {
   const s0 = session.s0;
   let kind = decided?.kind ?? null;
+  // views named by mapping.states clicks (a prototype without routes whose screens a refusal had to name)
+  if (!kind && mappedClicks(session.mapping).length) { session.kind = 'spa-state'; session.switches = 'mapping'; return mappedViews(session, s0, mappedClicks(session.mapping)); }
   if (!kind) {
     // spa-state: some click changes the skeleton of the page without changing the URL.
     const candidates = stateTriggers(s0.body).slice(0, 40);
@@ -831,8 +993,14 @@ export async function discoverViews(session, decided) {
     const base = pageSkeleton(s0.body);
     const changed = probes.some(probe => { const snap = results.get(probe.key)?.snaps?.[0]; return snap && snap.url === s0.url && pageSkeleton(snap.body) !== base; });
     kind = changed ? 'spa-state' : 'static';
+    // the skeleton of four levels saw nothing: a screen switched deeper (a React frame of classless divs)
+    if (!changed) {
+      session.switches = await screenSwitches(session, s0, candidates, probes, results);
+      if (session.switches) kind = 'spa-state';
+    }
   }
   session.kind = kind;
+  if (kind === 'spa-state' && session.switches) return switchViews(session, s0);
   if (kind === 'spa-hash' || kind === 'spa-path') {
     const crawl = await crawlRoutes(session, s0);
     const found = viewsFromCrawl(session, crawl);
@@ -911,9 +1079,13 @@ export async function discoverViews(session, decided) {
     });
     const keys = new Set();
     for (const view of views) { let key = view.key; let n = 2; while (keys.has(key)) key = view.key + '-' + n++; view.key = key; keys.add(key); }
-    const mount = findMount(views.map(view => view.render.body), { modalContainer: node => node.t === 'dialog' || attr(node, 'role') === 'dialog' });
-    for (const view of views) view.mountPath = mount?.mount ?? [];
-    return { kind, views, problems: [], states: [{ key: 'S0', assign: {} }], mount: mount?.mount, renderOf: () => null };
+    const bodies = views.map(view => view.render.body);
+    const mount = findMount(bodies, { modalContainer: node => node.t === 'dialog' || attr(node, 'role') === 'dialog' });
+    // the screen is what still differs under the mount while the frame around it is the same (VisitaCerta 2026-10-12: the app
+    // root holds a sidebar that only moves its active item and the <main> whose page changes): the sidebar is shell
+    const mountPath = mount?.mount && views.length > 1 ? deepenMount(bodies, mount.mount) : mount?.mount;
+    for (const view of views) view.mountPath = mountPath ?? [];
+    return { kind, views, problems: [], states: [{ key: 'S0', assign: {} }], mount: mountPath, renderOf: () => null };
   }
   // static: one view, the whole page.
   const key = slug(session.entry.replace(/\.html?$/i, '').split('/').pop()) || 'index';

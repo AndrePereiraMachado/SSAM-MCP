@@ -15,6 +15,62 @@ internal sealed class ModelBaseFacts(ModelSession session, ServiceStudio.Model.E
     private HashSet<string>? _functions;
     private readonly Dictionary<string, IReadOnlyDictionary<string, string>?> _records = new(StringComparer.OrdinalIgnoreCase);
 
+    public ActionNameFact? ActionNameTaken(string name) => ActionNameTaken(name, "server");
+
+    public ActionNameFact? ActionNameTaken(string name, string kind)
+    {
+        var element = ActionElement(name, kind);
+        return element == null ? null : DescribeAction(element);
+    }
+
+    internal IObjectSignature? ActionElement(string name, string kind = "server")
+        => Index().TryGetValue(name, out var named) ? named.FirstOrDefault(e => InActionScope(e) && ScopeOf(e) == ActionNameRules.Scope(kind)) : null;
+
+    internal IReadOnlyList<ActionNameFact> ActionNames()
+        => Index().Values.SelectMany(v => v).Where(InActionScope).Select(DescribeAction).Distinct().ToArray();
+
+    private static ActionNameFact DescribeAction(IObjectSignature element)
+        => new(element.GetInterface()?.Name ?? "IActionSignature", TypeResolver.Name(element) ?? "",
+            element.Parent is IObjectSignature owner ? TypeResolver.Name(owner) ?? owner.GetInterface()?.Name ?? "module" : "module", ScopeOf(element));
+
+    internal static string ScopeOf(IObjectSignature element)
+    {
+        // Generated entity actions expose action interfaces for both execution sides. Their owning entity decides
+        // the naming scope; interface inheritance alone would classify server CRUD actions as client actions.
+        if (ModelSession.Implements(element, "IEntityActionSignature"))
+        {
+            for (var p = element.Parent as IObjectSignature; p != null; p = p.Parent as IObjectSignature)
+            {
+                // O11's concrete Entity implements server, client and static interfaces at once; its native flag is
+                // the discriminant (the corpus oracle observes IsClientEntity=false on server/static owners).
+                if (ModelHost.Prop(p, "IsClientEntity") is bool clientEntity) return clientEntity ? "client" : "server";
+                var parentKind = p.GetInterface()?.Name;
+                if (parentKind is "IClientEntity" or "IClientEntitySignature") return "client";
+                if (parentKind is "IServerEntity" or "IServerEntitySignature" or "IStaticEntity" or "IStaticEntitySignature" or "IEntitySignature") return "server";
+            }
+            return ModelHost.Prop(element, "IsInsideClientSide") is true ? "client" : "server";
+        }
+        var kind = element.GetInterface()?.Name;
+        if (kind is "IServerAction" or "IServerActionSignature" or "IServiceAction" or "IServiceActionSignature" or "IExtensionActionSignature") return "server";
+        if (ModelSession.Implements(element, "IClientAction") || ModelSession.Implements(element, "IClientActionSignature")) return "client";
+        return "server";
+    }
+
+    private static bool InActionScope(IObjectSignature element)
+    {
+        if (ModelHost.Prop(element, "WasDeleted") is true) return false;
+        if (!(ModelSession.Implements(element, "IEntityActionSignature") || ModelSession.Implements(element, "IServerAction")
+            || ModelSession.Implements(element, "IServiceAction") || ModelSession.Implements(element, "IClientAction")
+            || ModelSession.Implements(element, "IServerActionSignature") || ModelSession.Implements(element, "IClientActionSignature")
+            || ModelSession.Implements(element, "IServiceActionSignature") || ModelSession.Implements(element, "IExtensionActionSignature"))) return false;
+        for (var parent = element.Parent as IObjectSignature; parent != null; parent = parent.Parent as IObjectSignature)
+            if (new[] { "IMobileScreen", "IMobileBlock", "IWebScreen", "IWebBlock", "IEmail", "IScreenAction" }.Any(k => ModelSession.Implements(parent, k)))
+                // A client screen action occupies the global client-action name scope too (native oracle); a server
+                // screen action remains local and does not occupy the module's server-action scope.
+                return ScopeOf(element) == "client" && ModelHost.Prop(element, "IsInsideClientSide") is true;
+        return true;
+    }
+
     public string? ModuleType
     {
         get { try { return espace.ESpaceType.ToString(); } catch { return null; } }
@@ -147,6 +203,19 @@ internal sealed class ModelBaseFacts(ModelSession session, ServiceStudio.Model.E
             return new CalleeFact(TypeResolver.Name(callee) ?? candidate.Reference, inputs, outputs);
         }
         return null;
+    }
+
+    private static readonly string[] ScreenDataKinds = ["IInputParameter", "ILocalVariable", "IAggregate", "IDataAction"];
+
+    public IReadOnlyCollection<string>? ScreenNames(string owner)
+    {
+        try
+        {
+            if (Resolve(owner) is not IObjectSignature screen) return null;
+            return screen.Children.Where(c => ScreenDataKinds.Any(k => ModelSession.Implements(c, k))).Select(c => TypeResolver.Name(c)).OfType<string>()
+                .Where(n => n.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+        catch { return null; }
     }
 
     private Dictionary<string, List<IObjectSignature>>? _index;

@@ -1,0 +1,36 @@
+{
+  "source": "recorded",
+  "records": 2,
+  "bytes": 31137,
+  "evidence": [
+    {
+      "type": "token_usage_record",
+      "timestamp": "2026-10-13T13:11:48.617Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": {
+        "input_tokens": 360799,
+        "cached_input_tokens": 352256,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 7005,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 367804
+      },
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "world_state",
+      "timestamp": "2026-10-13T13:11:48.642Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    }
+  ],
+  "shrunk": [],
+  "removed": []
+}

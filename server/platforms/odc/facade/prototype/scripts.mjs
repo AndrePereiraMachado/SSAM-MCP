@@ -14,14 +14,17 @@ export class RenderFailure extends Error {
 
 const CLASSIC_TYPES = new Set(['', 'text/javascript', 'application/javascript', 'text/ecmascript', 'application/ecmascript', 'text/jscript', 'text/livescript', 'application/x-javascript', 'text/x-javascript']);
 
+export const BABEL_TYPES = new Set(['text/babel', 'text/jsx']);
+
 // The scripts of a document in document order (static plan; dynamic insertions are handled by the runtime).
 export function planScripts(document, { nodeLocation } = {}) {
   const plan = [];
   for (const [index, element] of [...document.querySelectorAll('script')].entries()) {
     const type = String(element.getAttribute('type') ?? '').trim().toLowerCase();
-    const kind = CLASSIC_TYPES.has(type) ? 'classic' : type === 'module' ? 'module' : type === 'importmap' ? 'importmap' : 'data';
+    // text/babel and text/jsx are source code too (the page's Babel compiles them): kind babel, read by the static scan
+    const kind = CLASSIC_TYPES.has(type) ? 'classic' : type === 'module' ? 'module' : type === 'importmap' ? 'importmap' : BABEL_TYPES.has(type) ? 'babel' : 'data';
     const src = element.getAttribute('src');
-    const entry = { index, kind, element, defer: element.hasAttribute('defer'), async: element.hasAttribute('async'), nomodule: element.hasAttribute('nomodule') };
+    const entry = { index, kind, type, element, defer: element.hasAttribute('defer'), async: element.hasAttribute('async'), nomodule: element.hasAttribute('nomodule') };
     if (src != null) {
       const url = new URL(src, document.URL).href;
       entry.url = url;
@@ -60,15 +63,68 @@ export class ScriptCache {
   }
 }
 
-// "app.js:344:9" from an Error stack: the first frame inside a prototype file (not the capture's own modules).
+// Code a script evaluated (Babel standalone appends <script> elements with its output and an inline source map): the file
+// it names is babel:<file of the source map>, and its lines are mapped back to that file's lines (the first segment of
+// each generated line). filename -> {file, lines: generated line (1-based) -> source line}.
+const LINE_MAPS = new Map();
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+function decodeVlq(segment) {
+  const out = []; let value = 0, shift = 0;
+  for (const char of segment) {
+    const digit = B64.indexOf(char);
+    if (digit < 0) return out;
+    value += (digit & 31) << shift;
+    if (digit & 32) { shift += 5; continue; }
+    out.push(value & 1 ? -(value >>> 1) : value >>> 1);
+    value = 0; shift = 0;
+  }
+  return out;
+}
+// The inline source map of a script text (//# sourceMappingURL=data:application/json;...base64,...), or null.
+export function inlineSourceMap(text) {
+  const match = /\/\/[#@] sourceMappingURL=data:application\/json[^,]*;base64,([A-Za-z0-9+/=]+)\s*$/m.exec(String(text ?? ''));
+  if (!match) return null;
+  try { return JSON.parse(Buffer.from(match[1], 'base64').toString('utf8')); } catch { return null; }
+}
+// The name of an evaluated script (babel:<source file>) and its line map, registered for siteOf. -> the name, or null.
+// inline: the start lines of the page's inline text/babel scripts ("Inline Babel script (n)" is the n-th), entry the page.
+export function registerEvaluated(text, { fallback = null, entry = null, inline = [] } = {}) {
+  const map = inlineSourceMap(text);
+  let source = map?.sources?.[0] ?? map?.file ?? null;
+  let offset = 0;
+  const inlineName = /^Inline Babel script(?: \((\d+)\))?$/.exec(String(source ?? ''));
+  if (inlineName && entry) { offset = Math.max(0, (inline[Number(inlineName[1] ?? 1) - 1] ?? 1) - 1); source = entry; }
+  if (!source && !fallback) return null;
+  const raw = String(source ?? fallback).replace(/^https?:\/\/[^/]+\//, '');
+  const base = /^[A-Za-z]:[\\/]|^\//.test(raw) ? raw.replace(/^.*[\\/]/, '') : raw.replace(/\\/g, '/');
+  const name = 'babel:' + base;
+  const lines = [];
+  if (map?.mappings) {
+    let sourceLine = 0, sourceIndex = 0;
+    map.mappings.split(';').forEach((line, generated) => {
+      let first = null;
+      for (const segment of line.split(',').filter(Boolean)) {
+        const fields = decodeVlq(segment);
+        if (fields.length >= 4) { sourceIndex += fields[1]; sourceLine += fields[2]; if (first == null && sourceIndex === 0) first = sourceLine; }
+      }
+      lines[generated + 1] = first == null ? null : first + 1 + offset;
+    });
+  }
+  LINE_MAPS.set(name, { file: base, lines });
+  return name;
+}
+const mappedLine = (file, line) => { const map = LINE_MAPS.get(file); if (!map) return line; for (let at = line; at >= 1; at--) if (map.lines[at] != null) return map.lines[at]; return line; };
+
+// "app.js:344:9" from an Error stack: the first frame inside a prototype file (not the capture's own modules). A file name
+// may have spaces ("Folha de Ponto.html"): the frame is "at fn (<file>:<line>:<col>)" or "at <file>:<line>:<col>".
 export function siteOf(stack, files = null) {
   for (const line of String(stack ?? '').split('\n').slice(1)) {
-    const match = line.match(/\(?([^\s()]+):(\d+):(\d+)\)?\s*$/);
+    const match = line.match(/\((.+):(\d+):(\d+)\)\s*$/) ?? line.match(/^\s*at (?:async )?(.+?):(\d+):(\d+)\s*$/);
     if (!match) continue;
-    const file = match[1];
-    if (/[\\/]prototype[\\/][a-z-]+\.mjs$/.test(file) || file.startsWith('node:') || /node_modules/.test(file)) continue;
+    const file = match[1].replace(/^(?:new )?\S+ \[as \S+\] \(/, '');
+    if (/[\\/]prototype[\\/][a-z-]+\.mjs$/.test(file) || file.startsWith('node:') || /node_modules/.test(file) || /^(?:evalmachine|vm\.js)/.test(file)) continue;
     if (files && !files(file)) continue;
-    return { file, line: Number(match[2]), column: Number(match[3]) };
+    return { file, line: mappedLine(file, Number(match[2])), column: Number(match[3]) };
   }
   return null;
 }

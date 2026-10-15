@@ -54,6 +54,26 @@ public static class ElementWidgetMap
     private static readonly HashSet<string> O11Set = new(O11Tags, StringComparer.Ordinal);
     private static readonly HashSet<string> OdcSet = new(OdcTags, StringComparer.Ordinal);
 
+    /// <summary>The elements of the language (ssam-html/1, plan "Texto do SSAM" 1.3) that are native widgets with no HTML tag
+    /// of their own: one row each, asked by the html op in its fragment and document forms, by the reading (ScreenHtml) and
+    /// by the importer. An <c>&lt;i&gt;</c> is an Icon when it names one (icon="..."); without it, the HTML Element i.</summary>
+    public static readonly IReadOnlyDictionary<string, (string Widget, string Rule)> LanguageElements = new Dictionary<string, (string, string)>(StringComparer.Ordinal)
+    {
+        ["switch"] = ("ISwitch", "bind -> Variable; onchange"),
+        ["upload"] = ("IUpload", "content (or bind) -> FileContent, filename -> FileName, accept -> Accept"),
+        ["button-group"] = ("IButtonGroup", "bind -> Variable; its children are <button-group-item value>; onchange"),
+        ["button-group-item"] = ("IButtonGroupItem", "value -> Value; its text and icons are its content"),
+        ["i"] = ("IIcon", "icon -> Icon, size -> IconSize, weight -> Weight (ODC)"),
+    };
+
+    /// <summary>The attributes a row of <see cref="LanguageElements"/> spends on its widget (never extended properties).</summary>
+    private static readonly HashSet<string> LanguageAttributes = new(StringComparer.Ordinal) { "bind", "content", "filename", "accept", "value", "icon", "size", "weight" };
+
+    /// <summary>The widget of an element of the language, or null: switch, upload, button-group, button-group-item, and i
+    /// when it names an icon.</summary>
+    public static string? LanguageWidget(string tag, bool namesIcon)
+        => tag == "i" && !namesIcon ? null : LanguageElements.TryGetValue(tag, out var row) ? row.Widget : null;
+
     /// <summary>Elements that never become a widget: the CSS, the behavior and what the browser does not render.</summary>
     public static readonly IReadOnlySet<string> NoWidget = new HashSet<string>(StringComparer.Ordinal) { "template", "slot", "script", "style" };
 
@@ -188,6 +208,23 @@ public static class ElementWidgetMap
         string? widgetTag = null;
 
         if (NoWidget.Contains(tag)) return new ElementMapping("", null, null, [], [], [], null, null);
+        var language = request.Icon ? null : LanguageWidget(tag, Has("icon") && Attr("icon").Trim().Length > 0);
+        if (language != null)
+        {
+            // A native widget of the language: its own attributes go to its properties (the builder binds bind/content/value),
+            // the class to the Style, any other attribute to an extended property.
+            if (language == "IIcon") properties.Add(("Icon", Attr("icon").Trim()));
+            var languageName = NameFromId(Attr("id"));
+            foreach (var (attribute, value) in attributes)
+            {
+                var key = attribute.ToLowerInvariant();
+                if (key is "id" or "class" || IsInlineScript(key) || LanguageAttributes.Contains(key)) continue;
+                if (key == "style") { if (value.Trim().Length > 0) properties.Add(("CustomStyle", value.Trim())); continue; }
+                extended.Add((key, Quote(value)));
+            }
+            if (classes.Count > 0) properties.Insert(0, ("Style", Quote(string.Join(" ", classes))));
+            return new ElementMapping(language, null, languageName, properties, extended, classes, null, null);
+        }
         if (request.Icon)
         {
             // An icon of a library (an svg drawn by a script): an inline span with the original classes and ssam-icon; the mask

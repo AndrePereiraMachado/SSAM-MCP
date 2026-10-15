@@ -63,6 +63,7 @@ do kernel em execução (rodada 3, `JobSources.KernelRoot`); `--base` na linha d
 | `validation` | prova em fixture, entrega, publicação, gates |
 | `outsystemsUi` | (04/10/2026) só em intenção de criar/montar telas: padrões do OutSystems UI da faixa e do tipo de app, por categoria (§1.3) |
 | `steps` / `provenExample` / `values` | (05/10/2026) gramática de cada passo de lógica citado com a action provada que os usa, o job provado inteiro escolhido pelas palavras da intenção, e os valores fechados de uma propriedade citada (§1.4) |
+| `textRoute` | (11/10/2026, B2 do plano "Texto do SSAM") só em mudança de tela, de dados ou de lógica: a rota do texto (`ui.screen-html`, `ui.screen-html-edit`, `data.ddl`, `logic.flow`), a leitura e a entrega pronta da faixa, slots, regras do dono e o cartão do contrato (§1.6) |
 
 ### 1.2 Continuação em lote (`--expand`)
 
@@ -152,9 +153,9 @@ Três seções novas da resposta composta, todas tiradas do índice (contratos e
   todos os passos citados, com `reference` (`ssam_reference {kind:"example", query:{id}}`) para o job inteiro.
 - `provenExample`: entre as provas dos matches diretos, o job da suíte com mais palavras da intenção, inteiro até
   6 KB (senão `whole:false` e o `reference`). Ex.: "criar timer que roda a cada hora" no O11 traz
-  `pacote-laneE-timer-schedule` com `set Schedule "Every 60 minutes"`.
+  `pacote-laneE-timer-schedule` com os horários nativos `00:00 01:00 ... 23:00`.
 - `values`: valores fechados de uma propriedade citada, por faixa: `InputType` (os nove valores e o `type` do fragmento
-  html), `Schedule` O11 em texto (`Every 60 minutes`, `Every day at 00:00`, `Every Monday at 00:05`) e `CronSchedule`
+  html), `Schedule` O11 em horários nativos (`00:00`, `00:05 Mon`, lista de horários para intervalos) e `CronSchedule`
   ODC (cinco campos).
 Orçamento: as três seções entram DEPOIS da parte de modelo, das `tools` e da seção OutSystems UI, no espaço que sobra,
 e nunca as alteram: `provenExample` inteiro → 6 primeiras ops → só `job` e `reference`; depois `steps.example` → só o
@@ -193,6 +194,26 @@ Tamanho: até 38.912 bytes (o teto da resposta menos a folga do moldador); um `b
 uma parte da sala (`SHARES`); o que ela não usa passa para a seguinte, na ordem. Dentro da seção ficam os itens mais
 relevantes; o resto sai e é nomeado em `cuts`, com a chamada que o devolve. Mesma entrada, mesmos bytes: o pacote não
 traz tempo, cache nem data. Testes: `tests/pacote-trabalho.test.mjs`.
+
+### 1.6 Rota do texto (`textRoute`, 11/10/2026)
+
+Etapa B2 do plano "Texto do SSAM" (`docs/TEXTO-SSAM.md`). Um pedido que cria ou muda uma tela, os dados ou uma action
+recebe, na primeira resposta, a rota do texto que o módulo lê e escreve: `ui.screen-html` (tela ou bloco novo, a forma
+documento da op `html`), `ui.screen-html-edit` (tela existente: `ssam_map view:"html"` e a op `html` na forma
+edição), `data.ddl` (`ssam_map view:"ddl"` e a op `spec` com `ddl`) e `logic.flow` (`ssam_map view:"flow"` e a op
+`logic` com `flow`).
+
+- `textRoute`: `schema` (`ssam-text-route/1`), `id`, `title`, `wired`, `form`, `read` (a 1ª chamada), `readWhy`,
+  `call` (a entrega pronta da faixa: `o11_deliver`, ou `studio_deliver` com `feature`, `module`, `owners` e
+  `changes`), `slots`, `rules` (as regras do dono), `contract` (o cartão do ponteiro do contrato, até 4 KB, ou a
+  expansão), `also` (outros textos que o pedido também escreve) e `why`.
+- O classificador (`text-routes.mjs`) é separado da pontuação de capacidades e das rotas de ferramenta: guarda os verbos
+  (criar ou mudar) e nunca muda `matches`, `contracts` nem `tools`.
+- Orçamento: a seção entra depois do modelo e do OutSystems UI, antes das seções da §1.4, no nível mais rico que couber
+  (inteira, sem o cartão, só a chamada). Com orçamento inteiro (32 KB ou mais) há piso (`size.reserved.textRoute`);
+  abaixo disso, só o que sobra. Num pedido misto, a seção volta depois das ferramentas.
+- `wired: false` (regra de corte do plano) responde só a leitura. Hoje as quatro rotas estão ligadas.
+- Teste: `tests/text-routes.test.mjs` (20 frases por rota, pt e en, nas duas faixas, com teto de 40 KB).
 
 ## 2. Arquitetura e o que foi reutilizado
 

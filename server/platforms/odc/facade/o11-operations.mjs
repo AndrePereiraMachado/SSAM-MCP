@@ -9,12 +9,13 @@ import { run } from './lanes.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { serviceCenterTool } from './service-center/index.mjs';
 import { anvilRoot, o11Lane } from './workspace.mjs';
+import { producerCacheDir, recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
 
 const sessionActions = ['status', 'sign-in', 'web-sign-in', 'close'];
 const studioReads = ['applications', 'application', 'application-api', 'application-dependencies', 'modules', 'extensions', 'extension-database-provider', 'versions', 'module-id',
   'consumers', 'public-elements', 'commits', 'developer-operations', 'license', 'installation-kind', 'platform-properties', 'platform-settings', 'databases', 'application-database',
   'solution-components', 'solution-publish-status', 'apply-settings-status'];
-const pageReads = ['lifetime-capabilities', 'lifetime-web-status', 'timer-events', 'timers', 'site-properties', 'property-value', 'logs', 'error-detail', 'trace', 'bpt-processes', 'bpt-process',
+const pageReads = ['lifetime-capabilities', 'lifetime-web-status', 'timer-events', 'timers', 'site-properties', 'property-value', 'logs', 'integration-log-detail', 'error-detail', 'trace', 'bpt-processes', 'bpt-process',
   'bpt-instance', 'bpt-activity', 'integrations', 'integration-detail', 'db-connections', 'application-runtime-settings', 'solutions', 'solution-versions', 'solution-download', 'solution-download-status', 'async-operation-status', 'page-layout', 'module-references', 'module-dependencies', 'application-dependency-graph', 'application-relationships', 'application-owners'];
 const reads = ['capabilities', 'receipt', ...pageReads, ...studioReads];
 const pageWrites = ['application-timeout-set', 'timer-run', 'timer-deactivate', 'timer-activate', 'timer-schedule', 'property-set', 'solution-create',
@@ -238,11 +239,36 @@ export function registerO11Operations(server, fromJsonSchema, deps = {}) {
     inputSchema: fromJsonSchema({ type: 'object', required: ['action'], additionalProperties: false,
       properties: { action: { type: 'string', enum: actions }, ...Object.fromEntries(allowed[kind].filter(k => k !== 'action').map(k => [k, properties[k]])) } }),
   }, async input => {
-    let value;
-    try { value = await runTool(serviceCenterArguments(input, kind), deps.serviceCenter ?? {}); }
+    let value, publication = false;
+    try {
+      const argv = serviceCenterArguments(input, kind);
+      publication = kind === 'write' ? startedPublication(input) : false;
+      value = await runTool(argv, deps.serviceCenter ?? {});
+    }
     catch (error) { value = { ok: false, error: error.message }; }
+    endedPublication(input, kind, value, publication);
     return reply(value);
   });
+  // F5 (producer-signatures.mjs): a Service Center publication is recorded in the workspace's producer ledger from its start
+  // to its end, so no producer observation made before its end is reused. extension-publish names its extension (else every
+  // producer of the environment); it waits for the published version, so its answer ends it unless uncertain. A solution
+  // publish is a job whose modules the call does not list: every producer of the environment, ended by the
+  // solution-publish-status read that sees the job finish (else it counts as running for MAX_PUBLICATION_MS).
+  function signatureCache() {
+    try { return deps.signatureCache !== undefined ? deps.signatureCache : producerCacheDir(o11LaneOf(deps.lane ?? o11Lane.lane, { root: deps.root ?? anvilRoot, env: deps.env ?? process.env }).work); }
+    catch { return null; }
+  }
+  function startedPublication(input) {
+    if (input.execute !== true || !['extension-publish', 'solution-publish'].includes(input.action)) return false;
+    const module = input.action === 'extension-publish' && input.extension ? input.extension : '*';
+    return recordPublished(signatureCache(), { environment: input.host || '*', module, source: 'o11_service_center_write ' + input.action, id: input.operationId });
+  }
+  function endedPublication(input, kind, value, publication) {
+    // Only a confirmed answer ends it: a refusal or a lost reply leaves it running (it only costs a server observation).
+    if (publication && input.action === 'extension-publish' && value?.ok === true && !publicationOpen(value)) recordPublicationEnded(publication);
+    if (kind === 'read' && input.action === 'solution-publish-status' && input.operationId && value?.publicationObservation?.terminal === true)
+      recordPublicationEnded({ dir: signatureCache(), environment: input.host || '*', module: '*', publicationId: input.operationId });
+  }
   tool('o11_service_center_session', 'session', sessionActions, 'O11 Service Center session: which login a call uses',
     'status: the connected Studio identity, saved credential availability and selected transport. sign-in checks existing authentication. '
     + 'web-sign-in checks the native headless HTTP session. Without a Studio, sign-in uses the stored profile of the host and, only with nothing stored, '
@@ -254,7 +280,7 @@ export function registerO11Operations(server, fromJsonSchema, deps = {}) {
     'lifetime-capabilities: checks the observed User Management upgrade gate after SSO; does not provision an account. lifetime-web-status: read-only protected LifeTime page check through private headless SSO, requires session=vault; does not provision or validate a service-account API token. timer-events: bounded PerformanceMonitoring TimerExecuted GET, requires session=vault, since/until UTC up to one hour and limit 1..100; uses eventAuth=basic (default) or explicit service-token from the same-host LifeTime vault entry; no fallback or token provisioning. Empty events do not prove monitoring enabled or timer completion. Other reads authenticated by the connected Studio (SSO included): Studio API reads (applications, application details/dependencies, modules, extensions, '
     + 'versions, module-id, consumers, public-elements, commits, developer-operations, license, databases, solution-components, '
     + 'solution-publish-status, apply-settings-status) and Service Center pages through headless HTTP (logs with filters, '
-    + 'OsAjax pagination, stackContains and full XLSX export; error-detail; trace; timers (with name: that timer\'s page: schedule, last/next run, '
+    + 'OsAjax pagination, stackContains and full XLSX export; integration-log-detail {requestKey, logAction, moduleId?}: historical request/response through the exact native event, explicit payloadStatus, never replayed; not-exposed does not claim not-recorded. error-detail; trace; timers (with name: that timer\'s page: schedule, last/next run, '
     + 'actions); site-properties with values redacted; property-value '
     + 'for one named property, redacted unless reveal; bpt-processes/process/instance/activity; integrations; db-connections; solutions; '
     + 'solution-download without operationId starts an export under a minted UUID, with that UUID resumes it (unknown UUIDs are refused); solution-download-status reads its private durable record without advancing it or submitting any form; async-operation-status: status and message cursor of an observed asyncOperationId, without starting another operation; '
@@ -280,7 +306,9 @@ export function registerO11Operations(server, fromJsonSchema, deps = {}) {
     + 'commit-message-set, extension-publish (.xif), solution-publish (job), apply-settings (job), application-database-set. A page whose '
     + 'layout differs from the one modeled answers LAYOUT_UNKNOWN with the page-layout read to capture it; timer-schedule on a timer page '
     + 'without the schedule editor answers TIMER_SCHEDULE_IN_MODULE with the module change (the timer\'s Schedule property through '
-    + 'o11_deliver) instead. Run Now schedules; it does not prove completion. solution-download-abandon {solution, operationId, words, '
+    + 'o11_deliver) instead. Run Now performs a readback in the same call: outcome is scheduled, execution-observed, execution-failed, not-sent, not-executed, timer-absent or unknown; '
+    + 'requestStatus, executionObserved, executionCompleted, attributedToRequest and evidence distinguish acknowledgment from execution. '
+    + 'Unknown returns TIMER_RUN_OUTCOME_UNKNOWN plus a verify continuation; repeating the UUID only verifies, never resends. Run Now does not by itself prove successful completion. solution-download-abandon {solution, operationId, words, '
     + 'question?}: local only, marks an existing download record abandoned; nothing is sent and the UUID is never resumed.',
     { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
   server.registerTool('o11_dependencies', {

@@ -1,0 +1,51 @@
+{
+  "source": "recorded",
+  "records": 3,
+  "bytes": 58557,
+  "evidence": [
+    {
+      "type": "event_msg",
+      "payloadType": "item_completed",
+      "timestamp": "2026-10-13T14:57:39.936Z",
+      "started": 1791903458913,
+      "completed": 1791903459936,
+      "duration": {
+        "secs": 1,
+        "nanos": 22813100
+      },
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "item_completed",
+      "timestamp": "2026-10-13T14:58:01.385Z",
+      "started": 1791903478782,
+      "completed": 1791903481385,
+      "duration": {
+        "secs": 2,
+        "nanos": 602220300
+      },
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "item_completed",
+      "timestamp": "2026-10-13T15:13:42.627Z",
+      "started": 1791904420719,
+      "completed": 1791904422627,
+      "duration": {
+        "secs": 1,
+        "nanos": 907548900
+      },
+      "usage": null,
+      "tools": [],
+      "markers": []
+    }
+  ],
+  "shrunk": [],
+  "removed": []
+}

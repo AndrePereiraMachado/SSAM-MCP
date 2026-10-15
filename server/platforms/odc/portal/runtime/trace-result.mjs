@@ -1,9 +1,10 @@
-import { fail, redact } from './errors.mjs';
+import { fail, boundedText, limitedText } from './errors.mjs';
 
 const textFields = ['ApplicationKey', 'ApplicationName', 'LibraryKey', 'LibraryName', 'AssetKey', 'AssetName',
   'AssetType', 'ElementPath', 'StartTime', 'EndTime', 'TraceId', 'SpanId', 'ParentSpanId', 'SpanType',
   'SpanTypeLabel', 'SpanName', 'Status', 'StatusLabel', 'StatusMessage', 'SpanKind'];
 const integerFields = ['ApplicationVersion', 'LibraryVersion', 'AssetVersion', 'Duration', 'StartTimeUnixNano', 'EndTimeUnixNano'];
+const freeTextFields = new Set(['ApplicationName', 'LibraryName', 'AssetName', 'ElementPath', 'SpanTypeLabel', 'SpanName', 'StatusLabel', 'StatusMessage']);
 const decimalInteger = value => typeof value === 'string' && /^\d{1,30}$/.test(value) ? value
   : Number.isSafeInteger(value) && value >= 0 ? String(value) : null;
 const identifier = value => typeof value === 'string' && value.length <= 200 && !/[\u0000-\u001f]/.test(value);
@@ -43,7 +44,11 @@ export function normalizeTraceResult(data, { traceId, maxSpans = 1000 } = {}) {
     if (row.TraceId !== traceId) fail('PORTAL_BROKER_SCOPE_MISMATCH', 'A returned span belongs to a different trace.');
     if (nodes.has(row.SpanId)) { reasons.add('duplicate_span_ids'); continue; }
     const span = {};
-    for (const field of textFields) if (typeof row[field] === 'string') span[field] = row[field].slice(0, field === 'StatusMessage' ? 2048 : 512);
+    for (const field of textFields) if (typeof row[field] === 'string') {
+      span[field] = freeTextFields.has(field)
+        ? boundedText(row[field], field === 'StatusMessage' ? 2048 : 512, span, field)
+        : limitedText(row[field], 512, span, field);
+    }
     for (const field of integerFields) {
       const value = decimalInteger(row[field]);
       if (value !== null) span[field] = value;
@@ -80,8 +85,8 @@ export function normalizeTraceResult(data, { traceId, maxSpans = 1000 } = {}) {
   const base = timed[0]?.start;
   const timeline = timed.map(span => ({ spanId: span.spanId, startTimeUnixNano: String(span.start),
     endTimeUnixNano: String(span.end), offsetNanoseconds: String(span.start - base), durationNanoseconds: String(span.end - span.start) }));
-  return redact({ traceId, processingStatus, serverClaimsComplete, complete: reasons.size === 0,
+  return { traceId, processingStatus, serverClaimsComplete, complete: reasons.size === 0,
     completenessBasis: 'Server status and structural checks on the returned bounded set; not proof of complete upstream capture.',
     incompleteReasons: [...reasons], receivedSpanCount: source.length, returnedSpanCount: spans.length, truncated,
-    spans, timeline, hierarchy: { roots, edges, missingParents, cyclicSpanIds: [...cycleIds] } });
+    spans, timeline, hierarchy: { roots, edges, missingParents, cyclicSpanIds: [...cycleIds] } };
 }

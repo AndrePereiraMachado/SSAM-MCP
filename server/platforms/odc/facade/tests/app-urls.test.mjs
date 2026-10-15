@@ -92,9 +92,9 @@ test('new LLM sessions discover the URL tool in instructions and call it through
     const tool = (await client.listTools()).tools.find(t => t.name === 'ssam_app_url');
     assert.ok(tool);
     assert.equal(tool.annotations.readOnlyHint, true);
-    // tenant selects the exactly configured stage (platforms/odc/tenants.json: the Development runtime origin the user
-    // supplied), never the portal host with www.
-    const tenant = 'personal-nv0s5uly.outsystems.dev';
+    // tenant selects the exactly configured stage (platforms/odc/tenants.json: the Development runtime origin of the
+    // configured default personal tenant), never the portal host with www.
+    const tenant = tenants().default;
     const configured = 'https://' + tenants().tenants[tenant].stages.Development.domain;
     for (const [args, origin] of [[{ app, screen, environment }, environment], [{ app, screen, tenant }, configured]]) {
       const result = await client.callTool({ name: 'ssam_app_url', arguments: args });

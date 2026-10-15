@@ -294,7 +294,7 @@
    "summary": "Op prototype: SSAM renders the prototype folder headless and compiles it whole; the receipt tells what was built and measured.",
    "route": {
     "kind": "prototype",
-    "operation": "O11 => o11_deliver {\"module\":\"<módulo aberto>\",\"job\":{\"ops\":[{\"op\":\"prototype\",\"data\":{\"source\":\"<pasta do protótipo, caminho absoluto>\"}}]},\"publish\":true,\"authorize\":\"<palavras do usuário>\"} ;; ODC => studio_deliver {\"feature\":\"Protótipo <Prefixo>\",\"module\":\"<módulo aberto>\",\"job\":{\"ops\":[{\"op\":\"prototype\",\"data\":{\"source\":\"<pasta do protótipo, caminho absoluto>\"}}]},\"owners\":[\"<Prefixo>\"],\"changes\":[\"Protótipo <Prefixo> importado como telas nativas\"],\"publish\":true,\"authorize\":\"<palavras do usuário>\"}"
+    "operation": "O11 => o11_deliver {\"module\":\"<módulo aberto>\",\"job\":{\"ops\":[{\"op\":\"prototype\",\"data\":{\"source\":\"<pasta do protótipo ou o .zip dele, caminho absoluto>\"}}]},\"publish\":true,\"authorize\":\"<palavras do usuário>\"} ;; ODC => studio_deliver {\"feature\":\"Protótipo <Prefixo>\",\"module\":\"<módulo aberto>\",\"job\":{\"ops\":[{\"op\":\"prototype\",\"data\":{\"source\":\"<pasta do protótipo ou o .zip dele, caminho absoluto>\"}}]},\"owners\":[\"<Prefixo>\"],\"changes\":[\"Protótipo <Prefixo> importado como telas nativas\"],\"publish\":true,\"authorize\":\"<palavras do usuário>\"}"
    },
    "contract": [],
    "depends": [],

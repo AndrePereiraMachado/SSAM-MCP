@@ -117,7 +117,7 @@
     {
       "id": "portal.library-release",
       "title": "Low-code library release and revision prerequisites",
-      "keywords": "biblioteca release versão publicar revisão",
+      "keywords": "biblioteca library libraries lib release liberar liberação versionar versionamento versão version tag publicar revisão revision",
       "kind": "internal",
       "publicCoverage": "native_portal_contract",
       "implementation": "implemented_source",

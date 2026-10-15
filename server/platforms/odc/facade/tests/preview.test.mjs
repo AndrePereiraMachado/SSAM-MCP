@@ -20,17 +20,25 @@ function fixture(t){
  function save(){atomicJson(file,p);atomicJson(catalog,{schema:'ssam-preview-catalog/1',profiles:[pin(file)]});}
  save();let launches=0;const children=[];
  const manager=createPreviewManager({workspace,spawnProcess(...args){launches++;const c=spawn(...args);children.push(c);return c;}});
- t.after(async()=>{await manager({action:'stop',sessionId:'fixture'});for(const c of children){for(let n=0;n<80&&c.exitCode===null;n++)await delay(50);assert.notEqual(c.exitCode,null,'owned worker must exit gracefully');}fs.rmSync(workspace,{recursive:true,force:true,maxRetries:5,retryDelay:100});});
+ t.after(async()=>{await manager({action:'stop',sessionId:'fixture'});for(const c of children){const end=Date.now()+SETTLE_MS;while(c.exitCode===null&&Date.now()<end)await delay(50);assert.notEqual(c.exitCode,null,'owned worker must exit gracefully');}fs.rmSync(workspace,{recursive:true,force:true,maxRetries:5,retryDelay:100});});
  return {workspace,p,cfg,file,catalog,save,manager,get launches(){return launches;}};
 }
-async function stopped(manager){for(let n=0;n<80;n++){const s=await manager({action:'status',sessionId:'fixture'});if(s.status==='stopped')return s;await delay(50);}assert.fail('stop timed out');}
+// The worker is a child process: on a loaded machine its start or stop can take longer than the 8 s an open waits for it
+// and the 4 s these tests used to wait. An answer that is not terminal ('starting', 'stopping') is followed with status, as its
+// continuation says, until the session settles or SETTLE_MS passes; the assertions are on the settled state.
+const SETTLE_MS=60000;
+async function until(manager,done,sessionId='fixture'){const end=Date.now()+SETTLE_MS;let s;while(Date.now()<end){s=await manager({action:'status',sessionId});if(done(s))return s;await delay(50);}assert.fail(`the preview session did not settle in ${SETTLE_MS} ms: ${JSON.stringify(s)}`);}
+const settledStart=s=>!['starting','unreachable'].includes(s.status);
+// open; when the worker is still starting, the same open once the session settled (it reuses that instance: one launch).
+async function open(manager,args={}){const first=await manager({action:'open',...args});if(first.status!=='starting')return first;const s=await until(manager,settledStart);return ['stopped','failed'].includes(s.status)?s:manager({action:'open',...args});}
+async function stopped(manager){const s=await until(manager,x=>['stopped','failed'].includes(x.status));assert.equal(s.status,'stopped',JSON.stringify(s));return s;}
 
 test('managed worker opens once, exposes visible URL, reports static refresh and exits',async t=>{
  const f=fixture(t),m=f.manager;
  assert.equal((await m({action:'list',lane:'odc'})).profiles.length,0);
  assert.equal((await m({action:'open',app:'Other'})).code,'PREVIEW_PROFILE_NOT_PREPARED');
  assert.equal((await m({action:'open',screen:'Other'})).code,'PREVIEW_SCREEN_NOT_PREPARED');
- const opened=await m({action:'open',screen:'Home'});assert.equal(opened.status,'running',JSON.stringify(opened));
+ const opened=await open(m,{screen:'Home'});assert.equal(opened.status,'running',JSON.stringify(opened));
  assert.equal(opened.browser.action,'open-visible');assert.match(opened.url,/\?entry=test-screen$/);assert.equal(opened.render,null);
  assert.equal(await (await fetch(opened.url)).text(),'fixture');
  const reused=await m({action:'open'});assert.equal(reused.instanceId,opened.instanceId);assert.equal(reused.reused,true);assert.equal(f.launches,1);
@@ -39,12 +47,13 @@ test('managed worker opens once, exposes visible URL, reports static refresh and
  assert.equal((await fetch(`http://127.0.0.1:${endpoint.port}/stop`,{method:'POST'})).status,403);
  f.p.limitations.push('changed');f.save();assert.equal((await m({action:'open'})).code,'PREVIEW_PROFILE_IN_USE');
  assert.equal((await m({action:'stop',sessionId:'fixture'})).status,'stopping');await stopped(m);
- const next=await m({action:'open'});assert.equal(next.status,'running',JSON.stringify(next));assert.notEqual(next.instanceId,opened.instanceId);assert.equal(f.launches,2);
+ const next=await open(m);assert.equal(next.status,'running',JSON.stringify(next));assert.notEqual(next.instanceId,opened.instanceId);assert.equal(f.launches,2);
  await m({action:'stop',sessionId:'fixture'});await stopped(m);
 });
 test('simultaneous opens never spawn twice',async t=>{
  const f=fixture(t);const results=await Promise.all([f.manager({action:'open'}),f.manager({action:'open'})]);
- assert.equal(f.launches,1);assert.ok(results.some(x=>x.code==='PREVIEW_OPEN_BUSY'));assert.ok(results.some(x=>x.status==='running'));
+ assert.equal(f.launches,1);assert.ok(results.some(x=>x.code==='PREVIEW_OPEN_BUSY'));
+ const winner=results.find(x=>x.code!=='PREVIEW_OPEN_BUSY');assert.equal((winner.status==='starting'?await until(f.manager,settledStart):winner).status,'running',JSON.stringify(results));
 });
 test('changed pins, nonlocal host and false scope are refused before launch',async t=>{
  const f=fixture(t);fs.appendFileSync(f.cfg,' ');assert.equal((await f.manager({action:'open'})).code,'PREVIEW_PIN_CHANGED');
@@ -54,14 +63,26 @@ test('changed pins, nonlocal host and false scope are refused before launch',asy
 });
 test('startup failure has a terminal receipt',async t=>{
  const f=fixture(t);const cfg=JSON.parse(fs.readFileSync(f.cfg));cfg.fail=true;atomicJson(f.cfg,cfg);f.p.host.config=pin(f.cfg);f.save();
- const s=await f.manager({action:'open'});assert.equal(s.status,'failed');assert.equal(s.code,'TEST_STARTUP');assert.equal(f.launches,1);
+ const s=await open(f.manager);assert.equal(s.status,'failed');assert.equal(s.code,'TEST_STARTUP');assert.equal(f.launches,1);
 });
 test('uncertain or mismatched control endpoint cannot authorize duplicate start or stop',async t=>{
- const f=fixture(t),m=f.manager;await m({action:'open'});
+ const f=fixture(t),m=f.manager;await open(m);
  const file=path.join(f.workspace,'.local/preview/sessions/fixture/control.json'),endpoint=JSON.parse(fs.readFileSync(file));
  atomicJson(file,{...endpoint,instanceId:'another-instance'});
  try {const s=await m({action:'open'});assert.equal(s.status,'unreachable');assert.equal(s.outcome,'uncertain');assert.equal(f.launches,1);assert.equal((await m({action:'stop'})).status,'unreachable');}
  finally{atomicJson(file,endpoint);}
+});
+test('a session file replaced while another process reads it is never lost (the manager polls the receipt the worker writes)',async t=>{
+ // Windows refuses to replace a file another process has open (EPERM): before the bounded retry, most replaces of this loop
+ // failed, and a lost receipt left the worker 'starting' after a startup failure or 'stopping' after a stop.
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ssam-preview-receipt-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true,maxRetries:5,retryDelay:100}));
+ const file=path.join(dir,'receipt.json');atomicJson(file,{n:0});
+ const reader=spawn(process.execPath,['-e',"const fs=require('fs');const f=process.argv[1];for(;;){try{fs.readFileSync(f)}catch{}}",file],{stdio:'ignore',windowsHide:true});
+ try{
+  await delay(300);
+  const lost=[];for(let n=1;n<=150;n++){try{atomicJson(file,{n,status:n%2?'running':'stopping'});}catch(e){lost.push(e.code);}}
+  assert.deepEqual(lost,[],'replaces lost under a reader');assert.equal(JSON.parse(fs.readFileSync(file)).n,150);
+ }finally{reader.kill();}
 });
 test('MCP tool is structured and preserves failures',async()=>{
  let registered;registerPreviewTools({registerTool(...args){registered=args;}},{preview:async()=>({ok:false,code:'EXPECTED'})});
@@ -69,7 +90,7 @@ test('MCP tool is structured and preserves failures',async()=>{
  assert.equal(registered[1].inputSchema.safeParse({action:'open',url:'https://example.com'}).success,false);
 });
 test('ODC single-entry URL does not receive an unsupported entry query',async t=>{
- const f=fixture(t);f.p.lane='odc';f.p.implementation='odc-adapted-o11';f.save();const s=await f.manager({action:'open',screen:'Home'});assert.equal(s.status,'running');assert.ok(!s.url.includes('?'));
+ const f=fixture(t);f.p.lane='odc';f.p.implementation='odc-adapted-o11';f.save();const s=await open(f.manager,{screen:'Home'});assert.equal(s.status,'running');assert.ok(!s.url.includes('?'));
 });
 test('managed watcher has an exclusive owner and releases it on stop',async t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'ssam-watcher-'));t.after(()=>fs.rmSync(root,{force:true,recursive:true}));
@@ -86,9 +107,9 @@ test('watcher stop failure still closes the owned host and preserves a failed re
  fs.writeFileSync(module,"export async function startManagedWatcher(){return{stop:async()=>{throw Error('fixture stop failure')}}}");
  atomicJson(config,{target:{moduleKey:f.p.target.moduleKey,host:f.p.target.tenant},hostConfig:f.p.host.config});
  f.p.watcher={module:pin(module),config:pin(config)};f.save();
- const s=await f.manager({action:'open'});assert.equal(s.status,'running');
+ const s=await open(f.manager);assert.equal(s.status,'running');
  await f.manager({action:'stop'});
- let ended;for(let i=0;i<50;i++){ended=await f.manager({action:'status',sessionId:'fixture'});if(ended.status==='failed')break;await delay(50);}
+ const ended=await until(f.manager,x=>['failed','stopped'].includes(x.status));
  assert.equal(ended.status,'failed');assert.equal(ended.code,'PREVIEW_STOP_FAILED');await assert.rejects(fetch(s.url));
 });
 

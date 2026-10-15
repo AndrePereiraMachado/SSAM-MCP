@@ -1,0 +1,7 @@
+{
+  "source": "synthetic",
+  "records": 3,
+  "bytes": 483,
+  "compactions": 1,
+  "reason": "The recorded compaction row is 160022 bytes, exceeding the 65536 byte excerpt limit."
+}

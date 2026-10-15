@@ -12,7 +12,9 @@ public static class LogicOrder
         "preparation" => "IPreparation", "data" => "IDataAction",
         // An exposed REST method (op rest-expose): its flow is born with Start and End inside its IRestService.
         "rest" => RestServiceAction,
-        var kind => throw new InvalidOperationException($"logic: action {action["name"]}: kind '{kind}' desconhecido; permitidos: server, service, client, screen, preparation, data, rest")
+        // A consumed REST client's callback (OnBeforeRequest, OnAfterResponse): its parameters are the platform's own.
+        "callback" => RestCallback,
+        var kind => throw new InvalidOperationException($"logic: action {action["name"]}: kind '{kind}' desconhecido; permitidos: server, service, client, screen, preparation, data, rest, callback")
     };
 
     public static bool IsClient(JsonObject action) => string.Equals(action["kind"]?.ToString(), "client", StringComparison.OrdinalIgnoreCase) || !string.Equals(action["kind"]?.ToString(), "data", StringComparison.OrdinalIgnoreCase) && action["owner"]?.ToString().StartsWith("IMobile", StringComparison.Ordinal) == true;
@@ -24,6 +26,16 @@ public static class LogicOrder
             if (owner == null || !System.Text.RegularExpressions.Regex.IsMatch(owner, "^IRestService:[A-Za-z_][A-Za-z0-9_]*$"))
                 throw new ArgumentException("A rest action (exposed REST method) names its owner: \"owner\": \"IRestService:<Service>\"");
             if (action.ContainsKey("public") || action.ContainsKey("function")) throw new ArgumentException("Exposed REST methods do not declare public/function");
+            return owner;
+        }
+        if (kind == "callback")
+        {
+            if (owner == null || !System.Text.RegularExpressions.Regex.IsMatch(owner, "^IRestClient:[A-Za-z_][A-Za-z0-9_]*$"))
+                throw new ArgumentException("A callback action names its consumed REST client: \"owner\": \"IRestClient:<Client>\"");
+            if (action["name"]?.ToString() is not ("OnBeforeRequest" or "OnAfterResponse"))
+                throw new ArgumentException($"A callback action is OnBeforeRequest or OnAfterResponse, not '{action["name"]}'");
+            if (action.ContainsKey("public") || action.ContainsKey("function") || action.ContainsKey("inputs") || action.ContainsKey("outputs"))
+                throw new ArgumentException("A callback action declares no public, function, inputs or outputs: its parameters are the platform's (Request, CustomizedRequest; Request, Response, CustomizedResponse)");
             return owner;
         }
         if (action.ContainsKey("http") || action.ContainsKey("path"))
@@ -46,6 +58,10 @@ public static class LogicOrder
 
     internal const string MobileScreenAction = "OutSystems.Model.UI.Mobile.IScreenAction";
     internal const string RestServiceAction = "IRestServiceAction";
+    internal const string RestCallback = "IRestCallbackActionFlow";
+    public static bool IsCallback(JsonObject action) => string.Equals(action["kind"]?.ToString(), "callback", StringComparison.OrdinalIgnoreCase);
+    /// <summary>A parameter of a REST callback (O11 IRestCallbackActionFlowInput/Output, ODC their Signature types).</summary>
+    public static bool IsCallbackParameter(object o) => o.GetType().GetInterfaces().Any(i => i.Name.StartsWith("IRestCallbackActionFlowInput", StringComparison.Ordinal) || i.Name.StartsWith("IRestCallbackActionFlowOutput", StringComparison.Ordinal));
     public static bool IsRest(JsonObject action) => string.Equals(action["kind"]?.ToString(), "rest", StringComparison.OrdinalIgnoreCase);
     internal const string WebScreenAction = "OutSystems.Model.UI.Web.IScreenAction";
 
@@ -103,6 +119,7 @@ public static class LogicOrder
         var kind = ActionType(action); var owner = Owner(action); var name = action["name"]!.GetValue<string>();
         if (kind is "IDataAction" or "IPreparation") throw new InvalidOperationException("logic: 'call' cannot invoke a data action or preparation: " + name);
         if (kind == RestServiceAction) throw new InvalidOperationException("logic: 'call' cannot invoke an exposed REST method (it answers HTTP requests): " + name);
+        if (kind == RestCallback) throw new InvalidOperationException("logic: 'call' cannot invoke a REST callback (the platform runs it around each request): " + name);
         return new(owner == "@espace" ? kind + ":" + name : owner + "/" + name, kind, owner == "@espace" ? null : owner);
     }
 

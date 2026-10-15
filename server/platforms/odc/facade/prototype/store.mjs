@@ -152,15 +152,32 @@ function safeGet(object, key) { try { return object[key]; } catch { return undef
 
 // --- child side ------------------------------------------------------------------------------------------------------
 
+// The collection a list expression names: window.SCHEDULE -> Schedule, App.tiposBatida -> TiposBatida, else Data.
+export function collectionNameOfExpression(expression) {
+  const last = String(expression ?? '').trim().replace(/\(\)$/, '').split('.').pop();
+  if (!/^[A-Za-z_$][\w$]*$/.test(last ?? '')) return 'Data';
+  const word = /^[A-Z0-9_]+$/.test(last) ? last.toLowerCase() : last;
+  return word.split('_').filter(Boolean).map(part => part[0].toUpperCase() + part.slice(1)).join('') || 'Data';
+}
+
+// The role of a list of rows the page declares and never writes: what a refusal or the receipt says of it (2.7, a
+// configuration list is no data model, so taking it as the store is said, never silent).
+function roleOf(name, rows) {
+  const fields = Object.keys(rows[0] ?? {});
+  return 'constant list of ' + rows.length + ' records (' + fields.join(', ') + ') that the scripts declare (' + name + '); no event writes it, so it is configuration of the screens, imported as the static entity ' + collectionNameOfExpression(name);
+}
+
 export function discoverStore(page, mapping = {}) {
   const window = page.window;
   const candidates = [];
+  // mapping.data "none": no store; the lists stay as rendered (snapshot entities) and the data comes from the module's actions
+  if (mapping.data === 'none') return { source: 'none', data: {} };
   if (mapping.data) {
     try {
       const value = vm.runInContext(String(mapping.data), page.context);
       if (storeShape(value)) return { source: 'mapping:' + mapping.data, data: clone(value), live: String(mapping.data) };
       if (nestedStoreShape(value)) return { source: 'mapping:' + mapping.data, data: flattenStore(clone(value)), live: String(mapping.data) };
-      if (rowsArray(value)) return { source: 'mapping:' + mapping.data, data: { Data: clone(value) } };
+      if (rowsArray(value)) return { source: 'mapping:' + mapping.data, data: { [collectionNameOfExpression(mapping.data)]: clone(value) } };
       return { source: null, error: 'mapping.data "' + mapping.data + '" is not an object of arrays of plain objects' };
     } catch (error) {
       return { source: null, error: 'mapping.data "' + mapping.data + '" failed: ' + String(error?.message ?? error) };
@@ -210,21 +227,38 @@ export function discoverStore(page, mapping = {}) {
     const data = recordCollections(value);
     if (data) return { source: 'global:' + name, data, live: name };
   }
-  // No store: candidates for the refusal (2.7), so that the model never needs to read the scripts.
+  // No store: candidates for the refusal (2.7), so that the model never needs to read the scripts; each with its role, so the
+  // refusal says what taking it would mean (a constant list is configuration, a function or an object of lists a data model).
+  const roles = {};
+  const modelRole = 'a data model of the scripts (an object of lists of records): its collections become entities, those the events write regular ones';
   for (const name of page.globals) {
     const value = safeGet(window, name);
-    if (rowsArray(value)) candidates.push('window.' + name);
-    else if (typeof value === 'function' && value.length === 0 && !/^[A-Z]/.test(name)) { if (tryCall(value, window)) candidates.push(name + '()'); }
+    if (rowsArray(value)) { candidates.push('window.' + name); roles['window.' + name] = roleOf('window.' + name, value); }
+    else if (typeof value === 'function' && value.length === 0 && !/^[A-Z]/.test(name)) { if (tryCall(value, window)) { candidates.push(name + '()'); roles[name + '()'] = modelRole; } }
     else if (value && typeof value === 'object' && !(value instanceof window.Node)) {
       for (const key of Object.keys(value)) {
         const item = safeGet(value, key);
-        if (rowsArray(item)) candidates.push(name + '.' + key);
-        else if (storeShape(item)) candidates.push(name + '.' + key);
-        else if (typeof item === 'function' && item.length === 0 && tryCall(item, value)) candidates.push(name + '.' + key + '()');
+        if (rowsArray(item)) { candidates.push(name + '.' + key); roles[name + '.' + key] = roleOf(name + '.' + key, item); }
+        else if (storeShape(item)) { candidates.push(name + '.' + key); roles[name + '.' + key] = modelRole; }
+        else if (typeof item === 'function' && item.length === 0 && tryCall(item, value)) { candidates.push(name + '.' + key + '()'); roles[name + '.' + key + '()'] = modelRole; }
       }
     }
   }
-  return { source: null, candidates };
+  // Only constant lists of rows the page declares (window.SCHEDULE: the steps of a work day): they are the configuration of
+  // the screens, never a data model to guess between. They are taken as static collections, each named by its variable, and
+  // the capture says so (configuration, with the role and the alternative "none"); a refusal stays for a real choice.
+  if (candidates.length && candidates.every(candidate => /^window\.[A-Za-z_$][\w$]*$/.test(candidate))) {
+    const data = {}; const configuration = [];
+    for (const candidate of candidates) {
+      const rows = safeGet(window, candidate.slice('window.'.length));
+      const collection = collectionNameOfExpression(candidate);
+      if (collection in data) continue;
+      data[collection] = clone(rows);
+      configuration.push({ value: candidate, collection, rows: rows.length, role: roleOf(candidate, rows) });
+    }
+    return { source: 'config:' + candidates.join('+'), data, configuration, candidates };
+  }
+  return { source: null, candidates, roles };
 }
 
 export function collectionNameOfFile(relative) {
@@ -276,7 +310,7 @@ export function cssSheets(page) {
   const document = page.window.document;
   const out = [];
   for (const [order, element] of [...document.querySelectorAll('style, link[rel~="stylesheet"]')].entries()) {
-    if (element.localName === 'link') { out.push({ order, external: element.getAttribute('href') }); continue; }
+    if (element.localName === 'link') { out.push({ order, external: element.getAttribute('href'), media: element.getAttribute('media') || null }); continue; }
     let rules = 0, imports = 0;
     try { rules = countRules(element.sheet?.cssRules); imports = [...(element.sheet?.cssRules ?? [])].filter(rule => rule.type === 3).length; } catch { /* unreadable */ }
     out.push({ order, href: element.getAttribute('data-ssam-href'), runtime: page.styleSeen.get(element) !== 'initial', text: element.getAttribute('data-ssam-href') ? null : element.textContent, rules, imports });

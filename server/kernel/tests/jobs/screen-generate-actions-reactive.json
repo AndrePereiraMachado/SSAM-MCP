@@ -1,0 +1,59 @@
+{
+ "description": "Screens from entities and blocks wired to the module's actions found by their signature (gen-screen/1): GetTicketList (paging and total) and GetTicketById read through data actions, StoreTicket saves, RemoveTicketById deletes; no server action is created around the entity actions.",
+ "base": "reactive-ui.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "entities": [
+     {
+      "name": "Ticket",
+      "description": "A support ticket.",
+      "attributes": [
+       {
+        "name": "Title",
+        "type": "Text",
+        "mandatory": true,
+        "length": 120,
+        "description": "What the ticket is about."
+       },
+       {
+        "name": "OpenedOn",
+        "type": "Date Time",
+        "description": "When it was opened."
+       },
+       {
+        "name": "IsUrgent",
+        "type": "Boolean",
+        "description": "True when it is urgent."
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "logic",
+   "data": {
+    "flow": [
+     "/// Lists a page of tickets whose title contains the keyword.\nserver action GetTicketList\n  /// Position of the first ticket of the page.\n  in StartIndex: Integer\n  /// How many tickets a page has.\n  in MaxRecords: Integer\n  /// Text the title contains (empty: all).\n  in SearchKeyword?: Text\n  /// The tickets of the page.\n  out List: Ticket List\n  /// How many tickets match.\n  out Total: Long Integer\n  Found = aggregate FROM Ticket WHERE (SearchKeyword = \"\" or Ticket.Title like \"%\" + SearchKeyword + \"%\") SORT Ticket.OpenedOn desc MAX MaxRecords START StartIndex\n  assign  # The page and the total\n    List = Found.List\n    Total = Found.Count\n  end\n",
+     "/// Reads one ticket by its identifier.\nserver action GetTicketById\n  /// The ticket to read.\n  in TicketId: Ticket Identifier\n  /// The ticket.\n  out Ticket: Ticket\n  Found = aggregate FROM Ticket WHERE (Ticket.Id = TicketId) MAX 1\n  assign Ticket = Found.List.Current.Ticket  # The ticket\n  end\n",
+     "/// Stores a ticket after its checks.\nserver action StoreTicket\n  /// The ticket to store.\n  in Ticket: Ticket\n  /// The stored ticket.\n  out TicketId: Ticket Identifier\n  Saved = CreateOrUpdateTicket(Source=Ticket)\n  assign TicketId = Saved.Id  # The identifier\n  end\n",
+     "/// Removes a ticket.\nserver action RemoveTicketById\n  /// The ticket to remove.\n  in TicketId: Ticket Identifier\n  DeleteTicket(Id=TicketId)\n  end\n"
+    ]
+   }
+  },
+  {
+   "op": "screen",
+   "data": {
+    "generate": {
+     "entities": [
+      "Ticket"
+     ]
+    }
+   }
+  }
+ ]
+}

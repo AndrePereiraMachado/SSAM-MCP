@@ -4,6 +4,7 @@
 // CLI and runtime. The fixture fragments (tests/fixtures/catalog/fragments) are mechanism probes, not coverage claims.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireBytes } from './fixtures/answer-wire.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -203,7 +204,7 @@ test('selection and budget over fragments: an element-less shared capability sta
   // C-003: a declared refusal keeps at least its id under a budget that forces the minimal answer.
   for (const budgetBytes of [40960, 8192, 4096]) {
     const a = await discover({ lane: 'odc', intent: 'm0probeunavailable num formulario com dropdown pesquisavel, carregar dados e salvar numa entidade', sources: probe, budgetBytes });
-    assert.ok(a.size.bytes <= budgetBytes);
+    assert.ok(wireBytes(a, { budgetBytes: budgetBytes }) <= budgetBytes);
     assert.ok((a.unavailable ?? []).some(u => u.id === 'ui.m0-probe-unavailable'), `budget ${budgetBytes}: ${a.size.status} ${JSON.stringify(a.unavailable)}`);
   }
 });
@@ -225,7 +226,7 @@ for (const lane of ['odc', 'o11']) {
     const answer = await discover({ lane, intent: 'm0probebutton m0probeassign', sources: probe, budgetBytes: 12000 });
     assert.equal(answer.ok, true);
     assert.deepEqual(answer.matches.filter(m => m.via === 'match').map(m => m.id).sort(), ['logic.m0-probe-assign', 'ui.m0-probe-button']);
-    assert.ok(answer.size.bytes <= 12000);
+    assert.ok(wireBytes(answer, { budgetBytes: 12000 }) <= 12000);
     // The anchored keyword reaches the index as written and counts only with its context.
     const directOf = a => a.matches.filter(m => m.via === 'match');
     const alone = await discover({ lane, intent: 'm0probeanchored m0probebutton', sources: probe, budgetBytes: 12000 });

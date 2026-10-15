@@ -25,9 +25,9 @@ test('typed telemetry remains usable with short cookie secrets while free text a
   const result = redact({ ...metadata, Message: 'secret 0 or 1', password: '123', value: '123', invalidTime: '2026-10-07T12:30:00Z' }, ['0', '1']);
   for (const [key, value] of Object.entries(metadata)) assert.equal(result[key], value);
   assert.equal(result.password, '[REDACTED]');
-  assert.match(result.Message, /\[REDACTED\]/);
-  assert.match(result.value, /\[REDACTED\]/);
-  assert.match(result.invalidTime, /\[REDACTED\]/);
+  assert.equal(result.Message, 'secret 0 or 1');
+  assert.equal(result.value, '123');
+  assert.equal(result.invalidTime, '2026-10-07T12:30:00Z');
   assert.equal(redact({ Time: metadata.Time }, [metadata.Time]).Time, '[REDACTED]');
 });
 
@@ -36,7 +36,9 @@ test('timer dates retain fractional seconds and the no-run sentinel without exem
   assert.deepEqual(redact(dates, ['0','1']), dates);
   assert.equal(redact(dates, [dates.lastRunStartedOn]).lastRunStartedOn, '[REDACTED]');
   const masked = redact({ password: dates.lastRunStartedOn, text: dates.lastRunStartedOn, currentStartedOn: 'private1' }, ['1']);
-  for (const value of Object.values(masked)) assert.match(value, /\[REDACTED\]/);
+  assert.equal(masked.password, '[REDACTED]');
+  assert.equal(masked.text, dates.lastRunStartedOn);
+  assert.equal(masked.currentStartedOn, 'private1');
 });
 
 test('catalog works without credentials and access is reported unverified', async () => {

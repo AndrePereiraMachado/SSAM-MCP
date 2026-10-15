@@ -94,11 +94,12 @@ São cerca de 300 bytes escritos pelo modelo. O modelo **não lê** `app.js`, `m
 
 | Campo | Tipo | Obrigatório | Default | Regra |
 |---|---|---|---|---|
-| `source` | texto (caminho absoluto) | sim | — | Pasta do protótipo ou um arquivo `.html` dentro dela. Lido só para leitura, só pela fachada. |
-| `entry` | texto | não | `index.html`; senão o único `.html` da raiz; senão recusa | Relativo a `source`. |
+| `source` | texto (caminho absoluto) | sim | — | Pasta do protótipo, um arquivo `.html` dentro dela ou o `.zip` em que ele veio. Lido só para leitura, só pela fachada. O `.zip` é extraído uma vez em `<.local da faixa>/prototype/sources/<sha256 do zip>/` (zip-slip, caminho absoluto, link, cifrado e passar dos limites recusam o arquivo inteiro, nada é extraído; pasta única de topo vira a raiz, sem contar `__MACOSX/`, `._*` e `.DS_Store`, que nunca são extraídos) e resolvido como pasta; nome sem a flag UTF-8 que não é UTF-8 é lido em CP850, CP437 ou CP1252, o que acha mais arquivos que as páginas citam (CP850 no empate: Explorer e 7-Zip em pt-BR). Fonte sem nenhuma página e com um único `.zip` (zip dentro do zip, pasta que só tem o zip): esse `.zip` é o protótipo, extraído com as mesmas regras (aviso `prototypeNestedArchive`). O IR guarda `source.archive {path, sha256}` (o `path` fora do hash). No SSAM hospedado, só das pastas do agente (`agent:inbox/<nome>`) e vendors nunca da rede. |
+| `entry` | texto | não | `index.html`; senão o único `.html` da raiz; senão recusa | Relativo a `source`. A recusa traz no patch a página que roda o app (a que carrega mais scripts da pasta, `prototype/entry.mjs`; sem página na raiz, a das subpastas, a mais rasa primeiro) e a captura já roda com ela: a mesma recusa traz todo outro problema, e a chamada com o patch reaproveita essa captura. A mensagem nomeia o `.zip`, nunca a pasta interna da extração. |
 | `app` | `reactive` \| `mobile` | não | o tipo do módulo/app aberto | ODC ou O11 vem da ferramenta. |
 | `prefix` | texto `^[A-Za-z][A-Za-z0-9]*$` | não | o `<title>` até o primeiro separador (`\|`, `-`, `–`, `:`), em PascalCase ASCII; senão o nome da pasta | Prefixo de flow, tema, bloco, imagens, entidades e variáveis de cliente. FarmaVirtual → `FarmaVirtual`. |
 | `mapping` | objeto (1.3) | não | `{}` | Só quando a inferência pede, com o texto exato que a recusa entrega. |
+| `bind` | objeto (2.12) | não | — | Telas sobre as actions publicadas de um módulo produtor em vez de dados mock. `{producer:"<Módulo>"}` sozinho pede a proposta (`PROTOTYPE_BINDING_REQUIRED`). |
 | `clock` | ISO-8601 UTC | não | o `mtime` mais novo entre os arquivos de `source` lidos pela captura, truncado ao segundo | Relógio fixo da captura: datas relativas a `new Date()` viram valores absolutos estáveis enquanto os arquivos não mudam. Vai no IR e no recibo. |
 | `tz` | nome IANA | não | `UTC` | Fuso do processo filho (`TZ`), usado por `Date` e `Intl`. A inferência de formatos compara no mesmo fuso; em runtime o protótipo e o app nativo formatam no fuso do navegador. |
 | `home` | booleano | não | `false` | `true` torna a vista padrão a tela padrão do módulo. |
@@ -131,9 +132,10 @@ Chaves fechadas: qualquer outra chave é `INPUT_INVALID` com a mais próxima (re
 | `default` | nenhuma rota é a inicial (hash vazio cai em fallback) | vista padrão |
 | `routes` | uma vista conhecida só por texto (nenhum link, efeito, README ou literal a alcança) | rotas extras na semente da busca (2.3) |
 | `shell` | nenhuma região comum, ou mais de um ponto de montagem candidato | seletores das regiões e do ponto de montagem; `{"none":true}` = sem bloco |
-| `states` | uma vista só aparece em fallback em todos os estados explorados | estado canônico da vista, por dimensão |
+| `states` | uma vista só aparece em fallback em todos os estados explorados; num protótipo sem rotas, uma tela que um clique mostra e a captura não achou | estado canônico da vista, por dimensão; ou `{"<vista>": {"click": "<palavras do gatilho ou seletor CSS>"}}` |
 | `modals` | dois modais com o mesmo título normalizado e estruturas diferentes | chave do modal → nome do popup |
-| `data` | há coleções no DOM mas nenhum store foi achado (2.7) | expressão JS avaliada na página; a recusa já traz os candidatos |
+| `data` | há coleções no DOM mas nenhum store foi achado (2.7) | expressão JS avaliada na página; a recusa já traz os candidatos; `"none"`: sem store (as listas ficam como renderizadas) |
+| `version` | o dono quer outra versão do app que a pasta traz (`v2.jsx`), listada em `source.unreferenced` | o arquivo servido no lugar do script de app que a entrada carrega |
 | `vendor` | script de CDN fora do cache e sem rede, ou de host fora da lista | URL → arquivo local com o mesmo conteúdo |
 | `events` | o dono quer ligar um evento a uma action existente em vez da inferida | evento → action existente |
 | `ignore` | um elemento de depuração do protótipo não deve virar widget, ou o patch de degradação (1.4.1) | seletores excluídos da captura |
@@ -196,11 +198,12 @@ Recusa: **uma** resposta, antes de qualquer captura do Studio quando o problema 
 
 | Código | Quando | Patch |
 |---|---|---|
-| `PROTOTYPE_SOURCE_INVALID` | `source` inexistente, sem `.html`, `entry` ambíguo | `replace /ops/i/data/entry` com o candidato |
+| `PROTOTYPE_SOURCE_INVALID` | `source` inexistente, sem `.html`, `entry` ambíguo | `add`/`replace /ops/i/data/entry` com a página do app (`verified` quando a captura rodou com ela) |
 | `PROTOTYPE_RENDER_FAILED` | erro de script na carga (arquivo:linha:coluna e a mensagem), `document.write`, especificador nu sem import map, script de CDN fora do cache sem rede ou de host fora da lista | `add /ops/i/data/mapping/vendor/<url>` quando a causa é um script externo; senão nenhum |
 | `PROTOTYPE_AMBIGUOUS` | vistas, shell, modais ou store ambíguos (2.11) | `add /ops/i/data/mapping/<chave>` com o valor exato |
-| `PROTOTYPE_NAME_COLLISION` | só quando um nome **pedido** (`mapping.screens`, `prefix` explícito) colide com elemento sem marca; o nome inferido nunca recusa (1.6) | `replace` do nome pedido pelo candidato livre |
+| `PROTOTYPE_NAME_COLLISION` | só quando um nome **pedido** (`mapping.screens`, `prefix` explícito) colide com elemento sem marca; o nome inferido nunca recusa (1.6); sobra de renome do Studio num op gerado (membro de tela/bloco ou atributo de entidade: chave `<Dono>/<Nome>`) | `replace` do nome pedido pelo candidato livre; `mapping.names` só depois de o plano refeito com ele não gerar mais o nome (senão sem patch, `ssamDefect`, `unresolved`); patch que não muda a chamada nunca é oferecido |
 | `PROTOTYPE_IR_INVALID` | IR fora do schema ou pacote com hash divergente (defeito do SSAM; `ssamDefect:true`) | nenhum |
+| `PROTOTYPE_BINDING_REQUIRED` | `data.bind` sem ligação para uma lista, texto ou evento que o produtor tem de cobrir, ou só com `producer` (2.12) | `add /ops/i/data/bind/<seção>/<chave>` por item, cada um planejado e construído offline antes de ser oferecido; item `unresolved` sem patch |
 
 A recaptura por `captureSha256` divergente não é recusa: a fachada recaptura e segue (`warnings: captureRefreshed`).
 
@@ -595,7 +598,10 @@ Atributo com dois valores → expressão. Os mesmos predicados explicam variante
 - **Fontes.** `@import` e `@font-face` com URL externa ficam verbatim (4.1 item 2); `@font-face` com arquivo local vira
   asset.
 - **Inventário de CSS.** Cada folha (`<link rel=stylesheet>` e `<style>`, na ordem do documento) com `sha256`, contagem de
-  regras pelo parser do jsdom, `imports`, `urls`. Mais as `<style>` criadas por script (ex.: Tailwind do CDN), unidas em
+  regras pelo parser do jsdom, `imports`, `urls`. Um `<link>` remoto (Google Fonts, CSS de CDN) é a folha `origin: external`
+  cujo arquivo do pacote é o `@import url("<href>") <media>;` no mesmo lugar da ordem (o kernel o iça para o topo do tema);
+  um `<link>` local que a página não leu fica de fora. Nenhuma folha fica sem arquivo no pacote (a sessão VisitaCerta de
+  2026-10-12 recebia `The "path" argument must be of type string` em toda chamada). Mais as `<style>` criadas por script (ex.: Tailwind do CDN), unidas em
   todos os estados explorados na ordem de primeira aparição, com origem `runtime`. Folha usada só por uma página
   (`multi-page`) é marcada `page:<key>` e vai para o `StyleSheet` daquela tela (3.1), não para o tema.
 - **Pacote** (`<task>\prototype\bundle\`): `capture.json`, `sheets\<sha>.css`, `assets\<sha>.<ext>`. O kernel lê só o
@@ -704,6 +710,79 @@ A captura coleta **todos** os problemas e só depois decide. Exemplos:
 
 Todos os patches de uma recusa juntos formam uma chamada válida; a fachada devolve também `correctedJob`.
 
+### 2.12 Dados reais: `data.bind` (actions publicadas de um produtor)
+
+Pedido do dono (2026-10-12, FolhaPonto): telas pixel perfect **e funcionais**, ligadas às server actions publicadas do `_CS`
+(`ObterResumoHoje`, `RegistrarBatida`, `ObterEspelhoMensal`, `ObterDetalheDia`, `GerarEspelhoPDF`), sem entidades mock. Uma
+chamada só; o modelo não lê o protótipo nem o produtor.
+
+**Contrato** (chaves fechadas em todos os níveis; a fachada confere a forma, o kernel confere os nomes contra a captura e o
+produtor, com o nome mais próximo e o patch):
+
+```json
+"bind": {
+  "producer": "FolhaPonto_CS",
+  "screens": {"bater": {"source": {"action": "ObterResumoHoje", "as": "Resumo", "args": {}, "outputs": ["Resumo"]}}},
+  "modals":  {"day-sheet": {"source": {"action": "ObterDetalheDia", "args": {"Data": "NewDate(Year(CurrDate()), Month(CurrDate()), Dia)"}}}},
+  "lists":   {"v:bater/3/1": "Resumo.Dia.Etapas"},
+  "slots":   {"v:bater/0/1/0": "Resumo.Resumo.NomeColaborador", "v:bater/3/1/*/0@style": "If(Resumo.Resumo.Dia.Etapas.Current.IsRegistrada, \"...\", \"...\")"},
+  "events":  {"bater:click:cta": {"call": "RegistrarBatida", "args": {"RequestId": "<chave>"}, "then": ["refresh Resumo", "message Ponto registrado"]},
+              "bater:click:tab-espelho": {"navigate": "espelho"}, "bater:click:reset": null}
+}
+```
+
+| Chave | Valor | Compila para |
+|---|---|---|
+| `producer` | nome de um binding de produtores (`producers {Nome: .oml/.avsig}` ou `"published"`) | a etapa `reference` existente: `.oml` como primeiro passo do plano; `.avsig` importado antes da transação de edição (como um op `reference`); a entrega captura o produtor pelo nome (C27, `referencedProducers` lê `data.bind.producer`) |
+| `screens.<view>.source` / `modals.<modal>.source` | `{action, as?, args?, outputs?}` (`as` padrão = a action) | uma Data Action `<as>` da tela (as operações de `HtmlExpander.ActionSource`: saídas, Start, um Execute Server Action, um Assign, End), At Start; a de um popup na tela é On Demand e o `openPopup` a atualiza logo depois de atribuir as entradas (os parâmetros do modal são lidos pelo nome nos `args` e viram as locais do popup) |
+| `lists.<k da lista ou #id/.classe>` | caminho `<as>.<saída>.<atributo>...` de tipo lista (com uma saída só, `<as>.<atributo>` basta) | `IList.Source` = o caminho; nada de aggregate, entidade, seed nem entidade de snapshot para a coleção ligada |
+| `slots.<k>` / `slots.<k>@<atributo>` | expressão OutSystems sobre as saídas (dentro de linha, `<lista>.Current.<x>`); `null` mantém o literal do protótipo | `IExpression.Value` (texto) ou a expressão do atributo (`style`, `class`, `data-*`) |
+| `events.<chave>` | `{call, args?, then?}` ou `{navigate: "<view>"}`; `null` deixa o evento sem compilar | screen action: a server action do produtor, depois `refresh <as>` (Refresh Data), `message <texto>` / `message= <expressão>` (nó Message) e `download` (nó Download com o Binary Data, o nome e o MIME da saída); os efeitos de cliente da captura (popup, toast) continuam depois; `navigate` vira o OnClick de navegação pura |
+
+**Proposta determinística, sem LLM.** Com `bind {producer}` só (ou com o que ainda faltar), o job runner recusa **uma vez** com
+`PROTOTYPE_BINDING_REQUIRED`, antes de carregar a base para a edição, listando cada lista, texto e evento que o produtor tem de
+cobrir com a sua proposta (`PrototypeBindDiscovery`, tabela fechada):
+
+| Regra | O que a captura mostra | Proposta |
+|---|---|---|
+| fonte | os textos e listas da vista | a action de leitura (sem verbo de escrita; entradas preenchíveis: ano/mês correntes, hoje, a data do parâmetro do popup) que explica mais itens; empate: a que nomeia a vista, a de verbo de leitura, a que recebe o parâmetro do popup, menos entradas |
+| lista | linhas de uma coleção do store | a saída lista cujo tipo de linha explica os campos do template (rótulos que são registros de uma entidade estática do produtor → o Identifier; textos HH:mm → Time/Date Time; dias 1..31 → `Day()` de um Date; mesmo nome) |
+| rótulo | `"Saída almoço"` = registro `SaidaIntervalo` de `TipoBatida` (igual, ou as palavras do protótipo dentro do rótulo do registro) | `If(x = Entities.TipoBatida.Entrada, "Entrada", If(...))` com o **texto do protótipo** de cada registro |
+| hora | `"previsto 12:00"` | a saída Time/Date Time cujo nome partilha um radical com as palavras: `"previsto " + FormatDateTime(x, "HH:mm")` |
+| duração | `"02:49"`, `"+06:30"` ao lado de `"Trabalhando há"`, `"Saldo"` | a saída Integer de segundos/minutos/saldo com radical comum aos textos vizinhos: `FormatText(...Trunc/Mod...)`, com sinal |
+| nome | 1 a 4 palavras capitalizadas sozinhas num elemento (fora de botão, ênfase, legenda em maiúsculas ou ao lado de número, e que não são palavras da interface) | a saída Text `Nome*`/`Name*` |
+| variante de linha | um atributo com dois valores entre as linhas renderizadas | o único Boolean da linha; a última linha → `CurrentRowNumber = Length - 1`; `data-*` que repete um texto da linha → a mesma expressão |
+| evento | botão num grupo de botões (barra de abas) | `navigate` para a vista com o mesmo nome; sem vista → `unresolved` |
+| evento | texto com PDF/exportar/baixar | a action com saída Binary Data, `then: ["download"]` |
+| evento | outro botão | a action de escrita cujo nome partilha um radical com o texto (`Bater ponto` ~ `RegistrarBatida`), `then: ["refresh <fonte>"]`; um `RequestId` recebe a chave do usuário e do segundo do clique (só built-ins: `GenerateGuid` é da extensão Text) |
+
+Uma folha da saída explica um texto só por dono (a segunda leitura fica `unresolved`). O que nenhuma regra explica vem sem
+patch, `unresolved`, com o motivo.
+
+**Cada patch é revalidado antes de ser oferecido** (o invariante de `capture.mjs`, agora também no kernel): o op é planejado e
+aplicado com a proposta inteira numa cópia nova da base, com o produtor referenciado como a entrega fará, e Verificado; um
+problema que aponta o widget (pelo `k`), a screen action do evento, a Data Action da fonte ou o nó que só um item escreve
+(Download, Message) derruba esse item; sem nome, o build é isolado por tipo (eventos, textos, listas) e item a item (até 8
+builds). O que sobra é oferecido `validated`; a fachada junta os patches num `patch` estrito (`add /ops/i/data/bind`) e no
+`correctedJob`. Prova FolhaPonto (offline, `FolhaPonto_UI` Mobile + `FolhaPonto_CS`): 10 propostas validadas em 31 s, o
+build corrigido aceito, Verify sem erro, fidelidade 1,0 (53/53 elementos, 28/28 textos, 44/44 atributos); no fixture das duas
+vistas e do DaySheet, 25 validadas, 2 `unresolved` (a cor do dia por Boolean ambíguo; o Download, que um módulo Mobile não
+aceita em client action), fidelidade 0,966.
+
+**Fidelidade por construção.** As saídas de exemplo de cada Data Action (o equivalente de `nativeRows`, `nativeSamples` no
+pacote do render) são escolhidas para que cada expressão ligada renderize o texto capturado: o avaliador da leitura de volta
+percorre um domínio finito por folha (números, horas e palavras do texto, os ids dos registros estáticos, True/False), uma
+linha de exemplo por item renderizado; o que nada explica fica no padrão e aparece como diferença com o `k`. O recibo lista
+`data.bound` (produtor, referências, Data Actions, coleções ligadas, saídas de exemplo e o que não explicaram).
+
+**Fora do alcance do runtime, dito no recibo:** o contador "Trabalhando há" do protótipo anda por `setInterval`; sem timer de
+cliente e sem JS (regra do dono) ele é calculado na carga e após cada batida (ou o servidor devolve o tempo decorrido). Um
+módulo Mobile não aceita o nó Download em client action: o PDF fica `unresolved` com o motivo do Studio.
+
+**Pré-requisito.** A captura do JSX/React (vista Espelho, modal DaySheet, gatilhos separados das abas e do CTA, sem lista de
+snapshot para irmãos heterogêneos) é de outra faixa; sem ela não há Espelho para ligar. O caminho intermediário que funciona
+hoje: importar só o visual e ligar as telas pelo op `html` (`ui.html-page` `source.action` / `call`), como a sessão fez à mão.
+
 ## 3. Mapeamento para OutSystems nativo
 
 ### 3.1 Estrutura
@@ -800,6 +879,7 @@ devolve o estoque. Sem JSON, sem desenrolar, sem action vazia que exija um op `l
 
 **Dados:**
 
+- Coleção **ligada por `data.bind`** (2.12) → nenhuma entidade, seed ou entidade de snapshot: a lista lê a saída da Data Action.
 - Coleção **não mutada** → entidade estática `<Prefix><Coleção>` com os registros (op `spec`, `data.static[].records`, que já
   existe), `Id` Integer da chave (L7). Ex.: Categoria, StatusPedido, Users.
 - Coleção **mutada** → entidade comum `<Prefix><Coleção>`, `Id` Integer **sem** AutoNumber (as chaves do protótipo aparecem
@@ -1002,8 +1082,12 @@ placeholder, Form e Image; para o ODC, um app ODC publicado. Sem publicar e sem 
   concorrente: precisou de `:where(div.OSInline){display:block}`, `.ThemeGrid_MarginGutter{margin-left:0}`,
   `.fv-native-root{display:block!important;width:100%!important}`, `.product-image-wrap{display:block}` e do tratamento de
   `[data-dropdown]`; `visual-audit.txt` itens 4, 5, 10 e 13;
-- `IPopup`: fundo `position:fixed;inset:0;display:flex;align-items:center;justify-content:center` + as declarações de
-  `dialog::backdrop` do protótipo; caixa `display:contents`; o `div.ssam-tag-dialog` recebe as regras de UA de 4.1.
+- `IPopup`: fundo `position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center` + as
+  declarações de `dialog::backdrop` do protótipo; caixa `display:contents`; o `div.ssam-tag-dialog` recebe as regras de UA de
+  4.1. O `z-index` é a camada de topo do `<dialog>` modal: sem ele, um menu lateral `sticky` com `z-index:5` pintava por cima
+  do fundo (VisitaCerta, 2026-10-12). Um modal que o protótipo monta no `<body>` (portal do React) vira um `IPopup` ao lado
+  da instância do shell, nunca dentro do placeholder (`modals[].portal`): lá dentro, a animação de `transform` da página
+  prendia o fundo `fixed` à área da página.
 
 ### 4.3 Correções de escopo no op html (caminho manual)
 
@@ -1546,6 +1630,138 @@ dimensão, estado vazio alternativo, atributo condicional `""` × ausente, `MaxL
 option); etapa 0 (tabela 4.2 no publicado) não feita, `runtimeUnverified` continua com as linhas inferidas; carrinho mantido
 só em variável do script (c) não compila; `studio_deliver` (ODC) de job remendado não leva `--based-on` (esquema estrito do
 servidor ODC); workers residentes não usam o JIT sem tier 0; prova ao vivo pendente.
+
+### 9.2 FolhaPonto (2026-10-12): ZIP, colisão de atributo, Verify escondido e JSX/React
+
+Sessão Codex de 2026-10-12: o `.zip` foi recusado; depois, `PROTOTYPE_NAME_COLLISION` em `label` voltava com o mesmo patch
+(`mapping.names {label: label2}`) e escondia uma recusa do Verify sem patch; a tela Espelho e o DaySheet nunca eram capturados.
+
+- **ZIP** (`prototype/archive.mjs`): diretório central + `zlib.inflateRawSync`, sem dependência; limites de entradas, bytes por
+  arquivo e total, tamanho declarado e CRC conferidos; hora das entradas preservada (o `clock` é o do arquivo). 1.2.
+- **Nomes de atributo** (`PrototypeFieldNames`, na carga, antes do dialeto): escopo de nomes por entidade sem diferenciar
+  maiúsculas (chave, `Label`/`Order` da estática, campos); campo `label`/`order` (qualquer caixa) de entidade estática É o
+  atributo embutido; gêmeo por caixa ganha `<campo>2`, livre em toda entidade que o tem; `mapping.names "<Entidade>/<campo>"`
+  respeitado; toda referência do IR passa pelo mapa; o recibo lista os renomes e o seed grava no atributo certo.
+- **Colisão** (`Verbs.Prototype.cs`): as colisões que o próprio plano traz (dois `create` do mesmo tipo e do mesmo nome sem
+  caixa sob o mesmo pai) vêm todas numa recusa, antes de qualquer op, com o mapa conferido num plano refeito; entidade,
+  estática e estrutura são donos (`<Entidade>/<atributo>`); antes de oferecer, o plano é refeito com o mapa sobre a mesma
+  visão do módulo; mapa já presente ou nome ainda gerado sai sem patch (`ssamDefect`, `unresolved`). A fachada
+  tira todo patch que não muda o job (`identityPatchesOut`: `prototypeRefusal`, `job-runner`, `o11-cycle`).
+- **Verify → `k`** (1.4.1): o kernel sobe do objeto de propriedade da mensagem até o widget gerado e escreve `k`/`widgetKey`; a
+  fachada também lê `prototype-keys.json` e acha nós dentro de template de lista. SVG inline: de uma cor literal vira ícone
+  (máscara) com tamanho e cor; de várias, imagem do próprio markup (data URL); nunca `IImage` sem valor nem `viewBox` duplicado.
+- **Listas** (2.8): irmãos sem classe só são lista com as mesmas propriedades de estilo (par: o mesmo estilo e o mesmo formato de
+  texto); ícones diferentes nunca. Estilo inline que varia por item sem campo vira atributo extra `<Elemento>Style`; nó presente
+  em parte dos itens sem predicado vira `<Elemento>Shown` lido pelo `if`. O estilo inline do elemento da lista vai como atributo.
+- **JSX/React**: `text/babel`/`text/jsx` são fonte (kind `babel`): a fachada os compila com o Babel que a própria página carrega,
+  fora do filho, só quando é o pacote `@babel/standalone` de um CDN permitido (cache ou download da fachada) ou um build fixado
+  por `sha256` (`PINNED_BABEL`); uma cópia da pasta do protótipo nunca roda na fachada (aviso `PrototypeBabelUntrusted`, a
+  página ainda renderiza no filho). Vendors: `integrity` (SRI) conferido no cache e no download; cópia em `<pasta>/vendor/`
+  serve sem rede. A análise estática lê a saída (`babel:<arquivo>:<linha>`, a mesma
+  forma que o runtime dá ao código avaliado, linhas mapeadas pelo source map inline). `source.unreferenced` lista os scripts e
+  páginas que a entrada não carrega; `mapping.version` troca o script de app. Telas trocadas por estado cinco níveis abaixo
+  (sem classe) são vistas: gatilho sem parâmetro que muda o esqueleto profundo e tem irmão que volta (`screenSwitches`); nome
+  pelo texto do gatilho; o ponto de montagem desce até o único filho que difere (`deepenMount`, shell com `mount.path`
+  profundo). Overlay montado por clique (fundo translúcido cobrindo a tela) é modal, nomeado pelo componente React (fibra).
+  Gatilho sem id/classe: palavras próprias (até quatro), `title`, `aria-label`, posição; itens de lista (mais de oito irmãos)
+  continuam um gatilho. `localStorage` e `sessionStorage` conferidos antes de reaproveitar a janela. Lista constante sem store
+  (`window.SCHEDULE`) é configuração: coleção estática com o nome da variável, dita no aviso `PrototypeStoreFromConfiguration`
+  com o papel e a alternativa `mapping.data "none"`.
+- **Números** (ensaio offline, base `FolhaPonto_UI`, cache de vendors local): FolhaPonto aceito numa chamada a partir do
+  `.zip`, telas Bater e Espelho, popup DaySheet, fidelidade 1,0 (318/318) nos três estados.
+
+### 9.3 FolhaPonto com dados reais: ZIP + `data.bind` (2026-10-12, `feat/imp-folhaponto`)
+
+Lanes A (ZIP, nomes, JSX/React) e B (`data.bind`, 2.12) juntas. Replay offline do pedido do dono sobre as capturas da sessão
+(`FolhaPonto_UI-20261012134735`, produtor `FolhaPonto_CS-20261012135019`), sem Studio e sem worker:
+
+1. `{op:"prototype", data:{source:"<...>\\Folha de ponto.zip", bind:{producer:"FolhaPonto_CS"}}}` → uma recusa
+   `PROTOTYPE_BINDING_REQUIRED`: 21 ligações propostas e construídas offline (telas Bater→`ObterResumoHoje`,
+   Espelho→`ObterEspelhoMensal(Year(CurrDate()), Month(CurrDate()))`, popup DaySheet, 2 listas sobre `Resumo.Dia.Etapas`, rótulos
+   por `TipoBatida`, horários, duração, nome, estilos das linhas, CTA→`RegistrarBatida` + refresh) e 1 sem ligação (a coluna de
+   horário do DaySheet); `patch` único e `correctedJob`.
+2. O `correctedJob` com `null` no item sem ligação → aceito e válido numa chamada: telas Bater e Espelho, popup DaySheet, bloco
+   `FolhaDePontoShell`, 0 entidades, 3 Data Actions, eventos 6/6 (navigate 3, openPopup 1 com refresh da Data Action do popup,
+   closePopup 1, call 1). Fidelidade 1,0: elementos 318/318, textos 162/165, atributos 279/279, seletores 18/18.
+
+Correções da integração: o render de leitura dava aos exemplos de um popup precedência sobre os da própria tela quando as Data
+Actions têm o mesmo nome (Bater e DaySheet usam `ObterResumoHoje`): a tela vence (`PrototypeRender.StateSampleOwners`). O recibo
+não diz mais que uma lista de configuração substituída pelo `bind` virou estática (`store.configuration[].bound`, aviso
+`PrototypeStoreFromConfiguration` só com as listas importadas).
+
+Lacunas: o calendário do Espelho são 31 botões calculados no JSX (maio/2026), sem lista nem parâmetro de dia; só o dia sondado
+abre o DaySheet, e o DaySheet fica ligado a `ObterResumoHoje` (hoje) em vez de `ObterDetalheDia(Data)`. Fechar isso pede, na
+captura, a grade de dias como lista com variantes e o clique carregando a linha (entrada do popup), e então o `bind` liga a
+grade a `Espelho.Dias` e o popup a `ObterDetalheDia`. Textos sem ligação no Espelho: "Maio 2026", "de 176:00", "3 dias extras" e
+o sinal do saldo.
+
+### 9.4 VisitaCerta (2026-10-12): duas páginas na raiz, fonte remota, modal por portal, dados mockados
+
+Sessão de 2026-10-12 na pasta de prova (`VisitaCerta_UI`, O11 Reactive): o `.zip` foi recusado (importador antigo) e, extraído,
+as duas formas da chamada responderam `PROTOTYPE_IR_INVALID` "The capture threw: The "path" argument must be of type string"
+(`ssamDefect`). Causa: `bundle.mjs:12` (`path.join(dir, sheet.bundle)`) com a folha `origin: external` que
+`css-inventory.mjs:69` gerava sem arquivo para o `<link>` do Google Fonts (`store.mjs:313`); o kernel também recusaria a
+folha sem arquivo (`PrototypeCss.cs:89`). O ZIP tem `Visita Certa.html` (o app, sete `.jsx`) e `visita-certa-css.html` (vitrine
+de CSS) na raiz, o `tweaks-panel.jsx` da ferramenta de design e `screens/*.png` de referência.
+
+- **Fonte remota** (2.9): o `<link>` remoto vira a folha `external` com o `@import` no pacote; `writeBundle` nunca lança.
+- **Entrada** (1.2): `prototype/entry.mjs` ordena as páginas (scripts da pasta > da rede > inline); a recusa traz a do app no
+  patch, a captura roda com ela na mesma chamada (`verified`, mais todo outro problema) e a chamada com o patch reaproveita a
+  captura (`<lane .local>/prototype/captures/<chave>.json`, chave = arquivo ou pasta, entrada, mapping, clock, tz e o motor).
+- **Modal por classe** (2.4): fundo `position:fixed; inset:0` dado por classe com nome de overlay (`modal-bg`), montado no
+  `<body>` sem `role`: `ov` lido pela cascata (posição e lados; a cor `oklch(... / .55)` o jsdom lê como transparente). Nome:
+  o componente que usou o wrapper genérico (`WeatherPeekModal` > `Modal`), nunca o título com o registro. `modals[].portal`.
+- **Vistas** (2.2): toast (`toast`, `snackbar`, `aria-live`) fora do esqueleto; o ponto de montagem do spa-state genérico desce
+  com `deepenMount` (o menu lateral, que só move o item ativo, é shell). 11 vistas → 4.
+- **Gatilhos** (2.4): nas linhas de uma tabela de `.btn` iguais, as mesmas palavras de cada linha são um gatilho e as outras
+  palavras outro; sem palavras, o lugar na linha (`btn-p0-3`). Antes, os 25 botões eram um gatilho só (a estrela).
+- **Controles** (2.6): `select` sem id/nome é a dimensão `select@<caminho>` (`annotateControls` pelo lugar na região).
+- **Ícones** (3.2): `style` que não pinta na raiz do svg (`flex-shrink: 0`) não impede o ícone e vai para o span; o nome do
+  ícone desenhado inclui a pintura da raiz (estrela contornada e cheia são dois).
+- **Listas** (2.8): uma coleção mostrada em várias listas, cada uma uma parte das linhas que nenhuma regra separa (a agenda,
+  agrupada por dia), fica como renderizada; o espaço que só alguns itens de um snapshot têm (`" km/h"`) é do item.
+- **Kernel**: literal de data em atributo Date Time vira `#2026-10-12 00:00:00#` e valor de outro tipo básico ganha a conversão
+  (`PrototypeLogic.ToField`, `PrototypeExpr.Convert`); `div` que navega ganha uma ação do dono com `IDestinationNode` (o
+  `onclick` estendido exige ação); espaço entre dois textos da mesma linha fica (`SpaceText`); popup de modal por portal ao
+  lado da instância do shell; fundo do `IPopup` com `z-index:2147483000` (4.2). A medida compara o popup de topo onde o modal
+  estava entre os filhos do `<body>` (`bodyOrder`).
+- **Números** (ensaio offline sobre a captura `VisitaCerta_UI-20261012232036`, sem `bind`): chamada 1 = uma recusa (patch de
+  `entry` verificado), chamada 2 = aceita e válida, 4 telas, popup `WeatherPeekModal`, bloco `VisitaCertaShell`; fidelidade 1,0
+  em todos os 12 estados (elementos 1681/1681, atributos 798/798, classes 1186/1186; os textos das opções do `select` do
+  Planejador são um texto só no nativo). Render offline (Edge headless, sem rede) contra o protótipo renderizado: 0,9969 a
+  0,9999 de pixels iguais por tela.
+
+Lacunas: chave de texto (`p1`, `v1`) não é chave (o kernel só cria Identifier inteiro): a tabela de locais e a agenda ficam com
+as linhas renderizadas, `Visit` é regular com chave `Score`; os filtros e a ordenação por botões, a busca de CEP e as ações por
+linha (favorito, editar, remover) não compilam (estado só no script). As imagens `screens/` do ZIP não são deste código: 01 e
+06 mostram Dashboard e Histórico, que o código não tem, e 02 a 05 foram tiradas no meio da animação (área principal vazia).
+
+### 9.5 Revisão independente do VisitaCerta (2026-10-13): formas da fonte, recusas tipadas, imagens
+
+A revisão de `bd8ef245` (`C:\t\imp-vc\RESULTADO.md`) achou seis casos que davam resposta sem código, `ssamDefect` ou nenhum
+patch. Correções:
+
+- **Imagem com outra extensão** (3.6): a extensão da URL da imagem no tema é o tipo dos bytes (`PrototypeNames.ImageExtension`):
+  JPEG é sempre `.jpg` (um JPEG `foto.png` ou `foto.jpeg` dava `LightweightExpression_UnknownObj` no Verify); PNG, GIF, WebP,
+  BMP, ICO e SVG pelos bytes; o `mime` do asset também. Um erro de Verify do build do protótipo que não nomeia item da captura
+  volta `VALIDATION_REFUSED` com `ssamDefect` (`untypedBuildRefusal`), nunca `code: null`.
+- **ZIP em CP850** (1.2): o código de página é escolhido pelas referências das páginas; um `<link rel=stylesheet>` local que
+  não existe (e um `src` de `text/babel` que não existe) recusa `PROTOTYPE_RENDER_FAILED` "stylesheet X does not exist in
+  source", com os nomes parecidos em `alternatives`. Sem patch: o job não renomeia arquivo do protótipo.
+- **Erro da página que escapa** (2.1): o processo filho registra `unhandledRejection` como aviso
+  `PrototypeUnhandledRejection` (o navegador segue: um `fetch` sem `catch` importa) e `uncaughtException` como erro de script
+  da página (recusa tipada); o filho não sai mais. Com `PrototypeBabelSyntax`, a recusa nomeia arquivo, linha e coluna.
+- **Página só em subpasta** (1.2): patch de `entry` com a página mais rasa, verificado pela captura (como com várias páginas).
+- **Vendor sem rede** (2.1): o patch `mapping.vendor` aponta para `vendor/<arquivo>` ao lado da pasta ou do `.zip` (nunca a
+  pasta interna) e leva `needsFile`: fica só no problema, fora do `patch` combinado e do `correctedJob` (o arquivo precisa
+  existir antes). Arquivo de `mapping.vendor` que não existe é `PROTOTYPE_SOURCE_INVALID` em `/mapping/vendor/<url>`, sem
+  `ssamDefect`.
+- **`%20` no `src` ou no `url()`** (2.9): a referência é decodificada antes de ler o arquivo (`localReference`); o kernel
+  resolve a imagem estática pelo nome decodificado. A medida compara a imagem estática pelo asset que ela mostra
+  (`data-ssam-asset`; o `src` de runtime é a URL do módulo).
+
+Lacuna: imagem cujo `src` vem de dado de lista (três `<img>` que a inferência junta numa lista) continua External com o caminho
+relativo da linha, que não existe no módulo publicado.
 
 ## 10. Registro da revisão crítica (2026-10-10)
 

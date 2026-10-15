@@ -1,0 +1,138 @@
+[
+ {
+  "label": "AgentOps_Model_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/AgentOps_Model_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "AgentOps_Sample_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/AgentOps_Sample_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "DCIPS_Audit_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/DCIPS_Audit_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "DCIPS_Benefits_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/DCIPS_Benefits_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "DCIPS_Documents_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/DCIPS_Documents_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "DCIPS_FuneralHonors_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/DCIPS_FuneralHonors_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "DCIPS_LTCM_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/DCIPS_LTCM_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "DCIPS_Messaging_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/DCIPS_Messaging_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "DCIPS_Mortuary_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/DCIPS_Mortuary_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "DCIPS_Notification_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/DCIPS_Notification_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "DCIPS_PastConflicts_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/DCIPS_PastConflicts_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "DCIPS_Portal_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/DCIPS_Portal_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "DCIPS_Reference_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/DCIPS_Reference_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "DCIPS_Reporting_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/DCIPS_Reporting_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "DCIPS_Roles_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/DCIPS_Roles_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "DCIPS_Rules_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/DCIPS_Rules_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "DCIPS_Security_CS",
+  "lane": "o11",
+  "oml": "C:/t/gen-entity/corpus/DCIPS_Security_CS.oml",
+  "group": "O11 core services (captures outside the repository)"
+ },
+ {
+  "label": "wrightflood-personal-r8",
+  "lane": "odc",
+  "oml": "tests/fixtures/odc/wrightflood-personal-r8.oml",
+  "group": "ODC fixture"
+ },
+ {
+  "label": "gate-visitacerta",
+  "lane": "o11",
+  "oml": "tests/fixtures/blank-service.oml",
+  "ddl": "tests/fixtures/entity-actions/visitacerta-cs.ddl",
+  "group": "the data model of the release gate (17 entities, 11 static) on a blank module"
+ },
+ {
+  "label": "shapes",
+  "lane": "o11",
+  "oml": "tests/fixtures/blank-service.oml",
+  "ddl": "tests/fixtures/entity-actions/shapes.ddl",
+  "group": "owner, active attribute, two references to one entity, a reference named after its entity, self reference, text identifier, unique keys, date index"
+ },
+ {
+  "label": "gate-visitacerta",
+  "lane": "odc",
+  "oml": "tests/fixtures/odc/blank-mobile.oml",
+  "ddl": "tests/fixtures/entity-actions/visitacerta-cs.ddl",
+  "group": "the data model of the release gate (17 entities, 11 static) on a blank module"
+ },
+ {
+  "label": "shapes",
+  "lane": "odc",
+  "oml": "tests/fixtures/odc/blank-mobile.oml",
+  "ddl": "tests/fixtures/entity-actions/shapes.ddl",
+  "group": "owner, active attribute, two references to one entity, a reference named after its entity, self reference, text identifier, unique keys, date index"
+ }
+]

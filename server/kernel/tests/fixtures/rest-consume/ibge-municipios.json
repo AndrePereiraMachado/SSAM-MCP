@@ -1,0 +1,122 @@
+[
+ {
+  "id": 3500105,
+  "nome": "Adamantina",
+  "microrregiao": {
+   "id": 35035,
+   "nome": "Adamantina",
+   "mesorregiao": {
+    "id": 3508,
+    "nome": "Presidente Prudente",
+    "UF": {
+     "id": 35,
+     "sigla": "SP",
+     "nome": "São Paulo",
+     "regiao": {
+      "id": 3,
+      "sigla": "SE",
+      "nome": "Sudeste"
+     }
+    }
+   }
+  },
+  "regiao-imediata": {
+   "id": 350019,
+   "nome": "Adamantina - Lucélia",
+   "regiao-intermediaria": {
+    "id": 3505,
+    "nome": "Presidente Prudente",
+    "UF": {
+     "id": 35,
+     "sigla": "SP",
+     "nome": "São Paulo",
+     "regiao": {
+      "id": 3,
+      "sigla": "SE",
+      "nome": "Sudeste"
+     }
+    }
+   }
+  }
+ },
+ {
+  "id": 3500204,
+  "nome": "Adolfo",
+  "microrregiao": {
+   "id": 35004,
+   "nome": "São José do Rio Preto",
+   "mesorregiao": {
+    "id": 3501,
+    "nome": "São José do Rio Preto",
+    "UF": {
+     "id": 35,
+     "sigla": "SP",
+     "nome": "São Paulo",
+     "regiao": {
+      "id": 3,
+      "sigla": "SE",
+      "nome": "Sudeste"
+     }
+    }
+   }
+  },
+  "regiao-imediata": {
+   "id": 350025,
+   "nome": "São José do Rio Preto",
+   "regiao-intermediaria": {
+    "id": 3507,
+    "nome": "São José do Rio Preto",
+    "UF": {
+     "id": 35,
+     "sigla": "SP",
+     "nome": "São Paulo",
+     "regiao": {
+      "id": 3,
+      "sigla": "SE",
+      "nome": "Sudeste"
+     }
+    }
+   }
+  }
+ },
+ {
+  "id": 3500303,
+  "nome": "Aguaí",
+  "microrregiao": {
+   "id": 35029,
+   "nome": "Pirassununga",
+   "mesorregiao": {
+    "id": 3507,
+    "nome": "Campinas",
+    "UF": {
+     "id": 35,
+     "sigla": "SP",
+     "nome": "São Paulo",
+     "regiao": {
+      "id": 3,
+      "sigla": "SE",
+      "nome": "Sudeste"
+     }
+    }
+   }
+  },
+  "regiao-imediata": {
+   "id": 350044,
+   "nome": "São João da Boa Vista",
+   "regiao-intermediaria": {
+    "id": 3510,
+    "nome": "Campinas",
+    "UF": {
+     "id": 35,
+     "sigla": "SP",
+     "nome": "São Paulo",
+     "regiao": {
+      "id": 3,
+      "sigla": "SE",
+      "nome": "Sudeste"
+     }
+    }
+   }
+  }
+ }
+]

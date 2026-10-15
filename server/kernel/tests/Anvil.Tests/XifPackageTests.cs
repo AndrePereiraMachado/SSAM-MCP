@@ -103,6 +103,49 @@ public sealed class XifPackageTests
         Assert.Contains("not Binaries", problem.Message);
     }
 
+    [Fact]
+    public void ResourceExportPreservesBytesAndNamesWithoutUsingPackageDirectories()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "xif-export-" + Guid.NewGuid().ToString("N"));
+        var library = XifSynthetic.Resource("\\Source\\NET\\Bin\\", "Example.dll", [1, 2, 3], "Binaries");
+        library.SetAttributeValue("CodeReference", "Yes");
+        var platform = XifSynthetic.Resource("\\Source\\NET\\Bin\\", "OutSystems.Platform.dll", [4], "Binaries");
+        platform.SetAttributeValue("CodeReference", "Yes");
+        var document = XifPackage.Read(XifPackage.Pack(XifSynthetic.Extension("ExportTest", "k", [], [],
+            [library, platform, XifSynthetic.Resource("\\Licenses\\", "LICENSE.txt", [5]),
+             XifSynthetic.Resource("\\Other\\", "LICENSE.txt", [6])])));
+        try
+        {
+            var exported = document.ExportResources(root);
+            var rows = exported["resources"]!.AsArray();
+            Assert.Equal(4, rows.Count);
+            foreach (var row in rows)
+            {
+                var file = row!["file"]!.GetValue<string>();
+                Assert.StartsWith(root + Path.DirectorySeparatorChar, file);
+                Assert.Equal(row["sha256"]!.GetValue<string>(), Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file))).ToLowerInvariant());
+            }
+            var reference = Assert.Single(exported["references"]!.AsArray());
+            Assert.Equal("Example.dll", Path.GetFileName(reference!.GetValue<string>()));
+            Assert.NotEqual(rows[2]!["file"]!.ToString(), rows[3]!["file"]!.ToString());
+            Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(reference.GetValue<string>()));
+            Assert.Throws<XifRefusal>(() => document.ExportResources(root));
+            Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(reference.GetValue<string>()));
+            Assert.DoesNotContain("must-never-leave", exported.ToJsonString());
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public void ResourceExportRefusesDeviceNamesBeforeWritingAnyFile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "xif-export-" + Guid.NewGuid().ToString("N"));
+        var document = XifPackage.Read(XifPackage.Pack(XifSynthetic.Extension("ExportTest", "k", [], [],
+            [XifSynthetic.Resource("", "valid.txt", [1]), XifSynthetic.Resource("", "CON.dll", [2])])));
+        Assert.Throws<XifRefusal>(() => document.ExportResources(root));
+        Assert.False(Directory.Exists(root));
+    }
+
     private static byte[] Compress(string text)
     {
         var output = new MemoryStream();

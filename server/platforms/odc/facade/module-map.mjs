@@ -7,12 +7,23 @@
 //     [--key @key] [--offset N] [--max N] [--budget B] [--detail] [--expectedSourceSha256 H]
 //   ssam map [--lane o11|odc] <capture.oml|Module> --digest [--page N] [--budget B] [--expectedSourceSha256 H]
 //     the module digest of the same capture (view "digest", module-digest.mjs): the whole module as text, in pages
+//   ssam map [--lane o11|odc] <capture.oml|Module> --ddl [--element E] [--page N] [--budget B] [--expectedSourceSha256 H]
+//     the data text of the same capture (view "ddl", module-ddl.mjs): entities, structures, variables and timers as DDL,
+//     every element with its @key, in pages; element reads one of them by name or @key
+//   ssam map [--lane o11|odc] <capture.oml|Module> --flow [--element <@key|Flow/Screen/Action|Action>] [--page N] [--detail]
+//     the flow reading of the same capture (view "flow", module-flow.mjs): one action as ssam-flow/1 text, whole, with
+//     its fixed point; without --element the list of the actions
 //   ssam map [--lane o11|odc] <capture|Module>... --search <text> [--regex] [--property P] [--kind K] [--role R] [--offset N] [--max N]
 //   ssam map [--lane o11|odc] <capture|Module>... --uses <@key|Module.Element|Flow/Screen/Action|Kind:Name|Name> [--kind K]
 //     views "search" and "uses" (module-rich.mjs): the rich index of each capture (one or several of an app), built only
 //     on request ({"rich":"ensure"}) and read here; search finds text in expressions and values, uses finds who uses an
 //     element inside and across the given modules
+//   ssam map [--lane o11|odc] <capture.oml|Module> --html [--screen <Screen|Kind:Name|@key>] [--page N] [--keys] [--budget B]
+//     view "html": one screen or block as ssam-html/1 (the kernel's ScreenHtml, written by the same reader as the digest):
+//     its source as HTML, every element with k, expressions as text; its key table is stored beside the capture's index.
+//     Without screen, the list of screens and blocks.
 //   node module-map.mjs --prefetch <capture.oml> --lane o11|odc      (the detached warm-up, see prefetchIndex)
+import { withNormalizationsOf } from './normalizations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -27,16 +38,31 @@ import { resolveOpenModule, systemModuleName } from './studio-module.mjs';
 import { withStudioWriteLock } from './studio-write-lock.mjs';
 import { canonicalCapture } from './oml-content-sha.mjs';
 import { DIGEST_ADAPTER, DIGEST_PAGE_SCHEMA, DIGEST_SCHEMA, DIGEST_NOTE, loadDigest, digestPages, digestBody } from './module-digest.mjs';
+import { DDL_ADAPTER, DDL_PAGE_SCHEMA, DDL_SCHEMA, DDL_NOTE, loadDdl, ddlPages, ddlBody, selectBlocks } from './module-ddl.mjs';
+import { FLOW_ADAPTER, FLOW_SCHEMA, FLOW_PAGE_SCHEMA, FLOW_INDEX_SCHEMA, FLOW_NOTE, MAX_FLOW_ELEMENTS, loadFlow, findActions, similarActions, flowPages, textSha, flowReadingOf } from './module-flow.mjs';
 import { RICH_ADAPTER, RICH_SCHEMA, SEARCH_SCHEMA, USES_SCHEMA, SEARCH_NOTE, USES_NOTE, loadRich, searchRich, searchEntry, resolveElement, usesRich,
   usesEntry, describeRow } from './module-rich.mjs';
+import { WIRED } from './text-routes.mjs';
 
 export const INDEX_SCHEMA = 'ssam-module-index/1';
 export const EXTRACTOR = 1;
 export const MAP_SCHEMA = 'ssam-map/1';
 export const ROLES = ['module', 'flow', 'screen', 'block', 'action', 'actionRef', 'aggregate', 'entity', 'staticEntity', 'structure',
   'attribute', 'parameter', 'variable', 'widget', 'event', 'flowNode', 'expression', 'reference', 'other'];
-export const MAP_USAGE = 'ssam map [--lane o11|odc] <capture.oml|Module> [--kind K[,K...]] [--name N] [--prefix P] [--role R] [--parent @key] [--key @key] [--offset N] [--max N] [--budget B] [--detail] [--expectedSourceSha256 H] | ssam map [--lane o11|odc] <capture.oml|Module> --digest [--page N] [--budget B] [--expectedSourceSha256 H] | ssam map [--lane o11|odc] <capture|Module>... --search <text> [--regex] [--property P] [--kind K] [--role R] [--offset N] [--max N] | ssam map [--lane o11|odc] <capture|Module>... --uses <element> [--kind K] [--role R]';
-export const VIEWS = ['map', 'digest', 'search', 'uses'];
+export const MAP_USAGE = 'ssam map [--lane o11|odc] <capture.oml|Module> [--kind K[,K...]] [--name N] [--prefix P] [--role R] [--parent @key] [--key @key] [--offset N] [--max N] [--budget B] [--detail] [--expectedSourceSha256 H] | ssam map [--lane o11|odc] <capture.oml|Module> --digest [--page N] [--budget B] [--expectedSourceSha256 H] | ssam map [--lane o11|odc] <capture.oml|Module> --ddl [--element E] [--page N] [--budget B] [--expectedSourceSha256 H] | ssam map [--lane o11|odc] <capture.oml|Module> --flow [--element <@key|Flow/Screen/Action|Action>]... [--page N] [--offset N] [--max N] [--detail] | ssam map [--lane o11|odc] <capture|Module>... --search <text> [--regex] [--property P] [--kind K] [--role R] [--offset N] [--max N] | ssam map [--lane o11|odc] <capture|Module>... --uses <element> [--kind K] [--role R] | ssam map [--lane o11|odc] <capture.oml|Module> --html [--screen <Screen>] [--page N] [--keys] [--budget B]';
+export const VIEWS = ['map', 'digest', 'ddl', 'flow', 'search', 'uses', 'html', 'logic'];
+// view "logic" is "flow" under the word of ssam_code (part logic): the same answer.
+export const VIEW_ALIASES = { logic: 'flow' };
+export const HTML_SCHEMA = 'ssam-html/1';
+export const HTML_NOTE = 'ssam-html/1 (reading): the source of the screen or block, never its rendered state. k is the short key of each element in this '
+  + 'reading (keysFile maps it to the ObjectKey, with this capture sha256 and htmlSha256); expressions are text: {{ expression }} lines and '
+  + 'the values of if, list, bind, value and :Input; class is a plain string literal or {{ expression }}. <div else> right after a <div if> '
+  + 'is its False branch. on<event>="Destination(Param = expression)" is a native event, @<Event> a block event handler, :<Input> a block '
+  + 'argument; os-<Property> is any property outside the table, with the Model API name. os-opaque (tables, Traditional widgets) is '
+  + 'untouchable. Screen actions are named in actions; their bodies are in the logic digest. To change the screen (C2): send only the '
+  + 'elements you changed, each whole with its k (an If with its <div else>, the <style> alone), in one html op {screen, basedOn, edit} of '
+  + 'the delivery (continuations.edit); a new element has no k, a removed one is left out of its parent, an element with its k under '
+  + 'another parent moves there. Everything else keeps its key; the answer brings the next basedOn.';
 const RICH_VIEWS = ['search', 'uses'];
 // The most captures one search or uses call reads (the modules of one app).
 export const MAX_TARGETS = 16;
@@ -55,7 +81,30 @@ export const indexRoot = (env = process.env) => env.SSAM_MODULE_INDEX_ROOT ? pat
 export const indexFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), 'v1', lane, sha256.toLowerCase() + '.' + adapterOf(lane) + '.json');
 // The module digest beside the index (ModuleIndexStore.DigestPathOf), written in both lanes by the kernel's own reader.
 export const digestFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), 'v1', lane, sha256.toLowerCase() + '.' + DIGEST_ADAPTER + '.digest.json');
+// The data text beside them (ModuleIndexStore.DdlPathOf), written in both lanes by the same kernel reader as the digest.
+export const ddlFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), 'v1', lane, sha256.toLowerCase() + '.' + DDL_ADAPTER + '.ddl.json');
 // The rich index beside them (ModuleIndexStore.RichPathOf), written by the same kernel reader as the digest, only on request.
+// The flow reading beside them (ModuleIndexStore.FlowPathOf), written by the same kernel reader as the digest.
+export const flowFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), 'v1', lane, sha256.toLowerCase() + '.' + FLOW_ADAPTER + '.flow.json');
+// The read of one action an answer served, beside the flow reading (ModuleIndexStore.FlowReadingPathOf): the base of the
+// three-way merge of an edit written on it (kernel FlowMerge).
+export const flowReadingFile = (lane, sha256, sha, env = process.env) => path.join(indexRoot(env), 'v1', lane, sha256.toLowerCase() + '.' + FLOW_ADAPTER + '.flow-' + sha + '.json');
+// Every served action that is a fixed point keeps its read (written once: the file is named by its content); a store that
+// cannot be written only loses the merge (the edit is then refused with the current text, as before).
+function keepReadings(lane, sha256, served, actions) {
+  const folder = path.dirname(served);
+  for (const action of actions) {
+    if (!action?.fixedPoint) continue;
+    const reading = flowReadingOf(action, lane, sha256);
+    const file = path.join(folder, sha256.toLowerCase() + '.' + FLOW_ADAPTER + '.flow-' + reading.textSha + '.json');
+    try {
+      if (fs.existsSync(file)) continue;
+      const temporary = file + '.' + process.pid + '.' + randomUUID() + '.tmp';
+      fs.writeFileSync(temporary, JSON.stringify(reading));
+      fs.renameSync(temporary, file);
+    } catch { /* the merge is lost for this read, nothing else */ }
+  }
+}
 export const richFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), 'v1', lane, sha256.toLowerCase() + '.' + RICH_ADAPTER + '.rich.json');
 // C15: the registry of canonical captures by content (oml-content-sha.mjs canonicalCapture), beside the index store.
 export const contentRegistry = (lane, env = process.env) => path.join(indexRoot(env), 'v1', lane, 'content');
@@ -186,23 +235,42 @@ export const DEFAULT_MAP_BUDGET = (env = process.env) => {
 function mapRequest(input) {
   const lane = input.lane ?? 'odc';
   if (!['odc', 'o11'].includes(lane)) throw new Error('Unknown lane ' + lane + '; lanes: odc, o11');
-  const view = input.view ?? 'map';
-  if (!VIEWS.includes(view)) throw new Error('view must be one of: ' + VIEWS.join(', ') + ' (map: the elements with their @keys; digest: the whole module as text, in pages; search: text in expressions and values; uses: who uses an element)');
+  const view = VIEW_ALIASES[input.view] ?? input.view ?? 'map';
+  if (!VIEWS.includes(view)) throw new Error('view must be one of: ' + VIEWS.join(', ') + ' (map: the elements with their @keys; digest: the whole module as text, in pages; ddl: the module data as DDL with @keys, in pages; flow: one action as text, whole; search: text in expressions and values; uses: who uses an element; html: one screen or block as ssam-html/1)');
   const rich = RICH_VIEWS.includes(view);
   const targets = Array.isArray(input.target) ? input.target : [input.target];
   if (Array.isArray(input.target) && !rich) throw new Error('a list of targets belongs to views "search" and "uses"; view "' + view + '" reads one capture or module');
   if (!targets.length || targets.length > MAX_TARGETS || targets.some(t => typeof t !== 'string' || !t.trim()))
     throw new Error('target is required: a capture .oml or an open module name' + (rich ? ', or a list of 1 to ' + MAX_TARGETS + ' of them (the modules of one app)' : '') + '. ' + MAP_USAGE);
   for (const name of ['kind', 'name', 'prefix', 'role', 'parent', 'key', 'text', 'property', 'element'])
-    if (input[name] != null && (typeof input[name] !== 'string' || !input[name])) throw new Error(name + ' must be a non-empty string');
+    if (input[name] != null && (typeof input[name] !== 'string' || !input[name]) && !(name === 'element' && view === 'flow' && Array.isArray(input[name])))
+      throw new Error(name + ' must be a non-empty string');
   const hashes = input.expectedSourceSha256 == null ? [] : Array.isArray(input.expectedSourceSha256) ? input.expectedSourceSha256 : [input.expectedSourceSha256];
   if (hashes.some(h => typeof h !== 'string' || !/^[a-fA-F0-9]{64}$/.test(h))) throw new Error('expectedSourceSha256 must be 64 hexadecimal characters' + (rich ? ' (or a list of them, one per target)' : ''));
   if (Array.isArray(input.expectedSourceSha256) && (!Array.isArray(input.target) || hashes.length !== targets.length))
     throw new Error('expectedSourceSha256 as a list needs a list target with one hash per target (' + targets.length + ')');
   const offset = integer('offset', input.offset, 0, Number.MAX_SAFE_INTEGER, 0);
-  const richOnly = ['text', 'property', 'element'].filter(k => input[k] != null);
+  const richOnly = ['text', 'property', ...(view === 'ddl' || view === 'flow' ? [] : ['element'])].filter(k => input[k] != null);
+  // A list of elements is one answer of whole actions (view flow); every other view reads one element.
+  if (Array.isArray(input.element) && view !== 'flow') throw new Error('element as a list belongs to view "flow" (several actions read whole in one answer); view "' + view + '" takes one element');
   if (input.regex === true) richOnly.push('regex');
   if (!rich && richOnly.length) throw new Error(richOnly.join(', ') + ' belong to views "search" (text, regex, property) and "uses" (element)');
+  if (view === 'flow') {
+    // One action by element (its text, in pages when it is larger than the budget), else the list of the actions.
+    const mapOnly = ['kind', 'name', 'prefix', 'role', 'parent', 'key'].filter(k => input[k] != null);
+    if (mapOnly.length) throw new Error('view "flow" reads one action by element (@key, Flow/Screen/Action or the action name) or lists the actions; '
+      + mapOnly.join(', ') + ' belong to view "map"');
+    if (input.page != null && input.element == null) throw new Error('page belongs to an action of view "flow" (element); the list pages with offset and max');
+    // A list of elements reads several actions whole in one answer (the ones a job will edit together).
+    if (Array.isArray(input.element)) {
+      if (input.element.length === 0 || input.element.length > MAX_FLOW_ELEMENTS || !input.element.every(e => typeof e === 'string' && e.trim().length))
+        throw new Error('element is one action, or a list of 1 to ' + MAX_FLOW_ELEMENTS + ' actions (@key, Flow/Screen/Action or the action name)');
+      if (input.page != null) throw new Error('page belongs to one element; a list of elements answers whole actions (the ones that do not fit come in continuations.next)');
+    }
+    return { lane, target: input.target, view, element: input.element, page: integer('page', input.page, 1, 100000, 1), offset, max: integer('max', input.max, 1, 500, 100),
+      budgetBytes: integer('budgetBytes', input.budgetBytes, 2000, 1048576, DEFAULT_MAP_BUDGET()), includeDetail: input.includeDetail === true,
+      expectedSourceSha256: input.expectedSourceSha256?.toLowerCase(), pid: input.pid };
+  }
   if (rich) {
     // The rich views filter by kind and role and page with offset and max; the map's own filters would read as a scope
     // they do not have.
@@ -227,13 +295,36 @@ function mapRequest(input) {
       budgetBytes: integer('budgetBytes', input.budgetBytes, 2000, 1048576, DEFAULT_MAP_BUDGET()),
       expectedSourceSha256: Array.isArray(input.expectedSourceSha256) ? hashes.map(h => h.toLowerCase()) : hashes[0]?.toLowerCase(), pid: input.pid };
   }
+  if (view !== 'html' && (input.screen != null || input.keys === true)) throw new Error('screen and keys belong to view "html" (one screen or block as ssam-html/1)');
+  if (view === 'html') {
+    // One screen or block: the map's filters and paging would read as a filtered page, which it is not.
+    const mapOnly = ['kind', 'name', 'prefix', 'role', 'parent', 'key'].filter(k => input[k] != null);
+    if (input.includeDetail === true) mapOnly.push('includeDetail');
+    if (offset > 0) mapOnly.push('offset');
+    if (mapOnly.length) throw new Error('view "html" reads one screen or block (screen) in pages (page); ' + mapOnly.join(', ') + ' belong to view "map"');
+    if (input.screen != null && (typeof input.screen !== 'string' || !input.screen.trim())) throw new Error('screen must be a non-empty string: a screen or block name, Kind:Name or @key');
+    if (input.page != null && input.screen == null) throw new Error('page needs screen: the pages are those of one screen or block');
+    return { lane, target: input.target, view, screen: input.screen?.trim() ?? null, page: integer('page', input.page, 1, 100000, 1),
+      includeKeys: input.keys === true, budgetBytes: integer('budgetBytes', input.budgetBytes, 2000, 1048576, DEFAULT_MAP_BUDGET()),
+      expectedSourceSha256: input.expectedSourceSha256?.toLowerCase(), pid: input.pid };
+  }
+  if (view === 'ddl') {
+    // The data text pages whole blocks; element reads one of them. The map's filters would read as a filter it does not have.
+    const mapOnly = ['kind', 'name', 'prefix', 'role', 'parent', 'key'].filter(k => input[k] != null);
+    if (input.includeDetail === true) mapOnly.push('includeDetail');
+    if (offset > 0) mapOnly.push('offset');
+    if (mapOnly.length) throw new Error('view "ddl" pages the data text by whole blocks; ' + mapOnly.join(', ') + ' belong to view "map". Use element (a name or @key) for one entity, structure, variable or timer, and page to move through the text.');
+    return { lane, target: input.target, view, page: integer('page', input.page, 1, 100000, 1), element: input.element,
+      budgetBytes: integer('budgetBytes', input.budgetBytes, 2000, 1048576, DEFAULT_MAP_BUDGET()),
+      expectedSourceSha256: input.expectedSourceSha256?.toLowerCase(), pid: input.pid };
+  }
   if (view === 'digest') {
     // The digest pages the whole module: the map's filters and paging would read as a filtered digest, which it is not.
     const mapOnly = ['kind', 'name', 'prefix', 'role', 'parent', 'key'].filter(k => input[k] != null);
     if (input.includeDetail === true) mapOnly.push('includeDetail');
     if (offset > 0) mapOnly.push('offset');
     if (mapOnly.length) throw new Error('view "digest" pages the whole module digest; ' + mapOnly.join(', ') + ' belong to view "map". Use page to move through the digest.');
-  } else if (input.page != null) throw new Error('page belongs to view "digest" (the module digest in pages); the map pages with offset and max');
+  } else if (input.page != null) throw new Error('page belongs to view "digest" (the module digest in pages) or view "ddl" (the data text in pages); the map pages with offset and max');
   if (view === 'map' && input.kind != null && !kindList(input.kind).length) throw new Error('kind must name a kind, or a list of them (A|B or A,B)');
   return { lane, target: input.target, view, page: view === 'digest' ? integer('page', input.page, 1, 100000, 1) : undefined,
     kind: input.kind, name: input.name, prefix: input.prefix, role: input.role, parent: input.parent, key: input.key,
@@ -245,14 +336,15 @@ export function parseMapArguments(args) {
   const input = {};
   const values = { '--lane': 'lane', '--kind': 'kind', '--name': 'name', '--prefix': 'prefix', '--role': 'role', '--parent': 'parent', '--key': 'key',
     '--offset': 'offset', '--max': 'max', '--budget': 'budgetBytes', '--expectedSourceSha256': 'expectedSourceSha256', '--oml': 'target', '--pid': 'pid',
-    '--page': 'page', '--view': 'view', '--text': 'text', '--property': 'property', '--element': 'element' };
-  // --digest, --search <text> and --uses <element> name their view; a second view word disagrees.
-  const views = { '--digest': ['digest'], '--search': ['search', 'text'], '--uses': ['uses', 'element'] };
+    '--page': 'page', '--view': 'view', '--text': 'text', '--property': 'property', '--element': 'element', '--screen': 'screen' };
+  // --digest, --ddl, --flow, --html, --search <text> and --uses <element> name their view; a second view word disagrees.
+  const views = { '--digest': ['digest'], '--ddl': ['ddl'], '--flow': ['flow'], '--search': ['search', 'text'], '--uses': ['uses', 'element'], '--html': ['html'] };
   const targets = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--detail') { input.includeDetail = true; continue; }
     if (arg === '--regex') { input.regex = true; continue; }
+    if (arg === '--keys') { input.keys = true; continue; }
     if (views[arg]) {
       const [view, field] = views[arg];
       if (input.view != null && input.view !== view) throw new Error(arg + ' and --view ' + input.view + ' disagree');
@@ -269,6 +361,8 @@ export function parseMapArguments(args) {
       const value = args[++i];
       if (value == null || value.startsWith('--')) throw new Error('Missing value for ' + arg);
       if (values[arg] === 'target') { targets.push(value); continue; }
+      // --flow reads several actions with --element repeated (checked once the view is known, below).
+      if (values[arg] === 'element' && 'element' in input) { input.element = [].concat(input.element, value); continue; }
       if (values[arg] in input && !(values[arg] === 'view' && input.view === value)) throw new Error('Duplicate ' + arg);
       input[values[arg]] = value; continue;
     }
@@ -276,6 +370,7 @@ export function parseMapArguments(args) {
     targets.push(arg);
   }
   if (!targets.length) throw new Error(MAP_USAGE);
+  if (Array.isArray(input.element) && input.view !== 'flow') throw new Error('Duplicate --element (a list of elements belongs to --flow)');
   // Several targets only for search and uses (one app's modules); the other views refuse a list with their own words.
   if (targets.length > 1 && !RICH_VIEWS.includes(input.view)) throw new Error('map takes one target; ' + MAP_USAGE);
   input.target = targets.length > 1 ? targets : targets[0];
@@ -297,6 +392,19 @@ async function captureOf(q, deps) {
 const expectedHolds = (q, { sha256, canonical, captured }) =>
   !q.expectedSourceSha256 || [sha256, canonical.contentSha256, ...(canonical.reused ? [sha256Of(captured)] : [])].includes(q.expectedSourceSha256);
 
+// A budget below the smallest page of the data text or of the module digest has one meaning (owner session 2026-10-12: a
+// read refused "use at least 13353" and was sent again): the page is read at that smallest budget, listed in normalizations.
+const MINIMUM_PAGE = /budgetBytes (\d+) leaves no room for a page of the [\w ]+?; use at least (\d+)/;
+async function atLeastAPage(answer, q) {
+  try { return await answer(q); } catch (error) {
+    const m = MINIMUM_PAGE.exec(String(error?.message ?? ''));
+    const need = m ? Number(m[2]) : NaN;
+    if (!m || !(need > q.budgetBytes) || need > 1048576) throw error;
+    const value = await answer({ ...q, budgetBytes: need });
+    return withNormalizationsOf(value, [{ rule: 'budget-minimum', at: '/budgetBytes', note: `budgetBytes ${q.budgetBytes} leaves no room for a page; read at ${need}, the smallest page` }]);
+  }
+}
+
 export async function moduleMap(input = {}, deps = {}) {
   const { read = readSnapshot, prepare = ensureBuilder, reader = {}, env = process.env } = deps;
   const started = performance.now();
@@ -310,7 +418,10 @@ export async function moduleMap(input = {}, deps = {}) {
     const { sha256, canonical, captured, snapshot } = target;
     const hashMs = performance.now() - started;
     if (!expectedHolds(q, target)) throw new Error(CHANGED);
-    if (q.view === 'digest') return await digestAnswer(q, { file, sha256, canonical, captured, snapshot, started, hashMs, read, reader, env });
+    if (q.view === 'digest') return await atLeastAPage(r => digestAnswer(r, { file, sha256, canonical, captured, snapshot, started, hashMs, read, reader, env }), q);
+    if (q.view === 'html') return await htmlAnswer(q, { file, sha256, canonical, captured, snapshot, started, hashMs, read, reader, env });
+    if (q.view === 'ddl') return await atLeastAPage(r => ddlAnswer(r, { file, sha256, canonical, captured, snapshot, started, hashMs, read, reader, env }), q);
+    if (q.view === 'flow') return await flowAnswer(q, { file, sha256, canonical, captured, snapshot, started, hashMs, read, reader, env });
     const stored = indexFile(q.lane, sha256, env);
     let index = loadIndex(stored, q.lane, sha256), served = stored, cache = { index: 'hit' }, ensureMs;
     if (!index) {
@@ -422,7 +533,7 @@ async function richAnswer(q, { deps, read, capture, reader, env, started }) {
     const properties = Object.entries(found.byProperty).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
     head = { schema: SEARCH_SCHEMA, fieldsSearched: found.fields, byModule: found.byModule, byProperty: Object.fromEntries(properties.slice(0, 25)),
       ...(properties.length > 25 ? { otherProperties: { properties: properties.length - 25, hits: properties.slice(25).reduce((s, [, v]) => s + v, 0) } } : {}) };
-    extra = { note: SEARCH_NOTE };
+    extra = { ...((q.page ?? 1) === 1 && (q.offset ?? 0) === 0 ? { note: SEARCH_NOTE } : {}) };
   } else {
     const resolved = resolveElement(captures, q);
     if (!resolved.ok) {
@@ -447,7 +558,7 @@ async function richAnswer(q, { deps, read, capture, reader, env, started }) {
       consumers: new Set(edges.map(e => e.c + ':' + e.from)).size, direct: edges.filter(e => e.direct).length, descendant: edges.filter(e => !e.direct).length,
       crossModule: edges.filter(e => e.cross).length, byModule: count(edges, e => captures[e.c].rich.module.name),
       byConsumerKind: count(edges, e => captures[e.c].rich.types[captures[e.c].rich.rows[e.from][1]].kind) };
-    extra = { note: USES_NOTE };
+    extra = { ...((q.page ?? 1) === 1 && (q.offset ?? 0) === 0 ? { note: USES_NOTE } : {}) };
   }
   const queryMs = performance.now() - queryStarted;
   const total = all.length;
@@ -481,6 +592,132 @@ async function richAnswer(q, { deps, read, capture, reader, env, started }) {
   return result;
 }
 
+// ---- the flow view: one action of the capture as ssam-flow/1 (module-flow.mjs), or the list of its actions. A miss asks
+// the lane's kernel reader to write the flow file ({"flow":"ensure"}) and reads the file it wrote; every continuation pins
+// this capture's file and hash.
+async function ensureFlow(lane, { file, sha256, read, reader, env }) {
+  const stored = flowFile(lane, sha256, env);
+  let loaded = loadFlow(stored, lane, sha256), served = stored, cache = { flow: 'hit' }, ensureMs;
+  if (!loaded) {
+    const phase = performance.now();
+    const config = digestReaderConfig(lane, { ...reader, env });
+    if (read === readSnapshot && !fs.existsSync(config.dll))
+      throw new Error('The ' + lane + ' kernel reader that writes the flow reading is not built: ' + config.dll + ' (scripts/setup-dev.ps1 builds it)');
+    const response = await read({ ...config, request: { file, flow: 'ensure', expectedSourceSha256: sha256 } });
+    const built = response.flow ?? response.data?.flow;
+    if (!built) throw new Error('The ' + lane + ' reader answered without a flow reading: its binaries predate ' + FLOW_SCHEMA + '; rebuild the reader');
+    loaded = loadFlow(stored, lane, sha256);
+    // A reader started under another store root (SSAM_MODULE_INDEX_ROOT at its start) reports where it wrote.
+    const reported = typeof built.path === 'string' ? path.resolve(built.path) : null;
+    if (!loaded && reported && reported !== stored) { loaded = loadFlow(reported, lane, sha256); served = reported; }
+    if (!loaded) throw new Error('The flow reading of this capture is missing or invalid after the reader built it: ' + stored);
+    ensureMs = performance.now() - phase;
+    cache = { flow: 'ensured', built: built.built === true, ...(response.cache ? { loads: response.cache.loads, generation: response.cache.generation } : {}) };
+  }
+  return { loaded, served, cache, ensureMs };
+}
+
+async function flowAnswer(q, { file, sha256, canonical, captured, snapshot, started, hashMs, read, reader, env }) {
+  const { loaded, served, cache, ensureMs } = await ensureFlow(q.lane, { file, sha256, read, reader, env });
+  const { flow } = loaded;
+  const pin = { lane: q.lane, target: file, view: 'flow', budgetBytes: q.budgetBytes, expectedSourceSha256: sha256 };
+  const inspect = q.lane === 'odc'
+    ? { tool: 'studio_inspect', arguments: { target: file, path: '@<key>', expectedSourceSha256: sha256 } }
+    : { tool: 'o11_inspect', arguments: { oml: file, path: '@<key>', expectedSourceSha256: sha256 } };
+  const fixedPoint = flow.actions.filter(a => a.fixedPoint).length;
+  const head = { ok: true, lane: q.lane, target: q.target, file, sourceSha256: sha256, contentSha256: canonical.contentSha256,
+    ...(snapshot ? { snapshotSha256: snapshot.sha256 } : {}),
+    ...(snapshot?.capturedBy === PUBLISHED_CAPTURE ? { capturedBy: PUBLISHED_CAPTURE, versionId: snapshot.versionId ?? null } : {}),
+    module: flow.module, answeredBy: 'module-flow', store: { file: served, adapter: flow.adapter, extractor: flow.extractor, createdAt: flow.createdAt ?? null },
+    flow: { actions: flow.actions.length, fixedPoint, nodes: flow.actions.reduce((n, a) => n + a.nodes, 0) },
+    ...(canonical.reused ? { capture: { file: captured, reused: true, note: 'same content as the capture this answer reads (volatile header fields aside): its keys and index serve' } } : {}) };
+  const round = n => Math.round(n * 10) / 10;
+  const finish = answer => {
+    answer.cache = cache;
+    answer.size = { bytes: 0, budgetBytes: q.budgetBytes };
+    answer.timings = { hashMs: round(hashMs), ...(ensureMs != null ? { ensureMs: round(ensureMs) } : {}), totalMs: round(performance.now() - started) };
+    for (let i = 0; i < 3; i++) answer.size.bytes = Buffer.byteLength(JSON.stringify(answer), 'utf8');
+    return answer;
+  };
+  const entryOf = a => ({ name: a.name, kind: a.kind, key: a.key, bytes: Buffer.byteLength(a.text, 'utf8'), fixedPoint: a.fixedPoint });
+  if (q.element == null) {
+    // The list of the actions, in name order, paged by offset and max within the budget.
+    const all = flow.actions;
+    const page = all.slice(q.offset, q.offset + q.max).map(entryOf);
+    const answer = n => {
+      const nextOffset = q.offset + n < all.length ? q.offset + n : null;
+      return { ...head, schema: FLOW_INDEX_SCHEMA, count: all.length, offset: q.offset, returned: n, nextOffset, entries: page.slice(0, n),
+        continuations: { next: nextOffset != null ? { tool: 'ssam_map', arguments: { ...pin, offset: nextOffset, max: q.max } } : null,
+          action: { tool: 'ssam_map', arguments: { ...pin, element: '<name or @key>' } },
+          note: 'action reads one action as text (its name, Flow/Screen/Action or @key); next is the following page of this list' },
+        ...((q.page ?? 1) === 1 && (q.offset ?? 0) === 0 ? { note: FLOW_NOTE } : {}) };
+    };
+    const bytes = value => Buffer.byteLength(JSON.stringify(value), 'utf8') + 400;
+    let n = page.length;
+    while (n > 0 && bytes(answer(n)) > q.budgetBytes) n--;
+    return finish(answer(n));
+  }
+  if (Array.isArray(q.element)) return finish(flowList(q, flow, head, pin, inspect, finish, found => keepReadings(q.lane, sha256, served, found)));
+  const { matches, by } = findActions(flow, q.element);
+  if (matches.length !== 1) {
+    const candidates = (matches.length ? matches : similarActions(flow, q.element)).slice(0, 20).map(entryOf);
+    return finish({ ok: false, code: matches.length ? 'AMBIGUOUS_ELEMENT' : 'ELEMENT_NOT_FOUND', lane: q.lane, view: 'flow', target: q.target, file,
+      sourceSha256: sha256, element: q.element,
+      error: matches.length ? 'element "' + q.element + '" names ' + matches.length + ' actions of this capture (by ' + by + '); name one by its full name or @key'
+        : 'element "' + q.element + '" names no action of this capture (' + flow.module.name + ', ' + flow.actions.length + ' actions)',
+      ...(candidates.length ? { candidates } : {}),
+      continuation: candidates.length ? { tool: 'ssam_map', arguments: { ...pin, element: candidates[0].name }, why: 'the first candidate, by its full name' }
+        : { tool: 'ssam_map', arguments: pin, why: 'the list of the actions of this capture' } });
+  }
+  const action = matches[0];
+  keepReadings(q.lane, sha256, served, [action]);
+  const body = (text, pages, page = q.page) => ({ ...head, schema: FLOW_PAGE_SCHEMA,
+    action: { key: action.key, kind: action.kind, name: action.name, fixedPoint: action.fixedPoint, nodes: action.nodes, bytes: Buffer.byteLength(action.text, 'utf8'),
+      textSha: textSha(action.text), ...(action.fixedPoint ? {} : { problems: action.problems.slice(0, 20) }),
+      ...(Array.isArray(action.opaque) && action.opaque.length ? { opaque: action.opaque.slice(0, 20) } : {}) },
+    page, pages, text, ...(q.includeDetail ? { ids: action.ids } : {}),
+    continuations: { next: q.page < pages ? { tool: 'ssam_map', arguments: { ...pin, element: action.name, page: q.page + 1 } } : null,
+      list: { tool: 'ssam_map', arguments: pin }, inspect,
+      note: 'next is the following page of this action; ids (includeDetail) maps the @n/@p/@l ids to model keys for inspect' },
+    ...((q.page ?? 1) === 1 && (q.offset ?? 0) === 0 ? { note: FLOW_NOTE } : {}) });
+  const room = q.budgetBytes - Buffer.byteLength(JSON.stringify(finish({ ...body('', 99999, 99999), note: FLOW_NOTE })), 'utf8') - 64;
+  const pages = flowPages(action.text, room);
+  if (q.page > pages.length) throw new Error('page ' + q.page + ' does not exist: the text of ' + action.name + ' has ' + pages.length + ' page(s) at budgetBytes ' + q.budgetBytes);
+  return finish(body(pages[q.page - 1], pages.length));
+}
+
+// Several actions by a list of elements, each whole with its textSha, in the order asked, as many as fit the budget; the
+// rest come as continuations.next. Every element that names no action or several is answered at once, with candidates.
+function flowList(q, flow, head, pin, inspect, finish, keep = () => {}) {
+  const misses = [], found = [];
+  for (const element of q.element) {
+    const { matches, by } = findActions(flow, element);
+    if (matches.length === 1) { if (!found.some(a => a.key === matches[0].key)) found.push(matches[0]); continue; }
+    misses.push({ element, code: matches.length ? 'AMBIGUOUS_ELEMENT' : 'ELEMENT_NOT_FOUND', ...(by ? { by } : {}),
+      candidates: (matches.length ? matches : similarActions(flow, element)).slice(0, 10).map(a => a.name) });
+  }
+  if (misses.length)
+    return { ok: false, code: misses.length === 1 ? misses[0].code : 'ELEMENTS_NOT_FOUND', lane: q.lane, view: 'flow', target: q.target, file: head.file, sourceSha256: head.sourceSha256,
+      error: misses.length + ' of ' + q.element.length + ' elements name no single action of this capture (' + flow.module.name + '): '
+        + misses.map(m => m.element + (m.code === 'AMBIGUOUS_ELEMENT' ? ' (several)' : ' (none)')).join(', '),
+      misses, continuation: { tool: 'ssam_map', arguments: { ...pin, element: q.element.map(e => misses.find(m => m.element === e)?.candidates[0] ?? e) },
+        why: 'the same list with the first candidate of each miss (check that it is the action meant)' } };
+  const entry = a => ({ key: a.key, kind: a.kind, name: a.name, fixedPoint: a.fixedPoint, nodes: a.nodes, textSha: textSha(a.text),
+    ...(a.fixedPoint ? {} : { problems: a.problems.slice(0, 20) }), ...(q.includeDetail ? { ids: a.ids } : {}), text: a.text });
+  const answer = (n, rest) => ({ ...head, schema: FLOW_PAGE_SCHEMA, count: found.length, returned: n, actions: found.slice(0, n).map(entry),
+    continuations: { next: rest.length ? { tool: 'ssam_map', arguments: { ...pin, element: rest.map(a => a.name) } } : null, list: { tool: 'ssam_map', arguments: pin }, inspect,
+      note: 'next reads the actions of the list that did not fit this budget (one alone larger than the budget: read it by its element, in pages)' },
+    ...((q.page ?? 1) === 1 && (q.offset ?? 0) === 0 ? { note: FLOW_NOTE } : {}) });
+  let n = found.length;
+  while (n > 1 && Buffer.byteLength(JSON.stringify(finish(answer(n, found.slice(n)))), 'utf8') > q.budgetBytes) n--;
+  if (Buffer.byteLength(JSON.stringify(finish(answer(n, found.slice(n)))), 'utf8') > q.budgetBytes)
+    return { ok: false, code: 'BUDGET_TOO_SMALL', lane: q.lane, view: 'flow', target: q.target, file: head.file, sourceSha256: head.sourceSha256,
+      error: 'the action ' + found[0].name + ' alone is larger than budgetBytes ' + q.budgetBytes + ': read it by its element (in pages) or raise budgetBytes',
+      continuation: { tool: 'ssam_map', arguments: { ...pin, element: found[0].name } } };
+  keep(found.slice(0, n));
+  return answer(n, found.slice(n));
+}
+
 // ---- the digest view: one page of the module digest of the capture (module-digest.mjs). A miss asks the lane's kernel
 // reader to write it ({"digest":"ensure"}) and reads the file it wrote; every continuation pins this capture's file and hash.
 // The stored digest of a capture, or the one the lane's kernel reader writes on a miss: {loaded: {digest, stamp}, served,
@@ -505,6 +742,69 @@ async function ensureDigest(lane, { file, sha256, read, reader, env }) {
     cache = { digest: 'ensured', built: built.built === true, ...(response.cache ? { loads: response.cache.loads, generation: response.cache.generation } : {}) };
   }
   return { loaded, served, cache, ensureMs };
+}
+
+// ---- the ddl view: one page of the data text of the capture (module-ddl.mjs), or of one element's block. A miss asks the
+// lane's kernel reader to write it ({"ddl":"ensure"}) and reads the file it wrote; every continuation pins this capture.
+async function ensureDdl(lane, { file, sha256, read, reader, env }) {
+  const stored = ddlFile(lane, sha256, env);
+  let loaded = loadDdl(stored, lane, sha256), served = stored, cache = { ddl: 'hit' }, ensureMs;
+  if (!loaded) {
+    const phase = performance.now();
+    const config = digestReaderConfig(lane, { ...reader, env });
+    if (read === readSnapshot && !fs.existsSync(config.dll))
+      throw new Error('The ' + lane + ' kernel reader that writes the data text is not built: ' + config.dll + ' (scripts/setup-dev.ps1 builds it)');
+    const response = await read({ ...config, request: { file, ddl: 'ensure', expectedSourceSha256: sha256 } });
+    const built = response.ddl ?? response.data?.ddl;
+    if (!built) throw new Error('The ' + lane + ' reader answered without a data text: its binaries predate ' + DDL_SCHEMA + '; rebuild the reader');
+    loaded = loadDdl(stored, lane, sha256);
+    // A reader started under another store root (SSAM_MODULE_INDEX_ROOT at its start) reports where it wrote.
+    const reported = typeof built.path === 'string' ? path.resolve(built.path) : null;
+    if (!loaded && reported && reported !== stored) { loaded = loadDdl(reported, lane, sha256); served = reported; }
+    if (!loaded) throw new Error('The data text of this capture is missing or invalid after the reader built it: ' + stored);
+    ensureMs = performance.now() - phase;
+    cache = { ddl: 'ensured', built: built.built === true, ...(response.cache ? { loads: response.cache.loads, generation: response.cache.generation } : {}) };
+  }
+  return { loaded, served, cache, ensureMs };
+}
+
+async function ddlAnswer(q, { file, sha256, canonical, captured, snapshot, started, hashMs, read, reader, env }) {
+  const { loaded, served, cache, ensureMs } = await ensureDdl(q.lane, { file, sha256, read, reader, env });
+  const { ddl, stamp } = loaded;
+  const pin = { lane: q.lane, target: file, view: 'ddl', budgetBytes: q.budgetBytes, expectedSourceSha256: sha256 };
+  if (q.element != null) {
+    const found = selectBlocks(ddl, q.element);
+    if (!found.length) {
+      const near = ddl.blocks.filter(b => b.name.toLowerCase().includes(q.element.replace(/^@/, '').toLowerCase())).slice(0, 20)
+        .map(b => ({ section: b.section, kind: b.kind, name: b.name, key: b.key }));
+      return { ok: false, code: 'ELEMENT_NOT_FOUND', lane: q.lane, view: 'ddl', target: q.target, file, sourceSha256: sha256, element: q.element,
+        error: 'element "' + q.element + '" names no entity, structure, variable or timer of this capture (' + ddl.module.name + ')',
+        ...(near.length ? { candidates: near } : {}), continuation: { tool: 'ssam_map', arguments: pin, why: 'the whole data text, page 1' } };
+    }
+  }
+  const laid = ddlPages(ddl, { budgetBytes: q.budgetBytes, element: q.element ?? null, key: served + '|' + stamp });
+  if (q.page > laid.pages.length)
+    throw new Error('page ' + q.page + ' does not exist: the data text' + (q.element != null ? ' of ' + q.element : '') + ' has ' + laid.pages.length + ' page(s) at budgetBytes ' + q.budgetBytes);
+  const inspect = q.lane === 'odc'
+    ? { tool: 'studio_inspect', arguments: { target: file, path: '@<key>', expectedSourceSha256: sha256 } }
+    : { tool: 'o11_inspect', arguments: { oml: file, path: '@<key>', expectedSourceSha256: sha256 } };
+  const elementPin = q.element != null ? { ...pin, element: q.element } : pin;
+  const answer = { ok: true, schema: DDL_PAGE_SCHEMA, lane: q.lane, target: q.target, file, sourceSha256: sha256, contentSha256: canonical.contentSha256,
+    ...(snapshot ? { snapshotSha256: snapshot.sha256 } : {}),
+    ...(snapshot?.capturedBy === PUBLISHED_CAPTURE ? { capturedBy: PUBLISHED_CAPTURE, versionId: snapshot.versionId ?? null } : {}),
+    module: ddl.module, answeredBy: 'data-ddl', ...(q.element != null ? { element: q.element } : {}),
+    store: { file: served, adapter: ddl.adapter, extractor: ddl.extractor, createdAt: ddl.createdAt ?? null },
+    ...ddlBody(ddl, laid, q.page), cache,
+    ...(canonical.reused ? { capture: { file: captured, reused: true, note: 'same content as the capture this answer reads (volatile header fields aside): its keys and index serve' } } : {}),
+    continuations: { next: q.page < laid.pages.length ? { tool: 'ssam_map', arguments: { ...elementPin, page: q.page + 1 } } : null,
+      page: { tool: 'ssam_map', arguments: { ...elementPin, page: '<n>' } }, element: { tool: 'ssam_map', arguments: { ...pin, element: '<name or @key>' } }, inspect,
+      note: 'next is the following page; page reads any page (same capture, same budget); element reads one entity, structure, variable or timer; inspect reads an @key with this hash' },
+    ...((q.page ?? 1) === 1 && (q.offset ?? 0) === 0 ? { note: DDL_NOTE } : {}) };
+  const round = n => Math.round(n * 10) / 10;
+  answer.size = { bytes: 0, budgetBytes: q.budgetBytes };
+  answer.timings = { hashMs: round(hashMs), ...(ensureMs != null ? { ensureMs: round(ensureMs) } : {}), totalMs: round(performance.now() - started) };
+  for (let i = 0; i < 3; i++) answer.size.bytes = Buffer.byteLength(JSON.stringify(answer), 'utf8');
+  return answer;
 }
 
 // The whole module digest of a target, unpaged (the work packet of ssam_discover, work-packet.mjs): the same target rules,
@@ -548,7 +848,7 @@ async function digestAnswer(q, { file, sha256, canonical, captured, snapshot, st
     continuations: { next: q.page < laid.pages.length ? { tool: 'ssam_map', arguments: { ...pin, page: q.page + 1 } } : null,
       page: { tool: 'ssam_map', arguments: { ...pin, page: '<n>' } }, inspect,
       note: 'next is the following page; page reads any page of contents (same capture, same budget); inspect reads an @key with this hash' },
-    note: DIGEST_NOTE };
+    ...((q.page ?? 1) === 1 && (q.offset ?? 0) === 0 ? { note: DIGEST_NOTE } : {}) };
   const round = n => Math.round(n * 10) / 10;
   answer.size = { bytes: 0, budgetBytes: q.budgetBytes };
   answer.timings = { hashMs: round(hashMs), ...(ensureMs != null ? { ensureMs: round(ensureMs) } : {}), totalMs: round(performance.now() - started) };
@@ -559,6 +859,87 @@ async function digestAnswer(q, { file, sha256, canonical, captured, snapshot, st
 
 // A refusal of the map with its own code (G11: KEY_UNRESOLVED); the catch of moduleMap keeps its fields.
 const refusal = (code, message) => Object.assign(new Error(message), { refusal: { code } });
+
+// ---- the html view: one screen or block as ssam-html/1, read by the lane's kernel reader (the digest's reader: on ODC the
+// kernel's anvil-odc read-serve, whose Model API shows widgets as the digest does). The reader keeps the capture and its
+// module reading loaded, so the next screen of the same capture reads in milliseconds; it stores the key table of each
+// reading beside the capture's index (keysFile). Pages are whole lines within budgetBytes.
+export function htmlPages(text, budget) {
+  const lines = text.split('\n'); if (lines.at(-1) === '') lines.pop();
+  const pages = []; let from = 0, bytes = 0;
+  lines.forEach((line, i) => {
+    // As the line travels in the answer: JSON-escaped (a quote is two bytes), with its newline (\n, two bytes).
+    const size = Buffer.byteLength(JSON.stringify(line), 'utf8');
+    if (i > from && bytes + size > budget) { pages.push([from, i]); from = i; bytes = 0; }
+    bytes += size;
+  });
+  pages.push([from, lines.length]);
+  return { lines, pages };
+}
+
+// The delivery of an edit of this reading (C2): the html op in its edit form, in the lane's deliver tool. On ODC the
+// studio_deliver of the ssam server needs feature, module, owners and changes with a job (only a prototype job takes them
+// from the prototype): the call carries them, the screen as its owner.
+export function editCall(lane, html, sha256) {
+  const op = { op: 'html', data: { screen: html.root, basedOn: { capture: sha256, html: html.htmlSha256 }, edit: ['<the changed element, whole, with its k>'] } };
+  return lane === 'o11'
+    ? { tool: 'o11_deliver', arguments: { module: html.model ?? '<module>', job: { ops: [op] } } }
+    : { tool: 'studio_deliver', arguments: { feature: html.root + ' (change)', module: html.model ?? '<module>', job: { ops: [op] }, owners: [html.root], changes: ['<what changes in the screen>'] } };
+}
+
+async function htmlAnswer(q, { file, sha256, canonical, captured, snapshot, started, hashMs, read, reader, env }) {
+  const config = digestReaderConfig(q.lane, { ...reader, env });
+  if (read === readSnapshot && !fs.existsSync(config.dll))
+    throw new Error('The ' + q.lane + ' kernel reader that writes ssam-html/1 is not built: ' + config.dll + ' (scripts/setup-dev.ps1 builds it)');
+  const phase = performance.now();
+  const response = await read({ ...config, request: { file, html: q.screen ?? '', keys: q.includeKeys, expectedSourceSha256: sha256 } });
+  const html = response.html ?? response.data?.html;
+  if (!html) throw new Error('The ' + q.lane + ' reader answered without ' + HTML_SCHEMA + ': its binaries predate it; rebuild the reader');
+  const readMs = performance.now() - phase;
+  const round = n => Math.round(n * 10) / 10;
+  const pin = { lane: q.lane, target: file, view: 'html', expectedSourceSha256: sha256 };
+  const head = { ok: true, schema: HTML_SCHEMA, lane: q.lane, target: q.target, file, sourceSha256: sha256, contentSha256: canonical.contentSha256,
+    ...(snapshot ? { snapshotSha256: snapshot.sha256 } : {}),
+    ...(canonical.reused ? { capture: { file: captured, reused: true, note: 'same content as the capture this answer reads (volatile header fields aside): its keys serve' } } : {}),
+    module: html.model ?? null };
+  const timings = () => ({ hashMs: round(hashMs), readMs: round(readMs), ...(response.timings?.readMs != null ? { kernelReadMs: round(response.timings.readMs) } : {}),
+    totalMs: round(performance.now() - started) });
+  if (!q.screen) {
+    const roots = html.roots ?? [];
+    return { ...head, roots, count: roots.length,
+      continuations: { screen: { tool: 'ssam_map', arguments: { ...pin, screen: '<name>' } }, note: 'screen reads one of them as ssam-html/1' },
+      timings: timings() };
+  }
+  const inspect = q.lane === 'odc'
+    ? { tool: 'studio_inspect', arguments: { target: file, path: '@<key>', expectedSourceSha256: sha256 } }
+    : { tool: 'o11_inspect', arguments: { oml: file, path: '@<key>', expectedSourceSha256: sha256 } };
+  const shape = (page, pages, from, to, total, text) => ({ ...head, screen: html.root, kind: html.rootKind, key: html.rootKey, htmlSha256: html.htmlSha256,
+    basedOn: { capture: sha256, html: html.htmlSha256 }, bytes: html.bytes, elements: html.elements, widgets: html.widgets,
+    opaqueWidgets: html.opaqueWidgets, ...(html.keysFile ? { keysFile: html.keysFile } : {}), ...(html.problems ? { problems: html.problems } : {}),
+    page, pages, lines: { from: from + 1, to, total }, html: text, ...(q.includeKeys && html.keys ? { keys: html.keys } : {}),
+    continuations: { next: page < pages ? { tool: 'ssam_map', arguments: { ...pin, screen: q.screen, page: page + 1 } } : null,
+      keys: q.includeKeys ? null : { tool: 'ssam_map', arguments: { ...pin, screen: q.screen, keys: true } }, inspect,
+      // WIRED (text-routes.mjs): the edit form of the html op is offered only while its way back is wired.
+      edit: WIRED['ui.screen-html-edit'] === true ? editCall(q.lane, html, sha256) : null,
+      note: 'next is the following page of the same screen; keys returns the k -> ObjectKey table inline; inspect reads an @key with this hash; '
+        + (WIRED['ui.screen-html-edit'] === true ? 'edit is the delivery of a change of this reading (only the changed elements, with their k)'
+          : 'edit is null: the way back of ssam-html/1 is not wired in this server (a change goes by the JSON form of the op, the matches of ssam_discover)') },
+    ...((q.page ?? 1) === 1 && (q.offset ?? 0) === 0 ? { note: HTML_NOTE } : {}), size: { bytes: 0, budgetBytes: q.budgetBytes }, timings: timings() });
+  // The text of a page gets what the budget leaves after the rest of the answer, measured on the answer itself (a middle
+  // page, with every field and continuation) plus room for the digits that change. A line longer than that is a page alone.
+  // Keep page boundaries independent of whether this request reused the capture and of
+  // its timings. Later pages omit the fixed note but use the same layout as page one.
+  const { capture: _capture, timings: _timings, ...pageEnvelope } = shape(99999, 100000, 99999, 99999, 99999, '');
+  const overhead = Buffer.byteLength(JSON.stringify({ ...pageEnvelope, note: HTML_NOTE,
+    capture: { file: captured, reused: true, note: 'same content as the capture this answer reads (volatile header fields aside): its keys serve' },
+    timings: { hashMs: 999999, readMs: 999999, kernelReadMs: 999999, totalMs: 999999 } }), 'utf8') + 64;
+  const laid = htmlPages(html.html, Math.max(1000, q.budgetBytes - overhead));
+  if (q.page > laid.pages.length) throw new Error('page ' + q.page + ' does not exist: this screen has ' + laid.pages.length + ' page(s) at budgetBytes ' + q.budgetBytes);
+  const [from, to] = laid.pages[q.page - 1];
+  const answer = shape(q.page, laid.pages.length, from, to, laid.lines.length, laid.lines.slice(from, to).join('\n') + '\n');
+  for (let i = 0; i < 3; i++) answer.size.bytes = Buffer.byteLength(JSON.stringify(answer), 'utf8');
+  return answer;
+}
 
 function present(index, q, { file, sha256, stored, cache, snapshot }) {
   const { rows, types, roles } = index;

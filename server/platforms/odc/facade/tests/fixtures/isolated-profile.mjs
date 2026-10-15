@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+export const originalLocalAppData = process.env.LOCALAPPDATA;
 export const isolatedProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-test-profile-'));
 const home = path.join(isolatedProfile, 'home');
 for (const dir of [home, path.join(home, 'AppData', 'Local'), path.join(home, 'AppData', 'Roaming'), path.join(isolatedProfile, 'authority')])

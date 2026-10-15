@@ -25,7 +25,8 @@ import {A2A_TEST,A2A_SAVE,a2aConnectionApproval} from './a2a-connection-approval
 import {CUSTOM_SEARCH_TEST,CUSTOM_SEARCH_SAVE,customSearchConnectionApproval} from './custom-search-connection-approval.mjs';
 import {customSearchConnectionObservation} from './custom-search-connection-observation.mjs';
 import {customSearchDeleteApproval} from './custom-search-delete-approval.mjs';
-import {A2A_DISCOVER,a2aDiscoveryApproval,a2aDiscoveryOutcome} from './a2a-discovery.mjs';
+import {A2A_DISCOVER,a2aDiscoveryApproval,a2aDiscoveryOutcome,a2aDiscoveryContinuation} from './a2a-discovery.mjs';
+import {a2aConnectionPlan,rejectRedactedA2aCard} from './a2a-connection-plan.mjs';
 import {readA2aCleanupMetadata,readA2aProvisionalState} from './a2a-cleanup-metadata.mjs';
 import {connectionDeleteObservation} from './connection-delete-observation.mjs';
 import {portfolioRenameApproval,portfolioRenameObservation,PORTFOLIOS} from './portfolio-rename.mjs';
@@ -80,7 +81,8 @@ import { timerRunState } from './timer-run-state.mjs';
 import { executeMcpImport, observeMcpImport, planMcpImport } from './mcp-import.mjs';
 import { readPendingTimer } from './timer-pending-state.mjs';
 import { readTimerDeployment } from './timer-deployment-state.mjs';
-import { fail, publicError, redact } from './errors.mjs';
+import { fail, publicError, redactValues } from './errors.mjs';
+import { projectForAgent, trustedProjection } from './agent-projection.mjs';
 import { DEPLOY, OPERATION_STATUS, TARGET_NAMES, effectOf, readable } from './effects.mjs';
 import { isUuid, sha256, fingerprint } from './write-journal.mjs';
 import { withOperationLog } from './operation-log.mjs';
@@ -136,6 +138,25 @@ export class OdcAccess {
   }
 
   // ---- tenants and the Studio
+  a2aConnectionPlan({discoveryOperationUuid,tenant,...input}) {
+    rejectRedactedA2aCard(input.card);
+    if(input.configurationType==='url'&&!discoveryOperationUuid)
+      fail('A2A_DISCOVERY_REQUIRED','URL mode requires discoveryOperationUuid of a confirmed A2A discovery receipt. Prepare the plan from that receipt without copying the displayed card.');
+    if(!discoveryOperationUuid)return a2aConnectionPlan(input);
+    const discovery=isUuid(discoveryOperationUuid)?this.receipts?.lookup(discoveryOperationUuid):null;
+    const expected=discovery?.reconciliation?.a2aDiscovery;
+    let agentUrl;try{agentUrl=new URL(input.agentUrl).href;}catch{agentUrl=null;}
+    if(discovery?.state!=='confirmed'||discovery.identity?.kind!=='odc-portal'
+      ||discovery.identity.operationId!==A2A_DISCOVER||!HOST.test(discovery.identity.tenant??'')
+      ||tenant!==undefined&&tenant!==discovery.identity.tenant||!discovery.response?.card
+      ||fingerprint(discovery.response.card)!==discovery.response.cardSha256
+      ||expected?.name!==input.name||expected?.stageKey!==input.stage?.Key||expected?.agentUrl!==agentUrl)
+      fail('A2A_DISCOVERY_INVALID','The confirmed A2A discovery receipt must match the tenant, connection name, stage and agent base URL. No request was sent.');
+    if(input.card!==undefined&&fingerprint(input.card)!==fingerprint(discovery.response.card))
+      fail('A2A_DISCOVERY_CARD_MISMATCH','The supplied card differs from the confirmed discovery receipt. Omit card and prepare the plan using discoveryOperationUuid.');
+    return {...a2aConnectionPlan({...input,card:discovery.response.card},{receiptCard:true}),discoveryOperationUuid};
+  }
+
   tenantInfo(host) {
     const entry = this.tenants.tenants?.[host];
     return { host, known: Boolean(entry), class: entry?.class ?? 'unknown', readOnly: entry?.readOnly === true, label: entry?.label ?? null };
@@ -278,6 +299,9 @@ export class OdcAccess {
         return refusal(code, needsSelection ? 'The selected profile was unavailable or rejected. Choose or add a profile privately; nothing was resubmitted.'
           : 'The selected profile could not authenticate without interaction; no window was opened.',
           { host, stage: 'authentication', auth: { path: 'vault', host, user: selected.principal },
+            ...(result?.authentication ? { authentication: pick(result.authentication, ['stage', 'cognitoEnabled', 'srpConfigured', 'redirectAvailable']) } : {}),
+            ...(result?.error?.identityStage || result?.error?.identityHttpStatus ? { identity: pick(result.error, ['identityStage', 'identityHttpStatus']) } : {}),
+            ...(result?.error?.code === 'PORTAL_LOGIN_PROVIDER_UNSUPPORTED' ? { provider: pick(result.error, ['reason', 'providerOrigin', 'providerPath', 'message']) } : {}),
             continuation: { tool: 'odc_portal_login', arguments: { tenant: host, auth: 'portal-credential' },
               why: needsSelection ? 'Finish the private profile selection and authenticate once.' : 'An authenticated headless session is required; the tool does not launch interactive SSO/MFA.' } });
       }
@@ -292,23 +316,34 @@ export class OdcAccess {
     return broker;
   }
 
-  // The private prompt (windows-api-client-credential.ps1 / windows-portal-credential.ps1 -Mode bootstrap), only when
-  // the tenant has nothing stored for that path: at most one open per (kind, host, entry) every two minutes; nothing
-  // typed there passes through here. Without a prompt collaborator (tests, offline) the refusal stays AUTH_NOT_CONFIGURED.
-  async openPrompt(kind, host, database, setting) {
+  // The helper owns the form and confirms its live native window. No timestamp means "open".
+  // Only concurrent calls share a promise; later calls always recheck and recover the actual window.
+  // Hosted (servidor/fase4): no credential window ever opens on the server (HOSTED_PROMPT_UNAVAILABLE), whatever the action.
+  async openPrompt(kind, host, database, setting, action = 'ensure') {
     if (this.hosted) return refusal('HOSTED_PROMPT_UNAVAILABLE', 'No credential prompt opens in hosted mode for ' + host + ': only what the user\'s own ODC Studio session '
       + '(and its vault, read by its bridge) already holds is used.', { host, kind });
     const opener = kind === 'api-client' ? this.prompt?.apiClient : this.prompt?.portal;
     if (typeof opener !== 'function')
       return refusal('AUTH_NOT_CONFIGURED', 'No Studio session and no stored credential for ' + host + '; no private prompt is available here.', { host, kind });
-    const key = kind + ':' + host + ':' + (database ?? '') + ':' + (setting ?? '');
-    const last = this.prompts.get(key);
-    if (last && this.now() - last < 120000) return refusal('CREDENTIAL_PROMPT_PENDING', 'A private credential prompt for ' + host + ' was opened less than two minutes ago; finish it, then repeat the call.', { host, kind, resumable: true });
-    const opened = await (kind === 'api-client' ? this.prompt.apiClient(host) : this.prompt.portal(host, database, setting));
-    if (!opened?.opened) return refusal('AUTH_NOT_CONFIGURED', 'No Studio session and no stored credential for ' + host + '; the private prompt could not be opened (' + (opened?.reason ?? 'unavailable') + ').', { host, kind, operatorAction: opened?.command ?? null });
-    this.prompts.set(key, this.now());
-    return refusal('CREDENTIAL_PROMPT_OPENED', 'A private Windows prompt is open for ' + host + ' (' + (kind === 'api-client' ? 'ODC API Client' : database ? 'external database ' + database : setting ? 'secret setting value ' + setting : 'Portal account') + '). The user types there, never in chat; repeat this call afterwards.',
-      { host, kind, resumable: true, auth: { path: 'prompt', host } });
+    const key = kind + ':' + host + ':' + (database ?? '') + ':' + (setting ?? '') + ':' + action;
+    let pending = this.prompts.get(key);
+    if (!pending) {
+      pending = Promise.resolve().then(() => kind === 'api-client' ? opener(host, action) : opener(host, database, setting, action));
+      this.prompts.set(key, pending);
+    }
+    let window;
+    try { window = await pending; } catch { window = { state: 'failed', code: 'CREDENTIAL_PROMPT_UNAVAILABLE' }; }
+    finally { if (this.prompts.get(key) === pending) this.prompts.delete(key); }
+    if (window?.state === 'cancelled') return refusal('CREDENTIAL_PROMPT_CANCELLED', 'The private credential dialog was cancelled. Use odc_portal_login action prompt to reopen it.', { host, kind, resumable: true, window });
+    if (action === 'focus' && window?.visible === true && window?.foreground !== true)
+      window = { ...window, code: 'CREDENTIAL_FOCUS_DENIED' };
+    if (window?.visible !== true || window?.state !== 'visible' || window?.code) return refusal(window?.code ?? 'CREDENTIAL_PROMPT_WINDOW_UNAVAILABLE',
+      'The private credential window could not be confirmed' + (window?.code === 'CREDENTIAL_FOCUS_DENIED' ? ' in the foreground.' : ' as visible.'),
+      { host, kind, resumable: true, window: { state: window?.state ?? 'failed', visible: window?.visible === true, foreground: window?.foreground === true },
+        continuation: { tool: 'odc_portal_login', arguments: { tenant: host, action: 'focus' }, why: 'Recover and focus the owned private prompt, verifying its live window.' } });
+    return refusal(window.opened ? 'CREDENTIAL_PROMPT_OPENED' : 'CREDENTIAL_PROMPT_PENDING',
+      'A live private credential window for ' + host + ' is verified visible. Enter credentials there, never in chat; repeat the original call after saving.',
+      { host, kind, resumable: true, auth: { path: 'prompt', host }, window });
   }
 
   // ---- public REST
@@ -386,7 +421,7 @@ export class OdcAccess {
       return {...result,tenant:host,auth:authOf(resolved)};
     }catch(error){return {ok:false,...(host?{tenant:host}:{}),error:publicError(error)};}
   }
-  async read(input) { return boundedRead({ scope: 'odc-public', input }, () => this.readWithinBudget(input)); }
+  async read(input) { return projectForAgent(() => boundedRead({ scope: 'odc-public', input }, () => this.readWithinBudget(input))); }
   async readWithinBudget({ tenant, auth = 'auto', operationId, ...input }) {
     const start = new Date(this.now()).toISOString();
     let host;
@@ -413,7 +448,9 @@ export class OdcAccess {
 
   // secretRefs, like portalWrite's, is not a tool argument: only configurations passes it, for secret setting values
   // (SSAM/ODC3/<host>/Setting/<name> at /settings/<i>/value), and only the Studio path (bridge portal-call) sends it.
-  async write({ tenant, auth = 'auto', operationId, authorize, operationUuid, confirmTenant, ...input }, { secretRefs = [], authorizationContext, timerConfigurationContext, settingsConfigurationContext, mobileConfigurationContext, assetCreationContext, assetRevisionContext, revisionPrecondition, preparedSourceRevision, assetBuildContext, ipFilterContext, groupContext, organizationRoleContext, portfolioRenameContext, organizationRenameContext, stageRenameContext, environmentDefaultsContext, inactiveUserContext, groupMembershipContext, emptyRoleAssignmentContext, applicationRoleAssignmentContext, applicationRoleOverlapContext, groupRoleAssignmentContext, groupOriginOperationUuid, userOriginOperationUuid, originOperationUuid, externalLibraryParent, externalLibraryDiscard } = {}) {
+  async write(input, options) { return projectForAgent(() => this.writeRaw(input, options)); }
+
+  async writeRaw({ tenant, auth = 'auto', operationId, authorize, operationUuid, confirmTenant, ...input }, { secretRefs = [], authorizationContext, timerConfigurationContext, settingsConfigurationContext, mobileConfigurationContext, assetCreationContext, assetRevisionContext, revisionPrecondition, preparedSourceRevision, assetBuildContext, ipFilterContext, groupContext, organizationRoleContext, portfolioRenameContext, organizationRenameContext, stageRenameContext, environmentDefaultsContext, inactiveUserContext, groupMembershipContext, emptyRoleAssignmentContext, applicationRoleAssignmentContext, applicationRoleOverlapContext, groupRoleAssignmentContext, groupOriginOperationUuid, userOriginOperationUuid, originOperationUuid, externalLibraryParent, externalLibraryDiscard } = {}) {
     const start = new Date(this.now()).toISOString();
     let host, receipt;
     try {
@@ -787,7 +824,9 @@ export class OdcAccess {
     if (!isUuid(operationUuid)) return { ok: false, error: { code: 'INPUT_INVALID', message: 'operationUuid must be a UUID.' } };
     const existing = this.receipts.lookup(operationUuid);
     if (!existing) return { ok: false, error: { code: 'RECEIPT_NOT_FOUND', message: 'No write with this operationUuid.' } };
-    if (!reconcile) return { ok: true, receipt: receiptOf(existing), identity: existing.identity };
+    if (!reconcile) return { ok: true, receipt: receiptOf(existing), identity: existing.identity,
+      ...(existing.state==='confirmed'&&existing.identity?.operationId===A2A_DISCOVER
+        ?{continuation:a2aDiscoveryContinuation(existing.operationUuid,existing.reconciliation?.a2aDiscovery)}:{}) };
     try {
       const { state, read, authorize } = reconcile;
       if (typeof authorize !== 'string' || authorize.trim().length < 8) fail('AUTHORIZATION_REQUIRED', 'Reconciling a write needs the user\'s words that state what the read showed.');
@@ -994,7 +1033,7 @@ export class OdcAccess {
   }
 
   // ---- internal Portal
-  async portalRead(input) { return boundedRead({ scope: 'odc-portal', input }, () => this.portalReadWithinBudget(input)); }
+  async portalRead(input) { return projectForAgent(() => boundedRead({ scope: 'odc-portal', input }, () => this.portalReadWithinBudget(input))); }
   async portalReadWithinBudget({ tenant, auth = 'auto', operationId, input = {}, maxPages = 3 }) {
     const start = new Date(this.now()).toISOString();
     let host;
@@ -1216,7 +1255,9 @@ export class OdcAccess {
       this.receipts.settle(receipt,{state:'confirmed',vaultCleanup:proof});return true;
     }catch{return false;}
   }
-  async portalWrite({ tenant, auth = 'auto', operationId, input = {}, authorize, operationUuid, confirmTenant, target, authorizationContext, vaultFile }, { secretRefs = [], preparedConnectionApproval, preparedMcpImport, preparedEntityImport, preparedHeaderEdit, externalLibraryParent } = {}) {
+  async portalWrite(input, options) { return projectForAgent(() => OdcAccess.prototype.portalWriteRaw.call(this, input, options)); }
+
+  async portalWriteRaw({ tenant, auth = 'auto', operationId, input = {}, authorize, operationUuid, confirmTenant, target, authorizationContext, vaultFile }, { secretRefs = [], preparedConnectionApproval, preparedMcpImport, preparedEntityImport, preparedHeaderEdit, externalLibraryParent } = {}) {
     const start = new Date(this.now()).toISOString();
     let host, receipt;
     try {
@@ -1434,7 +1475,7 @@ export class OdcAccess {
           output={...output,ok:false,error:{code:'KNOWLEDGE_FILE_UPLOAD_UNVERIFIED',message:'The native upload did not confirm acceptance. Inspect the receipt and file inventory; never resend.'}};
         }
         if(operationId===A2A_DISCOVER){
-          try{output={...output,data:a2aDiscoveryOutcome(body.data)};state='confirmed';}
+          try{output={...output,data:a2aDiscoveryOutcome(body.data),continuation:a2aDiscoveryContinuation(operationUuid,discoveryPrepared.expected)};state='confirmed';}
           catch(error){output={ok:false,operationId,error:publicError(error)};state='uncertain';}
         }
         if(operationId===A2A_TEST&&!isUuid(output.data?.Out_ConnectionId)){
@@ -1624,23 +1665,38 @@ export class OdcAccess {
     }
   }
 
-  // Supported native headless session first, then the compatible private profile. No UI recovery.
+  // Headless login by default; prompt/focus explicitly recover only the owned credential form.
   async portalLogin(input) {
-    return boundedRead({ scope: 'odc-portal-login', input }, () => this.portalLoginWithinBudget(input));
+    return boundedRead({ scope: 'odc-portal-login', input }, () => this.portalLoginWithinBudget(input), { timeoutMs: input.action === undefined || input.action === 'open' ? 90000 : 29000 });
   }
   async portalLoginWithinBudget({ tenant, auth = 'auto', action = 'open', profile, authorize }) {
     readCheckpoint('authentication');
     try {
       const host = await this.pickTenant(tenant);
-      if (!['open', 'status', 'close', 'select-profile'].includes(action)) fail('INPUT_INVALID', 'action must be open, status, close or select-profile.');
+      if (!['open', 'status', 'close', 'select-profile', 'prompt', 'focus'].includes(action)) fail('INPUT_INVALID', 'action must be open, status, close, select-profile, prompt or focus.');
       if(action!=='select-profile'&&(profile!==undefined||authorize!==undefined))fail('INPUT_INVALID','Profile selection fields require action select-profile.');
       if (this.hosted && auth === 'portal-credential') return hostedOnlyStudio(host, 'portal-credential');
       // servidor/fase4-24 (R3): a credential profile of the SSAM server is never selected for a customer, whatever auth says.
       if (this.hosted && action === 'select-profile') return refusal('HOSTED_STUDIO_SESSION_ONLY', 'action:"select-profile" selects a credential profile of the SSAM server\'s vault, '
         + 'which is never used in hosted mode: the Portal runs only through the headless session of the user\'s own ODC Studio (auth "auto" or "studio").', { host });
+      // servidor/fase4-25: the private credential window (prompt, focus) never opens on the hosted server.
+      if (this.hosted && (action === 'prompt' || action === 'focus')) return refusal('HOSTED_PROMPT_UNAVAILABLE', 'action:"' + action + '" opens or focuses the private credential window '
+        + 'of the machine that runs SSAM, which never happens in hosted mode: the Portal runs only through the headless session of the user\'s own ODC Studio (auth "auto" or "studio").', { host, action });
       const studio = await this.studioState();
       const session = this.session(studio, host);
       if (this.hosted && !session) return studioRefusal(studio, host, {}, true);
+      if (action === 'prompt' || action === 'focus') {
+        if (await this.portalCredentialAvailable(host)) {
+          const selected = await this.profiles?.resolve({ lane: 'odc', host, principal: session?.user ?? null }, { interactive: false });
+          if (selected?.ok === true) return { ok: true, tenant: host, credentialConfigured: true, windowCreated: false };
+          return refusal('CREDENTIAL_SELECTION_REQUIRED', 'A Portal credential exists. Select its compatible profile; it was not overwritten.', { host });
+        }
+        return this.openPrompt('portal', host, undefined, undefined, 'focus');
+      }
+      if (action === 'status' && !this.profileSessions.has(host) && this.prompt?.status) {
+        const window = await this.prompt.status(host);
+        if (window.state !== 'absent') return { ok: true, tenant: host, signedIn: false, window };
+      }
       if(action==='select-profile') {
         if(auth!=='portal-credential'||!this.profiles?.select||!profile)fail('INPUT_INVALID','Profile selection requires portal-credential, an existing profile and the private metadata broker.');
         const selected=await this.profiles.select({lane:'odc',host,principal:session?.user??null},{...profile,authorize});
@@ -2457,7 +2513,7 @@ function studioAnswer(answer, operationId, host) {
   else if (typeof answer.bodyFile === 'string') data = { file: answer.bodyFile, byteLength: answer.bytes ?? null, sha256: answer.sha256 ?? null, mediaType: contentType, reason: 'Large body written (redacted) by the bridge.' };
   else if (answer.bodyOmitted) data = { contentOmitted: true, mediaType: contentType, byteLength: answer.bytes ?? null, sha256: answer.sha256 ?? null, reason: 'Body above 16 MB was not read.' };
   const ok = answer.status >= 200 && answer.status < 300;
-  return redact({ ok, operationId, status: answer.status, data,
+  return trustedProjection({ ok, operationId, status: answer.status, data,
     ...(!ok ? { error: { code: answer.status === 401 ? 'STUDIO_SESSION_REJECTED' : answer.status === 403 ? 'API_FORBIDDEN' : 'API_ERROR',
       message: answer.status === 401 ? 'The gateway did not accept the Studio session for this API family; repeat with auth:"api-client" if a vault API Client exists.'
         : answer.status === 403 ? 'The signed-in user is not authorized for this operation.' : 'The API returned an unsuccessful response.' } } : {}) });
@@ -2468,6 +2524,8 @@ const receiptOf = receipt => ({ operationUuid: receipt.operationUuid, state: rec
   ...(receipt.response ? { response: receipt.response } : {}), ...(receipt.reconciliations ? { reconciliations: receipt.reconciliations.length } : {}) });
 function answerExisting(existing, operationId, host) {
   return { ok: existing.ok === true, operationId, tenant: host, existingReceipt: true, replayed: false, receipt: receiptOf(existing),
+    ...(existing.state==='confirmed'&&operationId===A2A_DISCOVER
+      ?{continuation:a2aDiscoveryContinuation(existing.operationUuid,existing.reconciliation?.a2aDiscovery)}:{}),
     ...(existing.state === 'uncertain' ? { reconcile: reconcileHint(operationId, host, existing) } : {}),
     message: existing.state === 'not-sent' || existing.state === 'rejected' ? 'This operationUuid already ended (' + existing.state + '); nothing was sent again. A new attempt needs a new operationUuid.'
       : 'This operationUuid was already used; nothing was sent again.' };
@@ -2478,7 +2536,7 @@ function reconcileHint(operationId, host, receipt) {
     + '), then odc_receipt {operationUuid:"' + receipt.operationUuid + '", reconcile:{state, read, authorize}} with the user\'s words.';
 }
 function safeSession(value) {
-  const clean = redact(value);
+  const clean = redactValues(value);
   for (const key of ['credentialConfigured', 'bootstrapRequired', 'authenticated', 'ok']) if (typeof value?.[key] === 'boolean') clean[key] = value[key];
   if (value?.session && typeof value.session === 'object') clean.session = safeSession(value.session);
   return clean;

@@ -213,7 +213,13 @@ export function openOdcTimerInstance({ binding, sourceSha256, timer, callerName 
     },
     async release() {
       if (!broker) return { released: true };
-      await broker.jar.removeAllCookies(); if (Array.isArray(broker.secrets)) broker.secrets.fill(''); broker.authenticated = false;
+      if (typeof broker.dispose === 'function') await broker.dispose();
+      else {
+        await broker.jar.removeAllCookies();
+        if (typeof broker.credentialRegistry?.dispose === 'function') broker.credentialRegistry.dispose();
+        else broker.credentialRegistry?.reset?.();
+        broker.authenticated = false;
+      }
       return { released: true };
     } };
 }

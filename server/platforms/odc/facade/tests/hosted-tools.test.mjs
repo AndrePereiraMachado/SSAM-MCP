@@ -54,8 +54,8 @@ const enumOf = (schema, name) => alternatives(schema?.properties?.[name]).flatMa
 test('every tool registered by createSsamServer() plus ssam_friction is classified, and every classified tool is live', async () => {
   const names = await liveTools();
   // servidor/fase4-24: the 24th release adds 12 (catalog/tools.json 83 -> 95, none removed): 90 of createSsamServer, the 4
-  // hook tools (SSAM_APP_HOOK_TOOLS=1) and ssam_friction.
-  assert.equal(names.size, 95, 'the 90 tools of createSsamServer of the 24th release, the 4 hook tools (SSAM_APP_HOOK_TOOLS=1) and ssam_friction');
+  // hook tools (SSAM_APP_HOOK_TOOLS=1) and ssam_friction. servidor/fase4-25: marco-a5 adds ssam_code (95 -> 96).
+  assert.equal(names.size, 96, 'the 91 tools of createSsamServer of marco-a5, the 4 hook tools (SSAM_APP_HOOK_TOOLS=1) and ssam_friction');
   assert.deepEqual([...names.keys()].filter(n => !tools[n]), [], 'live tools without a hosted class');
   assert.deepEqual(Object.keys(tools).filter(n => !names.has(n)), [], 'stale hosted classes');
 });
@@ -108,10 +108,10 @@ test('every in/out pointer exists in the tool schema under the 6.4 grammar', asy
   assert.equal(pointerExists(names.get('studio_open').inputSchema, '/nope'), false);
 });
 
-test('the totals of section 5: 23 server (10 with a mode that uses the agent), 33 agent, 22 tenant-agent, 17 unavailable', () => {
+test('the totals of section 5: 23 server (10 with a mode that uses the agent), 33 agent, 22 tenant-agent, 18 unavailable (ssam_code, fase4-25)', () => {
   const count = klass => Object.values(tools).filter(t => t.class === klass).length;
   assert.deepEqual({ server: count('server'), agent: count('agent'), tenant: count('tenant-agent'), unavailable: count('unavailable') },
-    { server: 23, agent: 33, tenant: 22, unavailable: 17 });
+    { server: 23, agent: 33, tenant: 22, unavailable: 18 });
   assert.equal(Object.values(tools).filter(t => t.class === 'server' && typeof t.agent === 'object').length, 10);
   assert.deepEqual(Object.entries(tools).filter(([, t]) => t.agent === 'report').map(([n]) => n).sort(), ['hybrid_tenants', 'odc_auth_status', 'ssam_doctor', 'studio_doctor']);
 });

@@ -59,9 +59,10 @@ public static class LogicExpander
     {
         ["op"] = "logic", ["data"] = System.Text.Json.JsonSerializer.SerializeToNode(RootKeys),
         ["action"] = System.Text.Json.JsonSerializer.SerializeToNode(ActionKeys),
-        ["actionKinds"] = new JsonArray("server", "service", "client", "screen", "preparation", "data", "rest"),
+        ["actionKinds"] = new JsonArray("server", "service", "client", "screen", "preparation", "data", "rest", "callback"),
         ["owners"] = new JsonObject { ["screen"] = new JsonArray("IMobileScreen", "IMobileBlock", "IWebScreen", "IWebBlock"), ["preparation"] = new JsonArray("IWebScreen", "IWebBlock", "IWebEmail"),
-            ["rest"] = new JsonArray("IRestService") },
+            ["rest"] = new JsonArray("IRestService"), ["callback"] = new JsonArray("IRestClient") },
+        ["callback"] = "kind callback: the OnBeforeRequest or OnAfterResponse of a consumed REST client, owner IRestClient:<C>; no inputs/outputs (the platform's Request, CustomizedRequest; Request, Response, CustomizedResponse); vars and steps as any action (op rest-consume writes them for you).",
         ["rest"] = "kind rest: an exposed REST method of owner IRestService:<S>; http GET|POST|PUT|PATCH|DELETE, path /x/{Input}; parameter `in` url|header|body (inputs, default url) and body|header (outputs, default body); Start and End are the method's own (op rest-expose writes it for you).",
         ["parameter"] = System.Text.Json.JsonSerializer.SerializeToNode(ParamKeys),
         ["steps"] = System.Text.Json.JsonSerializer.SerializeToNode(StepKeys),
@@ -74,7 +75,18 @@ public static class LogicExpander
         ["queryColumn"] = new JsonArray("name", "attribute", "kind"),
         ["queryCalculated"] = new JsonArray("name", "value"),
         ["sqlParameter"] = System.Text.Json.JsonSerializer.SerializeToNode(SqlParamKeys),
-        ["rules"] = "One step kind per step; closed keys; label on any step; record: var or {Field: expr}; expressions are OutSystems text."
+        ["rules"] = "One step kind per step; closed keys; label on any step; record: var or {Field: expr}; expressions are OutSystems text.",
+        // The text form (Verbs.Flow.cs, docs/TEXTO-LOGICA.md): instead of data.actions.
+        ["flow"] = "data.flow: the text of one action as ssam_map view \"flow\" reads it (ssam-flow/1), edited; or a list of texts or {text, basedOn}. "
+            + "data.basedOn: the textSha of the read, needed with a header @key (changed since: merged three ways). A line keeps the element of its @id; a line without @id is new; "
+            + "a removed line is a removed element; a parameter or local renamed with its id is renamed (its expressions rewritten). A header without @key "
+            + "creates the action: server, service or client action Name; action Owner.Name (screen or block action) and data action Owner.Name name their "
+            + "screen or block (a screen an html op of the same job creates: put the logic op after it). Only what changed is written (set, create, link, delete, rename, move); the action is read again "
+            + "and must be the text (FLOW_NOT_EXACT otherwise). Refused at once: FLOW_KEY_FOREIGN, FLOW_KEY_ROLE, FLOW_KEY_TWICE, FLOW_JUMP_UNKNOWN, FLOW_SELF_LOOP, "
+            + "FLOW_BRANCHES_MEET, FLOW_OPAQUE_TOUCHED, FLOW_FOREACH_LIST_ACTION (T1/T2, with the List action as patch), FLOW_NODE_NAME_TAKEN, FLOW_BASE_CHANGED, "
+            + "FLOW_ACTION_NAME_TAKEN (a text without @key named after an action the module has: its current text is the patch); one refusal carries "
+            + "every problem of every text. Call=Client|Server only for the kind of call the flow does not pick by default. A record mapping is part of "
+            + "the value, in both lanes: Source mapTo { Field: value } (FLOW_MAPPING_TYPES when the two types take none)."
     };
 
     /// <summary>tryRef recebe candidatos ("IServerEntity:X", "IEntitySignature:X", ...) e devolve o primeiro que resolve no modulo,
@@ -151,13 +163,24 @@ public static class LogicExpander
 
     private sealed record LogicProblem(string Pointer, string Code, Exception Error, string? Fix = null);
 
-    /// <summary>A refusal that knows the key of the step it is about, so the problem points at the field to change.</summary>
-    private sealed class FieldException(string message, string field) : InvalidOperationException(message)
+    /// <summary>A refusal that knows the key of the step it is about, so the problem points at the field to change. A field
+    /// given as path segments (columns, 0, attribute) points inside the step; Code and Fix, when given, are the problem's.</summary>
+    private sealed class FieldException(string message, string field, string? code = null, string? fix = null, params string[] more) : InvalidOperationException(message)
     {
         public string Field { get; } = field;
+        public string? Code { get; } = code;
+        public string? Fix { get; } = fix;
+        private readonly string[] _more = more;
+        /// <summary>The pointer of the field relative to the step: each segment escaped.</summary>
+        public string Suffix => "/" + string.Join("/", new[] { Field }.Concat(_more).Select(Escape));
     }
 
     private static string Escape(string key) => key.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
+
+    /// <summary>The problem of an exception at <paramref name="at"/>: the field it names, its code and its fix.</summary>
+    private static LogicProblem ProblemAt(Exception ex, string at, bool coded = false) => ex is FieldException f
+        ? new(at + f.Suffix, f.Code ?? "LOGIC_INVALID", ex, f.Fix)
+        : new(at, coded && ex is ICodedError c ? c.Code : "LOGIC_INVALID", ex);
 
     /// <summary>Every problem of the spec at once (I4): one problem keeps the exception the caller always got (same type and
     /// text), carrying the coded problem inside for the preflight; several are one KernelRefusalException LOGIC_INVALID.</summary>
@@ -187,7 +210,7 @@ public static class LogicExpander
     {
         var problems = new List<LogicProblem>();
         try { Keys(data, RootKeys, "data"); }
-        catch (Exception ex) { problems.Add(new(ex is FieldException f ? "/" + Escape(f.Field) : "", "LOGIC_INVALID", ex)); }
+        catch (Exception ex) { problems.Add(ProblemAt(ex, "")); }
         if (data["actions"] is not JsonArray)
         {
             problems.Add(new("/actions", "LOGIC_INVALID", new InvalidOperationException("logic: 'actions' e obrigatorio"), "{\"actions\":[{\"name\":\"...\",\"steps\":[...]}]}"));
@@ -275,13 +298,13 @@ public static class LogicExpander
                     compiler.Declare();
                     compilers.Add((compiler, action));
                 }
-                catch (Exception ex) { problems.Add(new(ex is FieldException f ? at + "/" + Escape(f.Field) : at, "LOGIC_INVALID", ex)); }
+                catch (Exception ex) { problems.Add(ProblemAt(ex, at)); }
             }
             foreach (var (compiler, action) in compilers)
             {
                 var at = pointers[action];
                 try { compiler.CompileBody(); }
-                catch (Exception ex) { problems.Add(new(ex is FieldException f ? at + "/" + Escape(f.Field) : at, "LOGIC_INVALID", ex)); }
+                catch (Exception ex) { problems.Add(ProblemAt(ex, at)); }
                 barriers?.Add(new(ops.Count, "action"));
                 // C18 (atritos 3): an input or var never used and an output never assigned are the Verify's warnings (A03,
                 // nonblocking), never a refusal of the kernel; the preflight returns them as a note (LogicLint warning).
@@ -613,7 +636,7 @@ public static class LogicExpander
 
         /// <summary>A problem of one step, the step's pointer plus the field it names; compilation goes on with the next step.</summary>
         private void Record(Exception error, string at)
-            => _problems.Add(new(error is FieldException field ? at + "/" + Escape(field.Field) : at, error is ICodedError coded ? coded.Code : "LOGIC_INVALID", error));
+            => _problems.Add(ProblemAt(error, at, coded: true));
 
         public void Declare()
         {
@@ -626,6 +649,9 @@ public static class LogicExpander
             if (kind == LogicOrder.MobileScreenAction && _a["outputs"]?.AsArray().Count > 0)
                 throw new InvalidOperationException("logic: Reactive/Mobile screen actions do not support output parameters in this SS5 runtime; use a client action for returned values or a void screen action with owner state");
             _ops.Add(Op("create", ("parent", LogicOrder.Owner(_a)), ("type", kind), ("name", _name), ("as", _alias)));
+            // A new REST callback is born with its parameters, a comment, Start, End and the Assign that copies the request:
+            // the body written here replaces that Assign (a replaced one keeps only its parameters).
+            if (BornCallback) _ops.Add(Op("delete", ("target", _alias + "/#IAssignNode"), ("force", true))); // its only consumer: the Start's connector, linked again below
             if (kind == LogicOrder.RestServiceAction)
             {
                 var http = _a["http"]?.GetValue<string>()?.ToUpperInvariant() ?? "GET";
@@ -659,13 +685,16 @@ public static class LogicExpander
         }
 
         private bool IsRest => LogicOrder.ActionType(_a) == LogicOrder.RestServiceAction;
+        // A REST callback created by this op (not a replace): its Start and End are the ones it is born with.
+        private bool BornCallback => LogicOrder.ActionType(_a) == LogicOrder.RestCallback && _a["replace"]?.GetValue<bool>() != true;
+        private bool BornFlow => IsRest || BornCallback;
 
         public void CompileBody()
         {
             var steps = _a["steps"]?.AsArray() ?? throw new InvalidOperationException($"logic: action {_name}: 'steps' e obrigatorio (pode ser [])");
             // An exposed REST method is born with its Start and End: the flow starts at its own Start (a second one is
             // InvalidFlow_TooManyNodes) and the tails reach its own End.
-            var start = IsRest ? _alias + "/#IStartNode" : Node("IStartNode", "Start", label: false);
+            var start = BornFlow ? _alias + "/#IStartNode" : Node("IStartNode", "Start", label: false);
             var tails = Segment(steps, [(start, null)], $"action {_name}", _pointer + "/steps");
             var handlers = _a["handlers"]?.AsArray() ?? new JsonArray();
             for (var h = 0; h < handlers.Count; h++)
@@ -687,7 +716,7 @@ public static class LogicExpander
                 catch (Exception ex) { Record(ex, at); }
                 finally { _stepPointer = null; }
             }
-            if (IsRest)
+            if (BornFlow)
             {
                 if (tails.Count > 0) LinkAll(tails, _alias + "/#IEndNode");
                 else _ops.Add(Op("delete", ("target", _alias + "/#IEndNode"))); // every path raises: the born End would be unreachable
@@ -859,26 +888,48 @@ public static class LogicExpander
                 _ops.Add(Op("create", ("parent", node), ("type", "IAliasedSource"), ("name", sourceName), ("as", sourceAlias), ("args", new JsonObject { ["dataSource"] = reference })));
             }
             var joinIndex = 0;
-            foreach (var item in so["joins"]?.AsArray().OfType<JsonObject>() ?? [])
+            var declaredJoins = so["joins"]?.AsArray().OfType<JsonObject>().ToList() ?? [];
+            foreach (var item in declaredJoins)
             {
                 Keys(item, ["left", "right", "kind", "condition"], "aggregate join");
                 var left = Req(item, "left", ctx); var right = Req(item, "right", ctx);
                 var joinType = JoinKind(Req(item, "kind", ctx)) ?? throw new ArgumentException($"Unknown JoinType: {item["kind"]}; use Only With (Inner), With or Without (Left), With (Full), or None, Inner, Left, Right, Full");
                 if (!sources.ContainsKey(left) || !sources.ContainsKey(right) || left.Equals(right, StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("Join must name two declared distinct sources");
+                // The Right join of two sources is the Left join with them swapped, the form the Studio writes (NativeJoin; any
+                // other Right or None is refused by the checagem de compilação).
+                if (NativeJoin(joinType, declaredJoins.Count, sources.Count) is { } native && native.Swapped)
+                {
+                    _notes?.Add(new($"{_stepPointer ?? _pointer}/joins/{joinIndex}", AggregateSortRule.JoinNormalizedCode,
+                        $"logic: {ctx}: the join Right {left}~{right} is written Left {right}~{left}, as the Studio writes it (a Right join keeps every row of its right source: the Left join with the two sources swapped)",
+                        $"write {{\"left\":\"{right}\",\"right\":\"{left}\",\"kind\":\"With or Without\"}}"));
+                    (left, right, joinType) = (right, left, native.Kind);
+                }
                 var alias = node + ".join" + ++joinIndex;
                 _ops.Add(Op("create", ("parent", node), ("type", "IJoin"), ("as", alias)));
                 _ops.Add(Set(alias, "LeftSource", sources[left])); _ops.Add(Set(alias, "RightSource", sources[right]));
                 _ops.Add(Set(alias, "JoinType", joinType)); _ops.Add(Set(alias, "Condition", Req(item, "condition", ctx)));
             }
             var columnNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in so["columns"]?.AsArray().OfType<JsonObject>() ?? [])
+            var declaredColumns = so["columns"]?.AsArray().OfType<JsonObject>().ToList() ?? [];
+            for (var columnIndex = 0; columnIndex < declaredColumns.Count; columnIndex++)
             {
+                var item = declaredColumns[columnIndex];
                 Keys(item, ["name", "kind", "attribute"], "aggregate column"); var columnName = Req(item, "name", ctx); var columnKind = Req(item, "kind", ctx);
                 if (!columnNames.Add(columnName)) throw new ArgumentException("Repeated aggregate column: " + columnName);
                 if (!new[] { "Group", "Count", "Sum", "Max", "Min", "Avg" }.Contains(columnKind)) throw new ArgumentException("Unknown aggregation: " + columnKind);
+                var attribute = Req(item, "attribute", ctx);
+                // A column that reads no attribute ("Count" is no COUNT(*)): no data type, nothing for the compiler to aggregate.
+                if (attribute.Trim().Length == 0)
+                {
+                    var only = sources.Count == 1 ? sources.Keys.First() : null;
+                    var fix = AggregateSortRule.EmptyColumnFix(columnName, columnKind == "Group", columnKind == "Group" ? null : columnKind, only, null);
+                    throw new FieldException($"logic: {ctx}: the aggregate column '{columnName}' ({columnKind}) {AggregateSortRule.EmptyColumnWhy}: the column has no data type and the compiler has nothing to "
+                        + (columnKind == "Group" ? "group by" : "aggregate") + " (Count is no COUNT(*)); " + fix, "columns", AggregateSortRule.ColumnCode,
+                        "write the attribute the column reads: " + fix, columnIndex.ToString(System.Globalization.CultureInfo.InvariantCulture), "attribute");
+                }
                 var alias = node + ".column" + columnNames.Count;
                 _ops.Add(Op("create", ("parent", node), ("type", columnKind == "Group" ? "IGroupByAttribute" : "IAggregateAttribute"), ("name", columnName), ("as", alias)));
-                _ops.Add(Set(alias, "Attribute", Req(item, "attribute", ctx)));
+                _ops.Add(Set(alias, "Attribute", attribute));
                 if (columnKind != "Group") _ops.Add(Set(alias, "AggregationType", columnKind));
             }
             foreach (var item in so["calculated"]?.AsArray().OfType<JsonObject>() ?? [])
@@ -1282,15 +1333,12 @@ public static class LogicExpander
     /// <summary>C18 (atritos 3): the join kind as the Studio shows it or as SQL says it, any case: Only With and Inner are
     /// Inner, With or Without and Left are Left, With and Full are Full; None and Right as they are. Null otherwise.</summary>
     internal static string? JoinKind(string text)
-        => Regex.Replace(text, @"[\s_-]+", "").ToLowerInvariant() switch
-        {
-            "onlywith" or "inner" or "innerjoin" => "Inner",
-            "withorwithout" or "left" or "leftjoin" or "leftouter" or "leftouterjoin" => "Left",
-            "with" or "full" or "fulljoin" or "fullouter" or "fullouterjoin" => "Full",
-            "right" or "rightjoin" or "rightouter" or "rightouterjoin" => "Right",
-            "none" => "None",
-            _ => null,
-        };
+        => AggregateSortRule.JoinKindOf(text);
+
+    /// <summary>The join as written in the model: a Right join, the only join of an aggregate of two sources, is the Left join
+    /// with its sources swapped (Swapped); the other kinds as they are. Null for a kind JoinKind does not know.</summary>
+    internal static (string Kind, bool Swapped)? NativeJoin(string kind, int joins, int sources)
+        => JoinKind(kind) is not { } known ? null : known == "Right" && joins == 1 && sources == 2 ? ("Left", true) : (known, false);
 
     /// <summary>C18: the sources of an aggregate as the Studio names them: the same entity again is a self-join, named
     /// &lt;Entity&gt;2, &lt;Entity&gt;3 (name, entity), in order.</summary>

@@ -1100,8 +1100,11 @@ function harness({ running = true, connected = true, sessions = [{ host: PERSONA
     bridge: async host => ({ execute: async (operationId, input, mode) => { vaultCalls.push({ host, operationId, input, mode });
       return vaultExecute ? vaultExecute(operationId, input, mode) : { ok: true, operationId, status: 200, data: { from: 'vault' } }; } }),
   };
-  const prompt = { apiClient: async host => { prompts.push(['api-client', host]); return { opened: true }; },
-    portal: async (host, database, setting) => { prompts.push(['portal', host, database ?? null, ...(setting ? [setting] : [])]); return { opened: true }; } };
+  const openWindows = new Set();
+  const showPrompt = (key, args) => { const opened = !openWindows.has(key); if (opened) prompts.push(args); openWindows.add(key);
+    return { state: 'visible', visible: true, foreground: true, pid: 1000, opened, alreadyOpen: !opened }; };
+  const prompt = { apiClient: async host => showPrompt('api:' + host, ['api-client', host]),
+    portal: async (host, database, setting) => showPrompt([host, database, setting].join(':'), ['portal', host, database ?? null, ...(setting ? [setting] : [])]) };
   const broker = { target: 'odc3', available: false, authenticated: false, initialize: async () => {}, status: () => ({ authenticated: broker.authenticated }), ...brokerState };
   let n = 0;
   const brokers = [];
@@ -2888,4 +2891,20 @@ test('hosted: a mobile secret goes as a secretRef to the user\'s bridge; no vaul
   const select=await h.access.portalLogin({tenant:CORPORATE,auth:'auto',action:'select-profile',profile:{target:'SSAM/ODC3/'+CORPORATE+'/Portal',principal:'test@example.test'},authorize:'select '+CORPORATE});
   assert.equal(select.code,'HOSTED_STUDIO_SESSION_ONLY');assert.deepEqual(selected,[]);
   assert.deepEqual(h.vaultAsked,[]);assert.deepEqual(h.prompts,[]);assert.deepEqual(h.vaultCalls,[]);assert.deepEqual(h.brokers,[]);
+});
+
+// servidor/fase4-25 (marco-a5 merge, rule 17 of C:\t\vps-a5\PLANO.md): the product's private credential window (action
+// prompt and focus of odc_portal_login, the verified window of openPrompt) never opens hosted: HOSTED_PROMPT_UNAVAILABLE
+// before the Studio, the vault, the profiles or the prompt collaborator are asked.
+test('hosted: odc_portal_login prompt and focus answer HOSTED_PROMPT_UNAVAILABLE before the Studio, the vault or a profile', async () => {
+  const resolved = [];
+  const h = harness({ hosted: true, apiClient: true, portalAccount: true, profiles: { resolve: async (...a) => { resolved.push(a); return { ok: true }; } } });
+  for (const action of ['prompt', 'focus']) {
+    const value = await h.access.portalLogin({ tenant: PERSONAL, action });
+    assert.equal(value.ok, false, action);
+    assert.equal(value.code, 'HOSTED_PROMPT_UNAVAILABLE', action + ': ' + JSON.stringify(value).slice(0, 300));
+  }
+  for (const action of ['ensure', 'focus', 'status']) assert.equal((await h.access.openPrompt('portal', PERSONAL, undefined, undefined, action)).code, 'HOSTED_PROMPT_UNAVAILABLE', action);
+  assert.deepEqual(h.calls, [], 'the Studio was not read');
+  assert.deepEqual(h.vaultAsked, []); assert.deepEqual(h.prompts, []); assert.deepEqual(resolved, []); assert.deepEqual(h.brokers, []);
 });

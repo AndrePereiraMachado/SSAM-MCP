@@ -18,6 +18,9 @@ public sealed record ActionFact(int Op, int Index, JsonObject Declaration, strin
 /// <summary>A callee as a `call` reads it: its reference, its inputs (name, type, mandatory) and its outputs.</summary>
 public sealed record CalleeFact(string Reference, IReadOnlyList<ParamFact> Inputs, IReadOnlyList<ParamFact> Outputs);
 
+/// <summary>An element occupying the module's action-name scope.</summary>
+public sealed record ActionNameFact(string Kind, string Name, string Owner, string Scope = "server");
+
 /// <summary>
 /// What only the base module can answer, for the rules that run in JobRunner.CheckAgainstBase (C20): the attributes of an
 /// entity or structure, the signature of a callee, whether a name exists, whether a name is a function of the module or of
@@ -25,6 +28,10 @@ public sealed record CalleeFact(string Reference, IReadOnlyList<ParamFact> Input
 /// </summary>
 public interface IBaseFacts
 {
+    /// <summary>The existing element for which the Studio would rename a new module action, or null.</summary>
+    ActionNameFact? ActionNameTaken(string name) => null;
+    /// <summary>Server/service and client actions have independent native naming scopes.</summary>
+    ActionNameFact? ActionNameTaken(string name, string kind) => ActionNameTaken(name);
     IReadOnlyDictionary<string, string>? Attributes(string record);
     bool IsClientEntity(string name);
     CalleeFact? Callee(string target, JsonObject caller);
@@ -39,6 +46,9 @@ public interface IBaseFacts
     /// <summary>The expression a raw `set` writes on an element of the base: null when the target does not resolve or the
     /// property holds no expression; with the aggregate the element belongs to, when it is inside one.</summary>
     RawExpressionFact? RawExpression(string target, string prop);
+    /// <summary>motor2: the names of the data of a screen or block of the base (inputs, local variables, aggregates, data
+    /// actions), by its logic owner (`IMobileScreen:Home`); null when the base does not have it.</summary>
+    IReadOnlyCollection<string>? ScreenNames(string owner) => null;
 }
 
 /// <summary>Where a raw expression lives: the aggregate (its name, sources, columns, client side), or no aggregate.</summary>
@@ -83,7 +93,9 @@ public sealed class JobFacts
                         facts.Names.Add(name);
                         foreach (var p in fact.Locals) facts.Names.Add(p.Name);
                     }
-            if (kind == "spec" && op["data"] is JsonObject data)
+            // DL2: a data text names what it creates and renames (SpecExpander.Sections: the spec of its new types).
+            if (kind == "spec" && op["data"] is JsonObject specData) foreach (var name in SpecExpander.DdlNames(specData)) facts.Names.Add(name);
+            if (kind == "spec" && op["data"] is JsonObject source && SpecExpander.Sections(source) is var data)
                 foreach (var section in new[] { "entities", "clientEntities", "static", "structures" })
                     foreach (var record in (data[section] as JsonArray ?? new JsonArray()).OfType<JsonObject>())
                     {

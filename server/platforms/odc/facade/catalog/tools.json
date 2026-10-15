@@ -2468,6 +2468,7 @@
    "ssam_reference",
    "ssam_discover",
    "ssam_map",
+   "ssam_code",
    "studio_inspect",
    "o11_inspect",
    "o11_dependencies",
@@ -2560,6 +2561,11 @@
   "data.records": "Read or write records of the development database (an SSAM operation)"
  },
  "nonVerbEnums": [
+  {
+   "tool": "ssam_code",
+   "path": "items[].kind",
+   "reason": "kind of an element assigned by plan, not a tool verb"
+  },
   {
    "tool": "ssam_grant",
    "path": "verbs[]",
@@ -2719,6 +2725,21 @@
    "tool": "ssam_debug_client",
    "path": "mode",
    "reason": "private-compare mode (equality | identity), not a tool verb"
+  },
+  {
+   "tool": "ssam_code",
+   "path": "part",
+   "reason": "the part of the module as code (ddl|logic|html), an argument of grammar, read and write, not a tool verb"
+  },
+  {
+   "tool": "ssam_code",
+   "path": "until",
+   "reason": "where a write stops before the merge (the delivery tool of the lane), not a tool verb"
+  },
+  {
+   "tool": "ssam_code",
+   "path": "also[].part",
+   "reason": "the part of another code text in the same write"
   },
   {
    "path": "lane",
@@ -8057,6 +8078,26 @@
       "@erro"
      ]
     },
+    "integration-log-detail": {
+     "field": "action",
+     "value": "integration-log-detail",
+     "selector": "enum",
+     "when": "Read historical request/response for one exact integration event. Distinguishes a payload not exposed by the native row, explicitly not recorded, denied access, and unsupported detail layout; never replays the integration.",
+     "preconditions": ["Use the same authenticated O11 principal. Take requestKey and exact logAction from the integration log; moduleId disambiguates modules."],
+     "next": "Use the returned payloadStatus and evidence; do not infer missing payloads or replay the integration.",
+     "args": {
+      "action": "integration-log-detail",
+      "host": "<env-host>",
+      "requestKey": "<requestKey>",
+      "logAction": "<exact integration action>",
+      "moduleId": "<moduleId>"
+     },
+     "triggers": [["request", "response"], ["payload", "@log"], ["@detalhe", "@integracao"]],
+     "intents": {
+      "pt": ["ver request e response da chamada de integração", "corpo da resposta do log de integração", "detalhe do payload histórico da integração"],
+      "en": ["show the integration request and response", "historical integration log payload"]
+     }
+    },
     "error-detail": {
      "field": "action",
      "value": "error-detail",
@@ -12166,7 +12207,7 @@
      "field": "job.ops.0.op",
      "value": "prototype",
      "selector": "documented",
-     "when": "Import a prototype folder (HTML/CSS/JS) as native screens in ONE call: one screen per view, a shell block, popups, data and logic, the CSS verbatim; then merge, publication and demo data with the owner's words.",
+     "when": "Import a prototype folder (HTML/CSS/JS/JSX) or its .zip as native screens in ONE call: one screen per view, a shell block, popups, data and logic, the CSS verbatim; then merge, publication and demo data with the owner's words.",
      "preconditions": [
       "Service Studio open and connected on the O11 lane (ssam_connect {lane:\"o11\"}), signed in to the environment",
       "the Reactive or Mobile module is open in that Service Studio",
@@ -12180,7 +12221,7 @@
         {
          "op": "prototype",
          "data": {
-          "source": "<absolute prototype folder>"
+          "source": "<absolute prototype folder or .zip>"
          }
         }
        ]
@@ -14259,7 +14300,7 @@
      "field": "action",
      "value": "read",
      "selector": "enum",
-     "when": "The current spec of an extension (actions, structures, bodies), its keys, versionId and consumers.",
+     "when": "The current spec of an extension (actions, structures, bodies), keys, versionId and consumers; exported.resources contains local files and hashes, exported.references contains reusable non-platform DLL paths.",
      "preconditions": [
       "Service Studio connected on the O11 lane and signed in on host (SSO included)"
      ],
@@ -14302,7 +14343,7 @@
      "field": "action",
      "value": "publish",
      "selector": "enum",
-     "when": "Create or change a .NET extension from a spec in one call: generated, compiled, published; answers created/updated/already-running.",
+     "when": "Create or change a .NET extension from a spec in one call: generated, compiled, published; referencesFrom:[ExistingExtension] automatically acquires its non-platform library DLLs and license notices, pins source versions and verifies dependency closure. Answers created/updated/already-running.",
      "preconditions": [
       "words = the user's own words naming the extension (a contract break also names every consumer)"
      ],
@@ -15508,7 +15549,7 @@
    "group": "leitura",
    "kind": "model",
    "title": "Map every element of an application capture",
-   "when": "Read an application: the module as text in pages (digest), every element with @key (map), text in expressions and values (search), who uses an element across the app's modules (uses).",
+   "when": "Read an application: the module as text in pages (digest), its data as DDL with @keys (ddl), every element with @key (map), text in expressions and values (search), who uses an element across the app's modules (uses).",
    "preconditions": [
     "a capture .oml, or a module open in that lane's Studio (O11: an open tab is read by key; opening is a write)"
    ],
@@ -15619,6 +15660,85 @@
        "what does this module contain",
        "read the application"
       ]
+     }
+    },
+    "ddl": {
+     "field": "view",
+     "value": "ddl",
+     "selector": "enum",
+     "when": "Read the module's data as text: entities and static entities (records in values) as SQL DDL, structures as type X = {...}, site properties or settings, client variables and timers as one line; every element with its @key and whole description; element reads one of them by name or @key.",
+     "next": "continuations.next for the next page, continuations.element for one entity, structure, variable or timer; to change the data, deliver {\"op\":\"spec\",\"data\":{\"ddl\":\"<the statements that change, as read, with their -- @key>\"}} (no key: new; same key, other name: rename; left out of a statement sent whole: deleted; drop … -- @key)",
+     "args": {
+      "lane": "<lane>",
+      "target": "<capture.oml or open Module>",
+      "view": "ddl"
+     },
+     "cli": "ssam map --ddl",
+     "triggers": [
+      ["ddl"],
+      ["@consultar", "@dados", "@modulo"],
+      ["@consultar", "@dados", "@app"],
+      ["@entidade", "ddl"]
+     ],
+     "without": ["@renomear", "@criar", "@adicionar", "@apagar", "@extensao"],
+     "slots": {
+      "target": ["@modulo", "@app"]
+     },
+     "intents": {
+      "pt": ["ler os dados do módulo como DDL", "ver as entidades do módulo em DDL com as chaves"],
+      "en": ["read the module data as DDL", "show the entities of the module as DDL with their keys"]
+     }
+    },
+    "logic": {
+     "field": "view",
+     "value": "logic",
+     "selector": "enum",
+     "when": "The same as view flow under the word of ssam_code (part logic): one action whole as ssam-flow/1, or the list of the actions.",
+     "next": "ssam_code {action:\"write\", part:\"logic\"} with the edited text and its textSha as basedOn",
+     "args": {
+      "lane": "<lane>",
+      "target": "<capture.oml or open Module>",
+      "view": "logic",
+      "element": "<Action, Flow/Screen/Action or @key>"
+     },
+     "cli": "ssam map --flow",
+     "triggers": [
+      ["view", "logic"],
+      ["visao", "logic"]
+     ],
+     "intents": {
+      "pt": ["ssam_map com a visão logic da action"],
+      "en": ["ssam_map view logic of the action"]
+     }
+    },
+    "flow": {
+     "field": "view",
+     "value": "flow",
+     "selector": "enum",
+     "when": "Read one action whole (or a list of actions in one answer), as text that is also its source form (ssam-flow/1): every node, parameter and local with its @id, full descriptions, comments, scripts and SQL, with fixedPoint and textSha; without element, the list of the actions.",
+     "next": "continuations.next for the next page of a long action or the rest of a list; continuations.list for the other actions; to change them, send the edited texts in a job: {\"op\":\"logic\",\"data\":{\"flow\":[{\"text\":<edited text>,\"basedOn\":<textSha>}]}} (a line without @id is new, a removed line is removed; a header without @key creates the action: server action Name, action Screen.Name, data action Screen.Name)",
+     "args": {
+      "lane": "<lane>",
+      "target": "<capture.oml or open Module>",
+      "view": "flow",
+      "element": "<Action, Flow/Screen/Action or @key>"
+     },
+     "cli": "ssam map --flow",
+     "triggers": [
+      ["@consultar", "@acao_logica", "inteira"],
+      ["@consultar", "@acao_logica", "completa"],
+      ["@consultar", "whole", "@acao_logica"],
+      ["@consultar", "full", "@acao_logica"],
+      ["fluxo", "@acao_logica", "texto"],
+      ["flow", "@acao_logica", "text"]
+     ],
+     "without": ["@renomear", "@criar", "@adicionar", "@apagar", "@extensao"],
+     "slots": {
+      "target": ["@modulo", "@app"]
+     },
+     "intents": {
+      "pt": ["ler a action inteira", "mostrar o fluxo da action em texto"],
+      "en": ["read the whole action", "show the full action flow as text"]
      }
     },
     "map": {
@@ -15914,6 +16034,34 @@
        "who uses entity Customer",
        "who uses the entity in ODC"
       ]
+     }
+    },
+    "html": {
+     "field": "view",
+     "value": "html",
+     "selector": "enum",
+     "when": "Read one screen or block as its source in HTML (ssam-html/1): every element with k, expressions as text, both branches of every If, events with destination and arguments, os-* for the rest; without screen, the list.",
+     "next": "continuations.next for the following page of the same screen; keys:true for the k -> ObjectKey table; to change the screen, continuations.edit (one delivery with the html op in its edit form: only the changed elements, each whole with its k, and this basedOn)",
+     "args": {
+      "lane": "<lane>",
+      "target": "<capture.oml or open Module>",
+      "view": "html",
+      "screen": "<Screen or Block>"
+     },
+     "cli": "ssam map --html",
+     "triggers": [
+      ["@consultar", "@tela", "@html"],
+      ["@consultar", "@bloco", "@html"],
+      ["@tela", "@html"],
+      ["@bloco", "@html"]
+     ],
+     "without": ["@criar", "@adicionar", "@renomear", "@apagar", "@prototipo", "@importar", "@telas_nativas", "@pixel_perfect", "@extensao"],
+     "slots": {
+      "target": ["@modulo", "@app"]
+     },
+     "intents": {
+      "pt": ["ler a tela Login em html", "mostrar o html da tela Pedidos", "ver o bloco Card como html"],
+      "en": ["read the screen Login as html", "show the html of the screen Orders", "the block Card as html"]
      }
     }
    }
@@ -18577,7 +18725,7 @@
      "field": "job.ops.0.op",
      "value": "prototype",
      "selector": "documented",
-     "when": "Import a prototype folder (HTML/CSS/JS) as native screens in ONE call: one screen per view, a shell block, popups, data and logic, the CSS verbatim; then merge, publication and demo data with the owner's words.",
+     "when": "Import a prototype folder (HTML/CSS/JS/JSX) or its .zip as native screens in ONE call: one screen per view, a shell block, popups, data and logic, the CSS verbatim; then merge, publication and demo data with the owner's words.",
      "preconditions": [
       "ODC Studio open with the bridge attached (ssam_connect {lane:\"odc\"})",
       "the module is open in ODC Studio (studio_open)",
@@ -18592,7 +18740,7 @@
         {
          "op": "prototype",
          "data": {
-          "source": "<absolute prototype folder>"
+          "source": "<absolute prototype folder or .zip>"
          }
         }
        ]
@@ -25664,13 +25812,26 @@
      "field": "operationId",
      "value": "libraries.release",
      "selector": "documented",
-     "when": "libraries.release: use its typed Portal capability contract for inputs.",
+     "when": "Release (tag) an ODC low-code or mobile library revision through the Portal: libraries.release with input {inputParameters:{ApplicationKey, Revision, Version:'x.y.z', ReleaseNotes}}. Reads libraries.releaseSettings/libraries.releaseRevision (odc_portal_read) show the current state.",
+     "preconditions": [
+      "The revision is the library's current untagged revision and has a Finished publication (publicationKey of deployments-api-v1 publish-operations).",
+      "authorizationContext file: the user's explicit approval of a proposal; constraints {publicationKey, expectedTag:null, inputSha256} plus originOperationUuid for a library SSAM created, or preExisting:true for an existing library (scope targets name the library AND the tenant host).",
+      "authorize = the user's own words, a NEW operationUuid; corporate tenant: confirmTenant."
+     ],
      "args": {
       "operationId": "libraries.release",
       "tenant": "<tenant host>",
-      "input": {},
+      "input": {
+       "inputParameters": {
+        "ApplicationKey": "<library asset key>",
+        "Revision": "<published untagged revision number>",
+        "Version": "<x.y.z>",
+        "ReleaseNotes": "<release notes>"
+       }
+      },
       "authorize": "<user authorization words>",
-      "operationUuid": "<new operation UUID>"
+      "operationUuid": "<new operation UUID>",
+      "authorizationContext": "<absolute path of the approved authorization context file>"
      },
      "triggers": [
       [
@@ -25678,12 +25839,26 @@
        "low",
        "code",
        "library"
+      ],
+      [
+       "@liberar",
+       "@biblioteca"
+      ],
+      [
+       "versionar",
+       "@biblioteca"
       ]
      ],
-     "next": "odc_portal_capabilities describes the bounded native contract; provide its reviewed inputs.",
+     "next": "Read the exact revision (asset-repository revision + release-notes) to confirm the tag; uncertain -> odc_receipt, never resend.",
      "intents": {
+      "pt": [
+       "liberar a biblioteca no portal",
+       "fazer o release da lib",
+       "versionar a library"
+      ],
       "en": [
-       "release low code library"
+       "release low code library",
+       "release the library version"
       ]
      }
     },
@@ -26005,7 +26180,7 @@
    "group": "portal",
    "kind": "portal",
    "title": "Open the Portal session for a tenant",
-   "when": "Authenticate, check or clear a tenant Portal session through native headless HTTP or a compatible saved private profile. No browser window or credential prompt is opened.",
+   "when": "Authenticate or inspect a tenant Portal session. Missing credentials open an owned private form only after verified native visibility. prompt/focus recover that form; status reports its actual state. No browser is opened.",
    "preconditions": [
     "No secret is an argument. Private selection is scoped to lane, host and proven development principal; one compatible profile is automatic, multiple profiles require private choice. An unproven principal always requires choice."
    ],
@@ -26033,7 +26208,7 @@
      "selector": "enum",
      "when": "Reuse the connected Studio's native headless HTTP session first; otherwise authenticate with a compatible saved private profile. auth=studio never opens a window and refuses if native authentication is unavailable.",
      "preconditions": [
-      "ODC Studio connected through ssam_connect {lane:\"odc\"}, or an existing compatible saved private profile; no interactive fallback"
+      "ODC Studio connected through ssam_connect {lane:\"odc\"}, or a compatible saved profile; if no credential exists, the private form must confirm its visible window"
      ],
      "next": "odc_portal_read",
      "args": {
@@ -26084,7 +26259,7 @@
      "field": "action",
      "value": "status",
      "selector": "enum",
-     "when": "Headless Portal authentication and session state.",
+     "when": "Headless Portal authentication, or the live state and visibility of its owned credential form.",
      "next": "open if not signed in",
      "args": {
       "action": "status",
@@ -26205,6 +26380,26 @@
        "end the Portal session"
       ]
      }
+    },
+    "prompt": {
+     "field": "action",
+     "value": "prompt",
+     "selector": "enum",
+     "when": "Open or recover the private Portal credential form. Verify its real window, foreground it, and never duplicate a live prompt.",
+     "args": { "action": "prompt", "tenant": "<tenant host>" },
+     "next": "Enter credentials privately, then repeat the original call.",
+     "triggers": [["janela", "credenciais"], ["reabrir", "portal"]],
+     "intents": { "pt": ["abrir janela privada de credenciais do portal", "recuperar prompt do portal"], "en": ["open private Portal credential prompt"] }
+    },
+    "focus": {
+     "field": "action",
+     "value": "focus",
+     "selector": "enum",
+     "when": "Bring the owned Portal credential form to the foreground, recovering a missing process. Returns foreground confirmation or CREDENTIAL_FOCUS_DENIED.",
+     "args": { "action": "focus", "tenant": "<tenant host>" },
+     "next": "Enter credentials privately, then repeat the original call.",
+     "triggers": [["frente", "janela"], ["foco", "portal"], ["focus", "prompt"]],
+     "intents": { "pt": ["trazer a janela de credenciais do portal para frente", "a janela privada não apareceu"], "en": ["focus the Portal credential prompt"] }
     },
     "select-profile": {
      "effect": "write",
@@ -28113,6 +28308,159 @@
     }
    }
   },
+  "ssam_code": {
+   "effect": "delivery",
+   "lane": "both",
+   "group": "mudanca",
+   "kind": "model",
+   "title": "Read, check and write a module as code: data as SQL DDL, logic as pseudocode, screens as HTML",
+   "when": "The module as code: part ddl (SQL DDL), logic (pseudocode), html (screens). grammar for the syntax and an example (empty module), read, check against a capture without Studio, write (delivered).",
+   "preconditions": ["read/write: a module open in the Studio of the lane (or a capture .oml to read); check: a capture of the module; grammar needs nothing"],
+   "next": "read -> write with the text edited and its basedOn; a refusal -> patch + basedOn {job, sha256} in ssam_code write",
+   "args": {
+    "lane": "<lane>",
+    "action": "grammar"
+   },
+   "verbParam": "action",
+   "verbSelector": "enum",
+   "intents": {
+    "pt": ["ssam_code do módulo"],
+    "en": ["ssam_code of the module"]
+   },
+   "verbs": {
+    "grammar": {
+     "effect": "read",
+     "field": "action",
+     "value": "grammar",
+     "selector": "enum",
+     "when": "The syntax of ssam-ddl/1, ssam-flow/1 and ssam-html/1 with a from-scratch example; no module needed (start here on an empty module).",
+     "next": "ssam_code write with the example adapted",
+     "args": {
+      "lane": "<lane>",
+      "action": "grammar",
+      "part": "<ddl|logic|html>"
+     },
+     "triggers": [
+      ["sintaxe", "ddl"],
+      ["syntax", "ddl"],
+      ["gramatica", "ddl"],
+      ["grammar", "ddl"],
+      ["sintaxe", "ssam"],
+      ["syntax", "ssam"],
+      ["exemplo", "ddl"],
+      ["example", "ddl"],
+      ["ssam_code", "sintaxe"],
+      ["ssam_code", "syntax"],
+      ["ssam_code", "grammar"],
+      ["ssam_code", "gramatica"]
+     ],
+     "intents": {
+      "pt": ["qual a sintaxe do ddl do ssam", "gramática do ssam_code com exemplo", "sintaxe do ssam text para um módulo vazio"],
+      "en": ["what is the ssam ddl syntax", "ssam_code grammar with an example", "ssam text syntax for an empty module"]
+     }
+    },
+    "read": {
+     "effect": "read",
+     "field": "action",
+     "value": "read",
+     "selector": "enum",
+     "when": "Read a part of the module as code: ddl (data as SQL DDL), logic (an action as pseudocode), html (a screen as HTML), with keys and the basedOn of the write.",
+     "next": "ssam_code write with the edited text and basedOn",
+     "args": {
+      "lane": "<lane>",
+      "action": "read",
+      "part": "<ddl|logic|html>",
+      "target": "<Module or capture.oml>"
+     },
+     "triggers": [
+      ["@consultar", "@modulo", "codigo"],
+      ["@consultar", "@entidade", "sql"],
+      ["@consultar", "@tabela", "sql"],
+      ["@consultar", "@tabela", "codigo"],
+      ["@consultar", "pseudocodigo"],
+      ["@consultar", "ssam_code"],
+      ["@consultar", "ssam", "text"],
+      ["@consultar", "texto", "@modulo"],
+      ["@consultar", "code", "@modulo"]
+     ],
+     "intents": {
+      "pt": ["ler o módulo em código", "ver as entidades em SQL", "ler a action como pseudocódigo", "ler o texto do módulo pelo ssam_code"],
+      "en": ["read the module as code", "show the entities in SQL", "read the action as pseudocode"]
+     }
+    },
+    "check": {
+     "effect": "read",
+     "field": "action",
+     "value": "check",
+     "selector": "enum",
+     "when": "Validate the same job as write against the newest module capture, without contacting the Studio or merging; safe for parallel subagent checks. Include shared data/ops files and files defining actions called by this part.",
+     "next": "Fix all reported problems and repeat check until ok; answer only the file path, then the main agent sends ONE ssam_code write with all files",
+     "args": {
+      "lane": "<lane>",
+      "action": "check",
+      "module": "<Module>",
+      "files": ["<shared.ddl>", "<shared.json>", "<part.flow>"]
+     },
+     "triggers": [
+      ["ssam_code", "check"],
+      ["checar", "codigo"],
+      ["validar", "codigo"],
+      ["check", "code"]
+     ],
+     "intents": {
+      "pt": ["checar código sem Studio", "validar o código da minha parte em paralelo", "ssam_code check do módulo"],
+      "en": ["check code without Studio", "validate my part in parallel", "ssam_code check for the module"]
+     }
+    },
+    "plan": {
+     "effect": "read",
+     "field": "action",
+     "value": "plan",
+     "selector": "enum",
+     "when": "Six or more new elements: deterministically split the request into balanced parallel batches, each with a prompt file, exact context and a check against the same capture.",
+     "next": "Write shared data first; launch each returned launchPrompt in parallel; when all finish, send the returned final write",
+     "args": { "lane": "<lane>", "action": "plan", "module": "<Module>", "items": "<one per element: kind, name, intent, signature>" },
+     "triggers": [["ssam_code", "plan"], ["dividir", "trabalho"], ["subagentes", "paralelo"], ["plan", "subagents"]],
+     "intents": { "pt": ["dividir trabalho entre subagentes em paralelo", "ssam_code plan do módulo"], "en": ["plan parallel subagents for module changes", "ssam_code plan for the module"] }
+    },
+    "write": {
+     "field": "action",
+     "value": "write",
+     "selector": "enum",
+     "when": "Write a part as code, delivered by the lane's own delivery (one call, validated before any change): new statements, actions or screens without keys; changed ones with their keys and basedOn (a changed action WHOLE as read: a line left out is deleted); files:[paths] sends the parts subagents wrote (.flow with several actions, .ddl, .html, .json ops) in the same call; edits:[{replace|after|before|delete:\"@id\"}] with element and basedOn changes only the lines named.",
+     "next": "\"entregue\"; a refusal -> patch + basedOn {job, sha256}; publish with the user's words",
+     "args": {
+      "lane": "<lane>",
+      "action": "write",
+      "part": "<ddl|logic|html>",
+      "module": "<Module>",
+      "text": "<code>"
+     },
+     "triggers": [
+      ["@criar", "sql"],
+      ["@criar", "codigo"],
+      ["@criar", "@tabela", "codigo"],
+      ["@criar", "@tabela", "ddl"],
+      ["@mudar", "codigo"],
+      ["escrever", "codigo"],
+      ["escrever", "sql"],
+      ["escrever", "html"],
+      ["@criar", "html"],
+      ["@entregar", "ssam_code"],
+      ["ssam_code", "escrever"],
+      ["ssam_code", "write"],
+      ["write", "code"],
+      ["write", "html"],
+      ["ssam", "text", "@criar"],
+      ["texto", "ssam", "@entregar"]
+     ],
+     "intents": {
+      "pt": ["criar as tabelas em SQL no módulo", "escrever a tela em HTML no módulo", "entregar o código da action pelo ssam_code"],
+      "en": ["create the tables in SQL in the module", "write the screen as HTML in the module", "write the logic as code with ssam_code"]
+     }
+    }
+   }
+  },
   "ssam_job": {
    "effect": "delivery",
    "lane": "both",
@@ -29054,17 +29402,18 @@
    "group": "portal",
    "kind": "portal",
    "title": "Prepare an A2A connection without sending",
-   "when": "Prepare an A2A connection without sending. Use the typed MCP contract and returned continuation.",
+   "when": "Prepare an A2A plan from the confirmed discovery continuation in URL or JSON mode. Supply discoveryOperationUuid and omit card. Explicit cards with projection markers are refused; use the receipt instead.",
    "preconditions": [
-    "Use the explicit tenant and authorized private profile; no browser or credential prompt. Writes require the user authorization and durable operation UUID."
+    "Use a confirmed connections.a2aDiscover receipt matching the tenant, connection name, stage and agent base URL. Original explicit JSON cards remain supported without discovery, but any text containing [REDACTED], %5BREDACTED%5D or [INVALID URL] is refused. Never copy the displayed discovery card. The plan performs no network call."
    ],
-   "next": "Follow the returned continuation; reconcile uncertain writes before another operation.",
+   "next": "Review the plan hash and native test input, then approve the test with the same discoveryOperationUuid. Reconcile uncertain writes before another operation.",
    "args": {
     "name": "<name>",
     "portfolioKey": "<portfolioKey>",
     "agentUrl": "<agentUrl>",
     "stage": {},
-    "card": {}
+    "discoveryOperationUuid": "<confirmed-discovery-operation-uuid>",
+    "configurationType": "url"
    },
    "triggers": [
     [

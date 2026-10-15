@@ -1,0 +1,23 @@
+{
+  "source": "recorded",
+  "records": 1,
+  "bytes": 41341,
+  "evidence": [
+    {
+      "type": "response_item",
+      "payloadType": "custom_tool_call_output",
+      "timestamp": "2026-10-13T14:57:29.864Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": [
+        "original token count: 28159",
+        "PUBLISH_UNCERTAIN"
+      ]
+    }
+  ],
+  "shrunk": [],
+  "removed": []
+}

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { StudioPortalBroker } from '../runtime/studio-portal.mjs';
 import { Odc3PortalBroker, portalVault, setPointer } from '../runtime/odc3-context.mjs';
+import { redact } from '../runtime/errors.mjs';
 
 // Fakes of the bridge `portal-session` command and of the vault: no Studio, window or Portal is contacted.
 function studioBroker(answer) {
@@ -19,7 +20,9 @@ test('timer prerequisites send only scoped reads and Wake remains distinct from 
     const result = await broker.callScreenservice({ operationId, input: { screenVariables: variables } });
     const request = [...files.values()].at(-1);
     assert.equal(request.write, false); assert.equal(request.path, '/apps/screenservices/apps/Timers/timer/' + action);
-    assert.deepEqual(request.body.screenData.variables, variables); assert.doesNotMatch(JSON.stringify(result), /private/);
+    assert.deepEqual(request.body.screenData.variables, variables);
+    assert.equal(result.data.TimerInfo.Password, 'private');
+    assert.doesNotMatch(JSON.stringify(redact(result)), /private/);
   }
   await assert.rejects(broker.callScreenservice({ operationId: 'timers.run', input: {} }), { code: 'PORTAL_OPERATION_NOT_FOUND' });
   for (const operationId of ['timers.pause','timers.resume'])
@@ -33,11 +36,12 @@ test('timer prerequisites send only scoped reads and Wake remains distinct from 
   }
 });
 
-test('the Studio headless adapter sends scoped requests and redacts the response', async () => {
+test('the Studio headless adapter sends scoped requests and returns raw data for final projection', async () => {
   const { broker, files, calls } = studioBroker(() => ({ ok: true, status: 200, host: 'personal-test.outsystems.dev',
     body: { data: { Connections: [{ ConnectionId: 'c', Password: 'SECRET-PW' }] } } }));
   const body = await broker.callScreenservice({ operationId: 'connections.settings', input: { inputParameters: {}, screenVariables: { ConnectionId: 'c' }, clientVariables: {} } });
-  assert.doesNotMatch(JSON.stringify(body), /SECRET-PW/);
+  assert.equal(body.data.Connections[0].Password, 'SECRET-PW');
+  assert.doesNotMatch(JSON.stringify(redact(body)), /SECRET-PW/);
   assert.deepEqual(calls[0], ['portal-session', 'fetch', 'req-0', '--tenant', 'personal-test.outsystems.dev']);
   const sent = files.get('req-0');
   assert.equal(sent.path, '/connections/screenservices/connections/Connections/connection/DataActionGetSettings');

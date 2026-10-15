@@ -38,6 +38,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { normalizeCodeOps } from './ssam-code.mjs';
+import { readVerifiedPatch, verifiedPatchFile } from './verified-patch.mjs';
+export { verifiedPatchFile };
 
 export const PATCH_MAX_OPS = 50;
 export const PATCH_OPS = Object.freeze(['add', 'remove', 'replace', 'test']);
@@ -74,14 +77,16 @@ const toPointer = tokens => '/' + tokens.map(escapeToken).join('/');
 // The JSON Schema of the two arguments, for tools registered from JSON Schema (ssam.mjs o11_job / ssam_job and the
 // studio_deliver proxy). o11-cycle.mjs declares the same shape in zod.
 export const patchJsonSchema = Object.freeze({
-  type: 'array', minItems: 1, maxItems: PATCH_MAX_OPS,
-  items: { type: 'object', additionalProperties: false, required: ['op', 'path'],
-    properties: { op: { type: 'string', enum: [...PATCH_OPS] }, path: { type: 'string', minLength: 1 }, value: {} } },
+  anyOf: [{ type: 'array', minItems: 1, maxItems: PATCH_MAX_OPS,
+    items: { type: 'object', additionalProperties: false, required: ['op', 'path'],
+      properties: { op: { type: 'string', enum: [...PATCH_OPS] }, path: { type: 'string', minLength: 1 }, value: {} } } },
+  { type: 'string', enum: ['verified'] }],
   description: 'JSON Patch (RFC 6902: add, remove, replace, test; at most 50) over the job of basedOn, paths /ops/<i>/... '
     + '(or /<i>/... of an array job) and /expectedMessages/- (a declaration {id, element, why} a refusal asked for). '
     + 'A path may name elements instead of counting them: actions/<Action>/steps/<as>/assign/<Var> (a list of the ops\' data '
     + 'first, then names: name, as, key, id or label; digits stay an index); a refusal gives each patch by name too (patchByName). '
-    + 'Instead of job (or after a partial job given in job with basedOn): the patched job is written to a new file.',
+    + 'Instead of job (or after a partial job given in job with basedOn): the patched job is written to a new file. '
+    + '"verified": every verified patch of the refusal of that job (its verifiedPatch.call).',
 });
 export const basedOnJsonSchema = Object.freeze({
   anyOf: [
@@ -235,9 +240,9 @@ function applyOne(job, operation, at, resolved) {
 
 // The patched copy of a job (the job given is never changed) and the numeric patch it resolved to. All operations or
 // none: the first failure throws a PatchError {code, message, at, candidates?}.
-export function patchJob(job, patch) {
+export function patchJob(job, patch, { max = PATCH_MAX_OPS } = {}) {
   if (!Array.isArray(patch) || patch.length === 0) throw new PatchError('PATCH_INVALID', 'patch is a non-empty array of {op, path, value?}');
-  if (patch.length > PATCH_MAX_OPS) throw new PatchError('PATCH_INVALID', `patch has ${patch.length} operations; at most ${PATCH_MAX_OPS} (send only the changed elements as a partial job with basedOn instead)`);
+  if (patch.length > max) throw new PatchError('PATCH_INVALID', `patch has ${patch.length} operations; at most ${PATCH_MAX_OPS} (send only the changed elements as a partial job with basedOn instead)`);
   if (!opsOf(job)) throw new PatchError('PATCH_PATH_FORBIDDEN', 'only a job with ops ({ops:[...]} or an array of ops) is patched; a composite {jobs} job is patched in its part file');
   const copy = structuredClone(job);
   const resolved = [];
@@ -374,10 +379,17 @@ function namedLists(op, at) {
 }
 // An element of a list in a partial job and in the job: the same identity, and the same owner when either has one.
 const sameElement = (a, b) => identityOf(a) === identityOf(b) && (a?.owner ?? null) === (b?.owner ?? null);
-// The html op of a whole page ({op:"html", data:{screen, html, bindings...}}, no parent): its screen, compared as OutSystems
-// compares names (without regard to case); null for any other op (the fragment form keeps parent as its identity).
-const pageScreen = op => (isObject(op) && op.op === 'html' && isObject(op.data) && typeof op.data.screen === 'string' && op.data.screen.trim()
-  ? op.data.screen.trim().toLowerCase() : null);
+// The html op of a whole page ({op:"html", data:{screen, html, bindings...}}, no parent) or of a whole document (data.html
+// is <screen name="X"> or <block name="X">, the document form of B1): its screen, compared as OutSystems compares names
+// (without regard to case); null for any other op (the fragment form keeps parent as its identity).
+const DOCUMENT_ROOT = /^\s*(?:<!--[\s\S]*?-->\s*)*<(?:screen|block)\s[^>]*?\bname\s*=\s*(?:"([^"]*)"|'([^']*)')/;
+const pageName = op => {
+  if (!isObject(op) || op.op !== 'html' || !isObject(op.data)) return null;
+  if (typeof op.data.screen === 'string' && op.data.screen.trim()) return op.data.screen.trim();
+  const root = op.parent == null && typeof op.data.html === 'string' ? DOCUMENT_ROOT.exec(op.data.html) : null;
+  return root && (root[1] ?? root[2] ?? '').trim() ? (root[1] ?? root[2]).trim() : null;
+};
+const pageScreen = op => pageName(op)?.toLowerCase() ?? null;
 const POSITION_LATER = new Set(['logic', 'screen', 'html']);
 // Where a new op goes: a reference after the last reference, a spec before the first logic/screen/html op, others at the end.
 function newOpIndex(ops, verb) {
@@ -418,10 +430,10 @@ export function mergePartialJob(base, partial) {
       // An html page: the page of the same screen in basedOn takes each field the partial brings (a named list such as vars
       // by name); a field it does not bring stays. Another screen is a new page. Never a second page of one screen.
       const hits = ops.map((o, i) => (pageScreen(o) === screen ? i : -1)).filter(i => i >= 0);
-      if (hits.length > 1) throw new PatchError('PARTIAL_AMBIGUOUS', `partial op #${at} (html page ${op.data.screen}) matches ${hits.length} html ops of basedOn for that screen; change it with a patch at one of them`, at, hits.map(i => where(i)));
+      if (hits.length > 1) throw new PatchError('PARTIAL_AMBIGUOUS', `partial op #${at} (html page ${pageName(op)}) matches ${hits.length} html ops of basedOn for that screen; change it with a patch at one of them`, at, hits.map(i => where(i)));
       if (!hits.length) { for (const list of lists) op.data[list].forEach(e => placed.add(e)); placed.add(op); ops.splice(newOpIndex(ops, op.op), 0, op); merged.ops.push({ op }); return; }
       const target = ops[hits[0]];
-      if (placed.has(target)) throw twice(at, 'the html page ' + op.data.screen);
+      if (placed.has(target)) throw twice(at, 'the html page ' + pageName(op));
       placed.add(target);
       let fields = false;
       for (const [key, value] of Object.entries(op)) if (key !== 'op' && key !== 'data') { target[key] = value; fields = true; }
@@ -628,12 +640,20 @@ function plainJob(job, { root, inlineDir, uuid }) {
     const file = path.isAbsolute(job) ? job : root ? path.resolve(root, job) : null;
     if (!file) return fail('JOB_PATH_NOT_ABSOLUTE', 'job must be an absolute path or the job itself: ' + job);
     if (!isFile(file)) return fail('JOB_NOT_FOUND', 'No job file at ' + file);
+    // A file with op shapes of one meaning (the ssam_code aliases, set props{}, keys inside data, ...: ssam-code.mjs
+    // normalizeCodeOps) runs as a new inline file in the kernel form; what was taken as meant is listed (normalizations).
+    let aliased = null;
+    try { aliased = normalizeCodeOps(JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''))); } catch { /* the kernel reports an unreadable job */ }
+    if (aliased?.changed) { const text = JSON.stringify(aliased.job, null, 2) + '\n'; return { ok: true, path: writeInline(inlineDir, text, uuid), sha256: sha256(text), ...notesOf(aliased) }; }
     return { ok: true, path: file, sha256: sha256(fs.readFileSync(file)) };
   }
   if (!job || typeof job !== 'object') return fail('JOB_INVALID', 'job is a path or the job itself ({ops:[...]} or an array of ops)');
-  const text = JSON.stringify(job, null, 2) + '\n';
-  return { ok: true, path: writeInline(inlineDir, text, uuid), sha256: sha256(text) };
+  const shaped = normalizeCodeOps(job);
+  const text = JSON.stringify(shaped.job, null, 2) + '\n';
+  return { ok: true, path: writeInline(inlineDir, text, uuid), sha256: sha256(text), ...notesOf(shaped) };
 }
+// The normalizations field of a resolved job (empty when nothing was taken as meant).
+const notesOf = shaped => (shaped?.normalizations?.length ? { normalizations: shaped.normalizations } : {});
 
 // The partial job given with basedOn: the job itself, its JSON text, or a file (absolute, or relative to root).
 function partialOf(job, root) {
@@ -663,6 +683,13 @@ export function resolvePatchedJob({ job, patch, basedOn } = {}, { root = null, i
   if (patch == null && job == null) return fail('PATCH_INVALID', 'basedOn goes with patch, or with job: a partial job with only the changed or new elements');
   const base = baseOf(basedOn, { root, work });
   if (!base.ok) return base;
+  // patch "verified": every verified patch the refusal of that job wrote beside it (refusalFields with jobFile, verified-patch.mjs), for that job only.
+  let verified = false;
+  if (patch === 'verified') {
+    const saved = readVerifiedPatch(base.file, base.sha256);
+    if (!saved.ok) return fail('PATCH_INVALID', saved.error);
+    patch = saved.patch; verified = true;
+  }
   let parsed;
   try { parsed = JSON.parse(base.bytes.toString('utf8').replace(/^﻿/, '')); }
   catch (error) { return fail('PATCH_INVALID', 'The base job is not valid JSON: ' + error.message, { job: base.file }); }
@@ -673,12 +700,13 @@ export function resolvePatchedJob({ job, patch, basedOn } = {}, { root = null, i
       if (!partial.ok) return partial;
       ({ job: result, summary } = mergePartialJob(parsed, partial.value));
     }
-    if (patch != null) { patched = patchJob(result, patch); result = patched.job; }
+    if (patch != null) { patched = patchJob(result, patch, verified ? { max: Infinity } : {}); result = patched.job; }
   } catch (error) { if (error instanceof PatchError) return fail(error.code, error.message, patchErrorFields(error)); throw error; }
-  const text = JSON.stringify(pinReferences(result, path.dirname(base.file), inlineDir), null, 2) + '\n';
+  const shaped = normalizeCodeOps(result);
+  const text = JSON.stringify(pinReferences(shaped.job, path.dirname(base.file), inlineDir), null, 2) + '\n';
   const file = writeInline(inlineDir, text, uuid);
   const done = { ok: true, path: file, sha256: sha256(text), basedOn: { job: base.file, sha256: base.sha256, ...(base.taskId ? { taskId: base.taskId } : {}) },
-    ...(summary ? { partial: partialSummary(summary) } : {}) };
+    ...(summary ? { partial: partialSummary(summary) } : {}), ...notesOf(shaped) };
   if (journalDir) {
     try {
       fs.mkdirSync(journalDir, { recursive: true });

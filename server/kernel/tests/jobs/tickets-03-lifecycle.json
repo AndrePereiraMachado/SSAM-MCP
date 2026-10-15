@@ -889,7 +889,8 @@
    "parent": "$Ticket_Create",
    "type": "IForEachNode",
    "name": "EachMember",
-   "as": "$Ticket_Create_fe49"
+   "as": "$Ticket_Create_fe49",
+   "allowForEach": {"why": "a proof job written before the owner rule reached raw ops: the loop maps the rows into a list (T2), kept as written and listed"}
   },
   {
    "op": "set",
@@ -2057,7 +2058,8 @@
    "parent": "$Ticket_ChangeStatus",
    "type": "IForEachNode",
    "name": "EachWatcher",
-   "as": "$Ticket_ChangeStatus_fe26"
+   "as": "$Ticket_ChangeStatus_fe26",
+   "allowForEach": {"why": "a proof job written before the owner rule reached raw ops: the loop maps the rows into a list (T2), kept as written and listed"}
   },
   {
    "op": "set",

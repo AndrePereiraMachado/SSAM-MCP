@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Visita Certa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root { --line: oklch(91% 0.01 240); --accent: oklch(55% 0.12 240); }
+body { margin: 0; font-family: "Inter Tight", system-ui, sans-serif; font-size: 14px; }
+.app { display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; }
+.sidebar { position: sticky; top: 0; height: 100vh; z-index: 5; border-right: 1px solid var(--line); }
+.nav-item { display: flex; gap: 10px; padding: 9px 10px; cursor: pointer; }
+.nav-item.active { color: var(--accent); font-weight: 600; }
+.main { padding: 32px 40px; }
+.page { animation: pageIn .25s both; }
+@keyframes pageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.seg { display: inline-flex; gap: 2px; }
+.btn { display: inline-flex; gap: 8px; height: 30px; }
+.chip { display: inline-flex; gap: 6px; border-radius: 999px; }
+.tbl { width: 100%; border-collapse: separate; }
+.modal-bg { position: fixed; inset: 0; z-index: 1000; background: oklch(15% 0.03 240 / .55); display: flex; align-items: center; justify-content: center; }
+.modal { width: 100%; max-width: 560px; background: #fff; border-radius: 18px; }
+.toast { position: fixed; bottom: 24px; left: 50%; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="application/json" id="seed-data">
+{"places": [
+  {"id": "p1", "name": "Cliente João", "city": "São Paulo", "uf": "SP", "type": "visita técnica", "favorite": true},
+  {"id": "p2", "name": "Obra Centro", "city": "Rio de Janeiro", "uf": "RJ", "type": "visita técnica", "favorite": false},
+  {"id": "p3", "name": "Loja Norte", "city": "São Paulo", "uf": "SP", "type": "entrega", "favorite": true}
+],
+"visits": [
+  {"id": "v1", "placeId": "p1", "date": "2026-05-04", "score": 82},
+  {"id": "v2", "placeId": "p3", "date": "2026-05-04", "score": 61}
+]}
+</script>
+<script src="babel.min.js"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="vc-ui.jsx"></script>
+<script type="text/babel" src="vc-app.jsx"></script>
+</body>
+</html>

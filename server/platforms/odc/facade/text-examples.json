@@ -1,0 +1,27 @@
+{
+  "schema": "ssam-text-examples/1",
+  "_doc": [
+    "The proven examples of the text forms the work packet carries (ssam_discover {packet:true}, work-packet.mjs, text-routes.mjs packetTextSection): one compact example per form, written as a model writes a creation (no @key, no ids).",
+    "Proven by kernel/tests/Shared/FlowApplyScenarios.cs ThePacketExamplesApplyInOneJob (FlowApplyTests in Anvil.Tests, FlowApplyOdcTests in Anvil.Tests.Odc): ssam-ddl/1 and ssam-flow/1 in ONE job with the user exception they raise, on the blank service fixture of the lane; ssam-html/1 with the text of the screen action it names, on the Reactive fixture. Each one reads back as the text written.",
+    "A form keeps one text for both lanes, or one per lane (o11, odc) where the lane writes a word of its own (site property / setting; an ODC app has no public server action)."
+  ],
+  "examples": {
+    "ssam-ddl/1": {
+      "o11": "/// Situação de um pedido.\ncreate static entity StatusPedido public (\n  Id Integer identifier required,\n  Label Text(50) required,\n  Order Integer required\n)\nvalues\n  Aberto (Id = 1, Label = \"Aberto\", Order = 1),\n  Fechado (Id = 2, Label = \"Fechado\", Order = 2);\n/// Pedido de um cliente.\ncreate entity Pedido public (\n  Id Long Integer identifier auto required,\n  Numero Text(20) required,\n  StatusPedidoId StatusPedido Identifier required references StatusPedido on delete Protect,\n  Total Decimal(18,2) default 0,\n  CriadoEm Date Time required\n);\ncreate unique index UQ_Pedido_Numero on Pedido (Numero);\ntype PedidoResumo public = {\n  Numero: Text(20);\n  Total: Decimal(18,2);\n}\nsite property LimitePedidos: Integer = 50",
+      "odc": "/// Situação de um pedido.\ncreate static entity StatusPedido public (\n  Id Integer identifier required,\n  Label Text(50) required,\n  Order Integer required\n)\nvalues\n  Aberto (Id = 1, Label = \"Aberto\", Order = 1),\n  Fechado (Id = 2, Label = \"Fechado\", Order = 2);\n/// Pedido de um cliente.\ncreate entity Pedido public (\n  Id Long Integer identifier auto required,\n  Numero Text(20) required,\n  StatusPedidoId StatusPedido Identifier required references StatusPedido on delete Protect,\n  Total Decimal(18,2) default 0,\n  CriadoEm Date Time required\n);\ncreate unique index UQ_Pedido_Numero on Pedido (Numero);\ntype PedidoResumo public = {\n  Numero: Text(20);\n  Total: Decimal(18,2);\n}\nsetting LimitePedidos: Integer = 50"
+    },
+    "ssam-flow/1": {
+      "exceptions": [
+        "PedidoNaoEncontrado"
+      ],
+      "o11": "/// Lê o resumo de um pedido pelo número.\nserver action ObterPedidoResumo public\n  in Numero: Text\n  out Resumo: PedidoResumo\n  GetPedido = aggregate FROM Pedido WHERE (Pedido.Numero = Numero) MAX 1\n  if GetPedido.List.Empty:  # Pedido existe?\n    raise PedidoNaoEncontrado(\"Pedido não encontrado\")\n  assign  # Montar o resumo\n    Resumo.Numero = GetPedido.List.Current.Pedido.Numero\n    Resumo.Total = GetPedido.List.Current.Pedido.Total\n  end\n",
+      "odc": "/// Lê o resumo de um pedido pelo número.\nserver action ObterPedidoResumo\n  in Numero: Text\n  out Resumo: PedidoResumo\n  GetPedido = aggregate FROM Pedido WHERE (Pedido.Numero = Numero) MAX 1\n  if GetPedido.List.Empty:  # Pedido existe?\n    raise PedidoNaoEncontrado(\"Pedido não encontrado\")\n  assign  # Montar o resumo\n    Resumo.Numero = GetPedido.List.Current.Pedido.Numero\n    Resumo.Total = GetPedido.List.Current.Pedido.Total\n  end\n"
+    },
+    "ssam-html/1": {
+      "text": "<screen name=\"Pedidos\" actions=\"Fechar\">\n<var name=\"Filtro\" type=\"Text\"/>\n<aggregate name=\"GetPedidos\" from=\"Pedido\" where=\"Pedido.Total > 0\" sort=\"Pedido.CriadoEm desc\" max=\"50\"/>\n<Block name=\"LayoutTopMenu\"><slot name=\"Title\">Pedidos</slot><slot name=\"MainContent\">\n<div list=\"GetPedidos.List\"><span>{{ GetPedidos.List.Current.Pedido.Numero }}</span>\n<button class=\"btn\" onclick=\"Fechar(PedidoId = GetPedidos.List.Current.Pedido.Id)\">Fechar</button></div>\n</slot></Block>\n</screen>",
+      "actions": [
+        "/// Fecha o pedido escolhido.\naction Pedidos.Fechar\n  in PedidoId: Pedido Identifier\n  assign Filtro = \"\"  # Limpar o filtro\n  end\n"
+      ]
+    }
+  }
+}

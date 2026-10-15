@@ -14,6 +14,7 @@ import { PUBLIC_KEYS, isSensitiveKey } from '../runtime/errors.mjs';
 import { Catalog } from '../runtime/catalog.mjs';
 import { OdcAccess } from '../runtime/access.mjs';
 import { WriteJournal } from '../runtime/write-journal.mjs';
+import { CredentialRegistry } from '../runtime/credential-registry.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const bridgeDir = path.join(here, '..', '..', 'studio', 'bridge');
@@ -23,6 +24,37 @@ const sources = fs.readdirSync(bridgeDir).filter(f => f.endsWith('.cs')).map(f =
 const catalog = JSON.parse(fs.readFileSync(path.join(here, '..', 'catalog', 'catalog.json'), 'utf8'));
 const block = name => core.slice(core.indexOf(name), core.indexOf('};', core.indexOf(name)));
 const basePathOf = api => new URL(api.servers[0].url.replace('ODC_PORTAL_DOMAIN', 'placeholder.invalid')).pathname.replace(/\/$/, '');
+
+test('M2: cookie privacy agrees with the C# private transport routing allowlist', () => {
+  const source = fs.readFileSync(path.join(bridgeDir, 'PortalPrivateHttp.cs'), 'utf8');
+  const routing = /var publicRouting = name switch \{([\s\S]*?)\};/.exec(source)?.[1];
+  assert.ok(routing, 'the bridge must declare its public routing cookie policy');
+  const names = [...routing.matchAll(/"(Tenant[A-Za-z]+)"\s*=>/g)].map(match => match[1]);
+  assert.deepEqual(names.sort(), ['TenantDomain', 'TenantGeo', 'TenantPortfolio', 'TenantPref', 'TenantRing']);
+  assert.match(routing, /"TenantDomain" => value == host/);
+  assert.match(routing, /"TenantPref" => value == host\.Split\('\.'\)\[0\]/);
+  assert.match(routing, /"TenantGeo" => .*"\^\[A-Z\]\{2\}\$"/);
+  assert.match(routing, /"TenantRing" => .*"\^\\\\d\{1,2\}\$"/);
+  assert.match(routing, /"TenantPortfolio" => value is "0" or "1"/);
+  assert.match(routing, /_ => false/);
+  assert.match(source, /if \(!publicRouting\) \{\s*masks\.Add\(value\)/);
+  const host = 'personal-fixture-with-long-name.outsystems.dev';
+  const registry = new CredentialRegistry();
+  const publicValues = { TenantDomain: host, TenantPref: host.split('.')[0], TenantGeo: 'US', TenantRing: '12', TenantPortfolio: '1' };
+  for (const name of names) {
+    assert.equal(registry.cookie({ key: name, value: publicValues[name] }, host), false, name);
+    const invalid = crypto.randomUUID();
+    assert.equal(registry.cookie({ key: name, value: invalid }, host), true, name + ' unexpected shape remains private');
+    assert.equal([...registry.values()].includes(invalid), true, name);
+  }
+  for (const name of ['crf', 'nr1apps', 'nr2apps', 'unrecognized']) {
+    const value = crypto.randomUUID();
+    assert.equal(registry.cookie({ key: name, value }, host), true, name);
+    assert.equal([...registry.values()].includes(value), true, name);
+  }
+  for (const name of ['language', 'consent']) assert.equal(registry.cookie({ key: name, value: crypto.randomUUID() }, host), false, name);
+  assert.equal(registry.cookie({ key: 'unrecognized', value: '1' }, host), false);
+});
 
 test('every public API family of the catalog is a bridge base path', () => {
   const bridge = new Set([...block('BasePaths').matchAll(/"(\/api\/[^"]+)"/g)].map(m => m[1]));

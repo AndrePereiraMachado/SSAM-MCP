@@ -1,3 +1,4 @@
+import { CredentialRegistry } from './credential-registry.mjs';
 import { fail } from './errors.mjs';
 import { requestBytes, readJson } from './http.mjs';
 
@@ -12,10 +13,13 @@ export class OAuthClient {
     this.pending = null;
     this.tokenEndpoint = null;
     this.knownTokens = new Set();
+    this.credentialRegistry = new CredentialRegistry();
+    this.credentialRegistry.add(config.clientSecret);
   }
 
   configured() { return Boolean(this.config.origin && this.config.clientId && this.config.clientSecret); }
-  secrets() { return [this.config.clientId, this.config.clientSecret, ...this.knownTokens]; }
+  secrets() { return [this.config.clientSecret, ...this.knownTokens]; }
+  dispose() { this.credentialRegistry.dispose(); this.cached = null; this.knownTokens.clear(); }
 
   invalidate(token) { if (this.cached?.token === token) this.cached = null; }
 
@@ -60,8 +64,15 @@ export class OAuthClient {
       fail('AUTH_RESPONSE_INVALID', 'Token response is missing a valid Bearer token or positive expiry.');
     }
     this.knownTokens.add(data.access_token);
+    this.credentialRegistry.add(data.access_token);
     // Bound redaction state; normal cache expiry uses the actual provider lifetime.
-    if (this.knownTokens.size > 16) this.knownTokens.delete(this.knownTokens.values().next().value);
+    if (this.knownTokens.size > 16) {
+      const previous = this.knownTokens.values().next().value;
+      this.knownTokens.delete(previous);
+      // Keep the current known-token window active; older tokens remain in the
+      // bounded retired process history for joined or resumed reads.
+      if (previous !== this.config.clientSecret) this.credentialRegistry.retire(previous);
+    }
     const skewMs = Math.min(60_000, data.expires_in * 100);
     this.cached = { token: data.access_token, expiresAt: this.now() + data.expires_in * 1000 - skewMs };
     return data.access_token;

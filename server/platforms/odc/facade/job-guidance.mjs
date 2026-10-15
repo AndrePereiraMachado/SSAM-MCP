@@ -19,10 +19,10 @@ const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFE
 const OP_FAILURE = /op #(\d+) \(([a-z-]+)[^)]*\)(?: \[[A-Z0-9_]+\])?:\s*(?:([A-Za-z.]+Exception):\s*)?([\s\S]*)$/;
 // Which operation of a shared capability a verb exercises (discovery OP_VERBS, inverted).
 const OPERATION_OF_VERB = { create: 'create', spec: 'create', set: 'set', link: 'set', rename: 'rename', replace: 'replace', move: 'move', duplicate: 'duplicate', delete: 'delete', get: 'read', dump: 'read', find: 'read', usages: 'usages',
-  rest: 'create', 'rest-expose': 'create', soap: 'create' };
+  rest: 'create', 'rest-consume': 'create', 'rest-expose': 'create', soap: 'create', 'entity-actions': 'create' };
 // The contract pointer of a verb: the verb table, or the compact language's own schema for agent/spec/logic/screen/html and
-// the integration ops (rest, rest-expose, soap: `api --op <op>`, their shapes, codes and rules).
-const POINTER_OF_VERB = { agent: 'agent.shapes', spec: 'spec.shapes', logic: 'logic.action', screen: 'screen', html: 'html', rest: 'rest.shapes', 'rest-expose': 'rest-expose.shapes', soap: 'soap.shapes' };
+// the integration ops (rest, rest-consume, rest-expose, soap: `api --op <op>`, their shapes, codes and rules) and the generator entity-actions.
+const POINTER_OF_VERB = { agent: 'agent.shapes', spec: 'spec.shapes', logic: 'logic.action', screen: 'screen', html: 'html', rest: 'rest.shapes', 'rest-consume': 'rest-consume.shapes', 'rest-expose': 'rest-expose.shapes', soap: 'soap.shapes', 'entity-actions': 'entity-actions.shapes' };
 const shortType = t => String(t ?? '').split('.').at(-1).replace(/^([A-Z])(?!I?[A-Z])/, 'I$1');
 const typeWords = t => shortType(t).replace(/^I(?=[A-Z])/, '').replace(/([a-z])([A-Z])/g, '$1 $2');
 

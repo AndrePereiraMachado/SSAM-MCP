@@ -43,7 +43,7 @@ public class SoapContractTests
     /// <summary>The imported client as the Studio's importer leaves it, built with the raw creators; the operand input typed
     /// by <paramref name="operandType"/>.</summary>
     private static string Imported(string operandType) => $$$"""
-        [{"op":"create","parent":"@espace","type":"ISOAPClient","name":"Calculator","as":"$c"},
+        [{"op":"create","parent":"@espace","type":"ISOAPClient","name":"Calculator","as":"$c","allowSoapWithoutImport":{"why":"the imported client as the importer leaves it, built by verbs for the test"}},
          {"op":"create","parent":"$c","type":"ISOAPStructure","name":"tOperands","as":"$s"},
          {"op":"set","target":"$s","prop":"OriginalName","value":"tOperands"},
          {"op":"create","parent":"$s","type":"ISOAPStructureAttribute","name":"A","as":"$sa"},

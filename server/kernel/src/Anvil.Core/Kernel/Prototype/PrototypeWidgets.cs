@@ -31,8 +31,9 @@ public sealed record PrototypeHandler(string Event, string? Screen, string? Acti
 /// <summary>How an event key compiles at one owner (PrototypeLogic decides; the widget compiler only binds).</summary>
 public sealed record PrototypeEventBinding(string EventKey, string? Screen, string? Action, IReadOnlyList<JsonObject> Params, IReadOnlyDictionary<string, JsonNode>? NavParams = null, string? Why = null);
 
-/// <summary>A list of the owner: the aggregate it iterates and how its current record is read.</summary>
-public sealed record PrototypeListBinding(string Aggregate, string Entity, string Collection, IReadOnlyDictionary<string, string> Joins);
+/// <summary>A list of the owner: the aggregate it iterates and how its current record is read; or, bound by data.bind (2.12), the
+/// output list of a Data Action (Source) and its current record (Current).</summary>
+public sealed record PrototypeListBinding(string Aggregate, string Entity, string Collection, IReadOnlyDictionary<string, string> Joins, string? Source = null, string? Current = null);
 
 /// <summary>
 /// The capture trees as native widget trees (3.2): one <see cref="WidgetNode"/> per element of the prototype, decided by the shared
@@ -168,6 +169,23 @@ public sealed class PrototypeWidgets
         return widget;
     }
 
+    /// <summary>A whitespace-only text between two texts that show something (not a formatting newline between elements).</summary>
+    private static bool SignificantSpace(JsonArray siblings, int i)
+    {
+        static bool Blank(JsonNode? n) => n is JsonObject o && o["x"] is JsonValue && o["expr"] == null && o["t"] == null && Collapse.Replace(o["x"]!.ToString(), " ").Trim().Length == 0;
+        static bool Shows(JsonNode? n) => n is JsonObject o && o["t"] == null && o["x"] is JsonValue && (o["expr"] != null || o["x"]!.ToString().Trim().Length > 0);
+        return Blank(siblings[i]) && !siblings[i]!["x"]!.ToString().Contains('\n') && i > 0 && i < siblings.Count - 1 && Shows(siblings[i - 1]) && Shows(siblings[i + 1]);
+    }
+
+    private WidgetNode SpaceText(JsonObject node)
+    {
+        var text = new WidgetNode("ITextWidget", node["k"]?.ToString(), null, null, [], " ", null, null, null, []);
+        var spec = new PrototypeWidgetSpec { SourceKey = node["k"]?.ToString() };
+        spec.Properties.Add(("Text", " "));
+        _c.Specs[text] = spec; _c.Widgets++;
+        return text;
+    }
+
     private WidgetNode? Text(JsonObject node, PrototypeScope scope)
     {
         var raw = node["x"]!.ToString();
@@ -209,7 +227,8 @@ public sealed class PrototypeWidgets
         if (string.IsNullOrEmpty(src)) return;
         var path = src.Split('#', '?')[0];
         if (path.StartsWith("./", StringComparison.Ordinal)) path = path[2..];
-        if (_c.ImageOf(path) is { } image)
+        // 'foto%20grande.png' is the file 'foto grande.png' (the capture names the asset decoded, as the browser reads it)
+        if ((_c.ImageOf(path) ?? _c.ImageOf(PrototypeNames.Unescape(path))) is { } image)
         {
             spec.Properties.Add(("Type", "Static"));
             spec.Properties.Add(("Image", image));
@@ -242,6 +261,15 @@ public sealed class PrototypeWidgets
             ? (icon["from"] as JsonArray ?? []).OfType<JsonArray>().Where(p => p.Count == 2).Select(p => (p[0]!.ToString(), p[1]?.ToString() ?? "")).ToList()
             : Attrs(node);
         var hasElementChildren = (node["c"] as JsonArray ?? []).OfType<JsonObject>().Any(c => c["t"] != null);
+        // an inline svg that is no icon (several colors, a gradient): the image of its own markup (an img with the SVG as a data
+        // URL, its size and classes kept), never an Image without a value nor the svg attributes on another element
+        if (icon == null && tag == "svg" && node["svg"]?.ToString() is { Length: > 0 } markup)
+        {
+            attrs = attrs.Where(a => a.Item1.ToLowerInvariant() is "class" or "style" or "width" or "height" or "role" or "title" || a.Item1.StartsWith("aria-", StringComparison.OrdinalIgnoreCase)).ToList();
+            var xml = markup.Contains("xmlns=", StringComparison.Ordinal) ? markup : markup.Replace("<svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"", StringComparison.Ordinal);
+            attrs.Insert(0, ("src", "data:image/svg+xml," + PrototypeIcons.PercentEncode(xml)));
+            tag = "img";
+        }
         var request = new ElementRequest(_c.Platform, icon != null ? "svg" : tag, attrs, Clickable(node), icon != null, insideForm, hasElementChildren);
         ElementMapping mapping;
         try { mapping = _c.Element(request); }
@@ -280,11 +308,14 @@ public sealed class PrototypeWidgets
         var styleExpression = StyleExpression(node, classes, scope);
         // extended properties: what the map kept, minus what a capture expression rewrites
         var dynamicAttributes = node["attrExpr"] as JsonObject;
+        // an inline style the capture (or data.bind) computes is the expression's alone: never the static one beside it
+        if (dynamicAttributes?["style"] is JsonObject) spec.Properties.RemoveAll(p => p.Property == "CustomStyle");
         // the map's extended values are already what a set op writes (quoted literals, ElementWidgetMap): written as they are; an
         // id reference is the literal with the ids resolved to the widget names
         foreach (var (name, value) in mapping.ExtendedProperties)
         {
-            if (dynamicAttributes?.ContainsKey(name) == true || string.Equals(name, "class", StringComparison.OrdinalIgnoreCase)) continue;
+            // the map writes attribute names in lower case (viewbox) and the capture as written (viewBox): one attribute, once
+            if (dynamicAttributes?.Any(d => string.Equals(d.Key, name, StringComparison.OrdinalIgnoreCase)) == true || string.Equals(name, "class", StringComparison.OrdinalIgnoreCase)) continue;
             if (IdReferences.Contains(name) && Literal(value) is { Length: > 0 } ids) { spec.Extended.Add((name, PrototypeExpr.Quote(ResolveIds(node, name, ids)))); continue; }
             if (BooleanAttributes.Contains(name) && IsLiteral(value)) { spec.Extended.Add((name, PrototypeExpr.Quote(name.ToLowerInvariant()))); continue; }
             spec.Extended.Add((name, value));
@@ -295,6 +326,15 @@ public sealed class PrototypeWidgets
                 if (string.Equals(name, "class", StringComparison.OrdinalIgnoreCase)) continue;
                 var text = AttributeExpression(node, name, value as JsonObject, scope);
                 if (text == null) continue;
+                // an inline style that varies by item (an extra attribute of the list's entity): it replaces the static
+                // CustomStyle the map took from the first item, never a second style attribute
+                if (string.Equals(name, "style", StringComparison.OrdinalIgnoreCase))
+                {
+                    spec.Properties.RemoveAll(p => p.Property == "CustomStyle");
+                    spec.Extended.RemoveAll(x => string.Equals(x.Name, "style", StringComparison.OrdinalIgnoreCase));
+                    spec.Extended.Add(("style", text.Value));
+                    continue;
+                }
                 if (name == "disabled" && mapping.Widget is "IButton" or "ILink" or "IInput" or "ITextArea" or "IDropdown" or "ICheckbox")
                 {
                     spec.Properties.RemoveAll(p => p.Property == "Enabled");
@@ -414,7 +454,13 @@ public sealed class PrototypeWidgets
             {
                 if (wrap != null && i == start) { children.Add(ListWidget(node, wrap, childScope, self: false)); listed = true; if (!detached) continue; }
                 if (wrap != null && !detached && i > start && i < start + Math.Max(count, 1)) continue;
-                if (c[i] is JsonObject child) children.AddRange(Node(child, childScope, nowInsideForm));
+                if (c[i] is JsonObject child)
+                {
+                    // the space between two texts of one line ("📦" " " "Entrega", JSX {icon} {label}) is the space the browser
+                    // shows, never formatting: kept as a text of one space (VisitaCerta 2026-10-12)
+                    if (SignificantSpace(c, i)) { children.Add(SpaceText(child)); continue; }
+                    children.AddRange(Node(child, childScope, nowInsideForm));
+                }
             }
             if (wrap != null && !listed) children.Add(ListWidget(node, wrap, childScope, self: false));
         }
@@ -632,7 +678,13 @@ public sealed class PrototypeWidgets
         var template = list["template"] as JsonObject;
         var items = new List<WidgetNode>();
         PrototypeScope itemScope = scope;
-        if (binding != null)
+        if (binding?.Source != null)
+        {
+            spec.Properties.Add(("Source", binding.Source));
+            // the prototype's fields are not the producer's: an unbound slot of the row keeps its literal (listed unevaluable)
+            itemScope = scope.With(field: (field, _) => throw new PrototypeExpressionException($"the list is bound to {binding.Source}: the field {field} of the prototype's collection needs bind.slots"), fieldType: (_, _) => null);
+        }
+        else if (binding != null)
         {
             spec.Properties.Add(("Source", binding.Aggregate + ".List"));
             itemScope = scope.With(
@@ -659,8 +711,15 @@ public sealed class PrototypeWidgets
                 if (_c.IdClasses.TryGetValue(id, out var cls) && !classes.Contains(cls)) classes.Add(cls);
             }
             style = string.Join(" ", classes);
+            // the inline style of the list element, as the element map writes it for any element (CustomStyle)
+            foreach (var (property, value) in mapping.Properties.Where(p => p.Property == "CustomStyle")) spec.Properties.Add((property, value));
             foreach (var (name, value) in mapping.ExtendedProperties)
                 if (!string.Equals(name, "class", StringComparison.OrdinalIgnoreCase)) spec.Extended.Add((name, PrototypeExpr.Quote(value)));
+            // the inline style of the list's own element (a React column: display flex, direction column): an attribute of the
+            // list, as the class is its Style
+            if (mapping.Properties.FirstOrDefault(p => p.Property == "CustomStyle").Value is { Length: > 0 } inline
+                && !spec.Extended.Any(x => string.Equals(x.Name, "style", StringComparison.OrdinalIgnoreCase)))
+                spec.Extended.Add(("style", PrototypeExpr.Quote(inline)));
             if (mapping.SubstitutedFrom != null) _c.SubstitutedTags.Add(mapping.SubstitutedFrom);
             _c.Elements++;
         }

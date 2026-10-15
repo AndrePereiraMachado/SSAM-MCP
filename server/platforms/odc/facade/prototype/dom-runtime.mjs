@@ -5,7 +5,7 @@
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { ORIGIN, RejectingDispatcher, sourceInterceptor, installNetwork, localPath } from './network.mjs';
-import { planScripts, runModules, siteOf, describeError, RenderFailure } from './scripts.mjs';
+import { planScripts, runModules, siteOf, describeError, RenderFailure, registerEvaluated } from './scripts.mjs';
 import { isRemote } from './vendor.mjs';
 
 const require = createRequire(import.meta.url);
@@ -18,15 +18,62 @@ const SKIP_TAGS = new Set(['script', 'noscript', 'template', 'style', 'link', 'm
 const LUCIDE_DEFAULTS = new Set(['xmlns', 'width', 'height', 'viewbox', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'data-lucide']);
 
 // An svg that paints only with currentColor (or none): no other color, gradient, pattern, image, reference or inline style.
+// The root may carry an inline style that paints nothing (VisitaCerta's Icon: style="flex-shrink: 0;"): the span that replaces
+// it keeps that style.
 const PAINTS = new Set(['', 'none', 'currentcolor', 'transparent']);
+const PAINT_PROPERTIES = /^(fill|stroke|color|opacity|filter|mask|clip-path|background|mix-blend-mode|paint-order|stop-|marker|visibility|display|transform)/;
+export function paintFreeStyle(text) {
+  const declarations = String(text ?? '').split(';').map(part => part.trim()).filter(Boolean);
+  return declarations.every(part => { const at = part.indexOf(':'); return at > 0 && !PAINT_PROPERTIES.test(part.slice(0, at).trim().toLowerCase()); });
+}
+const styled = (node, root) => node.hasAttribute('style') && !(node === root && paintFreeStyle(node.getAttribute('style')));
 function monochrome(svg) {
   for (const node of [svg, ...svg.querySelectorAll('*')]) {
     const tag = node.localName.toLowerCase();
     if (['image', 'use', 'lineargradient', 'radialgradient', 'pattern', 'foreignobject', 'style', 'script', 'mask', 'filter'].includes(tag)) return false;
-    if (node.hasAttribute('style')) return false;
+    if (styled(node, svg)) return false;
     for (const attribute of ['fill', 'stroke', 'color', 'stop-color']) if (node.hasAttribute(attribute) && !PAINTS.has(node.getAttribute(attribute).trim().toLowerCase())) return false;
   }
   return svg.children.length > 0;
+}
+
+// The one literal color an svg paints with (fills and strokes in that color, currentColor or none; opacities allowed), or
+// null: gradients, patterns, images, references, inline styles or two colors keep it out.
+function singleColor(svg) {
+  let color = null;
+  for (const node of [svg, ...svg.querySelectorAll('*')]) {
+    const tag = node.localName.toLowerCase();
+    if (['image', 'use', 'lineargradient', 'radialgradient', 'pattern', 'foreignobject', 'style', 'script', 'mask', 'filter', 'text'].includes(tag)) return null;
+    if (styled(node, svg)) return null;
+    for (const attribute of ['fill', 'stroke', 'color', 'stop-color']) {
+      if (!node.hasAttribute(attribute)) continue;
+      const value = node.getAttribute(attribute).trim().toLowerCase();
+      if (PAINTS.has(value)) continue;
+      if (!/^(#[0-9a-f]{3,8}|rgba?\([^)]*\)|[a-z]+)$/.test(value) || value.startsWith('url')) return null;
+      if (color && color !== value) return null;
+      color = value;
+    }
+  }
+  return svg.children.length > 0 ? color : null;
+}
+
+// An element named like an overlay (read through the cascade only then) and the generic wrapper components that name none.
+const OVERLAY_NAME = /(^|[\s_-])(modal|dialog|overlay|backdrop|scrim|sheet|drawer|lightbox|popup)([\s_-]|$)/i;
+const PLACEMENT = ['position', 'inset', 'top', 'right', 'bottom', 'left'];
+const GENERIC_OVERLAY_COMPONENT = /^(Modal|Dialog|Portal|Overlay|Backdrop|Sheet|Drawer|Popup|Popover|Lightbox)$/;
+
+// A backdrop color between transparent and opaque: rgba()/hsla() with a comma alpha, any CSS color function with a slash
+// alpha (rgb(0 0 0 / .5), oklch(15% 0.03 240 / .55), hsl(), lab(), lch(), oklab(), color()), or #rgba / #rrggbbaa.
+export function translucentColor(color) {
+  const text = String(color ?? '').trim().toLowerCase();
+  let alpha = null;
+  const comma = /(?:rgba?|hsla?)\(\s*[^,()]+,[^,()]+,[^,()]+,\s*([0-9.]+%?)\s*\)/.exec(text);
+  const slash = /(?:rgba?|hsla?|oklch|oklab|lch|lab|hwb|color)\([^)]*\/\s*([0-9.]+%?)\s*\)/.exec(text);
+  const hex = /#(?:[0-9a-f]{3}([0-9a-f])|[0-9a-f]{6}([0-9a-f]{2}))\b/.exec(text);
+  const raw = comma?.[1] ?? slash?.[1] ?? null;
+  if (raw != null) alpha = raw.endsWith('%') ? Number(raw.slice(0, -1)) / 100 : Number(raw);
+  else if (hex) alpha = parseInt(hex[1] ? hex[1] + hex[1] : hex[2], 16) / 255;
+  return alpha != null && Number.isFinite(alpha) && alpha > 0 && alpha < 1;
 }
 
 function fnv(text) {
@@ -161,6 +208,50 @@ export class Page {
     return [...types].sort();
   }
 
+  // An overlay a click mounts (a React bottom sheet): positioned absolute/fixed over the whole screen (inset 0, or the four
+  // sides at 0) with a translucent backdrop color and at least one element inside. Inline style only (what a framework
+  // writes); a class-styled dialog is a <dialog> or [role=dialog] already. -> the name of the component that rendered it
+  // (React fiber: DaySheet), 1 when unnamed, or null.
+  // A backdrop styled by a class (VisitaCerta 2026-10-12: <div class="modal-bg"> with position:fixed; inset:0 and an oklch
+  // backdrop in the stylesheet, mounted by a portal, no role) is the same overlay: only an element named like one is read
+  // through the cascade (getComputedStyle walks every rule; it is never run per element), and its color is not asked (the
+  // stylesheet parser of jsdom reads oklch()/color-mix() backdrops as transparent): the name and the covering placement say it.
+  overlayOf(element) {
+    const style = element.style;
+    if (!style || !element.firstElementChild || ['dialog', 'body', 'html', 'svg'].includes(element.localName)) return null;
+    const zero = value => /^0(px|%)?$/.test(String(value ?? '').trim());
+    const covering = read => {
+      const inset = String(read('inset') ?? '').trim().split(/\s+/).filter(Boolean);
+      return (inset.length && inset.every(zero)) || (['top', 'right', 'bottom', 'left'].every(side => zero(read(side))));
+    };
+    if (['absolute', 'fixed'].includes(String(style.position).trim())) {
+      const read = property => style.getPropertyValue(property);
+      if (!covering(read)) return null;
+      if (!translucentColor(String(read('background-color') || read('background') || '').trim())) return null;
+      return this.componentOf(element) ?? 1;
+    }
+    if (String(style.position).trim() || !OVERLAY_NAME.test(String(element.getAttribute('class') ?? '') + ' ' + element.id)) return null;
+    const read = property => style.getPropertyValue(property) || this.cascade(element, property) || '';
+    if (!['absolute', 'fixed'].includes(String(read('position')).trim()) || !covering(read)) return null;
+    return this.componentOf(element) ?? 1;
+  }
+
+  // The function component that rendered an element (React: the fiber's nearest function owner), or null. A generic wrapper
+  // (Modal, Dialog, Portal, Overlay...) names nothing: the component that used it does (WeatherPeekModal > Modal).
+  componentOf(element) {
+    const key = Object.keys(element).find(name => name.startsWith('__reactFiber$'));
+    let generic = null;
+    for (let fiber = key ? element[key] : null, steps = 0; fiber && steps < 20; fiber = fiber.return, steps++) {
+      const type = fiber.type;
+      if (typeof type !== 'function') continue;
+      const name = type.displayName || type.name;
+      if (!/^[A-Za-z][A-Za-z0-9]*$/.test(name ?? '')) return generic;
+      if (!GENERIC_OVERLAY_COMPONENT.test(name)) return name;
+      generic ??= name;
+    }
+    return generic;
+  }
+
   globalListeners() {
     const out = [];
     for (const [target, entries] of this.registry) {
@@ -232,6 +323,7 @@ export class Page {
     Object.defineProperty(window, 'localStorage', { configurable: true, get: () => local });
     Object.defineProperty(window, 'sessionStorage', { configurable: true, get: () => session });
     this.local = local;
+    this.sessionStore = session;
     // Dialog, scrolling, media, observers, innerText, CSS.escape, dialogs of the browser.
     const Dialog = window.HTMLDialogElement?.prototype;
     if (Dialog) {
@@ -457,6 +549,8 @@ export class Page {
   }
 
   scriptSource(entry) {
+    // code a script inserted at runtime (Babel's output for a text/babel script): named babel:<its source>, lines mapped back
+    if (entry.text != null && entry.dynamic) return { text: entry.text, filename: registerEvaluated(entry.text, { entry: this.options.entry, inline: this.babelInline ?? [] }) ?? this.options.entry, line: 0, column: 0 };
     if (entry.text != null) return { text: entry.text, filename: this.options.entry, line: entry.line - 1, column: entry.column - 1 };
     if (entry.local != null) {
       const text = this.options.files.text(entry.local);
@@ -506,6 +600,8 @@ export class Page {
     for (const entry of plan.filter(item => item.kind === 'importmap')) {
       try { this.importMap = JSON.parse(entry.text ?? '{}'); } catch { this.log.problems.push({ reason: 'importmap', message: 'invalid import map' }); }
     }
+    // the start lines of the inline text/babel scripts: Babel names their output "Inline Babel script (n)"
+    this.babelInline = plan.filter(entry => entry.kind === 'babel' && entry.text != null).map(entry => entry.line ?? 1);
     const runnable = plan.filter(entry => (entry.kind === 'classic' && !entry.nomodule) || entry.kind === 'module');
     for (const entry of plan) this.handledScripts.add(entry.element);
     const sync = runnable.filter(entry => entry.kind === 'classic' && (entry.text != null || (!entry.defer && !entry.async)));
@@ -540,6 +636,7 @@ export class Page {
         page.handledScripts.add(node);
         const [entry] = planScripts({ querySelectorAll: () => [node], URL: window.document.URL });
         if (!entry || !['classic', 'module'].includes(entry.kind)) continue;
+        entry.dynamic = true;
         if (entry.remote && !page.options.vendors.has(entry.url)) page.log.problems.push({ reason: 'vendor', url: entry.url, message: 'script ' + entry.url + ' inserted at runtime is not available', dynamic: true });
         page.runEntry(entry).then(() => node.dispatchEvent(new window.Event('load')));
       }
@@ -729,8 +826,16 @@ export class Page {
     const classList = String(element.getAttribute('class') ?? '').split(/\s+/).filter(Boolean);
     let name = element.getAttribute('data-lucide');
     if (!name && classList.includes('lucide')) name = classList.find(token => token.startsWith('lucide-'))?.slice(7);
-    // A hand-written monochrome inline svg (strokes and fills in currentColor or none) is an icon too, named by its markup.
-    if (!name && monochrome(element)) name = 'svg-' + fnv((element.getAttribute('viewBox') ?? '') + '|' + element.innerHTML.replace(/\s+/g, ' ').trim());
+    const library = Boolean(name);
+    // A hand-written monochrome inline svg (strokes and fills in currentColor or none) is an icon too, named by its markup; so
+    // is one painted with ONE literal color (a status bar drawn with fill="#0F1A14"): the mask keeps its shapes and alpha, and
+    // the instance carries that color, so it looks the same (never an Image without a value, never a lost svg).
+    const literal = !name && !monochrome(element) ? singleColor(element) : null;
+    // the drawing is the root's paint too: the same star outlined (fill none) and filled (fill currentColor, stroke none) are two
+    // icons (VisitaCerta 2026-10-12: every star of the table showed filled); a root that paints as a line icon adds nothing
+    const rootPaint = ['fill', 'stroke'].map(key => [key, String(element.getAttribute(key) ?? '').trim().toLowerCase()])
+      .filter(([key, value]) => value && !(key === 'fill' && value === 'none') && !(key === 'stroke' && value === 'currentcolor')).map(([key, value]) => key + '=' + value).join(';');
+    if (!name && (literal || monochrome(element))) name = 'svg-' + fnv((element.getAttribute('viewBox') ?? '') + '|' + element.innerHTML.replace(/\s+/g, ' ').trim() + (rootPaint ? '|' + rootPaint : ''));
     if (!name) return null;
     const from = [];
     for (const attribute of element.attributes) {
@@ -742,12 +847,30 @@ export class Page {
       }
       from.push([attribute.name, attribute.value]);
     }
+    // A hand-written svg sizes itself with its width/height attributes (a library icon by the prototype's rules): the span
+    // that replaces it gets the same size inline, and the literal color of a single-color svg.
+    if (!library) {
+      const size = ['width', 'height'].map(key => [key, element.getAttribute(key)]).filter(([, value]) => value != null && /^\d+(\.\d+)?(px)?$/.test(String(value).trim()))
+        .map(([key, value]) => key + ':' + String(value).trim().replace(/px$/, '') + 'px');
+      const style = [...size, ...(literal ? ['color:' + literal] : [])];
+      // the root's own (paint-free) inline style stays, after the size: one style attribute, never two
+      const own = from.findIndex(([key]) => key === 'style');
+      if (own >= 0) { const [, text] = from.splice(own, 1)[0]; style.push(...String(text).split(';').map(part => part.trim()).filter(Boolean)); }
+      if (style.length) from.push(['style', style.join(';')]);
+    }
     if (!this.iconSvg.has(name)) {
       const keep = ['xmlns', 'viewBox', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin'];
-      const attrs = keep.filter(key => element.getAttribute(key) != null).map(key => key + '="' + element.getAttribute(key) + '"').join(' ');
-      this.iconSvg.set(name, { viewBox: element.getAttribute('viewBox') ?? '0 0 24 24', svg: '<svg ' + attrs + '>' + element.innerHTML + '</svg>' });
+      const attrs = keep.filter(key => element.getAttribute(key) != null).map(key => key + '="' + element.getAttribute(key) + '"');
+      // the SVG defaults made explicit on the root of a single-color svg (fill black, stroke none): the mask stylesheet fills in
+      // fill="none"/stroke only when the root says nothing, which is right for an icon library, not for a drawn shape
+      if (literal) {
+        if (element.getAttribute('fill') == null) attrs.push('fill="#000"');
+        if (element.getAttribute('stroke') == null) attrs.push('stroke="none"');
+      }
+      this.iconSvg.set(name, { viewBox: element.getAttribute('viewBox') ?? '0 0 24 24', svg: '<svg ' + attrs.join(' ') + '>' + element.innerHTML + '</svg>' });
     }
-    return { name, strokeWidth: this.effectiveStroke(element), from };
+    const stroke = this.effectiveStroke(element);
+    return { name, strokeWidth: stroke ?? (literal ? 1 : null), from };
   }
 
   // Visibility of top-level regions and modal candidates: hidden attribute, dialog open, inline display, and the
@@ -778,6 +901,8 @@ export class Page {
       if (icon) out.icon = icon; else out.svg = node.outerHTML;
       return out;
     }
+    const overlay = this.overlayOf(node);
+    if (overlay) out.ov = overlay;
     if (['input', 'select', 'textarea'].includes(tag)) {
       out.p = { v: String(node.value ?? '') };
       if (tag === 'input' && ['checkbox', 'radio'].includes(String(node.type))) out.p.ck = Boolean(node.checked);
@@ -841,8 +966,11 @@ export function parseRules(text) {
         if (rule.type === 1) {
           if (inMedia) continue;
           const display = rule.style.getPropertyValue('display'), stroke = rule.style.getPropertyValue('stroke-width');
-          if (!display && !stroke) continue;
-          for (const selector of rule.selectorText.split(',').map(part => part.trim())) out.push({ selector, spec: specificity(selector), display: display || null, displayImportant: rule.style.getPropertyPriority('display') === 'important', stroke: stroke || null, strokeImportant: rule.style.getPropertyPriority('stroke-width') === 'important' });
+          // the placement of a class-styled overlay (overlayOf): position and the sides it covers
+          const placed = Object.fromEntries(PLACEMENT.map(property => [property, rule.style.getPropertyValue(property) || null]).filter(([, value]) => value));
+          if (!display && !stroke && !Object.keys(placed).length) continue;
+          const important = Object.fromEntries(Object.keys(placed).map(property => [property + 'Important', rule.style.getPropertyPriority(property) === 'important']));
+          for (const selector of rule.selectorText.split(',').map(part => part.trim())) out.push({ selector, spec: specificity(selector), display: display || null, displayImportant: rule.style.getPropertyPriority('display') === 'important', stroke: stroke || null, strokeImportant: rule.style.getPropertyPriority('stroke-width') === 'important', ...placed, ...important });
         } else if (rule.cssRules) visit(rule.cssRules, inMedia || rule.type === 4 || rule.type === 12);
       }
     };

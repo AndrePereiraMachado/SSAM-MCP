@@ -152,6 +152,52 @@ public class PrototypeCssTests
         Assert.Equal("assets/products.png", odc.Report["unmappedUrls"]![0]!["url"]!.ToString());
     }
 
+    /// <summary>2026-10-13 (VisitaCerta screens/*.png are JPEGs): a JPEG saved as products.png gets the URL .jpg, the type the
+    /// Studio gives the image (url(.png) was refused by the Verify as an unknown object, with no code); a real PNG keeps .png
+    /// and an asset whose bytes are no image keeps its own extension.</summary>
+    [Fact]
+    public void AnImageUrlTakesTheTypeOfItsBytesNeverTheExtensionOfItsName()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ssam-css-type-" + Guid.NewGuid().ToString("N")[..8]);
+        try
+        {
+            var capture = Capture();
+            Directory.CreateDirectory(Path.Combine(dir, "sheets"));
+            foreach (var sheet in Directory.GetFiles(Path.Combine(Bundle, "sheets"))) File.Copy(sheet, Path.Combine(dir, "sheets", Path.GetFileName(sheet)));
+            var asset = Path.Combine(dir, capture["assets"]![0]!["bundle"]!.ToString());
+            Directory.CreateDirectory(Path.GetDirectoryName(asset)!);
+            PrototypeCssRequest Bare() => new(capture, dir, "o11", "Haiku_UI", new Dictionary<string, string>(), new Dictionary<string, string>(), ["dialog"], new Dictionary<string, WidgetNode>());
+            File.WriteAllBytes(asset, [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, (byte)'J', (byte)'F', (byte)'I', (byte)'F', 0]);
+            Assert.Contains("background-image:url('/Haiku_UI/img/Haiku_UI.FarmaVirtualProducts.jpg')", PrototypeCss.Compose(Bare()).StyleSheet);
+            File.WriteAllBytes(asset, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+            Assert.Contains("background-image:url('/Haiku_UI/img/Haiku_UI.FarmaVirtualProducts.png')", PrototypeCss.Compose(Bare()).StyleSheet);
+        }
+        finally { try { Directory.Delete(dir, recursive: true); } catch (IOException) { } }
+        // the rule itself: a JPEG is .jpg whatever the name (foto.jpeg was refused too), GIF/SVG/WebP by their bytes
+        byte[] jpeg = [0xFF, 0xD8, 0xFF, 0xDB], gif = "GIF89a"u8.ToArray(), svg = "<?xml version=\"1.0\"?><svg xmlns=\"http://www.w3.org/2000/svg\"/>"u8.ToArray();
+        Assert.Equal("jpg", PrototypeNames.ImageExtension(jpeg, "foto.png"));
+        Assert.Equal("jpg", PrototypeNames.ImageExtension(jpeg, "foto.jpeg"));
+        Assert.Equal("gif", PrototypeNames.ImageExtension(gif, "anim.png"));
+        Assert.Equal("svg", PrototypeNames.ImageExtension(svg, "logo.svg"));
+        Assert.Equal("png", PrototypeNames.ImageExtension([0x89, 0x50, 0x4E, 0x47], "foto.jpg"));
+        Assert.Equal("woff2", PrototypeNames.ImageExtension("wOF2"u8.ToArray(), "fonts/a.woff2"));
+        Assert.Equal("ext", PrototypeNames.ImageExtension([], "a.EXT"));
+    }
+
+    /// <summary>2026-10-13: 'foto%20grande.png' in a url() or an img src is the asset 'foto grande.png' (the capture names it
+    /// decoded): the module image, never an External URL that does not exist in the published module.</summary>
+    [Fact]
+    public void APercentEncodedUrlResolvesToTheDecodedAsset()
+    {
+        Assert.Equal("foto grande.png", PrototypeNames.Unescape("foto%20grande.png"));
+        Assert.Equal("enc ícone.png", PrototypeNames.Unescape("enc%20%C3%ADcone.png"));
+        Assert.Equal("100%.css", PrototypeNames.Unescape("100%.css"));
+        Assert.Equal("plain.png", PrototypeNames.Unescape("plain.png"));
+        var options = new RewriteOptions { Platform = "o11", AssetUrls = new Dictionary<string, string> { ["img/foto grande.png"] = "/M/img/M.PFotoGrande.png" } };
+        var rewrite = PrototypeRewrites.Rewrite(".a{background:url('img/foto%20grande.png')}", options);
+        Assert.Contains("url('/M/img/M.PFotoGrande.png')", rewrite.Text);
+    }
+
     [Fact]
     public void TheImportFallbackHookWritesTheInlineFontFacesInPlaceOfTheImport()
     {
@@ -197,7 +243,7 @@ public class PrototypeCssTests
         Assert.Equal("dialog::backdrop", written);
         var css = PrototypeCss.Compose(Request(Capture())).StyleSheet;
         var adapters = css[css.IndexOf(PrototypeCss.AdaptersMarker, StringComparison.Ordinal)..];
-        Assert.Contains(".popup-backdrop{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#13291e55;backdrop-filter:blur(3px)}", adapters);
+        Assert.Contains(".popup-backdrop{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:#13291e55;backdrop-filter:blur(3px)}", adapters);
         Assert.Contains("dialog::backdrop{background:#13291e55;backdrop-filter:blur(3px)}", Section(css, "/* styles.css */\n", PrototypeCss.IconsMarker));
     }
 

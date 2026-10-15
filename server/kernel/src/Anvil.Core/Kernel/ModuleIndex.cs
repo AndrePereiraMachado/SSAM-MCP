@@ -337,10 +337,10 @@ public sealed class ModuleIndex
 }
 
 // One folder of indexes per lane: <root>\v1\<lane>\<sha256>.<adapter>.json, and beside each the module digest
-// <sha256>.<adapter>.digest.json (ModuleDigest: valid for the same schema, extractor, lane, adapter and sha256) and, when
-// asked for, the rich index <sha256>.<adapter>.rich.json (ModuleRichIndex, the same rule). A cache: written atomically,
-// trimmed to the budget by oldest write (indexes, digests and rich indexes together), and any file that fails validation
-// is a miss.
+// <sha256>.<adapter>.digest.json (ModuleDigest: valid for the same schema, extractor, lane, adapter and sha256), the data
+// text <sha256>.<adapter>.ddl.json (DataDdl, the same rule) and, when asked for, the rich index
+// <sha256>.<adapter>.rich.json (ModuleRichIndex, the same rule). A cache: written atomically, trimmed to the budget by
+// oldest write (indexes, digests, data texts and rich indexes together), and any file that fails validation is a miss.
 public sealed class ModuleIndexStore(string root, string lane, string adapter, long budget = 512L * 1024 * 1024)
 {
     public string Root => root;
@@ -416,6 +416,107 @@ public sealed class ModuleIndexStore(string root, string lane, string adapter, l
         DurableJson.WriteBytes(file, rich.ToJson(adapter));
         Trim(file);
         return file;
+    }
+
+    // The key table of one ssam-html/1 reading (ScreenHtml): k -> ObjectKey of the document with that htmlSha256, kept with
+    // the capture's sha256 so an edit based on {capture, html} finds its keys: <sha256>.<adapter>.html-<htmlSha256>.json.
+    public string HtmlKeysPathOf(string sourceSha256, string htmlSha256) =>
+        Path.Combine(root, "v1", lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".html-" + htmlSha256.ToLowerInvariant() + ".json");
+
+    public string SaveHtmlKeys(string sourceSha256, ScreenHtmlDocument document)
+    {
+        var file = HtmlKeysPathOf(sourceSha256, document.HtmlSha256);
+        var json = new System.Text.Json.Nodes.JsonObject { ["schema"] = ScreenHtml.Schema, ["extractor"] = ScreenHtml.Extractor, ["lane"] = lane,
+            ["sourceSha256"] = sourceSha256.ToLowerInvariant(), ["root"] = document.Root, ["rootKey"] = document.RootKey, ["rootKind"] = document.RootKind,
+            ["htmlSha256"] = document.HtmlSha256,
+            ["keys"] = new System.Text.Json.Nodes.JsonObject(document.Keys.Select(k => KeyValuePair.Create(k.Key, (System.Text.Json.Nodes.JsonNode?)k.Value))),
+            // The text too: an edit of this reading that arrives after the screen changed is rebased by key (C2), and its
+            // conflicts are read against this text.
+            ["html"] = document.Html };
+        DurableJson.WriteBytes(file, System.Text.Encoding.UTF8.GetBytes(json.ToJsonString()));
+        Trim(file);
+        return file;
+    }
+
+    // The data text (DataDdl, ssam-ddl/1) beside them: <sha256>.<adapter>.ddl.json, the same rule.
+    public string DdlPathOf(string sourceSha256) => Path.Combine(root, "v1", lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".ddl.json");
+
+    public DataDdl? LoadDdl(string sourceSha256)
+    {
+        var file = DdlPathOf(sourceSha256);
+        try { return File.Exists(file) ? DataDdl.Parse(File.ReadAllBytes(file), lane, adapter, sourceSha256) : null; }
+        catch { return null; }
+    }
+
+    public string SaveDdl(DataDdl ddl)
+    {
+        if (ddl.Lane != lane) throw new ArgumentException("Data text belongs to the " + ddl.Lane + " lane");
+        var file = DdlPathOf(ddl.SourceSha256);
+        DurableJson.WriteBytes(file, ddl.ToJson(adapter));
+        Trim(file);
+        return file;
+    }
+
+    // The flow reading (ModuleFlow, ssam-flow/1) beside them: <sha256>.<adapter>.flow.json.
+    public string FlowPathOf(string sourceSha256) => Path.Combine(root, "v1", lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".flow.json");
+
+    public ModuleFlow? LoadFlow(string sourceSha256)
+    {
+        var file = FlowPathOf(sourceSha256);
+        try { return File.Exists(file) ? ModuleFlow.Parse(File.ReadAllBytes(file), lane, adapter, sourceSha256) : null; }
+        catch { return null; }
+    }
+
+    public string SaveFlow(ModuleFlow flow)
+    {
+        if (flow.Lane != lane) throw new ArgumentException("Module flow belongs to the " + flow.Lane + " lane");
+        var file = FlowPathOf(flow.SourceSha256);
+        DurableJson.WriteBytes(file, flow.ToJson(adapter));
+        Trim(file);
+        return file;
+    }
+
+    // One action read (FlowReading: its text and id table) beside the flow reading of its capture, written when ssam_map view
+    // flow serves the action (the facade writes the same file): <sha256>.<adapter>.flow-<textSha>.json. An edit of that read
+    // (basedOn = its textSha) that arrives after the action changed is merged three ways with it (FlowMerge).
+    public string FlowReadingPathOf(string sourceSha256, string textSha) =>
+        Path.Combine(root, "v1", lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".flow-" + textSha.ToLowerInvariant() + ".json");
+
+    public string SaveFlowReading(FlowReading reading)
+    {
+        if (reading.Lane != lane) throw new ArgumentException("Flow reading belongs to the " + reading.Lane + " lane");
+        var file = FlowReadingPathOf(reading.SourceSha256, reading.TextSha);
+        DurableJson.WriteBytes(file, reading.ToJson(adapter));
+        Trim(file);
+        return file;
+    }
+
+    // The read of that textSha in any capture of this lane (the same text has the same ids), or null when no file of this
+    // schema and extractor holds it.
+    public FlowReading? LoadFlowReading(string textSha)
+    {
+        if (textSha.Length != 16 || !textSha.All(Uri.IsHexDigit)) return null;
+        var folder = Path.Combine(root, "v1", lane);
+        try {
+            if (!Directory.Exists(folder)) return null;
+            foreach (var file in new DirectoryInfo(folder).GetFiles("*." + adapter + ".flow-" + textSha.ToLowerInvariant() + ".json").OrderByDescending(f => f.LastWriteTimeUtc))
+                try { if (FlowReading.Parse(File.ReadAllBytes(file.FullName), lane, adapter, textSha) is { } reading) return reading; }
+                catch (IOException) { } catch (UnauthorizedAccessException) { }
+        } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        return null;
+    }
+
+    // The key table of a reading, or null when absent or of another reading.
+    public System.Text.Json.Nodes.JsonObject? LoadHtmlKeys(string sourceSha256, string htmlSha256)
+    {
+        var file = HtmlKeysPathOf(sourceSha256, htmlSha256);
+        try {
+            if (!File.Exists(file)) return null;
+            var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllBytes(file))!.AsObject();
+            return json["schema"]?.ToString() == ScreenHtml.Schema && json["extractor"]?.GetValue<int>() == ScreenHtml.Extractor
+                && string.Equals(json["htmlSha256"]?.ToString(), htmlSha256, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(json["sourceSha256"]?.ToString(), sourceSha256, StringComparison.OrdinalIgnoreCase) ? json : null;
+        } catch { return null; }
     }
 
     private void Trim(string keep)

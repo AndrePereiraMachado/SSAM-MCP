@@ -15,7 +15,13 @@ import { fakeAnvil } from './fixtures/fake-anvil.mjs';
 import { tempKernel, linked } from './fixtures/o11env-kernel.mjs';
 // A namespace import: on a parent commit an export that does not exist yet fails the assertion that reads it, not the file.
 import * as reference from '../ssam-reference.mjs';
+import { generatorApproval, generatorShown, withGeneratorStates } from '../generators.mjs';
 const { API_OPS, API_OP_LINES, registerSsamReference, rulesAnswer } = reference;
+// The generator gate (generators.mjs, 9ebcc472): the op of a pending generator is neither a candidate nor in the allowed
+// list of a guessed op; approved (or named literally), it is. The lists below are the ungated ones, filtered here.
+const unasked = op => generatorShown(generatorApproval(op)?.op === op ? op : null);
+const gated = ops => ops.filter(op => unasked(typeof op === 'string' ? op : op.op));
+const allApproved = fn => withGeneratorStates({ 'entity-actions': { state: 'approved' }, 'rest-consume': { state: 'approved' }, 'gen-screen': { state: 'approved' } }, fn);
 
 // The contracts `api --op <op>` answers, cut to what the tests read (shapes of HtmlExpander, HtmlVisual and VerbSurface).
 const CHECKBOX = { widget: 'ICheckbox', rule: 'bind -> Boolean Variable' };
@@ -30,7 +36,7 @@ const SCHEMAS = {
     reference: { kind: 'read', required: ['ref'], optional: [], effect: 'Resolves a reference of the reference grammar' },
     logic: { kind: 'write', required: ['data'], optional: [] } } },
 };
-const OPS = ['logic', 'spec', 'screen', 'html', 'html-visual', 'verbs', 'rest', 'rest-expose', 'soap', 'agent', 'prototype'];
+const OPS = ['logic', 'spec', 'screen', 'html', 'html-visual', 'verbs', 'rest', 'rest-consume', 'rest-expose', 'soap', 'agent', 'prototype', 'entity-actions'];
 // The kernel's refusal (CommandSurface.UnknownOp), with its closest name only within 3 edits.
 const unknownOp = op => `ArgumentException: unknown op '${op}'${op === 'refrence' ? "; closest: 'reference'" : ''}; allowed: ${OPS.join(', ')}; verbs (their line): create, set, reference, html, rest`;
 // A native description (NativeSurface.Describe): the interfaces of that name with their properties, and the CLI's note.
@@ -257,8 +263,13 @@ test('G9 (call 50): an unknown op holding the words of known ops answers UNKNOWN
   assert.deepEqual(await first('fragment'), ['html-visual', 'html']);
   assert.deepEqual(await first('visual'), ['html-visual', 'html']);
   assert.deepEqual(await first('html_page'), ['html', 'html-visual']);
-  assert.deepEqual(await first('rest-api'), ['rest', 'rest-expose']);
-  assert.deepEqual(await first('create-entity'), ['create']);
+  assert.deepEqual(await first('rest-api'), gated(['rest', 'rest-consume', 'rest-expose']));
+  // "entity" is a segment of the op entity-actions (2026-10-13): it is a candidate after the verb (when approved).
+  assert.deepEqual(await first('create-entity'), gated(['create', 'entity-actions']));
+  await allApproved(async () => {
+    assert.deepEqual(await first('rest-api'), ['rest', 'rest-consume', 'rest-expose'], 'approved: the generator op is a candidate');
+    assert.deepEqual(await first('create-entity'), ['create', 'entity-actions'], 'approved: the generator op is a candidate');
+  });
   assert.deepEqual(await first('refrence'), ['reference']);
   assert.deepEqual(await first('expose'), ['rest-expose']);
   assert.deepEqual(await first('expose-api'), ['rest-expose']);
@@ -266,7 +277,7 @@ test('G9 (call 50): an unknown op holding the words of known ops answers UNKNOWN
   assert.deepEqual(await first('HTMLPage'), ['html', 'html-visual']);
   // A verb carries its own line of the verb table (api --op verbs, read once), not a template.
   const verb = await h.ask('o11', 'api', { op: 'create-entity' });
-  assert.deepEqual(verb.candidates, [{ op: 'create', line: SCHEMAS.verbs.verbs.create }]);
+  assert.deepEqual(verb.candidates, gated([{ op: 'create', line: SCHEMAS.verbs.verbs.create }, { op: 'entity-actions', line: API_OP_LINES['entity-actions'] }]));
   const reads = h.run.calls.filter(c => c.args.join(' ') === 'api --op verbs').length;
   assert.deepEqual((await h.ask('o11', 'api', { op: 'refrence' })).candidates, [{ op: 'reference', line: SCHEMAS.verbs.verbs.reference }]);
   assert.equal(h.run.calls.filter(c => c.args.join(' ') === 'api --op verbs').length, reads, 'the verb table is read once');
@@ -303,7 +314,8 @@ test('the refusal of an unknown op as CommandSurface.UnknownOp writes it (read f
     : { ok: false, command: 'api', error: render(args[2], args[2] === 'refrence' ? 'reference' : null) }) });
   const presentation = await h.ask('o11', 'api', { op: 'html-presentation' });
   assert.equal(presentation.code, 'UNKNOWN_OP', JSON.stringify(presentation));
-  assert.deepEqual([presentation.op, presentation.candidates.map(c => c.op), presentation.allowed], ['html-presentation', ['html-visual', 'html'], grammars]);
+  assert.deepEqual([presentation.op, presentation.candidates.map(c => c.op), presentation.allowed], ['html-presentation', ['html-visual', 'html'], gated(grammars)]);
+  await allApproved(async () => assert.deepEqual((await h.ask('o11', 'api', { op: 'html-presentation' })).allowed, grammars, 'approved: the whole kernel list'));
   const closest = await h.ask('o11', 'api', { op: 'refrence', name: 'ref' });
   assert.deepEqual([closest.code, closest.candidates, closest.continuation.arguments.query],
     ['UNKNOWN_OP', [{ op: 'reference', line: SCHEMAS.verbs.verbs.reference }], { op: 'reference', name: 'ref' }]);
@@ -319,11 +331,11 @@ test('call 50 against the O11 CLI of this worktree: html-presentation answers ht
   assert.equal(value.code, 'UNKNOWN_OP', JSON.stringify(value).slice(0, 400));
   assert.deepEqual(value.candidates.map(c => c.op), ['html-visual', 'html']);
   assert.deepEqual(value.continuation.arguments.query, { op: 'html-visual' });
-  assert.deepEqual(value.allowed, API_OPS, 'the kernel list, read from its refusal');
+  assert.deepEqual(value.allowed, gated(API_OPS), 'the kernel list, read from its refusal (without the pending generators)');
   const expose = await mcp.call('ssam_reference', { lane: 'o11', kind: 'api', query: { op: 'expose' } });
   assert.deepEqual(expose.candidates?.map(c => c.op), ['rest-expose'], JSON.stringify(expose).slice(0, 400));
   const verb = await mcp.call('ssam_reference', { lane: 'o11', kind: 'api', query: { op: 'create-entity' } });
-  assert.deepEqual(verb.candidates.map(c => c.op), ['create']);
+  assert.deepEqual(verb.candidates.map(c => c.op), gated(['create', 'entity-actions']));
   assert.equal(verb.candidates[0].line.kind, 'write', 'the line of create in the verb table: ' + JSON.stringify(verb.candidates[0].line).slice(0, 200));
   assert.ok(verb.candidates[0].line.required.includes('type'));
 });

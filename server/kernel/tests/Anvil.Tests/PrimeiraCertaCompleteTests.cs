@@ -56,6 +56,7 @@ public sealed class PrimeiraCertaCompleteTests
         """);
         var refused = Assert.IsType<JobPreflightException>(Errors.FindCoded(error!));
         Assert.True(refused.VerifyRan);
+        Assert.Equal(new[] { "preflight", "base", "apply", "verify" }, refused.Phases);
         var problems = refused.Problems.OfType<JsonObject>().ToArray();
         // The failed action points at itself in the op as written; the Verify of the action that applied comes with it.
         var apply = Assert.Single(problems, p => p["phase"]!.GetValue<string>() == "apply");
@@ -89,7 +90,7 @@ public sealed class PrimeiraCertaCompleteTests
         var error = Assert.ThrowsAny<Exception>(() => JobRunner.Run(new ModelHost(Path.Combine(dir, "work")), null, job, Path.Combine(dir, "collision.oml"),
             bindings: new Dictionary<string, string> { ["Runtime"] = signature }));
         var problems = Assert.IsType<JobPreflightException>(Errors.FindCoded(error)).Problems.OfType<JsonObject>().ToArray();
-        Assert.Contains(problems, p => p["code"]!.GetValue<string>() == "NAME_COLLISION" && p["pointer"]!.GetValue<string>() == "/ops/1/data/actions/0");
+        Assert.Contains(problems, p => p["code"]!.GetValue<string>() == "NAME_COLLISION" && p["pointer"]!.GetValue<string>() == "/ops/1/data/actions/0/name");
         Assert.Contains(problems, p => p["phase"]!.GetValue<string>() == "verify" && p["pointer"]!.GetValue<string>() == "/ops/1/data/actions/1/steps/0/assign/Code");
         Assert.DoesNotContain(problems, p => p["code"]!.GetValue<string>() == "InvalidFlow_NoStart");
     }
@@ -111,7 +112,7 @@ public sealed class PrimeiraCertaCompleteTests
         var envelope = Errors.Envelope("apply", error!, 1);
         Assert.Equal("DELETE_HAS_CONSUMERS", envelope["code"]!.GetValue<string>());
         Assert.True(envelope["verifyRan"]!.GetValue<bool>());
-        Assert.Equal("apply", Assert.Single(envelope["phases"]!.AsArray())!.GetValue<string>());
+        Assert.Equal(new[] { "preflight", "base", "apply", "verify" }, envelope["phases"]!.AsArray().Select(p => p!.GetValue<string>()));
         Assert.All(envelope["problems"]!.AsArray(), p => Assert.Equal("apply", p!["phase"]!.GetValue<string>()));
         Assert.NotEmpty(envelope["problems"]!.AsArray());
     }

@@ -129,7 +129,8 @@ public class DeliveryIntegrationImportTests
             var dir = Path.Combine(work, "importer-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(dir);
             var job = Path.Combine(dir, "native-import.json");
             var ops = new JsonArray(
-                new JsonObject { ["op"] = "create", ["parent"] = "@espace", ["type"] = "ISOAPClient", ["name"] = parameters["client"]!.ToString(), ["as"] = "$c" },
+                new JsonObject { ["op"] = "create", ["parent"] = "@espace", ["type"] = "ISOAPClient", ["name"] = parameters["client"]!.ToString(), ["as"] = "$c",
+                    [CompileCheck.SoapAllowKey] = new JsonObject { ["why"] = "the fake of the Studio importer builds the client by verbs" } },
                 new JsonObject { ["op"] = "create", ["parent"] = "$c", ["type"] = "ISOAPAction", ["name"] = "Add", ["as"] = "$m" });
             if (BreakContract)
             {

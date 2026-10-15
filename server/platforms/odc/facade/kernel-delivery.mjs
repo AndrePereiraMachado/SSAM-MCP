@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
+import { entityActionsOf } from './entity-actions.mjs';
 import { promisify } from 'node:util';
 import { anvilRoot, odcRoot } from './workspace.mjs';
 import { hostedContext, hostedSpawnEnv } from './executor.mjs';
@@ -13,10 +14,13 @@ import { jobSummary } from './job-summary.mjs';
 // The prototype importer (docs/PROTOTIPO-NATIVO.md, lane surface): the capture before the Studio, the rebuild of 1.4.1,
 // the receipt after the build and the seed after a clean publication.
 import { hasPrototypeOps, expandJobFile, capturePrototype, buildWithDegradation, buildProblems, journalTo, kernelPrototypeReport, findNativeDom,
-  measurePrototypeFidelity, prototypeReceipt, receiptWithSeed } from './prototype-op.mjs';
+  measurePrototypeFidelity, prototypeReceipt, receiptWithSeed, bindingCorrection, readJobDocument } from './prototype-op.mjs';
 import { seedPrototypeData, odcDataWriter } from './prototype-seed.mjs';
 import { prototypeAppUrl, prototypeScreenLinks } from './next-steps.mjs';
 import { kernelStart } from './quality-meter.mjs';
+import { removedOf } from './ssam-code.mjs';
+// F5, the family rule of producer signatures (producer-signatures.mjs): reference snapshots reused by revision.
+import { reuseOdcReference, rememberOdcReference, forgetOdcReference, recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
 
 const exec = promisify(execFile);
 // Quality (docs/QUALIDADE.md): a cold `dotnet anvil-odc.dll` is a kernel leaf (the worker request is one in anvil-worker.mjs).
@@ -91,10 +95,13 @@ export function interpretKernelResult(result, { output, exitCode = 0 }) {
     error: `ODC authoring CLI does not confirm layout ${requiredFlowLayoutEngine}: it is older than the facade; the integrator or the user rebuilds it before delivery.`,
     continuation: { tool: 'ssam_doctor', arguments: { lane: 'odc' }, why: 'componente não compilado: o integrador/usuário compila' } };
   // expectValid=false is useful in negative tests, but never authorizes delivery of an invalid candidate.
-  const ok = exitCode === 0 && result.ok === true && result.data?.accepted === true && result.data?.isValid === true;
+  // A lab that builds a consumed SOAP service by verbs (allowSoapWithoutImport, kernel CompileCheck) is never delivered either.
+  const lab = (Array.isArray(result.data?.highWarnings) ? result.data.highWarnings : []).find(w => w?.code === 'COMPILE_SOAP_DEFINITION_ALLOWED');
+  const ok = exitCode === 0 && result.ok === true && result.data?.accepted === true && result.data?.isValid === true && !lab;
   return { ok, candidate, receipt,
-    ...(ok ? {} : { error: withoutStack(result.error) ?? 'Kernel candidate must be accepted and valid before delivery.', diagnostics: result.data?.policyMessages,
-      ...(typeof result.code === 'string' ? { code: result.code } : {}),
+    ...(ok ? {} : { error: lab ? `The job builds a consumed SOAP service by verbs under the lab escape allowSoapWithoutImport (${lab.message ?? ''}); a lab is never delivered.`
+        : withoutStack(result.error) ?? 'Kernel candidate must be accepted and valid before delivery.', diagnostics: result.data?.policyMessages,
+      ...(lab ? { code: 'COMPILE_SOAP_DEFINITION' } : typeof result.code === 'string' ? { code: result.code } : {}),
       // primeira-certa A3: every problem (a candidate only the Verify refused carries them in data), whether the Verify ran
       // before the refusal, why not, and the phases of its problems.
       ...(Array.isArray(result.problems) ? { problems: result.problems } : Array.isArray(result.data?.problems) ? { problems: result.data.problems } : {}),
@@ -102,10 +109,14 @@ export function interpretKernelResult(result, { output, exitCode = 0 }) {
     validation: result.data?.validation, screenRoles: screenRolesOf(result.data?.results), leftovers: leftoversOf(result.data?.validation),
     // lentidao 2026-10-12: what the kernel rewrote in the job instead of refusing it (JobNormalizer), on an accepted candidate.
     ...(ok ? normalizationsOf(result.data) : {}),
+    // ssam_code: what an action text or a screen edit removed, never silent.
+    removed: removedOf(result.data?.results),
     // The HIGH warnings of the data-access rules (kernel highWarnings) first, then the Verify ones.
     warnings: [...highWarningsOf(result.data?.highWarnings), ...warningsOf(result.data?.validation)],
     // I7: what each integration op (rest, rest-expose, soap) imported, updated and removed.
-    ...(Array.isArray(result.data?.integration) ? { integration: result.data.integration } : {}) };
+    ...(Array.isArray(result.data?.integration) ? { integration: result.data.integration } : {}),
+    // The generated standard actions of the data model (op entity-actions).
+    ...(entityActionsOf(result.data?.entityActions) ? { entityActions: entityActionsOf(result.data.entityActions) } : {}) };
 }
 
 // I1 (fa): the content identity of a capture (the sha256 with the OML header's volatile fields masked), or the raw sha256
@@ -397,6 +408,12 @@ export function publicStructureProblems(entries, { module = 'this app' } = {}) {
     if (!isObject(op)) continue;
     if (op.op === 'spec' && Array.isArray(op.data?.structures))
       op.data.structures.forEach((s, j) => { if (isObject(s) && truthy(s.public ?? s.Public)) problem(entry, s.name, entry.pointer == null ? null : `${entry.pointer}/data/structures/${j}/public`); });
+    // DL2: the data text (spec op, ddl form): `type <Name> public` on a line of its own.
+    if (op.op === 'spec' && typeof op.data?.ddl === 'string')
+      op.data.ddl.split(/\r?\n/).forEach((line, at) => {
+        const m = /^type (\[(?:[^\]]|\]\])*\]|[^\s=]+)[^=]*? public\b/.exec(line);
+        if (m) { problem(entry, m[1], entry.pointer == null ? null : `${entry.pointer}/data/ddl`); problems.at(-1).line = at + 1; }
+      });
     if (op.op === 'create' && STRUCTURE_TYPE.test(String(op.type ?? ''))) {
       const name = op.name ?? op.args?.Name ?? op.args?.name;
       if (typeof op.as === 'string') aliases.set(op.as, name);
@@ -557,6 +574,8 @@ const standingGrants = async () => import('./standing-grants.mjs').catch(() => n
 export async function deliverKernel(input, deps) {
   const { root, studio, prepareManifest, nextLabDir, journal, apply = applyKernel, guide = catalogGuidance, prefetch = warmIndex,
     catalog = readCatalogOf(root), publishStep = publishDelivered } = deps;
+  // F5: the workspace's producer cache (producer-signatures.mjs); null turns the reuse off.
+  const signatureCache = deps.signatureCache !== undefined ? deps.signatureCache : path.join(root, '.local', 'producer-cache');
   // C31: the preflight runs on the kernel the delivery applies with; a test that fakes the apply fakes (or omits) it too.
   const check = deps.check !== undefined ? deps.check : apply === applyKernel ? checkJobKernel : null;
   // The merge order (planMergeOrderKernel): the same rule as check, the kernel the delivery applies with.
@@ -576,8 +595,10 @@ export async function deliverKernel(input, deps) {
   let jobDocument = readJob(job);
   // Named producer bindings on ordinary jobs are acquired through the consumer's native session.
   // job: sources and explicit fixtures retain their existing, offline resolution.
+  // a reference op's producer, and the producer data.bind of a prototype op names (docs/PROTOTIPO-NATIVO.md 2.12)
   const producersOf = document => [...new Set((Array.isArray(document) ? document : document.ops ?? [])
-    .filter(op => op.op === 'reference' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(op.producer ?? '')).map(op => op.producer))];
+    .map(op => (op.op === 'reference' ? op.producer : op.op === 'prototype' ? op.data?.bind?.producer : null))
+    .filter(name => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name ?? '')))];
   let requestedProducers = producersOf(jobDocument);
   let output = path.resolve(root, input.output ?? nextLabDir(feature));
   if (fs.existsSync(output)) throw new Error('Use a new output directory; evidence is never overwritten: ' + output);
@@ -604,7 +625,8 @@ export async function deliverKernel(input, deps) {
     if (Array.isArray(value.openModules)) report.openModules = value.openModules;
     if (Array.isArray(value.candidates)) report.candidates = value.candidates;
     // primeira-certa A3: every problem of every phase (grouped only to fit the answer), verifyRan and the phases.
-    if (Array.isArray(value.problems)) Object.assign(report, refusalFields(value.problems, value));
+    // The job the refusal ran: a problem that only follows from another failed op of it is summarized (CASCADE).
+    if (Array.isArray(value.problems)) Object.assign(report, refusalFields(value.problems, value, { job: jobDocument, jobFile: typeof job === 'string' ? job : null }));
     else Object.assign(report, diagnosisOf(value));
     if (Array.isArray(value.divergences)) report.divergences = value.divergences.slice(0, 50);
   };
@@ -744,7 +766,7 @@ export async function deliverKernel(input, deps) {
           const capture = report.error;
           report.failed = 'preflight'; report.code = checked.code ?? 'PREFLIGHT_REFUSED';
           Object.assign(report, refusalFields(Array.isArray(checked.problems) ? checked.problems : [], { verifyRan: false,
-            verifyReason: 'the module could not be captured (' + clipLine(capture) + '): only the job was read, so the base check, the apply and the Verify did not run' }));
+            verifyReason: 'the module could not be captured (' + clipLine(capture) + '): only the job was read, so the base check, the apply and the Verify did not run' }, { job: jobDocument }));
           report.error = withoutStack(checked.error) ?? 'The job preflight refused the job.';
           if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
         }
@@ -785,8 +807,22 @@ export async function deliverKernel(input, deps) {
     }
     claimed = true; report.evidence = output;
     const producers = {};
+    // F5 (producer-signatures.mjs, the family rule of producer signatures): the reference snapshot of a producer this
+    // workspace acquired lately in this environment, with no publication of it recorded since, is reused for the build
+    // (no acquisition); it is acquired again right before the merge, the only write, and must have the same bytes. Only
+    // a delivery that merges in this call reuses: one that stops at build, check-base or preview hands its manifest to a
+    // later studio_merge that acquires nothing, so its build acquires the producer now (as before F5).
+    const reusedProducers = [];
     for (const producer of requestedProducers) {
       const destination = path.join(output, producer + '.avsig');
+      const reused = signatureCache && until === 'merge' ? reuseOdcReference(signatureCache, { environment: snapshot.host, producer, target: destination }) : null;
+      if (reused) {
+        producers[producer] = destination;
+        reusedProducers.push({ name: producer, path: destination, sha256: reused.sha256 });
+        (report.producers ??= []).push({ name: producer, path: destination, sha256: reused.sha256, producerKey: reused.producerKey, revision: reused.revision,
+          reused: true, observed: 'ledger', observedAtUtc: reused.observedAtUtc });
+        continue;
+      }
       const captured = await call('reference-snapshot', async () => withBridgeUpgrade(await studio(['reference-snapshot', JSON.stringify({ module, producer, output: destination })], pid), producer));
       if (!captured) return report;
       if (captured.environment?.toLowerCase() !== snapshot.host?.toLowerCase() || captured.consumerUnchanged !== true)
@@ -796,6 +832,7 @@ export async function deliverKernel(input, deps) {
       if (digest !== captured.sha256?.toLowerCase()) throw new Error('Captured producer signature hash differs: ' + producer);
       producers[producer] = destination;
       (report.producers ??= []).push({ name: producer, path: destination, sha256: digest, producerKey: captured.producerKey, revision: captured.revision });
+      if (signatureCache) rememberOdcReference(signatureCache, { environment: snapshot.host, producer, file: destination, sha256: digest, producerKey: captured.producerKey ?? null, revision: captured.revision ?? null });
     }
     let kernelRefused = null, candidate = null;
     const built = await call('build', async () => {
@@ -826,13 +863,17 @@ export async function deliverKernel(input, deps) {
       if (high.length) report.highWarnings = high.slice(0, 20);
       if (!applied.ok) {
         kernelRefused = applied;
+        // data.bind (2.12): the proposals of PROTOTYPE_BINDING_REQUIRED as one strict patch and the corrected call
+        if (proto && applied.code === 'PROTOTYPE_BINDING_REQUIRED') return { ...applied, ...bindingCorrection(applied.problems, readJobDocument(proto.original)) };
         return { ...applied, code: applied.code ?? 'KERNEL_REFUSED' };
       }
       report.kernelReceipt = applied.receipt; candidate = applied.candidate;
       capped(report, 'leftovers', applied.leftovers ?? []);
       if (applied.normalizations) report.normalizations = applied.normalizations;
       capped(report, 'screenRoles', applied.screenRoles ?? []);
+      capped(report, 'removed', applied.removed ?? []);
       capped(report, 'integration', Array.isArray(applied.integration) ? applied.integration : [], 10);
+      if (applied.entityActions) report.entityActions = applied.entityActions;
       // The merge order (planMergeOrderKernel): a candidate with defaults the Studio drops when the merge creates their
       // elements goes in two merges of this call; the bridge never receives a merge whose own plan is not empty. A plan
       // that cannot be computed keeps the single merge of before, and says so.
@@ -886,6 +927,33 @@ export async function deliverKernel(input, deps) {
       report.prototype = proto.receipt;
     }
     if (until === 'build') { report.ok = true; return report; }
+    // F5: each reference snapshot the build reused is acquired again before the merge; another revision (the producer was
+    // published since) stops here with PRODUCER_CHANGED, nothing merged, its observation dropped, and the same delivery again.
+    // (A build reuses only when this call merges, so every reused snapshot is acquired again here.)
+    if (until === 'merge' && reusedProducers.length) {
+      for (const reused of reusedProducers) {
+        const fresh = path.join(output, reused.name + '.recheck.avsig');
+        const captured = await call('reference-snapshot', async () => withBridgeUpgrade(await studio(['reference-snapshot', JSON.stringify({ module, producer: reused.name, output: fresh })], pid), reused.name), { beforeMerge: true });
+        if (!captured) { if (publish === true) report.publish = { requested: true, outcome: 'skipped' }; return report; }
+        if (captured.environment?.toLowerCase() !== snapshot.host?.toLowerCase() || captured.consumerUnchanged !== true)
+          throw new Error('Producer acquisition did not prove the expected environment and unchanged consumer');
+        const digest = sha256(fs.readFileSync(fresh));
+        if (digest !== captured.sha256?.toLowerCase()) throw new Error('Captured producer signature hash differs: ' + reused.name);
+        if (digest !== reused.sha256) {
+          forgetOdcReference(signatureCache, { environment: snapshot.host, producer: reused.name });
+          report.failed = 'reference-snapshot'; report.code = 'PRODUCER_CHANGED';
+          report.error = 'The producer ' + reused.name + ' was published again after the reference snapshot the build reused (revision ' + (captured.revision ?? 'unknown') + ' now). Nothing was merged.';
+          report.continuation = { tool: 'studio_deliver', arguments: { feature, module, job: input.job, owners, changes, ...(Number.isInteger(pid) ? { pid } : {}),
+            ...(publish === true ? { publish: true, ...(typeof authorize === 'string' && authorize.trim() ? { authorize } : {}) } : {}) },
+            why: 'A mesma entrega de novo adquire a versão nova do produtor e constrói sobre ela; nada foi gravado.' };
+          if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
+          return report;
+        }
+        rememberOdcReference(signatureCache, { environment: snapshot.host, producer: reused.name, file: fresh, sha256: digest, producerKey: captured.producerKey ?? null, revision: captured.revision ?? null });
+        const entry = report.producers.find(p => p.name === reused.name && p.reused === true);
+        if (entry) entry.beforeMerge = 'acquired';
+      }
+    }
     if (order) {
       // Merge order, pass 1: the candidate without its deferred defaults creates the elements (the bridge's own plan finds
       // no default on an element it creates, so it runs one plain merge).
@@ -971,7 +1039,11 @@ export async function deliverKernel(input, deps) {
         stage = 'publish'; progress('publish');
         report.authorization = authorization.authorization;
         const begin = Date.now();
+        // F5: the module may be a producer of other modules; no reference snapshot of it acquired before the end of this
+        // publication is reused (an uncertain one stays running for the ledger).
+        const publication = signatureCache ? recordPublished(signatureCache, { environment: snapshot.host, module, source: 'studio_deliver' }) : false;
         const published = await publishStep({ manifest: report.manifest, module, words: authorization.words, pid }, { studio });
+        if (publication && !publicationOpen(published?.publish)) recordPublicationEnded(publication);
         report.steps.push({ step: 'publish', seconds: (Date.now() - begin) / 1000, ok: published.publish?.outcome === 'published' });
         report.publish = published.publish;
         if (published.lastPublication) report.lastPublication = published.lastPublication;

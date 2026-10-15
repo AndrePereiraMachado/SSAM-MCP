@@ -15,7 +15,9 @@ public sealed partial class ModelSession
 
     // ---- rest ---------------------------------------------------------------------------------------------------------
 
-    private JsonNode RestOp(JsonObject data)
+    /// <summary>deferred: the deletes of stale attributes and parameters are not applied but handed back (rest-consume applies
+    /// them after it rewrote its own actions, which are their only consumers).</summary>
+    private JsonNode RestOp(JsonObject data, List<JsonObject>? deferred = null)
     {
         var problems = RestExpander.Validate(data, Lane);
         if (problems.Count > 0) throw new IntegrationRefusalException("rest", problems);
@@ -50,6 +52,9 @@ public sealed partial class ModelSession
             report["client"]!["key"] = client.ObjectKey?.ToString();
         }
         var expansion = RestExpander.Expand(data, existing);
+        if (deferred != null)
+            foreach (var delete in expansion.Ops.Where(o => o["op"]?.ToString() == "delete" && o["breaks"] == null && o["target"]?.ToString()?.StartsWith('@') == true).ToList())
+            { expansion.Ops.Remove(delete); deferred.Add(delete); }
         BreaksPerTarget(expansion.Ops, data["breaks"], "rest");
         var applied = ApplyExpanded("rest", expansion.Ops);
         report["consumersBroken"] = ConsumersBroken(applied);

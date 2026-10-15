@@ -63,3 +63,44 @@ test('release confirmation requires exact revision, tag and notes, not acceptanc
  assert.equal(await verifyLibraryRelease(input,async id=>id.endsWith('release-notes')?{ok:true,data:{tag:input.Version,content:'Other'}}:read(id)),false);
  assert.equal(await verifyLibraryRelease(input,async()=>({ok:false})),false);
 });
+test('an existing library (preExisting) is released only with explicit approval naming library and tenant, verified base and publication',async t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'release-existing-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const file=path.join(dir,'approval.json'),proposal=path.join(dir,'proposal.md');fs.writeFileSync(proposal,'Release the existing library Shared');
+ const hash=x=>crypto.createHash('sha256').update(x).digest('hex');
+ const host='test.outsystems.dev',words='Synthetic test authorization',assetKey=crypto.randomUUID(),publicationKey=crypto.randomUUID();
+ const source={kind:'human-conversation',threadId:crypto.randomUUID(),messageId:crypto.randomUUID(),question:'Release the existing library?'};
+ const input={ApplicationKey:assetKey,Revision:7,Version:'2.1.0',ReleaseNotes:'Existing release'};
+ const constraints={preExisting:true,publicationKey,expectedTag:null,inputSha256:hash(JSON.stringify(input))};
+ const record=(scopeTargets,c=constraints)=>({schema:'ssam-authorization-context/1',decision:'approved',words,source,proposal:{file:proposal,sha256:hash(fs.readFileSync(proposal))},
+  scope:[{lane:'odc',host,operation:LIBRARY_RELEASE,targets:scopeTargets}],constraints:c});
+ const revision={assetKey,revision:7,assetType:'LowCodeLibrary',tag:null,name:'Shared'};
+ const pub={key:publicationKey,status:'Finished',assetKey,revision:7,operation:'Publish'};
+ const read=async id=>({ok:true,data:id.includes('publish-operations')?pub:revision});
+ const lookups=[];const args={file,words,host,raw:{inputParameters:input},lookup:id=>{lookups.push(id);return null;},read};
+ fs.writeFileSync(file,JSON.stringify(record(['Shared',host])));
+ const approved=await libraryReleaseApproval(args);
+ assert.equal(approved.operation,LIBRARY_RELEASE);assert.equal(approved.preExisting,true);assert.deepEqual(approved.targets,['Shared',host]);
+ assert.equal(approved.constraints.preExisting,true);assert.equal(lookups.length,0);
+ // No context file, or a context that does not name the tenant / the library: refused before any send.
+ await assert.rejects(libraryReleaseApproval({...args,file:undefined}),e=>e.code==='AUTHORIZATION_CONTEXT_INVALID');
+ fs.writeFileSync(file,JSON.stringify(record(['Shared'])));
+ await assert.rejects(libraryReleaseApproval(args),e=>e.code==='AUTHORIZATION_CONTEXT_INVALID');
+ fs.writeFileSync(file,JSON.stringify(record([host])));
+ await assert.rejects(libraryReleaseApproval(args),e=>e.code==='AUTHORIZATION_CONTEXT_INVALID');
+ // Other words than the recorded human ones, or other version than the approved input.
+ fs.writeFileSync(file,JSON.stringify(record(['Shared',host])));
+ await assert.rejects(libraryReleaseApproval({...args,words:'release it'}),e=>e.code==='AUTHORIZATION_CONTEXT_INVALID');
+ await assert.rejects(libraryReleaseApproval({...args,raw:{inputParameters:{...input,Version:'9.9.9'}}}),e=>e.code==='AUTHORIZATION_CONTEXT_INVALID');
+ // preExisting must be exactly true and exclusive with an origin receipt.
+ fs.writeFileSync(file,JSON.stringify(record(['Shared',host],{...constraints,preExisting:'yes'})));
+ await assert.rejects(libraryReleaseApproval(args),e=>e.code==='AUTHORIZATION_CONTEXT_INVALID');
+ fs.writeFileSync(file,JSON.stringify(record(['Shared',host])));
+ // Unverified publication, tagged or non-current revision: refused.
+ for(const change of [{status:'Failed'},{revision:6},{assetKey:crypto.randomUUID()}])
+  await assert.rejects(libraryReleaseApproval({...args,read:async id=>id.includes('publish-operations')?{ok:true,data:{...pub,...change}}:read(id)}),e=>e.code==='LIBRARY_PUBLICATION_UNVERIFIED');
+ await assert.rejects(libraryReleaseApproval({...args,read:async id=>id.includes('publish-operations')?{ok:false}:read(id)}),e=>e.code==='LIBRARY_PUBLICATION_UNVERIFIED');
+ await assert.rejects(libraryReleaseApproval({...args,read:async id=>id.includes('publish-operations')?read(id):{ok:true,data:{...revision,tag:'2.0.0'}}}),e=>e.code==='LIBRARY_RELEASE_BASE_UNVERIFIED');
+ await assert.rejects(libraryReleaseApproval({...args,read:async id=>id.includes('publish-operations')?read(id):id.includes('/revisions/')?{ok:true,data:revision}:{ok:true,data:{...revision,revision:8}}}),e=>e.code==='LIBRARY_RELEASE_BASE_UNVERIFIED');
+ // Changed proposal after approval.
+ fs.appendFileSync(proposal,'changed');await assert.rejects(libraryReleaseApproval(args),e=>e.code==='AUTHORIZATION_CONTEXT_INVALID');
+});

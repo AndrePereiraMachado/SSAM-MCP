@@ -5,7 +5,8 @@ import * as z from 'zod/v4';
 import { registerOdcTools } from './server.mjs';
 import { OdcBridge } from './bridge.mjs';
 import { readConfig, httpsOrigin } from './config.mjs';
-import { publicError, redact } from './errors.mjs';
+import { publicError, redactValues } from './errors.mjs';
+import { projectForAgent } from './agent-projection.mjs';
 import { resolvePublicApiEnvironment, windowsApiClientCredential } from './api-client-credential.mjs';
 
 const defaultContextFactory = async options => {
@@ -18,7 +19,7 @@ const response = value => ({ content: [{ type: 'text', text: JSON.stringify(valu
 });
 
 function safeSessionResult(value) {
-  const clean = redact(value);
+  const clean = redactValues(value);
   // These booleans are provisioning metadata, not credential material.
   for (const key of ['credentialConfigured', 'bootstrapRequired', 'authenticated']) {
     if (typeof value?.[key] === 'boolean') clean[key] = value[key];
@@ -47,7 +48,7 @@ export async function createOdc3Server({ env = process.env, contextFactory = def
     inputSchema: z.object({}).strict(),
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async () => {
-    try { return response(safeSessionResult(await context.status())); }
+    try { return response(await projectForAgent(async () => safeSessionResult(await context.status()), context.credentialRegistry)); }
     catch (error) { return response({ ok: false, error: publicError(error) }); }
   });
   server.registerTool('odc3_authenticate', {
@@ -56,7 +57,7 @@ export async function createOdc3Server({ env = process.env, contextFactory = def
     inputSchema: z.object({}).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, async () => {
-    try { return response(safeSessionResult(await context.authenticate())); }
+    try { return response(await projectForAgent(async () => safeSessionResult(await context.authenticate()), context.credentialRegistry)); }
     catch (error) { return response({ ok: false, error: publicError(error) }); }
   });
   return server;

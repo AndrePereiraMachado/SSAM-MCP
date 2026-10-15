@@ -100,7 +100,10 @@ public static class PrototypeAdapters
             var row = RuntimeDomTable.Row(platform, "IPopup")!;
             var (backdrop, _) = RuntimeDomTable.Popup(platform);
             var top = string.Join(";", backdrops.Where(b => b.Enclosing.Count == 0).Select(b => b.Declarations.Trim().TrimEnd(';')).Where(d => d.Length > 0));
-            Rule("IPopup", backdrop, "position:fixed;inset:0;display:flex;align-items:center;justify-content:center" + (top.Length > 0 ? ";" + top : ""),
+            // the popup stands for a modal dialog, which the browser draws in the top layer, over every z-index of the page (a
+            // fixed backdrop is its own stacking context: without one of its own, a sticky side menu with z-index 5 painted over
+            // it, VisitaCerta 2026-10-12)
+            Rule("IPopup", backdrop, "position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center" + (top.Length > 0 ? ";" + top : ""),
                 "popup backdrop: overlay layout" + (top.Length > 0 ? " + the prototype's dialog::backdrop" : ""), row.Status);
             foreach (var (enclosing, declarations) in backdrops.Where(b => b.Enclosing.Count > 0))
             {

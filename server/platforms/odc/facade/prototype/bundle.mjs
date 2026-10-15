@@ -8,11 +8,15 @@ import { canonical, sha256 } from './ir.mjs';
 export function writeBundle(dir, ir, payloads = {}) {
   fs.mkdirSync(path.join(dir, 'sheets'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'assets'), { recursive: true });
+  // a payload without a bundle file (nothing of it travels) is skipped, never a throw (the VisitaCerta session of 2026-10-12:
+  // a remote <link> made path.join(dir, undefined) throw and the answer was an SSAM defect with no way out)
   for (const sheet of payloads.sheets ?? []) {
+    if (typeof sheet?.bundle !== 'string' || typeof sheet.text !== 'string') continue;
     const file = path.join(dir, sheet.bundle);
     if (!fs.existsSync(file)) fs.writeFileSync(file, sheet.text, 'utf8');
   }
   for (const asset of payloads.assets ?? []) {
+    if (typeof asset?.bundle !== 'string' || asset.data == null) continue;
     const file = path.join(dir, asset.bundle);
     if (!fs.existsSync(file)) fs.writeFileSync(file, asset.data);
   }

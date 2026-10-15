@@ -3,6 +3,8 @@
 # Batch files run in cmd.exe, which needs CRLF whatever core.autocrlf the clone uses.
 *.cmd text eol=crlf
 *.bat text eol=crlf
+# The benchmark requests are compared byte for byte with the LF text renderRequest builds, whatever core.autocrlf the clone uses.
+/tools/benchmark/requests/*.md text eol=lf
 
 docker-compose.yml text eol=lf
 .env.example text eol=lf
@@ -231,3 +233,4 @@ docs/PORTAL-APPLICATION-ROLE-PROPOSTA-20261010.md -text
 /docs/PORTAL-ROLE-UNION-LIVE-20261010.md -text whitespace=-blank-at-eol,-blank-at-eof,cr-at-eol
 /docs/PORTAL-KNOWLEDGE-FILE-IDENTITY-20261010.md -text whitespace=-blank-at-eol,-blank-at-eof,cr-at-eol
 /docs/PORTAL-KNOWLEDGE-PRIVATE-DOWNLOAD-20261010.md -text whitespace=-blank-at-eol,-blank-at-eof,cr-at-eol
+/tools/benchmark/fixtures/recorded/* text eol=lf

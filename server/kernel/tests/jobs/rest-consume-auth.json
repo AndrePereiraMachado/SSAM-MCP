@@ -1,0 +1,140 @@
+{
+ "description": "rest-consume (generator) for authenticated and customized APIs on the blank O11 service module: Acme with a bearer token, client headers (Accept, X-Client), the base URL from a site property per environment, a 20 s timeout, a correlation id header, a header input (X-Tenant, optional) and a fixed header (X-Version: 2), 404 and 429 mapped to their own exceptions and the model's own steps after each recipe; KeyQ with an API key in the query (appid); Oauth with OAuth 2.0 client credentials (token client OauthAuth, GetOauthAccessToken cached 30 minutes). No credential is in the model: the generator creates the empty secret site properties (AcmeToken, KeyQApiKey, OauthClientId, OauthClientSecret) that OnBeforeRequest reads, and the receipt's configure lists where the user fills them (Service Center). OnAfterResponse raises AcmeError with the status and the first 300 characters of the body. Offline: the samples are inline (an authenticated API is never sampled).",
+ "base": "tests/fixtures/blank-service.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "rest-consume",
+   "data": {
+    "name": "Acme",
+    "auth": {
+     "type": "bearer"
+    },
+    "headers": {
+     "Accept": "application/json",
+     "X-Client": "ssam"
+    },
+    "settings": {
+     "baseUrl": true
+    },
+    "timeout": 20,
+    "correlationHeader": "X-Correlation-Id",
+    "errors": {
+     "status": {
+      "404": "AcmeNotFound",
+      "429": "AcmeRateLimited"
+     }
+    },
+    "callbacks": {
+     "before": {
+      "steps": [
+       {
+        "assign": {
+         "Header.Name": "\"X-Request-Time\"",
+         "Header.Value": "DateTimeToText(CurrDateTime())"
+        },
+        "label": "Build the request time header"
+       },
+       {
+        "call": "ListAppend",
+        "as": "AddRequestTime",
+        "args": {
+         "List": "CustomizedRequest.Headers",
+         "Element": "Header"
+        }
+       }
+      ]
+     },
+     "after": {
+      "steps": [
+       {
+        "assign": {
+         "CustomizedResponse.ResponseText": "Trim(Response.ResponseText)"
+        },
+        "label": "Trim the body"
+       }
+      ]
+     }
+    },
+    "methods": [
+     {
+      "name": "GetOrder",
+      "url": "https://api.acme.example/v1/orders/{id=1}?expand={expand=items}",
+      "headers": {
+       "X-Tenant": "{tenant=t1}",
+       "X-Version": "2"
+      },
+      "optional": [
+       "tenant",
+       "expand"
+      ],
+      "sample": {
+       "id": 1,
+       "status": "open",
+       "total": 10.5,
+       "paid": false
+      }
+     },
+     {
+      "name": "CreateOrder",
+      "verb": "POST",
+      "url": "https://api.acme.example/v1/orders",
+      "request": {
+       "customer": "c1",
+       "total": 10.5
+      },
+      "sample": {
+       "id": 2,
+       "status": "open"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "op": "rest-consume",
+   "data": {
+    "name": "KeyQ",
+    "auth": {
+     "type": "apiKey",
+     "in": "query",
+     "name": "appid"
+    },
+    "methods": [
+     {
+      "name": "Weather",
+      "url": "https://keyq.example/data/weather?q={q=London}",
+      "sample": {
+       "temp": 12.5,
+       "city": "London"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "op": "rest-consume",
+   "data": {
+    "name": "Oauth",
+    "auth": {
+     "type": "oauth2",
+     "tokenUrl": "https://auth.oauth.example/oauth2/token",
+     "scope": "read write",
+     "cacheMinutes": 30
+    },
+    "methods": [
+     {
+      "name": "Accounts",
+      "url": "https://api.oauth.example/v2/accounts",
+      "sample": [
+       {
+        "id": "a1",
+        "balance": 3.5
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}

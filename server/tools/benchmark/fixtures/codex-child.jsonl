@@ -1,0 +1,14 @@
+{"timestamp":"2026-01-01T12:00:00Z","type":"session_meta","payload":{"id":"child-neutral","parent_thread_id":"root-neutral","agent_nickname":"Helper"}}
+{"timestamp":"2026-01-01T12:00:01Z","type":"event_msg","payload":{"type":"task_started","turn_id":"root-a","turn_attribution":{"parent_turn_id":null}}}
+{"timestamp":"2026-01-01T12:00:02Z","type":"response_item","payload":{"type":"function_call","name":"copied_call","call_id":"copy","arguments":"COPY MUST NOT COUNT"}}
+{"timestamp":"2026-01-01T12:00:03Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"output_tokens":100}}}}
+{"timestamp":"2026-01-01T12:00:04Z","type":"event_msg","payload":{"type":"task_started","turn_id":"child-a","turn_attribution":{"parent_turn_id":"root-a","root_turn_id":"root-a"}}}
+{"timestamp":"2026-01-01T12:00:05Z","type":"response_item","payload":{"type":"function_call","name":"read_file","call_id":"child-a","arguments":"{}"}}
+{"timestamp":"2026-01-01T12:00:06Z","type":"response_item","payload":{"type":"function_call_output","call_id":"child-a","output":"ok"}}
+{"timestamp":"2026-01-01T12:00:06Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"output_tokens":110}}}}
+{"timestamp":"2026-01-01T12:00:07Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"child-a"}}
+{"timestamp":"2026-01-01T12:00:08Z","type":"event_msg","payload":{"type":"task_started","turn_id":"child-b","turn_attribution":{"parent_turn_id":"root-b","root_turn_id":"root-b"}}}
+{"timestamp":"2026-01-01T12:00:09Z","type":"response_item","payload":{"type":"function_call","name":"read_file","call_id":"child-b","arguments":"[]"}}
+{"timestamp":"2026-01-01T12:00:10Z","type":"response_item","payload":{"type":"function_call_output","call_id":"child-b","output":"yes"}}
+{"timestamp":"2026-01-01T12:00:10Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"output_tokens":130}}}}
+{"timestamp":"2026-01-01T12:00:11Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"child-b"}}

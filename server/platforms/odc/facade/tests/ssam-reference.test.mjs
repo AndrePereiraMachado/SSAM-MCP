@@ -170,6 +170,7 @@ test('a CLI refusal points to the next lookup; a large answer goes to a file', a
   assert.ok(large.file.startsWith(path.join(h.root, '.local', 'reference')));
   assert.equal(JSON.parse(fs.readFileSync(large.file, 'utf8')).length, 3000);
   assert.equal(large.preview.count, 3000); assert.equal(large.preview.first.length, 20);
+  assert.deepEqual(large.continuation, { tool: 'ssam_evidence', arguments: { file: large.file } });
 });
 
 test('deps.outDir keeps a large answer in a folder of the caller (a bench sandbox), per lane', async t => {

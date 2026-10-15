@@ -9,7 +9,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as z from 'zod/v4';
-import { anvilRoot } from './workspace.mjs';
+import { anvilRoot, odcRoot } from './workspace.mjs';
+import { recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
 import { execFile } from 'node:child_process';
 import { namesWhole } from './studio-create-app.mjs';
 import { portalTransportDirectory } from './portal-request-file.mjs';
@@ -309,10 +310,11 @@ export function createExternalLibraryTool(deps = {}) {
       const codes = [...new Set(problems.map(p => p.code === 'WORDS_MUST_NAME_LIBRARY' || p.code === 'INPUT_INVALID' ? p.code : 'EXTERNAL_LIBRARY_SPEC_INVALID'))];
       return refusal(codes.length === 1 ? codes[0] : 'DEPLOY_REFUSED', problems.length + ' problem(s); nothing was built or sent.', { problems });
     }
+    let tenantHost = null;
     if (action === 'deploy') {
       const a = await accessOf();
       try {
-        const host = await a.pickTenant(input.tenant);
+        const host = tenantHost = await a.pickTenant(input.tenant);
         const { guardTenant } = deps.portalRuntime?.access ?? await portalModule('access.mjs');
         guardTenant(a.tenantInfo(host), authorization.words, input.confirmTenant,authorization.authorization?.context);
       } catch (error) {
@@ -328,9 +330,17 @@ export function createExternalLibraryTool(deps = {}) {
         next: { tool: 'odc_external_library', arguments: { action: 'deploy', specFile: path.join(built.evidence, 'spec.json'), authorize: '<the user\'s words naming ' + data.name + '>', operationUuid: '<new uuid>' }, why: 'deploys the complete spec preserved by this build to the authorized tenant in one call' } };
 
     const plan = { name: data.name, package: { path: data.package.path, fileName: data.package.fileName, sha256: data.package.sha256, bytes: data.package.bytes }, contents: data.contents };
+    // F5 (producer-signatures.mjs): the library is a producer of the apps that reference it; no reference snapshot of it
+    // acquired before the end of this deploy is reused. Only a released library ends it; anything else (uncertain, awaiting
+    // words, a job left on the tenant) leaves it running for the ledger.
+    // The ODC lane's producer cache (kernel-delivery.mjs signatureCache: <ODC root>/.local/producer-cache).
+    const signatureCache = deps.signatureCache !== undefined ? deps.signatureCache : path.join(odcRoot, '.local', 'producer-cache');
+    const publication = signatureCache ? recordPublished(signatureCache, { environment: tenantHost || '*', module: data.name, source: 'odc_external_library deploy', id: input.operationUuid }) : false;
     const result = await (await deployer()).deploy(plan, { tenant: input.tenant, auth: input.auth ?? 'auto', words: authorization.words, userWords: authorization.userWords,
       operationUuid: input.operationUuid, confirmTenant: input.confirmTenant, releaseTag: input.releaseTag, releaseNotes: input.releaseNotes, authorization: authorization.authorization,
       authorizationContext:input.authorizationContext,originOperationUuid:input.originOperationUuid,expectedRevision:input.expectedRevision });
+    // A repeated call that only read its confirmed receipt published nothing now: it ends too.
+    if (publication && result?.ok === true && (result.state === 'released' || (result.existingReceipt === true && !publicationOpen(result)))) recordPublicationEnded(publication);
     return finish(result, { input, spec, evidence: built.evidence });
   };
 

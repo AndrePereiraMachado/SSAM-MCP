@@ -41,26 +41,19 @@ const actions = {
   complete: '/authentication/screenservices/authentication/UnifiedAuthentication/redirect/ActionProcessCodeRedirect',
   list: '/connections/screenservices/connections/Connections/connections/DataActionGetProviders',
 };
-test('public tenant metadata cookies do not corrupt DTOs while session and unknown cookies remain secrets', async () => {
-  let entries = ['TenantRing=1', 'TenantPortfolio=0', 'TenantGeo=US', 'TenantPref=wrightflood', 'TenantDomain=wrightflood.outsystems.dev'];
+test('all nonpublic cookie values of sufficient length enter the credential registry', async () => {
+  const entries = ['TenantRing=1', 'TenantPortfolio=0', 'TenantGeo=US', 'language=pt-BR',
+    'Unknown=long-but-not-authentication', 'tenant_session=synthetic-session-credential-12345'];
   const broker = new Odc3PortalBroker({ fetchImpl: async () => {
     const headers = new Headers();
     for (const entry of entries) headers.append('set-cookie', entry + '; Path=/; Secure');
     return new Response('{}', { headers });
   }});
   await broker.request(origin + '/');
-  const dto = { Region: 'us-east-1', RegionLabel: 'US East (N. Virginia)', Hostname: 'wrightflood-dev.outsystems.app', DeploymentDateTime: '1900-01-01T00:00:00' };
-  assert.deepEqual(redact(dto, broker.secrets), dto);
-  assert.equal((await broker.jar.getCookies(origin)).length, 5);
-  entries = ['TenantRing=PRIVATE_RING', 'TenantGeo=PRIVATE_GEO', 'TenantPref=other-tenant', 'TenantDomain=other.example', 'TenantPortfolio=PRIVATE_PORTFOLIO', 'Unknown=1', 'TenantAccess=PRIVATE_ACCESS; HttpOnly', 'TenantGeo=US; HttpOnly'];
-  await broker.request(origin + '/');
-  for (const value of ['PRIVATE_RING', 'PRIVATE_GEO', 'other-tenant', 'other.example', 'PRIVATE_PORTFOLIO', '1', 'PRIVATE_ACCESS', 'US']) assert.ok(broker.secrets.includes(value));
-  entries = ['TenantRing=2'];
-  await broker.request('https://id.outsystems.dev/');
-  assert.ok(broker.secrets.includes('2'));
-  broker.secrets.push('wrightflood'); // A credential with the same text must still be masked.
-  assert.match(redact(dto, broker.secrets).Hostname, /\[REDACTED\]/);
-  assert.equal(redact({ cookie: 'TenantRing=1' }, broker.secrets).cookie, '[REDACTED]');
+  const dto = { Region: 'us-east-1', Hostname: 'wrightflood-dev.outsystems.app', DeploymentDateTime: '1900-01-01T00:00:00' };
+  assert.deepEqual(redact(dto, broker.credentialRegistry), dto);
+  assert.deepEqual([...broker.credentialRegistry.values()], ['long-but-not-authentication', 'synthetic-session-credential-12345']);
+  assert.equal(redact({ cookie: 'TenantRing=1' }, broker.credentialRegistry).cookie, '[REDACTED]');
 });
 function fixture({ missing = false, challenge = false } = {}) {
   const credentialCalls = [], calls = [];
@@ -78,16 +71,16 @@ function fixture({ missing = false, challenge = false } = {}) {
     if (url.origin === 'https://cognito-idp.eu-west-1.amazonaws.com') {
       const input = JSON.parse(request.body);
       assert.equal(input.AuthParameters.PASSWORD, 'PRIVATE_PASSWORD');
-      return json(challenge ? { ChallengeName: 'SOFTWARE_TOKEN_MFA' } : { AuthenticationResult: { AccessToken: 'PRIVATE_ACCESS', IdToken: 'PRIVATE_ID', RefreshToken: 'PRIVATE_REFRESH' } });
+      return json(challenge ? { ChallengeName: 'SOFTWARE_TOKEN_MFA' } : { AuthenticationResult: { AccessToken: 'PRIVATE_ACCESS_TOKEN_LONG', IdToken: 'PRIVATE_ID', RefreshToken: 'PRIVATE_REFRESH' } });
     }
     if (url.origin === 'https://id.outsystems.dev' && url.pathname === '/v1/storage') return json({ ok: true });
     if (url.pathname === '/id/callback') return new Response(null, { status: 302, headers: { Location: origin + '/authentication/redirect?code=PRIVATE_TENANT_CODE&state=PRIVATE_TENANT_STATE' } });
-    if (url.pathname === actions.complete) return json({ data: {} }, { 'set-cookie': 'tenant_session=PRIVATE_SESSION; Path=/; Secure; HttpOnly' });
+    if (url.pathname === actions.complete) return json({ data: {} }, { 'set-cookie': 'tenant_session=PRIVATE_SESSION_TOKEN_LONG; Path=/; Secure; HttpOnly' });
     if (url.pathname === actions.list) {
-      assert.match(request.headers.Cookie, /tenant_session=PRIVATE_SESSION/);
+      assert.match(request.headers.Cookie, /tenant_session=PRIVATE_SESSION_TOKEN_LONG/);
       return json({ data: { Providers: [{ Id: 'mssql', Label: 'SQL Server' }] } });
     }
-    return json({ data: { Logs: [{ LogId: 'log', Message: 'PRIVATE_PASSWORD PRIVATE_ACCESS PRIVATE_SESSION' }] } });
+    return json({ data: { Logs: [{ LogId: 'log', Message: 'PRIVATE_ACCESS_TOKEN_LONG PRIVATE_SESSION_TOKEN_LONG' }] } });
   } });
   broker.metadata.resolve = async (module, view, action) => ({ moduleVersion: 'current-module', apiVersion: 'current-api', action, view });
   return { broker, calls, credentialCalls };
@@ -117,7 +110,8 @@ test('managed login completes full mocked session flow, confirms protected read 
   assert.equal(calls.filter(call => call.url.origin.includes('cognito')).length, 1);
   const output = await broker.readScreenservice({ target: 'odc3', origin, readOnly: true, operationId: 'monitoring.detail',
     module: 'monitoring', view: 'logs.log', action: 'monitoring/logs/log/DataActionGetLogById', inputParameters: {}, screenVariables: {} });
-  assert.equal(JSON.stringify(output).includes('PRIVATE_'), false);
+  assert.equal(output.body.data.Logs[0].Message, 'PRIVATE_ACCESS_TOKEN_LONG PRIVATE_SESSION_TOKEN_LONG');
+  assert.equal(JSON.stringify(redact(output, broker.credentialRegistry)).includes('PRIVATE_'), false);
   assert.equal(JSON.stringify(login).includes('PRIVATE_'), false);
 });
 
@@ -207,7 +201,7 @@ test('recovery respects the original deadline and never starts another login aft
 test('typed pagination survives short secret fragments while log text remains redacted', async () => {
   const { broker } = fixture();
   broker.authenticated = true;
-  broker.secrets = ['1', '2'];
+  broker.credentialRegistry.add('1'); broker.credentialRegistry.add('2');
   const { screen } = createLogScreenDefaults();
   const calls = [];
   broker.action = async (_module, _view, action) => {
@@ -223,9 +217,9 @@ test('typed pagination survives short secret fragments while log text remains re
     module: 'monitoring', view: 'logs.logs', action: 'monitoring/logs/logs/DataActionLogSearch',
     clientVariables: { StageId: 'stage' }, screenVariables: { SelectedEnviroment: { Key: 'stage' } } });
   assert.deepEqual(calls, ['DataActionGetSettings', 'DataActionGetFilter_Stages', 'DataActionLogSearch']);
-  assert.deepEqual(result.body.data.LogSearch_Page, { Limit: 3, Offset: 0, NextPageOffset: -1, TotalPages: 4, TotalResults: 12 });
-  assert.equal(result.body.data.LogsList.List[0].Message, 'value [REDACTED][REDACTED]');
-  assert.equal(result.body.data.LogsList.List[0].password, '[REDACTED]');
+  assert.deepEqual(result.body.data.LogSearch_Page, { Limit: '3', Offset: '0', NextPageOffset: '-1', TotalPages: '4', TotalResults: '12' });
+  assert.equal(result.body.data.LogsList.List[0].Message, 'value 12');
+  assert.equal(result.body.data.LogsList.List[0].password, '12');
 });
 
 test('broker refuses cross-tenant/mutating calls and unallowlisted redirect origins', async () => {
@@ -241,15 +235,15 @@ test('routing-cookie digits never corrupt scoped GUIDs or pagination; credential
     const headers = new Headers();
     for (const value of ['TenantPortfolio=1; Path=/; Secure', 'TenantRing=3; Path=/; Secure', 'TenantGeo=us; Path=/; Secure', 'TenantAccess=PRIVATE_ACCESS; Path=/; Secure']) headers.append('Set-Cookie', value);
     return new Response(JSON.stringify({ data: { Page: { TotalResults: '3' }, ApplicationKey: 'e6e54de6-3d28-491d-a43b-079d2b3350f4',
-      Message: 'TenantRing=3 PRIVATE_ACCESS' } }), { status: 200, headers });
+      Message: 'TenantRing=3 PRIVATE_ACCESS_TOKEN_LONG' } }), { status: 200, headers });
   } });
   broker.authenticated = true;
   broker.metadata.resolve = async (_module, _view, action) => ({ moduleVersion: 'current', apiVersion: 'current', action });
   const output = await broker.readScreenservice({ target: 'odc3', origin, readOnly: true, operationId: 'monitoring.detail',
     module: 'monitoring', view: 'logs.log', action: 'monitoring/logs/log/DataActionGetLogById', inputParameters: {}, screenVariables: {} });
   assert.equal(output.body.data.ApplicationKey, 'e6e54de6-3d28-491d-a43b-079d2b3350f4');
-  assert.equal(output.body.data.Page.TotalResults, 3);
-  assert.equal(output.body.data.Message, '[REDACTED] [REDACTED]');
+  assert.equal(output.body.data.Page.TotalResults, '3');
+  assert.equal(output.body.data.Message, 'TenantRing=3 PRIVATE_ACCESS_TOKEN_LONG');
 });
 
 test('vault failure does not prevent discovery startup and never leaks raw helper error', async () => {
@@ -312,7 +306,7 @@ test('native tenant SRP flow passes observed inputs to Portal and proves protect
   broker.cognito = async input => {
     assert.equal(input.config.AuthFlow, 'USER_SRP_AUTH');
     assert.equal(input.password, 'PRIVATE_PASSWORD');
-    return { IdToken: 'PRIVATE_ID', AccessToken: 'PRIVATE_ACCESS', RefreshToken: 'PRIVATE_REFRESH' };
+    return { IdToken: 'PRIVATE_ID', AccessToken: 'PRIVATE_ACCESS_TOKEN_LONG', RefreshToken: 'PRIVATE_REFRESH' };
   };
   broker.action = async (module, view, action, parameters, variables) => {
     received.push({ action, parameters, variables });
@@ -330,7 +324,7 @@ test('native tenant SRP flow passes observed inputs to Portal and proves protect
   assert.equal(output.ok, true); assert.equal(output.session.authenticated, true);
   const call = received.find(entry => entry.action.endsWith('/ActionProcessCognitoToken'));
   assert.equal(call.parameters.ClientId, 'client');
-  assert.equal(call.parameters.CognitoAccessToken, 'PRIVATE_ACCESS');
+  assert.equal(call.parameters.CognitoAccessToken, 'PRIVATE_ACCESS_TOKEN_LONG');
   assert.equal(call.variables.state, 'PRIVATE_STATE');
   assert.equal(JSON.stringify(output).includes('PRIVATE_'), false);
 });

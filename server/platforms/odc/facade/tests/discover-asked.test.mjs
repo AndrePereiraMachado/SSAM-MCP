@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as discovery from '../discovery.mjs'; // a namespace: before a rule exists its test fails on the rule, not at import
 import { discoverAll } from '../tool-routing.mjs';
+import { wireBytes } from './fixtures/answer-wire.mjs';
 
 const { discover, laneSources, parseExpand } = discovery;
 const o11 = laneSources('o11');
@@ -61,7 +62,7 @@ test('expand and detail beside an intent are answered: every part asked is whole
     const label = `call ${i}`;
     assert.equal(a.ok, true, label);
     assert.ok(Array.isArray(a.matches) && a.intent === args.intent, `${label}: the intent is still answered`);
-    assert.ok(bytes(a) <= args.budgetBytes && a.size.bytes === bytes(a), `${label}: ${bytes(a)} bytes within ${args.budgetBytes}`);
+    assert.ok(wireBytes(a, args) <= args.budgetBytes && a.size.bytes === bytes(a), `${label}: ${bytes(a)} bytes within ${args.budgetBytes}`);
     await answeredOrNamed(a, args, label);
     reducedSeen += a.expansionsReduced?.length ?? 0;
     // Stage F never cuts a part asked in silence (review of 2026-10-11: calls 49, 59, 106 and 142 lost ops, bindings and
@@ -73,7 +74,7 @@ test('expand and detail beside an intent are answered: every part asked is whole
   // stage F's bindingsOmitted marker became a "part" and the continuation was refused).
   for (const budgetBytes of [3000, 4096, 6000, 8000]) {
     const small = await discover({ lane: 'o11', ...CALLS[49], budgetBytes, sources: o11 });
-    assert.ok(bytes(small) <= budgetBytes, `${budgetBytes}`);
+    assert.ok(wireBytes(small, { budgetBytes }) <= budgetBytes, `${budgetBytes}`);
     if (small.expansionsOmitted) assert.deepEqual(small.expansionsOmitted.map(o => o.expand), asked(CALLS[49]).map(u => u.spec), `${budgetBytes}`);
     if (small.continuations) assert.deepEqual(continued(small), asked(CALLS[49]).map(u => u.spec), `${budgetBytes}`);
   }
@@ -132,7 +133,7 @@ test('a budget below the minimal answer is raised to it when the minimal fits un
     assert.equal(a.size.budgetBytes, adjusted.to, label);
     // The answer's own field keeps the adjustment when an input layer writes its own inputAdjusted over the answer's.
     assert.deepEqual(a.size.budgetAdjusted, { from: adjusted.from, to: adjusted.to, rule: adjusted.rule }, label);
-    assert.ok(bytes(a) <= adjusted.to && a.size.bytes === bytes(a), `${label}: ${bytes(a)} bytes within ${adjusted.to}`);
+    assert.ok(wireBytes(a) <= adjusted.to && a.size.bytes === bytes(a), `${label}: ${bytes(a)} bytes within ${adjusted.to}`);
     // Every part asked comes whole: nothing reduced, nothing left to another call.
     for (const u of asked(args)) assert.deepEqual(a.expansions?.[u.id]?.[u.part], await wholeOf(u), `${label}: ${u.spec} whole`);
     assert.equal(a.expansionsReduced, undefined, label); assert.equal(a.expansionsOmitted, undefined, label); assert.equal(a.continuations, undefined, label);
@@ -145,7 +146,7 @@ test('a budget below the minimal answer is raised to it when the minimal fits un
   assert.equal(roomy.inputAdjusted, undefined); assert.equal(roomy.size.budgetBytes, 30000);
   // The engine itself keeps its hard budget (no ceiling: the tests and the reruns for the room of the tools).
   const engine = await discover({ lane: 'o11', ...INSUFFICIENT[31], sources: o11 });
-  assert.equal(engine.size.status, 'insufficient'); assert.ok(bytes(engine) <= 14000);
+  assert.equal(engine.size.status, 'insufficient'); assert.ok(wireBytes(engine) <= 14000);
 });
 
 // The sections after the model part (review of 2026-10-11, round 3): a budget raised to the minimal of the model part left
@@ -171,7 +172,7 @@ test('a budget raised at the entry holds the floor of the sections after the mod
     const a = await discoverAll({ lane: 'o11', ...args, sources: o11 });
     const adjusted = a.inputAdjusted?.find(x => x.path === '/budgetBytes');
     assert.ok(adjusted?.from === args.budgetBytes && adjusted.to > args.budgetBytes && a.size.budgetBytes === adjusted.to && a.size.status !== 'insufficient', `${label}: ${JSON.stringify(a.inputAdjusted)} ${a.size.status}`);
-    assert.ok(bytes(a) <= adjusted.to && a.size.bytes === bytes(a), `${label}: ${bytes(a)} bytes within ${adjusted.to}`);
+    assert.ok(wireBytes(a) <= adjusted.to && a.size.bytes === bytes(a), `${label}: ${bytes(a)} bytes within ${adjusted.to}`);
     // Every section at its floor at least: the room above the minimal of the model part is theirs, and no more than that.
     for (const k of wants) assert.ok(a[k] != null, `${label}: ${k} (truncated: ${(a.size.truncated ?? []).map(t => t.section).join(',')})`);
     assert.ok(adjusted.to - bytes(a) < 1024, `${label}: ${bytes(a)} bytes of ${adjusted.to}`);
@@ -190,7 +191,7 @@ test('a budget raised at the entry holds the floor of the sections after the mod
       const a = await discoverAll({ lane: 'o11', intent, budgetBytes, sources: o11 });
       const label = `${i} at ${budgetBytes} (minimal ${minimal})`;
       assert.deepEqual(unnamed(a, wants), [], label);
-      assert.ok(a.size.status !== 'insufficient' && bytes(a) <= a.size.budgetBytes && a.size.bytes === bytes(a), `${label}: ${JSON.stringify(a.size)}`);
+      assert.ok(a.size.status !== 'insufficient' && wireBytes(a) <= a.size.budgetBytes && a.size.bytes === bytes(a), `${label}: ${JSON.stringify(a.size)}`);
       assert.equal(a.size.budgetBytes, a.inputAdjusted?.[0]?.to ?? budgetBytes, label);
     }
   }
@@ -206,7 +207,7 @@ test('a minimal answer above the ceiling is answered in pages: each page within 
   for (;;) {
     pages++;
     assert.equal(a.ok, true); assert.notEqual(a.size.status, 'insufficient', JSON.stringify(a.size));
-    assert.ok(bytes(a) <= Math.max(ceilingBytes, a.size.budgetBytes) && a.size.bytes === bytes(a), `page ${pages}: ${bytes(a)} bytes`);
+    assert.ok(wireBytes(a, { maxBytes: Math.max(ceilingBytes, a.size.budgetBytes) }) <= Math.max(ceilingBytes, a.size.budgetBytes) && a.size.bytes === bytes(a), `page ${pages}: ${bytes(a)} bytes`);
     for (const [key, v] of Object.entries(a.expansions ?? {})) for (const part of Object.keys(v)) if (!['title', 'route'].includes(part)) seen.add(`${key}:${part}`);
     const next = a.continuations?.next;
     if (!next) break;
@@ -222,7 +223,7 @@ test('a minimal answer above the ceiling is answered in pages: each page within 
   const below = await discoverAll({ lane: 'o11', ...INSUFFICIENT[40], budgetBytes: 4096, ceilingBytes: 20000, sources: o11 });
   const adj = below.inputAdjusted?.[0];
   assert.ok(adj?.rule === 'raise-to-page' && adj.from === 4096 && adj.to > 4096 && adj.to < 20000 && below.size.budgetAdjusted?.to === adj.to, JSON.stringify(below.inputAdjusted));
-  assert.ok(below.continuations?.next && bytes(below) <= adj.to);
+  assert.ok(below.continuations?.next && wireBytes(below) <= adj.to);
   const held = await discoverAll({ lane: 'o11', ...INSUFFICIENT[40], budgetBytes: adj.to, ceilingBytes: 20000, sources: o11 });
   assert.equal(held.inputAdjusted, undefined); assert.deepEqual(Object.keys(held.expansions['ui.html-page']), Object.keys(below.expansions['ui.html-page']));
   // Every page names the pages after it, to the last: following next alone returns every part asked (review of 2026-10-11:
@@ -233,7 +234,7 @@ test('a minimal answer above the ceiling is answered in pages: each page within 
   const got = new Set(); let count = 0;
   for (;;) {
     count++;
-    assert.ok(count < 8 && page.ok && page.size.status !== 'insufficient' && bytes(page) <= page.size.budgetBytes && page.size.bytes === bytes(page), `page ${count}: ${JSON.stringify(page.size)}`);
+    assert.ok(count < 8 && page.ok && page.size.status !== 'insufficient' && wireBytes(page) <= page.size.budgetBytes && page.size.bytes === bytes(page), `page ${count}: ${JSON.stringify(page.size)}`);
     if (Object.keys(page.expansions).some(k => k.startsWith('ui.'))) assert.ok(page.outsystemsUi || page.size.truncated?.some(t => t.section === 'outsystemsUi'), `page ${count}: the OutSystems UI section of a ui.* part is there or named`);
     for (const [key, v] of Object.entries(page.expansions)) for (const part of Object.keys(v)) if (!['title', 'route'].includes(part)) got.add(`${key}:${part}`);
     if (!page.continuations) break;
@@ -247,7 +248,7 @@ test('a minimal answer above the ceiling is answered in pages: each page within 
   // page at the ceiling less the note of an adjustment is the caller's too.
   for (const budgetBytes of [12000, 11950]) {
     const atCeiling = await discoverAll({ lane: 'o11', expand: FOUR, budgetBytes, ceilingBytes: 12000, sources: o11 });
-    assert.ok(atCeiling.inputAdjusted === undefined && atCeiling.size.budgetBytes === budgetBytes && bytes(atCeiling) <= budgetBytes, `${budgetBytes}: ${JSON.stringify(atCeiling.inputAdjusted)} ${atCeiling.size.budgetBytes}`);
+    assert.ok(atCeiling.inputAdjusted === undefined && atCeiling.size.budgetBytes === budgetBytes && wireBytes(atCeiling) <= budgetBytes, `${budgetBytes}: ${JSON.stringify(atCeiling.inputAdjusted)} ${atCeiling.size.budgetBytes}`);
   }
 });
 

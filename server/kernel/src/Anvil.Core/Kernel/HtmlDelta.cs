@@ -19,6 +19,8 @@ public sealed partial class ModelSession
     private JsonNode Html(JsonObject op)
     {
         if (op["parent"] != null) return ApplyHtmlVisual(op); // the visual fragment form: HtmlVisual.cs
+        if (Anvil.Reading.ScreenHtmlEdit.IsEdit(op)) return HtmlEdit(op); // the edit of a reading (C2): Verbs.ScreenHtml.cs
+        if (ScreenDocument.IsDocumentOp(op)) return HtmlDocument(op); // the document form: <screen>/<block>, Verbs.ScreenDocument.cs
         if (op["data"]?["components"] is JsonValue componentSource)
         {
             var contract = HtmlComponents.Compile(componentSource.GetValue<string>());
@@ -205,12 +207,13 @@ public sealed partial class ModelSession
     /// before the owner) is adopted once by the first owner that installs that class: the marker is renamed and the content
     /// replaced (<c>adoptedLegacy</c>); the next owners get blocks of their own. Never two copies. The @import statements the
     /// block carries go to the top of the stylesheet, once (H14, <c>cssImportsHoisted</c>).</summary>
-    private string InstallStylesheet(string blockKey, string scopedCss, JsonObject report)
+    private string InstallStylesheet(string blockKey, string scopedCss, JsonObject report, bool format = true)
     {
         var defaultTheme = _es.DefaultMobileTheme ?? throw new InvalidOperationException("html: the module has no default theme to carry the stylesheet");
         var theme = _es.MobileThemes.FirstOrDefault(t => t.ObjectKey?.ToString() == defaultTheme.ObjectKey?.ToString())
             ?? throw new InvalidOperationException($"html: the default theme {TypeResolver.Name(defaultTheme)} belongs to another module; the page stylesheet needs a theme owned by this module");
-        scopedCss = FormatCode(CodeLanguage.Css, scopedCss, TypeResolver.Name(theme) + ".StyleSheet (html " + blockKey + ")");
+        // The document form writes its CSS as given (format false); the page and fragment forms write the CSS they compiled.
+        if (format) scopedCss = FormatCode(CodeLanguage.Css, scopedCss, TypeResolver.Name(theme) + ".StyleSheet (html " + blockKey + ")");
         var begin = Marker(blockKey); var end = EndMarker(blockKey);
         var block = begin + "\n" + scopedCss.TrimEnd() + "\n" + end;
         // O bloco vai para a metade do AUTOR do tema, nunca pela efetiva: num tema com CSS do Theme Editor a efetiva
@@ -219,7 +222,9 @@ public sealed partial class ModelSession
         var css = sheet != null ? ThemeCss.Author(sheet) : theme.StyleSheet ?? "";
         var (i, endMarker) = (css.IndexOf(begin, StringComparison.Ordinal), end);
         var colon = blockKey.IndexOf(':');
-        if (i < 0 && colon > 0)
+        // A named style is independent of a root with the same name. Only the older
+        // page/fragment keys may adopt that root's legacy marker.
+        if (i < 0 && colon > 0 && !blockKey.StartsWith("style:", StringComparison.Ordinal))
         {
             var legacy = Marker(blockKey[(colon + 1)..]);
             if ((i = css.IndexOf(legacy, StringComparison.Ordinal)) >= 0)

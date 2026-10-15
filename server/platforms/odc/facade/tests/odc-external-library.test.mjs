@@ -141,7 +141,7 @@ function harness({ tenant = tenantFake(), signedIn = true, capabilities = ['port
     return { ok: true, envelope: { ok: true, command: 'external-library', data: { ok: true, name: spec.name, package: { path: file, fileName: path.basename(file), sha256, bytes: bytes.length },
       contents, sdk: { package: 'OutSystems.ExternalLibraries.SDK', version: '1.5.0' }, targetFramework: 'net10.0', runtime: 'linux-x64' } } };
   };
-  const tool = createExternalLibraryTool({ access, kernel, grants, portalRoot: dir, evidenceRoot: path.join(dir, 'evidence'), sleep: async () => {}, waits: { pollMs: 1, readbackSeconds: 5 } });
+  const tool = createExternalLibraryTool({ access, kernel, grants, portalRoot: dir, evidenceRoot: path.join(dir, 'evidence'), signatureCache: path.join(dir, 'producer-cache'), sleep: async () => {}, waits: { pollMs: 1, readbackSeconds: 5 } });
   const sent = () => calls.filter(c => c[0] === 'portal-upload' || (c[0] === 'portal-call' && requests.get(c[1]).method !== 'GET') || (c[0] === 'portal-session' && c[1] === 'fetch' && requests.get(c[2]).write));
   const receipts = () => (fs.existsSync(path.join(dir, 'receipts')) ? fs.readdirSync(path.join(dir, 'receipts')) : []);
   return { tool, access, tenant, calls, requests, kernelCalls, vaultFetches, sent, receipts, dir };
@@ -312,6 +312,14 @@ test('7. the happy path: build, upload, two reads until ReadyForReview, publishJ
   const before = h.sent().length;
   const again = await h.tool({ action: 'deploy', spec: SPEC, tenant: PERSONAL, authorize: WORDS, operationUuid: out.receipt.operationUuid });
   assert.equal(again.existingReceipt, true); assert.equal(h.sent().length, before);
+  // F5: the library is a producer; its deploy is in the producer ledger from start to end (released: ended, no marker).
+  const { unsafeUntil, ledgerId } = await import('../producer-signatures.mjs');
+  const cache = path.join(h.dir, 'producer-cache');
+  const record = JSON.parse(fs.readFileSync(path.join(cache, 'published', ledgerId(PERSONAL, 'SSAMTextTools') + '.json'), 'utf8'));
+  assert.equal(record.source, 'odc_external_library deploy');
+  assert.ok(Date.parse(record.endedAtUtc) >= Date.parse(record.publishedAtUtc));
+  assert.deepEqual(fs.readdirSync(path.join(cache, 'publishing')), []);
+  assert.ok(unsafeUntil(cache, { environment: PERSONAL, producer: 'SSAMTextTools' }) <= Date.now());
 });
 
 test('8. GenerationError is GENERATION_FAILED with no publish; FinishedWithError is PUBLISH_FAILED with no tag', async () => {
@@ -325,6 +333,9 @@ test('8. GenerationError is GENERATION_FAILED with no publish; FinishedWithError
   assert.equal(out.code, 'PUBLISH_FAILED'); assert.equal(out.publishKey, PUB(1));
   assert.deepEqual(publish.tenant.writes, [], 'no PATCH of the tag');
   assert.equal(publish.calls.filter(c => c[0] === 'portal-upload').length, 1);
+  // F5: a deploy that did not release stays running for the producer ledger (its end is not proven).
+  const { unsafeUntil } = await import('../producer-signatures.mjs');
+  assert.ok(unsafeUntil(path.join(publish.dir, 'producer-cache'), { environment: PERSONAL, producer: 'SSAMTextTools' }) > Date.now());
 });
 
 test('9. a lost portal-upload answer is UNCERTAIN, never resent; the same operationUuid settles it by the file name; two such jobs are AMBIGUOUS', async () => {

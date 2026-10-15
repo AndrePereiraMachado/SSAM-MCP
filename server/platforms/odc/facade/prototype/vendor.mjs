@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { sha256 } from './ir.mjs';
 
 export const VENDOR_HOSTS = Object.freeze(['cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'unpkg.com', 'esm.sh', 'cdn.tailwindcss.com', 'code.jquery.com', 'cdn.skypack.dev']);
@@ -56,8 +57,33 @@ export async function downloadVendor(url) {
   return Buffer.concat(chunks);
 }
 
-// Resolves every remote script URL: mapping.vendor (local file) > cache > download. Problems are returned, never thrown.
-export async function resolveVendors(urls, { mapping = {}, cacheDir = defaultVendorCache(), download = null, source } = {}) {
+// Subresource integrity (integrity="sha384-..."): whether the bytes are the ones the page pinned (no integrity: true).
+export function integrityMatches(data, integrity) {
+  const pins = String(integrity ?? '').trim().split(/\s+/).filter(Boolean).map(token => /^(sha256|sha384|sha512)-(.+)$/.exec(token)).filter(Boolean);
+  if (!pins.length) return true;
+  return pins.some(([, algorithm, digest]) => createHash(algorithm).update(data).digest('base64') === digest);
+}
+
+// A copy of a CDN script inside the prototype folder: <source>/vendor/<file name> (where the mapping.vendor patch points) or
+// <source>/<file name>, accepted when the page's integrity pins it (or, without integrity, by its place in vendor/).
+function fromFolder(source, url, integrity) {
+  if (!source) return null;
+  let name = null;
+  try { name = decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() ?? ''); } catch { return null; }
+  if (!name) return null;
+  for (const [file, needsPin] of [[path.join(source, 'vendor', name), false], [path.join(source, name), true]]) {
+    let data;
+    try { data = fs.readFileSync(file); } catch { continue; }
+    if ((needsPin && !integrity) || !integrityMatches(data, integrity)) continue;
+    return { data, file };
+  }
+  return null;
+}
+
+// Resolves every remote script URL: mapping.vendor (local file) > cache > a copy in the prototype folder > download (never in
+// the hosted SSAM: download null). A pinned integrity (SRI) is checked on whatever bytes are found: a cache or a download
+// that does not match is never run. Problems are returned, never thrown.
+export async function resolveVendors(urls, { mapping = {}, cacheDir = defaultVendorCache(), download = null, source, integrity = {} } = {}) {
   const vendors = new Map(), problems = [];
   for (const url of [...new Set(urls)].sort()) {
     const local = mapping.vendor?.[url];
@@ -75,12 +101,16 @@ export async function resolveVendors(urls, { mapping = {}, cacheDir = defaultVen
       problems.push({ url, reason: 'host', message: 'script ' + url + ' comes from a host outside the CDN allowlist (' + VENDOR_HOSTS.join(', ') + ')' });
       continue;
     }
+    const pin = integrity[url] ?? null;
     let data = fromCache(cacheDir, url);
     let from = 'cache';
+    if (data && !integrityMatches(data, pin)) data = null;
+    if (!data) { const local = fromFolder(source, url, pin); if (local) { data = local.data; from = 'folder'; } }
     if (!data && typeof download === 'function') {
       try {
         data = await download(url);
         if (data.length > VENDOR_MAX_BYTES) throw new Error('larger than 5 MB');
+        if (!integrityMatches(data, pin)) throw new Error('the bytes downloaded do not match the integrity ' + pin + ' the page pins');
         storeInCache(cacheDir, url, data);
         from = 'download';
       } catch (error) {

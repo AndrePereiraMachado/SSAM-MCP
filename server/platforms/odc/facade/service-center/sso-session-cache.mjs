@@ -14,9 +14,27 @@ const keyOf=auth=>{
 };
 export class SsoSessionCache{
  constructor({now=Date.now,ttlMs=300000,maxEntries=16,schedule=(fn,ms)=>{const t=setTimeout(fn,ms);t.unref();return t;},cancel=clearTimeout}={}){
-  Object.assign(this,{now,ttlMs,maxEntries,schedule,cancel});this.entries=new Map();
+  Object.assign(this,{now,ttlMs,maxEntries,schedule,cancel});this.entries=new Map();this.authenticating=new Map();
  }
  key(auth){return keyOf(auth);}
+ async authenticate(auth,create){
+  const key=keyOf(auth);
+  // Concurrent reads of different pages share one credential exchange. Each
+  // caller receives its own cookie jar, and closing one cannot break another.
+  let pending=key&&this.authenticating.get(key);
+  if(!pending){
+   pending=(async()=>{const identity=create();try{
+    await identity.authenticateSc();
+    this.put(auth,identity.jar);
+    const jar=this.scopedJar(auth,identity.jar);
+    if(!jar)throw new Error('Authenticated session has no Service Center cookie');
+    return jar;
+   }finally{await identity.close();}})();
+   if(key)this.authenticating.set(key,pending);
+  }
+  try{return{key,jar:(await pending).cloneSync()};}
+  finally{if(key&&this.authenticating.get(key)===pending)this.authenticating.delete(key);}
+ }
  drop(key){const entry=this.entries.get(key);if(!entry)return;this.entries.delete(key);this.cancel(entry.timer);entry.jar.removeAllCookiesSync();}
  clear(){for(const key of this.entries.keys())this.drop(key);}
  get(auth){const key=keyOf(auth),entry=this.entries.get(key);if(!entry)return null;

@@ -1,0 +1,23 @@
+{"timestamp":"2026-01-01T12:00:00Z","type":"session_meta","payload":{"id":"root-neutral"}}
+{"timestamp":"2026-01-01T12:00:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"output_tokens":10}}}}
+{"timestamp":"2026-01-01T12:00:01Z","type":"event_msg","payload":{"type":"task_started","turn_id":"root-a","turn_attribution":{"parent_turn_id":null}}}
+{"timestamp":"2026-01-01T12:00:01Z","type":"turn_context","payload":{"model":"test-model"}}
+{"timestamp":"2026-01-01T12:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<context>ignore</context>"}]}}
+{"timestamp":"2026-01-01T12:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"[BenchSSAM round=01 case=C1 lane=o11 subagents=yes]\nFaça a ação."}]}}
+{"timestamp":"2026-01-01T12:00:02Z","type":"response_item","payload":{"type":"custom_tool_call","name":"functions.exec","call_id":"a","input":"await tools.mcp__ssam_proto__ssam_code({text:'ação'})"}}
+{"timestamp":"2026-01-01T12:00:04Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"a","output":[{"type":"input_text","text":"{\"outcome\":\"refused\",\"code\":\"PREFLIGHT_REFUSED\",\"error\":\"[GRAMMAR] [GRAMMAR] wrong\",\"problems\":[{\"code\":\"SHAPE\"}]}"}]}}
+{"timestamp":"2026-01-01T12:00:05Z","type":"event_msg","payload":{"type":"turn_aborted","turn_id":"root-a"}}
+{"timestamp":"2026-01-01T12:00:07Z","type":"event_msg","payload":{"type":"task_started","turn_id":"root-b","turn_attribution":{"parent_turn_id":null}}}
+{"timestamp":"2026-01-01T12:00:07Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Continue"}]}}
+{"timestamp":"2026-01-01T12:00:08Z","type":"response_item","payload":{"type":"function_call","name":"mcp__ssam__o11_deliver","call_id":"b","arguments":"{\"text\":\"ação\"}"}}
+{"timestamp":"2026-01-01T12:00:11Z","type":"response_item","payload":{"type":"function_call_output","call_id":"b","output":"{\"ok\":true,\"result\":\"entregue\"}"}}
+{"timestamp":"2026-01-01T12:00:12Z","type":"response_item","payload":{"type":"function_call","name":"mcp__ssam__ssam_reference","call_id":"c","arguments":"{}"}}
+{"timestamp":"2026-01-01T12:00:13Z","type":"response_item","payload":{"type":"function_call_output","call_id":"c","output":"Documentation mentions refused and error."}}
+{"timestamp":"2026-01-01T12:00:14Z","type":"response_item","payload":{"type":"function_call","name":"mcp__other__deliver","call_id":"d","arguments":"{}"}}
+{"timestamp":"2026-01-01T12:00:15Z","type":"response_item","payload":{"type":"function_call_output","call_id":"d","output":"{\"outcome\":\"refused\",\"code\":\"OTHER\"}"}}
+{"timestamp":"2026-01-01T12:00:16Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Pronto."}]}}
+{"timestamp":"2026-01-01T12:00:16Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"output_tokens":25}}}}
+{"timestamp":"2026-01-01T12:00:17Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"root-b"}}
+{"timestamp":"2026-01-01T12:00:18Z","type":"event_msg","payload":{"type":"task_started","turn_id":"root-c","turn_attribution":{"parent_turn_id":null}}}
+{"timestamp":"2026-01-01T12:00:18Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Um pedido sem tag"}]}}
+{"timestamp":"2026-01-01T12:00:20Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"root-c"}}

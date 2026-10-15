@@ -25,6 +25,8 @@ public static class ScreenExpander
     {
         ["kinds"] = new JsonArray(Kinds.Select(k => (JsonNode)k).ToArray()),
         ["shapes"] = new JsonObject(Shapes.Select(p => KeyValuePair.Create(p.Key, (JsonNode?)new JsonArray(p.Value.Select(k => (JsonNode)k).ToArray())))),
+        // data.generate: the standard list, detail and form screens of entities, from the module (ScreenGenerator).
+        ["generate"] = ScreenGenerator.Schema(),
     };
 
     public static List<JsonObject> Expand(JsonObject data, Func<string[], string?> tryRef,

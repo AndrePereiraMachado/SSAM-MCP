@@ -5,6 +5,13 @@ import {fingerprint,isUuid,sha256} from './write-journal.mjs';
 import {fail} from './errors.mjs';
 export const A2A_DISCOVER='connections.a2aDiscover';
 
+export function a2aDiscoveryContinuation(operationUuid,expected){
+ if(!expected?.stage)return undefined;
+ return {tool:'odc_a2a_connection_plan',arguments:{discoveryOperationUuid:operationUuid,name:expected.name,
+  agentUrl:expected.agentUrl,stage:structuredClone(expected.stage)},
+  why:'Prepare the plan using the confirmed receipt. Supply the explicit portfolioKey and configurationType; omit card.'};
+}
+
 export async function a2aDiscoveryApproval({file,words,host,raw,read}){
  const reject=()=>fail('AUTHORIZATION_CONTEXT_INVALID','Agent card discovery requires an exact approved HTTPS base URL, connection name and live stage. Nothing was sent.');
  let record,url;try{
@@ -20,7 +27,9 @@ export async function a2aDiscoveryApproval({file,words,host,raw,read}){
   constraints:{connectionName:name,agentUrl:url.href,inputSha256:sha256(JSON.stringify(raw.inputParameters))}});
  const stages=await read('monitoring.stages',{});
  if(!stages?.ok||stages.truncated===true||!Array.isArray(stages.rows)||stages.rows.filter(s=>s.Key===agent.environmentId).length!==1)reject();
- return {approval,expected:{name,agentUrl:url.href,stageKey:agent.environmentId}};
+ const observed=stages.rows.find(stage=>stage.Key===agent.environmentId);
+ const stage=Object.fromEntries(['Key','Name','Purpose','Order','Hosting'].filter(key=>observed[key]!==undefined).map(key=>[key,observed[key]]));
+ return {approval,expected:{name,agentUrl:url.href,stageKey:agent.environmentId,stage}};
 }
 
 // Never return the raw string, authentication declarations or unknown fields.

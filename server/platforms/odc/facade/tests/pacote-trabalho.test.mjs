@@ -15,6 +15,7 @@ import { DIGEST_EXTRACTOR, DIGEST_SECTIONS } from '../module-digest.mjs';
 import { discover, laneSources, parseDiscoverArguments } from '../discovery.mjs';
 import { discoverAll } from '../tool-routing.mjs';
 import { writeCapture } from './fixtures/module-index.mjs';
+import { snapshotSources } from './fixtures/discovery-results.mjs';
 
 const bytes = v => Buffer.byteLength(JSON.stringify(v), 'utf8');
 const block = (key, kind, name, text, extra = {}) => ({ key, kind, name, text, ...extra });
@@ -232,8 +233,11 @@ test('ssam_discover takes packet:true (MCP schema, CLI --packet) and the instruc
 
 // ---- over the real index of each lane (needs the lane CLI)
 const cliSkip = lane => !fs.existsSync(laneSources(lane).cli) && `the ${lane} CLI is not built`;
+// The stamped results the index reads come from the committed snapshot (fixtures/discovery-results.mjs): the live ones
+// (kernel/.local/[lane-odc/]test-work) are rewritten by a kernel suite running in the same checkout, and the index key
+// moves between the two calls this test compares.
 const cache = {};
-const sourcesOf = lane => (cache[lane] ??= { ...laneSources(lane), cacheDir: fs.mkdtempSync(path.join(os.tmpdir(), `pacote-trabalho-${lane}-`)) });
+const sourcesOf = lane => (cache[lane] ??= snapshotSources(lane, { cacheDir: fs.mkdtempSync(path.join(os.tmpdir(), `pacote-trabalho-${lane}-`)) }));
 for (const lane of ['o11', 'odc']) {
   test(`${lane}: the discover packet over the real index, with and without a module: deterministic and inside the ceiling`, { skip: cliSkip(lane), timeout: 900000 }, async () => {
     const sources = sourcesOf(lane);

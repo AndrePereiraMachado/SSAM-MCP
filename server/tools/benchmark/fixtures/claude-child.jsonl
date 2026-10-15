@@ -1,0 +1,4 @@
+{"timestamp":"2026-01-01T12:00:02Z","type":"user","isSidechain":true,"message":{"content":"Ajude"}}
+{"timestamp":"2026-01-01T12:00:03Z","type":"assistant","isSidechain":true,"message":{"id":"s1","model":"claude-test","usage":{"output_tokens":5},"content":[{"type":"tool_use","id":"s","name":"read_file","input":{"path":"example"}}]}}
+{"timestamp":"2026-01-01T12:00:04Z","type":"user","isSidechain":true,"message":{"content":[{"type":"tool_result","tool_use_id":"s","content":"ok"}]}}
+{"timestamp":"2026-01-01T12:00:05Z","type":"system","isSidechain":true,"subtype":"stop_hook_summary"}

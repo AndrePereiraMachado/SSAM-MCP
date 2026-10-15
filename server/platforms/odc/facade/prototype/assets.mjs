@@ -13,6 +13,20 @@ function addUse(map, relative, use) {
   map.get(relative).add(use);
 }
 
+// The type of an image by its first bytes (a JPEG saved as .png is a JPEG): the mime the asset carries; null when the bytes
+// are no known image (the extension decides, as before).
+export function imageMime(data) {
+  if (!data || data.length < 4) return null;
+  if (data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47) return 'image/png';
+  if (data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return 'image/jpeg';
+  if (data.subarray(0, 4).toString('latin1') === 'GIF8') return 'image/gif';
+  if (data.length >= 12 && data.subarray(0, 4).toString('latin1') === 'RIFF' && data.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+  if (data[0] === 0x42 && data[1] === 0x4d) return 'image/bmp';
+  if (data[0] === 0 && data[1] === 0 && data[2] === 1 && data[3] === 0) return 'image/x-icon';
+  if (/^\s*(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*(<!doctype svg[^>]*>\s*)?<svg[\s>]/i.test(data.subarray(0, 4096).toString('utf8').replace(/^﻿/, ''))) return 'image/svg+xml';
+  return null;
+}
+
 export function collectAssets({ sheets, trees, readBytes, page = null }) {
   const uses = new Map();
   for (const sheet of sheets) for (const url of sheet.urls ?? []) addUse(uses, url.asset, /\.(woff2?|ttf|otf|eot)$/i.test(url.raw) ? 'font' : 'css');
@@ -42,7 +56,7 @@ export function collectAssets({ sheets, trees, readBytes, page = null }) {
     let n = 2;
     while (taken.has(name)) name = pascal(path.posix.basename(relative, ext)) + n++;
     taken.add(name);
-    out.push({ path: relative, bundle: 'assets/' + hash + ext, mime: mimeOf(relative), bytes: data.length, sha256: hash, name, uses: [...set].sort(), data });
+    out.push({ path: relative, bundle: 'assets/' + hash + ext, mime: imageMime(data) ?? mimeOf(relative), bytes: data.length, sha256: hash, name, uses: [...set].sort(), data });
   }
   return out;
 }

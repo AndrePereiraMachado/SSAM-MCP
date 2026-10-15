@@ -359,6 +359,8 @@ internal sealed class SignatureEnvironment : IBridgeClient
     public int? VersionAfterReads { get; set; }
     public List<string> Operations { get; } = [];
     public List<JsonObject> Connects { get; } = [];
+    /// <summary>The environment the read-only lease answers (F5 tests: another environment).</summary>
+    public string Host { get; set; } = "lab.example";
     private int extensionReads;
 
     public static SignatureEnvironment Primitive()
@@ -384,7 +386,7 @@ internal sealed class SignatureEnvironment : IBridgeClient
         if (operation == "connect")
         {
             Connects.Add(request);
-            return new JsonObject { ["lease"] = "lease-" + Connects.Count, ["host"] = "lab.example", ["username"] = "test-user",
+            return new JsonObject { ["lease"] = "lease-" + Connects.Count, ["host"] = Host, ["username"] = "test-user",
                 ["ideVersion"] = "11.55.69", ["serverVersion"] = "11.41.0.46924" };
         }
         if (operation == "close") return new JsonObject { ["closed"] = true };

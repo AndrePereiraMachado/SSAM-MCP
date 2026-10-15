@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { generatorApproval, offered, approvalIdentity } from './generators.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const CATALOG_DIR = path.join(here, 'catalog');
@@ -24,9 +25,23 @@ export const COVERAGE_STATUSES = ['represented', 'excluded', 'gap', 'undetermine
 export const APPLICABILITY = ['applicable', 'conditional', 'not-applicable', 'undetermined'];
 export const CLASSIFICATIONS = { 'concrete-authorable': 'concrete', 'base-interface': 'base', 'referenced-signature': 'signature', undetermined: 'undetermined', 'outside-object-root': 'outside-root' };
 export const CLASSIFICATION_VALUES = ['concrete', 'base', 'signature', 'generated', 'undetermined', 'outside-root'];
-const API_OPS = ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-expose', 'soap'];
+const API_OPS = ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-consume', 'rest-expose', 'soap', 'entity-actions'];
 // Fields a fragment capability may carry for the catalog only; they never reach the index or an answer.
-const CATALOG_ONLY = ['requires', 'supersedes'];
+const CATALOG_ONLY = ['requires', 'supersedes', 'generator', 'withoutGenerator'];
+// A fragment entry (capability or unavailable) that offers a generator says so with "generator": "<id of
+// generators.mjs GENERATOR_APPROVAL>". While that generator is not approved (offered(id) false), the composition answers as
+// before the generator existed: the entry with its "withoutGenerator" fields (the text it had then) in place of the
+// current ones, or, without them, no entry at all (a capability the generator brought). The states are part of the
+// composition's identity, so an index built under other states is never reused.
+function gatedEntry(entry, where, problems) {
+  if (entry?.generator == null) return entry;
+  if (!generatorApproval(entry.generator)) { problems.push(`${where}: ${entry.id} names an unknown generator '${entry.generator}' (generators.mjs GENERATOR_APPROVAL)`); return null; }
+  if (entry.withoutGenerator != null && (typeof entry.withoutGenerator !== 'object' || Array.isArray(entry.withoutGenerator) || 'id' in entry.withoutGenerator)) {
+    problems.push(`${where}: ${entry.id} withoutGenerator must be an object of fields (never the id)`); return null;
+  }
+  if (offered(entry.generator)) return entry;
+  return entry.withoutGenerator ? { ...entry, ...entry.withoutGenerator } : null;
+}
 
 // ---- text: accent-insensitive tokens, tiny stemming, PT/EN stopwords. The matcher (discovery.mjs) reads intents and
 // keywords with these; the contract check below uses the same functions, so the pure check (T0) refuses what the index
@@ -137,7 +152,7 @@ export function composeCatalog({ shared, sharedBytes = Buffer.alloc(0), fragment
   const composed = shared ? { ...shared, capabilities: [...(shared.capabilities ?? [])], synonyms: { ...(shared.synonyms ?? {}) }, unavailable: [...(shared.unavailable ?? [])] } : null;
   const ids = new Set((composed?.capabilities ?? []).map(c => c.id));
   const supersedes = new Map(); // old id -> { by, lanes, front }
-  const hash = createHash('sha256').update(sharedBytes);
+  const hash = createHash('sha256').update(sharedBytes).update('\ngenerators ' + approvalIdentity());
   const manifest = [];
   for (const f of fragments) {
     hash.update('\n' + f.front + '/' + f.name + '\n').update(f.bytes);
@@ -147,8 +162,11 @@ export function composeCatalog({ shared, sharedBytes = Buffer.alloc(0), fragment
     if (fr.front !== f.front) problems.push(`fragment ${f.front}/${f.name}: front '${fr.front}' differs from its directory '${f.front}'`);
     if (!composed) { problems.push(`fragment ${f.front}/${f.name}: no shared descriptor to compose with`); continue; }
     const lanesOf = c => c.lanes ?? composed.lanes ?? LANES;
-    for (const c of fr.capabilities ?? []) {
-      if (!c?.id) { problems.push(`fragment ${f.front}/${f.name}: capability without id`); continue; }
+    const composedIds = { capabilities: [], unavailable: [] };
+    for (const entry of fr.capabilities ?? []) {
+      if (!entry?.id) { problems.push(`fragment ${f.front}/${f.name}: capability without id`); continue; }
+      const c = gatedEntry(entry, `fragment ${f.front}/${f.name}`, problems);
+      if (!c) continue;
       // A capability of the shared descriptor itself (data.static, data.structure, data.entity) is taken over by the
       // fragment that supersedes it: the base entry leaves the composition, the fragment's version replaces it.
       for (const old of c.supersedes ?? []) {
@@ -157,6 +175,7 @@ export function composeCatalog({ shared, sharedBytes = Buffer.alloc(0), fragment
       }
       if (ids.has(c.id)) { problems.push(`fragment ${f.front}/${f.name}: duplicate capability id ${c.id}`); continue; }
       ids.add(c.id);
+      composedIds.capabilities.push(c.id);
       for (const old of c.supersedes ?? []) {
         if (supersedes.has(old)) problems.push(`fragment ${f.front}/${f.name}: ${c.id} supersedes ${old}, already superseded by ${supersedes.get(old).by}`);
         else supersedes.set(old, { by: c.id, lanes: lanesOf(c), front: f.front });
@@ -164,15 +183,18 @@ export function composeCatalog({ shared, sharedBytes = Buffer.alloc(0), fragment
       const clean = Object.fromEntries(Object.entries(c).filter(([k]) => !CATALOG_ONLY.includes(k)));
       composed.capabilities.push({ ...clean, origin: { front: f.front, fragment: f.name } });
     }
-    for (const u of fr.unavailable ?? []) {
-      if (!u?.id) { problems.push(`fragment ${f.front}/${f.name}: unavailable entry without id`); continue; }
+    for (const entry of fr.unavailable ?? []) {
+      if (!entry?.id) { problems.push(`fragment ${f.front}/${f.name}: unavailable entry without id`); continue; }
+      const u = gatedEntry(entry, `fragment ${f.front}/${f.name}`, problems);
+      if (!u) continue;
       if (ids.has(u.id)) { problems.push(`fragment ${f.front}/${f.name}: duplicate id ${u.id} (unavailable)`); continue; }
       ids.add(u.id);
+      composedIds.unavailable.push(u.id);
       for (const old of u.supersedes ?? []) {
         if (supersedes.has(old)) problems.push(`fragment ${f.front}/${f.name}: ${u.id} supersedes ${old}, already superseded by ${supersedes.get(old).by}`);
         else supersedes.set(old, { by: u.id, lanes: u.lanes ?? LANES, front: f.front });
       }
-      const { supersedes: _s, ...rest } = u;
+      const { supersedes: _s, generator: _g, withoutGenerator: _w, ...rest } = u;
       composed.unavailable.push({ ...rest, origin: { front: f.front, fragment: f.name } });
     }
     for (const p of synonymProblems(fr.synonyms, `fragment ${f.front}/${f.name}: synonyms`)) problems.push(p);
@@ -181,7 +203,7 @@ export function composeCatalog({ shared, sharedBytes = Buffer.alloc(0), fragment
       if (!Array.isArray(variants)) continue;
       composed.synonyms[canonical] = [...new Set([...(known ?? []), ...variants.filter(v => typeof v === 'string' && v.trim())])];
     }
-    manifest.push({ front: f.front, file: f.name, sha256: sha256(f.bytes).slice(0, 16), capabilities: (fr.capabilities ?? []).map(c => c.id), unavailable: (fr.unavailable ?? []).map(u => u.id), coverage: (fr.coverage ?? []).length });
+    manifest.push({ front: f.front, file: f.name, sha256: sha256(f.bytes).slice(0, 16), capabilities: composedIds.capabilities, unavailable: composedIds.unavailable, coverage: (fr.coverage ?? []).length });
   }
   return { shared: composed, supersedes, fragments: manifest, problems, bytes: Buffer.from(hash.digest('hex')), raw: fragments };
 }

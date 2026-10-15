@@ -9,6 +9,7 @@
 // every answer fits the 12000-byte budget. Needs the lane CLIs built (the index is built from them); skips otherwise.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireBytes } from './fixtures/answer-wire.mjs';
 import fs from 'node:fs';
 import { laneSources, discover } from '../discovery.mjs';
 
@@ -22,7 +23,7 @@ const expanded = new Map();
 const expansion = (lane, id) => { const k = lane + '\u0000' + id; if (!expanded.has(k)) expanded.set(k, discover({ lane, expand: `${id}:operations+native+evidence`, sources: lanes[lane], budgetBytes: 400000 }).then(r => r.expansions[id])); return expanded.get(k); };
 function withinBudget(a, label) {
   assert.equal(a.ok, true, label + ': ' + (a.error ?? ''));
-  assert.ok(bytesOf(a) <= 12000 && a.size.bytes <= 12000, `${label}: hard budget, ${bytesOf(a)} bytes`);
+  assert.ok(wireBytes(a, { budgetBytes: 12000 }) <= 12000, `${label}: hard budget, ${bytesOf(a)} bytes`);
   assert.notEqual(a.size.status, 'insufficient', `${label}: ${JSON.stringify(a.size)}`);
 }
 const ids = a => JSON.stringify((a.matches ?? []).map(m => m.id + ':' + m.via));

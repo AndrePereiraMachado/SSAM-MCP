@@ -51,8 +51,12 @@ public static class VerbSurface
         new("html", "write", ["parent|data"], ["file", "html"],
             "Visual fragment inside an existing parent (`parent` + `file`|`html`, see `api --op html-visual`) or a whole page manifest (`data`, see `api --op html`)."),
         new("prototype", "write", ["data"], [], "Prototype folder imported as native screens, a shell block, popups, data and logic (data.capture is written by the facade); see `api --op prototype`."),
+        new("entity-actions", "write", [], ["data"],
+            "The standard actions of the module's data model, generated from it (Get<E>List, Get<E>ById, Save<E>, Remove<E>, service wrappers), written as logic texts; existing actions are never overwritten; see `api --op entity-actions`."),
         new("rest", "write", ["data"], [],
             "Consumed REST client, declarative over what it names (client, methods, structures, openapi, remove, breaks); see `api --op rest`."),
+        new("rest-consume", "write", ["data"], [],
+            "Generator: a consumed REST integration from URLs and JSON samples in one call (client, methods, structures, public structures, mapping, service actions, exception); see `api --op rest-consume`."),
         new("rest-expose", "write", ["data"], [],
             "Exposed REST service and its methods (service, methods with action/arguments/results or steps, remove, breaks); see `api --op rest-expose`."),
         new("soap", "write", ["data"], [],
@@ -81,9 +85,12 @@ public static class VerbSurface
             throw new InvalidOperationException($"unknown op: {kind}; ops: {string.Join(", ", Names)}");
         var missing = shape.Required.Where(group => group.Split('|').All(k => op[k] == null)).ToList();
         var allowed = shape.Required.SelectMany(g => g.Split('|')).Concat(shape.Optional).ToHashSet(StringComparer.Ordinal);
-        // allowQueryInLoop {why}: the explicit escape of QUERY_IN_LOOP (QueryInLoopRule), accepted on any write op.
+        // allowQueryInLoop {why}: the explicit escape of QUERY_IN_LOOP (QueryInLoopRule), accepted on any write op; allowForEach
+        // {why}: the escape of T1/T2 on the ops the owner's rules judge after the apply (ForEachEscape: logic, create, duplicate, move);
+        // allowSoapWithoutImport {why}: the lab escape of the SOAP rule (CompileCheck), on the create of a SOAP client.
         var unknown = op.Select(p => p.Key).Where(k => k != "op" && !k.StartsWith('_') && !allowed.Contains(k)
-            && !(k == QueryInLoopRule.AllowKey && shape.Kind == "write")).ToList();
+            && !(k == QueryInLoopRule.AllowKey && shape.Kind == "write") && !(k == ForEachEscape.AllowKey && ForEachEscape.Takes(kind))
+            && !(k == CompileCheck.SoapAllowKey && kind == "create")).ToList();
         if (missing.Count == 0 && unknown.Count == 0) return;
         var problems = new List<string>();
         if (missing.Count > 0) problems.Add("missing " + string.Join(", ", missing.Select(m => m.Contains('|') ? "one of " + m.Replace("|", ", ") : $"'{m}'")));

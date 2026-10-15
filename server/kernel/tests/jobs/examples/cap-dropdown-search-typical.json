@@ -10,7 +10,7 @@
   {"op": "set", "target": "$sel", "prop": "DataType", "value": "Priority Identifier"},
   {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetPriorityList", "as": "$agg"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IStaticEntity:Priority"}},
-  {"op": "logic", "data": {"actions": [
+  {"op": "logic", "allowForEach": { "why": "proof job written before the owner's rules judged the JSON form of the logic op (T1/T2, 2026-10-12); kept as the regression it already proves" }, "data": {"actions": [
    {"name": "BuildPriorityOptions", "kind": "screen", "owner": "IMobileScreen:Showcase",
     "description": "Converte os registros da static em opcoes do DropdownSearch",
     "vars": [{"name": "Option", "type": "DropdownOption"}],

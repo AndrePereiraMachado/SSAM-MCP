@@ -1,0 +1,138 @@
+{
+ "description": "rest-consume (generator): three public APIs from their URLs and samples on the blank ODC app: the REST clients and methods, the response structures, a public structure per resource, the mapping (attribute by attribute; Map* functions for deeper records and lists), a public service action per method (GetBrasilApiFeriados, GetIbgeEstados, GetIbgeMunicipios) and, for the POST, CreatePlaceholderPost that checks the signed-in user and calls CreatePlaceholderPost_Impl; every failure raises <Client>Error, logged. Offline: the samples are inline (a delivery samples the urls itself).",
+ "base": "tests/fixtures/odc/blank-mobile.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "rest-consume",
+   "data": {
+    "name": "BrasilApi",
+    "methods": [
+     {
+      "name": "Feriados",
+      "url": "https://brasilapi.com.br/api/feriados/v1/{ano=2026}",
+      "sample": [
+       {
+        "date": "2026-01-01",
+        "name": "Confraternização mundial",
+        "type": "national",
+        "weekday": "quinta-feira"
+       },
+       {
+        "date": "2026-02-16",
+        "name": "Carnaval",
+        "type": "national",
+        "weekday": "segunda-feira"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "rest-consume",
+   "data": {
+    "name": "Ibge",
+    "methods": [
+     {
+      "name": "Estados",
+      "url": "https://servicodados.ibge.gov.br/api/v1/localidades/estados",
+      "sample": [
+       {
+        "id": 11,
+        "sigla": "RO",
+        "nome": "Rondônia",
+        "regiao": {
+         "id": 1,
+         "sigla": "N",
+         "nome": "Norte"
+        }
+       },
+       {
+        "id": 12,
+        "sigla": "AC",
+        "nome": "Acre",
+        "regiao": {
+         "id": 1,
+         "sigla": "N",
+         "nome": "Norte"
+        }
+       }
+      ]
+     },
+     {
+      "name": "Municipios",
+      "url": "https://servicodados.ibge.gov.br/api/v1/localidades/estados/{uf=SP}/municipios",
+      "sample": [
+       {
+        "id": 3500105,
+        "nome": "Adamantina",
+        "microrregiao": {
+         "id": 35035,
+         "nome": "Adamantina",
+         "mesorregiao": {
+          "id": 3508,
+          "nome": "Presidente Prudente",
+          "UF": {
+           "id": 35,
+           "sigla": "SP",
+           "nome": "São Paulo",
+           "regiao": {
+            "id": 3,
+            "sigla": "SE",
+            "nome": "Sudeste"
+           }
+          }
+         }
+        },
+        "regiao-imediata": {
+         "id": 350019,
+         "nome": "Adamantina - Lucélia",
+         "regiao-intermediaria": {
+          "id": 3505,
+          "nome": "Presidente Prudente",
+          "UF": {
+           "id": 35,
+           "sigla": "SP",
+           "nome": "São Paulo",
+           "regiao": {
+            "id": 3,
+            "sigla": "SE",
+            "nome": "Sudeste"
+           }
+          }
+         }
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "rest-consume",
+   "data": {
+    "name": "Placeholder",
+    "baseUrl": "https://jsonplaceholder.typicode.com",
+    "methods": [
+     {
+      "name": "CreatePost",
+      "verb": "POST",
+      "url": "/posts",
+      "request": {
+       "title": "Visit report",
+       "body": "All checks done",
+       "userId": 1
+      },
+      "sample": {
+       "id": 101,
+       "title": "Visit report",
+       "body": "All checks done",
+       "userId": 1
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

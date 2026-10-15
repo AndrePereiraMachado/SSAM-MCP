@@ -31,8 +31,15 @@ public static class CodedProblems
             if (problem["severity"]?.ToString() is not ("error" or "warning")) problem["severity"] = "error";
             problem["message"] = OneLine(problem["message"]?.ToString() ?? coded.Code);
             // Every problem carries a fix (I2): one the thrower gave none gets what its message names, else its grammar's.
-            problem["fix"] = problem["fix"] is JsonValue f && f.TryGetValue<string>(out var fix) && !string.IsNullOrWhiteSpace(fix) ? OneLine(fix)
-                : JobPreflight.FixFrom(problem["message"]!.ToString()) ?? JobPreflight.DefaultFix(kind);
+            var message = problem["message"]!.ToString();
+            var supplied = problem["fix"] is JsonValue f && f.TryGetValue<string>(out var fix) && !string.IsNullOrWhiteSpace(fix) ? OneLine(fix) : null;
+            // Preserve a thrower's specific correction, but never preserve a stale op-grammar fallback in place of
+            // advice for a known code. A logic wrapper can expose a data/property/name error just as the raw verb does.
+            if (supplied != null && JobPreflight.CodeFix(problem["code"]!.ToString()) != null && GrammarFixes.Contains(supplied)) supplied = null;
+            problem["fix"] = JobPreflight.FixFrom(message)
+                ?? supplied ?? JobPreflight.FixFor(problem["code"]!.ToString(), kind, message);
+            var advice = message.IndexOf(" Fix: ", StringComparison.Ordinal);
+            if (advice >= 0) problem["message"] = message[..advice].TrimEnd();
             if (problem["patch"] is JsonArray patch) problem["patch"] = basePointer == null ? null : RebasePatch(patch, basePointer, swapFrom, swapTo);
             if (phase != null && problem["phase"] == null) problem["phase"] = phase;
             problem["_kind"] = kind;
@@ -64,4 +71,7 @@ public static class CodedProblems
     }
 
     private static string OneLine(string text) => Regex.Replace(text, @"\s*[\r\n]+\s*", " ").Trim();
+
+    private static readonly HashSet<string> GrammarFixes = new(new[] { "logic", "spec", "html", "html-visual", "sql", "data", "verbs" }
+        .Select(JobPreflight.DefaultFix), StringComparer.Ordinal);
 }

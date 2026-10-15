@@ -1,0 +1,30 @@
+{
+  "schema": "ssam-recorded-fixture/1",
+  "source": "recorded",
+  "tool": "mcp__ssam__studio_deliver",
+  "result": {
+    "outcome": "refused",
+    "code": "KERNEL_REFUSED",
+    "problemCodes": [],
+    "publishFailedAfterDelivery": false,
+    "shape": {
+      "keys": [
+        "code",
+        "discovery",
+        "error",
+        "failed",
+        "failedOp",
+        "job",
+        "jobSha256",
+        "ok"
+      ],
+      "code": "KERNEL_REFUSED",
+      "failed": "build",
+      "outcome": null
+    }
+  },
+  "records": 1,
+  "bytes": 6480,
+  "shrunk": [],
+  "removed": []
+}

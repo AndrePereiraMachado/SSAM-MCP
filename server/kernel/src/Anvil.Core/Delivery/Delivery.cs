@@ -64,7 +64,8 @@ public static partial class Delivery
         IProducerSignatureAuthority? producerAuthority = null,
         Func<string, string, string, IReadOnlyDictionary<string, string>, JsonObject>? applyWithProducers = null,
         IMergePlanner? mergePlanner = null,
-        Func<string, string, string, JsonObject>? previewSignatures = null)
+        Func<string, string, string, JsonObject>? previewSignatures = null,
+        Func<string, JsonArray>? referenceInventory = null)
     {
         var clock = Stopwatch.StartNew();
         // Proof-only jobs (K1 proofs, NEVER DELIVER marker) are refused before a task exists or the bridge is called.
@@ -78,6 +79,9 @@ public static partial class Delivery
         if (result["closed"]?.GetValue<bool>() == true) throw new InvalidOperationException("This failed delivery was closed for revision; it cannot be replayed");
         result["delivered"] = false; result.Remove("error"); result.Remove("code"); result.Remove("warnings"); result.Remove("reselected"); result.Remove("normalizations");
         result.Remove("referencesRefreshed"); result.Remove("referencesRefreshFailed");
+        // fam-deps: the reference closure belongs to this run; a dialog that blocked the merge (blockedBy, question) stays
+        // until the merge settles (RecordMerge).
+        result.Remove("referenceClosure"); result.Remove("referenceSignatureChanges");
         IReadOnlyDictionary<string, VerifyHint>? hints = null;
         var dataProofDiffers = false;
         // primeira-certa A3: the preflight of a job it refuses, kept for an answer without a capture (Fail).
@@ -190,8 +194,17 @@ public static partial class Delivery
             var foreignPath = Path.Combine(attemptDirectory, "foreign.oml");
             var writeState = result["writeState"]!.ToString();
             stage = "producer-signatures";
-            var producers = CaptureProducers(task, request, sources, active["environment"]?.ToString(), producerAuthority, log, key);
+            // F5: what this call observed of each producer signature (a fresh capture, a server attestation) and the
+            // workspace ledger that vouches for a recent observation of the same published state.
+            var signatures = new SignatureObservations(ProducerLedger.ForWork(request.WorkDirectory), ProducerCache.ForWork(request.WorkDirectory));
+            var producers = CaptureProducers(task, request, sources, active["environment"]?.ToString(), producerAuthority, log, key, signatures);
             if (writeState == "not-sent") AttestProducers("producerAttestation");
+            // fam-deps (family E): a consumer delivery (reference ops, captured or bound producers) has its references read and
+            // checked by the kernel: the base (owners kept, R5), the candidate before the merge, the merged module after it.
+            var referenceOps = request.Specification == null ? ReferenceClosure.ReferenceOps(request.JobPath) : [];
+            var consumer = request.Specification == null && (referenceOps.Count > 0 || producers.Count > 0);
+            IReadOnlyList<ModuleReferenceEntry>? baseReferences = null, candidateReferences = null;
+            var keptOwners = new List<string>();
             stage = "runtime-dependencies";
             var frozenCompilation = ReadCompilation(task, request, active["environment"]?.ToString(), key);
             var sourceCompilation = frozenCompilation?.Compilation ?? (request.Specification == null ? null : ModuleSpecification.CompileCSharpSource(request.Specification));
@@ -200,7 +213,18 @@ public static partial class Delivery
             if (writeState is "intent" or "unknown")
             {
                 stage = "reconcile";
-                if (!Reconcile()) return Fail("Merge outcome remains unknown; no creation or merge was replayed. Reconcile the original operation.");
+                if (!Reconcile())
+                {
+                    // fam-deps: a merge blocked by a dialog only the person answers is still waiting for that answer.
+                    if (result["blockedBy"] is JsonObject waiting)
+                    {
+                        result["code"] = StudioDialogPending;
+                        return Fail("The merge still waits in the Studio for the person to answer \"" + waiting["title"] + "\". " + waiting["question"]
+                            + " Nothing was repeated; resume this task again after the answer.");
+                    }
+                    return Fail("Merge outcome remains unknown; no creation or merge was replayed. Reconcile the original operation.");
+                }
+                if (StudioErrorDuringMerge() is { } studioErrorAnswer) return studioErrorAnswer;
                 writeState = result["writeState"]!.ToString();
             }
             if (writeState == "not-applied")
@@ -226,19 +250,48 @@ public static partial class Delivery
             // C26: a consumer whose job captured producer signatures first takes the Studio's own Refresh References for those
             // producers (a no-op when its references are already the server's), so the candidate and the live module agree on
             // the producer before the merge. Only with a bridge that has refresh_references; an older bridge merges as before.
+            // fam-deps R5: an owner of foreign types (ownerKey) the module already references with every object its dependents
+            // use keeps its signature, so the Studio is never asked to move it either. Review finding 3: that decision is made
+            // here, BEFORE the refresh, on a capture of the module as it is now (pre-refresh.oml): the producers the job names and
+            // the owners R5 links (the module lacks an object they must provide) are refreshed to their published signature, so
+            // the candidate does not change their signature and the live merge never selects one; only the kept owners stay
+            // out. When the module cannot be read here, the owners stay out of the refresh, as before.
             if (writeState == "not-sent" && result["capturedProducers"] is JsonObject { Count: > 0 } capturedNow && Offers(bridge, RefreshReferencesCapability))
             {
-                stage = "refresh-references";
-                var names = new JsonArray(); var keys = new JsonArray();
-                foreach (var entry in capturedNow.Select(p => p.Value).OfType<JsonObject>())
+                var keptBeforeRefresh = new List<string>();
+                var owners = capturedNow.Where(p => p.Value?["ownerKey"] != null).Select(p => p.Key).ToList();
+                if (owners.Count > 0)
                 {
-                    if (entry["producer"]?.ToString() is { Length: > 0 } producerName) names.Add(producerName);
-                    if (entry["key"]?.ToString() is { Length: > 0 } producerKey) keys.Add(producerKey);
+                    keptBeforeRefresh.AddRange(owners);
+                    if (consumer)
+                    {
+                        stage = "reference-closure";
+                        var preRefreshPath = Path.Combine(attemptDirectory, "pre-refresh.oml");
+                        var preRefresh = bridge.Call("snapshot_module", Target(new() { ["path"] = preRefreshPath }));
+                        if (preRefresh["key"]?.ToString() == key && ReadReferences(preRefreshPath, "preRefresh") is { } current)
+                        {
+                            var (keptNow, ownersNow) = ReferenceClosure.OwnersKeptByBase(capturedNow, current, SameProducerKey);
+                            keptBeforeRefresh.Clear(); keptBeforeRefresh.AddRange(keptNow);
+                            Closure()["ownersBeforeRefresh"] = ownersNow;
+                        }
+                    }
                 }
-                var refreshed = bridge.Call("refresh_references", Target(new() { ["producers"] = names, ["producer_keys"] = keys, ["timeout"] = 600 }));
-                result["refreshReferences"] = refreshed;
-                task.Save(stage);
-                log?.Invoke($"deliver: refresh_references before the merge changed={refreshed["changed"]}");
+                var toRefresh = capturedNow.Where(p => !keptBeforeRefresh.Contains(p.Key, StringComparer.OrdinalIgnoreCase)).Select(p => p.Value).OfType<JsonObject>().ToList();
+                if (toRefresh.Count > 0)
+                {
+                    stage = "refresh-references";
+                    var names = new JsonArray(); var keys = new JsonArray();
+                    foreach (var entry in toRefresh)
+                    {
+                        if (entry["producer"]?.ToString() is { Length: > 0 } producerName) names.Add(producerName);
+                        if (entry["key"]?.ToString() is { Length: > 0 } producerKey) keys.Add(producerKey);
+                    }
+                    var refreshed = bridge.Call("refresh_references", Target(new() { ["producers"] = names, ["producer_keys"] = keys, ["timeout"] = 600 }));
+                    result["refreshReferences"] = refreshed;
+                    task.Save(stage);
+                    log?.Invoke($"deliver: refresh_references before the merge changed={refreshed["changed"]}");
+                    if (RefreshBlocked(result, refreshed, stage) is { } waiting) return Fail(waiting);
+                }
             }
             if (writeState == "not-sent")
             {
@@ -278,6 +331,27 @@ public static partial class Delivery
                         applyBase = candidate;
                     }
                 }
+                // fam-deps R5: the references of the base decide which owners of foreign types the apply links. An owner the
+                // module already references with every object its dependents use keeps its signature: the delivery changes
+                // the signature of a producer only when it needs something the module does not have.
+                if (consumer)
+                {
+                    stage = "reference-closure";
+                    baseReferences = ReadReferences(basePath, "base");
+                    if (baseReferences != null && result["capturedProducers"] is JsonObject capturedAll)
+                    {
+                        var (kept, owners) = ReferenceClosure.OwnersKeptByBase(capturedAll, baseReferences, SameProducerKey);
+                        if (owners.Count > 0) Closure()["owners"] = owners;
+                        keptOwners.AddRange(kept);
+                        if (kept.Count > 0)
+                        {
+                            producers = producers.Where(p => !kept.Contains(p.Key, StringComparer.OrdinalIgnoreCase))
+                                .ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
+                            log?.Invoke($"deliver: the module already references {string.Join(", ", kept)} with what the job needs; their signatures stay (R5)");
+                        }
+                    }
+                    task.Save(stage);
+                }
                 stage = "apply";
                 if (request.CaptureProducers is { Count: > 0 } && (applyWithProducers == null || dependencies != null || frozenCompilation != null))
                     return Fail("Captured producer signatures require the producer-aware job apply; nothing was applied");
@@ -297,9 +371,42 @@ public static partial class Delivery
                 if (applied["isValid"]?.GetValue<bool>() != true || applied["accepted"]?.GetValue<bool>() != true)
                 {
                     RecordWarnings(null);
-                    return Fail("job rejected by validation contract; merge was not attempted");
+                    // The part of the contract that refused, with its counts: the task's receipt and every record of it say so.
+                    return Fail("job rejected by validation contract (" + ValidationVerdict(applied) + "); merge was not attempted");
+                }
+                // A lab that builds a SOAP client by verbs (allowSoapWithoutImport) measures the verbs: it never reaches a module,
+                // whose compiler would fail on that client (CompileCheck, class D).
+                if (applied["highWarnings"] is JsonArray labWarnings && labWarnings.OfType<JsonObject>().FirstOrDefault(w => w["code"]?.ToString() == CompileCheck.SoapAllowed) is { } lab)
+                {
+                    RecordWarnings(null);
+                    result["code"] = CompileCheck.SoapDefinition;
+                    return Fail($"the job builds a consumed SOAP service by verbs under the lab escape {CompileCheck.SoapAllowKey} ({lab["message"]}); a lab is never delivered: import the service with op soap. Nothing was merged.");
                 }
                 if (DeliveryReceipt.Changed(sources).Count > 0) return Fail("Job or dependency changed during apply; nothing was merged. Deliver the current source.");
+                // fam-deps (family E): the candidate's references against the base and the captures, before the only Studio
+                // write: a named producer missing or not at its published signature, or a collateral signature change (R5),
+                // refuses here once with every reference named; the live merge never meets them.
+                if (consumer && baseReferences != null)
+                {
+                    stage = "reference-closure";
+                    candidateReferences = ReadReferences(foreignPath, "candidate");
+                    if (candidateReferences != null)
+                    {
+                        var captured = result["capturedProducers"] as JsonObject;
+                        var referenceExpectations = ReferenceClosure.Expectations(referenceOps, captured, BoundSignatures(request));
+                        var mayChange = DeliveryProducerKeys();
+                        Closure()["changes"] = ReferenceClosure.Changed(baseReferences, candidateReferences, SameProducerKey);
+                        var problems = ReferenceClosure.CheckCandidate(referenceExpectations, candidateReferences, baseReferences, mayChange, SameProducerKey);
+                        if (problems.Count > 0)
+                        {
+                            result["code"] = ReferenceClosure.ClosureRefused; result["problems"] = problems;
+                            RecordWarnings(null);
+                            return Fail("The candidate's producer references do not match what this delivery may merge; nothing was merged: "
+                                + string.Join(" ", problems.OfType<JsonObject>().Select(p => p["message"] + " Fix: " + p["fix"])));
+                        }
+                    }
+                    task.Save(stage);
+                }
                 // C15: a candidate that changes a producer signature is merged first in a disposable preview; a postcondition
                 // that fails there would roll the live merge back after it started (an uncertain delivery), so it refuses here.
                 if (dependencies == null && frozenCompilation == null && BindsProducerSignatures(request)
@@ -373,6 +480,16 @@ public static partial class Delivery
                     // left to the outer handler and to resume: the merge may still be running in the Studio.
                     result["writeState"] = "unknown"; result["mergeError"] = Errors.Text(ex); task.Save("merge-unknown");
                 }
+                // fam-deps (family D): the bridge answered in seconds that a dialog the Studio opened during the merge needs the
+                // person (OperationDialogLoop); the merge still waits for that answer in the Studio. One question with the exact
+                // text; nothing is repeated, and the resume settles the merge through its journal once the person answered.
+                if (result["merge"]?["blocked"]?.GetValue<bool>() == true && result["merge"]?["blockedBy"] is JsonObject dialog)
+                {
+                    result["code"] = StudioDialogPending; result["blockedBy"] = dialog.DeepClone(); result["question"] = dialog["question"]?.DeepClone();
+                    task.Save("merge-blocked");
+                    return Fail("The Studio opened \"" + dialog["title"] + "\" during the merge and only the person can answer it. " + dialog["question"]
+                        + " Nothing was repeated; after the answer, resume this task (deliver --resume " + task.Id + ").");
+                }
                 // A native merge that failed after it started (verificationError) is unknown, never repeated: it is reconciled
                 // in this same call (merge_status, then the rollback proofs); what stays unknown is resumed later.
                 if (result["writeState"]!.ToString() == "unknown")
@@ -384,10 +501,25 @@ public static partial class Delivery
                             + "; nothing was repeated. Resume reconciles it through merge_status.");
                     stage = "merge";
                 }
+                // Review finding 1: a merge during which the Studio reported an error is proven against the base before its result counts.
+                if (StudioErrorDuringMerge() is { } studioErrorAnswer) return studioErrorAnswer;
                 if (result["writeState"]!.ToString() == "not-applied" && result["merge"]?["rolledBack"]?.GetValue<bool>() == true) return RolledBack();
                 if (result["writeState"]!.ToString() is not ("applied" or "unchanged"))
                     return Fail("merge not applied: " + (result["merge"]?["reason"]?.ToString() ?? result["merge"]?["result"]?.ToString()));
+                // fam-deps + MB2: the dependencies dialog the bridge closed (Cancel) while the merge ran is followed, as after an
+                // open, by the Studio's own Refresh References of every producer of the module.
+                if (result["merge"]?["dialogs"] is JsonArray seenDialogs
+                    && seenDialogs.OfType<JsonObject>().Where(d => d["kind"]?.ToString() == OperationDialogPolicy.Dependencies).ToArray() is { Length: > 0 } dependencyAnswers)
+                {
+                    stage = "refresh-references";
+                    var answeredDependencies = new JsonArray(dependencyAnswers.Select(d => (JsonNode)new JsonObject { ["kind"] = DependenciesKindAnswered, ["title"] = d["title"]?.DeepClone(), ["answer"] = "Cancel", ["text"] = d["text"]?.DeepClone() }).ToArray());
+                    if (RefreshAfterDependencies(bridge, result, "merge", answeredDependencies, request.Module, key, result["environment"]?.ToString(), log) is { } refreshFailed)
+                        failures.Add(("refresh-references", refreshFailed));
+                    task.Save(stage);
+                }
             }
+            // Review finding 1: a resumed applied task whose merge reported a Studio error keeps that failure (idempotent here).
+            if (StudioErrorDuringMerge() is { } studioErrorLate) return studioErrorLate;
             // Every independent checker runs, even if a nominal check or another checker fails.
             stage = "verify";
             try
@@ -465,7 +597,15 @@ public static partial class Delivery
             result.Remove("mergeOrder");
             var assertions = result["assertions"]!.AsArray();
             var deferred = result["mergePlan"]?["deferred"] as JsonArray;
-            if (assertions.Count > 0 || dependencies != null || frozenCompilation != null || deferred is { Count: > 0 })
+            // fam-deps (class E): after a merge of a consumer, the merged module keeps the producer references the validated
+            // candidate had (same signature, every export); read on the same delivered snapshot as the data proof.
+            if (consumer && result["writeState"]?.ToString() == "applied" && candidateReferences == null && File.Exists(foreignPath) && File.Exists(basePath))
+            {
+                baseReferences ??= ReadReferences(basePath, "base");
+                if (baseReferences != null) candidateReferences = ReadReferences(foreignPath, "candidate");
+            }
+            var proveReferences = consumer && result["writeState"]?.ToString() == "applied" && candidateReferences != null && baseReferences != null;
+            if (assertions.Count > 0 || dependencies != null || frozenCompilation != null || deferred is { Count: > 0 } || proveReferences)
             {
                 try
                 {
@@ -474,6 +614,7 @@ public static partial class Delivery
                     if (deliveredSnapshot["key"]?.ToString() != key) throw new InvalidOperationException("Active module changed before content proof; merge kept for review");
                     result["deliveredSnapshot"] = deliveredSnapshot;
                     result["artifacts"]!.AsArray().Add(Artifact(deliveredPath));
+                    if (proveReferences) ProveReferences(deliveredPath);
                     // Deferred defaults are checked on the delivered module itself: logic parameters have no data assertion.
                     var lost = deferred is { Count: > 0 } && mergePlanner != null ? mergePlanner.Missing(deliveredPath, deferred) : new JsonArray();
                     var forced = new JsonArray();
@@ -558,6 +699,49 @@ public static partial class Delivery
                 if (result["environment"] != null) parameters["environment"] = result["environment"]!.DeepClone();
                 return parameters;
             }
+            // fam-deps: the reference closure receipt of this run (base, candidate, delivered summaries, owners, changes).
+            JsonObject Closure()
+            {
+                if (result["referenceClosure"] is JsonObject existing) return existing;
+                var created = new JsonObject();
+                result["referenceClosure"] = created;
+                return created;
+            }
+            // The references of an OML (ReferenceInventory, SS11), or null with the reason when they cannot be read here (no
+            // reader in this lane, not an OML, a model that does not load): the checks that need them do not run, as before.
+            IReadOnlyList<ModuleReferenceEntry>? ReadReferences(string path, string what)
+            {
+                var reader = referenceInventory ?? (DefaultReferenceInventory is { } read ? p => read(p, attemptDirectory) : null);
+                string? reason = reader == null ? "no reference reader in this lane" : !LooksLikeOml(path) ? "not an OML file" : null;
+                if (reason == null)
+                {
+                    try
+                    {
+                        var references = ReferenceClosure.FromJson(reader!(path));
+                        Closure()[what] = new JsonObject { ["ran"] = true, ["references"] = ReferenceClosure.Summary(references) };
+                        return references;
+                    }
+                    catch (Exception ex) when (ex is not OutOfMemoryException) { reason = Errors.Text(ex); }
+                }
+                Closure()[what] = new JsonObject { ["ran"] = false, ["reason"] = reason };
+                return null;
+            }
+            // Class E after the merge: the references the delivery changed or named, in the merged module as validated.
+            void ProveReferences(string deliveredPath)
+            {
+                var delivered = ReadReferences(deliveredPath, "delivered");
+                if (delivered == null || candidateReferences == null || baseReferences == null) return;
+                var watched = ReferenceClosure.Changed(baseReferences, candidateReferences, SameProducerKey).OfType<JsonObject>()
+                    .Select(c => c["key"]?.ToString()).Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k!)
+                    .Concat(DeliveryProducerKeys()).Distinct(StringComparer.Ordinal).ToList();
+                var problems = ReferenceClosure.CheckDelivered(candidateReferences, delivered, watched, SameProducerKey);
+                Closure()["deliveredProblems"] = problems;
+                if (problems.Count == 0) return;
+                result["code"] ??= ReferenceClosure.NotRetained;
+                failures.Add(("reference-proof", "Merge kept for review: the merged module did not keep the producer references the validated candidate had: "
+                    + string.Join(" ", problems.OfType<JsonObject>().Select(p => p["message"]?.ToString())) + " "
+                    + (problems.OfType<JsonObject>().FirstOrDefault()?["fix"]?.ToString() ?? "")));
+            }
             // A08: before the verification, the tab of this task's module is the selected one: when another session selected
             // its own tab of the same Studio, open_module by the task's key selects it again (a bridge with module_key reads
             // already target any tab; an older one reads the selected tab). Throws when the module cannot be selected.
@@ -586,22 +770,67 @@ public static partial class Delivery
             }
             // Attested envelopes (captured by `anvil signature` or --capture-producer) are re-observed on the server:
             // an offline fixture, another environment or a republished producer stops the delivery before any write.
+            // F5 (the family rule of producer signatures): before the apply, an envelope this call already observed (its fresh
+            // capture, the attestation of its cached capture) or one whose identity the workspace ledger saw lately with the
+            // same published state and no publication since is not observed again ({by: capture|server|ledger, observedAtUtc});
+            // the rest are observed together, in one read-only lease. Right before the merge every envelope is observed on the
+            // server, always (one lease). A producer that changed drops its ledger observation and its cached captures (the
+            // next round captures it again); right before the merge it refuses the delivery as PRODUCER_CHANGED, nothing written.
             void AttestProducers(string field)
             {
-                var attested = new JsonArray();
+                var beforeMerge = field == "producerAttestationBeforeMerge";
                 // Only .avsig sources reach RequiresAttestation: invoking it JIT-compiles the envelope reader, which loads the
                 // Studio model assemblies, and a delivery without producer signatures must not need them here.
-                foreach (var path in sources.OfType<JsonObject>().Select(s => s["path"]!.ToString())
-                             .Where(p => Path.GetExtension(p).Equals(".avsig", StringComparison.OrdinalIgnoreCase)).Where(ProducerSignatures.RequiresAttestation))
+                var paths = sources.OfType<JsonObject>().Select(s => s["path"]!.ToString())
+                    .Where(p => Path.GetExtension(p).Equals(".avsig", StringComparison.OrdinalIgnoreCase)).Where(ProducerSignatures.RequiresAttestation).ToList();
+                if (paths.Count == 0) return;
+                var environmentName = active["environment"]?.ToString();
+                var entries = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase);
+                var server = new List<string>();
+                var now = DateTime.UtcNow;
+                foreach (var path in paths)
+                {
+                    var identity = ProducerIdentity.ReadEnvelope(path);
+                    if (!beforeMerge && signatures.Seen(path) is { } seen)
+                        entries[path] = AttestedLocally(path, identity, seen.By, seen.AtUtc);
+                    else if (!beforeMerge && identity != null && environmentName != null
+                             && string.Equals(identity.Environment, environmentName, StringComparison.OrdinalIgnoreCase)
+                             && signatures.Ledger?.Trust(identity, now, out _) is { } trust)
+                        entries[path] = AttestedLocally(path, identity, "ledger", trust.ObservedAtUtc);
+                    else server.Add(path);
+                }
+                if (server.Count > 0)
                 {
                     if (producerAuthority == null)
-                        throw new InvalidOperationException("Attested producer signature requires server re-attestation before merge; no read-only producer authority: " + path);
-                    var observed = producerAuthority.Attest(path, active["environment"]?.ToString() ?? throw new InvalidOperationException("Unknown target environment"));
-                    observed["path"] = path; observed["sha256"] = DeliveryReceipt.Hash(path);
-                    attested.Add(observed);
-                    log?.Invoke($"deliver: producer {observed["producer"]} re-attested ({observed["guard"]} {observed["versionId"] ?? observed["advertisedSignatureHash"]})");
+                        throw new InvalidOperationException("Attested producer signature requires server re-attestation before merge; no read-only producer authority: " + server[0]);
+                    var environment = environmentName ?? throw new InvalidOperationException("Unknown target environment");
+                    Exception? refused = null;
+                    foreach (var outcome in producerAuthority.AttestAll(server, environment))
+                    {
+                        var identity = ProducerIdentity.ReadEnvelope(outcome.Path);
+                        if (outcome.Error != null || outcome.Observed == null)
+                        {
+                            refused ??= outcome.Error ?? new InvalidOperationException("The producer signature was not re-observed: " + outcome.Path);
+                            if (identity != null) signatures.Changed(identity);
+                            continue;
+                        }
+                        var observed = outcome.Observed;
+                        observed["path"] = outcome.Path; observed["sha256"] = DeliveryReceipt.Hash(outcome.Path); observed["by"] = "server";
+                        observed["observedAtUtc"] = DateTime.UtcNow.ToString("O");
+                        entries[outcome.Path] = observed;
+                        if (identity != null) signatures.Ledger?.Observe(ProducerIdentity.OfAttestation(observed, environment, identity.Key) ?? identity, "attest", DateTime.UtcNow);
+                        log?.Invoke($"deliver: producer {observed["producer"]} re-attested ({observed["guard"]} {observed["versionId"] ?? observed["advertisedSignatureHash"]})");
+                    }
+                    if (refused != null)
+                    {
+                        if (entries.Count > 0) result[field] = new JsonArray(paths.Where(entries.ContainsKey).Select(p => (JsonNode)entries[p]).ToArray());
+                        // Before the apply the refusal stays as it was (a job the preflight refused still answers its problems).
+                        if (beforeMerge && ProducerChanged(refused)) result["code"] = ProducerChangedCode;
+                        System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(refused).Throw();
+                    }
                 }
-                if (attested.Count > 0) { result[field] = attested; task.Save(stage); }
+                result[field] = new JsonArray(paths.Where(entries.ContainsKey).Select(p => (JsonNode)entries[p]).ToArray());
+                task.Save(stage);
             }
             // C15: an unknown merge is reconciled, never repeated. First the bridge's own journal (a bridge with
             // merge_from_oml:rollback_proof records there the rollback it proved itself); then, for an older bridge whose
@@ -613,6 +842,13 @@ public static partial class Delivery
                 try { status = bridge.Call("merge_status", new() { ["operation_id"] = result["operationId"]!.DeepClone(), ["module_key"] = key }); }
                 catch (Exception ex) { result["reconcileError"] = Errors.Text(ex); return false; }
                 result["operationStatus"] = status.DeepClone();
+                // Review finding 5: a bridge whose watch stayed with the merge (dialogWatch) says which dialog waits for the person
+                // NOW; the resume repeats that question, never the one of the first answer (none open: no question).
+                if (status["dialogWatch"]?.GetValue<bool>() == true)
+                {
+                    if (status["pendingDialog"] is JsonObject now) { result["blockedBy"] = now.DeepClone(); result["question"] = now["question"]?.DeepClone(); }
+                    else { result.Remove("blockedBy"); result.Remove("question"); }
+                }
                 if (status["state"]?.ToString() is "applied" or "unchanged" or "not-applied" && status["receipt"] is JsonObject receipt)
                 {
                     RecordMerge(receipt.DeepClone().AsObject());
@@ -640,9 +876,159 @@ public static partial class Delivery
                 var merge = result["merge"]!;
                 result["code"] = MergeRolledBackCode; result["closed"] = true;
                 result["closedReason"] = merge["reason"]?.ToString() ?? RollbackProof.BridgeReason;
+                // fam-deps R7/R8: the exact references whose signature the merge had to select (the bridge's plan, else the
+                // kernel's own preview of it), whether the job named each one, and the stage and the real exception of the
+                // failure inside the Studio command; never the symptom alone.
+                var named = (result["capturedProducers"] as JsonObject ?? new JsonObject()).Where(p => p.Value?["ownerKey"] == null)
+                    .Select(p => p.Value?["key"]?.ToString()).Concat(BoundSignatureKeys(request)).Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k!).ToList();
+                var changes = ReferenceClosure.SignatureChanges(merge["referenceSignatures"] ?? result["signaturePreview"]?["plan"],
+                    result["capturedProducers"] as JsonObject, named, baseReferences, SameProducerKey);
+                // Review finding 2: the same classification as the candidate check (mayChange): the producers the job names, the
+                // owners R5 linked and the bound signatures are the delivery's; any other change is collateral.
+                var deliveryKeys = DeliveryProducerKeys();
+                foreach (var change in changes.OfType<JsonObject>())
+                    change["neededByDelivery"] = deliveryKeys.Any(k => SameProducerKey(k, change["key"]?.ToString() ?? ""));
+                if (changes.Count > 0) result["referenceSignatureChanges"] = changes;
+                // Review finding 2: "the same job again" only when the next run will not select these signatures. That changes
+                // only if the module already holds them: the kernel runs the Studio's Refresh References of exactly those
+                // producers now and reads the module again; the same job is said only when every one is at the candidate's
+                // signature. Otherwise the answer is a different fix (the producers as OML), never a loop of the same refusal.
+                var aligned = changes.Count > 0 ? AlignAfterRollback(changes) : null;
+                var sameJob = aligned?["aligned"]?.GetValue<bool>() == true;
+                result["sameJobAgain"] = sameJob;
+                var producerNames = string.Join(", ", changes.OfType<JsonObject>().Select(c => c["producer"]?.ToString()).Distinct());
                 return Fail("The Studio rolled the merge back (" + result["closedReason"] + "): the live module equals this task's base, sha256 "
-                    + merge["liveSha256"] + ". Nothing was applied, the task is closed and the module is free; deliver the corrected job as a new delivery."
-                    + (merge["error"] is { } cause ? " Cause reported by the Studio: " + cause : ""));
+                    + merge["liveSha256"] + ". Nothing was applied, the task is closed and the module is free."
+                    + (changes.Count > 0 ? " Producer signatures the merge had to select: " + ReferenceClosure.Describe(changes) + "." : "")
+                    + (merge["stage"] is { } failedStage ? " Failed at stage " + failedStage + "." : "")
+                    + (merge["error"] is { } cause ? " Cause reported by the Studio: " + cause : "")
+                    + string.Concat((merge["dialogs"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().Where(OperationDialogPolicy.IsStudioError).Take(1)
+                        .Select(d => " The Studio showed \"" + d["title"] + "\" (closed by the bridge): " + d["text"] + "."))
+                    + (sameJob ? " The module now holds those signatures (the Studio's Refresh References of " + producerNames + " ran now; Ctrl+Z undoes it): "
+                            + "deliver the same job again as a new delivery; its merge selects no producer signature."
+                        : changes.Count > 0 ? " The same job would roll back the same way (" + aligned?["reason"] + "): deliver it with " + producerNames
+                            + " as OML (producers: {<name>: <capture OML>}), so the candidate carries the signature the module has."
+                        : " Deliver the corrected job as a new delivery."));
+            }
+            // Review finding 2: the Studio's Refresh References of the producers a rolled-back merge had to select, then the
+            // module's references read again: aligned when each one is now at the candidate's signature.
+            JsonObject AlignAfterRollback(JsonArray changes)
+            {
+                var report = new JsonObject { ["aligned"] = false };
+                result["afterRollback"] = report;
+                if (!Offers(bridge, RefreshReferencesCapability)) { report["reason"] = "this bridge has no refresh_references"; return report; }
+                var names = new JsonArray(); var keys = new JsonArray();
+                foreach (var change in changes.OfType<JsonObject>())
+                {
+                    if (change["key"]?.ToString() is { Length: > 0 } producerKey) keys.Add(producerKey);
+                    if (change["producer"]?.ToString() is { Length: > 0 } producerName && producerName != change["key"]?.ToString()) names.Add(producerName);
+                }
+                try
+                {
+                    stage = "refresh-references";
+                    var refreshed = bridge.Call("refresh_references", Target(new() { ["producers"] = names, ["producer_keys"] = keys, ["timeout"] = 600 }));
+                    report["refresh"] = refreshed.DeepClone();
+                    if (refreshed["blocked"]?.GetValue<bool>() == true)
+                    {
+                        report["reason"] = "the refresh waits for the person in the Studio: " + refreshed["blockedBy"]?["question"];
+                        return report;
+                    }
+                    var livePath = Path.Combine(attemptDirectory, "refreshed-" + Guid.NewGuid().ToString("N") + ".oml");
+                    var live = bridge.Call("snapshot_module", Target(new() { ["path"] = livePath }));
+                    if (live["key"]?.ToString() != key) { report["reason"] = "another module answered the capture after the refresh"; return report; }
+                    if (ReadReferences(livePath, "afterRollback") is not { } references)
+                    {
+                        report["reason"] = "the module's references could not be read after the refresh";
+                        return report;
+                    }
+                    var each = new JsonArray(); var all = true;
+                    foreach (var change in changes.OfType<JsonObject>())
+                    {
+                        var producerKey = change["key"]?.ToString() ?? "";
+                        var now = references.FirstOrDefault(r => r.ProducerKey.Length > 0 && SameProducerKey(r.ProducerKey, producerKey));
+                        var at = now != null && ReferenceClosure.SameHash(now.Hash, change["candidateHash"]?.ToString());
+                        all &= at;
+                        each.Add(new JsonObject { ["producer"] = change["producer"]?.DeepClone(), ["key"] = producerKey, ["liveHash"] = now?.Hash,
+                            ["candidateHash"] = change["candidateHash"]?.DeepClone(), ["aligned"] = at });
+                    }
+                    report["references"] = each; report["aligned"] = all;
+                    if (!all)
+                        report["reason"] = "the Studio's Refresh References did not bring " + string.Join(", ", each.OfType<JsonObject>().Where(e => e["aligned"]?.GetValue<bool>() != true)
+                            .Select(e => e["producer"] + " (now " + (e["liveHash"]?.ToString() ?? "absent") + ", candidate " + e["candidateHash"] + ")")) + " to the candidate's signature";
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { report["reason"] = Errors.Text(ex); }
+                task.Save(stage);
+                return report;
+            }
+            // Review finding 2: one classification of the producers a delivery may move, for the candidate check, the proof after
+            // the merge and the rollback answer: the captured producers except the owners R5 kept, and the bound signatures.
+            List<string> DeliveryProducerKeys()
+                => (result["capturedProducers"] as JsonObject ?? new JsonObject()).Where(p => !keptOwners.Contains(p.Key, StringComparer.OrdinalIgnoreCase))
+                    .Select(p => p.Value?["key"]?.ToString()).Concat(BoundSignatureKeys(request))
+                    .Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k!).Distinct(StringComparer.Ordinal).ToList();
+            // Review finding 1: the Studio reported an error (its "Unexpected Error", or an error box with only OK) while the merge
+            // ran and the bridge closed it. The Studio rolled back the command that raised it and swallowed the exception, so the
+            // merge's own word (merged, or a plain "not applied") is not trusted: the module is captured now and compared with
+            // this task's base in the same call. Equal: rolled back, the task closes with this code, the stage and the dialog's
+            // text. Different: the merge stays for review (one failure, verification still runs). Not provable: unknown, never
+            // repeated; resume proves it. Null when no error was reported (or after the proof, for an applied module).
+            JsonObject? StudioErrorDuringMerge()
+            {
+                var reports = (result["merge"]?["dialogs"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().Where(OperationDialogPolicy.IsStudioError).ToList();
+                // A rollback the bridge already proved is answered by RolledBack, which names the dialog too.
+                if (reports.Count == 0 || result["merge"]?["rolledBack"]?.GetValue<bool>() == true) return null;
+                var first = reports[0];
+                var text = first["text"]?.ToString() ?? "";
+                var said = "The Studio reported an error while the merge ran (\"" + (first["title"]?.ToString() is { Length: > 0 } title ? title : first["kind"]?.ToString()) + "\""
+                    + (text.Length > 0 ? ": " + (text.Length > 400 ? text[..400] + "..." : text) : "") + "), closed by the bridge";
+                string Kept() => "Merge kept for review: " + said + ", and the module differs from this task's base, so the merge's own result is not trusted. "
+                    + "Ctrl+Z in the Studio undoes it; nothing was published.";
+                if (result["studioError"]?["proof"]?.ToString() == "changed")
+                {
+                    if (!failures.Any(f => f.Stage == "studio-error")) failures.Add(("studio-error", Kept()));
+                    result["code"] ??= StudioErrorDuringMergeCode;
+                    return null;
+                }
+                stage = "studio-error";
+                result["code"] = StudioErrorDuringMergeCode;
+                var failedStage = result["merge"]?["stage"]?.ToString() ?? "merge";
+                var studioError = new JsonObject { ["stage"] = failedStage, ["kind"] = first["kind"]?.DeepClone(), ["title"] = first["title"]?.DeepClone(),
+                    ["text"] = first["text"]?.DeepClone(), ["count"] = reports.Count, ["mergeSaid"] = result["writeState"]?.DeepClone(),
+                    ["mergeResult"] = result["merge"]?["result"]?.DeepClone() };
+                result["studioError"] = studioError;
+                var baseSha = RollbackProof.BaseSha256(result);
+                string? liveSha = null;
+                try
+                {
+                    var livePath = Path.Combine(attemptDirectory, "studio-error-" + Guid.NewGuid().ToString("N") + ".oml");
+                    var live = bridge.Call("snapshot_module", Target(new() { ["path"] = livePath }));
+                    if (live["key"]?.ToString() != key) throw new InvalidOperationException("another module answered the capture");
+                    liveSha = live["sha256"]?.ToString() ?? (File.Exists(livePath) ? DeliveryReceipt.Hash(livePath) : null);
+                    studioError["live"] = livePath;
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { studioError["proofError"] = Errors.Text(ex); }
+                studioError["liveSha256"] = liveSha; studioError["baseSha256"] = baseSha;
+                if (string.IsNullOrWhiteSpace(liveSha) || string.IsNullOrWhiteSpace(baseSha))
+                {
+                    result["writeState"] = "unknown"; task.Save(stage);
+                    return Fail(said + ". Whether the module changed could not be proven (" + (studioError["proofError"]?.ToString() ?? "no hash of the base") + "): "
+                        + "the outcome is unknown and nothing was repeated; resume proves it against the base.");
+                }
+                if (RollbackProof.SameSha256(liveSha, baseSha))
+                {
+                    studioError["proof"] = "rolled-back";
+                    result["writeState"] = "not-applied"; result["closed"] = true;
+                    result["closedReason"] = "the Studio reported an error and rolled the merge back";
+                    task.Save(stage);
+                    return Fail(said + ". The live module equals this task's base (sha256 " + liveSha + "): the Studio rolled the merge back. Nothing was applied, "
+                        + "the task is closed and the module is free. Failed at stage " + failedStage + ". The Studio's text above is the cause "
+                        + "(an SSAM defect when the job is valid); deliver the job again as a new delivery.");
+                }
+                studioError["proof"] = "changed";
+                result["writeState"] = "applied"; result["hasAppliedWrites"] = true;
+                task.Save(stage);
+                failures.Add(("studio-error", Kept()));
+                return null;
             }
         }
         catch (Exception ex)
@@ -738,6 +1124,8 @@ public static partial class Delivery
             result["unchanged"] = unchanged;
             result["writeState"] = merge["merged"]?.GetValue<bool>() == true ? "applied" : unchanged ? "unchanged"
                 : merge["merged"]?.GetValue<bool>() == false ? "not-applied" : "unknown";
+            // fam-deps: a settled merge no longer waits for any dialog.
+            if (result["writeState"]!.ToString() != "unknown") { result.Remove("blockedBy"); result.Remove("question"); }
             task.Save("merge-recorded");
         }
         JsonObject Fail(string message)
@@ -766,8 +1154,9 @@ public static partial class Delivery
     /// confirmed) and captures only the producers still missing, e.g. after a later capture failed: a completed capture
     /// is never repeated for the same task, and every recorded one is re-attested before apply and before merge.</summary>
     private static IReadOnlyDictionary<string, string> CaptureProducers(DeliveryTask task, DeliveryRequest request, JsonArray sources,
-        string? environment, IProducerSignatureAuthority? authority, Action<string>? log, string? moduleKey = null)
+        string? environment, IProducerSignatureAuthority? authority, Action<string>? log, string? moduleKey = null, SignatureObservations? signatures = null)
     {
+        signatures ??= new SignatureObservations(ProducerLedger.ForWork(request.WorkDirectory), ProducerCache.ForWork(request.WorkDirectory));
         var producers = new Dictionary<string, string>(request.Producers ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
         if (request.CaptureProducers is not { Count: > 0 } entries) return producers;
         // "Binding" captures the producer of the same name; "Binding=Producer" names it when it is not a binding name,
@@ -802,42 +1191,20 @@ public static partial class Delivery
             RemoveSource(destination);
             if (File.Exists(destination)) File.Delete(destination);
             var elements = ProducerSignatures.ReferencedElements(request.JobPath, name);
-            // C27: the capture of the same producer is reused while the server still serves the version it was captured from
-            // (re-attested here; a republished producer throws and is captured again).
-            var cache = ProducerCache.ForWork(request.WorkDirectory);
-            JsonObject? receipt = null; var reused = false;
-            if (cache?.Find(environment, producerName, elements) is { } cached)
-            {
-                try
-                {
-                    var observed = authority.Attest(cached.Path, environment);
-                    if (observed["attested"]?.GetValue<bool>() != false)
-                    {
-                        File.Copy(cached.Path, destination, overwrite: true);
-                        receipt = cached.Receipt; reused = true;
-                    }
-                }
-                // A cut read (ENVIRONMENT_CALL_CUT) says nothing about the cached capture: it propagates, typed, and the cache stays.
-                catch (Exception ex) when (ex is not OutOfMemoryException and not EnvironmentCallCutException)
-                {
-                    log?.Invoke($"deliver: cached capture of {producerName} no longer attests ({Errors.Text(ex)}); capturing it again");
-                    cache.Remove(environment, producerName, elements);
-                }
-            }
-            if (!reused)
-            {
-                receipt = authority.Capture(producerName, elements, destination, environment);
-                try { cache?.Store(environment, producerName, elements, destination, receipt); }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { log?.Invoke("deliver: producer cache not written: " + ex.Message); }
-            }
+            // C27 + F5: the capture of the same producer is reused while its published state did not change (the ledger saw
+            // it lately, else the server re-attests it here); a republished producer is captured again.
+            var producerAuthority = authority;
+            var acquired = Acquire(signatures, producerAuthority, environment, producerName, elements, destination, log,
+                (producer, wanted, file) => producerAuthority.Capture(producer, wanted, file, environment));
             var sha = DeliveryReceipt.Hash(destination);
             sources.Add(new JsonObject { ["path"] = destination, ["sha256"] = sha });
-            captured[name] = CapturedEntry(producerName, destination, sha, environment, receipt!);
-            if (reused) captured[name]!["reusedFromCache"] = true;
+            captured[name] = CapturedEntry(producerName, destination, sha, environment, acquired.Receipt);
+            if (acquired.Reused) captured[name]!["reusedFromCache"] = true;
+            captured[name]!["observed"] = acquired.Observed.DeepClone();
             task.Save("capture-producer:" + name);
-            log?.Invoke($"deliver: {(reused ? "reused the cached capture of" : "captured")} producer {name} sha256={sha} signatureHash={receipt!["signatureHash"]} version={receipt["versionIdBefore"]}");
+            log?.Invoke($"deliver: {(acquired.Reused ? "reused the cached capture of" : "captured")} producer {name} sha256={sha} signatureHash={acquired.Receipt["signatureHash"]} version={acquired.Receipt["versionIdBefore"]} observed={acquired.Observed["by"]}");
         }
-        var owners = CaptureOwners(task, request, sources, environment!, authority, moduleKey, log);
+        var owners = CaptureOwners(task, request, sources, environment!, authority, moduleKey, log, signatures);
         foreach (var name in targets.Select(t => t.Binding).Concat(owners))
         {
             var entry = captured[name] as JsonObject ?? throw new InvalidOperationException("Task has no capture for producer " + name);
@@ -852,6 +1219,36 @@ public static partial class Delivery
         return producers;
 
         void RemoveSource(string path) => RemoveRecordedSource(sources, path);
+    }
+
+    /// <summary>The part of the apply's validation contract that refused a candidate, with its counts (VisitaCerta 2026-10-12:
+    /// the refusal said only "job rejected by validation contract"): the Verify (its errors by code, when the module is not as
+    /// the job expects it), the messages no expectedMessages entry covers, the data contract.</summary>
+    public static string ValidationVerdict(JsonObject applied)
+    {
+        static bool? Flag(JsonNode? node) => node is JsonValue value && value.TryGetValue<bool>(out var flag) ? flag : null;
+        var parts = new List<string>();
+        var expectedValid = Flag(applied["expectedValid"]) ?? true;
+        if (Flag(applied["isValid"]) is { } valid && valid != expectedValid)
+        {
+            var errors = (applied["problems"] as JsonArray ?? []).OfType<JsonObject>()
+                .Where(p => p["phase"]?.ToString() == "verify" && p["severity"]?.ToString() != "warning").Select(p => p["code"]?.ToString() ?? "unknown").ToList();
+            List<string> ErrorsOf(string list) => (applied["validation"]?[list] as JsonArray ?? []).OfType<JsonObject>()
+                .Where(m => string.Equals(m["type"]?.ToString(), "Error", StringComparison.OrdinalIgnoreCase)).Select(m => m["id"]?.ToString() ?? "unknown").ToList();
+            static string Counts(List<string> codes) => string.Join(", ", codes.GroupBy(c => c).Select(g => g.Key + " " + g.Count()));
+            if (errors.Count == 0) errors = ErrorsOf("new");
+            // Re-check of 2026-10-12 (probe K1): invalid only by errors the module already had, the job added none.
+            var had = expectedValid && errors.Count == 0 ? ErrorsOf("preexisting") : new List<string>();
+            parts.Add(!expectedValid ? "the Verify found the module valid and the job expects it invalid"
+                : had.Count > 0 ? "the module already had " + had.Count + " error" + (had.Count == 1 ? "" : "s") + " (" + Counts(had) + "), the job added none"
+                : "the Verify of the candidate: " + errors.Count + " error" + (errors.Count == 1 ? "" : "s") + (errors.Count == 0 ? "" : " (" + Counts(errors) + ")"));
+        }
+        var unexpected = (applied["validation"]?["unexpected"] as JsonArray)?.Count ?? 0;
+        if (unexpected > 0) parts.Add(unexpected + " message" + (unexpected == 1 ? "" : "s") + " no expectedMessages entry covers");
+        if (Flag(applied["dataContract"]?["accepted"]) == false) parts.Add("the data contract");
+        // JobRunner: the references a refactor relies on, compared after the save and a reload.
+        if (Flag(applied["refactorProof"]?["accepted"]) == false) parts.Add("the refactor proof (reference sets changed after save/reload)");
+        return parts.Count == 0 ? "the candidate was not accepted" : string.Join("; ", parts);
     }
 
     /// <summary>K1: links the .avsig among the producer bindings for the apply (NativeReferenceSnapshot.Link); null, and no
@@ -875,6 +1272,77 @@ public static partial class Delivery
         ["advertisedSignatureHash"] = receipt["advertisedSignatureHash"]?.DeepClone(), ["xifSha256"] = receipt["xifSha256"]?.DeepClone(),
         ["foreignDependencies"] = receipt["foreignDependencies"]?.DeepClone(), ["capturedAtUtc"] = DateTime.UtcNow.ToString("O") };
 
+    /// <summary>F5: refused by the server observation of a producer whose published state changed since its capture.</summary>
+    public const string ProducerChangedCode = "PRODUCER_CHANGED";
+    private static bool ProducerChanged(Exception error)
+    {
+        var text = Errors.Text(error);
+        return text.Contains("VersionIdChanged", StringComparison.Ordinal) || text.Contains("SignatureHashChanged", StringComparison.Ordinal);
+    }
+
+    /// <summary>The producerAttestation entry of an envelope this call did not observe on the server again: its identity, how
+    /// it counts as observed (capture or server in this call, ledger for an earlier one) and when.</summary>
+    private static JsonObject AttestedLocally(string path, ProducerIdentity? identity, string by, DateTime atUtc) => new() {
+        ["producer"] = identity?.Producer, ["environment"] = identity?.Environment, ["guard"] = identity?.Guard, ["versionId"] = identity?.VersionId,
+        ["advertisedSignatureHash"] = identity?.AdvertisedSignatureHash, ["attested"] = true, ["by"] = by, ["observedAtUtc"] = atUtc.ToUniversalTime().ToString("O"),
+        ["path"] = path, ["sha256"] = DeliveryReceipt.Hash(path) };
+
+    private static JsonObject Observation(string by, DateTime atUtc) => new() { ["by"] = by, ["observedAtUtc"] = atUtc.ToUniversalTime().ToString("O") };
+
+    /// <summary>One producer signature of a delivery: the receipt of its capture, whether it came from the cache, and how its
+    /// identity was observed ({by: ledger|server|capture, observedAtUtc}).</summary>
+    private sealed record Acquired(JsonObject Receipt, bool Reused, JsonObject Observed);
+
+    /// <summary>C27 + F5, the family rule of producer signatures, for a producer named by the job and for an owner of its
+    /// foreign types alike: the cached capture that covers the job's elements (ProducerCache.FindCovering) is reused with no
+    /// server call when the workspace ledger saw its published state lately and no publication since (ProducerLedger.Trust);
+    /// otherwise the server re-attests it (one read-only lease) and the observation is recorded; a capture that no longer
+    /// attests drops every cached capture of the producer and its observation, and the producer is captured again. A new
+    /// capture is stored (dropping the captures it covers and those of another published state) and observed. Never another
+    /// environment: the cache and the ledger are keyed by it.</summary>
+    private static Acquired Acquire(SignatureObservations signatures, IProducerSignatureAuthority authority, string environment, string producer,
+        IReadOnlyList<string> elements, string destination, Action<string>? log, Func<string, IReadOnlyList<string>, string, JsonObject> capture)
+    {
+        var cache = signatures.Cache;
+        if (cache?.FindCovering(environment, producer, elements) is { } cached)
+        {
+            var identity = ProducerIdentity.ReadEnvelope(cached.Path);
+            var sameEnvironment = identity != null && string.Equals(identity.Environment, environment, StringComparison.OrdinalIgnoreCase);
+            if (sameEnvironment && signatures.Ledger?.Trust(identity!, DateTime.UtcNow, out _) is { } trust)
+            {
+                File.Copy(cached.Path, destination, overwrite: true);
+                return new Acquired(cached.Receipt, true, Observation("ledger", trust.ObservedAtUtc));
+            }
+            try
+            {
+                var observed = authority.Attest(cached.Path, environment);
+                if (observed["attested"]?.GetValue<bool>() != false)
+                {
+                    File.Copy(cached.Path, destination, overwrite: true);
+                    var at = DateTime.UtcNow;
+                    if (identity != null) signatures.Ledger?.Observe(ProducerIdentity.OfAttestation(observed, environment, identity.Key) ?? identity, "attest", at);
+                    signatures.Saw(destination, "server", at);
+                    return new Acquired(cached.Receipt, true, Observation("server", at));
+                }
+            }
+            // prazos B: a cut read (ENVIRONMENT_CALL_CUT) says nothing about the cached capture: it propagates, typed, and the
+            // cache and the ledger stay.
+            catch (Exception ex) when (ex is not OutOfMemoryException and not EnvironmentCallCutException)
+            {
+                log?.Invoke($"deliver: cached capture of {producer} no longer attests ({Errors.Text(ex)}); capturing it again");
+                cache.RemoveProducer(environment, producer);
+                if (identity != null) signatures.Changed(identity);
+            }
+        }
+        var receipt = capture(producer, elements, destination);
+        try { cache?.Store(environment, producer, elements, destination, receipt); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { log?.Invoke("deliver: producer cache not written: " + ex.Message); }
+        var now = DateTime.UtcNow;
+        if (ProducerIdentity.OfReceipt(receipt, environment) is { } fresh) signatures.Ledger?.Observe(fresh, "capture", now);
+        signatures.Saw(destination, "capture", now);
+        return new Acquired(receipt, false, Observation("capture", now));
+    }
+
     /// <summary>K1-b (atritos 3): the producers that own the foreign types of the captured signatures (an entity attribute of
     /// one producer typed with another producer's identifier) are captured too, by key, read-only, in the same
     /// producer-signatures stage and before any write. The import links their signatures into the same native refresh
@@ -884,8 +1352,9 @@ public static partial class Delivery
     /// owners. An owner that cannot be captured refuses the delivery as PRODUCER_SIGNATURE_MISSING, cause foreign, naming it.
     /// Returns the bindings of the owners.</summary>
     private static IReadOnlyList<string> CaptureOwners(DeliveryTask task, DeliveryRequest request, JsonArray sources, string environment,
-        IProducerSignatureAuthority? authority, string? moduleKey, Action<string>? log)
+        IProducerSignatureAuthority? authority, string? moduleKey, Action<string>? log, SignatureObservations? signatures = null)
     {
+        signatures ??= new SignatureObservations(ProducerLedger.ForWork(request.WorkDirectory), ProducerCache.ForWork(request.WorkDirectory));
         var captured = (JsonObject)task.State["capturedProducers"]!;
         var known = captured.Select(p => p.Value?["key"]?.ToString()).Concat(BoundSignatureKeys(request)).Append(moduleKey)
             .Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k!).ToList();
@@ -893,7 +1362,6 @@ public static partial class Delivery
         var problems = new List<JsonObject>(); string? refusedFor = null;
         var queue = new Queue<string>(captured.Select(p => p.Key)); var scanned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var owners = captured.Where(p => p.Value?["ownerKey"] != null).Select(p => p.Key).ToList();
-        var cache = ProducerCache.ForWork(request.WorkDirectory);
         while (queue.Count > 0)
         {
             var dependentBinding = queue.Dequeue();
@@ -904,28 +1372,17 @@ public static partial class Delivery
                 if (Known(owner)) continue;
                 var elements = objects.Select(o => "@" + o).ToList();
                 var destination = Path.Combine(task.DirectoryPath, "producers", "owner-" + SafeKeyName(owner) + ".avsig");
-                JsonObject? receipt = null; var reused = false;
+                Acquired? acquired = null;
                 try
                 {
                     if (authority == null) throw new InvalidOperationException("no read-only producer authority captures it");
                     Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                     RemoveRecordedSource(sources, destination);
                     if (File.Exists(destination)) File.Delete(destination);
-                    if (cache?.Find(environment, "@" + owner, elements) is { } cached)
-                    {
-                        try
-                        {
-                            if (authority.Attest(cached.Path, environment)["attested"]?.GetValue<bool>() != false)
-                            { File.Copy(cached.Path, destination, overwrite: true); receipt = cached.Receipt; reused = true; }
-                        }
-                        catch (Exception ex) when (ex is not OutOfMemoryException and not EnvironmentCallCutException) { cache.Remove(environment, "@" + owner, elements); }
-                    }
-                    if (!reused)
-                    {
-                        receipt = authority.CaptureByKey(owner, elements, destination, environment);
-                        try { cache?.Store(environment, "@" + owner, elements, destination, receipt); }
-                        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { log?.Invoke("deliver: producer cache not written: " + ex.Message); }
-                    }
+                    // C27 + F5: an owner's capture is reused by the same rule as a producer's (cached under "@<key>").
+                    var ownerAuthority = authority;
+                    acquired = Acquire(signatures, ownerAuthority, environment, "@" + owner, elements, destination, log,
+                        (_, wanted, file) => ownerAuthority.CaptureByKey(owner, wanted, file, environment));
                 }
                 // prazos B: a cut read is not a missing owner (PRODUCER_SIGNATURE_MISSING would send the model to the job); it
                 // propagates as ENVIRONMENT_CALL_CUT.
@@ -940,19 +1397,21 @@ public static partial class Delivery
                     known.Add(owner);
                     continue;
                 }
-                var name = receipt!["producer"]?.ToString() is { Length: > 0 } producerName ? producerName : owner;
+                var receipt = acquired!.Receipt;
+                var name = receipt["producer"]?.ToString() is { Length: > 0 } producerName ? producerName : owner;
                 var binding = UniqueBinding(name, captured, request);
                 var sha = DeliveryReceipt.Hash(destination);
                 sources.Add(new JsonObject { ["path"] = destination, ["sha256"] = sha });
                 var entry = CapturedEntry(name, destination, sha, environment, receipt);
                 entry["reason"] = "foreign-owner-of:" + dependentName; entry["ownerKey"] = owner;
-                if (reused) entry["reusedFromCache"] = true;
+                if (acquired.Reused) entry["reusedFromCache"] = true;
+                entry["observed"] = acquired.Observed.DeepClone();
                 captured[binding] = entry;
                 known.Add(owner);
                 if (receipt["key"]?.ToString() is { Length: > 0 } capturedKey) known.Add(capturedKey);
                 owners.Add(binding); queue.Enqueue(binding);
                 task.Save("capture-producer:" + binding);
-                log?.Invoke($"deliver: {(reused ? "reused the cached capture of" : "captured")} {name}, owner of foreign types of {dependentName}, as {binding} sha256={sha}");
+                log?.Invoke($"deliver: {(acquired.Reused ? "reused the cached capture of" : "captured")} {name}, owner of foreign types of {dependentName}, as {binding} sha256={sha} observed={acquired.Observed["by"]}");
             }
         }
         if (problems.Count > 0) throw Preflight.ProducerSignatureMissing.Refusal(refusedFor!, problems);
@@ -1206,6 +1665,59 @@ public static partial class Delivery
     private static readonly Func<string, string, string, JsonObject>? DefaultSignaturePreview =
         typeof(Delivery).Assembly.GetType("Anvil.Core.Delivery.SignaturePreview")?.GetMethod("Check", [typeof(string), typeof(string), typeof(string)]) is { } check
             ? check.CreateDelegate<Func<string, string, string, JsonObject>>() : null;
+
+    /// <summary>fam-deps (family D): a dialog the Studio opened during the merge needs the person; the merge waits for it in the
+    /// Studio and the answer carries the dialog (blockedBy) and the one question.</summary>
+    public const string StudioDialogPending = "STUDIO_DIALOG_PENDING";
+    /// <summary>fam-deps review (finding 1): the Studio reported an error (its "Unexpected Error", closed by the bridge) while
+    /// the merge ran. The Studio rolled back the command that raised it and swallowed the exception, so the merge's own result
+    /// is not trusted: the kernel proves the module against the base in the same call and answers with this code, the stage
+    /// and the dialog's text (studioError), never delivered on the merge's word alone.</summary>
+    public const string StudioErrorDuringMergeCode = "STUDIO_ERROR_DURING_MERGE";
+    /// <summary>The kind of an answered dependencies dialog in referencesRefreshed (Anvil.Bridge DialogScope.DependenciesKind).</summary>
+    private const string DependenciesKindAnswered = "DependenciesDialog";
+
+    /// <summary>The O11 reference reader (Adapters.SS11/ReferenceInventory.cs), found by name like the signature preview:
+    /// Anvil.Core.Odc has none, and there the reference closure does not run.</summary>
+    private static readonly Func<string, string, JsonArray>? DefaultReferenceInventory =
+        typeof(Delivery).Assembly.GetType("Anvil.Core.Delivery.ReferenceInventory")?.GetMethod("Read", [typeof(string), typeof(string)]) is { } readReferences
+            ? readReferences.CreateDelegate<Func<string, string, JsonArray>>() : null;
+
+    /// <summary>An OML file starts with "OML" (its textual header); anything else is never loaded as a model here.</summary>
+    private static bool LooksLikeOml(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            Span<byte> head = stackalloc byte[3];
+            return stream.Read(head) == 3 && head[0] == (byte)'O' && head[1] == (byte)'M' && head[2] == (byte)'L';
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
+
+    /// <summary>Two producer keys name the same producer (ordinal, then by the Studio's key form).</summary>
+    internal static bool SameProducerKey(string left, string right)
+    {
+        if (string.Equals(left, right, StringComparison.Ordinal)) return true;
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right)) return false;
+        try { return ParsedKeysEqual(left, right); } catch (Exception ex) when (ex is FormatException or ArgumentException or FileNotFoundException or FileLoadException or TypeLoadException) { return false; }
+    }
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static bool ParsedKeysEqual(string left, string right) => Keys.Parse(left).Equals(Keys.Parse(right));
+
+    /// <summary>The bound .avsig signatures of the request by binding: (producer key, signature hash); read only when there are any.</summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static IReadOnlyDictionary<string, (string Key, string? Hash)> BoundSignatures(DeliveryRequest request)
+    {
+        var bound = new Dictionary<string, (string Key, string? Hash)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (binding, file) in request.Producers ?? new Dictionary<string, string>())
+        {
+            if (!Path.GetExtension(file).Equals(".avsig", StringComparison.OrdinalIgnoreCase)) continue;
+            try { var snapshot = NativeReferenceSnapshot.Read(file); bound[binding] = (snapshot.ModuleKey, snapshot.SignatureHash.ToString()); }
+            catch (Exception ex) when (ex is IOException or ArgumentException or JsonException or FormatException or UnauthorizedAccessException) { }
+        }
+        return bound;
+    }
 
     /// <summary>Whether the job binds producer signatures (captured, or an explicit .avsig binding): only then can the candidate
     /// change a reference signature the live merge selects.</summary>

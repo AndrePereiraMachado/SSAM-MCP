@@ -48,9 +48,13 @@ export function seedPlan({ receipt, capture }) {
   for (const entity of Array.isArray(receipt?.data?.entities) ? receipt.data.entities : []) {
     if (!marked(entity, prefix) || entity.autoNumber === true) continue;
     const collection = collections.get(collectionName(entity, prefix));
-    const rows = Array.isArray(collection?.rows) ? collection.rows.filter(isObject) : [];
+    // a field the compiler gave another attribute name (receipt entity.attributes: field -> attribute, the entity's name
+    // scope of PrototypeFieldNames) is written to that attribute
+    const renames = isObject(entity.attributes) ? entity.attributes : {};
+    const attribute = name => (typeof renames[name] === 'string' ? renames[name] : name);
+    const rows = (Array.isArray(collection?.rows) ? collection.rows.filter(isObject) : []).map(row => (Object.keys(renames).length ? Object.fromEntries(Object.entries(row).map(([k, v]) => [attribute(k), v])) : row));
     if (!rows.length) continue;
-    entries.push({ entity: entity.name, collection: collection.name, key: collection.key ?? 'Id', rows,
+    entries.push({ entity: entity.name, collection: collection.name, key: attribute(collection.key ?? 'Id'), rows,
       references: (Array.isArray(collection.references) ? collection.references : []).map(r => r?.collection).filter(Boolean) });
   }
   // Parents first: an entry waits for the entries of the collections it references (a cycle keeps the document order).

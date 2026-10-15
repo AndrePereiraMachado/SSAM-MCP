@@ -42,7 +42,13 @@ test('a 100 KB answer is kept in .local/answers and paged; ssam_evidence reads t
   const client = await connect(t, server);
   const reply = await client.callTool({ name: 'o11_job', arguments: { job: [{ op: 'find', kind: 'Entity' }] } });
   assert.ok(bytes(reply.content[0].text) <= MAX_ANSWER_BYTES, bytes(reply.content[0].text) + ' bytes');
-  const value = valueOf(reply);
+  // The per-kind policy now runs before the ceiling: this job receipt fits 2 KB and
+  // its omitted rows remain exact evidence. Exercise the 40 KB safety net separately.
+  const receipt = valueOf(reply);
+  assert.ok(bytes(reply.content[0].text) <= 2048);
+  assert.ok(receipt.omitted);
+  assert.equal(JSON.parse(fs.readFileSync(receipt.omitted.arguments.file, 'utf8')).rows.length, 1000);
+  const value = valueOf(pageAnswer({ content: [{ type: 'text', text: JSON.stringify(big) }], structuredContent: big }, { root }));
   assert.equal(value.ok, true); assert.equal(value.lane, 'o11'); assert.equal(value.job, 'C:\\jobs\\big.json');
   assert.equal(value.note.length, 501, 'a long text stays inline cut, the whole one is in the file');
   assert.deepEqual(value.answerContinuation, big.continuation, "the answer's own continuation is kept beside the paging one");
@@ -52,16 +58,21 @@ test('a 100 KB answer is kept in .local/answers and paged; ssam_evidence reads t
   const stored = fs.readFileSync(value.paged.file, 'utf8');
   assert.equal(createHash('sha256').update(stored, 'utf8').digest('hex'), value.paged.sha256);
   assert.equal(JSON.parse(stored).rows.length, 1000);
-  assert.deepEqual(value.continuation, { tool: 'ssam_evidence', arguments: { file: value.paged.file, budgetBytes: 20000 }, why: value.continuation.why });
+  // The rows do not fit under the ceiling as a table (2026-10-12, paged-answer.mjs): the outline names them and the one
+  // continuation reads all of them as a table, within the reader's budget.
+  assert.equal(value.paged.complete, false);
+  assert.deepEqual(value.paged.outline.map(o => [o.at, o.rows, o.inline]), [['/rows', 1000, false]]);
+  assert.deepEqual(value.continuation, { tool: 'ssam_evidence', arguments: { file: value.paged.file, pointer: '/rows', table: true, fields: ['i', 'text'], max: 1000, budgetBytes: 65536 }, why: value.continuation.why });
   // The continuation is a call this server answers.
   const read = await client.callTool({ name: 'ssam_evidence', arguments: { file: value.paged.file, pointer: '/rows/999/i' } });
   assert.notEqual(read.isError, true, read.content[0].text);
   assert.equal(valueOf(read).value, 999);
   // Under the ceiling: untouched, no file.
+  const filesBeforeSmall = fs.readdirSync(path.join(root, '.local', 'answers')).length;
   answer = { ok: true, lane: 'o11', small: true };
   const small = valueOf(await client.callTool({ name: 'o11_job', arguments: { job: [{ op: 'find', kind: 'Entity' }] } }));
   assert.equal(small.small, true); assert.equal(small.paged, undefined);
-  assert.equal(fs.readdirSync(path.join(root, '.local', 'answers')).length, 1);
+  assert.equal(fs.readdirSync(path.join(root, '.local', 'answers')).length, filesBeforeSmall);
   // pageAnswer alone: a refusal stays a refusal; SSAM_MAX_ANSWER_BYTES moves the ceiling (never below 4096).
   const refused = pageAnswer({ content: [{ type: 'text', text: JSON.stringify({ ok: false, code: 'X', rows }) }], isError: true }, { root, maxBytes: 4096 });
   assert.equal(refused.isError, true); assert.equal(refused.structuredContent.code, 'X');

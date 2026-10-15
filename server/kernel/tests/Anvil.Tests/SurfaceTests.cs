@@ -80,7 +80,8 @@ public class SurfaceTests
     {
         var rows = Node(CommandSurface.Recipes(Root, "tickets-all", true, 3)).AsArray();
         var recipe = rows.Single(r => r!["name"]!.ToString() == "tickets-all")!;
-        Assert.Equal(3131, recipe["opCount"]!.GetValue<int>());
+        // 3131 until GetBreaches (tickets-07-read) joined its two sources as the Studio does (one filter became five join ops).
+        Assert.Equal(3135, recipe["opCount"]!.GetValue<int>());
         Assert.Equal(recipe["rows"]!.AsArray().Count, recipe["rows"]!.AsArray().Select(r => r!.ToString()).Distinct().Count());
         Assert.True(recipe["truncated"]!.GetValue<bool>());
         Assert.Equal(3, recipe["ops"]!.AsArray().Count);
@@ -130,9 +131,9 @@ public class SurfaceTests
             .Select(m => m.Name.ToLowerInvariant()).ToHashSet();
         handlers.UnionWith(["get", "dump"]); // dispatched with a resolved target instead of the op object
         foreach (var verb in named) Assert.Contains(verb.Replace("-", ""), handlers); // rest-expose -> RestExpose
-        foreach (var expected in new[] { "agent", "create", "set", "link", "move", "reference", "usages", "rename", "duplicate", "delete", "get", "find", "replace", "layout", "spec", "logic", "screen", "html", "dump", "rest", "rest-expose", "soap", "prototype" })
+        foreach (var expected in new[] { "agent", "create", "set", "link", "move", "reference", "usages", "rename", "duplicate", "delete", "get", "find", "replace", "layout", "spec", "logic", "screen", "html", "dump", "rest", "rest-consume", "rest-expose", "soap", "prototype", "entity-actions" })
             Assert.Contains(expected, named);
-        Assert.Equal(23, named.Length);
+        Assert.Equal(25, named.Length);
         Assert.Contains("parent", schema["verbs"]!["create"]!["required"]!.AsArray().Select(k => k!.ToString()));
         Assert.Contains("$pai/#Tipo[n]", schema["references"]!.AsObject().Select(p => p.Key));
         Assert.Contains("verbs", CommandSurface.OperationNames);
@@ -194,7 +195,7 @@ public class SurfaceTests
     public void HandlerKeyReadsMatchTheVerbTable()
     {
         var kernel = Path.Combine(Root, "src", "Anvil.Core", "Kernel");
-        var sources = string.Join("\n", new[] { "Verbs.cs", "HtmlDelta.cs", "HtmlVisual.cs", "Reparent.cs", "AgentExpander.cs", "Verbs.Prototype.cs" }.Select(f => File.ReadAllText(Path.Combine(kernel, f))));
+        var sources = string.Join("\n", new[] { "Verbs.cs", "HtmlDelta.cs", "HtmlVisual.cs", "Reparent.cs", "AgentExpander.cs", "Verbs.Prototype.cs", "Verbs.EntityActions.cs" }.Select(f => File.ReadAllText(Path.Combine(kernel, f))));
         // Any method that takes the op object (handlers return JsonNode; the html helpers return string/void).
         var handlerStart = new System.Text.RegularExpressions.Regex(@"\b(?:JsonNode\??|string|void|bool)\s+([A-Z][A-Za-z]*)\(JsonObject op(?:,[^)]*)?\)", System.Text.RegularExpressions.RegexOptions.Compiled);
         var readers = new[] { @"op\[""([A-Za-z_]+)""\]", @"Req\(op,\s*""([A-Za-z_]+)""\)", @"op\.ContainsKey\(""([A-Za-z_]+)""\)", @"op\.TryGetPropertyValue\(""([A-Za-z_]+)""" }
@@ -234,6 +235,8 @@ public class SurfaceTests
             // The move handler splits into the reorder (Reorder: first/last/before/after) and the parent change
             // (Reparent.cs MoveInto: into, x/y refused; HasDirection: the position in the new parent).
             if (verb.Verb == "move") foreach (var helper in new[] { "Reorder", "MoveInto", "HasDirection" }) read.UnionWith(ReadsOf(helper));
+            // The create handler is Create(op) => CreateCore(op, nativeNameProbe) (the native name probe of the job preflight).
+            if (verb.Verb == "create") read.UnionWith(ReadsOf("CreateCore"));
             Assert.True(read.Count > 0, $"{verb.Verb}: no handler reads found (source scan broke: handler renamed?)");
             var undeclared = read.Except(declared).Except(allowedUndeclared.GetValueOrDefault(verb.Verb, [])).ToList();
             var unread = declared.Except(read).ToList();

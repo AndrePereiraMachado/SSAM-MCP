@@ -23,8 +23,23 @@ public static class TypeResolver
             return ent.IdentifierType;
         }
         if (s.Equals("Object", StringComparison.OrdinalIgnoreCase)) return es.ObjectType;
+        // "@key": the structure of that key, where a name is not one (each REST client has its own HTTPHeader).
+        if (s.StartsWith('@') && !s.Contains(' '))
+        {
+            var key = s[1..];
+            static string? KeyOf(object o) => o.GetType().GetProperty("ObjectKey")?.GetValue(o)?.ToString();
+            foreach (var candidate in es.GetAllDescendantsOfType<IStructure>())
+                if (KeyOf(candidate) == key) return candidate;
+            foreach (var candidate in es.GetAllDescendantsOfType<IStructureSignature>())
+                if (KeyOf(candidate) == key && candidate is ITypeSignature keyed) return keyed;
+            throw new KeyNotFoundException($"unknown type: {spec} (no structure has that key)");
+        }
         if (s.EndsWith(" List", StringComparison.OrdinalIgnoreCase))
         {
+            // A list the module already has under exactly this name: a list of an anonymous record ("Order Record List", the
+            // output of an aggregate, whose element is the record {Order}), which no name below builds.
+            var named = es.ListTypes.FirstOrDefault(l => string.Equals(Name(l), s, StringComparison.OrdinalIgnoreCase));
+            if (named != null) return named;
             var elem = Resolve(es, s[..^" List".Length]);
             var list = es.ListTypes.FirstOrDefault(l => ReferenceEquals(l.ElementType, elem) || string.Equals(Name(l.ElementType), Name(elem), StringComparison.Ordinal));
             return list ?? es.GetOrCreateListType(elem);   // cria a lista se ainda nao existe (respostas REST em array, variaveis de lista)

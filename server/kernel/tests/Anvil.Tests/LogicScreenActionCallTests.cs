@@ -164,6 +164,14 @@ public sealed class LogicScreenActionCallTests
     public void NativeVoidScreenCallsVerifyReloadMergeAndPreserveScreenAndClientIdentities(string fixtureName)
     {
         StudioAssemblies.Bind(null);
+        NativeVoidScreenCalls(fixtureName);
+    }
+
+    // The model types load only after StudioAssemblies.Bind: the body is a method of its own (not inlined). Run first in
+    // its process, a body in the same method as the Bind fails to JIT ("Could not load OutSystems.Model.V1").
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void NativeVoidScreenCalls(string fixtureName)
+    {
         var work = Path.Combine(Root, ".local/lane-ss5/proofs/screen-calls", fixtureName);
         Directory.CreateDirectory(work);
         var host = new ModelHost(work);

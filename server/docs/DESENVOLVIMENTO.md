@@ -61,6 +61,18 @@ não substituir por `sc_api TestQuery`, que permanece bloqueado.
   Exceção inesperada dentro dele é `XIF_ENGINE_FAILED` (defeito do SSAM, não do spec).
 - Documento da tarefa e provas ao vivo pendentes: `kernel/docs/tasks/2026-10-05-o11-xif-headless.md` e `kernel/docs/tasks/2026-10-06-xif-motor-construtor.md`.
 
+`o11_extension {action:"publish", referencesFrom:["ExtensaoExistente"], spec, ...}` resolve as bibliotecas no mesmo
+ambiente durante a entrega: fixa versão e hash do XIF fonte, exporta as DLLs referenciadas que não são da plataforma,
+inclui as licenças e notices, recusa DLLs conflitantes e passa pela checagem de closure antes de compilar.
+Não exige caminhos de DLL nem uma chamada de leitura separada. `referenceSources` registra a origem no recibo.
+
+`o11_extension {action:"read"}` exporta também os recursos do XIF para uma pasta privada nova:
+`exported.resources` traz caminho lógico, arquivo local, SHA-256, deploy e codeReference;
+`exported.references` traz as DLLs referenciadas que não são da plataforma. Uma nova extensão pode usar esses
+caminhos em `spec.references`, preservando as licenças pertinentes em `spec.resources`. A verificação existente
+confere a closure das DLLs. Não há resolução automática de NuGet. Internamente:
+`anvil xif read --xif <arquivo> --resources-out <diretório novo absoluto>`; sem a opção, continua só descritivo.
+
 ## Regras do produto
 
 - Nenhuma edição direta de modelo aberto: candidato headless e merge nativo com base, hash e recibos.
@@ -121,7 +133,52 @@ não substituir por `sc_api TestQuery`, que permanece bloqueado.
 
 ## Referências
 
+### Prompt de credenciais ODC (2026-10-14)
+
+`portal/runtime/credential-prompt.mjs` e `windows-credential-prompt.ps1` substituem o lançamento
+detached sem confirmação. O helper gerencia somente sua própria janela, usa mutexes por contexto,
+confere PID/instante de criação/handle e atende pedidos de foco na thread da própria UI.
+`odc_portal_login` expõe `prompt` e `focus`; `status` não cria janelas.
+`OdcAccess.openPrompt` não usa mais tempo decorrido como evidência de janela aberta.
+Prova e limitações: [prompt ODC](proofs/2026-10-14-odc-credential-prompt.md).
+
+O broker também reconhece o login pessoal em `id.outsystems.com/community/login`, mantendo
+o PKCE e o estado do Portal, a identidade do perfil escolhido e a confirmação por leitura protegida.
+O login do Portal tem orçamento de 90 s. Prova de autenticação e releases:
+[OutSystems ID da comunidade](proofs/2026-10-14-odc-community-auth.md).
+
+O prompt legado de banco O11 não foi migrado por esta mudança. A falha de janela não visível
+observada nessa rota permanece separada; não atribuir a ela a prova de visibilidade do ODC.
+
+### Service Center: autenticação e timers (2026-10-14)
+
+- Leituras do Service Center têm orçamento de 90 s, incluindo SSO frio. O processo privado tem até 65 s (sempre limitado ao orçamento restante), para comportar descoberta, inicialização e a chamada de identidade de até 45 s. As demais leituras mantêm o padrão de 29 s, exceto o login do Portal ODC, descrito acima.
+- Chamadas simultâneas da mesma identidade compartilham uma autenticação em voo; cada chamada recebe seu próprio jar, somente com cookies do Service Center. Host, principal, perfil e Studio continuam separados. Erros locais de validação/layout não invalidam uma sessão autenticada; falhas de autenticação invalidam.
+- `Schedule` do O11 é validado no compilador DDL antes de criar elementos e no setter antes de salvar. O Service Center recusa ativar uma agenda nativa inválida antes de reservar/enviar. Exemplos nativos: `03:00`, `00:05 Mon`, lista `00:00 00:05 ... 23:55`; o setter também aceita `{ "everyMinutes": 5 }`. Prosa não é agenda.
+- `timer-run` faz a verificação de leitura na própria chamada e retorna `outcome`, `requestStatus`, `executionObserved`, `executionCompleted`, `attributedToRequest` e `evidence`. Os outcomes são `scheduled`, `execution-observed`, `execution-failed`, `not-sent`, `not-executed`, `timer-absent` ou `unknown`. `unknown` tem o código `TIMER_RUN_OUTCOME_UNKNOWN` e continuação `verify`, nunca um reenvio. Um novo log ou mudança de Last Run comprova a execução observada, não qual escritor a disparou. Uma observação exata resolve o recibo pendente sem repetir o POST.
+- Provas e comandos de teste: [autenticação e timers](proofs/2026-10-14-service-center-auth-timers.md).
+
+### Payload histórico de integração O11
+
+`o11_service_center_read {action:"integration-log-detail", host, requestKey, logAction, moduleId?}`
+liga o Request Log ao XLSX de integrações e à linha nativa pela ação, módulo e instante exatos.
+Reaplica os filtros explicitamente, inclusive All, para não herdar seleções de outra chamada.
+Segue apenas um link de detalhe de leitura observado naquela linha; nunca refaz a chamada REST/SOAP.
+Um detalhe disponível precisa confirmar Request Key, Action, Module e Time of Log antes de expor
+os campos Request/Response, com segredos mascarados. Layouts de payload ainda não vistos ao vivo
+continuam sujeitos à validação por contrato, sem atribuir prova viva aos testes sintéticos.
+
+`payloadStatus` distingue `available`, `not-exposed`, `not-recorded`, `permission-denied`,
+`event-not-found`, `ambiguous-event`, `incomplete-list` e detalhes/layouts não suportados.
+`not-recorded` exige mensagem explícita da plataforma; ausência de link responde
+`SC_INTEGRATION_PAYLOAD_NOT_EXPOSED` com `recordingStatus:unknown`.
+Páginas Permission denied/Access denied agora retornam `SC_PERMISSION_DENIED` antes da análise de layout.
+Prova real e regressões: [payload de integração](proofs/2026-10-14-o11-integration-payload.md).
+
 - Leitura: `docs/LEITURA-RAPIDA.md` (mapa e índice por captura) e `docs/LEITURA-MODELO.md`.
+- Lógica em texto (`ssam-flow/1`: a ida da etapa LG1, com ponto fixo provado no corpus do plano, e a volta da LG2 pela op
+  `logic` com `data.flow`, com a bateria de edições; screen, block e data actions nascem do texto com o dono no cabeçalho,
+  com a bateria de criação `FlowCreateBattery`): `docs/TEXTO-LOGICA.md`.
 - Preview local ODC/O11: `docs/PREVIEW-LOCAL.md`.
 - Descoberta contextual: `docs/DESCOBERTA-CONTEXTUAL.md`. Pacote de trabalho (`ssam_discover {packet:true}`, `work-packet.mjs`): §1.5. Studio da faixa O11 na descoberta: §2.3.
 - Conexão com o Studio aberto: `docs/CONEXAO-STUDIO.md`.

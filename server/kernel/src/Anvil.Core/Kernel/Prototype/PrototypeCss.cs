@@ -196,7 +196,8 @@ public static class PrototypeCss
                 continue;
             }
             var file = System.IO.Path.GetFileName(path);
-            var ext = System.IO.Path.GetExtension(file).TrimStart('.');
+            // the type of the bytes, not the name (a JPEG saved as .png): the Studio checks the stylesheet URL by it
+            var ext = PrototypeNames.ImageExtension(BundleHead(request.BundleRoot, asset["bundle"]?.ToString()), file);
             var name = asset["name"]?.ToString() is { Length: > 0 } n ? n : Pascal(System.IO.Path.GetFileNameWithoutExtension(file));
             var image = name.StartsWith(prefix, StringComparison.Ordinal) ? name : prefix + name;
             var url = "/" + request.ModuleName + "/img/" + request.ModuleName + "." + image + (ext.Length > 0 ? "." + ext : "");
@@ -204,6 +205,20 @@ public static class PrototypeCss
             report.Add(new JsonObject { ["asset"] = path, ["url"] = url, ["source"] = "derived" });
         }
         return (urls, report);
+    }
+
+    private static byte[] BundleHead(string? root, string? bundle)
+    {
+        if (string.IsNullOrEmpty(root) || string.IsNullOrEmpty(bundle) || System.IO.Path.IsPathRooted(bundle)) return [];
+        try
+        {
+            var file = System.IO.Path.GetFullPath(System.IO.Path.Combine(root, bundle));
+            if (!File.Exists(file)) return [];
+            using var stream = File.OpenRead(file);
+            var buffer = new byte[4096];
+            return buffer[..stream.Read(buffer, 0, buffer.Length)];
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return []; }
     }
 
     private static string Pascal(string text) => string.Concat(text.Split(['-', '_', ' ', '.'], StringSplitOptions.RemoveEmptyEntries)

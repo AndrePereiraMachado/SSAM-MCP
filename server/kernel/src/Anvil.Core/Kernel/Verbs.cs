@@ -75,6 +75,12 @@ public sealed partial class ModelSession
             var isolationWarnings = new List<JsonObject>();
             var blocked = new Blocked();
             Kept = null;
+            BeginOwnerRules(ops);
+            // The screens an html edit of the job names, as the capture has them before any op, when an earlier op may change them.
+            _htmlAtStart = HtmlReadingsAtStart(ops);
+            // The module's data text before the first op, when a data text of the job may need it (MergeDdl).
+            _ddlAtStart = BaseSha256 != null && ops.OfType<JsonObject>().Any(o => o["op"]?.ToString() == "spec" && o["data"]?["ddl"] != null)
+                ? Anvil.Reading.DataDdl.Build((IObjectSignature)_espace, new KernelModelReader(), MessageExpectations.Lane, "", 0).Text : null;
             // primeira-certa A2: an op the preflight refused whole (it cannot be compiled) is never run; what uses it is skipped.
             var refusedBefore = false;
             // C28 (K2, atritos 3): an event argument written before the Destination of its event runs right after it.
@@ -91,7 +97,8 @@ public sealed partial class ModelSession
                 }
                 var op = node!.AsObject();
                 var kind = op["op"]?.GetValue<string>() ?? throw new InvalidOperationException($"op #{i}: missing 'op'");
-                if ((failures.Count > 0 || refusedBefore) && blocked.UsedBy(op) is { } uses)
+                var flowTexts = kind == "logic" && op["data"]?["flow"] != null;
+                if (!flowTexts && (failures.Count > 0 || refusedBefore) && blocked.UsedBy(op) is { } uses)
                 {
                     skipped.Add((i, uses.Op, uses.Name));
                     blocked.Mark(op, uses.Op);
@@ -100,6 +107,13 @@ public sealed partial class ModelSession
                 }
                 JsonNode? r;
                 _applyOps = ops; _applyIndex = i;
+                _flowBlocked = flowTexts ? blocked : null;
+                _flowDependencySkipped = flowTexts ? (pointer, origin, name) => {
+                    var at = opsPointer == null ? null : $"{opsPointer}/{i}/data{pointer}";
+                    isolationWarnings.Add(JobPreflight.Problem(i, at, "APPLY_SKIPPED", "warning",
+                        $"skipped: it uses {name}, which failed op #{origin} would have created", $"fix op #{origin}; this text runs with it"));
+                    log?.Invoke($"#{i} {kind} {pointer} skipped: it uses {name} of failed op #{origin}");
+                } : null;
                 BeginAnchors(i);
                 var opFailed = true;
                 try { r = ApplyOne(op); opFailed = false; }
@@ -113,7 +127,7 @@ public sealed partial class ModelSession
                     if (Errors.FindUnresolved(ex) is { } u) msg += ForwardRefs.Explain(ops, i, u.Name);
                     // A name that does not resolve because an earlier failed (or skipped) op would have created it is that op's
                     // consequence, not a fault of its own: the op is skipped, never a second problem.
-                    if ((failures.Count > 0 || refusedBefore) && Blocked.MissingName(ex, msg) is { } missing && blocked.Mentioned(missing) is { } origin)
+                    if (!flowTexts && (failures.Count > 0 || refusedBefore) && Blocked.MissingName(ex, msg) is { } missing && blocked.Mentioned(missing) is { } origin)
                     {
                         skipped.Add((i, origin, missing));
                         blocked.Mark(op, origin);
@@ -140,7 +154,7 @@ public sealed partial class ModelSession
                     log?.Invoke($"#{i} {kind} failed: {Unwrap(ex)}");
                     continue;
                 }
-                finally { EndAnchors(opFailed); }
+                finally { _flowBlocked = null; _flowDependencySkipped = null; EndAnchors(opFailed); }
                 results.Add(new JsonObject { ["op"] = kind, ["result"] = r });
                 log?.Invoke($"#{i} {kind} ok");
             }
@@ -155,9 +169,15 @@ public sealed partial class ModelSession
                 catch (Exception ex) { failures.Add(new ApplyFailure(index, "delete", pending, new InvalidOperationException($"op #{index} (delete ): {Unwrap(ex)}", ex))); }
             }
             _pendingDeletes.Clear();
+            // Every theme the job wrote with no base theme carries the native widgets' CSS (Verbs.NativeWidgets.cs).
+            if (failures.Count == 0) NativeWidgetCss(); else _themesWritten.Clear();
             // Data access on the candidate model (QueryInLoopRule.cs, AggregateConsolidationRule.cs): QUERY_IN_LOOP is one more
             // failure of this refusal; legacy loops, escapes and AGGREGATES_MERGEABLE go to the receipt (highWarnings).
             QueryInLoopReview(ops, failures);
+            // The owner's rules on the JSON form of the logic op (Verbs.OwnerRules.cs): new JavaScript and T1/T2 loops it wrote.
+            OwnerRulesReview(ops, failures, opsPointer);
+            // Checagem de compilação (CompileCheck.cs): what the OutSystems compiler cannot build is one more failure.
+            CompileCheckReview(ops, failures);
             AggregateConsolidationReview(ops);
             var failed = failures.Count > 0 || refusedBefore;
             if (failed)
@@ -206,8 +226,17 @@ public sealed partial class ModelSession
         VerbSurface.Check(op); // the executed contract: verb, required keys and the closed key set (api --op verbs)
         using var timing = NativePerformanceCapture.MeasureVerb(kind);
         var renamed = kind == "rename" ? Resolve(Req(op, "target")) : null;
+        // The owner's rules (Verbs.OwnerRules.cs): what a move into another parent takes along, before the platform recreates it.
+        IObjectSignature? moved = null, movedFrom = null; List<IObjectSignature>? movedOwn = null;
+        if (kind == "move" && op["into"] != null && _applyOps != null && op["target"] is JsonValue movedRef && movedRef.TryGetValue<string>(out var movedText))
+        {
+            try { moved = Resolve(movedText) as IObjectSignature; } catch (KeyNotFoundException) { }
+            movedFrom = moved?.Parent as IObjectSignature;
+            movedOwn = moved?.GetAllDescendantsOfType<IObjectSignature>().Append(moved).Where(o => JavaScriptOrLoop(o) && o.ObjectKey?.ToString() is { } k && _jobWrittenNodes.Contains(k)).ToList();
+        }
         Anotar(kind, op, null);   // antes: e a unica altura em que o alvo de um delete ainda existe
         FootprintScopes(kind, op); // B3: the children of what the op names, before it writes (Verbs.Footprint.cs)
+        _lastWritten = null;
         var result = kind switch
         {
             "create" => Create(op), "set" => Set(op), "link" => Link(op), "move" => Move(op), "reference" => Reference(op), "usages" => Usages(op), "rename" => Rename(op),
@@ -220,8 +249,12 @@ public sealed partial class ModelSession
             "screen" => Screen(op),
             "html" => Html(op),
             "prototype" => Prototype(op),
+            // The standard actions of the data model, generated from the module (Verbs.EntityActions.cs).
+            "entity-actions" => EntityActions(op),
             // Integration ops (Verbs.Integration.cs): consumed REST, exposed REST, SOAP (O11).
             "rest" => Rest(op),
+            // The generator of a consumed REST integration from URLs and samples (Verbs.RestConsume.cs, RestConsume.cs).
+            "rest-consume" => RestConsume(op),
             "rest-expose" => RestExpose(op),
             "soap" => Soap(op),
             "dump" => Dump(Resolve(Req(op, "target")), op["depth"]?.GetValue<int>() ?? 3),
@@ -229,7 +262,16 @@ public sealed partial class ModelSession
         };
         Anotar(kind, op, result);  // depois: create e duplicate so revelam o tipo no resultado
         if (kind == "create") RememberCreate(op, result);
+        // A theme the job writes (created, its base theme or its style sheet): with no base theme at the end, it gets the native
+        // widgets' CSS (Verbs.NativeWidgets.cs).
+        try
+        {
+            if (kind == "create" && (op["type"]?.ToString() ?? "").EndsWith("Theme", StringComparison.Ordinal) && result?["key"]?.ToString() is { Length: > 0 } themeKey) ThemeWritten(Resolve("@" + themeKey));
+            else if (kind == "set" && op["prop"]?.ToString() is "BaseTheme" or "StyleSheet") ThemeWritten(Resolve(Req(op, "target")));
+        }
+        catch (KeyNotFoundException) { }
         RecordDataAccessOrigin(kind, result);
+        RememberWrittenNodes(kind, op, _lastWritten, moved, movedFrom, movedOwn);
         // O contrato afere a propriedade que o rename escreveu (Identifier num registo, Label num no...), nao sempre Name.
         if (renamed != null) RememberData(renamed, result?["property"]?.GetValue<string>() ?? "Name", op["name"]!.DeepClone());
         return result;
@@ -250,6 +292,8 @@ public sealed partial class ModelSession
     private JsonNode Spec(JsonObject op)
     {
         var data = op["data"]?.AsObject() ?? throw new InvalidOperationException("spec: 'data' is required");
+        // DL2: the module's data text, compiled against the module as it is now (Verbs.Ddl.cs).
+        if (data["ddl"] != null) return DdlSpec(data);
         // C21: a value of the spec written as the literal the Studio stores is reported, with its pointer in the job.
         var rewrites = new List<(string Pointer, string From, string To)>();
         var expanded = SpecExpander.Expand(data, rewrites);
@@ -317,12 +361,16 @@ public sealed partial class ModelSession
     /// <summary>rest {data}: a consumed REST client (RestExpander); rest-expose {data}: an exposed REST service
     /// (RestExposeExpander); soap {data}: a SOAP client imported from its WSDL (SoapPlan, O11). Verbs.Integration.cs.</summary>
     private JsonNode Rest(JsonObject op) => RestOp(op["data"] as JsonObject ?? throw new InvalidOperationException("rest: 'data' is required (api --op rest)"));
+    // rest-consume {data}: the generator of a consumed REST integration from URLs and samples (Verbs.RestConsume.cs).
+    private JsonNode RestConsume(JsonObject op) => RestConsumeOp(op["data"] as JsonObject ?? throw new InvalidOperationException("rest-consume: 'data' is required (api --op rest-consume)"));
     private JsonNode RestExpose(JsonObject op) => RestExposeOp(op["data"] as JsonObject ?? throw new InvalidOperationException("rest-expose: 'data' is required (api --op rest-expose)"));
     private JsonNode Soap(JsonObject op) => SoapOp(op["data"] as JsonObject ?? throw new InvalidOperationException("soap: 'data' is required (api --op soap)"));
 
     private JsonNode Screen(JsonObject op)
     {
         if (op["data"] is JsonObject tree && tree.ContainsKey("owners")) return ScreenTree(tree);
+        // Screens from entities and blocks (Verbs.ScreenGenerator.cs, ScreenGenerator.cs): the module's own standard screens.
+        if (ScreenGenerator.IsGenerate(op["data"] as JsonObject)) return GenerateScreens(op);
         string? TryRef(string[] names)
         {
             foreach (var name in names) { try { Resolve(name); return name; } catch (KeyNotFoundException) { } }
@@ -342,6 +390,9 @@ public sealed partial class ModelSession
     /// actions, exceptions) resolvidas contra ESTE modulo antes de aplicar; devolve os ops gerados e os aliases.</summary>
     private JsonNode Logic(JsonObject op)
     {
+        // The text form (ssam-flow/1, Verbs.Flow.cs): an action written as the text ssam_map view "flow" reads.
+        if (op["data"] is JsonObject textForm && textForm.ContainsKey("flow")) return FlowOp(op);
+        _mappingRewrites.Clear();
         try
         {
             _logicNames = Descendants().Where(o => !string.IsNullOrEmpty(TypeResolver.Name(o)))
@@ -350,7 +401,7 @@ public sealed partial class ModelSession
             _logicActionNames = op["data"]?["actions"]?.AsArray().OfType<JsonObject>().Select(a => a["name"]?.ToString() ?? "").ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
             return LogicCore(op);
         }
-        finally { _logicNames = null; _logicTypes = null; _logicActionNames = null; }
+        finally { _logicNames = null; _logicTypes = null; _logicActionNames = null; _mappingRewrites.Clear(); }
     }
 
     private JsonNode LogicCore(JsonObject op)
@@ -393,6 +444,12 @@ public sealed partial class ModelSession
                 replacements.Add((name, ReplacementKey(LogicOrder.Owner(action), name), type, existing, existing.ObjectKey!.ToString()!, action));
             }
         }
+        // The actions as they read before the op replaces them: what they had (a JavaScript, a For Each) is theirs, never new
+        // (OwnerRulesReview, Verbs.OwnerRules.cs).
+        var readBefore = new Dictionary<string, Anvil.Reading.FlowItem>(StringComparer.OrdinalIgnoreCase);
+        if (_applyOps != null)
+            foreach (var replacement in replacements)
+                if (FlowItemOf(replacement.Target) is { } read) readBefore[replacement.Key] = read;
         var preserved = replacements.ToDictionary(r => r.Key, r => Consumers(r.Target)
             .Where(c => !replacements.Any(other => ReferenceEquals(c.Referer, other.Target) || IsInside(c.Referer, other.Target)))
             .Select(c => ((IObjectSignature)c.Referer).ObjectKey!.ToString()!).ToHashSet(StringComparer.Ordinal), StringComparer.OrdinalIgnoreCase);
@@ -404,6 +461,8 @@ public sealed partial class ModelSession
         bool StableSignature(IObjectSignature target, JsonObject declaration)
         {
             var type = LogicOrder.ActionType(declaration);
+            // A REST callback's parameters are the platform's own (Request, CustomizedRequest...): its body changes, never them.
+            if (type == LogicOrder.RestCallback) return true;
             var serverSide = type is "IServerAction" or "IServiceAction";
             if (!serverSide && declaration["kind"]?.ToString() is not ("screen" or "client")) return false;
             if (type == "IClientAction" || serverSide)
@@ -444,7 +503,7 @@ public sealed partial class ModelSession
             var removed = replacement.Target.GetAllDescendantsOfType<IObjectSignature>().Append(replacement.Target).ToHashSet();
             if (keep)
             {
-                var retained = replacement.Target.Children.OfType<IObjectSignature>().Where(p => Implements(p, "IInputParameter") || Implements(p, "IOutputParameter")).ToArray();
+                var retained = replacement.Target.Children.OfType<IObjectSignature>().Where(p => Implements(p, "IInputParameter") || Implements(p, "IOutputParameter") || LogicOrder.IsCallbackParameter(p)).ToArray();
                 removed.ExceptWith(retained.SelectMany(p => p.GetAllDescendantsOfType<IObjectSignature>().Append(p))); removed.Remove(replacement.Target);
                 foreach (var child in replacement.Target.Children.OfType<IObjectSignature>().Where(p => !retained.Contains(p)).ToArray()) child.Delete();
                 // A retained input keeps no default the declaration no longer gives (the declaration's own default is set again).
@@ -473,7 +532,7 @@ public sealed partial class ModelSession
             var e = expanded[k];
             try
             {
-                if (e["op"]?.ToString() == "create" && e["name"] is { } actionName && retainedActions.TryGetValue(ReplacementKey(e["parent"]?.ToString() ?? "", actionName.ToString()), out var retained) && e["type"]?.ToString().Split('.').Last() is "IScreenAction" or "IClientAction" or "IServerAction" or "IServiceAction")
+                if (e["op"]?.ToString() == "create" && e["name"] is { } actionName && retainedActions.TryGetValue(ReplacementKey(e["parent"]?.ToString() ?? "", actionName.ToString()), out var retained) && e["type"]?.ToString().Split('.').Last() is "IScreenAction" or "IClientAction" or "IServerAction" or "IServiceAction" or LogicOrder.RestCallback)
                     Register(e["as"]!.ToString(), retained);
                 else if (e["op"]?.ToString() == "create" && e["type"]?.ToString() is "IInputParameter" or "IOutputParameter" && e["parent"] is { } parent && retainedActions.Values.Any(v => _handles.TryGetValue(parent.ToString(), out var value) && ReferenceEquals(v, value)))
                     Register(e["as"]!.ToString(), ((IObjectSignature)Resolve(parent.ToString())).Children.Single(p => TypeResolver.Name(p) == e["name"]!.ToString() && Implements(p, e["type"]!.ToString())));
@@ -497,6 +556,9 @@ public sealed partial class ModelSession
             healed.Add(new JsonObject { ["name"] = replacement.Name, ["oldKey"] = replacement.OldKey,
                 ["identityRetained"] = retainedActions.ContainsKey(replacement.Key), ["key"] = current.ObjectKey!.ToString(), ["healedConsumers"] = preserved[replacement.Key].Count });
         }
+        FlushPendingMappings($"/ops/{_applyIndex}/data/actions");
+        ReportJsonMappings(data);
+        RememberJsonLogic(data, readBefore);
         return new JsonObject { ["expanded"] = expanded.Count, ["replaced"] = replacements.Count > 0,
             ["healedConsumers"] = preserved.Values.Sum(v => v.Count), ["replacements"] = healed,
             ["aliases"] = new JsonArray(expanded.Where(e => e["as"] != null).Select(e => (JsonNode)e["as"]!.GetValue<string>()).ToArray()) };
@@ -515,6 +577,10 @@ public sealed partial class ModelSession
     private IObjectSignature? OwnedAction(string name) => ((IObjectSignature)_es).Children.OfType<IObjectSignature>().FirstOrDefault(o => ReferenceEquals(o.Parent, _espace)
         && (Implements(o, "IServerAction") || Implements(o, "IServiceAction") || Implements(o, "IClientAction"))
         && string.Equals(TypeResolver.Name(o), name, StringComparison.OrdinalIgnoreCase));
+    private IObjectSignature? OwnedActionInScope(string name, string kind) => ((IObjectSignature)_es).Children.OfType<IObjectSignature>().FirstOrDefault(o => ReferenceEquals(o.Parent, _espace)
+        && (Implements(o, "IServerAction") || Implements(o, "IServiceAction") || Implements(o, "IClientAction"))
+        && Preflight.ModelBaseFacts.ScopeOf(o) == Preflight.ActionNameRules.Scope(kind)
+        && string.Equals(TypeResolver.Name(o), name, StringComparison.OrdinalIgnoreCase));
     private static string DuplicateAction(string name) => $"action '{name}' already exists in this module; to rewrite its body keeping consumers use \"replace\": true in a logic spec; otherwise pick another name";
     /// <summary>"owner/name" of a declared action, case-insensitive like LogicOrder's key: the owner is the parent its create
     /// op names (LogicOrder.Owner), "@espace" for a module action.</summary>
@@ -522,7 +588,9 @@ public sealed partial class ModelSession
 
     // ---- verbos ---------------------------------------------------------------------------
 
-    private JsonNode Create(JsonObject op)
+    private JsonNode Create(JsonObject op) => CreateCore(op, nativeNameProbe: false);
+
+    private JsonNode CreateCore(JsonObject op, bool nativeNameProbe)
     {
         var parent = Resolve(Req(op, "parent"));
         var typeName = Req(op, "type");
@@ -543,7 +611,7 @@ public sealed partial class ModelSession
         if (ReferenceEquals(parent, _espace) && typeName.Split('.').Last() is "IServerAction" or "IServiceAction" or "IClientAction")
         {
             if (op.ContainsKey("replace")) throw new InvalidOperationException("create: use replace:true on an action inside a logic spec");
-            if (name != null && OwnedAction(name) != null) throw new InvalidOperationException(DuplicateAction(name));
+            if (!nativeNameProbe && name != null && OwnedActionInScope(name, typeName) != null) throw new InvalidOperationException(DuplicateAction(name));
         }
         // Um item de grupo so existe dentro do seu grupo. O ODC recusa no create ("A Button Group Item must be placed
         // inside a Button Group widget"); o O11 aceita e o Verify nativo cai com NullReferenceException fora de qualquer op
@@ -566,6 +634,11 @@ public sealed partial class ModelSession
         }
         var options = FindCreate(parent, typeName);
         if (options.Count == 0) throw new InvalidOperationException($"{Describe(parent)} cannot create {typeName} (no Create method in the API)");
+        // Several Create forms without a name parameter, one of them named after the element (the REST callbacks:
+        // CreateOnBeforeRequestCallback, CreateOnAfterResponseCallback...): that one, never the first of the list.
+        if (name != null && options.Count > 1 && options.Where(o => o.Method.Name.Equals("Create" + name + "Callback", StringComparison.OrdinalIgnoreCase)
+                || o.Method.Name.Equals("Create" + name, StringComparison.OrdinalIgnoreCase)).ToList() is { Count: 1 } named)
+            options = named;
         // Every arg must reach a parameter of the Create form that runs: an arg nobody consumes was dropped in silence before.
         if (args is { Count: > 0 })
         {
@@ -619,6 +692,8 @@ public sealed partial class ModelSession
             && !string.Equals(actual, name, StringComparison.OrdinalIgnoreCase)
             && System.Text.RegularExpressions.Regex.IsMatch(actual, "^" + System.Text.RegularExpressions.Regex.Escape(System.Text.RegularExpressions.Regex.Replace(name, @"\d+$", "")) + @"\d+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
         {
+            // Only the internal offline oracle consumes the actual native name and removes this object itself.
+            if (nativeNameProbe) return Summary(created);
             var taken = (parent as IObjectSignature)?.Children.FirstOrDefault(c => !ReferenceEquals(c, created) && string.Equals(TypeResolver.Name(c), name, StringComparison.OrdinalIgnoreCase));
             // primeira-certa A6: what the Studio created is this failed op's: anchored, so the isolation of a logic op removes
             // it and the Verify of the refusal never reports the renamed element (a flow without Start) as a fault of its own.
@@ -636,6 +711,7 @@ public sealed partial class ModelSession
             throw collision;
         }
         Anchor(created, created: true);
+        _lastWritten = created as IObjectSignature;
         if (op["as"]?.GetValue<string>() is { } alias) Register(alias, created);
         if (_byKey != null && created is IObjectSignature sig && sig.ObjectKey != null) _byKey[sig.ObjectKey.ToString()!] = sig;
         if (op["source"]?.GetValue<string>() is { } source)
@@ -688,6 +764,7 @@ public sealed partial class ModelSession
     private JsonNode Set(JsonObject op)
     {
         var target = Resolve(Req(op, "target"));
+        op = AliasRule(target, op);
         var clientFlow = op["prop"]?.ToString() == "Action" && Implements(target, "IExecuteClientActionNode");
         var (written, weight) = IconRule(target, op);
         // CSS, SQL e JavaScript formatados em varias linhas antes de chegar ao modelo (CodeFormat/CodeFormatHook.cs).
@@ -696,10 +773,29 @@ public sealed partial class ModelSession
         (written, var done) = StyleRule(target, written);
         if (done != null) { Touch(target); AnchorProperty(target, op); return done; }
         var result = InClientFlow(clientFlow || _preferClient, () => SetCore(target, written));
+        // A mapping that waited for the other side of its assignment (a new one gets its Value before its Variable).
+        if (_pendingMappings.Count > 0 && WritePendingMapping(target) is { } mapped && result is JsonObject setResult) setResult["mapping"] = mapped;
         // The weight the conversion table gives goes with the converted name, as the merge writes it.
         if (weight != null) SetCore(target, new JsonObject { ["op"] = "set", ["target"] = op["target"]?.DeepClone(), ["prop"] = "Weight", ["value"] = weight });
         AnchorProperty(target, op);
         return result;
+    }
+
+    /// <summary>motor2 (C11): a property written by the name another element of the family uses (Handler on a lifecycle
+    /// event, Destination on a widget event, Name on an extended property) is written to the one this element has for it,
+    /// listed in normalizations (PROPERTY_ALIASED), when the element cannot write the name as written and can write the alias.</summary>
+    private JsonObject AliasRule(object target, JsonObject op)
+    {
+        if (op["prop"]?.ToString() is not { Length: > 0 } prop || CanSet(target, prop)) return op;
+        var interfaces = target.GetType().GetInterfaces().Select(i => i.Name);
+        if (Preflight.PropertyAliases.Meant(interfaces, prop) is not { } to || !CanSet(target, to)) return op;
+        var copy = op.DeepClone().AsObject();
+        copy["prop"] = to;
+        var raw = _applyOps != null && _applyIndex < _applyOps.Count && _applyOps[_applyIndex]?["op"]?.ToString() == "set";
+        var at = OpsPointer != null && _applyOps != null && _applyIndex < _applyOps.Count ? $"{OpsPointer}/{_applyIndex}" + (raw ? "/prop" : "") : null;
+        Normalized([Preflight.JobNormalizer.Entry(Preflight.PropertyAliases.Rule, at, prop, to,
+            $"{ShortType(target)} {op["target"]} has no property {prop}; the one it has for it is {to}")]);
+        return copy;
     }
 
     // C17: the weight each converted icon takes from the conversion table (a later `set Weight` keeps it).
@@ -746,6 +842,12 @@ public sealed partial class ModelSession
         Touch(target);
         var prop = Req(op, "prop");
         var value = op["value"];
+        // The parameter interface exposes Description, but JavaScript parameters reject it at runtime.
+        // This is documentation only, so follow the same dropped-property contract as a missing setter.
+        if (Preflight.JobNormalizer.Droppable(prop) && target is IObjectSignature parameter
+            && parameter.Parent is IObjectSignature parent && Implements(parent, "IJavaScriptNode")
+            && (Implements(parameter, "IInputParameter") || Implements(parameter, "IOutputParameter")))
+            return DropDocumentation(target, prop, op);
         if (prop == "Schedule" && target is OutSystems.Model.Processes.ITimer)
         {
             var schedule = TimerScheduleValue.Prepare(value, FindProperty(target, "CronSchedule") != null);
@@ -769,6 +871,12 @@ public sealed partial class ModelSession
             return new JsonObject { ["set"] = prop, ["via"] = "native property" };
         }
         var pi = FindProperty(target, prop);
+        // O11: the record mapping of an assignment or an argument lives beside its Value (IRecordMappings, Verbs.Mapping.cs).
+        if (prop == "Value" && pi is { CanWrite: false } && StudioAdapter.Runtime.Mappings is { } mappings && mappings.Owns(target))
+        {
+            preparationTiming.Dispose();
+            return SetMappedValue(target, pi, mappings, value, Req(op, "target"));
+        }
         // The app name of a module (ESpace.AppName, which the ODC Studio shows as the module's DisplayName) has no setter
         // on the Model API interfaces, only on the module class itself, where OdcAppFactory sets it when it creates an
         // app. Only that property of the module is reached this way.
@@ -792,6 +900,8 @@ public sealed partial class ModelSession
             // C27 (ODC): an expression property parsed by the platform takes the same rewrites as IExpression.Text.
             if (pi.PropertyType.FullName == "OutSystems.Model.Expressions.ExpressionDefinition" && value is JsonValue dv && dv.TryGetValue<string>(out var definition))
                 value = JsonValue.Create(Expression(target, prop, definition, Req(op, "target")));
+            // A sort whose Attribute a normalization reversed (`-X`): the direction written is the declared one reversed.
+            if (prop == "SortDirection" && _sortFlips.Count > 0) value = SortDirectionValue(target, value);
             var converted = Convert(value, pi.PropertyType);
             // Mudar o DataType de um atributo que tem DefaultValue tipado pelo identificador (uma FK com
             // Entities.X.Y, ou um valor que deixa de caber no tipo novo) faz o proprio Verify do Studio lancar
@@ -859,14 +969,22 @@ public sealed partial class ModelSession
         {
             var text = value?.GetValue<string>() ?? "";
             // Left out (logic node default): the Max. Records of the aggregate it refreshes, or 50 when that is empty.
-            if (prop == "MaxRecords" && text.Trim().Length == 0) text = RefreshMaxRecords(refresh);
+            if (prop == "MaxRecords" && text.Trim().Length == 0 && !_verbatim) text = RefreshMaxRecords(refresh);
             preparationTiming.Dispose();
             using (NativePerformanceCapture.MeasureSet(target.GetType(), prop, "refreshDataSetter"))
                 if (prop == "StartIndex") refresh.SetStartIndex(text); else refresh.SetMaxRecords(text);
             return new JsonObject { ["set"] = prop, ["via"] = "Model API setter" };
         }
         // propriedade so-leitura que devolve uma expressao (Input.Variable, Button.Enabled, Dropdown.List, Aggregate.MaxRecords...): escreve o Text
-        if (pi != null && !pi.CanWrite && pi.GetValue(target) is IExpression expr)
+        // ODC (no IRecordMappings): a mapping (`Source mapTo { ... }`) is a conversion expression the platform builds from the
+        // whole text, which only the setter writes; the Text of an existing value holds its source alone (an edit wrote the
+        // mapping inside it: `... mapTo { ... } mapTo {  }`, a syntax error; re-check of 2026-10-12, probe E2 on ODC).
+        // Junction 24-1-final: on the ODC lane this branch writes such a value whole through OdcWholeValue (the 24.1 fixes,
+        // b5c28f8e), which also removes the conversion the value had (two assignments that trade places kept the old one when
+        // the mapping went to the setter below); the exclusion stays for any other runtime without mappings.
+        if (pi != null && !pi.CanWrite && pi.GetValue(target) is IExpression expr
+            && !(prop == "Value" && StudioAdapter.Runtime.Mappings == null && MessageExpectations.Lane != "odc" && value is JsonValue mapped && mapped.TryGetValue<string>(out var mappedText)
+                && Anvil.Reading.FlowMapping.Split(mappedText) != null && FindMethod(target, "Set" + prop, 1) != null))
         {
             // C27: plain words are the text they mean, Type:Entity/Attribute is Entity.Attribute; unbalanced quotes refuse.
             var expressionText = value is JsonValue ev && ev.TryGetValue<string>(out var given) ? Expression(target, prop, given, Req(op, "target")) : value?.ToString() ?? "";
@@ -874,7 +992,13 @@ public sealed partial class ModelSession
             // Preserve evaluation order: the source value conversion occurs at the
             // same write site, and only metadata identifies its diagnostic group.
             preparationTiming.Dispose();
+            if (prop == "Value" && MessageExpectations.Lane == "odc") {
+                if (OdcWholeValue(target, expressionText, Req(op, "target")) is { } whole) return whole;
+                // The value read again: with a conversion, the element's Value is the conversion, which OdcWholeValue removed.
+                if (pi.GetValue(target) is IExpression now) expr = now;
+            }
             using (NativePerformanceCapture.MeasureSet(target.GetType(), prop, "expression.Text")) expr.Text = expressionText;
+            OdcParsed(target, pi, prop, expressionText);
             if (op["empty"]?.GetValue<bool>() is true) ClearDefaults(target);
             return new JsonObject { ["set"] = prop, ["via"] = "expression.Text" };
         }
@@ -934,13 +1058,16 @@ public sealed partial class ModelSession
         // lentidao 2026-10-12 (cause 2): a documentation property this type has no way to write (IUserException.Description) is
         // dropped and listed (normalizations), never refused; any other property stays PROPERTY_NOT_WRITABLE.
         if (Preflight.JobNormalizer.Droppable(prop))
-        {
-            var raw = _applyOps != null && _applyIndex < _applyOps.Count && _applyOps[_applyIndex]?["op"]?.ToString() == "set";
-            var at = OpsPointer != null && _applyOps != null && _applyIndex < _applyOps.Count ? $"{OpsPointer}/{_applyIndex}" + (raw ? "/prop" : "") : null;
-            Normalized([Preflight.JobNormalizer.Dropped(at, ShortType(target), prop, op["target"]?.ToString() ?? Describe(target))]);
-            return new JsonObject { ["set"] = prop, ["dropped"] = true, ["via"] = $"dropped: {ShortType(target)} has no way to write {prop}" };
-        }
+            return DropDocumentation(target, prop, op);
         throw new InvalidOperationException(PropertyError(target, prop));
+    }
+
+    private JsonObject DropDocumentation(object target, string prop, JsonObject op)
+    {
+        var raw = _applyOps != null && _applyIndex < _applyOps.Count && _applyOps[_applyIndex]?["op"]?.ToString() == "set";
+        var at = OpsPointer != null && _applyOps != null && _applyIndex < _applyOps.Count ? $"{OpsPointer}/{_applyIndex}" + (raw ? "/prop" : "") : null;
+        Normalized([Preflight.JobNormalizer.Dropped(at, ShortType(target), prop, op["target"]?.ToString() ?? Describe(target))]);
+        return new JsonObject { ["set"] = prop, ["dropped"] = true, ["via"] = $"dropped: {ShortType(target)} has no way to write {prop}" };
     }
 
     /// <summary>O par Add*/Remove* (um so de cada) que recebe um array do tipo de elemento da lista `list`.</summary>
@@ -1129,6 +1256,7 @@ public sealed partial class ModelSession
         // action); isso nao e uma copia: o job inteiro desfaz-se.
         if (copy is ServiceStudio.Model.AbstractObject pasted && pasted.AbstractObjectKind != source.AbstractObjectKind)
             throw new InvalidOperationException($"duplicate: {Describe(owner)} turned the copy of {Describe(target)} into {Describe(copy)}; that is a conversion, not a copy: pick a parent of the same kind as {Describe(target.Parent ?? (object)_es)}");
+        _lastWritten = copy;
         if (op["as"]?.GetValue<string>() is { } alias) Register(alias, copy);
         if (_byKey != null && copy.ObjectKey != null) _byKey[copy.ObjectKey.ToString()!] = copy;
         var summary = Summary(copy);
@@ -1730,11 +1858,136 @@ public sealed partial class ModelSession
             }
             // ODC: writable expression properties (static record values, defaults) hold a parsed ExpressionDefinition,
             // where SS11 exposes a read-only IExpression whose Text is written. Same text, parsed by the platform.
-            if (t.FullName == "OutSystems.Model.Expressions.ExpressionDefinition")
-                return t.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static, [typeof(string)])!.Invoke(null, [s]);
+            if (t.FullName == "OutSystems.Model.Expressions.ExpressionDefinition") return ParseDefinition(t, s);
             return System.Convert.ChangeType(s, t);
         }
         throw new InvalidOperationException($"cannot convert {value.GetType().Name} to {t.Name}");
+    }
+
+    /// <summary>
+    /// ODC: the value of an assignment or an argument keeps its record mapping in a conversion of its own (its
+    /// ValueTypeConversion, as O11 does), which the platform reads into the value's text (Src mapTo { Total: Amount }). Written as
+    /// the text of the value, a mapping or a record literal is not parsed (the text parser reads neither: NotParsedExpression),
+    /// and the conversion there wraps whatever the text says (Src mapTo { new } mapTo { old }). Such a value is written whole
+    /// through the element's setter (the parsed definition: the conversion it says, or the literal), after the conversion
+    /// there is removed; a plain value over a conversion removes it first too (the developer's mapping the text left out, or
+    /// the automatic one of the value before, which would stay hidden around the new value: the platform makes its automatic
+    /// conversion again where the types differ). Null: written as text, as before.
+    /// </summary>
+    private JsonObject? OdcWholeValue(object target, string text, string path)
+    {
+        var mapping = Anvil.Reading.FlowMapping.Split(text) != null;
+        var literal = !mapping && Anvil.Reading.FlowMapping.SplitRecord(text) != null;
+        var conversion = (target as IObjectSignature)?.Children.OfType<IObjectSignature>().FirstOrDefault(c => Implements(c, "ITypeConversionExpression"));
+        if (!mapping && !literal && conversion == null) return null;
+        var setter = FindMethod(target, "SetValue", 1);
+        if (setter == null || setter.GetParameters()[0].ParameterType.FullName != "OutSystems.Model.Expressions.ExpressionDefinition") return null;
+        if (conversion != null) ApplyOne(new JsonObject { ["op"] = "delete", ["target"] = "@" + conversion.ObjectKey, ["force"] = true });
+        if (!mapping && !literal) return null;
+        var definitionType = setter.GetParameters()[0].ParameterType;
+        // A record literal into an argument is built with the record type the argument takes (a generic Element takes it from
+        // the List), with the scope of the action as it is now: untyped, the platform retypes it while it fills its fields and
+        // fails ("Cannot create an object under a deleted parent"); tried again at most twice, as the platform settles the type.
+        for (var attempt = 0; ; attempt++) {
+            if (literal) RefreshScopes(target);
+            var definition = (literal && ArgumentRecordType(target) is { } concrete && definitionType.GetNestedType("RecordLiteral") is { } literalType
+                ? RecordLiteral(definitionType, literalType, Anvil.Reading.FlowMapping.SplitRecord(text)!, definitionType.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static, [typeof(string)])!, concrete)
+                : null) ?? Convert(JsonValue.Create(text), definitionType);
+            RememberValue(target, "Value", Remembered(definition, JsonValue.Create(text)), path);
+            try {
+                using (NativePerformanceCapture.MeasureSet(target.GetType(), "Value", "setter.Invoke")) setter.Invoke(target, [definition]);
+                break;
+            } catch (TargetInvocationException error) when (literal && attempt < 2 && error.GetBaseException() is InvalidOperationException { Message: var message }
+                && message.Contains("deleted parent", StringComparison.Ordinal)) { }
+        }
+        OdcParsed(target, FindProperty(target, "Value"), "Value", text);
+        return new JsonObject { ["set"] = "Value", ["via"] = setter.Name, ["conversion"] = conversion == null ? null : "replaced" };
+    }
+
+    // The record type an argument takes (ConcreteParameterType): a generic one (ListAppend's Element) takes it from another
+    // argument of the call (its List, written before it: ApplyFlowText's order of the arguments); while the platform has not
+    // typed it, the item type of the list another argument names, when that is a parameter or local of the action.
+    private static object? ArgumentRecordType(object argument)
+    {
+        if (ModelHost.Prop(argument, "ConcreteParameterType") is { } concrete) return concrete;
+        if (argument is not IObjectSignature { Parent: IObjectSignature call } || call.Parent is not IObjectSignature action) return null;
+        var siblings = call.Children.OfType<IObjectSignature>().Where(c => !ReferenceEquals(c, argument) && Implements(c, "IArgument")).ToList();
+        foreach (var sibling in siblings) {
+            if (ModelHost.Prop(sibling, "Value") is not IExpression { Text: { } named } || !Anvil.Reading.FlowSyntax.IsIdentifier(named.Trim())) continue;
+            var variable = action.Children.OfType<IObjectSignature>().FirstOrDefault(c => !c.WasDeleted && (Implements(c, "ILocalVariable") || Implements(c, "IInputParameter") || Implements(c, "IOutputParameter"))
+                && string.Equals(ModelHost.Prop(c, "Name")?.ToString(), named.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (variable != null && ModelHost.Prop(variable, "DataType") is OutSystems.Model.Types.IListType list) return list.ElementType;
+        }
+        return null;
+    }
+
+    /// <summary>The scope caches of an element and its owners up to the module dropped (the platform's own invalidation): an
+    /// expression parsed next sees what the same command created before it (a local, a call node), which a cached scope of the
+    /// action does not have yet.</summary>
+    internal static void RefreshScopes(object element)
+    {
+        for (var at = element as IObjectSignature; at != null; at = at.Parent as IObjectSignature) {
+            foreach (var name in new[] { "InvalidateTopLevelScopeEntriesCaches", "IncreaseScopeEntryChildrenGeneration" })
+                at.GetType().GetMethod(name, BindingFlags.Public | BindingFlags.Instance, Type.EmptyTypes)?.Invoke(at, null);
+            if (Implements(at, "IESpace")) break;
+        }
+    }
+
+    // ODC: an expression the platform keeps as text it could not parse (NotParsedExpression) reads back as the text written and
+    // means nothing (the Verify refuses it: ParserUnexpectedElement): refused at the write, with the element and the value.
+    private static void OdcParsed(object target, PropertyInfo? property, string prop, string text)
+    {
+        if (MessageExpectations.Lane != "odc" || text.Trim().Length == 0 || property?.GetValue(target) is not { } now || now.GetType().Name != "NotParsedExpression") return;
+        var message = "the platform keeps " + prop + " = `" + (text.Length <= 160 ? text : text[..160] + "...") + "` of " + Describe(target) + " as text it does not parse (the Verify refuses it)";
+        throw new KernelRefusalException("FLOW_NOT_EXACT", "set " + prop + ": " + message,
+            new JsonArray(JobPreflight.PublicProblem(JobPreflight.Problem(null, null, "FLOW_NOT_EXACT", "error", message,
+                "write the value in a form the platform parses (a record literal only as an argument, a mapping as Source mapTo { Field: value }); nothing was kept"))));
+    }
+
+    // ODC: the platform parses the text. Its reading of a mapping (Source mapTo { Field: value, ... }) splits the fields at
+    // every comma, even inside a call or a text (If(a, b, c); Replace(x, ",", "")), so a mapping the platform itself prints
+    // can fail to parse back ("Missing colon separator in mapping"). Then the mapping is built from its parts: the source and
+    // each field and value, every one parsed by the platform (FlowMapping splits them as the text grammar scans).
+    private static object ParseDefinition(Type t, string text)
+    {
+        var parse = t.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static, [typeof(string)])!;
+        try {
+            var parsed = parse.Invoke(null, [text])!;
+            // A record literal the parser read as something else (its text kept unparsed): built from its fields, as below.
+            if (Anvil.Reading.FlowMapping.SplitRecord(text) is { } fieldsOf && t.GetNestedType("RecordLiteral") is { } literalType && !literalType.IsInstanceOfType(parsed)
+                && RecordLiteral(t, literalType, fieldsOf, parse) is { } built) return built;
+            return parsed;
+        }
+        catch (TargetInvocationException error) when (error.InnerException is ArgumentException && Anvil.Reading.FlowMapping.Split(text) is { } mapping
+            && t.GetNestedType("TypeConversion") is { } conversion)
+        {
+            var pair = typeof(ValueTuple<,>).MakeGenericType(t, t);
+            var fields = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(pair))!;
+            foreach (var (field, value) in mapping.Fields) fields.Add(Activator.CreateInstance(pair, parse.Invoke(null, [field]), ParseDefinition(t, value)));
+            var build = conversion.GetConstructor([t, typeof(IEnumerable<>).MakeGenericType(pair)]) ?? throw error.InnerException!;
+            return build.Invoke([ParseDefinition(t, mapping.Source), fields]);
+        }
+        // The same reading of a record literal ({ Field: value, ... }) splits its fields at every comma too ("Missing colon
+        // separator in record field"): the literal is built from its fields, each value parsed by the platform, without a type
+        // (as the platform's own reading of a literal leaves it).
+        catch (TargetInvocationException error) when (error.InnerException is ArgumentException && Anvil.Reading.FlowMapping.SplitRecord(text) is { } record
+            && t.GetNestedType("RecordLiteral") is { } literal)
+        {
+            return RecordLiteral(t, literal, record, parse) ?? throw error.InnerException!;
+        }
+    }
+
+    // A record literal built from its fields, each value parsed by the platform, of the record type given (or without one);
+    // null when the definition type has no constructor for it (or none that takes that type).
+    private static object? RecordLiteral(Type t, Type literal, List<(string Field, string Value)> record, MethodInfo parse, object? type = null)
+    {
+        var pair = typeof(ValueTuple<,>).MakeGenericType(typeof(string), t);
+        var build = literal.GetConstructors().FirstOrDefault(c => c.GetParameters() is { Length: 2 } ps && ps[1].ParameterType == typeof(IEnumerable<>).MakeGenericType(pair)
+            && (type == null || ps[0].ParameterType.IsInstanceOfType(type)));
+        if (build == null) return null;
+        var fields = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(pair))!;
+        foreach (var (field, value) in record) fields.Add(Activator.CreateInstance(pair, field, ParseDefinition(t, value)));
+        return build.Invoke([type, fields]);
     }
 
     // `iface` = a interface qualificada que o objecto declara (GetInterface().FullName): o `type` curto e ambiguo no ODC
@@ -1937,8 +2190,10 @@ public sealed partial class ModelSession
             if (!string.Equals(final, name, StringComparison.Ordinal))
                 throw new InvalidOperationException($"rename: '{name}' clashes with an existing name in that scope (the Studio would use '{final}'); pick another name");
         }
+        if (prop == "Name" && !_verbatim && !string.Equals(oldName, name, StringComparison.OrdinalIgnoreCase)) RenameCaptured(target, oldName, name);
         var before = Consumers(target);
         var textsBefore = before.Select(c => (c.Referer as IExpression)?.Text).ToList();
+        var typeBefore = prop == "Name" ? TypeOfElement(target) : null;
         var assertionsBefore = SnapshotAssertions();   // o que o contrato de dados le agora; o que mudar DURANTE o rename e reescrita da plataforma
         // Um tipo do modelo implementa varias interfaces e mais do que uma pode declarar a mesma propriedade; a ordem de
         // Type.GetInterfaces() NAO e garantida pelo CLR, por isso "a primeira escrevivel" e uma aposta. Foi esta mesma
@@ -1963,6 +2218,7 @@ public sealed partial class ModelSession
             throw new InvalidOperationException(
                 $"rename: {ShortType(target)} accepted the write to {prop} and kept '{oldName}' -- this type cannot be "
                 + "renamed through the model API. Recreate the object with the new name, or rename it in the Studio UI.");
+        var typeKept = typeBefore is { } kept ? KeepType(target, kept) : null;
         var after = Consumers(target);
         var propagated = 0;
         for (var i = 0; i < before.Count; i++)
@@ -1975,9 +2231,115 @@ public sealed partial class ModelSession
         {
             ["renamed"] = prop == "Name" ? Describe(target) : $"{ShortType(target)} '{NameOf(target, prop)}'", ["property"] = prop,
             ["from"] = oldName, ["to"] = name, ["consumers"] = after.Count, ["expressionsRewritten"] = propagated,
-            ["dataContractRewrites"] = absorbed,
+            ["dataContractRewrites"] = absorbed, ["typeKept"] = typeKept,
             ["note"] = "consumers stay linked by key; check literals/descriptions/URLs/CSS by hand (they do not propagate); values this job wrote that the platform rewrote during the rename are expected as rewritten (dataContract.assertions[].platformRewrites)",
         };
+    }
+
+    /// <summary>The raw rename of a parameter or local (of an action, or a variable of a screen or block) onto a name a mapping
+    /// that names it reads first as an attribute of its source (Source mapTo { Field: Old }: inside the mapping the source's
+    /// attributes come first): the value would read that attribute after the rename, and the next read prints it the same.
+    /// Refused as the logic text refuses it (FLOW_RENAME_CAPTURED, with a free name); a text checks its own renames before it is
+    /// written (RenameCaptures), so this runs for the raw verb only.</summary>
+    private void RenameCaptured(object target, string from, string to)
+    {
+        if (target is IObjectSignature { Parent: IObjectSignature record } attribute && (Implements(record, "IEntitySignature") || Implements(record, "IStructureSignature"))
+            && new KernelModelReader().KindOf(attribute).EndsWith("Attribute", StringComparison.Ordinal)) { AttributeRenameCaptured(attribute, record, from, to); return; }
+        if (!(Implements(target, "IInputParameter") || Implements(target, "IOutputParameter") || Implements(target, "ILocalVariable"))
+            || target is not IObjectSignature { Parent: IObjectSignature parent } element) return;
+        var reader = new KernelModelReader();
+        var actions = Anvil.Reading.ModuleFlow.ActionKinds.Contains(reader.KindOf(parent)) ? [parent]
+            : Anvil.Reading.FlowOwners.IsOwner(reader, parent) ? reader.ChildrenOf(parent).Where(c => Anvil.Reading.ModuleFlow.ActionKinds.Contains(reader.KindOf(c))).ToList()
+            : new List<IObjectSignature>();
+        var extractor = new Anvil.Reading.FlowExtractor<IObjectSignature>(reader, (IObjectSignature)_es);
+        foreach (var action in actions) {
+            Anvil.Reading.FlowItem item;
+            try { item = extractor.Action(action, out _); } catch (Exception error) when (error is InvalidOperationException or KeyNotFoundException or NotSupportedException) { continue; }
+            if (RenameCapture(item, from, to) is not { } capture) continue;
+            var message = "rename: " + reader.KindOf(element) + " " + capture.Message + " (in " + reader.KindOf(action) + " " + reader.NameOf(action) + ")";
+            throw new KernelRefusalException("FLOW_RENAME_CAPTURED", message,
+                new JsonArray(JobPreflight.PublicProblem(JobPreflight.Problem(null, null, "FLOW_RENAME_CAPTURED", "error", message, capture.Fix))));
+        }
+    }
+
+    /// <summary>The rename of an attribute of an entity or structure (the raw verb, and the data text's rename, which runs it) onto
+    /// a name a mapping of that record reads in a field value as another element (a parameter, a local, a node, a variable of the
+    /// screen): inside the mapping the source's attributes come first, so after the rename that value reads the attribute, the
+    /// next read prints the same text and the action means something else (correction 2: SrcRow.Note renamed Prefix, and
+    /// `Src mapTo { Key: Prefix + Code }` went from the input Prefix to Src.Prefix). Refused (FLOW_RENAME_CAPTURED) with a free
+    /// name. Only the actions in whose scope an element of the new name is are read.</summary>
+    private void AttributeRenameCaptured(IObjectSignature attribute, IObjectSignature record, string from, string to)
+    {
+        var reader = new KernelModelReader();
+        var attributes = reader.ChildrenOf(record).Where(c => reader.KindOf(c).EndsWith("Attribute", StringComparison.Ordinal)).Select(reader.NameOf)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var root = (IObjectSignature)_es;
+        var actions = new List<IObjectSignature>();
+        foreach (var element in reader.Walk(root)) {
+            if (element.WasDeleted || ReferenceEquals(element, attribute) || !string.Equals(reader.NameOf(element), to, StringComparison.OrdinalIgnoreCase)
+                || reader.KindOf(element).EndsWith("Attribute", StringComparison.Ordinal)) continue;
+            for (var at = element.Parent as IObjectSignature; at != null && !ReferenceEquals(at, root); at = at.Parent as IObjectSignature) {
+                if (Anvil.Reading.ModuleFlow.ActionKinds.Contains(reader.KindOf(at))) { actions.Add(at); break; }
+                if (Anvil.Reading.FlowOwners.IsOwner(reader, at)) { actions.AddRange(reader.ChildrenOf(at).Where(c => Anvil.Reading.ModuleFlow.ActionKinds.Contains(reader.KindOf(c)))); break; }
+            }
+        }
+        if (actions.Count == 0) return;
+        var extractor = new Anvil.Reading.FlowExtractor<IObjectSignature>(reader, root);
+        foreach (var action in actions.Distinct()) {
+            Anvil.Reading.FlowItem item;
+            try { item = extractor.Action(action, out _); } catch (Exception error) when (error is InvalidOperationException or KeyNotFoundException or NotSupportedException) { continue; }
+            foreach (var (source, fields) in Anvil.Reading.FlowMapping.MappingsOf(item)) {
+                // The mapping reads this record: its source typed as it (the same attributes), or, untyped, a field value that
+                // names the renamed attribute.
+                var typed = SourceAttributes(source, item);
+                if (typed != null ? !(typed.Contains(from) && typed.SetEquals(attributes)) : !fields.Any(f => Anvil.Reading.FlowEdits.Renamed(f.Value, from, "\u0001") != f.Value)) continue;
+                var at = fields.FindIndex(f => Anvil.Reading.FlowEdits.Renamed(f.Value, to, "\u0001") != f.Value);
+                if (at < 0) continue;
+                var named = fields[at];
+                var taken = new HashSet<string>(attributes.Concat(item.Items.Where(i => Anvil.Reading.FlowItem.Keyed(i.Role)).Select(i => i.Name)), StringComparer.OrdinalIgnoreCase);
+                var free = Anvil.Reading.FlowDiff.Numbered(to, taken.Contains);
+                var message = "rename: " + reader.KindOf(attribute) + " " + reader.NameOf(record) + "." + from + " is renamed " + to + ", and the mapping `" + source + " mapTo { ... }` of "
+                    + reader.KindOf(action) + " " + reader.NameOf(action) + " reads " + to + " in the field value `" + named.Field + ": " + named.Value + "` as another element"
+                    + (typed != null ? "" : " (the module could not type `" + source + "`; its values name " + from + ")")
+                    + ": inside a mapping the attributes of its source come first, so after the rename the value would read the attribute " + to + " instead";
+                throw new KernelRefusalException("FLOW_RENAME_CAPTURED", message,
+                    new JsonArray(JobPreflight.PublicProblem(JobPreflight.Problem(null, null, "FLOW_RENAME_CAPTURED", "error", message,
+                        "give the attribute a name no element that mapping reads has, e.g. " + free))));
+            }
+        }
+    }
+
+    /// <summary>The type of an element that has one (attribute, variable, parameter) and its size, as written.</summary>
+    private (PropertyInfo Property, object? Type, string? Length, string? Decimals)? TypeOfElement(object target)
+    {
+        if (FindProperty(target, "DataType") is not { CanRead: true, CanWrite: true } property) return null;
+        object? type;
+        try { type = property.GetValue(target); } catch { return null; }
+        return (property, type, SizeText(target, "Length"), SizeText(target, "Decimals"));
+    }
+
+    private string? SizeText(object target, string name)
+    {
+        object? value;
+        try { value = FindProperty(target, name)?.GetValue(target); } catch { return null; }
+        return value is IExpression expression ? expression.Text : value?.ToString();
+    }
+
+    /// <summary>DL2: a rename changes only the name. Writing the Name of an attribute (or of a variable or parameter) makes the
+    /// platform guess a type from the new name: renaming the structure attribute Nome (Text 200) to NomeProduto turned it into
+    /// the Produto record and dropped its length (Service Studio 11, 2026-10-11). The type and the size it had are written
+    /// back; the result names what the platform had changed (typeKept), null when it changed nothing.</summary>
+    private JsonObject? KeepType(object target, (PropertyInfo Property, object? Type, string? Length, string? Decimals) before)
+    {
+        var now = TypeOfElement(target);
+        if (now == null || Equals(now.Value.Type, before.Type) && now.Value.Length == before.Length && now.Value.Decimals == before.Decimals) return null;
+        var guessed = new JsonObject { ["type"] = now.Value.Type == null ? null : TypeResolver.Name(now.Value.Type) ?? now.Value.Type.ToString(), ["length"] = now.Value.Length, ["decimals"] = now.Value.Decimals };
+        before.Property.SetValue(target, before.Type);
+        foreach (var (size, text) in new[] { ("Length", before.Length), ("Decimals", before.Decimals) })
+            if (SizeText(target, size) != text && FindProperty(target, size) != null)
+                SetCore(target, new JsonObject { ["op"] = "set", ["target"] = "@" + ((IObjectSignature)target).ObjectKey, ["prop"] = size, ["value"] = text == null ? null : JsonValue.Create(text) });
+        return new JsonObject { ["guessed"] = guessed, ["kept"] = new JsonObject { ["type"] = before.Type == null ? null : TypeResolver.Name(before.Type) ?? before.Type.ToString(),
+            ["length"] = before.Length, ["decimals"] = before.Decimals } };
     }
 
     /// <summary>

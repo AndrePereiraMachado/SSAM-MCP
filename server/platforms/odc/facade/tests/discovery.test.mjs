@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireBytes } from './fixtures/answer-wire.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,6 +11,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { applicationContext, applyBudget, bindingsOf, buildIndex, classifyExecutions, closure, discover, identityKey, jobLevel, laneSources, levelOf, nativeCacheKey, normalize, parseDiscoverArguments, parseExpand, query, signatureOf, tokens, validateDescriptor, DEFAULT_BUDGET_BYTES, DISCOVERY_SCHEMA, INDEX_SCHEMA } from '../discovery.mjs';
 import { createFacadeServer } from '../mcp.mjs';
 import { root as odcRoot } from '../lib.mjs';
+import { snapshotSources } from './fixtures/discovery-results.mjs';
 
 // The engine is measured over the base catalog: the fronts' fragments (catalog/fragments) are left out here, since the
 // catalog tests compose them (request C-004: base assertions must not depend on what a front delivered).
@@ -710,13 +712,15 @@ test('the budget is measured on the answer as returned: at every budget it is wi
 // ---- the real index over the ODC lane sources (needs the built anvil-odc CLI)
 test('the ODC index is built from the kernel CLI and the job suite, classifies results strictly, and is reused by identity', { skip: !cliBuilt && 'anvil-odc CLI not built', timeout: 120000 }, async () => {
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-discovery-'));
-  const isolated = { ...sources, cacheDir };
+  // Built twice and compared by identity: the results come from the committed snapshot, which no suite of this checkout
+  // rewrites between the two builds (fixtures/discovery-results.mjs).
+  const isolated = snapshotSources('odc', { fragments: BASE_ONLY, cacheDir });
   try {
     const first = await buildIndex('odc', { sources: isolated, rebuild: true });
     const index = first.index;
     assert.equal(index.schemaVersion, INDEX_SCHEMA);
-    for (const op of ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-expose', 'soap']) assert.ok(index.contracts[op] && !index.contracts[op].error, op);
-    assert.deepEqual(Object.keys(index.contracts.verbs.verbs).sort(), ['agent', 'create', 'delete', 'dump', 'duplicate', 'find', 'get', 'html', 'layout', 'link', 'logic', 'move', 'prototype', 'reference', 'rename', 'replace', 'rest', 'rest-expose', 'screen', 'set', 'soap', 'spec', 'usages']);
+    for (const op of ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-consume', 'rest-expose', 'soap', 'entity-actions']) assert.ok(index.contracts[op] && !index.contracts[op].error, op);
+    assert.deepEqual(Object.keys(index.contracts.verbs.verbs).sort(), ['agent', 'create', 'delete', 'dump', 'duplicate', 'entity-actions', 'find', 'get', 'html', 'layout', 'link', 'logic', 'move', 'prototype', 'reference', 'rename', 'replace', 'rest', 'rest-consume', 'rest-expose', 'screen', 'set', 'soap', 'spec', 'usages']);
     assert.ok(index.jobs.length >= 67, 'jobs: ' + index.jobs.length);
     assert.ok(index.jobs.every(j => typeof j.description === 'string' && j.opCount > 0 && /^[0-9a-f]{64}$/.test(j.sha256) && Array.isArray(j.bindings)));
     for (const j of index.jobs.filter(j => j.executed)) {
@@ -817,7 +821,7 @@ test('expansions return exactly the parts named, within the budget, for several 
   assert.equal(one.expansions['logic.aggregate'].example.job, 'aggregate-full');
   assert.ok(one.expansions['contract:logic.steps.get'].includes('where'));
   assert.equal(one.expansions['native:IDropdown'].provenance, 'A');
-  assert.ok(one.size.bytes <= one.size.budgetBytes);
+  assert.ok(wireBytes(one) <= one.size.budgetBytes);
   assert.deepEqual(one.problems, []);
   // --detail is the single-capability form; the example is flagged as a fragment when cut; evidence carries the proofs.
   const detail = await discover({ lane: 'odc', detail: 'data.entity', sources });
@@ -836,7 +840,7 @@ test('answers respect the byte budget, keep contracts and examples of a composit
   const answer = await discover({ lane: 'odc', intent: 'formulário com dropdown pesquisável, carregar dados e salvar', sources });
   assert.equal(answer.ok, true);
   assert.equal(answer.size.budgetBytes, DEFAULT_BUDGET_BYTES);
-  assert.ok(answer.size.bytes <= answer.size.budgetBytes, 'bytes: ' + answer.size.bytes);
+  assert.ok(wireBytes(answer) <= answer.size.budgetBytes, 'bytes: ' + answer.size.bytes);
   assert.equal(answer.size.bytes, Buffer.byteLength(JSON.stringify(answer), 'utf8'));
   assert.ok(!answer.size.truncated.some(t => ['contracts', 'examples', 'matches.dependencies'].includes(t.section)), 'reductions: ' + JSON.stringify(answer.size.truncated));
   for (const m of answer.matches.filter(x => x.via === 'match')) if (answer.examples[m.id]) assert.ok(answer.examples[m.id].ops.length > 0 && typeof answer.examples[m.id].fragment === 'boolean');
@@ -849,7 +853,7 @@ test('answers respect the byte budget, keep contracts and examples of a composit
   for (const alt of answer.matches.filter(m => m.via === 'alternative')) { assert.ok(alt.reason && alt.expand === alt.id, JSON.stringify(alt)); assert.equal(alt.contract, undefined); }
   const tight = await discover({ lane: 'odc', intent: 'formulário com dropdown pesquisável, carregar dados e salvar', sources, budgetBytes: 8192 });
   assert.ok(tight.size.truncated.length >= 4 && tight.size.truncated.every(t => t.recover), JSON.stringify(tight.size.truncated));
-  assert.ok(tight.size.bytes <= 8192 && ['reduced', 'insufficient'].includes(tight.size.status), 'hard budget: ' + tight.size.bytes + ' ' + tight.size.status);
+  assert.ok(wireBytes(tight, { budgetBytes: 8192 }) <= 8192 && ['reduced', 'insufficient'].includes(tight.size.status), 'hard budget: ' + tight.size.bytes + ' ' + tight.size.status);
 });
 
 // ---- application context through the real reader over the fixture (read-only; never contacts the Studio)
@@ -865,7 +869,7 @@ test('with a capture, the composite answer carries the signatures the intent nam
   assert.ok(dropdown.inputs.find(i => i.name === 'OptionsList')?.mandatory === true);
   assert.ok(dropdown.events.find(e => e.name === 'OnChanged')?.parameters.some(p => p.name === 'SelectedOptionList'));
   assert.ok(answer.matches.find(m => m.id === 'ui.screen')?.existingInCapture?.length, 'existing screens');
-  assert.ok(answer.size.bytes <= answer.size.budgetBytes, 'bytes: ' + answer.size.bytes + ' ' + JSON.stringify(answer.size.truncated));
+  assert.ok(wireBytes(answer, { app: fixture }) <= answer.size.budgetBytes, 'bytes: ' + answer.size.bytes + ' ' + JSON.stringify(answer.size.truncated));
   const one = await discover({ lane: 'odc', expand: 'element:MobileBlockSignature:DropdownSearch', app: fixture, sources, inspect });
   assert.equal(one.ok, true);
   const el = one.expansions['element:MobileBlockSignature:DropdownSearch'];

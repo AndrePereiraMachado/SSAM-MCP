@@ -6,7 +6,7 @@ import {isUuid} from './write-journal.mjs';
 export const LIBRARY_RELEASE='libraries.release';
 export const LIBRARY_PUBLISH='deployments-api-v1:post:/publish-operations';
 const sha=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const bad=()=>fail('AUTHORIZATION_CONTEXT_INVALID','Library release requires a bound proposal for an agent-created library, its published revision and exact version/notes. Nothing was sent.');
+const bad=()=>fail('AUTHORIZATION_CONTEXT_INVALID','Library release requires a bound proposal (an agent-created library by originOperationUuid, or an existing library by preExisting:true with scope targets naming the library and the tenant host), its published revision and exact version/notes. Nothing was sent.');
 
 export async function libraryPublicationApproval({file,words,host,input,originOperationUuid,lookup,read}) {
  const bad=()=>fail('AUTHORIZATION_CONTEXT_INVALID','Publication requires a bound proposal for an agent-created supported asset, exact revision and environment. Nothing was sent.');
@@ -34,12 +34,16 @@ export async function libraryReleaseApproval({file,words,host,raw,lookup,read}) 
    ||typeof input.ReleaseNotes!=='string'||input.ReleaseNotes.length>10000)bad();
  let constraints;
  try {if(fs.statSync(file).size>32768)bad();constraints=JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{bad();}
- if(!isUuid(constraints?.originOperationUuid)||!isUuid(constraints?.publicationKey)
+ // Owner decision 2026-10-14: a library SSAM did not create (preExisting:true, no origin receipt) is released only with the
+ // user's explicit approval recorded in the context file, whose scope names the library AND the tenant host; the base
+ // revision and its publication are verified exactly as for an own library.
+ const preExisting=constraints?.preExisting===true&&constraints.originOperationUuid===undefined;
+ if((!preExisting&&!isUuid(constraints?.originOperationUuid))||!isUuid(constraints?.publicationKey)
    ||constraints.expectedTag!==null)bad();
- const origin=lookup(constraints.originOperationUuid);
- if(!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.tenant!==host
+ const origin=preExisting?null:lookup(constraints.originOperationUuid);
+ if(!preExisting&&(!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.tenant!==host
    ||origin.identity.operationId!=='asset-repository-api-v1:post:/assets'
-   ||origin.response?.assetKey!==input.ApplicationKey||!origin.authorization?.source)bad();
+   ||origin.response?.assetKey!==input.ApplicationKey||!origin.authorization?.source))bad();
  const path={assetKey:input.ApplicationKey,revisionNumber:input.Revision};
  const revision=await read('asset-repository-api-v1:get:/assets/{assetKey}/revisions/{revisionNumber}',path);
  const current=await read('asset-repository-api-v1:get:/assets/{assetKey}',{assetKey:input.ApplicationKey});
@@ -48,14 +52,18 @@ export async function libraryReleaseApproval({file,words,host,raw,lookup,read}) 
    ||revision.data.tag!==null||!revision.data.name||current.data?.assetKey!==input.ApplicationKey
    ||current.data.revision!==input.Revision||current.data.name!==revision.data.name)
    fail('LIBRARY_RELEASE_BASE_UNVERIFIED','Exact current untagged low-code or mobile library revision was not verified. Nothing was sent.');
- const approval=authorizationContext(file,words,{lane:'odc',host,operation:LIBRARY_RELEASE,targets:[revision.data.name],
-  constraints:{originOperationUuid:constraints.originOperationUuid,publicationKey:constraints.publicationKey,expectedTag:null,inputSha256:sha(input)}});
- if(!approval||approval.source.threadId!==origin.authorization.source.threadId||approval.source.messageId!==origin.authorization.source.messageId)bad();
+ const approval=preExisting
+  ?authorizationContext(file,words,{lane:'odc',host,operation:LIBRARY_RELEASE,targets:[revision.data.name,host],
+    constraints:{preExisting:true,publicationKey:constraints.publicationKey,expectedTag:null,inputSha256:sha(input)}})
+  :authorizationContext(file,words,{lane:'odc',host,operation:LIBRARY_RELEASE,targets:[revision.data.name],
+    constraints:{originOperationUuid:constraints.originOperationUuid,publicationKey:constraints.publicationKey,expectedTag:null,inputSha256:sha(input)}});
+ if(!approval||(!preExisting&&(approval.source.threadId!==origin.authorization.source.threadId||approval.source.messageId!==origin.authorization.source.messageId)))bad();
  const publication=await read('deployments-api-v1:get:/publish-operations/{operationKey}',{operationKey:constraints.publicationKey});
  if(!publication?.ok||publication.data?.key!==constraints.publicationKey||publication.data.status!=='Finished'
    ||publication.data.assetKey!==input.ApplicationKey||publication.data.revision!==input.Revision||publication.data.operation!=='Publish')
    fail('LIBRARY_PUBLICATION_UNVERIFIED','The same library revision must have a verified successful publication before this release. Nothing was sent.');
- return approval;
+ // The receipt plan keeps the approval (plan.authorizationContext): an existing library's release stays marked as such.
+ return preExisting?{...approval,preExisting:true}:approval;
 }
 
 export async function verifyLibraryRelease(input,read) {

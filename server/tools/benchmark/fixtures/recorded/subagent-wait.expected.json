@@ -1,0 +1,72 @@
+{
+  "source": "recorded",
+  "records": 6,
+  "bytes": 4611,
+  "evidence": [
+    {
+      "type": "inter_agent_communication_metadata",
+      "timestamp": "2026-10-13T15:33:33.313Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "agent_message",
+      "timestamp": "2026-10-13T15:33:33.313Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "inter_agent_communication_metadata",
+      "timestamp": "2026-10-13T15:33:53.546Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "agent_message",
+      "timestamp": "2026-10-13T15:33:53.546Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "inter_agent_communication_metadata",
+      "timestamp": "2026-10-13T15:34:02.498Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "response_item",
+      "payloadType": "agent_message",
+      "timestamp": "2026-10-13T15:34:02.498Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    }
+  ],
+  "shrunk": [],
+  "removed": []
+}

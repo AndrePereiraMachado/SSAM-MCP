@@ -1,0 +1,97 @@
+{
+  "source": "recorded",
+  "records": 2,
+  "bytes": 5076,
+  "evidence": [
+    {
+      "type": "assistant",
+      "timestamp": "2026-10-13T14:05:17.222Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 19464,
+        "cache_read_input_tokens": 44164,
+        "output_tokens": 357,
+        "output_tokens_details": {
+          "thinking_tokens": 77
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "xxxxxxxx",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 19464,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "xxxxxx",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 357,
+            "cache_read_input_tokens": 44164,
+            "cache_creation_input_tokens": 19464,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 19464
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "xxxxxxxx",
+        "fallback_credit": null
+      },
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "assistant",
+      "timestamp": "2026-10-13T14:05:18.906Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 19464,
+        "cache_read_input_tokens": 44164,
+        "output_tokens": 357,
+        "output_tokens_details": {
+          "thinking_tokens": 77
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "xxxxxxxx",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 19464,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "xxxxxx",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 357,
+            "cache_read_input_tokens": 44164,
+            "cache_creation_input_tokens": 19464,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 19464
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "xxxxxxxx",
+        "fallback_credit": null
+      },
+      "tools": [
+        "ToolSearch"
+      ],
+      "markers": []
+    }
+  ],
+  "shrunk": [],
+  "removed": []
+}

@@ -249,6 +249,23 @@ test('publisher selection refusal is not a submitted write, while transport fail
   assert.equal((await life.publish(operation)).state,'uncertain');
 });
 
+test('F5: the debugger publication is in the producer ledger from its start to its proven end; an uncertain one stays running',async t=>{
+  const { unsafeUntil } = await import('../producer-signatures.mjs');
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'ssam-o11-publication-ledger-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const cache=path.join(root,'.local','producer-cache'),until=()=>unsafeUntil(cache,{environment:target.host,producer:target.module});
+  for(const state of ['published','uncertain']) {
+    const request={operationId:randomUUID(),...target,candidateSha256:'a'.repeat(64)},requestPath=path.join(root,state+'-request.json'),receiptPath=path.join(root,state+'-receipt.json');
+    o11Write(requestPath,request);
+    let during=null;
+    const life=createO11Lifecycle({root,cli:async()=>{during=until();return{operationId:request.operationId,candidateSha256:request.candidateSha256,moduleKey:target.moduleKey,host:target.host,state,versionId:state==='published'?2:undefined};}});
+    const result=await life.publish({requestPath,receiptPath,request,operationId:request.operationId});
+    assert.equal(result.state,state);
+    assert.ok(during>Date.now(),'recorded before the native publication');
+    if(state==='published') assert.ok(until()<=Date.now(),'ended by the published receipt');
+    else assert.ok(until()>Date.now(),'an uncertain publication stays running');
+  }
+});
+
 test('reconciliation preserves write request bytes and never resends an uncertain publication',async t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'ssam-o11-publication-read-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const request={operationId:randomUUID(),...target,baseVersionId:1,candidateSha256:'a'.repeat(64),receiptDirectory:root},

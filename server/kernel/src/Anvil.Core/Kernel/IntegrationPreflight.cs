@@ -17,6 +17,7 @@ public static class IntegrationOps
             IEnumerable<IntegrationProblem> problems = op["op"]?.ToString() switch
             {
                 "rest" => RestExpander.Validate(data, lane),
+                "rest-consume" => RestConsume.Validate(data, lane),
                 "rest-expose" => RestExposeExpander.Validate(data),
                 "soap" when lane == "odc" => [new IntegrationProblem("SOAP_LANE_UNSUPPORTED", "/data", "soap: SOAP is not available on ODC (the platform consumes REST only)",
                     "consume the service through a REST facade (op rest), or an External Library that calls it")],

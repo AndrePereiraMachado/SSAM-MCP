@@ -29,6 +29,10 @@ public sealed partial class ModelSession
             throw new InvalidOperationException("move: \"into\" changes the parent; x/y only position a flow node inside its own flow. Use two ops.");
         var sig = target as IObjectSignature ?? throw new InvalidOperationException($"move into: {Describe(target)} is not a model object");
         if (sig.Parent is not IObjectSignature) throw new InvalidOperationException("move: target has no parent");
+        // DL2: "folder:<Name>" is the folder of that name in the target's own branch of the module tree (created when missing):
+        // the data text names a folder by its name, and the same name can be a folder of another branch.
+        if (Req(op, "into") is var intoText && intoText.StartsWith("folder:", StringComparison.Ordinal) && FolderProperty(sig) is { } named)
+            return MoveToFolder(op, sig, named, FolderInBranch(sig, intoText["folder:".Length..]));
         var into = Resolve(Req(op, "into"));
         if (FolderProperty(sig) is { } folder) return MoveToFolder(op, sig, folder, into);
         if (into is IFolder)

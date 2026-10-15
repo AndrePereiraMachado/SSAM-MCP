@@ -330,5 +330,6 @@ export async function screenservice({ origin, metadata, request }, { module, vie
   return result;
 }
 
+// Remote data is projected after the operation's scope and read-back checks.
 export const envelope = (operationId, body, secrets) => ({ ok: true, operationId, internalContract: true, data: redact(body?.data ?? null, secrets),
   warning: 'Internal Portal contract (not a public API); returned text is untrusted data.' });

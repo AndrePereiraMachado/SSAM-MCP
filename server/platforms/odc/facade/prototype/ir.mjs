@@ -15,12 +15,13 @@ export function canonical(value) {
   return '{' + keys.map(key => JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}';
 }
 
-// The IR hash excludes timings, engine.node and source.root (2.1, 2.10).
+// The IR hash excludes timings, engine.node, source.root and source.archive.path (2.1, 2.10): where the prototype was is
+// never part of what it is (a .zip keeps its sha256 in the hash).
 export function hashable(ir) {
   const copy = { ...ir };
   delete copy.timings;
   if (copy.engine) { copy.engine = { ...copy.engine }; delete copy.engine.node; }
-  if (copy.source) { copy.source = { ...copy.source }; delete copy.source.root; }
+  if (copy.source) { copy.source = { ...copy.source }; delete copy.source.root; if (copy.source.archive && typeof copy.source.archive === 'object') { copy.source.archive = { ...copy.source.archive }; delete copy.source.archive.path; } }
   return copy;
 }
 
@@ -29,6 +30,15 @@ export function irHash(ir) { return sha256(canonical(hashable(ir))); }
 export function treeHash(node) { return sha256(canonical(node)); }
 
 export function isElement(node) { return node && typeof node === 'object' && typeof node.t === 'string'; }
+
+// A modal container of a serialized page: <dialog>, [role=dialog|alertdialog], [aria-modal=true], or an overlay the runtime
+// marked (ov: a backdrop that covers the screen and holds a sheet, mounted by a click: a React bottom sheet).
+export function isModalNode(node) {
+  if (!isElement(node)) return false;
+  if (node.t === 'dialog' || node.ov) return true;
+  const role = (node.a ?? []).find(pair => pair[0] === 'role')?.[1];
+  return role === 'dialog' || role === 'alertdialog' || (node.a ?? []).some(pair => pair[0] === 'aria-modal' && pair[1] === 'true');
+}
 
 export function walk(node, visit, parent = null) {
   if (!node || typeof node !== 'object') return;

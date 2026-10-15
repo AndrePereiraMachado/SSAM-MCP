@@ -83,6 +83,22 @@ public static class PrototypeExpr
         throw new PrototypeExpressionException("unsupported literal " + raw);
     }
 
+    /// <summary>An expression of type <paramref name="from"/> as a value of <paramref name="to"/> (an attribute assigned from a value
+    /// of another basic type): the built-in conversion, else the expression as it is (same type, unknown type, or one the platform
+    /// converts implicitly, Integer into Decimal).</summary>
+    public static string Convert(string expression, string? from, string? to) => (from, to) switch
+    {
+        ("Text", "DateTime") => $"TextToDateTime({expression})",
+        ("Text", "Integer") => $"TextToInteger({expression})",
+        ("Text", "Decimal") => $"TextToDecimal({expression})",
+        ("Integer", "Text") => $"IntegerToText({expression})",
+        ("Decimal", "Text") => $"DecimalToText({expression})",
+        ("Boolean", "Text") => $"BooleanToText({expression})",
+        ("DateTime", "Text") => $"DateTimeToText({expression})",
+        ("Decimal", "Integer") => $"DecimalToInteger({expression})",
+        _ => expression,
+    };
+
     public static string TypeOfLiteral(JsonNode? value)
     {
         if (value is not JsonValue v) return "Text";
@@ -104,6 +120,7 @@ public static class PrototypeExpr
     {
         if (val is not JsonObject o) return null;
         if (o.ContainsKey("lit")) return TypeOfLiteral(o["lit"]);
+        if (o.ContainsKey("os")) return o["type"]?.ToString();
         if (o["input"]?.ToString() is { } recordInput && o["field"]?.ToString() is { } inputField) return scope.InputFieldType?.Invoke(recordInput, inputField);
         if (o["field"]?.ToString() is { } f)
             return o["record"]?.ToString() is { } record ? scope.RecordType?.Invoke(record, f, o["via"]?.ToString()) : scope.FieldType?.Invoke(f, o["via"]?.ToString());
@@ -124,6 +141,8 @@ public static class PrototypeExpr
     {
         if (val is not JsonObject o) throw new PrototypeExpressionException("a value is an object, got " + (val?.ToJsonString() ?? "null"));
         if (o.ContainsKey("lit")) return Literal(o["lit"]);
+        // data.bind (2.12): an expression over the producer's outputs, written by the binding, used as it is
+        if (o["os"] is JsonValue os && os.TryGetValue<string>(out var expression)) return expression;
         // a field of a record input of the block (the shell shows the current user's name: UsuarioAtual.Name)
         if (o["input"]?.ToString() is { } recordInput && o["field"]?.ToString() is { } inputField)
             return (scope.Input ?? throw Missing("block input " + recordInput))(recordInput) + "." + inputField;
@@ -357,9 +376,16 @@ public sealed class PrototypeDataModel
         return candidate;
     }
 
+    /// <summary>Label and Order of a static entity are its own attributes; a field of either name (any case) is that attribute.</summary>
+    public static bool IsBuiltIn(string field) => string.Equals(field, "Label", StringComparison.OrdinalIgnoreCase) || string.Equals(field, "Order", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The value a row gives to the built-in Label or Order (its field of that name in any case), or null.</summary>
+    public static JsonNode? BuiltInValue(Entity entity, JsonObject row, string builtIn)
+        => entity.Fields.FirstOrDefault(f => f.Name != entity.Key && string.Equals(f.Name, builtIn, StringComparison.OrdinalIgnoreCase)) is { } field ? row[field.Name] : null;
+
     public static string RecordLabel(Entity entity, JsonObject row)
     {
-        if (entity.Fields.Any(f => f.Name == "Label") && row["Label"]?.ToString() is { } label) return label;
+        if (BuiltInValue(entity, row, "Label")?.ToString() is { } label) return label;
         return entity.Fields.Where(f => f.Type == "Text" && f.Name != entity.Key).Select(f => row[f.Name]?.ToString()).FirstOrDefault(t => !string.IsNullOrEmpty(t)) ?? row[entity.Key]?.ToString() ?? "";
     }
 }

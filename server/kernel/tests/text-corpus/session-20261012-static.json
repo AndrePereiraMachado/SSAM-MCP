@@ -1,0 +1,42 @@
+{
+ "request": "crie as actions no mesmo modulo (VisitaCerta_CS, Codex, 2026-10-12 21:07-21:18): the static entity CondicaoMeteorologica written without Order (#15) and without `Id =` (#16) was refused three times, then written as a JSON spec (#19)",
+ "baseline": {
+  "refusals": 3,
+  "seconds": 87,
+  "source": "C:\\t\\analise-vc-actions\\ANALISE.md section 3"
+ },
+ "note": "The captures and the session jobs stay where the analysis exported them (read only, never copied here): without them the test says so and returns. The jobs run offline on the capture of #15 with the producer signature the session bound.",
+ "base": {
+  "oml": "C:\\t\\analise-vc-actions\\repro\\in\\cs-base-001435.oml",
+  "sha": "5f40163a101545e27147ef91e1e63a69121a9c93fd966c3ddf8d57d1e500a349"
+ },
+ "producers": {
+  "VisitaCerta_IS": {
+   "path": "C:\\t\\analise-vc-actions\\repro\\in\\VisitaCerta_IS.avsig",
+   "sha": "96223fba610b3b22e9d0dd1c9c5c9ca2b026db26ff7daa019cf95b8f1708b0a1"
+  }
+ },
+ "jobs": [
+  {
+   "name": "#15 971a6cb2 (static entity without Order)",
+   "path": "C:\\t\\analise-vc-actions\\repro\\in\\job15-971a6cb2.json",
+   "sha": "94be14cd6d3e065089d028248d6c2d7c62d11cdf5bf3aa8cf243ac034466cee1",
+   "before": "accepted false: 28 data differences (the Order values the spec wrote, deleted with the attribute)",
+   "notes": []
+  },
+  {
+   "name": "#16 f3c1957e (records without Id =)",
+   "path": "C:\\t\\analise-vc-actions\\repro\\in\\job16-f3c1957e.json",
+   "sha": "a97a61e9b9160c1e621451df18566b6ca2b8be8ad56db84a65a4f4e8d6a37dbb",
+   "before": "isValid false: 28 RequiredPropertyValue (the second round cleared the ids the first one wrote) and 28 data differences",
+   "notes": ["DDL_STATIC_VALUE_FILLED"]
+  },
+  {
+   "name": "#19 06a76b78 (the JSON spec the session delivered)",
+   "path": "C:\\t\\analise-vc-actions\\repro\\in\\job19-06a76b78.json",
+   "sha": "a43d111aadbf40fe502faf29128e3a81b24fcd0dfb25c1af636b3b007112f48d",
+   "before": "accepted",
+   "notes": []
+  }
+ ]
+}

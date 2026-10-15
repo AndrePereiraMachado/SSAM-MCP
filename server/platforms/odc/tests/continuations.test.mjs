@@ -125,7 +125,7 @@ const SPEC = {
   // MODULE_NOT_OPEN: a module name no open module has (studio-module.mjs) opens it from the organization.
   studio_open: { module: null, localOml: null, pid: null },
   studio_dismiss_dialog: { caption: null, action: null, pid: null },
-  odc_portal_login: { tenant: null, auth: ['auto', 'studio', 'portal-credential'], action: ['open', 'status', 'close'] },
+  odc_portal_login: { tenant: null, auth: ['auto', 'studio', 'portal-credential'], action: ['open', 'status', 'close', 'select-profile', 'prompt', 'focus'] },
   odc_portal_routes: { tenant: null, module: null, view: null, match: null },
 };
 // o11_studio args per command (the strict shapes of the o11_studio tool)
@@ -147,12 +147,12 @@ function argumentProblems(where, args, spec) {
 }
 
 // 79 tools of plan §4.2, the two GitSSAM integrations (o11_extension, odc_external_library), ssam_debug, and the live tools
-// the guides and the continuations of the 2026-10-06 package name (ssam_grant, ssam_evidence, o11_publish), and
-// studio_reference_producers of the SC/Portal line (port of 2026-10-11).
-test('MCP_TOOLS is the list of plan §4.2 plus the live tools the guides and continuations name: 86 tools', () => {
-  assert.equal(MCP_TOOLS.length, 86);
-  assert.equal(new Set(MCP_TOOLS).size, 86);
-  for (const name of ['ssam_grant', 'ssam_evidence', 'o11_publish', 'o11_extension', 'odc_external_library']) assert.ok(MCP_TOOLS.includes(name), name);
+// the guides and the continuations of the 2026-10-06 package name (ssam_grant, ssam_evidence, o11_publish),
+// studio_reference_producers of the SC/Portal line (port of 2026-10-11) and ssam_code (the module as code, 2026-10-12).
+test('MCP_TOOLS is the list of plan §4.2 plus the live tools the guides and continuations name: 87 tools', () => {
+  assert.equal(MCP_TOOLS.length, 87);
+  assert.equal(new Set(MCP_TOOLS).size, 87);
+  for (const name of ['ssam_grant', 'ssam_evidence', 'o11_publish', 'o11_extension', 'odc_external_library', 'ssam_code']) assert.ok(MCP_TOOLS.includes(name), name);
   for (const name of ['ssam_status', 'ssam_license', 'ssam_setup', 'ssam_update', 'ssam_credentials', 'ssam_reprove', 'ssam_task',
     'ssam_reference', 'o11_inspect', 'o11_deliver', 'o11_environment', 'o11_studio', 'odc_portal_routes']) assert.ok(MCP_TOOLS.includes(name), name);
   assert.equal(MCP_TOOLS.filter(t => t.startsWith('studio_')).length, 30, 'the 28 of the plan, studio_create_app and studio_reference_producers');

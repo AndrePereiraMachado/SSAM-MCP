@@ -8,7 +8,7 @@ namespace Anvil.Core;
 /// Modelo do Studio sem GUI: carrega OML, valida, descreve, salva e recarrega. Tudo o que depende da plataforma
 /// (prologo, load, save, release) passa por StudioAdapter.Runtime (WS0); o resto e so Model API V1.
 /// </summary>
-public sealed class ModelHost
+public sealed partial class ModelHost
 {
     private readonly string _workDir;
     internal string WorkDirectory => Path.GetFullPath(_workDir);
@@ -24,6 +24,24 @@ public sealed class ModelHost
     {
         var module = Load(path);
         try { return new ModelSession(module).CheckModuleSpecification(specification, expectedTypes, runtime); }
+        finally { Release(module); }
+    }
+
+    /// <summary>The REST callbacks of a client (OnBeforeRequest, OnAfterResponse) as ssam-flow/1 text, by name: the read-back
+    /// of what rest-consume wrote (the module's flow read lists module and screen actions, not callbacks).</summary>
+    public Dictionary<string, string> RestCallbackTexts(string omlPath, string client)
+    {
+        var module = Load(omlPath);
+        try
+        {
+            var reader = new KernelModelReader();
+            var root = (IObjectSignature)module;
+            var texts = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var node in reader.Walk(root))
+                if (reader.IsKind(node, "IRestCallbackActionFlow") && node.Parent is IObjectSignature parent && TypeResolver.Name(parent) == client)
+                    texts[reader.NameOf(node)] = Anvil.Reading.ModuleFlow.Print(Anvil.Reading.ModuleFlow.Extract(root, reader, node, out _)).Text;
+            return texts;
+        }
         finally { Release(module); }
     }
 
@@ -176,12 +194,104 @@ public sealed class ModelHost
         finally { Release(module); }
     }
 
+    /// <summary>The flow reading of these bytes (ssam-flow/1: every action as text, with its fixed point), built from the
+    /// loaded model; the caller stores it (Anvil.Reading.ModuleFlow.Ensure).</summary>
+    public Anvil.Reading.ModuleFlow BuildFlow(byte[] source, string sourceSha256, string lane, Action<Anvil.Reading.FlowItem>? visit = null)
+    {
+        var module = Load(source);
+        try { return Anvil.Reading.ModuleFlow.Build((IObjectSignature)module, new KernelModelReader(), lane, sourceSha256, source.Length, visit); }
+        finally { Release(module); }
+    }
+
     /// <summary>The rich module index of these bytes (ssam-rich-index), built from the loaded model; the caller stores it
     /// (Anvil.Reading.ModuleRichIndex.Ensure).</summary>
     public Anvil.Reading.ModuleRichIndex BuildRich(byte[] source, string sourceSha256, string lane)
     {
         var module = Load(source);
         try { return Anvil.Reading.ModuleRichIndex.Build((IObjectSignature)module, new KernelModelReader(), lane, sourceSha256, source.Length); }
+        finally { Release(module); }
+    }
+
+    /// <summary>The census of the screens and blocks of these bytes (Anvil.Reading.ScreenHtmlCensus): every property and
+    /// child kind of what they hold, measured against the ssam-html/1 tables.</summary>
+    public System.Text.Json.Nodes.JsonObject HtmlCensus(byte[] source)
+    {
+        var module = Load(source);
+        try { return Anvil.Reading.ScreenHtmlCensus.Run((IObjectSignature)module, new KernelModelReader()); }
+        finally { Release(module); }
+    }
+
+    /// <summary>The ssam-html/1 reading of these bytes (Anvil.Reading.ScreenHtml): one screen or block by name, Kind:Name or
+    /// @key, or all of them; each document with its text, keys and sizes.</summary>
+    public System.Text.Json.Nodes.JsonObject HtmlRead(byte[] source, string? target, bool withKeys = true, string? explain = null)
+    {
+        var module = Load(source);
+        try {
+            var reading = Anvil.Reading.ScreenHtml.Module((IObjectSignature)module, new KernelModelReader());
+            var sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(source)).ToLowerInvariant();
+            // --explain <name>: every element that name answers to, with its tier from the screen (the name rules, for a developer).
+            if (explain is { Length: > 0 })
+                return new System.Text.Json.Nodes.JsonObject { ["explain"] = new System.Text.Json.Nodes.JsonArray(reading.Explain(explain, target ?? "").Select(l => (System.Text.Json.Nodes.JsonNode)l).ToArray()) };
+            var documents = target != null ? [reading.Read(target)] : reading.ReadAll().ToList();
+            var answer = new System.Text.Json.Nodes.JsonObject { ["schema"] = Anvil.Reading.ScreenHtml.Schema, ["module"] = reading.ModuleName,
+                ["sourceSha256"] = sha256, ["documents"] = new System.Text.Json.Nodes.JsonArray(documents.Select(d => (System.Text.Json.Nodes.JsonNode)d.Json(withKeys)).ToArray()) };
+            return answer;
+        }
+        finally { Release(module); }
+    }
+
+    /// <summary>The fixed point of the ssam-html/1 reading over every screen and block of these bytes: read, parse the text
+    /// back, compare (Anvil.Reading.ScreenHtml); per document its size, read time, widgets, opaque widgets, problems and the
+    /// differences (none at the fixed point). <paramref name="htmlDir"/> receives each text when given.</summary>
+    public System.Text.Json.Nodes.JsonObject HtmlCheck(byte[] source, string? htmlDir = null)
+    {
+        var sw = Stopwatch.StartNew();
+        var module = Load(source);
+        var loadMs = sw.ElapsedMilliseconds;
+        try {
+            sw.Restart();
+            var reading = Anvil.Reading.ScreenHtml.Module((IObjectSignature)module, new KernelModelReader());
+            var rows = new System.Text.Json.Nodes.JsonArray();
+            foreach (var document in reading.ReadAll()) {
+                var compare = Stopwatch.StartNew();
+                IReadOnlyList<System.Text.Json.Nodes.JsonObject> ops;
+                string? parseError = null;
+                try { ops = document.Compare(document.Html); }
+                catch (Exception error) { ops = []; parseError = error.GetBaseException().Message; }
+                var again = reading.Read("@" + document.RootKey);
+                if (htmlDir != null) {
+                    Directory.CreateDirectory(htmlDir);
+                    File.WriteAllText(Path.Combine(htmlDir, document.RootKind + "-" + string.Concat(document.Root.Select(c => char.IsLetterOrDigit(c) ? c : '_')) + ".html"), document.Html);
+                }
+                rows.Add(new System.Text.Json.Nodes.JsonObject {
+                    ["root"] = document.Root, ["kind"] = document.RootKind, ["key"] = document.RootKey, ["htmlSha256"] = document.HtmlSha256, ["bytes"] = document.Bytes,
+                    ["readMs"] = Math.Round(document.ReadMs, 1), ["compareMs"] = compare.ElapsedMilliseconds, ["widgets"] = document.Widgets,
+                    ["opaqueWidgets"] = document.OpaqueWidgets, ["elements"] = document.Elements, ["deterministic"] = again.Html == document.Html,
+                    ["problems"] = new System.Text.Json.Nodes.JsonArray(document.Problems.Take(20).Select(p => (System.Text.Json.Nodes.JsonNode)p).ToArray()),
+                    ["problemCount"] = document.Problems.Count, ["parseError"] = parseError, ["ops"] = ops.Count,
+                    ["opSamples"] = new System.Text.Json.Nodes.JsonArray(ops.Take(12).Select(o => (System.Text.Json.Nodes.JsonNode)o.DeepClone()).ToArray()) });
+            }
+            return new System.Text.Json.Nodes.JsonObject { ["schema"] = Anvil.Reading.ScreenHtml.Schema, ["module"] = reading.ModuleName,
+                ["loadMs"] = loadMs, ["indexMs"] = Math.Round(reading.LoadMs, 1), ["indexDetail"] = reading.LoadDetail, ["totalMs"] = sw.ElapsedMilliseconds, ["documents"] = rows };
+        }
+        finally { Release(module); }
+    }
+
+    /// <summary>The data text of these bytes (ssam-ddl/1), built from the loaded model; the caller stores it
+    /// (Anvil.Reading.DataDdl.Ensure).</summary>
+    public Anvil.Reading.DataDdl BuildDdl(byte[] source, string sourceSha256, string lane)
+    {
+        var module = Load(source);
+        try { return Anvil.Reading.DataDdl.Build((IObjectSignature)module, new KernelModelReader(), lane, sourceSha256, source.Length); }
+        finally { Release(module); }
+    }
+
+    /// <summary>The fixed point of the data text over these bytes: printed, parsed and compared with the model
+    /// (Anvil.Reading.DdlCheck).</summary>
+    public Anvil.Reading.DdlCheck CheckDdl(byte[] source, string lane)
+    {
+        var module = Load(source);
+        try { return Anvil.Reading.DdlCheck.Run((IObjectSignature)module, new KernelModelReader(), lane); }
         finally { Release(module); }
     }
 

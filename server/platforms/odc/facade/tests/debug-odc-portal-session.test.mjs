@@ -7,13 +7,13 @@ import { OdcBridge } from '../../portal/runtime/bridge.mjs';
 import { readConfig } from '../../portal/runtime/config.mjs';
 const host = 'personal-example.outsystems.dev';
 const binding = { host, pid: 123, startedUtc: '2026-10-05T02:00:00.0000000Z', studioDir: 'C:/SDK', includeToken: true };
-const response = (token = 'private-token') => ({ ok: true, token, metadata: { host, developerKey: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' }, binding: { ...binding } });
+const response = (token = 'private-token-for-fixture') => ({ ok: true, token, metadata: { host, developerKey: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' }, binding: { ...binding } });
 test('developer token stays private, caches only in memory and pins the complete native process binding', async () => {
   let now = 0, calls = 0, next = response();
   const auth = new OdcStudioSessionAuth({ host, now: () => now, acquire: async input => { assert.deepEqual(input, { host, includeToken: true }); calls++; return next; } });
-  assert.equal(await auth.getToken(), 'private-token'); assert.equal(next.token, null);
-  assert.equal(await auth.getToken(), 'private-token'); assert.equal(calls, 1);
-  assert.equal(JSON.stringify(auth).includes('private-token'), false);
+  assert.equal(await auth.getToken(), 'private-token-for-fixture'); assert.equal(next.token, null);
+  assert.equal(await auth.getToken(), 'private-token-for-fixture'); assert.equal(calls, 1);
+  assert.equal(JSON.stringify(auth).includes('private-token-for-fixture'), false);
   now = 61000; next = response('new-token'); next.binding.pid++;
   await assert.rejects(auth.getToken(), /native_binding_changed/);
   next = response('new-token'); next.metadata.developerKey = 'ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee';
@@ -36,11 +36,11 @@ test('native 401 is terminal: no refresh, retry or API Client fallback and respo
   let acquisitions = 0, sends = 0;
   const auth = new OdcStudioSessionAuth({ host, acquire: async () => { acquisitions++; return response(); } });
   const bridge = new OdcBridge({ config: readConfig({ ODC_PORTAL_ORIGIN: 'https://' + host }), auth,
-    fetchImpl: async (_url, options) => { sends++; assert.equal(options.headers.authorization, 'Bearer private-token');
-      return new Response(JSON.stringify({ echoed: 'private-token' }), { status: 401, headers: { 'content-type': 'application/json' } }); } });
+    fetchImpl: async (_url, options) => { sends++; assert.equal(options.headers.authorization, 'Bearer private-token-for-fixture');
+      return new Response(JSON.stringify({ echoed: 'private-token-for-fixture' }), { status: 401, headers: { 'content-type': 'application/json' } }); } });
   const result = await bridge.execute('portfolio-api-v2:get:/environments', {}, 'read');
   assert.equal(result.status, 401); assert.equal(sends, 1); assert.equal(acquisitions, 1);
-  assert.equal(JSON.stringify(result).includes('private-token'), false);
+  assert.equal(JSON.stringify(result).includes('private-token-for-fixture'), false);
   assert.equal(bridge.status().auth.method, 'ODC Studio developer session');
   const again = await bridge.execute('portfolio-api-v2:get:/environments', {}, 'read');
   assert.equal(again.ok, false); assert.equal(sends, 1); assert.equal(acquisitions, 1);
@@ -68,7 +68,7 @@ test('connection chooses native authentication only for confirmed missing creden
   const services = { lib, credentialStatus: async () => ({ available: configured }), getNativeSession: async () => { native++; return response(); } };
   const first = await connect(host, { services }); assert.equal(first.nativeSession, true);
   assert.equal(first.bridge.status().auth.method, 'ODC Studio developer session');
-  assert.equal(await first.bridge.auth.getToken(), 'private-token'); assert.equal(native, 1);
+  assert.equal(await first.bridge.auth.getToken(), 'private-token-for-fixture'); assert.equal(native, 1);
   await assert.rejects(first.direct('POST', config.origin + '/api/asset-repository/v1/uploads'), /native_write_unavailable/);
   await assert.rejects(first.direct('GET', 'https://other.outsystems.dev/path'), /origin_mismatch/);
   configured = true;

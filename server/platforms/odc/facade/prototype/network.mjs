@@ -33,14 +33,18 @@ export function localPath(url, base = ORIGIN + '/') {
 
 // Reads files of source on demand and records what was read (the IR lists the files the capture read).
 export class SourceFiles {
-  constructor(root, { preload = {} } = {}) {
+  // aliases: a file served in place of another (mapping.version: the entry's app script -> the version chosen)
+  constructor(root, { preload = {}, aliases = {} } = {}) {
     this.root = path.resolve(root);
+    this.aliases = aliases ?? {};
     this.cache = new Map(Object.entries(preload).map(([key, value]) => [key, Buffer.isBuffer(value) ? value : Buffer.from(value)]));
     this.read = new Set();
   }
   bytes(relative) {
     const normal = path.posix.normalize(String(relative).replace(/\\/g, '/'));
     if (normal.startsWith('..') || path.isAbsolute(normal)) return null;
+    const alias = this.aliases[normal];
+    if (typeof alias === 'string' && alias !== normal) return this.bytes(alias);
     if (this.cache.has(normal)) { this.read.add(normal); return this.cache.get(normal); }
     const full = path.resolve(this.root, normal);
     if (!full.startsWith(this.root + path.sep)) return null;

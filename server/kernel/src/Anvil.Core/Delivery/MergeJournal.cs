@@ -44,12 +44,32 @@ public sealed class MergeJournal(string directory)
     public JsonObject Status(string id, string? moduleKey = null)
     {
         var path = PathFor(id);
-        if (!File.Exists(path)) return new() { ["operationId"] = id, ["state"] = "unknown" };
-        var record = DurableJson.Read(path);
-        if (moduleKey != null && record["binding"]?["module_key"]?.ToString() != moduleKey)
+        var record = File.Exists(path) ? DurableJson.Read(path) : new() { ["operationId"] = id, ["state"] = "unknown" };
+        if (File.Exists(path) && moduleKey != null && record["binding"]?["module_key"]?.ToString() != moduleKey)
             throw new InvalidOperationException("Operation belongs to another module");
+        // fam-deps (finding 5): what the dialog watch of this operation recorded after the bridge answered: every dialog it
+        // closed (also in the receipt, the superset of the receipt's own list) and the dialog that waits for the person now.
+        var watch = DialogsPath(id);
+        if (File.Exists(watch))
+        {
+            var seen = DurableJson.Read(watch);
+            record["dialogWatch"] = true;
+            record["dialogs"] = seen["dialogs"]?.DeepClone() ?? new JsonArray();
+            var settled = record["state"]?.ToString() is "applied" or "unchanged" or "not-applied";
+            record["pendingDialog"] = settled ? null : seen["pendingDialog"]?.DeepClone();
+            if (record["receipt"] is JsonObject receipt && seen["dialogs"] is JsonArray all && all.Count > ((receipt["dialogs"] as JsonArray)?.Count ?? 0))
+                receipt["dialogs"] = all.DeepClone();
+        }
         return record;
     }
+
+    private string DialogsPath(string id) => Path.ChangeExtension(PathFor(id), ".dialogs.json");
+
+    /// <summary>fam-deps (finding 5): the dialogs the watch of operation <paramref name="id"/> closed and the one that now waits
+    /// for the person (null: none), beside the journal record (the operation itself holds the record's lease while it runs).</summary>
+    public void RecordDialogs(string id, JsonArray dialogs, JsonObject? pending)
+        => DurableJson.Write(DialogsPath(id), new JsonObject { ["operationId"] = id, ["dialogs"] = dialogs.DeepClone(),
+            ["pendingDialog"] = pending?.DeepClone(), ["updatedAt"] = DateTimeOffset.UtcNow.ToString("O") });
 
     public Operation Begin(string id, JsonObject binding) => new(PathFor(id), id, binding);
 

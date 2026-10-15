@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fixContinuation } from '../portal/runtime/operation-log.mjs';
 import { resolveOpenModule } from './studio-module.mjs';
+import { recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
 
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -160,8 +161,8 @@ export async function publishWithGrant({ manifest, module: requested, authorize,
     if (target.ok !== true) return target;
     manifest = target.manifest;
   }
-  let recorded = null, module = null;
-  try { const m = readManifest(manifest); module = m?.module ?? null; recorded = typeof m?.publishAuthorization === 'string' && m.publishAuthorization.trim() ? m.publishAuthorization : null; }
+  let recorded = null, module = null, tenant = null;
+  try { const m = readManifest(manifest); module = m?.module ?? null; tenant = typeof m?.tenant === 'string' && m.tenant ? m.tenant : null; recorded = typeof m?.publishAuthorization === 'string' && m.publishAuthorization.trim() ? m.publishAuthorization : null; }
   catch { /* the bridge reads the manifest itself and refuses what it cannot read */ }
   let authorization = null;
   if (typeof authorize === 'string' && authorize.trim()) {
@@ -177,7 +178,11 @@ export async function publishWithGrant({ manifest, module: requested, authorize,
       authorization = found.authorization;
     }
   } else if (recorded) authorization = { source: 'words' };
+  // F5 (producer-signatures.mjs): the module may be a producer; no reference snapshot of it acquired before the end of this
+  // publication is reused. Without wait (or uncertain) the end is not known: it stays running for the ledger.
+  const publication = module && root ? recordPublished(path.join(root, '.local', 'producer-cache'), { environment: tenant ?? '*', module, source: 'studio_publish' }) : false;
   let value = await publish({ manifest, wait, minutes, pid }, { studio, moduleOf: () => module });
+  if (publication && wait && isObject(value) && !publicationOpen(value)) recordPublicationEnded(publication);
   if (!isObject(value)) return value;
   // A manifest given directly: its lab folder holds the delivery (deliver-result.json beside delivery/manifest.json).
   const merge = target?.merge ?? (() => {

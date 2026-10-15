@@ -45,6 +45,17 @@
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ModuleIndex.cs" Link="shared\ModuleIndex.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ModuleDigest.cs" Link="shared\ModuleDigest.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ModuleRichIndex.cs" Link="shared\ModuleRichIndex.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ScreenHtml.cs" Link="shared\ScreenHtml.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ScreenHtmlModule.cs" Link="shared\ScreenHtmlModule.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\DataDdl.cs" Link="shared\DataDdl.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ModuleFlow.cs" Link="shared\ModuleFlow.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\FlowText.cs" Link="shared\FlowText.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\FlowExtract.cs" Link="shared\FlowExtract.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\FlowPrint.cs" Link="shared\FlowPrint.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\FlowParse.cs" Link="shared\FlowParse.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\FlowTextNormalize.cs" Link="shared\FlowTextNormalize.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\AggregateSortRule.cs" Link="shared\AggregateSortRule.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\KernelLane.cs" Link="shared\KernelLane.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Hosting\SnapshotReadServer.cs" Link="shared\SnapshotReadServer.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Hosting\WorkerServer.cs" Link="shared\WorkerServer.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Delivery\BridgeAccess.cs" Link="shared\BridgeAccess.cs" />

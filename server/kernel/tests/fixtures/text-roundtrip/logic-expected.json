@@ -1,0 +1,49 @@
+{
+ "about": "TextRoundTripCorpus (kernel/tests/Shared/TextRoundTripTests.cs): the fixed point of ssam-flow/1 over corpus.json, per lane. The O11 and ODC numbers add up to the plan's table 6.5 (C:\\Users\\andre\\SSAM-analises\\html-do-ssam\\PLANO.md): 5,240 actions, 50,305 nodes, every node kind, and every authored value the digest of 16d95076 lost (counted). Sizes: structure = the text without its descriptions (///), comments and continuation lines (|) against the whole digest of the same actions; median = the median per action of the whole text against the digest's text of that action.",
+ "lanes": {
+  "o11": {
+   "actions": 4439,
+   "nodes": 43129,
+   "nodeKinds": {
+    "AggregateNode": 1248, "AjaxRefreshNode": 1, "AssignNode": 12174, "CommentNode": 639, "DestinationNode": 302, "DownloadNode": 30, "EndNode": 5948,
+    "ExceptionHandlerNode": 692, "Execute": 11241, "ForEachNode": 996, "IfNode": 3324, "JSONDeserializeNode": 104, "JSONSerializeNode": 111,
+    "JavaScriptNode": 289, "MessageNode": 84, "RaiseExceptionNode": 706, "RefreshDataNode": 421, "SQLNode": 91, "StartNode": 4439, "SwitchNode": 58,
+    "TriggerNode": 231
+   },
+   "counted": {
+    "AggregateNode.Description": 633, "AggregateNode.StartIndex": 9, "AjaxRefreshNode.AnimationEffect": 1, "ClientAction.Description (long)": 8,
+    "CommentNode.Text (long)": 189, "DataAction.Description (long)": 16, "DestinationNode.Transition": 63, "InputParameter.DefaultValue": 12,
+    "InputParameter.Description": 1414, "JSONDeserializeNode.Description": 21, "JSONSerializeNode.Description": 24,
+    "JSONSerializeNode.SerializeDefaultValues": 109, "JavaScriptNode.IsAsynchronous": 2, "JavaScriptNode.JavaScript (long)": 138,
+    "LocalVariable.Description": 359, "MessageNode.Label": 80, "OutputParameter.Description": 600, "RefreshDataNode.MaxRecords": 2,
+    "SQLInputParameter.DataType": 278, "SQLNode.Description": 20, "ScreenAction.Description (long)": 45, "ServerAction.Description (long)": 963
+   },
+   "maxStructureRatio": 1.25,
+   "maxMedianRatio": 1.25,
+   "twice": "Haiku_CS"
+  },
+  "odc": {
+   "actions": 801,
+   "nodes": 7176,
+   "nodeKinds": {
+    "AggregateNode": 146, "AssignNode": 1746, "CommentNode": 103, "DestinationNode": 84, "EndNode": 1335, "ExcelToRecordListNode": 4,
+    "ExceptionHandlerNode": 80, "Execute": 1278, "ForEachNode": 124, "IfNode": 930, "JSONDeserializeNode": 119, "JSONSerializeNode": 36,
+    "JavaScriptNode": 75, "MessageNode": 122, "RaiseExceptionNode": 86, "RefreshDataNode": 17, "SQLNode": 1, "SendEmailNode": 7, "StartNode": 801,
+    "TriggerNode": 82
+   },
+   "counted": {
+    "AggregateNode.CacheInMinutes": 17, "AggregateNode.Description": 38, "ClientAction.Description (long)": 8, "CommentNode.Text (long)": 94,
+    "DataAction.Description (long)": 1, "DestinationNode.Transition": 4, "ExcelToRecordListNode.Description": 4, "ForEachNode.StartIndex": 1,
+    "InputParameter.DefaultValue": 7, "InputParameter.Description": 180, "JSONDeserializeNode.Description": 113, "JSONSerializeNode.Description": 21,
+    "JSONSerializeNode.SerializeDefaultValues": 27, "JavaScriptNode.Description": 56, "JavaScriptNode.IsAsynchronous": 7,
+    "JavaScriptNode.JavaScript (long)": 51, "LocalVariable.Description": 37, "MessageNode.Label": 99, "OutputParameter.Description": 150,
+    "RefreshDataNode.MaxRecords": 15, "RefreshDataNode.StartIndex": 1, "SQLNode.Description": 1, "ScreenAction.Description (long)": 196,
+    "ServerAction.Description (long)": 76, "TriggerNode.Description": 74
+   },
+   "maxStructureRatio": 1.25,
+   "maxMedianRatio": 1.5,
+   "medianNote": "The ODC actions carry long descriptions and comments the digest cut or never showed (screen action descriptions, template comments): with them the median is 1.437 (measured 2026-10-11, LG1); the structure alone is within 1.25. The corpus as a whole (both lanes) has a median of 1.24. LG2 (2026-10-11): 1.447, because 9 template actions (UpdateUser, SendResetPasswordEmail, SendChangeEmail in three apps) write @{Call=Server}: a client flow calling the server action whose name its client action shares, which the way back needs to choose the action. Owner header (2026-10-12, extractor 5): 1.477, because the header of the 620 screen and data actions names its screen or block (action Home.Save), which a new one needs to be born from its text; the ceiling went from 1.45 to 1.50 for that (O11: 1.220 -> 1.246, within its 1.25).",
+   "twice": "FloodServices"
+  }
+ }
+}

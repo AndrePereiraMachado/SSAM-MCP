@@ -174,6 +174,10 @@ test('C16.1: a structure made public in an app is refused before the build; a li
   fs.writeFileSync(path.join(dir, 'part.json'), JSON.stringify({ ops: [{ op: 'create', parent: '@espace', type: 'IStructure', name: 'Dto', as: '$dto' }, { op: 'set', target: '$dto', prop: 'Public', value: 'True' }] }));
   const entries = collectJobOps({ jobs: ['part.json'] }, dir);
   assert.deepEqual(publicStructureProblems(entries).map(p => [p.op, p.pointer]), [[1, null]]);
+  // DL2: the data text of a spec op names a public structure on its line.
+  const text = [{ op: { op: 'spec', data: { ddl: 'type Dto public = {\n  A: Text;\n}\ntype Kept = { -- @k\n  B: Text; -- @b\n}\ntype [Other Dto] folder X public = {\n}' } }, index: 0, pointer: '/ops/0' }];
+  assert.deepEqual(publicStructureProblems(text).map(p => [p.pointer, p.line, p.message.includes('Structure Dto') || p.message.includes('Structure [Other Dto]')]),
+    [['/ops/0/data/ddl', 1, true], ['/ops/0/data/ddl', 7, true]]);
 });
 
 test('C16.4: an uncertain merge answers its divergences and no .NET stack trace', async t => {

@@ -91,7 +91,12 @@ function harness(t, state = {}) {
       write(xif, Buffer.from('final'));
       data = { ok: true, stage: 'final', xif, xifSha256: 'a'.repeat(64), dllSha256: 'b'.repeat(64), hash: 'model-hash-1', key: 'ext-key-1', name: NAME,
         ...(args.includes('--base') && s.contractDiff ? { contractDiff: s.contractDiff } : {}) };
-    } else if (verb === 'read') data = { ok: true, name: NAME, sha256: 'c'.repeat(64), hash: 'model-hash-1', signatureHash: 'd'.repeat(64), spec: SPEC, resources: [] };
+    } else if (verb === 'read') {
+      const directory = opt('--resources-out'), file = path.join(directory, '0000', 'Example.dll'), license = path.join(directory, '0001', 'LICENSE.txt');
+      write(file, Buffer.from('dependency')); write(license, Buffer.from('license notice'));
+      data = { ok: true, name: NAME, sha256: 'c'.repeat(64), hash: 'model-hash-1', signatureHash: 'd'.repeat(64), spec: SPEC, resources: [],
+        exported: { directory, resources: [{ path: 'Source\\NET\\Bin\\Example.dll', file }, { path: 'Licenses\\LICENSE.txt', file: license }], references: [file] } };
+    }
     return { ok: data.ok, exitCode: data.ok ? 0 : 1, envelope: { ok: data.ok, command: 'xif', data } };
   };
   const serviceCenter = async argv => { scCalls.push(argv); return typeof s.publish === 'function' ? s.publish(argv) : s.publish; };
@@ -310,6 +315,11 @@ test('read: the active version downloaded, read by the kernel, with its consumer
   assert.deepEqual(value.spec, SPEC); assert.deepEqual(value.consumers, ['Orders_CS']); assert.equal(value.signatureHash, 'd'.repeat(64));
   assert.deepEqual(h.bridgeCalls.find(c => c.operation === 'DownloadExtension').args.versionId, 7);
   assert.deepEqual(h.kernelCalls.map(a => a[1]), ['read']);
+  const out = h.kernelCalls[0][h.kernelCalls[0].indexOf('--resources-out') + 1];
+  assert.ok(path.isAbsolute(out));
+  assert.equal(value.exported.directory, out);
+  assert.deepEqual(value.exported.references, [path.join(out, '0000', 'Example.dll')]);
+  assert.equal(h.scCalls.length, 0, 'export never publishes');
   const missing = await harness(t, { extensions: [{ Name: 'ZZHybridXifLib', Key: 'x', Version_Id: 1 }] }).run({ action: 'read', host: HOST, extension: NAME });
   assert.equal(missing.code, 'EXTENSION_NOT_FOUND'); assert.match(missing.problems[0].fix, /ZZHybridXifLib/);
 });
@@ -321,6 +331,43 @@ test('consumers:true runs the o11_publish cascade of a producer that is not a St
   assert.deepEqual(h.cascades.map(c => c.producer), [{ name: NAME, key: 'ext-key-1', environment: HOST }]);
   assert.equal(h.cascades[0].message, 'v2');
   assert.deepEqual(value.consumerPublications, [{ module: 'Orders_CS', outcome: 'published' }]);
+});
+
+test('referencesFrom delivers end-to-end with pinned source DLLs and license notices, without editing the caller spec', async t => {
+  const source = { Name: 'PdfLibrary', Key: 'pdf-lib-key', Version_Id: 42, Id: 12 };
+  const h = harness(t, { extensions: [source] });
+  const spec = structuredClone(SPEC);
+  const value = await h.run({ action: 'publish', host: HOST, spec, words: WORDS, referencesFrom: ['PdfLibrary', 'PdfLibrary'] });
+  assert.equal(value.ok, true, JSON.stringify(value));
+  assert.deepEqual(spec, SPEC);
+  assert.equal(h.publishes().length, 1);
+  assert.equal(h.kernelCalls.filter(a => a[1] === 'read').length, 1);
+  assert.equal(h.bridgeCalls.filter(c => c.operation === 'ListExtensions').length, 1);
+  assert.deepEqual(value.referenceSources, [{ extension: 'PdfLibrary', versionId: 42, xifSha256: 'c'.repeat(64), references: 1 }]);
+  const receipt = JSON.parse(fs.readFileSync(path.join(h.root, '.local', 'xif', 'receipts', value.operationId + '.json'), 'utf8'));
+  assert.deepEqual(receipt.referenceSources, value.referenceSources);
+  assert.equal(receipt.xif, value.xif);
+  const check = h.kernelCalls.find(a => a[1] === 'check');
+  const resolved = JSON.parse(fs.readFileSync(check[check.indexOf('--spec') + 1], 'utf8'));
+  assert.equal(fs.readFileSync(resolved.references[0], 'utf8'), 'dependency');
+  assert.equal(resolved.resources[0].path, 'Licenses\\PdfLibrary\\Licenses\\LICENSE.txt');
+  assert.equal(fs.readFileSync(resolved.resources[0].file, 'utf8'), 'license notice');
+  const reconciled = await h.run({ action: 'publish', host: HOST, spec, referencesFrom: ['PdfLibrary'], operationId: value.operationId, words: WORDS });
+  assert.equal(reconciled.reconciled, true);
+  assert.deepEqual(reconciled.referenceSources, value.referenceSources);
+  assert.equal(h.publishes().length, 1, 'reconciliation never publishes a second time');
+});
+
+test('referencesFrom refuses a missing source and conflicting DLLs before build or publish', async t => {
+  const missing = harness(t);
+  const refused = await missing.run({ action: 'publish', host: HOST, spec: SPEC, words: WORDS, referencesFrom: ['MissingLib'] });
+  assert.equal(refused.code, 'XIF_REFERENCE_SOURCE_FAILED');
+  assert.equal(missing.publishes().length, 0); assert.equal(missing.kernelCalls.length, 0);
+  const h = harness(t, { extensions: [{ Name: 'PdfLibrary', Key: 'pdf-lib-key', Version_Id: 42 }] });
+  const file = path.join(h.root, 'Example.dll'); fs.writeFileSync(file, 'incompatible library');
+  const conflict = await h.run({ action: 'publish', host: HOST, spec: { ...SPEC, references: [file] }, words: WORDS, referencesFrom: ['PdfLibrary'] });
+  assert.equal(conflict.code, 'XIF_REFERENCE_CONFLICT');
+  assert.equal(h.publishes().length, 0); assert.equal(h.kernelCalls.filter(a => a[1] === 'build').length, 0);
 });
 
 test('agreement with the bridge: every integration-studio operation sent is in IntegrationStudioOperations, read-only, with the arguments it reads', async t => {
@@ -347,7 +394,7 @@ test('the tool is listed with the schema of the contract and destructive annotat
   const tool = (await client.listTools()).tools.find(x => x.name === 'o11_extension');
   assert.ok(tool);
   assert.deepEqual(Object.keys(tool.inputSchema.properties).sort(), ['action', 'application', 'applicationKey', 'authorizationContext', 'commitMessage', 'confirmHost', 'consumers',
-    'expectedVersionId', 'extension', 'host', 'operationId', 'spec', 'specFile', 'words']);
+    'expectedVersionId', 'extension', 'host', 'operationId', 'referencesFrom', 'spec', 'specFile', 'words']);
   assert.deepEqual(tool.inputSchema.required.sort(), ['action', 'host']);
   assert.deepEqual(tool.inputSchema.properties.action.enum, ['read', 'publish', 'delete']);
   assert.deepEqual(tool.annotations, { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });

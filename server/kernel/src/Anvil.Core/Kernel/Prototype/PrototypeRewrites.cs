@@ -484,6 +484,10 @@ public sealed record RewriteOptions
     /// <summary>Given a compound (already rewritten, without positional pseudo-classes and pseudo-elements), the distinct chains
     /// of runtime wrappers (outermost first) around compiled elements it can match; empty when none (4.1 item 6).</summary>
     public Func<CompoundSelector, string, IReadOnlyList<IReadOnlyList<string>>>? Wrappers { get; init; }
+    /// <summary>Only item 5 (the html op's inline svg turned into icon spans, ScreenHtmlNative): <c>svg</c> also matches
+    /// <c>.ssam-icon</c> and <c>span</c> leaves it out; ids, tags, submit, wrappers, urls and @import stay as written, and a
+    /// selector that already names <c>.ssam-icon</c> is not rewritten again.</summary>
+    public bool IconsOnly { get; init; }
 }
 
 /// <summary>A rewritten sheet: the text, every rewrite, the @import statements taken out for the top of the theme, the
@@ -586,6 +590,7 @@ public static class PrototypeRewrites
     public static string RewriteSelector(string selector, RewriteOptions options, List<string> kinds, out bool backdrop)
     {
         backdrop = false;
+        if (options.IconsOnly && selector.Contains(".ssam-icon", StringComparison.Ordinal)) return selector;
         ComplexSelector complex;
         try { complex = CssSelectors.ParseComplex(selector); }
         catch (FormatException) { kinds.Add("unparsed"); return selector; }
@@ -601,23 +606,23 @@ public static class PrototypeRewrites
                     var raw = selector[s.Start..s.End];
                     switch (s.Kind)
                     {
-                        case SimpleKind.Id when s.Name != CssStylesheet.ReactContainer:
+                        case SimpleKind.Id when s.Name != CssStylesheet.ReactContainer && !options.IconsOnly:
                             var cls = options.IdClasses.TryGetValue(s.Name, out var mapped) ? mapped : "ssam-id-" + s.Name;
                             edits.Add((s.Start, s.End, ":is(" + raw + ", ." + cls + ")", Id));
                             break;
-                        case SimpleKind.Type when s.Name == "dialog" && isBackdrop:
+                        case SimpleKind.Type when s.Name == "dialog" && isBackdrop && !options.IconsOnly:
                             hasBackdrop = true;
                             break;
                         case SimpleKind.Type when s.Name == "svg":
                             edits.Add((s.Start, s.End, ":is(" + raw + ", :where(.ssam-icon" + (options.SubstitutedTags.Contains("svg") ? ", .ssam-tag-svg" : "") + "))", IconSvg));
                             break;
-                        case SimpleKind.Type when options.SubstitutedTags.Contains(s.Name) && !isBackdrop:
+                        case SimpleKind.Type when options.SubstitutedTags.Contains(s.Name) && !isBackdrop && !options.IconsOnly:
                             edits.Add((s.Start, s.End, ":is(" + raw + ", :where(.ssam-tag-" + s.Name + "))", Tag));
                             break;
                         case SimpleKind.Type when s.Name == "span":
                             edits.Add((s.End, s.End, ":not(:where(" + string.Join(", ", new[] { ".ssam-icon" }.Concat(options.RuntimeSpans)) + "))", IconSpan));
                             break;
-                        case SimpleKind.Attribute when s.Name == "type" && s.Op == "=" && string.Equals(s.Value, "submit", StringComparison.OrdinalIgnoreCase):
+                        case SimpleKind.Attribute when !options.IconsOnly && s.Name == "type" && s.Op == "=" && string.Equals(s.Value, "submit", StringComparison.OrdinalIgnoreCase):
                             edits.Add((s.Start, s.End, ":is(" + raw + ", :where(.ssam-submit))", Submit));
                             break;
                     }
@@ -736,7 +741,7 @@ public static class PrototypeRewrites
                 var trimmed = prelude.Trim();
                 if (css[preludeEnd] == ';')
                 {
-                    if (topLevel && trimmed.StartsWith("@import", StringComparison.OrdinalIgnoreCase))
+                    if (topLevel && !options.IconsOnly && trimmed.StartsWith("@import", StringComparison.OrdinalIgnoreCase))
                     {
                         var stop = preludeEnd + 1;
                         if (stop < css.Length && css[stop] == '\r') stop++;
@@ -807,6 +812,7 @@ public static class PrototypeRewrites
         /// <summary>url(…) of a local asset in a declaration block → the module image URL, keeping the quotes as written.</summary>
         private void Urls(int from, int to)
         {
+            if (options.IconsOnly) return;
             var i = from;
             while (i < to)
             {
@@ -844,7 +850,9 @@ public static class PrototypeRewrites
             var normalized = raw.StartsWith("./", StringComparison.Ordinal) ? raw[2..] : raw;
             var hash = normalized.IndexOfAny(['?', '#']);
             if (hash >= 0) normalized = normalized[..hash];
-            return options.AssetUrls.TryGetValue(normalized, out var direct) ? direct : null;
+            if (options.AssetUrls.TryGetValue(normalized, out var direct)) return direct;
+            // 'foto%20grande.png' is the file 'foto grande.png' (the capture names the asset decoded)
+            return options.AssetUrls.TryGetValue(PrototypeNames.Unescape(normalized), out var decoded) ? decoded : null;
         }
 
         private int SkipTrivia(int i, int end)

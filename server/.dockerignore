@@ -105,6 +105,17 @@ kernel/scripts/*dcips*
 kernel/tests/html/dcips-*
 kernel/tests/browser/dcips-*
 kernel/tests/ui/dcips-*
+# servidor/fase4-25 (marco-a5): the corpora of the kernel tests label real client modules, the CX10 speed bench is an
+# owner's tool, and the design docs of the SSAM text name client modules; no code the server runs reads them
+kernel/tests/contracts/screen-html/corpus.json
+kernel/tests/fixtures/entity-actions/corpus.json
+kernel/tests/fixtures/text-roundtrip/corpus.json
+kernel/tests/fixtures/text-roundtrip/logic-expected.json
+kernel/tests/text-corpus/unique.json
+tools/benchmark
+docs/SSAM-HTML.md
+docs/TEXTO-LOGICA.md
+docs/TEXTO-SSAM.md
 # Windows-only credential prompts of the Portal lane (the hosted server runs no Windows prompt)
 platforms/odc/portal/runtime/*.ps1
 # the ODC Studio bridge runs in the customer's Studio, never in the hosted server (the image does not build it)

@@ -6,6 +6,7 @@
 // before the delivery; the fragment form of a dropdown, a block instance and nested lists. Index checks need the lane CLI.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireBytes } from './fixtures/answer-wire.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -123,7 +124,7 @@ test('o11: a timer that runs every hour answers the O11 Schedule with the whole 
   assert.ok(a.values.some(v => v.property === 'Schedule' && v.set.includes('00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00')));
   const route = a.matches.find(m => m.id === 'timer.schedule').route?.operation ?? '';
   assert.match(route, /O11: set Schedule "00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00"/);
-  assert.ok(a.size.bytes <= a.size.budgetBytes);
+  assert.ok(wireBytes(a) <= a.size.budgetBytes);
 });
 
 for (const lane of ['odc', 'o11']) {
@@ -140,14 +141,14 @@ for (const lane of ['odc', 'o11']) {
     const text = JSON.stringify(example.ops);
     assert.ok(example.ops[0].op === 'logic' && text.includes('"get"') && text.includes('"if"'), text.slice(0, 300));
     assert.equal(example.reference.arguments.query.id, example.job);
-    assert.ok(a.size.bytes <= a.size.budgetBytes);
+    assert.ok(wireBytes(a) <= a.size.budgetBytes);
   });
 
   test(`${lane}: the OutSystems UI list is present at 8 KB, named patterns ride along, and ui.* expansions carry it (C07)`, { skip: cliSkip(lane), timeout: 900000 }, async () => {
     const sources = sourcesOf(lane);
     const small = await discover({ lane, intent: 'criar um dashboard com cards e menu lateral', sources, budgetBytes: 8192 });
     assert.ok(small.outsystemsUi, JSON.stringify(small.size));
-    assert.ok(small.size.bytes <= 8192, String(small.size.bytes));
+    assert.ok(wireBytes(small, { budgetBytes: 8192 }) <= 8192, String(small.size.bytes));
     const deck = await discover({ lane, intent: 'criar uma tela com um deck de cartoes', sources });
     assert.ok(deck.outsystemsUi.named.some(n => n.pattern === 'StackedCards' && n.via === 'deck'), JSON.stringify(deck.outsystemsUi.named));
     const slider = await discover({ lane, intent: 'adicionar um slider de preco na tela', sources });
@@ -155,6 +156,6 @@ for (const lane of ['odc', 'o11']) {
     const expanded = await discover({ lane, expand: 'ui.list:example', sources, budgetBytes: 12000 });
     assert.equal(expanded.ok, true);
     assert.ok(expanded.outsystemsUi, 'a ui.* expansion carries the section');
-    assert.ok(expanded.size.bytes <= 12000);
+    assert.ok(wireBytes(expanded, { expand: 'ui.list:example', budgetBytes: 12000 }) <= 12000);
   });
 }

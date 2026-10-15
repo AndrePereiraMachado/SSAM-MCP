@@ -26,7 +26,8 @@ import { anvilRoot, workspaceRoot } from '../workspace.mjs';
 import { scrubDiscover, scrubEvidence, thirdPartyJobs } from './evidence.mjs';
 import { agentReadable, agentSegments, insideVisible } from './mirror.mjs';
 import { agentPath, outsideWorkspaceRefusal } from '../agent-paths.mjs';
-import { JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesPrototype, outside, parseJobTexts } from './job-paths.mjs';
+import { JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesGenerator, namesPrototype, outside, parseJobTexts } from './job-paths.mjs';
+import { generatorApproval, offered } from '../generators.mjs';
 
 export const TOOLS_FILE = fileURLToPath(new URL('./tools.json', import.meta.url));
 let loaded = null;
@@ -187,6 +188,27 @@ export function prototypeUnavailable(name, lane) {
       why: 'Builds the same screens with the ops this server runs (html op plus its <style>), without the prototype op; or import the prototype with an SSAM installed on the user\'s own machine.' } };
 }
 
+// ---- servidor/fase4-25 (D2 of C:\t\vps-a5\PLANO.md, 3.2-E): the generator ops pending their blind test
+// THE switch. 'refuse': a hosted job, delivery or proof that carries a generator op whose approval (generators.mjs
+// GENERATOR_APPROVAL) is not 'approved' is refused at the gate, before the agent and any capture (an op called by name runs
+// locally; hosted, nothing the owner has not approved runs, and rest-consume would read its samples from the server).
+// 'allow': the gate lets them through. A generator the owner approves runs like any op.
+export const HOSTED_GENERATOR_OPS = 'refuse';
+export const GENERATOR_TOOLS = JOB_TOOLS;
+export { namesGenerator };
+// Whether the gate refuses this generator id ('unreadable': a part it could not read whole, fails closed).
+export const pendingGenerator = id => id === 'unreadable' || (typeof id === 'string' && !offered(id));
+export function generatorUnavailable(name, lane, generator) {
+  const approval = generatorApproval(generator);
+  return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'GENERATOR_PENDING', policy: 'HOSTED_GENERATOR_OPS', tool: name, generator, outcome: 'not-sent',
+    ...(approval ? { state: approval.state } : {}),
+    error: 'The generator op ' + JSON.stringify(generator) + ' is not available on a hosted SSAM server: it still waits for its independent blind test, '
+      + 'so this server never runs it. Nothing ran. / O gerador ' + JSON.stringify(generator) + ' não está disponível no servidor hospedado: ele ainda '
+      + 'espera o teste cego independente, e este servidor não o roda. Nada rodou.',
+    continuation: { tool: 'ssam_discover', arguments: { intent: generator === 'rest-consume' ? 'consume a REST API' : generator === 'gen-screen' ? 'create list and detail screens' : 'create the CRUD actions of an entity', lane: lane === 'odc' ? 'odc' : 'o11' },
+      why: 'Lists the ops this server runs for the same request, written in the job by hand, without the pending generator.' } };
+}
+
 // ---- paths (6.3, 6.4)
 // The concrete locations of a pointer in an argument object: '*' is every key of an object or item of an array.
 function locations(node, segments) {
@@ -343,10 +365,12 @@ export function presenter({ workspace, serverRoots = [workspaceRoot, os.homedir(
 // (HOSTED_PROTOTYPE_OP by default; tests pass the other value). kernelRefused: the lanes the server image refused at start
 // (ssam.mjs startupKernel), each off for every tool but the state reports (kernelLaneOff).
 export function wrapHostedTool(name, config, handler, { context, link = context?.agent, lanes = context?.lanes ?? [], run = (ctx, fn) => fn(),
-  tools = hostedTools(), serverRoots, waitMs = RECONNECT_WAIT_MS, argsOf = null, prototypeOp = HOSTED_PROTOTYPE_OP, kernelRefused = null } = {}) {
+  tools = hostedTools(), serverRoots, waitMs = RECONNECT_WAIT_MS, argsOf = null, prototypeOp = HOSTED_PROTOTYPE_OP, generatorOps = HOSTED_GENERATOR_OPS,
+  kernelRefused = null } = {}) {
   const entry = tools[name];
   const present = presenter({ workspace: context.workspace, ...(serverRoots ? { serverRoots } : {}) });
   const refusesPrototype = prototypeOp !== 'allow' && PROTOTYPE_TOOLS.includes(name);
+  const refusesGenerators = generatorOps !== 'allow' && GENERATOR_TOOLS.includes(name);
   return async (...params) => {
     const hasArgs = config?.inputSchema != null && params.length > 1;
     // R1: the arguments the tool runs (a field the input layer renames is confined under its own name).
@@ -361,6 +385,8 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
     const lane = laneOf(entry, args);
     // D2: an inline job, partial job or patch with the prototype op, before the agent, the lane checks and any capture.
     if (refusesPrototype && hasArgs && namesPrototype(args)) return refusal(prototypeUnavailable(name, lane));
+    // servidor/fase4-25: a pending generator op in the inline job, partial job or patch, at the same place.
+    if (refusesGenerators && hasArgs) { const generator = namesGenerator(args, pendingGenerator); if (generator) return refusal(generatorUnavailable(name, lane, generator)); }
     if (LANED.has(lane) && !lanes.includes(lane)) return refusal(laneDisabled(lane));
     const need = agentNeed(entry.agent, args);
     // O.6.1: a lane the image refused at start is off for every tool but the state reports, before the agent and any path.
@@ -398,9 +424,11 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
       // (directly, or a part the gate cannot read whole), then every path inside them confined and, inline, rewritten to
       // the absolute workspace path the kernel reads (job-paths.mjs). Before the handler and any capture.
       const jobs = await confineJobs(name, resolved, { workspace: context.workspace, prototype: refusesPrototype,
-        resolve: value => resolveValue(value, 'in', lane, context, info?.agentRoot ?? null) });
+        generator: refusesGenerators ? pendingGenerator : null, resolve: value => resolveValue(value, 'in', lane, context, info?.agentRoot ?? null) });
       if (jobs.prototype) return refusal(prototypeUnavailable(name, lane));
       if (jobs.refusal) return refusal(jobPathRefused(jobs.refusal, info?.agentRoot ?? null));
+      // servidor/fase4-25: after the paths (a part the gate refused is named by its own refusal, never as 'unreadable').
+      if (jobs.generator) return refusal(generatorUnavailable(name, lane, jobs.generator));
       resolved = jobs.resolved;
       if (name === 'ssam_job' && lane === 'odc' && (resolved.base === undefined || resolved.base === null || resolved.base === ''))
         resolved = { ...resolved, base: NEUTRAL_ODC_BASE };

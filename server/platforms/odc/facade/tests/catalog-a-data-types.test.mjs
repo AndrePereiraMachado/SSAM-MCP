@@ -10,6 +10,7 @@
 // the theme fits the 12000-byte budget. Needs the lane CLIs built (the index is built from them); skips otherwise.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireBytes } from './fixtures/answer-wire.mjs';
 import fs from 'node:fs';
 import { laneSources, discover } from '../discovery.mjs';
 
@@ -21,7 +22,7 @@ const ask = (lane, intent) => discover({ lane, intent, sources: lanes[lane], bud
 const expand = (lane, what) => discover({ lane, expand: what, sources: lanes[lane], budgetBytes: 200000 });
 function withinBudget(a, label) {
   assert.equal(a.ok, true, label + ': ' + (a.error ?? ''));
-  assert.ok(bytesOf(a) <= 12000 && a.size.bytes <= 12000, `${label}: hard budget, ${bytesOf(a)} bytes`);
+  assert.ok(wireBytes(a, { budgetBytes: 12000 }) <= 12000, `${label}: hard budget, ${bytesOf(a)} bytes`);
   assert.notEqual(a.size.status, 'insufficient', label);
 }
 const pick = (a, id) => { const f = direct(a).find(m => m.id === id); assert.ok(f, `${id} not a direct match: ` + JSON.stringify((a.matches ?? []).map(m => m.id + ':' + m.via))); return f; };

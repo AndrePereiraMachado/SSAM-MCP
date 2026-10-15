@@ -7,12 +7,14 @@ export const A2A_TEST='connections.a2aTest',A2A_SAVE='connections.a2aSave';
 const reject=()=>fail('AUTHORIZATION_CONTEXT_INVALID','A2A authorization must bind the exact new connection plan, stage and native test receipt. Nothing was sent.');
 const list=x=>Array.isArray(x)?x:Array.isArray(x?.List)?x.List:null;
 
-function restorePlan(details,discoveredCard){
+function restorePlan(details,discoveredCard,receiptCard=false){
  const header=details?.ConnectionDetails_Header,configs=details?.ConnectionDetail_StageConfig?.List;
  if(!header||!Array.isArray(configs)||configs.length!==1)reject();
  let card;try{card=configs[0].ConfigurationType==='url'?discoveredCard:JSON.parse(configs[0].AgentCardJson);}catch{reject();}
+ if(discoveredCard&&configs[0].ConfigurationType==='json'&&fingerprint(card)!==fingerprint(discoveredCard))
+  fail('A2A_DISCOVERY_CARD_MISMATCH','The native JSON card differs from the confirmed discovery receipt. Prepare a new plan using discoveryOperationUuid and omit card. Nothing was sent.');
  const plan=a2aConnectionPlan({name:header.ConnectionName,description:header.ConnectionDescription,
-  portfolioKey:header.PortfolioKey,stage:configs[0].TenantStage,card,agentUrl:configs[0].AgentUrl,configurationType:configs[0].ConfigurationType});
+  portfolioKey:header.PortfolioKey,stage:configs[0].TenantStage,card,agentUrl:configs[0].AgentUrl,configurationType:configs[0].ConfigurationType},{receiptCard:receiptCard||Boolean(discoveredCard)});
  if(fingerprint(plan.details)!==fingerprint(details))reject();
  return plan;
 }
@@ -34,8 +36,9 @@ export async function a2aConnectionApproval({file,words,host,operationId,raw,loo
  const p=raw.inputParameters;
  let plan,origin,originOperationUuid,discovery,discoveryOperationUuid;
  if(operationId===A2A_TEST){
-  if(p?.ValidStageConfigs?.List?.[0]?.ConfigurationType==='url'){
-   discoveryOperationUuid=constraintsFrom(file)?.discoveryOperationUuid;
+  const constraints=constraintsFrom(file);
+  if(p?.ValidStageConfigs?.List?.[0]?.ConfigurationType==='url'||constraints?.discoveryOperationUuid!==undefined){
+   discoveryOperationUuid=constraints?.discoveryOperationUuid;
    if(!isUuid(discoveryOperationUuid)||typeof lookup!=='function')reject();
    discovery=lookup(discoveryOperationUuid);
    if(discovery?.state!=='confirmed'||discovery.identity?.kind!=='odc-portal'||discovery.identity.tenant!==host
@@ -46,6 +49,9 @@ export async function a2aConnectionApproval({file,words,host,operationId,raw,loo
   if(discovery){
    const expected=discovery.reconciliation?.a2aDiscovery;
    if(expected?.stageKey!==plan.stageKey||expected.agentUrl!==plan.agentUrl||expected.name!==plan.details.ConnectionDetails_Header.ConnectionName)reject();
+   const config=plan.details.ConnectionDetail_StageConfig.List[0];
+   if(config.ConfigurationType==='json'&&fingerprint(JSON.parse(config.AgentCardJson))!==fingerprint(discovery.response.card))
+    fail('A2A_DISCOVERY_CARD_MISMATCH','The native JSON card differs from the confirmed discovery receipt. Prepare a new plan using discoveryOperationUuid and omit card. Nothing was sent.');
   }
   if(fingerprint(p)!==fingerprint(plan.testInput.inputParameters))reject();
  }else if(operationId===A2A_SAVE){
@@ -54,7 +60,7 @@ export async function a2aConnectionApproval({file,words,host,operationId,raw,loo
   if(!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.kind!=='odc-portal'||origin.identity.tenant!==host
     ||origin.identity.operationId!==A2A_TEST||!isUuid(origin.response?.Out_ConnectionId)||origin.response.Out_ConnectionId!==p?.ConnectionId)reject();
   const expected=origin.reconciliation?.a2aConnection;
-  plan=restorePlan(expected?.details,expected?.card);
+  plan=restorePlan(expected?.details,expected?.card,true);
   if(expected.planSha256!==plan.planSha256||fingerprint(p)!==fingerprint(a2aSaveInput(plan,p.ConnectionId,plan.planSha256).inputParameters))reject();
  }else reject();
  const name=plan.details.ConnectionDetails_Header.ConnectionName;
@@ -83,6 +89,7 @@ export async function a2aConnectionApproval({file,words,host,operationId,raw,loo
    fail('CONNECTION_TEST_NOT_CONFIRMED','The exact A2A stage test must succeed before saving. Nothing was sent.');
  }
  return {approval,expected:{planSha256:plan.planSha256,details:structuredClone(plan.details),stageKey:plan.stageKey,name,
+  ...(discoveryOperationUuid?{discoveryOperationUuid}:{}),
   ...(plan.card?{card:structuredClone(plan.card),discoveryOperationUuid:discoveryOperationUuid??origin?.reconciliation?.a2aConnection?.discoveryOperationUuid}:{}),
   ...(origin?{connectionId:p.ConnectionId,originOperationUuid}:{})}};
 }

@@ -32,7 +32,7 @@ public sealed class ModuleRichIndex
     // internal paths, canvas positions, the reverse of connectors and the native referrers, icons, display copies, the ODC
     // Model API's descriptors and editing hints), or point at the element's own frame (owners, the module). Measured on
     // the O11 and ODC fixtures (2026-10-10): they were 2/3 of the bytes and every read error.
-    private static readonly HashSet<string> Skipped = new(StringComparer.Ordinal) {
+    internal static readonly HashSet<string> Skipped = new(StringComparer.Ordinal) {
         "Name", "Owner", "OwnerESpace", "ESpace", "Module", "PropertyOwner", "RealPropertyOwner", "Object", "Parent", "Children",
         "Key", "ObjectKey", "GlobalKey", "IsValid", "Root", "HorizontalPosition", "VerticalPosition", "IncomingConnectors", "Icon", "DisplayValue",
         "DisplayName", "ReadableIdentifier", "Referrers", "Referers", "ApplicableCssClasses", "CollectionDescriptor", "PropertyDescriptor",

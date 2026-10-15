@@ -238,6 +238,35 @@ public sealed class XifDocument
         }).ToArray()),
     };
 
+    /// <summary>Export into a fresh private directory. Package paths are metadata, never filesystem destinations.</summary>
+    public JsonObject ExportResources(string directory)
+    {
+        if (!System.IO.Path.IsPathFullyQualified(directory) || Directory.Exists(directory) || File.Exists(directory))
+            throw XifRefusal.Single(XifCodes.PackageInvalid, "Resource export needs a new absolute directory.", "Use a new private work directory.");
+        // Validate every filename before writing anything; Windows device names and alternate streams are not files.
+        foreach (var r in Resources)
+            if (r.Filename.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0 || r.Filename.EndsWith('.') || r.Filename.EndsWith(' ') ||
+                System.Text.RegularExpressions.Regex.IsMatch(r.Filename, @"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                throw XifRefusal.Single(XifCodes.PackageInvalid, "The XIF has an unsafe resource filename.", "Use a package with ordinary resource filenames.");
+        var resources = new JsonArray();
+        var references = new JsonArray();
+        Directory.CreateDirectory(directory);
+        for (var i = 0; i < Resources.Count; i++)
+        {
+            var r = Resources[i];
+            // Separate slots preserve same-named resources without collisions or trusting the package's directories.
+            var slot = System.IO.Path.Combine(directory, i.ToString("D4"));
+            Directory.CreateDirectory(slot);
+            var file = System.IO.Path.Combine(slot, r.Filename);
+            using (var output = new FileStream(file, FileMode.CreateNew, FileAccess.Write, FileShare.None)) output.Write(r.Data);
+            resources.Add(new JsonObject { ["path"] = r.RelativePath, ["file"] = file, ["sha256"] = r.Sha256,
+                ["bytes"] = r.Data.Length, ["deploy"] = r.CompileAction, ["codeReference"] = r.CodeReference });
+            if (r.CodeReference && r.Filename.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
+                !r.Filename.StartsWith("OutSystems.", StringComparison.OrdinalIgnoreCase)) references.Add(file);
+        }
+        return new JsonObject { ["directory"] = directory, ["resources"] = resources, ["references"] = references };
+    }
+
     /// <summary>The checks of a final XIF before it is sent: the compiled DLL is the one we built, no platform DLL is embedded,
     /// and no local profile path leaked into it. Every problem at once.</summary>
     public IReadOnlyList<XifProblem> Audit(string? expectedDllSha256, IEnumerable<string> platformDlls, IEnumerable<string> profilePaths)

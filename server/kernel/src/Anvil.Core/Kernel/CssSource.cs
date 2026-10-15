@@ -270,6 +270,86 @@ public sealed class CssStylesheet
         catch (InvalidOperationException) { return TolerantCount(css, 0, css.Length); }
     }
 
+    /// <summary>Whole top-level source spans. A malformed tail is not shareable even when
+    /// the lenient semantic parser would silently swallow it (notably a cut import string).</summary>
+    public static List<(int Start, int End)> SplitTopLevel(string css)
+    {
+        var spans = new List<(int, int)>();
+        var start = -1; var braces = 0; var parens = 0; var brackets = 0;
+        char quote = '\0';
+        for (var i = 0; i < css.Length; i++)
+        {
+            var c = css[i];
+            if (quote != '\0')
+            {
+                if (c is '\r' or '\n') throw new InvalidOperationException("string reaches end of line");
+                if (c == '\\')
+                {
+                    if (++i >= css.Length) throw new InvalidOperationException("unfinished escape");
+                    if (css[i] is '\r' or '\n') throw new InvalidOperationException("string reaches end of line");
+                    continue;
+                }
+                if (c == quote) quote = '\0';
+                continue;
+            }
+            if (c == '/' && i + 1 < css.Length && css[i + 1] == '*')
+            {
+                var end = css.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                if (end < 0) throw new InvalidOperationException("unterminated comment");
+                i = end + 1; continue;
+            }
+            if (start < 0 && (char.IsWhiteSpace(c) || c == '\uFEFF')) continue;
+            if (start < 0) start = i;
+            if (c is '\'' or '"') { quote = c; continue; }
+            if (c == '\\') { if (++i >= css.Length) throw new InvalidOperationException("unfinished escape"); continue; }
+            if (c == '(') parens++;
+            if (c == ')') parens--;
+            if (c == '[') brackets++;
+            if (c == ']') brackets--;
+            if (parens < 0 || brackets < 0) throw new InvalidOperationException("unbalanced CSS delimiters");
+            if (parens != 0 || brackets != 0) continue;
+            if (c == '{') braces++;
+            if (c == '}')
+            {
+                if (--braces < 0) throw new InvalidOperationException("unbalanced CSS braces");
+                if (braces == 0) { spans.Add((start, i + 1)); start = -1; }
+            }
+            else if (c == ';' && braces == 0) { spans.Add((start, i + 1)); start = -1; }
+        }
+        if (quote != '\0' || braces != 0 || parens != 0 || brackets != 0 || start >= 0)
+            throw new InvalidOperationException("incomplete CSS rule or string");
+        _ = Parse(css, lenient: true);
+        return spans;
+    }
+
+    /// <summary>Comparison key; strings and escapes retain their exact authored contents.</summary>
+    public static string SharedRuleKey(string text)
+    {
+        var clean = new StringBuilder();
+        var strings = new List<string>();
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (c is '\'' or '"')
+            {
+                var start = i;
+                var quote = c;
+                while (++i < text.Length)
+                {
+                    if (text[i] == '\\') { i++; continue; }
+                    if (text[i] == quote) break;
+                }
+                strings.Add(text[start..Math.Min(i + 1, text.Length)]);
+                clean.Append('\0').Append(strings.Count - 1).Append('\0');
+            }
+            else if (c == '\\' && i + 1 < text.Length) { clean.Append(c).Append(text[++i]); }
+            else if (c == '/' && i + 1 < text.Length && text[i + 1] == '*')
+            { var end = text.IndexOf("*/", i + 2, StringComparison.Ordinal); clean.Append(' '); i = end < 0 ? text.Length : end + 1; }
+            else clean.Append(c);
+        }
+        var key = string.Join("\n", clean.ToString().Replace("\r\n", "\n").Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0));
+        return System.Text.RegularExpressions.Regex.Replace(key, "\0([0-9]+)\0", match => strings[int.Parse(match.Groups[1].Value)]);
+    }
     private static int TolerantCount(string css, int i, int end)
     {
         var count = 0;

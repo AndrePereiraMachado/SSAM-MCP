@@ -179,6 +179,17 @@ public sealed partial class ModelSession
     /// declares the flow owner and the node by name; null otherwise.</summary>
     private static string? StepPointer(JsonObject? op, string owner, string node)
     {
+        // The text form (ssam-flow/1): the text of the action whose header names the owner.
+        if (op?["op"]?.ToString() == "logic" && op["data"] is JsonObject textForm && textForm.ContainsKey("flow"))
+        {
+            try
+            {
+                foreach (var (text, _, pointer) in FlowTextForm.Texts(textForm))
+                    if (FlowTextForm.ActionNames([(text, null, pointer)]).Contains(owner)) return pointer;
+            }
+            catch (KernelRefusalException) { }
+            return null;
+        }
         if (op?["op"]?.ToString() != "logic" || op["data"]?["actions"] is not JsonArray actions) return null;
         for (var a = 0; a < actions.Count; a++)
             if (actions[a] is JsonObject action && string.Equals(action["name"]?.ToString(), owner, StringComparison.OrdinalIgnoreCase)

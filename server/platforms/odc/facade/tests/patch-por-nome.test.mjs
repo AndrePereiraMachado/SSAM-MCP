@@ -165,6 +165,20 @@ test('P2: an html page op is identified by its screen: a partial replaces its fi
   assert.deepEqual(fragment.job.ops, [{ op: 'html', parent: '$home', html: '<p>b</p>' }]);
 });
 
+test('B1: an html op in the document form is identified by the name of its <screen> or <block>: a partial replaces it', () => {
+  const doc = name => ({ op: 'html', data: { html: `<!-- page -->\n<screen name="${name}" roles="Registered">\n<var name="Busca" type="Text"/>\n</screen>` } });
+  const base = { ops: [doc('Pedidos'), { op: 'logic', data: { actions: [{ name: 'Buscar', kind: 'screen', owner: 'IMobileScreen:Pedidos', steps: [] }] } }] };
+  const fixed = { op: 'html', data: { html: '<screen name="pedidos" roles="Registered">\n<var name="Busca" type="Text"/>\n<var name="Total" type="Integer"/>\n</screen>' } };
+  const merged = jobPatch.mergePartialJob(base, [fixed]);
+  assert.equal(merged.job.ops.filter(o => o.op === 'html').length, 1, 'the corrected document replaces the one of basedOn (the name without regard to case)');
+  assert.equal(merged.job.ops[0].data.html, fixed.data.html);
+  assert.deepEqual(merged.summary, { replaced: ['/ops/0'], added: [], ops: [] });
+  // Another root is a new document; a block too.
+  assert.equal(jobPatch.mergePartialJob(base, [doc('Detalhe')]).job.ops.filter(o => o.op === 'html').length, 2);
+  const block = { op: 'html', data: { html: "<block name='Cartao'></block>" } };
+  assert.equal(jobPatch.mergePartialJob({ ops: [block] }, [{ op: 'html', data: { html: "<block name='Cartao'><var name='X' type='Text'/></block>" } }]).job.ops.length, 1);
+});
+
 test('P2: what a partial job cannot merge by name is refused with the candidates, before anything runs', () => {
   const twoOrders = { ops: [{ op: 'logic', data: { actions: [{ name: 'A' }] } }, { op: 'logic', data: { actions: [{ name: 'A' }] } }] };
   const ambiguous = thrown(() => jobPatch.mergePartialJob(twoOrders, [{ op: 'logic', data: { actions: [{ name: 'A', steps: [] }] } }]));

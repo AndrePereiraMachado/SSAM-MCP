@@ -183,7 +183,8 @@ test('default observer opens its own developer Portal session, prepares the Time
   const binding = { tenant: 'fixture.outsystems.dev', environmentKey: STAGE, module: 'Store', moduleKey, revision: 42, runtimeUrl: 'https://fixture-dev.outsystems.app/Store/' };
   const requests = [], state = { isRunning: false, isPendingRun: false, lastRunDuration: 0, currentStartedOn: '1900-01-01T00:00:00',
     lastRunStartedOn: '1900-01-01T00:00:00', lastRunFinishedOn: '1900-01-01T00:00:00', nextRunStartsOn: '1900-01-01T00:00:00' };
-  const broker = { target: 'odc3', origin: 'https://fixture.outsystems.dev', authenticated: false, secrets: ['s'],
+  const broker = { target: 'odc3', origin: 'https://fixture.outsystems.dev', authenticated: false,
+    credentialRegistry: { reset: () => requests.push('credentials-reset') },
     jar: { removeAllCookies: async () => { requests.push('cookies-removed'); } },
     initialize: async () => {}, authenticate: async () => { broker.authenticated = true; return { ok: true }; },
     metadata: { resolve: async (m, v, a) => ({ action: a, apiVersion: TIMER_PORTAL_CONTRACT.actions[a.split('/').at(-1)], moduleVersion: 'v1' }) },
@@ -201,7 +202,8 @@ test('default observer opens its own developer Portal session, prepares the Time
   const baseline = await observer.baseline();
   assert.equal(baseline.available, true); assert.equal(baseline.state.isRunning, false);
   assert.equal(requests.includes('ActionWakeTimer_Wrapper'), false);
-  assert.deepEqual(await observer.release(), { released: true }); assert.equal(broker.authenticated, false); assert.deepEqual(broker.secrets, ['']);
+  assert.deepEqual(await observer.release(), { released: true }); assert.equal(broker.authenticated, false);
+  assert.ok(requests.includes('credentials-reset'));
   assert.ok(requests.includes('cookies-removed'));
   // Non-ODC-cloud targets never open a Portal session.
   assert.equal(openOdcTimerInstance({ binding: { ...binding, environmentKey: 'dev' }, sourceSha256: 'a'.repeat(64), timer: { timerKey, name: 'Nightly' }, root }), null);

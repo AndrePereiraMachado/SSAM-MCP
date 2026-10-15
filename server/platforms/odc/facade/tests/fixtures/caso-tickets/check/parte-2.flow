@@ -1,0 +1,132 @@
+/// Grava comentários e atualiza o ticket na mesma transação.
+server action AddTicketComment public
+  in TicketId: Ticket Identifier
+  in Text: Text
+  in IsInternal?: Boolean = False
+  out CommentData: TicketComment
+  out TicketData: Ticket
+  Access = RequireTicketAccess(TicketId=TicketId, LockForUpdate=True)
+  if Access.TicketData.StatusId = Entities.TicketStatus.Closed or Access.TicketData.StatusId = Entities.TicketStatus.Cancelled:  # Ticket aceita comentários?
+    raise TicketValidationError("Tickets fechados ou cancelados não aceitam comentários.")
+  if IsInternal and not Access.IsStaff:  # Usuário pode escrever nota interna?
+    raise TicketAccessDenied("Somente a equipe pode registrar notas internas.")
+  if Length(Trim(Text)) = 0 or Length(Text) > 20000:  # Comentário é válido?
+    raise TicketValidationError("Informe um comentário com até 20000 caracteres.")
+  assign  # Preparar comentário
+    CommentData.TicketId = TicketId
+    CommentData.AuthorId = Access.CurrentUserId
+    CommentData.Text = Trim(Text)
+    CommentData.IsInternal = IsInternal
+    CommentData.CreatedOn = CurrDateTime()
+  CreatedComment = CreateTicketComment(Source=CommentData)
+  assign CommentData.Id = CreatedComment.Id  # Retornar comentário
+  assign  # Atualizar data do ticket
+    TicketData = Access.TicketData
+    TicketData.UpdatedOn = CommentData.CreatedOn
+  IEntityActionSignature:UpdateTicket(Source=TicketData)
+  RecordTicketHistory(TicketId=TicketId, Event=If(IsInternal,"InternalNoteAdded","CommentAdded"), NewValue=LongIntegerToText(CommentData.Id))
+  end
+
+/// Confere o tamanho real do arquivo e grava metadados e conteúdo juntos.
+server action UploadTicketAttachment public
+  in TicketId: Ticket Identifier
+  in FileName: Text
+  in MimeType: Text
+  in FileContent: Binary Data
+  in FileSize: Long Integer
+  out AttachmentData: TicketAttachment
+  out TicketData: Ticket
+  local ContentData: TicketAttachmentContent
+  Access = RequireTicketAccess(TicketId=TicketId, LockForUpdate=True)
+  if Access.TicketData.StatusId = Entities.TicketStatus.Closed or Access.TicketData.StatusId = Entities.TicketStatus.Cancelled:  # Ticket aceita anexos?
+    raise TicketValidationError("Tickets fechados ou cancelados não aceitam anexos.")
+  if Length(Trim(FileName)) = 0 or Length(FileName) > 255:  # Nome do arquivo é válido?
+    raise TicketValidationError("Informe um nome de arquivo com até 255 caracteres.")
+  if Length(Trim(MimeType)) = 0 or Length(MimeType) > 255:  # Tipo do arquivo é válido?
+    raise TicketValidationError("Informe um tipo de arquivo válido.")
+  FileBytes = BinaryData.BinaryDataSize(BinaryData=FileContent)
+  if FileBytes.Size <= 0 or FileBytes.Size > Site.TicketMaxAttachmentBytes:  # Arquivo respeita o limite?
+    raise TicketValidationError("O arquivo deve ter conteúdo e respeitar o limite configurado.")
+  if FileSize <> FileBytes.Size:  # Tamanho informado corresponde ao arquivo?
+    raise TicketValidationError("O tamanho informado não corresponde ao conteúdo do arquivo.")
+  assign  # Preparar metadados
+    AttachmentData.TicketId = TicketId
+    AttachmentData.AuthorId = Access.CurrentUserId
+    AttachmentData.Name = Trim(FileName)
+    AttachmentData.MimeType = Trim(MimeType)
+    AttachmentData.Size = FileBytes.Size
+    AttachmentData.CreatedOn = CurrDateTime()
+  CreatedAttachment = CreateTicketAttachment(Source=AttachmentData)
+  assign AttachmentData.Id = CreatedAttachment.Id  # Retornar anexo
+  assign  # Preparar conteúdo binário
+    ContentData.AttachmentId = AttachmentData.Id
+    ContentData.Content = FileContent
+  CreateTicketAttachmentContent(Source=ContentData)
+  assign  # Atualizar data do ticket
+    TicketData = Access.TicketData
+    TicketData.UpdatedOn = AttachmentData.CreatedOn
+  IEntityActionSignature:UpdateTicket(Source=TicketData)
+  RecordTicketHistory(TicketId=TicketId, Event="AttachmentAdded", NewValue=AttachmentData.Name)
+  end
+
+/// Retorna o arquivo somente ao usuário autorizado no ticket.
+server action DownloadTicketAttachment public
+  in AttachmentId: TicketAttachment Identifier
+  out FileName: Text
+  out MimeType: Text
+  out FileContent: Binary Data
+  out FileSize: Long Integer
+  RequireTicketSession()
+  AttachmentById = aggregate FROM TicketAttachment WHERE (TicketAttachment.Id = AttachmentId) MAX 1
+  if AttachmentById.List.Empty:  # Anexo existe?
+    raise TicketNotFound("Anexo não encontrado.")
+  RequireTicketAccess(TicketId=AttachmentById.List.Current.TicketAttachment.TicketId)
+  ContentById = aggregate FROM TicketAttachmentContent WHERE (TicketAttachmentContent.AttachmentId = AttachmentId) MAX 1
+  if ContentById.List.Empty:  # Conteúdo existe?
+    raise TicketNotFound("Conteúdo do anexo não encontrado.")
+  assign  # Retornar arquivo autorizado
+    FileName = AttachmentById.List.Current.TicketAttachment.Name
+    MimeType = AttachmentById.List.Current.TicketAttachment.MimeType
+    FileContent = ContentById.List.Current.TicketAttachmentContent.Content
+    FileSize = AttachmentById.List.Current.TicketAttachment.Size
+  end
+
+/// Cria ou renomeia categorias com permissão administrativa e nome único.
+server action SaveTicketCategory public
+  in CategoryId?: TicketCategory Identifier
+  in Name: Text
+  out CategoryData: TicketCategory
+  Session = RequireTicketSession()
+  if not Session.IsAdmin:  # Usuário é administrador?
+    raise TicketAccessDenied("Somente administradores podem gerenciar categorias.")
+  if Length(Trim(Name)) = 0 or Length(Name) > 100:  # Nome é válido?
+    raise TicketValidationError("Informe uma categoria com até 100 caracteres.")
+  DuplicateCategory = aggregate FROM TicketCategory WHERE (ToLower(TicketCategory.Name) = ToLower(Trim(Name)) and TicketCategory.Id <> CategoryId) MAX 1
+  if not DuplicateCategory.List.Empty:  # Nome já existe?
+    raise TicketValidationError("Já existe uma categoria com esse nome.")
+  if CategoryId = NullIdentifier():  # Categoria é nova?
+    assign  # Preparar nova categoria ativa
+      CategoryData.Name = Trim(Name)
+      CategoryData.IsActive = True
+    CreatedCategory = CreateTicketCategory(Source=CategoryData)
+    assign CategoryData.Id = CreatedCategory.Id  # Retornar categoria criada
+    end
+  ExistingCategory = GetTicketCategoryForUpdate(Id=CategoryId)
+  assign CategoryData = ExistingCategory.Record  # Preservar categoria
+  assign CategoryData.Name = Trim(Name)  # Renomear categoria
+  UpdateTicketCategory(Source=CategoryData)
+  end
+
+/// Ativa ou desativa categorias sem remover os tickets existentes.
+server action SetTicketCategoryActive public
+  in CategoryId: TicketCategory Identifier
+  in IsActive: Boolean
+  out CategoryData: TicketCategory
+  Session = RequireTicketSession()
+  if not Session.IsAdmin:  # Usuário é administrador?
+    raise TicketAccessDenied("Somente administradores podem gerenciar categorias.")
+  ExistingCategory = GetTicketCategoryForUpdate(Id=CategoryId)
+  assign CategoryData = ExistingCategory.Record  # Preservar categoria
+  assign CategoryData.IsActive = IsActive  # Atualizar disponibilidade
+  UpdateTicketCategory(Source=CategoryData)
+  end

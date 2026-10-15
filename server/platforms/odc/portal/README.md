@@ -1,5 +1,91 @@
 # ODC Portal public API MCP
 
+## Política de credenciais e projeção (14/10/2026)
+
+O broker HTTP mantém um `CredentialRegistry` privado. Todos os registros contribuem
+para o conjunto de credenciais do processo, incluindo segredo e tokens do API Client.
+O mínimo é **16 caracteres**. Valores menores ficam fora e são contados.
+Um novo login move os valores ativos para uma geração retirada, inclusive se o login
+falhar. Credenciais ativas de registros vivos permanecem no conjunto do processo,
+sem teto por registro ou descarte por pressão de outros logins. O limite de
+**4.096 valores** vale somente para os retirados; o mais antigo sai primeiro.
+Repetir um retirado o move para o fim da fila. Observar um registro recompõe seus
+ativos no conjunto. A contagem de ativos considera os registros vivos.
+Cada identidade de cookie (`key`, `domain` e `path` salvos pelo jar) mantém seu
+valor atual ativo; o anterior vai para os retirados quando essa identidade muda.
+Cookies de mesmo nome em domínios ou caminhos diferentes mantêm donos separados.
+Tokens e códigos do broker permanecem ativos até `reset()` ou `dispose()`.
+O API Client OAuth mantém ativos somente o segredo e até 16 tokens de
+`knownTokens`. Ao sair dessa janela, o token é retirado; a fila global de 4.096
+continua protegendo ecos recentes. O broker liberado sai dos registros vivos; seus valores
+entram na fila limitada de retirados. Leituras juntadas e retomadas ficam protegidas
+enquanto o registro estiver vivo ou seus valores continuarem retidos após o login
+ou a liberação. O diagnóstico contém apenas contagens e nomes de cookies; nomes e
+contagem de curtos são reiniciados no login.
+
+Todo cookie aceito pelo jar do broker, de origem de tenant ou identidade, entra no
+registro, exceto idioma, consentimento e cookies públicos de roteamento com forma
+validada: `TenantDomain` igual ao host, `TenantPref` igual ao primeiro segmento do host,
+`TenantGeo` com duas letras maiúsculas, `TenantRing` com um ou dois dígitos e
+`TenantPortfolio` igual a `0` ou `1`. Nomes desconhecidos são privados. Para `nr2*`,
+o `crf` decodificado também entra. Nunca se documentam os valores dos cookies.
+`state` e `os_data1/2/3`, usuário e senha continuam fora desse registro.
+O identificador público do cliente OAuth permanece público.
+
+Os transportes internos retornam dados brutos. A validação de escopo, identidade,
+datas, paginação e confirmação de escrita ocorre antes da ocultação. `redact()`
+aplica regras por chave e `isSecret` somente nas projeções de dados remotos do tenant.
+A borda `projectForAgent` aplica `redactValues()`: valores registrados, suas formas
+`encodeURIComponent`, Bearer com token e parâmetros de URLs assinadas. A borda usa
+a união das credenciais ativas e retiradas do processo, inclusive para leituras
+juntadas ou retomadas. Textos livres recebem substituição de credenciais antes do
+corte. As projeções marcam os campos realmente cortados; só nesses campos a borda
+remove um sufixo de oito ou mais caracteres que seja prefixo de credencial registrada.
+Campos inteiros não recebem corte de prefixo. A substituição de credenciais
+inteiras continua ativa; GUIDs, datas e paginação são validados antes da máscara.
+O casador é compilado uma vez por versão do conjunto e reutilizado; a busca percorre
+o texto com Aho-Corasick.
+
+Sete ferramentas locais ficam fora da borda: `odc_status`, `odc_portal_capabilities`,
+`odc_describe_capability`, `odc_list_apis`, `odc_search_operations`,
+`odc_describe_operation` e `odc_a2a_connection_plan`. Contratos, planos, booleans de
+estado e referências ao cofre preservam seus tipos e valores públicos, pois a borda
+não oculta por chave. As respostas remotas comuns passam pela projeção. O plano
+A2A com recibo é uma exceção: expõe o cartão bruto e o corpo de teste fora da borda
+para manter o vínculo entre o hash revisado e o envio. Essa limitação corresponde
+ao achado N2, ainda aberto; não há garantia de máscara nesse cartão do plano.
+
+O plano A2A aceita `discoveryOperationUuid` nos modos URL e JSON. Omita `card` para
+usar o cartão bruto do recibo confirmado de `connections.a2aDiscover`. O modo URL
+exige esse recibo; um `card` diferente dele é recusado com
+`A2A_DISCOVERY_CARD_MISMATCH`. O plano continua fora da borda e não faz chamadas de
+rede. Cartões exibidos pela descoberta ou pela leitura do recibo podem estar
+mascarados; o plano e a aprovação usam a mesma fonte bruta do recibo.
+Um `card` explícito com `[REDACTED]`, `%5BREDACTED%5D` ou `[INVALID URL]` em qualquer
+texto é recusado com `A2A_CARD_REDACTED_COPY`, nos dois modos. Uma única recusa
+lista todos os caminhos marcados e orienta usar `discoveryOperationUuid`.
+Se a aprovação cita o recibo e o cartão difere dele, a recusa usa
+`A2A_DISCOVERY_CARD_MISMATCH`. A descoberta confirmada devolve a continuação para
+`odc_a2a_connection_plan` com o UUID, nome, URL e estágio; não inclui `card`.
+URLs com usuário no texto exibido preservam uma marca explícita: o usuário vira
+`[REDACTED]` (`%5BREDACTED%5D@` na URL serializada), e a senha é apagada. A cópia
+desse cartão também é recusada, inclusive em um teste nativo montado sem recibo.
+
+Os testes de trace com 0, 108 e 1.008 valores continuam medindo a primeira leitura,
+com limite de um segundo. Para 4.096 valores, a compilação é medida e informada à
+parte; o limite de um segundo vale para a leitura com o casador pronto. O custo
+da compilação e da memória no teto continua documentado como N3.
+
+Logs e busca de traces aceitam um `Limit` positivo menor ou igual ao pedido, com o mesmo
+`Offset`. Traces informam `serverLimit` e calculam a continuação com o limite recebido.
+Recusas de paginação mostram somente `requested: {limit, offset}`,
+`received: {Limit, Offset, NextPageOffset, TotalPages, TotalResults}` (inteiros ou `null`)
+e `invalidFields`. Não incluem linhas, nomes de apps ou mensagens.
+
+Esta alteração é do runtime Node. A bridge C# não foi alterada; sua ocultação própria
+continua anterior à entrega do corpo ao Node. A causa exata de uma recusa de paginação
+em produção exige a prova ao vivo com o dono autenticado. Os testes locais não a comprovam.
+
 A portable **MCP tool module**, independent of Codex and any conversation history. Register it on an existing MCP server through `registerOdcTools`; the standalone stdio entry remains a compatibility and local-test option. A compatible MCP host can discover official OutSystems Developer Cloud public operations and the separately mapped Portal capability inventory, inspect contracts and call public operations through one authenticated broker. The public broker does **not** expose every feature of the Portal and does **not** acquire or reuse a browser/Studio session.
 
 ## Delivery status

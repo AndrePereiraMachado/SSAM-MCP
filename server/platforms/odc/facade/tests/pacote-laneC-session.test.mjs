@@ -14,7 +14,7 @@ import { Client } from '@modelcontextprotocol/client';
 import * as m_ssam from '../ssam.mjs';
 const { createSsamServer, moduleReservations } = m_ssam; // a namespace: at the base each test fails on its own rule, not at import
 
-const CORE = ['ssam_doctor', 'ssam_connect', 'ssam_discover', 'ssam_map', 'ssam_reference', 'ssam_evidence', 'ssam_task', 'o11_inspect', 'o11_deliver',
+const CORE = ['ssam_doctor', 'ssam_connect', 'ssam_discover', 'ssam_map', 'ssam_code', 'ssam_reference', 'ssam_evidence', 'ssam_task', 'o11_inspect', 'o11_deliver',
   'o11_publish', 'o11_studio', 'studio_deliver', 'studio_inspect', 'studio_status'];
 
 test('the instructions load every core tool schema in one ToolSearch select', async t => {

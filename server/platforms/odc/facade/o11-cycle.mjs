@@ -22,6 +22,10 @@
 //   "entregue", PUBLISH_FAILED|PUBLISH_UNCERTAIN and only the o11_publish continuation: the delivery is never repeated.
 // - authorize may be absent when a standing grant covers the module for deliver; the answer names authorization.
 // - every producer a `reference` op of the job names is captured read-only (captureProducers), as the ODC lane does (C27).
+//   F5 (family rule of producer signatures, 2026-10-12): the kernel reuses a capture while the producer's published state
+//   did not change (Delivery.Acquire, ProducerLedger): a round before the merge makes no server call when the workspace saw
+//   that version lately and no publication since; the merge observes every producer first (one lease) and a changed one
+//   answers PRODUCER_CHANGED with the same delivery as continuation. Each answer says it in producers/producersNote.
 // - a job made only of `set StyleSheet` on blocks or themes gets one deterministic touch of a block widget (C32): the
 //   published block CSS is regenerated only when a widget of the block changes. The answer says touch {target, op}.
 // - a refused job answers PREFLIGHT_REFUSED with every problem of every phase over the live module (primeira-certa A3:
@@ -43,6 +47,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import * as z from 'zod/v4';
 import { anvilRoot, o11Lane } from './workspace.mjs';
+import { entityActionsOf } from './entity-actions.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { o11Bridge, bridgeTarget } from './o11-bridge.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
@@ -56,16 +61,21 @@ import { resolvePatchedJob, failedOpOf, jobShapeOf, PATCH_MAX_OPS, nextBasedOnOf
 import { resolveOpenModule } from './studio-module.mjs';
 import * as standingGrants from './standing-grants.mjs';
 import { prepareIntegrationJob } from './integration-documents.mjs';
+import { textFormRefusal, partReader } from './text-routes.mjs';
+import { CODE_JOB_TEXT, removedOf } from './ssam-code.mjs';
 import { taskWarnings, warningFields } from './delivery-warnings.mjs';
 import { jobSummary } from './job-summary.mjs';
+import { mergeNormalizations } from './normalizations.mjs';
 // Lane wp (atritos 3): the build phase of a phased delivery, outside the Studio lock (o11-build-phase.mjs).
-import { phaseGuards, buildBeforeApply, afterApply } from './o11-build-phase.mjs';
+import { phaseGuards, buildBeforeApply, afterApply, validationContract, contractProblems } from './o11-build-phase.mjs';
 import { refusalFields, diagnosisOf, normalizationsOf } from './refusal-problems.mjs';
 import { PHASES_META } from './studio-write-lock.mjs';
+// F5: what a delivery reused of its producer signatures, in every answer (producer-signatures.mjs).
+import { producerSignaturesOf } from './producer-signatures.mjs';
 // The prototype importer (docs/PROTOTIPO-NATIVO.md, lane surface): the capture before anything, the rebuild of 1.4.1, the
 // receipt and the seed after a clean publication.
 import { expandJobFile, capturePrototype, buildWithDegradation, buildProblems, journalTo, kernelPrototypeReport, findNativeDom,
-  measurePrototypeFidelity, prototypeReceipt, receiptWithSeed, PROTOTYPE_DELIVER_TEXT } from './prototype-op.mjs';
+  measurePrototypeFidelity, prototypeReceipt, receiptWithSeed, PROTOTYPE_DELIVER_TEXT, withoutIdentityPatches, bindingCorrection, readJobDocument } from './prototype-op.mjs';
 import { seedPrototypeData, o11DataWriter } from './prototype-seed.mjs';
 import { prototypeAppUrl, prototypeScreenLinks } from './next-steps.mjs';
 // prazos B: a referenced producer open and unmodified in the same Studio is bound by a capture of its tab (no environment call).
@@ -88,6 +98,35 @@ const doctor = why => ({ tool: 'ssam_doctor', arguments: { lane: 'o11' }, why })
 const connect = why => ({ tool: 'ssam_connect', arguments: { lane: 'o11' }, why });
 const resumeWith = taskId => ({ tool: 'o11_deliver', arguments: { resume: taskId },
   why: 'Resumes the same kernel task: it reconciles through merge_status and never repeats the merge. Pass the user\'s words in authorize.' });
+
+// fam-deps (family D): the dialog the bridge read during a merge (OperationDialogPolicy), short: kind, title, text, buttons.
+export function dialogOf(blockedBy) {
+  if (!blockedBy || typeof blockedBy !== 'object') return null;
+  return { kind: blockedBy.kind ?? null, title: blockedBy.title ?? null, text: clean(blockedBy.text ?? '', 500),
+    buttons: Array.isArray(blockedBy.buttons) ? blockedBy.buttons.slice(0, 8) : [] };
+}
+// fam-deps review (finding 1): every dialog the bridge closed for this delivery (during the merge, before it, during a
+// Refresh References), short: kind, title, text, answer, closed, when. Absent when none. An error the Studio reported is
+// never hidden in the receipt: it reaches the answer, delivered or refused.
+export function dialogsOf(state) {
+  const pick = (list, when) => (Array.isArray(list) ? list : []).filter(d => d && typeof d === 'object')
+    .map(d => ({ kind: d.kind ?? null, title: d.title ?? null, text: clean(d.text ?? '', 300), answer: d.answer ?? null,
+      ...(d.closed !== undefined ? { closed: d.closed } : {}), when }));
+  const all = [...pick(state?.merge?.dialogsBefore, 'before-merge'), ...pick(state?.merge?.dialogs, 'merge'), ...pick(state?.refreshDialogs, 'refresh-references')];
+  return all.length ? { dialogs: all.slice(0, 10), ...(all.length > 10 ? { dialogsTotal: all.length } : {}) } : {};
+}
+// fam-deps review (finding 1): the Studio error the kernel proved against the base (STUDIO_ERROR_DURING_MERGE), short.
+export function studioErrorOf(state) {
+  const e = state?.studioError;
+  if (!e || typeof e !== 'object') return {};
+  return { studioError: { stage: e.stage ?? null, title: e.title ?? null, text: clean(e.text ?? '', 500), proof: e.proof ?? null } };
+}
+// fam-deps (family E, R8): the producer signatures a rolled-back merge had to select, named by the kernel (Delivery.cs).
+export function signatureChangesOf(state) {
+  const list = (Array.isArray(state?.referenceSignatureChanges) ? state.referenceSignatureChanges : []).filter(c => c && typeof c === 'object');
+  return list.slice(0, 10).map(c => ({ producer: c.producer ?? null, key: c.key ?? null, baseHash: c.baseHash ?? null, candidateHash: c.candidateHash ?? null,
+    namedByJob: c.namedByJob === true }));
+}
 
 // Kernel and bridge texts may carry a shell hint (ssam connect ..., dotnet build ...). The model gets continuations,
 // never commands, so those sentences are dropped and the rest is kept short.
@@ -174,8 +213,8 @@ const ops = z.array(z.record(z.string(), z.unknown())).min(1);
 const TASK_ID = /^[0-9a-fA-F]{32}$/;
 const SHA = /^[a-fA-F0-9]{64}$/;
 // JSON Patch (job-patch.mjs): the same shape as its patchJsonSchema / basedOnJsonSchema.
-const patchSchema = z.array(z.object({ op: z.enum(['add', 'remove', 'replace', 'test']), path: z.string().min(1), value: z.unknown().optional() }).strict())
-  .min(1).max(PATCH_MAX_OPS);
+const patchSchema = z.union([z.array(z.object({ op: z.enum(['add', 'remove', 'replace', 'test']), path: z.string().min(1), value: z.unknown().optional() }).strict())
+  .min(1).max(PATCH_MAX_OPS), z.literal('verified')]);
 const basedOnSchema = z.union([z.object({ job: z.string().min(1), sha256: z.string().regex(SHA) }).strict(),
   z.object({ taskId: z.string().regex(TASK_ID), sha256: z.string().regex(SHA).optional() }).strict()]);
 const deliverSchema = z.object({
@@ -183,7 +222,7 @@ const deliverSchema = z.object({
   job: z.union([z.string().min(1), ops, z.record(z.string(), z.unknown())]).optional()
     .describe('Absolute path of the job JSON, or the job itself (array of ops, or {ops} / {jobs}). With basedOn: a partial job, only the changed or new '
       + 'actions/entities/structures/ops (same name replaces, new name is added). Required unless resume, close or patch'),
-  patch: patchSchema.optional().describe('Instead of job: JSON Patch (add, remove, replace, test; at most 50) over the job of basedOn, '
+  patch: patchSchema.optional().describe('Instead of job: JSON Patch (add, remove, replace, test; at most 50) over the job of basedOn, or "verified" (every verified patch of its refusal: verifiedPatch.call), '
     + 'paths /ops/<i>/... (/<i>/... for an array job) or by name: actions/<Action>/steps/<as>/...; the patched job is a new file'),
   basedOn: basedOnSchema.optional().describe('With patch or a partial job: {job, sha256} as an answer returned them (nextBasedOn), or {taskId} of a refused delivery'),
   checks: z.array(z.string().min(1).regex(/^[^,]+$/)).max(64).optional().describe('Element names that must exist after the merge'),
@@ -263,11 +302,14 @@ function resolveJob(input, lane) {
 // Every refusal of a delivery that ran a job names that job, so the next call patches it (jobShape 'array': its patch
 // paths are /<i>/...), with nextBasedOn ready for basedOn and each patch of its problems also by name (patchByName); a
 // partial job says what it merged (partial). An uncertain one never names it (it is resumed, never corrected).
+// The op shapes of the job taken as meant (job-patch.mjs: normalizations), on every answer that names the job.
+const notesOf = (value, resolved) => (resolved?.normalizations?.length
+  ? { normalizations: mergeNormalizations(value?.normalizations, resolved.normalizations) } : {});
 function withJob(value, resolved) {
   if (value?.ok !== false || value.outcome === 'uncertain' || !resolved?.path || value.job != null) return value;
   const shape = jobShapeOf(resolved.path);
   return withNamedPatches({ ...value, job: resolved.path, jobSha256: resolved.sha256, ...(shape ? { jobShape: shape } : {}), ...nextBasedOnOf(resolved.path, resolved.sha256),
-    ...(resolved.partial ? { partial: resolved.partial } : {}) }, resolved.path);
+    ...(resolved.partial ? { partial: resolved.partial } : {}), ...notesOf(value, resolved) }, resolved.path);
 }
 // A success names the job it delivered (or validated) the same way: nextBasedOn, and what a partial job merged. A delivery
 // ("entregue", "entregue e publicado") also says what the job created or changed (job-summary.mjs: each action with its
@@ -277,7 +319,7 @@ function withJobDone(value, resolved) {
   const delivered = value?.result === 'entregue' || value?.result === 'entregue e publicado';
   let summary = null;
   if (delivered && value.summary == null) { try { summary = jobSummary(JSON.parse(fs.readFileSync(resolved.path, 'utf8').replace(/^﻿/, ''))); } catch { summary = null; } }
-  return { ...value, ...nextBasedOnOf(resolved.path, resolved.sha256), ...(resolved.partial ? { partial: resolved.partial } : {}), ...(summary ? { summary } : {}) };
+  return { ...value, ...nextBasedOnOf(resolved.path, resolved.sha256), ...(resolved.partial ? { partial: resolved.partial } : {}), ...(summary ? { summary } : {}), ...notesOf(value, resolved) };
 }
 
 // patch + basedOn instead of job, or job + basedOn (a partial job, a patch applied after it). A base task with an
@@ -505,15 +547,31 @@ export function preflightProblems(problems, limit = 300) {
     op: Number.isInteger(p.op) ? p.op : null, pointer: typeof p.pointer === 'string' ? p.pointer : null, code: String(p.code ?? 'PREFLIGHT_ERROR'),
     severity: p.severity === 'warning' ? 'warning' : 'error', message: clean(p.message, limit), fix: p.fix == null ? null : clean(p.fix, limit),
     ...(Array.isArray(p.patch) && p.patch.length ? { patch: p.patch } : {}),
+    ...(typeof p.text === 'string' ? { text: clean(p.text, 4000) } : {}),
+    ...(p.corrected != null ? { corrected: p.corrected } : {}),
     ...(typeof p.element === 'string' && p.element ? { element: clean(p.element, limit) } : {}), ...(typeof p.key === 'string' && p.key ? { key: p.key } : {}) }));
+}
+// A refusal of the validation contract (VisitaCerta 2026-10-12; o11_deliver until=apply and o11_access said only "Job
+// rejected by the validation contract"): the part that refused (contract, its summary for the error) and every problem, the
+// kernel's own (problems of the task, then of its apply) or, without them, one per new Verify error, data contract or refactor
+// difference and uncovered message (contractProblems), never an empty list. ops: the ops the errors name. Empty without the
+// kernel's apply data.
+export function contractRefusal(apply, own = null) {
+  const contract = validationContract(apply);
+  if (!contract) return { fields: {}, summary: null, ops: [] };
+  const list = Array.isArray(own) && own.length ? own : Array.isArray(apply.problems) && apply.problems.length ? apply.problems : contractProblems(apply);
+  const ops = [...new Set(list.filter(p => p && p.severity !== 'warning' && Number.isInteger(p.op)).map(p => p.op))];
+  return { fields: { contract, ...refusalFields(preflightProblems(list), apply) }, summary: contract.summary, ops };
 }
 // The refusal names the job it ran (withJob adds job and jobSha256), so every problem is fixed with one patch + basedOn.
 // primeira-certa A3: the kernel's single refusal over the live module (every phase, verifyRan, phases), grouped only to
 // fit the answer; a refusal of the apply alone keeps its own code (A7: DELETE_HAS_CONSUMERS) with the same fields.
-const preflightRefusal = (source, base, code = 'PREFLIGHT_REFUSED') => ({ ok: false, outcome: 'refused', code, ...base,
+// The job the refusal ran, read for its cascade (refusal-problems.mjs summarizeCascade); null when it cannot be read.
+const jobDocumentOf = file => { if (typeof file !== 'string' || !file) return null; try { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, '')); } catch { return null; } };
+const preflightRefusal = (source, base, code = 'PREFLIGHT_REFUSED', job = null) => ({ ok: false, outcome: 'refused', code, ...base,
   ...(code === 'PREFLIGHT_REFUSED' ? { stage: 'preflight', failed: 'preflight' } : { stage: base.stage ?? 'apply' }),
   error: clean(source.error ?? 'The job was refused by the preflight; nothing was sent to the Studio.', 400),
-  ...refusalFields(preflightProblems(source.problems), source),
+  ...refusalFields(preflightProblems(source.problems), source, { job: jobDocumentOf(job), jobFile: job }),
   // prazos B: the environment read the Studio's own client cut, when that is why the rest of the phases did not run.
   ...(cutOf(source.cut) ? { cut: cutOf(source.cut) } : {}) });
 
@@ -535,15 +593,23 @@ export function deliveryFields(state) {
   // The integration reports of the job (contract I7): what each rest/rest-expose/soap op imported, skipped, updated,
   // removed and broke, with the document and the SOAP port; at most 10 plus integrationTotal.
   const integration = Array.isArray(state?.integration) ? state.integration : Array.isArray(state?.apply?.integration) ? state.apply.integration : [];
+  // ssam_code: what an action text or a screen edit removed (the lines and elements it left out), never silent.
+  const removed = removedOf(state?.apply?.results);
+  // The generated standard actions of the data model (op entity-actions): what was created, unchanged and kept.
+  const entityActions = entityActionsOf(state?.entityActions ?? state?.apply?.entityActions);
   return { ...(leftovers.length ? { leftovers: leftovers.slice(0, 20), ...(leftovers.length > 20 ? { leftoversTotal: leftovers.length } : {}) } : {}),
+    ...(removed.length ? { removed: removed.slice(0, 20), ...(removed.length > 20 ? { removedTotal: removed.length } : {}) } : {}),
     ...(screenRoles.length ? { screenRoles: screenRoles.slice(0, 20), ...(screenRoles.length > 20 ? { screenRolesTotal: screenRoles.length } : {}) } : {}),
     ...(integration.length ? { integration: integration.slice(0, 10), ...(integration.length > 10 ? { integrationTotal: integration.length } : {}) } : {}),
+    ...(entityActions ? { entityActions } : {}),
     // A03 (I9): the new warnings that blocked nothing, each with its path and the suggested fix.
     ...warningFields(taskWarnings(state)),
     // MB2: the dependencies dialogs the delivery answered (Cancel) and the Refresh References of every producer after each.
     ...referencesRefreshedOf(state),
     // lentidao 2026-10-12: the kernel's JobNormalizer rewrites of this job (apply receipt), never silent.
-    ...normalizationsOf(state?.apply) };
+    ...normalizationsOf(state?.apply),
+    // fam-deps review (finding 1): the dialogs the bridge closed for this delivery.
+    ...dialogsOf(state) };
 }
 // MB2 (Delivery.cs, DeliveryDependenciesDialog.cs): the receipt's referencesRefreshed, short; absent when none.
 export function referencesRefreshedOf(state) {
@@ -574,7 +640,7 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
   // The CLI's own refusal of the job (Program.ErrorEnvelope with code and problems): nothing reached the Studio. The single
   // refusal (PREFLIGHT_REFUSED) or one of the apply alone with its own code and problems (primeira-certa A7).
   if ((!state || typeof state !== 'object') && (run?.envelope?.code === 'PREFLIGHT_REFUSED' || (Array.isArray(run?.envelope?.problems) && run.envelope.problems.length)))
-    return preflightRefusal(run.envelope, { taskId: taskId ?? null }, /^[A-Z][A-Z0-9_]{2,}$/.test(String(run.envelope.code ?? '')) ? run.envelope.code : 'PREFLIGHT_REFUSED');
+    return preflightRefusal(run.envelope, { taskId: taskId ?? null }, /^[A-Z][A-Z0-9_]{2,}$/.test(String(run.envelope.code ?? '')) ? run.envelope.code : 'PREFLIGHT_REFUSED', job);
   if (!state || typeof state !== 'object') {
     const found = findKernelTask(work, { taskId, job, since });
     const error = run?.envelope?.error ?? (run?.timedOut ? 'deliver timed out' : 'deliver ended without an answer');
@@ -591,11 +657,21 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
   const outcome = deliveryOutcome(state);
   // K1-g (I8): what the kernel did with the tab this delivery opened (--close-opened-tab): true, or {closed:false, reason}.
   const tab = state.closedTab !== undefined && state.closedTab !== null ? { closedTab: state.closedTab } : {};
-  if (outcome === 'delivered') { const fields = { ...deliveryFields(state), ...tab }; return Object.keys(fields).length ? { ...DELIVERED, ...fields } : DELIVERED; }
+  // F5 (producer-signatures.mjs): every answer of a delivery with producer signatures says what was reused and how each
+  // producer was observed (ledger: no server call; server; capture), and whether the merge observed it first.
+  const signatures = producerSignaturesOf(state);
+  if (outcome === 'delivered') { const fields = { ...deliveryFields(state), ...tab, ...signatures }; return Object.keys(fields).length ? { ...DELIVERED, ...fields } : DELIVERED; }
   const base = { stage: state.stage ?? null, taskId: state.taskId ?? taskId ?? null };
-  if (state.code === 'PREFLIGHT_REFUSED') return preflightRefusal(state, base);
+  if (state.code === 'PREFLIGHT_REFUSED') return { ...preflightRefusal(state, base, 'PREFLIGHT_REFUSED', job ?? state.request?.JobPath ?? state.request?.jobPath), ...signatures };
+  // fam-deps (family D): the Studio opened a dialog during the merge that only the person answers (recovery, sign-in, a
+  // question with choices). The bridge read it and answered in seconds; the merge waits for the person in the Studio. One
+  // question with the exact text, never "outcome unknown"; after the answer the same task is resumed, nothing is repeated.
+  if (state.code === 'STUDIO_DIALOG_PENDING') return { ok: false, outcome: 'blocked', code: 'STUDIO_DIALOG_PENDING', ...base, writeState: state.writeState,
+    question: state.question ?? state.blockedBy?.question ?? null, dialog: dialogOf(state.blockedBy), error: clean(state.error ?? '', 600), ...dialogsOf(state),
+    continuation: base.taskId ? { ...resumeWith(base.taskId), why: 'Depois que a pessoa responder o diálogo no Studio: retoma a mesma entrega (nada é repetido).' }
+      : { tool: 'ssam_task', arguments: { id: trackId }, why: 'Reads what this delivery left recorded; never repeat it.' } };
   if (outcome === 'uncertain') return { ok: false, outcome: 'uncertain', code: 'DELIVERY_UNCERTAIN', ...base, writeState: state.writeState,
-    error: clean(state.error ?? 'The merge outcome is not confirmed') + ' Nothing was repeated.',
+    error: clean(state.error ?? 'The merge outcome is not confirmed') + ' Nothing was repeated.', ...dialogsOf(state), ...studioErrorOf(state),
     continuation: base.taskId ? resumeWith(base.taskId) : { tool: 'ssam_task', arguments: { id: trackId }, why: 'Reads what this delivery left recorded; never repeat it.' } };
   const { messages, omitted } = validationMessages(state);
   const failures = (state.failures ?? []).map(f => ({ stage: f?.stage ?? null, error: clean(f?.error, 300) }));
@@ -637,9 +713,18 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
       + (base.taskId ? ' (o11_deliver {resume:"' + base.taskId + '"})' : '') + '; nothing was merged.') };
   // A merge the Studio rolled back (C15, proven by the bridge or by the kernel's hash proof): nothing applied, the task is
   // closed and the module is free, so the corrected job is simply delivered again.
-  if (state.code === 'MERGE_ROLLED_BACK') return { ok: false, outcome: 'refused', code: 'MERGE_ROLLED_BACK', ...base, failed: 'merge', error,
-    closed: true, ...(input.module && job ? { continuation: { tool: 'o11_deliver', arguments: { module: input.module, job, authorize: WORDS_MARKER },
-      why: 'Nada foi aplicado e o módulo está livre: entregue o job corrigido como uma nova entrega. authorize: as palavras do usuário no lugar do marcador.' } } : {}) };
+  // fam-deps R7/R8: the receipt names the producer signatures the merge had to select and the stage that failed. Review
+  // finding 2: "the same job again" only when the kernel proved the next run will not select them (sameJobAgain: it ran the
+  // Studio's Refresh References of those producers and the module now holds the candidate's signatures); otherwise the
+  // kernel's error carries the other fix (the producers as OML), never a loop of the same refusal.
+  const signatureChanges = signatureChangesOf(state);
+  const sameJobAgain = state.sameJobAgain === true;
+  if (state.code === 'MERGE_ROLLED_BACK') return { ok: false, outcome: 'refused', code: 'MERGE_ROLLED_BACK', ...base, failed: 'merge', error: clean(state.error ?? error, 600),
+    closed: true, ...(signatureChanges.length ? { signatureChanges } : {}), ...(state.merge?.stage ? { failedStage: state.merge.stage } : {}), sameJobAgain, ...dialogsOf(state),
+    ...(input.module && job ? { continuation: { tool: 'o11_deliver', arguments: { module: input.module, job, authorize: WORDS_MARKER },
+      why: (sameJobAgain ? 'O módulo já tem as assinaturas que o merge precisava (o SSAM atualizou as referências agora). Entregue o mesmo job de novo, como nova entrega. '
+        : signatureChanges.length ? 'O mesmo job falharia igual. Siga a correção do erro: entregue com esses produtores como OML (producers). '
+        : 'Nada foi aplicado e o módulo está livre: entregue o job corrigido como uma nova entrega. ') + 'authorize: as palavras do usuário no lugar do marcador.' } } : {}) };
   // prazos B: a read of the environment that the Service Studio's own client cut (ENVIRONMENT_CALL_CUT: its WCF
   // SendTimeout, a connection that never answered). Nothing was written; the answer says what was cut and when a new
   // delivery helps, never "repeat": the same delivery repeats the same environment calls.
@@ -658,18 +743,32 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
   const evidence = state.code === 'DATA_PROOF_DIFFERS' ? dataProofContinuation(state, work) : null;
   // MB2: the refresh after the dependencies dialog failed: the kernel names the module and the next call.
   const refreshNext = state.code === 'REFERENCES_REFRESH_FAILED' && state.referencesRefreshFailed?.next?.tool ? state.referencesRefreshFailed.next : null;
-  const continuation = next ?? evidence ?? refreshNext ?? repair;
+  // F5: a producer republished since its capture (seen right before the merge): nothing was written, its captures were
+  // dropped, and the same delivery again captures the new version.
+  const changedNext = state.code === 'PRODUCER_CHANGED' && !merged && input.module && job ? { ...closeAndDeliver(input, job, holds ? base.taskId : null),
+    why: 'Um produtor foi publicado de novo desde a captura; nada foi gravado. A mesma entrega de novo captura a versão nova. authorize: as palavras do usuário no lugar do marcador.' } : null;
+  if (changedNext && !holds) delete changedNext.arguments.closePrevious;
+  const continuation = next ?? evidence ?? refreshNext ?? changedNext ?? repair;
+  // (d) A refusal of the validation contract names the part that refused (the Verify, the expectations, the data contract)
+  // and always carries its problems: the kernel's, or one per new Verify error and uncovered message.
+  const contract = !merged && !kernelCode && invalid && state.apply ? validationContract(state.apply) : null;
+  if (contract && /^job rejected by validation contract; /.test(error)) error = clean('job rejected by validation contract (' + contract.summary + '); merge was not attempted', 300);
+  const fallback = contract && !(Array.isArray(state.problems) && state.problems.length) && !(Array.isArray(state.apply?.problems) && state.apply.problems.length) ? contractProblems(state.apply) : [];
   return { ok: false, outcome: 'refused', code: kernelCode ?? (invalid ? 'VALIDATION_REFUSED' : 'DELIVERY_FAILED'), ...base, error,
+    ...(contract ? { contract } : {}),
     // primeira-certa A3/A7: a refusal of the apply alone (DELETE_HAS_CONSUMERS, ...) with its problems, verifyRan and phases.
     // A candidate only the Verify refused: its errors with op, pointer, element, key and fix (apply.problems).
-    ...(!merged && Array.isArray(state.problems) && state.problems.length ? refusalFields(preflightProblems(state.problems), state)
-      : !merged && Array.isArray(state.apply?.problems) && state.apply.problems.length ? refusalFields(preflightProblems(state.apply.problems), state.apply)
+    ...(!merged && Array.isArray(state.problems) && state.problems.length ? refusalFields(preflightProblems(state.problems), state, { job: jobDocumentOf(job ?? state.request?.JobPath ?? state.request?.jobPath), jobFile: job ?? state.request?.JobPath ?? state.request?.jobPath })
+      : !merged && Array.isArray(state.apply?.problems) && state.apply.problems.length ? refusalFields(preflightProblems(state.apply.problems), state.apply, { job: jobDocumentOf(job ?? state.request?.JobPath ?? state.request?.jobPath), jobFile: job ?? state.request?.JobPath ?? state.request?.jobPath })
+      : fallback.length ? refusalFields(preflightProblems(fallback), state.apply, { job: jobDocumentOf(job ?? state.request?.JobPath ?? state.request?.jobPath), jobFile: job ?? state.request?.JobPath ?? state.request?.jobPath })
       : merged ? {} : diagnosisOf(state)),
     ...(failedOp != null ? { failedOp } : {}), ...(lines.length > 1 ? { refusalLines: lines } : {}),
     ...(messages.length ? { messages } : {}), ...(omitted ? { messagesOmitted: omitted } : {}), ...(failures.length ? { failures } : {}),
     ...(merged ? { merged: true } : {}), ...(order ? { mergeOrder: order } : {}), ...(dataProof ? { dataProof } : {}),
     // A03 (I9): a refusal with errors still names the warnings that block nothing, so one correction covers both.
-    ...warningFields(taskWarnings(state)), ...tab, ...(continuation ? { continuation } : {}) };
+    ...warningFields(taskWarnings(state)),
+    // fam-deps review (finding 1): the dialogs the bridge closed and the Studio error the kernel proved, never only in the receipt.
+    ...dialogsOf(state), ...studioErrorOf(state), ...tab, ...signatures, ...(continuation ? { continuation } : {}) };
 }
 
 // The kernel's mergeOrder receipt (Delivery.cs), short: the lost elements as "Element = value", the repair job, the
@@ -756,9 +855,18 @@ async function applyOnly(input, job, ctx, task, proto = null) {
     if (run?.envelope?.ok === true && data?.isValid === true && data?.accepted === true) return { ok: true, valid: true };
     if (data && typeof data === 'object' && 'isValid' in data) {
       const { messages, omitted } = validationMessages({ apply: data });
-      return { ok: false, valid: false, code: 'VALIDATION_REFUSED', stage: 'apply', error: 'Job rejected by the validation contract; nothing was merged.',
+      // The part of the contract that refused and every problem (as deliverOutcome answers a delivery), never only messages;
+      // the op the errors name, when one, is the op the correction patches.
+      const refused = contractRefusal(data);
+      return { ok: false, valid: false, code: 'VALIDATION_REFUSED', stage: 'apply',
+        error: clean('Job rejected by the validation contract' + (refused.summary ? ' (' + refused.summary + ')' : '') + '; nothing was merged.', 400),
+        ...refused.fields, ...(refused.ops.length === 1 ? { failedOp: refused.ops[0] } : {}),
         ...(messages.length ? { messages } : {}), ...(omitted ? { messagesOmitted: omitted } : {}) };
     }
+    // The kernel's own refusal of the job (the single refusal, PREFLIGHT_REFUSED, or one of the apply alone with its code):
+    // every problem with its patch or candidates, as the build phase and a delivery answer it (re-check of 2026-10-12, V4).
+    if (run?.envelope?.ok === false && (run.envelope.code === 'PREFLIGHT_REFUSED' || (Array.isArray(run.envelope.problems) && run.envelope.problems.length)))
+      return preflightRefusal(run.envelope, { stage: 'apply' }, /^[A-Z][A-Z0-9_]{2,}$/.test(String(run.envelope.code ?? '')) ? run.envelope.code : 'PREFLIGHT_REFUSED');
     const failedOp = failedOpOf(run?.envelope?.error, job);
     return refusal('APPLY_FAILED', clean(run?.envelope?.error ?? [...(run?.stderr ?? [])].slice(-3).join(' ')) || 'apply failed',
       doctor('Reports the O11 lane CLI and Studio; nothing was merged.'), { stage: 'apply', ...(failedOp != null ? { failedOp } : {}) });
@@ -784,6 +892,13 @@ async function openModuleNamed(module, ctx) {
     why: 'Repeat with the exact module name and the user\'s words in authorize.' }, { openModules: resolved.openModules, candidates: resolved.candidates });
 }
 
+// The codes of a refusal's problems with their counts, most frequent first, at most 10 ("ExpressionUnknownObject 15").
+export function problemCodes(problems) {
+  const counts = new Map();
+  for (const p of problems) { const code = String(p?.code ?? 'unknown'); counts.set(code, (counts.get(code) ?? 0) + 1); }
+  return [...counts].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([code, n]) => code + ' ' + n);
+}
+
 // One tracked task with its journal lines: `start` (with the sha256 of the words) before anything runs, `end` after.
 function tracked(ctx, lane, summary, words, fn) {
   const journal = entry => ctx.journal(lane.local, { tool: 'o11_deliver', ...entry });
@@ -793,7 +908,10 @@ function tracked(ctx, lane, summary, words, fn) {
     // A failed end line never changes what happened; the task file still records the outcome.
     try {
       journal({ event: 'end', task: task.id, outcome: value === CLOSED ? 'closed' : value.ok ? (summary.until === 'apply' ? 'valid' : 'delivered') : value.outcome ?? 'refused',
-        ...(value.code ? { code: value.code } : {}), ...(value.stage ? { stage: value.stage } : {}), ...(value.taskId ? { kernelTaskId: value.taskId } : {}) });
+        ...(value.code ? { code: value.code } : {}), ...(value.stage ? { stage: value.stage } : {}), ...(value.taskId ? { kernelTaskId: value.taskId } : {}),
+        // (d) what refused, so the journal alone says it: the contract and the problems by code.
+        ...(value.contract?.summary ? { contract: value.contract.summary } : {}),
+        ...(Array.isArray(value.problems) && value.problems.length ? { problems: value.problems.length, codes: problemCodes(value.problems) } : {}) });
     } catch { /* see above */ }
     return value;
   });
@@ -829,7 +947,9 @@ export function referencedProducers(jobFile) {
   let document;
   try { document = JSON.parse(fs.readFileSync(jobFile, 'utf8').replace(/^﻿/, '')); } catch { return []; }
   const ops = Array.isArray(document) ? document : Array.isArray(document?.ops) ? document.ops : [];
-  return [...new Set(ops.filter(op => op?.op === 'reference' && BINDING.test(String(op.producer ?? ''))).map(op => op.producer))];
+  // a prototype op's data.bind names its producer as a reference op does (docs/PROTOTIPO-NATIVO.md 2.12)
+  const named = ops.map(op => (op?.op === 'reference' ? op.producer : op?.op === 'prototype' ? op?.data?.bind?.producer : null));
+  return [...new Set(named.filter(name => BINDING.test(String(name ?? ''))))];
 }
 export function autoCaptures(jobFile, input = {}) {
   const bound = new Set(Object.keys(input.producers ?? {}).map(n => n.toLowerCase()));
@@ -1020,6 +1140,13 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
       if (closeState(previous) === 'refused' && previous.moduleKey) closing = input.closePrevious;
     }
     if (!input.resume) resolved = resolveJob(input, lane);
+    // WIRED (text-routes.mjs): a text form whose way back is not wired is refused before the Studio or the build is touched.
+    if (!input.resume && resolved?.path) {
+      let document = null;
+      try { document = JSON.parse(fs.readFileSync(resolved.path, 'utf8').replace(/^\uFEFF/, '')); } catch { /* the kernel reports an unreadable job */ }
+      const unwired = textFormRefusal(document, undefined, { readPart: partReader(resolved.path, fs, path) });
+      if (unwired) return withJob(unwired, resolved);
+    }
     // a patched or partial job names the job it corrects: the kernel's preflight refuses CSS the correction dropped
     // (CSS_RULES_DROPPED, apply --based-on)
     if (typeof resolved?.basedOn?.job === 'string') input = { ...input, [BASED_ON]: resolved.basedOn.job };
@@ -1152,7 +1279,11 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
     if (value === CLOSED) return value;
     // prazos B: the producers bound from their Studio tab, named in the answer (their references came from there).
     if (fromStudio.length && value && typeof value === 'object') value = { ...value, producersFromStudio: fromStudio };
+    // data.bind (docs/PROTOTIPO-NATIVO.md 2.12): the proposals of PROTOTYPE_BINDING_REQUIRED as one strict patch and the corrected call
+    if (proto && value?.code === 'PROTOTYPE_BINDING_REQUIRED') value = { ...value, ...bindingCorrection(value.problems, readJobDocument(named?.path)) };
     if (proto && value?.ok === true) value = await prototypeAnswer(value, proto, { kernelState, module: input.module ?? null });
+    // a kernel refusal of the import (PROTOTYPE_NAME_COLLISION) never offers a patch that leaves the call as it was
+    if (proto && value?.ok === false) value = withoutIdentityPatches(value, readJobDocument(proto.original?.path));
     if (until !== 'merge') return withJobDone(value, named);
     const module = input.module ?? findKernelTask(lane.work, { taskId: input.resume })?.module ?? null;
     if (touch) value = { ...value, touch };
@@ -1305,7 +1436,7 @@ export function registerO11Cycle(server, deps = {}) {
       + 'publish:true publishes the same module right after a clean merge (the o11_publish flow, same words or grant): "entregue e publicado"; '
       + 'a failed publication answers result "entregue" with PUBLISH_FAILED|PUBLISH_UNCERTAIN and the o11_publish continuation, never a new delivery. '
       + 'Without publish nothing is published. Without authorize a standing grant (ssam_grant) of the module for deliver is used. Producers named by '
-      + 'reference ops are captured read-only by name. Blocks until the CLI ends; ssam_task reads the task meanwhile. ' + PROTOTYPE_DELIVER_TEXT,
+      + 'reference ops are captured read-only by name. Blocks until the CLI ends; ssam_task reads the task meanwhile. ' + PROTOTYPE_DELIVER_TEXT + ' ' + CODE_JOB_TEXT,
     inputSchema: deliverSchema, annotations: mutating,
     // Lane wp: this handler splits its delivery in build and apply (o11-build-phase.mjs; studio-write-lock.mjs PHASES_META).
     _meta: { [PHASES_META]: true },

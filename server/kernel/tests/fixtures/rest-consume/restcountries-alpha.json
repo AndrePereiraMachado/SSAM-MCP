@@ -1,0 +1,128 @@
+[
+ {
+  "name": {
+   "common": "Brazil",
+   "official": "Federative Republic of Brazil",
+   "nativeName": {
+    "por": {
+     "official": "República Federativa do Brasil",
+     "common": "Brasil"
+    }
+   }
+  },
+  "tld": [
+   ".br"
+  ],
+  "cca2": "BR",
+  "ccn3": "076",
+  "cca3": "BRA",
+  "cioc": "BRA",
+  "independent": true,
+  "status": "officially-assigned",
+  "unMember": true,
+  "currencies": {
+   "BRL": {
+    "name": "Brazilian real",
+    "symbol": "R$"
+   }
+  },
+  "idd": {
+   "root": "+5",
+   "suffixes": [
+    "5"
+   ]
+  },
+  "capital": [
+   "Brasília"
+  ],
+  "altSpellings": [
+   "BR",
+   "Brasil"
+  ],
+  "region": "Americas",
+  "subregion": "South America",
+  "languages": {
+   "por": "Portuguese"
+  },
+  "translations": {
+   "ara": {
+    "official": "جمهورية البرازيل الاتحادية",
+    "common": "البرازيل"
+   },
+   "deu": {
+    "official": "Föderative Republik Brasilien",
+    "common": "Brasilien"
+   },
+   "por": {
+    "official": "República Federativa do Brasil",
+    "common": "Brasil"
+   }
+  },
+  "latlng": [
+   -10,
+   -55
+  ],
+  "landlocked": false,
+  "borders": [
+   "ARG",
+   "BOL",
+   "COL"
+  ],
+  "area": 8515767,
+  "demonyms": {
+   "eng": {
+    "f": "Brazilian",
+    "m": "Brazilian"
+   },
+   "fra": {
+    "f": "Brésilienne",
+    "m": "Brésilien"
+   }
+  },
+  "flag": "🇧🇷",
+  "maps": {
+   "googleMaps": "https://goo.gl/maps/waCKk21HeeqFzkNC9",
+   "openStreetMaps": "https://www.openstreetmap.org/relation/59470"
+  },
+  "population": 212559409,
+  "gini": {
+   "2019": 53.4
+  },
+  "fifa": "BRA",
+  "car": {
+   "signs": [
+    "BR"
+   ],
+   "side": "right"
+  },
+  "timezones": [
+   "UTC-05:00",
+   "UTC-04:00",
+   "UTC-03:00",
+   "UTC-02:00"
+  ],
+  "continents": [
+   "South America"
+  ],
+  "flags": {
+   "png": "https://flagcdn.com/w320/br.png",
+   "svg": "https://flagcdn.com/br.svg",
+   "alt": "The flag of Brazil has a green field."
+  },
+  "coatOfArms": {
+   "png": "https://mainfacts.com/media/images/coats_of_arms/br.png",
+   "svg": "https://mainfacts.com/media/images/coats_of_arms/br.svg"
+  },
+  "startOfWeek": "monday",
+  "capitalInfo": {
+   "latlng": [
+    -15.79,
+    -47.88
+   ]
+  },
+  "postalCode": {
+   "format": "#####-###",
+   "regex": "^(\\d{8})$"
+  }
+ }
+]

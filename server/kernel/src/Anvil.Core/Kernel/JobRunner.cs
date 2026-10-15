@@ -22,6 +22,20 @@ public static partial class JobRunner
         IReadOnlyList<ExpectedMessage> expected, bool expectedValid, JsonObject? preflight = null, bool builtBase = false, string? opsPointer = "/ops",
         IReadOnlyList<JsonObject>? notes = null)
     {
+        try { return ApplyResolvedCore(host, basePath, ops, outPath, log, expected, expectedValid, preflight, builtBase, opsPointer, notes, null); }
+        // A refusal for an owner's rule goes through the patch round (JobRunner.Probe.cs) once this model is released: the job
+        // with its patches applied on a fresh copy of the base says what the refusal could not see and which patch is not good.
+        catch (Exception refusal) when (opsPointer != null && PatchRoundApplies(refusal))
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(PatchRound(refusal, host, basePath, ops, log, expected, expectedValid, builtBase, opsPointer)).Throw();
+            throw;
+        }
+    }
+
+    private static object ApplyResolvedCore(ModelHost host, string basePath, JsonArray ops, string outPath, Action<string>? log,
+        IReadOnlyList<ExpectedMessage> expected, bool expectedValid, JsonObject? preflight, bool builtBase, string? opsPointer,
+        IReadOnlyList<JsonObject>? notes, Probe? probe)
+    {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var signatures=ops.OfType<JsonObject>().Where(op=>op["op"]?.ToString()=="reference")
             .Select(op=>op["producer"]!.ToString()).Distinct(StringComparer.OrdinalIgnoreCase)
@@ -30,24 +44,42 @@ public static partial class JobRunner
         bool NativeReference(JsonNode? node)=>node?["op"]?.ToString()=="reference" && signatures.ContainsKey(node["producer"]!.ToString());
         // Frozen references (.avsig) are imported before the edit transaction wherever the job writes them: a later one is
         // hoisted (and reported), never refused.
-        var prepared=ops.Where(NativeReference).OfType<JsonObject>().ToArray();
+        var prepared=ops.Where(NativeReference).OfType<JsonObject>().ToList();
         var firstEdit=ops.Select((op,index)=>(op,index)).FirstOrDefault(x=>!NativeReference(x.op),(null,ops.Count)).index;
         var hoisted=ops.Select((op,index)=>(op,index)).Where(x=>x.index>firstEdit && NativeReference(x.op)).Select(x=>x.index).ToArray();
         var baseBytes = File.ReadAllBytes(basePath);
-        // In the resident worker only: a spare instance of exactly this base, taken once and released below like a fresh load.
-        var spare = BaseModelCache.Shared?.Take(basePath, baseBytes, reusable: !builtBase);
-        var espace = spare?.Model ?? host.Load(baseBytes);
-        var loadMs = sw.ElapsedMilliseconds;
-        var session = new ModelSession(espace);
         var producers = new Dictionary<string, ServiceStudio.Model.ESpace>(StringComparer.OrdinalIgnoreCase);
-        session.ProducerLoader = spec =>
+        ServiceStudio.Model.ESpace LoadProducer(string spec)
         {
             if (producers.TryGetValue(spec, out var cached)) return cached;
             // As fontes foram resolvidas antes de abrir a transacao do consumidor.
             var p = host.Load(File.ReadAllBytes(spec));
             producers[spec] = p;
             return p;
-        };
+        }
+        // data.bind of the prototype ops (docs/PROTOTIPO-NATIVO.md 2.12): what still needs a binding is proposed, built offline and
+        // refused at once, before the base is loaded for the edit; a complete binding's frozen producer signature is imported
+        // before the transaction like a reference op's.
+        if (ops.OfType<JsonObject>().Any(o => o["op"]?.ToString() == "prototype" && o["data"]?["bind"] is JsonObject))
+        {
+            try
+            {
+                foreach (var reference in PrototypeBindPrepass.Run(host, baseBytes, ops, opsPointer, LoadProducer, log))
+                {
+                    var file = reference["producer"]!.ToString();
+                    if (!signatures.ContainsKey(file)) signatures[file] = NativeReferenceSnapshot.Read(file);
+                    prepared.Add(reference);
+                }
+            }
+            catch { foreach (var p in producers.Values) ModelHost.Release(p); throw; }
+        }
+        // In the resident worker only: a spare instance of exactly this base, taken once and released below like a fresh load.
+        var spare = BaseModelCache.Shared?.Take(basePath, baseBytes, reusable: !builtBase);
+        var espace = spare?.Model ?? host.Load(baseBytes);
+        var loadMs = sw.ElapsedMilliseconds;
+        // A job keeps the reads its answers name (the basedOn of a next text or data edit, the edit a refusal hands back) in the store.
+        var session = new ModelSession(espace) { BaseSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(baseBytes)).ToLowerInvariant(), KeepReadings = true };
+        session.ProducerLoader = LoadProducer;
         Dictionary<string, int>? released = null;
         try
         {
@@ -93,13 +125,19 @@ public static partial class JobRunner
             // Everything the job names that only the base can answer, all at once, before the first op (C20).
             phase = sw.ElapsedMilliseconds;
             var baseCheck = CheckAgainstBase(session, espace, ops, preflight, opsPointer, checkFunctions: expectedValid, log: log, facts: baseFacts);
+            // motor2 review: a node the module type has not, with its certain patch (a Download in a Mobile module), is applied
+            // as the patch writes it for this round's apply and Verify (never saved: the job is refused for it), so the round
+            // proves the patch and judges the rest of the op; then the pointers of the base phase speak of the job as sent.
+            Preflight.NodeRules.ApplyForDiagnosis(ops, baseCheck.Problems, opsPointer, log);
+            Preflight.SentJob.TranslateAll(baseCheck.Problems, ops, opsPointer);
             var baseCheckMs = sw.ElapsedMilliseconds - phase;
             phase = sw.ElapsedMilliseconds;
             // A02 item 6: every failing op is recorded (its dependents skipped). primeira-certa A2: kept, not thrown, so the
             // Verify of what did apply joins the refusal; an op the preflight refused whole is never run.
             session.OpsPointer = opsPointer;
             session.KeepFailures = true;
-            session.SkipOps = RefusedWhole(preflight);
+            session.SkipOps = RefusedWholeButDocuments(preflight, ops);
+            session.KnownProblems = (preflight?["problems"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().Concat(baseCheck.Problems).ToList();
             var results = session.Apply(ops, log);
             // What only the database upgrade (publish) would refuse, read on the effective model before anything is saved.
             // Not on a model the Studio could not check at the end of the apply (a failed op left it half-built).
@@ -111,7 +149,12 @@ public static partial class JobRunner
                 var refusal = Diagnosis(session, espace, before, ops, preflight, baseCheck, upgrade, expected, expectedValid, opsPointer, log);
                 // What was rewritten comes with what stayed, so the correction does not undo a normalization.
                 Errors.AttachNormalizations(refusal, session.Normalizations());
-                throw refusal;
+                if (probe == null) throw refusal;
+                probe.Execution = Errors.Diagnosis(refusal);
+                probe.Normalizations = session.Normalizations();
+                // The patch round reads the refusal of its job with this model still loaded (the keys of the Verify's messages).
+                Classify(probe, session, (Errors.FindCoded(refusal)?.Problems ?? new JsonArray()).OfType<JsonObject>());
+                return probe;
             }
             var sessionApplyMs = sw.ElapsedMilliseconds - phase;
             phase = sw.ElapsedMilliseconds;
@@ -153,12 +196,22 @@ public static partial class JobRunner
             {
                 try
                 {
-                    verifyProblems = new JsonArray(session.VerifyProblems(policy.Unexpected, ops, opsPointer, MessageExpectations.Lane, VerifyHints.TryRead())
-                        .Where(p => p["severity"]?.ToString() != "warning").Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray());
+                    var mapped = session.VerifyProblems(policy.Unexpected, ops, opsPointer, MessageExpectations.Lane, VerifyHints.TryRead())
+                        .Where(p => p["severity"]?.ToString() != "warning").ToList();
+                    Preflight.SentJob.TranslateAll(mapped, ops, opsPointer);
+                    verifyProblems = new JsonArray(mapped.Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray());
                 }
                 catch (Exception ex) { log?.Invoke("  verify problems not mapped: " + Errors.Text(ex)); }
             }
             var detailsMs = sw.ElapsedMilliseconds - phase;
+            if (probe != null)
+            {
+                probe.Execution = new JsonObject { ["verifyRan"] = true,
+                    ["phases"] = preflight == null ? new JsonArray("base", "apply", "verify") : new JsonArray("preflight", "base", "apply", "verify") };
+                probe.Normalizations = session.Normalizations();
+                Classify(probe, session, verifyProblems?.OfType<JsonObject>() ?? []);
+                return probe;
+            }
             phase = sw.ElapsedMilliseconds;
             var refactorAssertions = session.RefactorContract();
             var bytes = host.Save(espace);
@@ -195,8 +248,12 @@ public static partial class JobRunner
             log?.Invoke($"apply: {ops.Count} ops, {snap.Objects} objects, {snap.Validation.Total} messages, isValid={snap.IsValid}, load {loadMs} ms, apply {applyMs} ms");
             // data.integration (contract I7): the report of each integration op, absent when the job has none.
             var integration = new System.Text.Json.Nodes.JsonArray(results.OfType<JsonObject>()
-                .Where(r => r["op"]?.ToString() is "rest" or "rest-expose" or "soap" && r["result"]?["integration"] is JsonObject)
+                .Where(r => r["op"]?.ToString() is "rest" or "rest-consume" or "rest-expose" or "soap" && r["result"]?["integration"] is JsonObject)
                 .Select(r => r["result"]!["integration"]!.DeepClone()).ToArray());
+            // data.entityActions: the receipt of each entity-actions op (what it created, kept unchanged, kept and why).
+            var entityActions = new System.Text.Json.Nodes.JsonArray(results.OfType<JsonObject>()
+                .Where(r => r["op"]?.ToString() == EntityActionsExpander.Op && r["result"]?["entityActions"] is JsonObject)
+                .Select(r => { var copy = r["result"]!["entityActions"]!.DeepClone().AsObject(); if (r["result"]?["noChange"] is { } same) copy["noChange"] = same.DeepClone(); return (JsonNode)copy; }).ToArray());
             var answer = new { outPath, outSha256, ops = ops.Count, loadMs, applyMs, objects = snap.Objects, isValid = snap.IsValid, messages = snap.Validation.Total, details, validation, accepted, expectedValid, policyMessages, handles, results, footprint = footprint.Json, hoistedReferences = hoisted.Length > 0 ? hoisted : null, flowLayoutEngine = FlowLayout.EngineRevision, automaticLayouts = session.AutomaticLayouts, layoutRefused, released, baseCache = spare?.Receipt, timings, preflight, dataContract, refactorProof, coverage = session.CoverageLedger() };
             // What the kernel applied that the author did not write (atritos 3, section 5.1): notes, iconConversions,
             // expressionRewrites, nameTruncations, indexNoOps, anonymousExposure, ... each only when it has entries.
@@ -210,11 +267,12 @@ public static partial class JobRunner
             {
                 receipt["problems"] = verifyProblems;
                 receipt["verifyRan"] = true;
-                receipt["phases"] = new JsonArray("verify");
+                receipt["phases"] = preflight == null ? new JsonArray("base", "apply", "verify") : new JsonArray("preflight", "base", "apply", "verify");
             }
             if (integration.Count == 0 && receipt.Count == 0) return answer;
             var withIntegration = System.Text.Json.JsonSerializer.SerializeToNode(answer, Json.Compact)!.AsObject();
             if (integration.Count > 0) withIntegration["integration"] = integration;
+            if (entityActions.Count > 0) withIntegration["entityActions"] = entityActions;
             foreach (var field in receipt.ToArray()) { receipt.Remove(field.Key); withIntegration[field.Key] = field.Value; }
             return withIntegration;
         }
@@ -349,6 +407,9 @@ public static partial class JobRunner
             JsonObject? problem = null;
             // A documentation property the element cannot write is dropped by the apply and listed (JobNormalizer), never refused.
             if (!session.CanSet(element, prop) && Preflight.JobNormalizer.Droppable(prop)) continue;
+            // motor2 (C11): a property the element means by another name is written there by the apply (PROPERTY_ALIASED).
+            if (!session.CanSet(element, prop) && Preflight.PropertyAliases.Meant(element.GetType().GetInterfaces().Select(t => t.Name), prop) is { } meant
+                && session.CanSet(element, meant)) continue;
             if (!session.CanSet(element, prop) && !(prop == "Style" && session.StyleHasAPlace(element)))
                 problem = JobPreflight.Problem(index, Pointer(index) is { } at ? at + "/prop" : null, "PROPERTY_NOT_WRITABLE", "error",
                     ModelSession.PropertyErrorText(element, prop), $"write one of: {string.Join(", ", ModelSession.ClosestWritable(element, prop))}", null, "set");
@@ -364,7 +425,9 @@ public static partial class JobRunner
         // that expects an invalid module (expectValid false) asks the Verify for that verdict: it is not refused here.
         // G5 (2026-10-11): the expressions an html page op writes from its bindings, sources and variables are read too (job
         // 0314 of the html replay reached the Verify with 18 ExpressionUnknownFunction 'Lower' in its bindings).
-        var calls = checkFunctions ? LogicLint.AllExpressions(ops).Concat(HtmlPageExpressions(ops))
+        // B3 (2026-10-12): and the expressions the edit form of an html op writes (the plan of a refused edit never reaches the
+        // Verify, so an unknown function such as JSONSerialize came only in a later round).
+        var calls = checkFunctions ? LogicLint.AllExpressions(ops).Concat(HtmlPageExpressions(ops)).Concat(HtmlEditExpressions(ops))
             .SelectMany(e => FunctionCall.Matches(StringLiteral.Replace(e.Text, "\"\"")).Select(m => (e.Op, Name: m.Groups[1].Value)))
             .Where(c => c.Name is not ("and" or "or" or "not") && !RoleFunction.IsMatch(c.Name)).ToList() : [];
         HashSet<string>? builtins = null, scope = null;
@@ -420,6 +483,22 @@ public static partial class JobRunner
             foreach (var problem in found.Problems) { problems.Add(problem); lines.Add(JobPreflight.Text(problem)); }
             foreach (var warning in found.Warnings) log?.Invoke("  " + JobPreflight.Text(warning));
         }
+        // motor2: the module type and the base's own screens (a node the module type has not, a name of a base screen with two
+        // meanings), for a job that imports producers too; not for one that expects an invalid module.
+        if (checkFunctions)
+        {
+            var found = Preflight.PreflightChecks.WithModule(ops, opsPointer, MessageExpectations.Lane, facts ?? new Preflight.ModelBaseFacts(session, espace));
+            foreach (var problem in found.Problems)
+            {
+                // The pure pass may have found the same name problem without the base: once (its pointers are the job as sent).
+                var sent = Preflight.SentJob.ToSent(problem["pointer"]?.ToString(), ops, opsPointer).Pointer;
+                if (Preflight.ActionNameRules.EnrichPreflight(preflight, problem, sent)) continue;
+                if (problems.Any(p => p["code"]?.ToString() == problem["code"]?.ToString() && p["pointer"]?.ToString() == problem["pointer"]?.ToString())
+                    || preflight?["problems"] is JsonArray pure && pure.OfType<JsonObject>().Any(p => p["code"]?.ToString() == problem["code"]?.ToString() && p["pointer"]?.ToString() == sent)) continue;
+                problems.Add(problem); lines.Add(JobPreflight.Text(problem));
+            }
+            foreach (var warning in found.Warnings) log?.Invoke("  " + JobPreflight.Text(warning));
+        }
         // I6: what only the base could answer.
         foreach (var problem in problems) problem["phase"] ??= "base";
         return new(problems, lines);
@@ -466,6 +545,11 @@ public static partial class JobRunner
             if (source["data"]!["actions"]![a] is JsonObject action)
                 foreach (var site in Preflight.LogicScan.Of(action).Expressions.Where(s => Calls(s.Text)))
                     sites.Add(($"{opsPointer}/{op}/data/actions/{a}{site.Pointer}", site.Text, site.Key == "sort"));
+        // B3: an edit string of the edit form that calls it (no rename patch: an edit is html, not one expression).
+        if (source["op"]?.ToString() == "html" && Anvil.Reading.ScreenHtmlEdit.IsEdit(source) && source["data"]?["edit"] is JsonArray edits)
+            for (var e = 0; e < edits.Count; e++)
+                if (edits[e] is JsonValue v2 && v2.TryGetValue<string>(out var edit) && EditExpressions(edit).Any(Calls))
+                    sites.Add(($"{opsPointer}/{op}/data/edit/{e}", edit, true));
         // G5: a binding, source or variable default of an html page op (a sort entry is [expression, direction]: its site is
         // the expression alone, so it is patched as any other).
         if (HtmlPage(source) is { } page)
@@ -476,7 +560,43 @@ public static partial class JobRunner
 
     /// <summary>The data of an html op in its page form (no parent, no components), or null.</summary>
     private static JsonObject? HtmlPage(JsonNode? node)
-        => node is JsonObject op && op["op"]?.ToString() == "html" && op["parent"] == null && op["data"] is JsonObject data && data["components"] == null ? data : null;
+        => node is JsonObject op && op["op"]?.ToString() == "html" && op["parent"] == null && op["data"] is JsonObject data && data["components"] == null
+            && !Anvil.Reading.ScreenHtmlEdit.IsEdit(op) && !ScreenDocument.IsDocumentOp(op) ? data : null;
+
+    /// <summary>B3: every expression the edit form of the html ops writes, with its op (EditExpressions).</summary>
+    private static IEnumerable<(int Op, string Text)> HtmlEditExpressions(JsonArray ops)
+    {
+        for (var i = 0; i < ops.Count; i++)
+        {
+            if (ops[i] is not JsonObject op || op["op"]?.ToString() != "html" || !Anvil.Reading.ScreenHtmlEdit.IsEdit(op) || op["data"] is not JsonObject data) continue;
+            var texts = data["edit"] is JsonArray list ? list.OfType<JsonValue>().Select(v => v.TryGetValue<string>(out var t) ? t : null).OfType<string>().ToList()
+                : data["html"] is JsonValue whole && whole.TryGetValue<string>(out var document) ? [document] : [];
+            foreach (var text in texts)
+                foreach (var expression in EditExpressions(text)) yield return (i, expression);
+        }
+    }
+
+    private static readonly Regex HtmlRun = new(@"\{\{(.*?)\}\}", RegexOptions.Compiled | RegexOptions.Singleline);
+
+    /// <summary>The expressions of an ssam-html/1 text: the {{ }} runs (in the text and in attribute values), if, list, os-Visible,
+    /// block inputs (:X) and the arguments of the events. Plain text and literal attributes are never an expression.</summary>
+    internal static IEnumerable<string> EditExpressions(string html)
+    {
+        Anvil.Reading.ScreenHtml.Node parsed;
+        try { parsed = Anvil.Reading.ScreenHtml.Parse(html); } catch (FormatException) { yield break; }
+        foreach (var (node, _) in Anvil.Reading.ScreenHtmlText.Elements(parsed))
+        {
+            foreach (var (name, value) in node.Attributes)
+            {
+                if (name is "if" or "list" or "os-Visible" || name.StartsWith(':')) yield return value;
+                else if ((name.StartsWith("on", StringComparison.Ordinal) || name.StartsWith('@')) && ScreenDocument.ParseCall(value, out _, out var arguments))
+                    foreach (var (_, argument) in arguments) yield return argument;
+                foreach (Match run in HtmlRun.Matches(value)) yield return run.Groups[1].Value;
+            }
+            foreach (var child in node.Children.Where(c => c.IsText))
+                foreach (Match run in HtmlRun.Matches(child.Text!)) yield return run.Groups[1].Value;
+        }
+    }
 
     /// <summary>G5: every expression the html page ops of the job write (HtmlExpander.Expressions), with its op.</summary>
     private static IEnumerable<(int Op, string Text)> HtmlPageExpressions(JsonArray ops)
@@ -582,8 +702,18 @@ public static partial class JobRunner
             if (resolveProducer == null) return source;
             var copy = source.DeepClone().AsArray();
             for (var i = 0; i < copy.Count; i++)
+            {
                 if (copy[i] is JsonObject op && op["op"]?.GetValue<string>() == "reference" && op["producer"] is JsonValue producer)
                     op["producer"] = resolveProducer(producer.GetValue<string>(), jobDir, offset + i);
+                // data.bind of a prototype op (docs/PROTOTIPO-NATIVO.md 2.12): its producer binding, resolved as a reference's; an
+                // unbound producer leaves it out and the op refuses with the binding it lacks
+                if (copy[i] is JsonObject proto && proto["op"]?.GetValue<string>() == "prototype" && proto["data"] is JsonObject data
+                    && data["bind"]?["producer"] is JsonValue bound && bound.TryGetValue<string>(out var name) && name.Length > 0)
+                {
+                    try { data["_producer"] = resolveProducer(name, jobDir, offset + i); }
+                    catch (Exception) { data.Remove("_producer"); }
+                }
+            }
             return copy;
         }
     }
@@ -680,7 +810,10 @@ public static partial class JobRunner
                 // The cheap deterministic checks first. primeira-certa A2: a job they refuse still goes on, without saving, to
                 // the base check, the apply and the Verify when its base (and its producers) load, so the refusal carries every
                 // phase at once; when they do not load, the refusal says the Verify did not run and why.
-                var preflight = JobPreflight.Analyze(CollectOps(job, Path.GetDirectoryName(jobPath)!, null), job, null, jobPath);
+                // motor2 review: the preflight normalizes a copy. The ops of the apply are read from the job as sent and normalized
+                // again, so the marks of what the kernel inserted (SentJob) are on them and every pointer of the answer, the
+                // base's, the apply's and the Verify's too, is one of the job as sent.
+                var preflight = JobPreflight.Analyze(CollectOps(job.DeepClone(), Path.GetDirectoryName(jobPath)!, null), job, null, jobPath);
                 var expectedValid = job is JsonObject obj && obj["expectValid"] is JsonValue ev && ev.TryGetValue<bool>(out var valid) ? valid : true;
                 string resolvedBase; JsonArray ops;
                 try

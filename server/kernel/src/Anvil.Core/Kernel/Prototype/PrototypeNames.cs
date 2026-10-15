@@ -84,7 +84,7 @@ public static class PrototypeNames
     {
         if (!string.IsNullOrWhiteSpace(title))
         {
-            var cut = title.IndexOfAny(['|', '-', '–', ':']);
+            var cut = title.IndexOfAny(['|', '-', '–', '—', ':', '·', '•']);
             var head = (cut > 0 ? title[..cut] : title).Trim();
             if (head.Length > 0) return Pascal(head);
         }
@@ -96,6 +96,43 @@ public static class PrototypeNames
     /// <summary>A module image: &lt;Prefix&gt;&lt;file name in PascalCase&gt; ("assets/products.png" -> "FarmaVirtualProducts").</summary>
     public static string Image(string prefix, string assetPath)
         => prefix + Pascal(Path.GetFileNameWithoutExtension(assetPath.Replace('\\', '/').Split('/').Last()));
+
+    /// <summary>The extension of a module image's URL (/&lt;Module&gt;/img/&lt;Module&gt;.&lt;Image&gt;.&lt;ext&gt;): the type of its bytes, never
+    /// the name of the file (a JPEG saved as foto.png is a JPEG for the Studio, whose stylesheet check refuses the URL .png as
+    /// an unknown object); the file's own extension only when the bytes are no image type the Studio knows.</summary>
+    public static string ImageExtension(ReadOnlySpan<byte> bytes, string assetPath)
+    {
+        var sniffed = ImageType(bytes);
+        if (sniffed == null) return Path.GetExtension(assetPath).TrimStart('.').ToLowerInvariant();
+        // a JPEG is .jpg for the Studio whatever its name says (foto.jpeg with url(foto.jpeg) is refused the same way as a JPEG
+        // named foto.png: proven offline 2026-10-13, cases f14a and f14k)
+        return sniffed == "jpeg" ? JpegExtension : sniffed;
+    }
+
+    /// <summary>A file reference with its percent-encoding decoded ('foto%20grande.png' -> 'foto grande.png'); as written when it
+    /// has no escape or a malformed one.</summary>
+    public static string Unescape(string reference)
+    {
+        if (!reference.Contains('%')) return reference;
+        try { return Uri.UnescapeDataString(reference); } catch (UriFormatException) { return reference; }
+    }
+
+    /// <summary>The extension of a JPEG image in its stylesheet URL.</summary>
+    internal const string JpegExtension = "jpg";
+
+    /// <summary>The image type of the first bytes: png, jpeg, gif, webp, bmp, ico or svg; null for anything else.</summary>
+    public static string? ImageType(ReadOnlySpan<byte> b)
+    {
+        if (b.Length >= 4 && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47) return "png";
+        if (b.Length >= 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF) return "jpeg";
+        if (b.Length >= 4 && b[0] == (byte)'G' && b[1] == (byte)'I' && b[2] == (byte)'F' && b[3] == (byte)'8') return "gif";
+        if (b.Length >= 12 && b[0] == (byte)'R' && b[1] == (byte)'I' && b[2] == (byte)'F' && b[3] == (byte)'F' && b[8] == (byte)'W' && b[9] == (byte)'E' && b[10] == (byte)'B' && b[11] == (byte)'P') return "webp";
+        if (b.Length >= 2 && b[0] == (byte)'B' && b[1] == (byte)'M') return "bmp";
+        if (b.Length >= 4 && b[0] == 0 && b[1] == 0 && b[2] == 1 && b[3] == 0) return "ico";
+        var head = System.Text.Encoding.UTF8.GetString(b[..Math.Min(b.Length, 4096)]).TrimStart('﻿');
+        if (Regex.IsMatch(head, @"^\s*(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*(<!doctype svg[^>]*>\s*)?<svg[\s>]", RegexOptions.IgnoreCase)) return "svg";
+        return null;
+    }
 
     /// <summary>The icon mask class (3.5): ssam-icon-&lt;name&gt; at the default stroke, ssam-icon-&lt;name&gt;-w&lt;stroke x 100&gt; otherwise.</summary>
     public static string IconClass(string name, double strokeWidth, double defaultStrokeWidth)

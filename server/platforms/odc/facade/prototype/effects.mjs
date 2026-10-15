@@ -3,7 +3,7 @@
 // increment, remove, update, insert, upsert, insertFrom, updateFrom, removeWhere, validate, toast. A store difference
 // is explained by the fixed-order search for the combination of effects that explains every changed row; the residue
 // goes to events.notCompiled with the exact difference.
-import { attr, classes, elementsWithPath, isElement, textOf, walk, canonical } from './ir.mjs';
+import { attr, classes, elementsWithPath, isElement, isModalNode, textOf, walk, canonical } from './ir.mjs';
 import { renderKey, alignTrees, alignSequences } from './align.mjs';
 import { storeState, findStoreKey, typeCollections } from './store.mjs';
 import { separate, decisionList, evaluate } from './predicates.mjs';
@@ -336,16 +336,23 @@ export function explainStore(diff, ctx, meta) {
 // ---- observation ----------------------------------------------------------------------------------------------------
 
 export function modalContainers(body) {
-  return elementsWithPath(body).filter(({ node }) => node.t === 'dialog' || attr(node, 'role') === 'dialog' || attr(node, 'aria-modal') === 'true');
+  return elementsWithPath(body).filter(({ node }) => isModalNode(node));
 }
 
 export function modalTitle(container, body) {
+  // an overlay a named component mounted (React WeatherPeekModal) is that component: its heading may carry the record it shows
+  // ("Clima hoje · Cliente João"), never a name for the popup of every record (VisitaCerta 2026-10-12)
+  if (typeof container?.ov === 'string') return container.ov.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
   const labelled = attr(container, 'aria-labelledby');
   let found = null;
   if (labelled) walk(container, node => { if (found) return false; if (isElement(node) && attr(node, 'id') === labelled) found = node; });
   if (!found && labelled && body) walk(body, node => { if (found) return false; if (isElement(node) && attr(node, 'id') === labelled) found = node; });
   if (!found) walk(container, node => { if (found) return false; if (isElement(node) && /^h[1-3]$/.test(node.t)) found = node; });
-  return found ? textOf(found).replace(/\s+/g, ' ').trim() : '';
+  if (found) return textOf(found).replace(/\s+/g, ' ').trim();
+  // an overlay without a heading: the component that mounted it (React DaySheet -> "Day Sheet"), else its aria-label/title
+  if (typeof container?.ov === 'string') return container.ov.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+  if (container?.ov) return String(attr(container, 'aria-label') ?? attr(container, 'title') ?? '').replace(/\s+/g, ' ').trim();
+  return '';
 }
 
 function openModals(body) {
@@ -371,7 +378,7 @@ export function toastRegions(body, appIndex) {
   const out = [];
   (body.c ?? []).forEach((node, index) => {
     if (!isElement(node) || index === appIndex) return;
-    if (node.t === 'dialog' || attr(node, 'role') === 'dialog' || attr(node, 'aria-modal') === 'true') return;
+    if (isModalNode(node)) return;
     out.push(index);
   });
   return out;
@@ -609,7 +616,8 @@ export async function analyzeInteractions(session, { decided }) {
   const storeInfo = s0.inspect.store ?? {};
   const storeRows = Object.values(storeInfo.data ?? {}).map(rows => canonical(rows));
   const extras = (s0.inspect.arrays ?? []).filter(array => !storeRows.includes(canonical(array.rows)));
-  const meta = new StoreMeta(storeInfo.data ?? {}, storeInfo.data ? extras : []);
+  // mapping.data "none": no store and no data arrays either (every list stays as rendered)
+  const meta = new StoreMeta(storeInfo.data ?? {}, storeInfo.data && storeInfo.source !== 'none' ? extras : []);
   session.meta = meta;
   const delegated = new Set((s0.inspect.listeners ?? []).map(item => item.type));
   const mountPath = discovery.mount ?? null;
@@ -626,7 +634,7 @@ export async function analyzeInteractions(session, { decided }) {
   const templateOf = route => { for (const view of views) { if (view.template === route) return view; if (view.template.includes('{id}')) { const re = new RegExp('^' + view.template.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace('\\{id\\}', '([^/]+)').replace('{id}', '([^/]+)') + '$'); if (re.test(route)) return view; } } return null; };
   // spa-state: the view is the skeleton of the page; spa-sections: the view is the visible section.
   const visibleSection = snap => { let found = null; walk(snap.body, node => { if (found) return false; if (isElement(node) && attr(node, 'id') && !node.h && views.some(view => view.sectionId === attr(node, 'id'))) found = attr(node, 'id'); }); return found; };
-  const stateViewOf = kind === 'spa-state' ? snap => views.find(view => skeleton(view.render.body, 4) === skeleton(snap.body, 4)) ?? null
+  const stateViewOf = kind === 'spa-state' ? discovery.viewOf ?? (snap => views.find(view => skeleton(view.render.body, 4) === skeleton(snap.body, 4)) ?? null)
     : kind === 'spa-sections' ? snap => views.find(view => view.sectionId === visibleSection(snap)) ?? null : null;
   const reachFor = (view, state) => {
     if (kind === 'spa-hash' || kind === 'spa-path') return [...session.stateSteps(state), { do: 'nav', route: view.route }];

@@ -4,6 +4,7 @@
 // CLI of this checkout (no Studio, no reader, no worker).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireBytes } from './fixtures/answer-wire.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,7 +22,7 @@ async function ask(lane, intent) {
   }
   const answer = await discover({ lane, intent, sources: indexes[lane], budgetBytes: BUDGET });
   assert.equal(answer.ok, true, JSON.stringify(answer).slice(0, 400));
-  assert.ok(answer.size.bytes <= BUDGET);
+  assert.ok(wireBytes(answer, { budgetBytes: BUDGET }) <= BUDGET);
   return answer;
 }
 
@@ -73,7 +74,7 @@ for (const lane of ['o11', 'odc']) {
   test(`integrations (${lane}): the contracts of the three ops are in the index`, { skip }, async () => {
     await ask(lane, 'consumir api rest');
     const { index } = await buildIndex(lane, { sources: indexes[lane] });
-    for (const op of ['rest', 'rest-expose', 'soap']) assert.ok(index.contracts[op] && !index.contracts[op].error, op);
+    for (const op of ['rest', 'rest-consume', 'rest-expose', 'soap']) assert.ok(index.contracts[op] && !index.contracts[op].error, op);
     assert.ok(index.contracts.rest.shapes.client.includes('baseUrl'));
     assert.deepEqual(index.contracts.soap.lanes, ['o11']);
   });

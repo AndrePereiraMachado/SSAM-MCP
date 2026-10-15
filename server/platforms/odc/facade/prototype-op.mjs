@@ -25,24 +25,39 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { isArchive, extractArchive, archiveSha256, allowedSource, htmlPages, innerArchive, ARCHIVE_LIMITS } from './prototype/archive.mjs';
+import { rankEntries } from './prototype/entry.mjs';
 
 export const RECEIPT_SCHEMA = 'ssam-prototype-receipt/1';
 export const CAPTURE_SCHEMA = 'ssam-prototype-capture/1';
 // The codes of the importer's own refusals (refusal-codes.mjs registers them). CAPTURE_STALE does not exist: a divergent
 // capture is captured again, never refused.
 export const PROTOTYPE_CODES = Object.freeze(['PROTOTYPE_SOURCE_INVALID', 'PROTOTYPE_RENDER_FAILED', 'PROTOTYPE_AMBIGUOUS',
-  'PROTOTYPE_NAME_COLLISION', 'PROTOTYPE_IR_INVALID']);
-export const DATA_KEYS = Object.freeze(['source', 'entry', 'app', 'prefix', 'mapping', 'clock', 'tz', 'home', 'seed', 'capture', 'captureSha256']);
+  'PROTOTYPE_NAME_COLLISION', 'PROTOTYPE_IR_INVALID', 'PROTOTYPE_BINDING_REQUIRED']);
+// source: the absolute path of the prototype folder, of an .html in it, or of the .zip it came in (extracted once, safely, into
+// <lane .local>/prototype/sources/<sha256>; in the hosted SSAM only from the agent's folders, agent:inbox/<name>).
+export const DATA_KEYS = Object.freeze(['source', 'entry', 'app', 'prefix', 'mapping', 'bind', 'clock', 'tz', 'home', 'seed', 'capture', 'captureSha256']);
+// data.bind (docs/PROTOTIPO-NATIVO.md 2.12): the prototype's collections, texts and events bound to the published actions of a
+// producer module instead of mock entities. The kernel checks the names against the producer and proposes what is missing
+// (PROTOTYPE_BINDING_REQUIRED, every patch built offline before it is offered); the facade checks the shape.
+export const BIND_KEYS = Object.freeze(['producer', 'screens', 'lists', 'slots', 'events', 'modals']);
+export const BIND_SOURCE_KEYS = Object.freeze(['action', 'as', 'args', 'outputs']);
+export const BIND_EVENT_KEYS = Object.freeze(['call', 'args', 'then', 'navigate']);
+const BIND_THEN = /^(refresh [A-Za-z][A-Za-z0-9_]*|message(=| )[\s\S]+|download)$/;
 // names: the name map of a PROTOTYPE_NAME_COLLISION ("<Owner>/<Name>" or "<Name>" -> the free name every reference uses).
-export const MAPPING_KEYS = Object.freeze(['screens', 'default', 'routes', 'shell', 'states', 'modals', 'data', 'vendor', 'events', 'ignore', 'names']);
+// version: the script of the folder served in place of the entry's app script (a prototype with v1/v2/v3 versions; the
+// receipt lists the unreferenced ones in source.unreferenced). states: also {"<view>": {"click": "<words or selector>"}}.
+export const MAPPING_KEYS = Object.freeze(['screens', 'default', 'routes', 'shell', 'states', 'modals', 'data', 'vendor', 'events', 'ignore', 'names', 'version']);
 // The facade fills these; the model never writes them.
 export const FACADE_KEYS = Object.freeze(['capture', 'captureSha256']);
 export const WORDS_MARKER = '<palavras do usuário>'; // the marker of o11-cycle.mjs and next-steps.mjs
 // The sentence the delivery tools (o11_deliver, studio_deliver) carry about the op; catalog/tools.json routes its verb
 // "prototype" by it (selector documented).
-export const PROTOTYPE_DELIVER_TEXT = 'A prototype folder (HTML/CSS/JS) becomes native screens in ONE call: job {ops:[{op:"prototype", data:{source:"<absolute folder>"}}]} '
+export const PROTOTYPE_DELIVER_TEXT = 'A prototype folder (HTML/CSS/JS/JSX) or its .zip becomes native screens in ONE call: job {ops:[{op:"prototype", data:{source:"<absolute folder or .zip>"}}]} '
   + 'with publish:true and the owner\'s words in authorize (they cover the import, the publication and the demo data); never read nor hand-convert the prototype, '
-  + 'and add data.mapping only when a refusal asks for it (apply its patch). The answer carries the receipt in prototype (screens, popups, blocks, data, events, fidelity per state, seed, timings).';
+  + 'and add data.mapping only when a refusal asks for it (apply its patch). For screens on the published actions of a producer module instead of mock data: data.bind {producer:"<Module>"} (the refusal PROTOTYPE_BINDING_REQUIRED proposes every source, list, text and event, each built offline). '
+  + 'The answer carries the receipt in prototype (screens, popups, blocks, data, events, fidelity per state, seed, timings).';
 export const TIMING_KEYS = Object.freeze(['captureMs', 'expandMs', 'buildMs', 'verifyMs', 'fidelityMs', 'mergeMs', 'publishMs', 'seedMs']);
 // The order of the top-level code of a refusal with several codes: an SSAM defect first, then what stops the capture.
 const CODE_ORDER = ['PROTOTYPE_IR_INVALID', 'PROTOTYPE_SOURCE_INVALID', 'PROTOTYPE_RENDER_FAILED', 'INPUT_INVALID', 'PROTOTYPE_NAME_COLLISION', 'PROTOTYPE_AMBIGUOUS'];
@@ -79,9 +94,9 @@ export function pascal(text) {
   return /^[A-Za-z]/.test(name) ? name : '';
 }
 export const PREFIX_PATTERN = /^[A-Za-z][A-Za-z0-9]*$/;
-// The title up to the first separator (|, -, en dash, :), in ASCII PascalCase; else the folder name (1.2).
+// The title up to the first separator (|, -, en dash, :, middle dot, bullet), in ASCII PascalCase; else the folder name (1.2).
 export function prefixFromTitle(title) {
-  const head = String(title ?? '').split(/\s*[|:–—]\s*|\s+-\s+/)[0];
+  const head = String(title ?? '').split(/\s*[|:–—·•]\s*|\s+-\s+/)[0];
   return pascal(head);
 }
 function titleOf(file) {
@@ -100,35 +115,92 @@ export function inferPrefix(data = {}, resolved = null) {
     const fromFolder = pascal(path.basename(source.root));
     if (fromFolder) return { prefix: fromFolder, from: 'folder' };
   } else if (typeof data.source === 'string' && data.source) {
-    const fromFolder = pascal(path.basename(/\.html?$/i.test(data.source) ? path.dirname(data.source) : data.source));
+    const fromFolder = pascal(path.basename(/\.html?$/i.test(data.source) ? path.dirname(data.source) : data.source.replace(/\.zip$/i, '')));
     if (fromFolder) return { prefix: fromFolder, from: 'folder' };
   }
   return { prefix: null, from: null };
 }
 
-// ---- the source: a folder or an .html file in it; entry = data.entry, else index.html, else the only .html of the root.
-export function resolveSource(data = {}) {
+// ---- the source: a folder, an .html file in it, or a .zip of it; entry = data.entry, else index.html, else the only .html
+// of the root. A .zip is extracted once (prototype/archive.mjs: zip-slip, links and size caps refuse the whole archive) into
+// <lane .local>/prototype/sources/<sha256 of the zip>/ and resolved as that folder (its single top-level folder when it has
+// one); the answer carries archive {path, sha256}, which the IR records. sourcesDir: where archives are extracted (the
+// callers give <lane .local>/prototype/sources). agentRoot: hosted mode, the source is read only from the agent's folders.
+export const defaultSourcesDir = () => process.env.SSAM_PROTOTYPE_SOURCES || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'kernel', '.local', 'prototype', 'sources');
+export function resolveSource(data = {}, { sourcesDir = null, agentRoot = null } = {}) {
   const source = data.source;
-  if (typeof source !== 'string' || !source.trim()) return { ok: false, problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/source', message: 'data.source is required: the absolute path of the prototype folder (or of an .html file in it).' } };
-  if (!path.isAbsolute(source)) return { ok: false, problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/source', message: 'data.source must be an absolute path; got ' + clip(source, 200) + '.' } };
-  let root = path.resolve(source); let entry = typeof data.entry === 'string' && data.entry.trim() ? data.entry.trim() : null;
-  if (isFile(root)) {
-    if (!/\.html?$/i.test(root)) return { ok: false, problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/source', message: 'data.source is a file but not an .html page: ' + root } };
+  if (typeof source !== 'string' || !source.trim()) return { ok: false, problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/source', message: 'data.source is required: the absolute path of the prototype folder (or of an .html file in it, or of its .zip).' } };
+  const allowed = allowedSource(source, { agentRoot });
+  if (!allowed.ok) return { ok: false, problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/source', message: allowed.message, fix: allowed.fix } };
+  if (!path.isAbsolute(allowed.path)) return { ok: false, problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/source', message: 'data.source must be an absolute path; got ' + clip(source, 200) + '.' } };
+  let root = path.resolve(allowed.path); let entry = typeof data.entry === 'string' && data.entry.trim() ? data.entry.trim() : null;
+  let archive = null; let nested = null;
+  const extract = file => {
+    const extracted = extractArchive(file, { sourcesDir: sourcesDir ?? defaultSourcesDir() });
+    if (extracted.ok) return extracted;
+    return { ok: false, problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/source',
+      message: 'The archive ' + (file === root ? root : path.basename(file) + ' inside ' + root) + ' cannot be used as a prototype (nothing was extracted): ' + extracted.problems.slice(0, 6).map(p => p.message).join('; ') + (extracted.problems.length > 6 ? '; and ' + (extracted.problems.length - 6) + ' more' : '') + '.',
+      fix: 'Extract the archive yourself only if the owner trusts it, and point data.source to the extracted folder; the importer never extracts an entry outside its folder, a link or more than ' + ARCHIVE_LIMITS.entries + ' entries.' } };
+  };
+  if (isFile(root) && isArchive(root)) {
+    const extracted = extract(root);
+    if (!extracted.ok) return extracted;
+    archive = { path: root, sha256: extracted.sha256 };
+    root = extracted.root;
+  } else if (isFile(root)) {
+    if (!/\.html?$/i.test(root)) return { ok: false, problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/source', message: 'data.source is a file but neither an .html page nor a .zip of the prototype: ' + root } };
     entry ??= path.basename(root); root = path.dirname(root);
   } else if (!isDir(root)) return { ok: false, problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/source', message: 'No prototype folder or file at ' + root + '.' } };
+  // a zip inside the zip, or a folder that only holds the zip: the prototype is in that zip (extracted with the same checks;
+  // the capture records the outer archive, whose bytes decide the inner one, or the zip of the folder)
+  const inner = innerArchive(root);
+  if (inner) {
+    const extracted = extract(inner);
+    if (!extracted.ok) return extracted;
+    nested = path.basename(inner);
+    archive ??= { path: inner, sha256: extracted.sha256 };
+    root = extracted.root;
+  }
+  const resolved = resolveEntry(root, entry, { shown: archive?.path ?? root });
+  const extra = { ...(archive ? { archive } : {}), ...(nested ? { nested } : {}) };
+  if (resolved.ok) return { ...resolved, ...extra };
+  if (resolved.proposed) return { ...resolved, proposed: { ...resolved.proposed, ...extra } };
+  return resolved;
+}
+// shown: what the messages name (the .zip the model gave, never the internal extraction folder).
+function resolveEntry(root, entry, { shown = root } = {}) {
   let pages = [];
   try { pages = fs.readdirSync(root).filter(f => /\.html?$/i.test(f) && isFile(path.join(root, f))).sort(); } catch { pages = []; }
   if (entry) {
-    if (path.isAbsolute(entry) || entry.split(/[\\/]/).includes('..') || !isFile(path.join(root, entry)))
-      return { ok: false, problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/entry', message: 'data.entry ' + clip(entry, 200) + ' is not an .html file of ' + root + '.',
-        ...(pages.length ? { patch: [{ op: 'replace', path: '/entry', value: pages.includes('index.html') ? 'index.html' : pages[0] }], alternatives: pages.slice(0, 8) } : {}) } };
+    if (path.isAbsolute(entry) || entry.split(/[\\/]/).includes('..') || !isFile(path.join(root, entry))) {
+      const all = pages.length ? pages : htmlPages(root);
+      return { ok: false, problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/entry', message: 'data.entry ' + clip(entry, 200) + ' is not an .html file of ' + shown + '.',
+        ...(all.length ? { patch: [{ op: 'replace', path: '/entry', value: all.includes('index.html') ? 'index.html' : all[0] }], alternatives: all.slice(0, 8) } : {}) } };
+    }
     return { ok: true, root, entry: entry.replace(/\\/g, '/') };
   }
   if (pages.includes('index.html')) return { ok: true, root, entry: 'index.html' };
   if (pages.length === 1) return { ok: true, root, entry: pages[0] };
-  if (!pages.length) return { ok: false, problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/source', message: 'The prototype folder ' + root + ' has no .html page at its root.' } };
-  return { ok: false, problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/entry', message: 'The prototype folder has ' + pages.length + ' .html pages and no index.html: data.entry says which one is the entry.',
-    patch: [{ op: 'add', path: '/entry', value: pages[0] }], alternatives: pages.slice(1, 9) } };
+  if (!pages.length) {
+    // the pages are in subfolders (outer/inner/, site/, v1/ and v2/): the patch names the page that runs the app, the
+    // shallowest first, and the capture runs with it (verified as with several pages at the root)
+    const deeper = htmlPages(root);
+    if (!deeper.length) return { ok: false, problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/source', message: (shown === root ? 'The prototype folder ' : 'The archive ') + shown + ' has no .html page (nor in its subfolders).' } };
+    const depth = page => page.split('/').length;
+    const ranked = rankEntries(root, deeper).sort((a, b) => depth(a.page) - depth(b.page));
+    const best = ranked[0].page;
+    return { ok: false, proposed: { ok: true, root, entry: best },
+      problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/entry', message: (shown === root ? 'The prototype folder ' : 'The archive ') + shown + ' has no .html page at its root; '
+        + (deeper.length === 1 ? 'its only page is ' + best + '.' : 'its pages are in subfolders: ' + ranked.slice(0, 6).map(item => item.why).join('; ') + '.') + ' The patch names ' + best + ' as data.entry.',
+      patch: [{ op: 'add', path: '/entry', value: best }], ...(ranked.length > 1 ? { alternatives: ranked.slice(1, 9).map(item => item.page) } : {}) } };
+  }
+  // several pages: a choice the importer never makes alone; the patch names the page that runs the app (prototype/entry.mjs),
+  // and the capture still runs with it (expandPrototypeOps), so the one refusal carries every other problem of the call too
+  const ranked = rankEntries(root, pages);
+  return { ok: false, proposed: { ok: true, root, entry: ranked[0].page },
+    problem: { code: 'PROTOTYPE_SOURCE_INVALID', at: '/entry', message: 'The prototype folder has ' + pages.length + ' .html pages and no index.html: data.entry says which one is the entry. '
+      + ranked.map(item => item.why).join('; ') + '. The patch names ' + ranked[0].page + '.',
+    patch: [{ op: 'add', path: '/entry', value: ranked[0].page }], alternatives: ranked.slice(1, 9).map(item => item.page) } };
 }
 
 // ---- the op's own data (closed keys, 1.2): every problem at once
@@ -165,12 +237,72 @@ export function dataProblems(data) {
     problems.push({ code: 'INPUT_INVALID', at: '/clock', message: 'data.clock must be an ISO-8601 UTC instant (2026-10-10T21:00:00Z); default: the newest mtime of the files the capture reads.', patch: [{ op: 'remove', path: '/clock' }] });
   for (const key of ['home', 'seed']) if (data[key] !== undefined && typeof data[key] !== 'boolean')
     problems.push({ code: 'INPUT_INVALID', at: '/' + key, message: 'data.' + key + ' is a boolean.', patch: [{ op: 'replace', path: '/' + key, value: key === 'seed' }] });
+  if (data.bind !== undefined) problems.push(...bindProblems(data.bind));
   if (data.mapping !== undefined) {
     if (!isObject(data.mapping)) problems.push({ code: 'INPUT_INVALID', at: '/mapping', message: 'data.mapping is an object (1.3); only what a refusal asks for.', patch: [{ op: 'remove', path: '/mapping' }] });
     else for (const key of Object.keys(data.mapping).filter(k => !MAPPING_KEYS.includes(k))) {
       const near = nearest(key, MAPPING_KEYS);
       problems.push({ code: 'INPUT_INVALID', at: '/mapping/' + escapeToken(key), message: 'mapping.' + key + ' is not a mapping key' + (near ? '; did you mean ' + near + '?' : '') + ' Keys: ' + MAPPING_KEYS.join(', ') + '.',
         patch: [{ op: 'remove', path: '/mapping/' + escapeToken(key) }, ...(near && !Object.hasOwn(data.mapping, near) ? [{ op: 'add', path: '/mapping/' + near, value: data.mapping[key] }] : [])] });
+    }
+  }
+  return problems;
+}
+
+// The shape of data.bind (closed keys at every level): {producer, screens: {<view>: {source: {action, as?, args?, outputs?}}},
+// lists: {<k>: "<path>" | null}, slots: {<k>[@attr]: "<expression>" | null}, events: {<key>: {call, args?, then?} | {navigate} | null},
+// modals: {<modal>: {source}}}. The names (views, ks, events, actions, outputs) are the kernel's to check against the capture and
+// the producer; null keeps the prototype's own value (a literal, the mock list, an uncompiled event).
+const IDENT = /^[A-Za-z][A-Za-z0-9_]*$/;
+export function bindProblems(bind) {
+  const problems = [];
+  const bad = (at, message, patch) => problems.push({ code: 'INPUT_INVALID', at, message: 'data.bind' + message, ...(patch ? { patch } : {}) });
+  if (!isObject(bind)) { bad('/bind', ' is an object {producer, screens, lists, slots, events, modals}.'); return problems; }
+  for (const key of Object.keys(bind).filter(k => !BIND_KEYS.includes(k))) {
+    const near = nearest(key, BIND_KEYS);
+    bad('/bind/' + escapeToken(key), '.' + key + ' is not a key' + (near ? '; did you mean ' + near + '?' : '') + ' Keys: ' + BIND_KEYS.join(', ') + '.',
+      [{ op: 'remove', path: '/bind/' + escapeToken(key) }, ...(near && !Object.hasOwn(bind, near) ? [{ op: 'add', path: '/bind/' + near, value: bind[key] }] : [])]);
+  }
+  if (typeof bind.producer !== 'string' || !IDENT.test(bind.producer)) bad('/bind/producer', '.producer is the name of the producer module (a producers binding, e.g. "FolhaPonto_CS").');
+  for (const section of ['screens', 'modals']) {
+    if (bind[section] === undefined) continue;
+    if (!isObject(bind[section])) { bad('/bind/' + section, '.' + section + ' is {<key>: {source: {action, as, args, outputs}}}.'); continue; }
+    for (const [key, owner] of Object.entries(bind[section])) {
+      const at = `/bind/${section}/${escapeToken(key)}`;
+      if (!isObject(owner) || !isObject(owner.source)) { bad(at, `.${section}.${key} is {source: {action, as, args, outputs}}.`); continue; }
+      for (const extra of Object.keys(owner).filter(k => k !== 'source')) bad(at + '/' + escapeToken(extra), `.${section}.${key}.${extra} is not a key; keys: source.`, [{ op: 'remove', path: at + '/' + escapeToken(extra) }]);
+      for (const extra of Object.keys(owner.source).filter(k => !BIND_SOURCE_KEYS.includes(k))) {
+        const near = nearest(extra, BIND_SOURCE_KEYS);
+        bad(at + '/source/' + escapeToken(extra), `: source.${extra} is not a key${near ? '; did you mean ' + near + '?' : ''} Keys: ${BIND_SOURCE_KEYS.join(', ')}.`, [{ op: 'remove', path: at + '/source/' + escapeToken(extra) }]);
+      }
+      if (typeof owner.source.action !== 'string' || !IDENT.test(owner.source.action)) bad(at + '/source/action', ': source.action names a public server action of the producer.');
+      if (owner.source.as !== undefined && !(typeof owner.source.as === 'string' && IDENT.test(owner.source.as))) bad(at + '/source/as', ': source.as is the name of the Data Action (an identifier).');
+      if (owner.source.args !== undefined && !(isObject(owner.source.args) && Object.values(owner.source.args).every(v => typeof v === 'string'))) bad(at + '/source/args', ': source.args is {<input>: "<expression>"}.');
+      if (owner.source.outputs !== undefined && !(Array.isArray(owner.source.outputs) && owner.source.outputs.every(v => typeof v === 'string'))) bad(at + '/source/outputs', ': source.outputs lists output names.');
+    }
+  }
+  for (const section of ['lists', 'slots']) {
+    if (bind[section] === undefined) continue;
+    if (!isObject(bind[section])) { bad('/bind/' + section, `.${section} is {<capture k>: "<expression>" | null}.`); continue; }
+    for (const [key, value] of Object.entries(bind[section]))
+      if (value !== null && !(typeof value === 'string' && value.trim())) bad(`/bind/${section}/${escapeToken(key)}`, `.${section}.${key} is an expression (text), or null to keep the prototype's own value.`);
+  }
+  if (bind.events !== undefined) {
+    if (!isObject(bind.events)) bad('/bind/events', '.events is {<event key>: {call, args, then} | {navigate} | null}.');
+    else for (const [key, value] of Object.entries(bind.events)) {
+      const at = '/bind/events/' + escapeToken(key);
+      if (value === null) continue;
+      if (!isObject(value)) { bad(at, `.events.${key} is {call, args, then} or {navigate} or null.`); continue; }
+      for (const extra of Object.keys(value).filter(k => !BIND_EVENT_KEYS.includes(k))) {
+        const near = nearest(extra, BIND_EVENT_KEYS);
+        bad(at + '/' + escapeToken(extra), `.events.${key}.${extra} is not a key${near ? '; did you mean ' + near + '?' : ''} Keys: ${BIND_EVENT_KEYS.join(', ')}.`, [{ op: 'remove', path: at + '/' + escapeToken(extra) }]);
+      }
+      if (value.call === undefined && value.navigate === undefined) bad(at, `.events.${key} calls an action (call) or navigates (navigate).`);
+      if (value.call !== undefined && !(typeof value.call === 'string' && IDENT.test(value.call))) bad(at + '/call', ': call names a public server action of the producer.');
+      if (value.navigate !== undefined && typeof value.navigate !== 'string') bad(at + '/navigate', ': navigate names a view of the capture.');
+      if (value.args !== undefined && !(isObject(value.args) && Object.values(value.args).every(v => typeof v === 'string'))) bad(at + '/args', ': args is {<input>: "<expression>"}.');
+      if (value.then !== undefined && !(Array.isArray(value.then) && value.then.every(t => typeof t === 'string' && BIND_THEN.test(t.trim()))))
+        bad(at + '/then', ': then lists "refresh <data action>", "message <text>", "message= <expression>" or "download".');
     }
   }
   return problems;
@@ -231,12 +363,12 @@ export function opPath(raw, index, base) {
 const withPaths = (patch, index, base) => (Array.isArray(patch) ? patch.filter(isObject).map(p => ({ ...p, path: opPath(p.path, index, base) })) : null);
 
 // ---- the IR hash: the render lane's own (prototype/ir.mjs) when present, else the same rule (canonical JSON, keys sorted,
-// without timings, engine.node and source.root). Either one, or the raw bytes, proves the file is the one named.
+// without timings, engine.node, source.root and source.archive.path). Either one, or the raw bytes, proves the file is the one named.
 const canonical = value => (Array.isArray(value) ? '[' + value.map(canonical).join(',') + ']'
   : isObject(value) ? '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + canonical(value[k])).join(',') + '}' : JSON.stringify(value) ?? 'null');
 export function canonicalSha256(ir) {
   const copy = structuredClone(ir);
-  if (isObject(copy)) { delete copy.timings; if (isObject(copy.engine)) delete copy.engine.node; if (isObject(copy.source)) delete copy.source.root; }
+  if (isObject(copy)) { delete copy.timings; if (isObject(copy.engine)) delete copy.engine.node; if (isObject(copy.source)) { delete copy.source.root; if (isObject(copy.source.archive)) delete copy.source.archive.path; } }
   return sha256(canonical(copy));
 }
 let irModule;
@@ -257,12 +389,16 @@ export async function irSha256(ir) {
 }
 // Whether data.capture is still the capture of data.source: the file is there, one of its hashes is data.captureSha256, and
 // every source file the IR lists still has its sha256. Anything else is captured again (never a refusal).
-export async function captureCurrent(data, root) {
+export async function captureCurrent(data, root, { archive = null } = {}) {
   if (typeof data?.capture !== 'string' || typeof data?.captureSha256 !== 'string' || !isFile(data.capture)) return { current: false, why: 'no capture' };
   let bytes, ir;
   try { bytes = fs.readFileSync(data.capture); ir = JSON.parse(bytes.toString('utf8').replace(/^﻿/, '')); } catch { return { current: false, why: 'unreadable capture' }; }
   if (ir?.schema !== CAPTURE_SCHEMA) return { current: false, why: 'not a ' + CAPTURE_SCHEMA };
   if (!(await irHashes(ir, bytes)).has(data.captureSha256.toLowerCase())) return { current: false, why: 'captureSha256 differs from the capture file' };
+  // a .zip source: the capture is of this archive (its sha256); a folder never reuses the capture of an archive, nor the reverse
+  const was = isObject(ir.source?.archive) && typeof ir.source.archive.sha256 === 'string' ? ir.source.archive.sha256.toLowerCase() : null;
+  const now = typeof archive?.sha256 === 'string' ? archive.sha256.toLowerCase() : null;
+  if (was !== now) return { current: false, why: was && now ? 'the archive ' + path.basename(archive.path ?? '') + ' changed' : was ? 'the capture is of an archive, the source is a folder' : 'the source is now an archive' };
   for (const f of Array.isArray(ir.source?.files) ? ir.source.files : []) {
     if (typeof f?.path !== 'string' || typeof f?.sha256 !== 'string') continue;
     const file = path.join(root, f.path);
@@ -281,12 +417,13 @@ export async function capturePrototype(args) {
 }
 
 const fixOf = code => ({
-  PROTOTYPE_SOURCE_INVALID: 'Point data.source to the absolute folder of the prototype (or its .html entry); the patch names the entry when the folder has several pages.',
+  PROTOTYPE_SOURCE_INVALID: 'Point data.source to the absolute folder of the prototype, its .html entry or its .zip (given as it is, never unzipped by hand); the patch names the entry when the folder has several pages.',
   PROTOTYPE_RENDER_FAILED: 'The prototype did not load headless; when the cause is an external script the patch maps its URL to a local copy (mapping.vendor).',
   PROTOTYPE_AMBIGUOUS: 'Apply the patch as it is: it is the exact mapping the capture could not infer.',
   PROTOTYPE_NAME_COLLISION: 'A name you asked for is taken by an element the import does not own; the patch uses the free name.',
   PROTOTYPE_IR_INVALID: 'SSAM defect: nothing to correct in the call; report it.',
-  INPUT_INVALID: 'Apply the patch: the op data keys are closed (source, entry, app, prefix, mapping, clock, tz, home, seed).',
+  PROTOTYPE_BINDING_REQUIRED: 'Apply the patch as it is: each binding was planned and built offline against the producer before it was offered; an unresolved item has no patch: write it, or null to keep the value of the prototype.',
+  INPUT_INVALID: 'Apply the patch: the op data keys are closed (source, entry, app, prefix, mapping, bind, clock, tz, home, seed).',
 }[code] ?? 'Apply the patch.');
 function problemFor(raw, index, base) {
   const code = typeof raw?.code === 'string' ? raw.code : 'PROTOTYPE_IR_INVALID';
@@ -294,6 +431,7 @@ function problemFor(raw, index, base) {
   const patch = withPaths(raw?.patch, index, base);
   return { phase: 'prototype', op: index, pointer, code, severity: 'error', message: clip(raw?.message ?? code, 600), fix: raw?.fix ?? fixOf(code),
     ...(patch?.length ? { patch } : {}), ...(Array.isArray(raw?.alternatives) && raw.alternatives.length ? { alternatives: raw.alternatives.slice(0, 8) } : {}),
+    ...(typeof raw?.needsFile === 'string' && raw.needsFile ? { needsFile: raw.needsFile } : {}),
     ...(raw?.ssamDefect === true || code === 'PROTOTYPE_IR_INVALID' ? { ssamDefect: true } : {}) };
 }
 // Strips what the facade wrote (capture, captureSha256) from every prototype op: the job as the model gave it.
@@ -302,10 +440,54 @@ export function modelJob(document) {
   for (const { op } of prototypeOps(copy).list) if (isObject(op.data)) for (const key of FACADE_KEYS) delete op.data[key];
   return copy;
 }
+// A patch whose application leaves the job as it is cannot resolve anything (the loop of 2026-10-12: mapping.names
+// {label: label2} offered again to the call that already carried it). Such a problem comes back without the patch, as an
+// SSAM defect the model must not retry. -> the problems, and how many lost their patch.
+export function identityPatchesOut(problems, original) {
+  let dropped = 0;
+  const same = patch => { try { return JSON.stringify(applyLenient(original, patch)) === JSON.stringify(original); } catch { return false; } };
+  const out = (problems ?? []).map(p => {
+    if (!isObject(p) || !Array.isArray(p.patch) || !p.patch.length || !same(p.patch)) return p;
+    dropped++;
+    const { patch, correctedJob, ...rest } = p;
+    return { ...rest, ssamDefect: true, unresolved: true,
+      message: clip(String(p.message ?? '') + ' — the patch the importer gave changes nothing in this call (it is already applied), so it cannot resolve the problem', 900),
+      fix: 'No patch resolves this problem: the call already has what the patch would add. Do not retry it; report it as an SSAM defect with this refusal.' };
+  });
+  return { problems: out, dropped };
+}
+// The refusal of a kernel run of a prototype job (job-runner, o11-cycle) with the identity patches out (identityPatchesOut).
+export function withoutIdentityPatches(result, document) {
+  if (!isObject(result) || result.ok !== false || !document) return result;
+  const original = modelJob(document);
+  const { problems, dropped } = identityPatchesOut(result.problems, original);
+  if (!dropped) return result;
+  const out = { ...result, problems, ssamDefect: true };
+  const left = problems.flatMap(p => (isObject(p) && Array.isArray(p.patch) ? p.patch : []));
+  if (left.length) { const corrected = applyLenient(original, left); out.patch = strictPatch(original, corrected); out.correctedJob = corrected; }
+  else { delete out.patch; delete out.correctedJob; }
+  return out;
+}
+
+// A prototype build the Verify refused with no code of its own (the errors name no item of the capture, so nothing was
+// degraded): VALIDATION_REFUSED with ssamDefect, the errors kept, nothing to retry. Answers that already carry a code stand.
+export function untypedBuildRefusal(value) {
+  if (!isObject(value) || value.ok !== false || value.code) return value;
+  const problems = Array.isArray(value.problems) ? value.problems : [];
+  const first = problems.find(p => isObject(p) && p.message)?.message;
+  return { ...value, outcome: value.outcome ?? 'refused', code: 'VALIDATION_REFUSED', ssamDefect: true, stage: value.stage ?? 'build', failed: value.failed ?? 'build',
+    error: (value.error ? String(value.error) + ' ' : '') + 'SSAM defect: the module generated from the prototype fails the Verify'
+      + (first ? ' (' + clip(first, 300) + ')' : '') + ' and no item of the capture is named to leave out; nothing was merged.',
+    fix: 'SSAM defect: nothing to correct in the call and no patch; do not retry. Report it with this refusal.' };
+}
+
 // The single refusal: every problem, the strict combined patch and the corrected call.
-export function prototypeRefusal(problems, job, { code = null, error = null, ssamDefect = false, stage = 'prototype', extra = {} } = {}) {
+export function prototypeRefusal(given, job, { code = null, error = null, ssamDefect = false, stage = 'prototype', extra = {} } = {}) {
   const original = modelJob(job);
-  const lenient = problems.flatMap(p => p.patch ?? []);
+  const problems = identityPatchesOut(given, original).problems;
+  // a patch that needs a file saved first (needsFile: the mapping.vendor copy of a script) is offered on its problem only:
+  // never in the combined patch nor in correctedJob, which would fail the same way until the file exists (2.11)
+  const lenient = problems.filter(p => !p.needsFile).flatMap(p => p.patch ?? []);
   const corrected = lenient.length ? applyLenient(original, lenient) : null;
   const patch = corrected ? strictPatch(original, corrected) : [];
   // Each problem's own patch, made strict over the call as the model sent it (applies alone with patch + basedOn).
@@ -320,44 +502,88 @@ export function prototypeRefusal(problems, job, { code = null, error = null, ssa
     ...(defect ? { ssamDefect: true } : {}), ...extra };
 }
 
+// data.bind (2.12): the kernel's PROTOTYPE_BINDING_REQUIRED carries one patch per binding it proposes (each built offline before
+// it is offered), each adding a member of data.bind; together they are the call with every proposal. This is that call: the
+// strict patch (add /ops/<i>/data/bind with the whole corrected binding, parents always present) and the corrected job, over
+// the job as the model gave it.
+export function bindingCorrection(problems, document) {
+  if (!document) return {};
+  const original = modelJob(document);
+  const lenient = (Array.isArray(problems) ? problems : []).flatMap(p => (isObject(p) && Array.isArray(p.patch) ? p.patch : [])).filter(isObject);
+  if (!lenient.length) return {};
+  const corrected = applyLenient(original, lenient);
+  const patch = strictPatch(original, corrected);
+  return patch.length ? { patch, correctedJob: corrected } : {};
+}
+
 // ---- the expansion
 // job: the job document (object or array). work: the folder of this expansion (the bundles go to <work>/op-<i>/bundle).
 // -> {job, expanded:false} when there is no prototype op; {job, expanded:true, captures, warnings, timings}; or {refusal}.
-export async function expandPrototypeOps(job, { work, capture = capturePrototype, now = Date.now } = {}) {
+// sourcesDir: where a .zip source is extracted (default <work>/../sources, i.e. <lane .local>/prototype/sources). agentRoot:
+// hosted mode (the source only from the agent's folders, the vendors never downloaded); the hosted server sets it, or
+// SSAM_PROTOTYPE_AGENT_ROOT names it for every expansion of the process.
+export async function expandPrototypeOps(job, { work, capture = capturePrototype, now = Date.now, sourcesDir = null, agentRoot = process.env.SSAM_PROTOTYPE_AGENT_ROOT || null } = {}) {
   const started = now();
   const document = structuredClone(job);
   const { base, list } = prototypeOps(document);
   if (!list.length) return { job: document, expanded: false };
   const problems = []; const warnings = []; const captures = [];
   const ready = [];
+  const extractTo = sourcesDir ?? (work ? path.join(work, '..', 'sources') : defaultSourcesDir());
   for (const { index, op } of list) {
     const own = dataProblems(op.data).map(p => problemFor(p, index, base));
     problems.push(...own);
     if (!isObject(op.data)) continue;
-    const source = resolveSource(op.data);
-    if (!source.ok) { problems.push(problemFor(source.problem, index, base)); continue; }
+    const source = resolveSource(op.data, { sourcesDir: extractTo, agentRoot });
+    const nested = source.nested ?? source.proposed?.nested;
+    if (nested) warnings.push({ code: 'prototypeNestedArchive', op: index, message: 'The prototype is in ' + nested + ', the only .zip of the source and no .html page beside it: it was extracted with the same checks and captured.' });
+    if (!source.ok) {
+      problems.push(problemFor(source.problem, index, base));
+      // the entry the importer does not choose alone: the capture still runs with the page its patch names, so the refusal is
+      // ONE, with every other problem of the call, and the entry patch was tried (never a second refusal after it)
+      if (source.proposed && !own.some(p => p.code === 'INPUT_INVALID' && /\/mapping/.test(p.pointer))) ready.push({ index, op, source: source.proposed, proposed: true });
+      continue;
+    }
     if (!own.some(p => p.code === 'INPUT_INVALID' && /\/mapping/.test(p.pointer))) ready.push({ index, op, source });
   }
   let captureMs = 0;
-  for (const { index, op, source } of ready) {
-    const data = op.data;
-    if (data.capture != null || data.captureSha256 != null) {
-      const check = await captureCurrent(data, source.root);
+  const memoDir = path.join(extractTo, '..', 'captures');
+  for (const { index, op, source, proposed } of ready) {
+    // the op as the patch would leave it (proposed entry): the job given is never changed by a refusal
+    const data = proposed ? { ...op.data, entry: source.entry } : op.data;
+    if (!proposed && (data.capture != null || data.captureSha256 != null)) {
+      const check = await captureCurrent(data, source.root, { archive: source.archive ?? null });
       if (check.current) { captures.push({ op: index, capture: data.capture, captureSha256: data.captureSha256.toLowerCase(), reused: true, ...summaryOf(check.ir) }); continue; }
       warnings.push({ code: 'captureRefreshed', op: index, why: check.why });
     }
+    // the call that applies the entry patch of a refusal reuses the capture that refusal already made with that entry (same
+    // source files, archive, mapping, clock, zone and capture engine), never capturing the same prototype twice in a row
+    const memo = !proposed && data.capture == null ? await readCaptureMemo(memoDir, data, source) : null;
+    if (memo) { data.capture = memo.capture; data.captureSha256 = memo.captureSha256; captures.push({ op: index, capture: memo.capture, captureSha256: memo.captureSha256, entry: source.entry, reused: true, ...summaryOf(memo.ir) }); continue; }
     const out = path.join(work ?? path.join(source.root, '.ssam-prototype'), 'op-' + index, 'bundle');
     const begin = now();
     let result;
     try {
       result = await capture({ source: source.root, entry: source.entry, mapping: isObject(data.mapping) ? data.mapping : {},
-        ...(typeof data.clock === 'string' ? { clock: data.clock } : {}), tz: typeof data.tz === 'string' ? data.tz : 'UTC', out });
+        ...(typeof data.clock === 'string' ? { clock: data.clock } : {}), tz: typeof data.tz === 'string' ? data.tz : 'UTC', out,
+        ...(source.archive ? { archive: source.archive } : {}), ...(agentRoot ? { download: null } : {}) });
     } catch (error) { result = { ok: false, problems: [{ code: 'PROTOTYPE_IR_INVALID', ssamDefect: true, message: 'The capture threw: ' + clip(error?.message ?? error, 300) }] }; }
     captureMs += now() - begin;
     for (const w of Array.isArray(result?.warnings) ? result.warnings : []) warnings.push(isObject(w) ? { op: index, ...w } : { op: index, message: String(w) });
     if (result?.ok === true && typeof result.capturePath === 'string' && typeof result.sha256 === 'string') {
+      if (proposed) {
+        // the entry patch was tried: the capture with it works; it is kept for the call that applies the patch
+        writeCaptureMemo(memoDir, data, source, { capture: path.resolve(result.capturePath), captureSha256: result.sha256.toLowerCase() });
+        const entryProblem = problems.find(p => p.op === index && /\/entry$/.test(p.pointer));
+        if (entryProblem) {
+          const s = isObject(result.summary) ? result.summary : {};
+          entryProblem.message = clip(entryProblem.message + ' With it the capture ran: ' + (s.views ?? '?') + ' screen(s), ' + (s.modals ?? 0) + ' popup(s), ' + (s.events ?? 0) + ' event(s); nothing else to correct in this op.', 900);
+          entryProblem.verified = true;
+        }
+        continue;
+      }
       data.capture = path.resolve(result.capturePath); data.captureSha256 = result.sha256.toLowerCase();
-      captures.push({ op: index, capture: data.capture, captureSha256: data.captureSha256, entry: source.entry, ...(isObject(result.summary) ? { summary: result.summary } : {}) });
+      captures.push({ op: index, capture: data.capture, captureSha256: data.captureSha256, entry: source.entry, ...(source.archive ? { archive: source.archive } : {}), ...(isObject(result.summary) ? { summary: result.summary } : {}) });
       continue;
     }
     const raw = Array.isArray(result?.problems) && result.problems.length ? result.problems
@@ -367,14 +593,45 @@ export async function expandPrototypeOps(job, { work, capture = capturePrototype
   if (problems.length) return { refusal: prototypeRefusal(problems, document, { extra: warnings.length ? { warnings } : {} }) };
   return { job: document, expanded: true, captures, warnings, timings: { captureMs, expandMs: now() - started } };
 }
-const summaryOf = ir => (isObject(ir?.stats) ? { summary: { kind: ir.kind ?? null, ...ir.stats } } : {});
+// The capture a refusal made with the entry its patch names, kept for the call that applies the patch: keyed by everything the
+// capture reads (the archive or folder, the entry, the mapping, the clock, the zone) and by the capture engine's own files, and
+// reused only when captureCurrent still finds every source file the same.
+let ENGINE_STAMP = null;
+function engineStamp() {
+  if (ENGINE_STAMP) return ENGINE_STAMP;
+  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'prototype');
+  let names = [];
+  try { names = fs.readdirSync(dir).filter(name => name.endsWith('.mjs')).sort(); } catch { /* no engine folder */ }
+  ENGINE_STAMP = sha256(names.map(name => { try { const s = fs.statSync(path.join(dir, name)); return name + ':' + s.size + ':' + s.mtimeMs; } catch { return name; } }).join('|'));
+  return ENGINE_STAMP;
+}
+function captureMemoFile(memoDir, data, source) {
+  const key = { schema: CAPTURE_SCHEMA, engine: engineStamp(), source: source.archive?.sha256 ?? path.resolve(source.root).toLowerCase(), entry: source.entry,
+    mapping: isObject(data.mapping) ? data.mapping : {}, clock: typeof data.clock === 'string' ? data.clock : null, tz: typeof data.tz === 'string' ? data.tz : 'UTC' };
+  return path.join(memoDir, sha256(JSON.stringify(key)) + '.json');
+}
+function writeCaptureMemo(memoDir, data, source, value) {
+  try { fs.mkdirSync(memoDir, { recursive: true }); fs.writeFileSync(captureMemoFile(memoDir, data, source), JSON.stringify(value)); } catch { /* the next call captures again */ }
+}
+async function readCaptureMemo(memoDir, data, source) {
+  let memo;
+  try { memo = JSON.parse(fs.readFileSync(captureMemoFile(memoDir, data, source), 'utf8')); } catch { return null; }
+  if (!isObject(memo) || typeof memo.capture !== 'string' || typeof memo.captureSha256 !== 'string') return null;
+  const check = await captureCurrent(memo, source.root, { archive: source.archive ?? null });
+  return check.current ? { capture: memo.capture, captureSha256: memo.captureSha256, ir: check.ir } : null;
+}
+
+const summaryOf = ir => (isObject(ir?.stats) ? { summary: { kind: ir.kind ?? null, ...ir.stats,
+  ...(Array.isArray(ir.source?.unreferenced) && ir.source.unreferenced.length ? { unreferenced: ir.source.unreferenced } : {}), ...(isObject(ir.source?.version) ? { version: ir.source.version } : {}),
+  ...(Array.isArray(ir.store?.configuration) && ir.store.configuration.length ? { configuration: ir.store.configuration } : {}) },
+  ...(isObject(ir.source?.archive) ? { archive: ir.source.archive } : {}) } : {});
 
 // A job file with prototype ops expanded into a new file of inlineDir; null when the job has none (nothing written).
 // -> {path, sha256, expansion} | {refusal}
-export async function expandJobFile(file, { inlineDir, work, capture = capturePrototype, now = Date.now, uuid = randomUUID } = {}) {
+export async function expandJobFile(file, { inlineDir, work, capture = capturePrototype, now = Date.now, uuid = randomUUID, sourcesDir = null, agentRoot = undefined } = {}) {
   const document = readJobDocument(file);
   if (!document || !hasPrototypeOps(document)) return null;
-  const expansion = await expandPrototypeOps(document, { work: work ?? path.join(inlineDir, '..', '..', 'prototype', uuid()), capture, now });
+  const expansion = await expandPrototypeOps(document, { work: work ?? path.join(inlineDir, '..', '..', 'prototype', uuid()), capture, now, sourcesDir, agentRoot });
   if (expansion.refusal) return { refusal: expansion.refusal };
   return { ...writeJobFile(inlineDir, expansion.job, uuid), expansion };
 }
@@ -401,6 +658,20 @@ export function buildProblems(result) {
   return out;
 }
 const sourceKey = p => (typeof p?.k === 'string' && p.k ? p.k : typeof p?.sourceKey === 'string' && p.sourceKey ? p.sourceKey : typeof p?.origin?.k === 'string' ? p.origin.k : null);
+// The k of a problem that names a model key only (a Verify message on a property object of a widget): the widget keys the kernel
+// wrote next to the bundle (prototype-keys.json, built widget key -> capture k) give it; the kernel names widgetKey when it
+// walked up from the property to the widget.
+function keyedSource(p, captures) {
+  const own = sourceKey(p);
+  if (own) return own;
+  for (const key of [p?.widgetKey, p?.key].filter(v => typeof v === 'string' && v)) {
+    for (const c of captures) {
+      const map = c.keys ?? (c.keys = (() => { try { return readJson(path.join(path.dirname(c.file), 'prototype-keys.json')); } catch { return {}; } })());
+      if (typeof map[key] === 'string') return map[key];
+    }
+  }
+  return null;
+}
 const propertyOf = p => [p?.property, p?.prop, p?.attribute].find(v => typeof v === 'string' && v) ?? null;
 // The node of a capture by k, with its chain of ancestors (root first).
 export function findNode(ir, k) {
@@ -415,7 +686,8 @@ export function findNode(ir, k) {
       const [node, chain] = stack.pop();
       if (!isObject(node)) continue;
       if (node.k === k) return { node, chain };
-      const kids = Array.isArray(node.c) ? node.c : [];
+      // the template of a list (its items are built from it) and the alternative of an if are nodes of the capture too
+      const kids = [...(Array.isArray(node.c) ? node.c : []), ...(isObject(node.list?.template) ? [node.list.template] : []), ...(isObject(node.else) ? [node.else] : Array.isArray(node.else) ? node.else : [])];
       for (let i = kids.length - 1; i >= 0; i--) stack.push([kids[i], [...chain, node]]);
     }
   }
@@ -454,7 +726,7 @@ export function degradableItems(problems, document) {
   const captures = captureDocuments(document);
   const items = []; const seen = new Set();
   for (const p of problems ?? []) {
-    const k = sourceKey(p); if (!k) continue;
+    const k = keyedSource(p, captures); if (!k) continue;
     const owner = captures.find(c => (Array.isArray(c.ir?.events) && c.ir.events.some(e => e?.key === k)) || findNode(c.ir, k));
     if (!owner) continue;
     const isEvent = Array.isArray(owner.ir.events) && owner.ir.events.some(e => e?.key === k);
@@ -484,7 +756,7 @@ export function degradeCapture(ir, items) {
     if (item.kind === 'event') {
       const event = (copy.events ?? []).find(e => e?.key === item.k);
       if (event) { event.compiled = false; done.push({ ...item, action: 'event not compiled (listed in events.notCompiled)' }); }
-      const strip = node => { if (!isObject(node)) return; if (Array.isArray(node.events)) node.events = node.events.filter(e => e !== item.k); for (const c of node.c ?? []) strip(c); };
+      const strip = node => { if (!isObject(node)) return; if (Array.isArray(node.events)) node.events = node.events.filter(e => e !== item.k); for (const c of node.c ?? []) strip(c); if (isObject(node.list?.template)) strip(node.list.template); };
       for (const root of [copy.shell?.root, ...(copy.views ?? []).map(v => v?.root), ...(copy.modals ?? []).map(m => m?.root), ...Object.values(copy.trees ?? {})]) strip(root);
       continue;
     }
@@ -532,7 +804,7 @@ export function degradationRefusal({ document, problems, done, selectorsFrom = d
   const captures = captureDocuments(selectorsFrom);
   const byOp = new Map();
   for (const p of problems) {
-    const k = sourceKey(p); if (!k) continue;
+    const k = keyedSource(p, captures); if (!k) continue;
     for (const c of captures) { const s = selectorOf(c.ir, k); if (s) { if (!byOp.has(c.op)) byOp.set(c.op, new Set()); byOp.get(c.op).add(s); break; } }
   }
   const patch = [];
@@ -621,7 +893,7 @@ export async function measurePrototypeFidelity({ captures = [], nativeDom, measu
 }
 
 // ---- the receipt (1.4)
-const EFFECTS = ['navigate', 'openPopup', 'closePopup', 'setDimension', 'toggle', 'increment', 'remove', 'update', 'insert', 'upsert', 'insertFrom', 'updateFrom', 'removeWhere', 'validate', 'toast'];
+const EFFECTS = ['navigate', 'openPopup', 'closePopup', 'setDimension', 'toggle', 'increment', 'remove', 'update', 'insert', 'upsert', 'insertFrom', 'updateFrom', 'removeWhere', 'validate', 'toast', 'call'];
 const COUNT_KEYS = ['ops', 'widgets', 'extendedProperties', 'screenActions', 'serverActions', 'ifWidgets', 'lists'];
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 function verifyWarningsOf(report, verify) {
@@ -662,9 +934,21 @@ export function prototypeReceipt(kernelReport, { fidelity = null, phases = {}, s
     const s = (seeded.seeded ?? []).find(x => x.entity === e?.name);
     return isObject(e) ? { ...e, seeded: s ? s.rows : num(e.seeded) ?? 0 } : e;
   });
+  // data.bind (2.12): a configuration list the binding replaced is no static entity (it left the store): the receipt says what
+  // it became and the capture's warning keeps only the lists still imported
+  const bound = new Set(isObject(data.bound) && Array.isArray(data.bound.collections) ? data.bound.collections : []);
+  const producer = isObject(data.bound) ? data.bound.producer ?? 'the producer' : 'the producer';
+  const configuration = (Array.isArray(first.summary?.configuration) ? first.summary.configuration : [])
+    .map(item => (isObject(item) && bound.has(item.collection) ? { ...item, role: `data.bind replaced it with the outputs of ${producer}: no static entity, no seed`, bound: true } : item));
+  const shown = warnings.map(w => (isObject(w) && w.code === 'PrototypeStoreFromConfiguration' && Array.isArray(w.lists) ? { ...w, lists: w.lists.filter(l => !bound.has(l?.collection)) } : w))
+    .filter(w => !(isObject(w) && w.code === 'PrototypeStoreFromConfiguration' && Array.isArray(w.lists) && w.lists.length === 0));
   return {
     schema: RECEIPT_SCHEMA,
-    source: { ...(isObject(k.source) ? k.source : {}), ...(first.captureSha256 && !k.source?.captureSha256 ? { captureSha256: first.captureSha256 } : {}) },
+    source: { ...(isObject(k.source) ? k.source : {}), ...(first.captureSha256 && !k.source?.captureSha256 ? { captureSha256: first.captureSha256 } : {}),
+      // what the entry never loads (other versions of a design canvas), the version chosen, the archive it came in
+      ...(Array.isArray(first.summary?.unreferenced) && first.summary.unreferenced.length ? { unreferenced: first.summary.unreferenced } : {}),
+      ...(isObject(first.summary?.version) ? { version: first.summary.version } : {}), ...(isObject(first.archive) ? { archive: first.archive } : {}) },
+    ...(configuration.length ? { store: { configuration } } : {}),
     flow: k.flow ?? null, theme: k.theme ?? null,
     screens: linked,
     blocks: Array.isArray(k.blocks) ? k.blocks : [],
@@ -684,7 +968,7 @@ export function prototypeReceipt(kernelReport, { fidelity = null, phases = {}, s
     outOfScope: Array.isArray(k.outOfScope) ? k.outOfScope : [],
     padroes: isObject(k.padroes) ? k.padroes : { notes: [] },
     modelBytes: num(k.modelBytes) ?? 0,
-    ...(warnings.length ? { warnings: warnings.slice(0, 20) } : {}),
+    ...(shown.length ? { warnings: shown.slice(0, 20) } : {}),
   };
 }
 

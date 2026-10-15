@@ -174,3 +174,32 @@ test('unknown IDs, input bounds and explicit pagination are enforced', () => {
   assert.equal(page.capabilities.length, 2);
   assert.equal(page.offset, 3);
 });
+
+test('odc_portal_capabilities answers compact capability rows within the budget, never an omitted list', async () => {
+  const capabilities = new PortalCapabilities({ catalog, tenantAccess: true });
+  const all = capabilities.page({});
+  assert.equal(all.total, capabilities.entries.size);
+  assert.ok(all.returned > 0 && all.capabilities.length === all.returned);
+  assert.ok(Buffer.byteLength(JSON.stringify(all)) <= 4096, 'fits the facade 4 KB answer budget');
+  assert.equal(all.nextOffset, all.returned);
+  assert.deepEqual(all.continuation.arguments, { offset: all.returned, limit: 30 });
+  for (const row of all.capabilities) assert.ok(row.id && row.title && row.kind && row.implementation);
+  let offset = 0, seen = 0;
+  while (offset !== undefined) {
+    const page = capabilities.page({ offset });
+    assert.ok(Buffer.byteLength(JSON.stringify(page)) <= 4096);
+    seen += page.returned; offset = page.nextOffset;
+  }
+  assert.equal(seen, capabilities.entries.size);
+  for (const query of ['release library', 'liberar biblioteca', 'release da lib', 'versionar library', 'liberar a biblioteca']) {
+    const page = capabilities.page({ query });
+    const row = page.capabilities.find(c => c.id === 'portal.library-release');
+    assert.ok(row, query);
+    assert.deepEqual(row.tools, ['odc_portal_read', 'odc_portal_write']);
+    assert.deepEqual(row.writes, ['libraries.release']);
+    assert.deepEqual([...row.reads].sort(), ['libraries.releaseRevision', 'libraries.releaseSettings']);
+  }
+  assert.equal(capabilities.page({ search: 'release library' }).capabilities[0].id, 'portal.library-release');
+  assert.equal(capabilities.page({ id: 'portal.library-release' }).access.writes[0], 'libraries.release');
+  assert.throws(() => capabilities.page({ search: 'a', query: 'b' }), e => e.code === 'INPUT_INVALID');
+});

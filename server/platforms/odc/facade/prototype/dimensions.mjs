@@ -2,7 +2,7 @@
 // without changing the store and without changing the skeleton: enumerable controls with change/input listeners, text
 // fields with input listeners, groups of triggers with the same key and different parameters whose effect is only a
 // re-render, and parameterless triggers that toggle the DOM between two forms.
-import { attr, classes, elementsWithPath, isElement, matchIndex, textOf } from './ir.mjs';
+import { attr, classes, elementsWithPath, isElement, isModalNode, matchIndex, textOf } from './ir.mjs';
 import { pascal, slug } from './names.mjs';
 import { controlInfo } from './perturb.mjs';
 
@@ -44,6 +44,20 @@ export function ancestorTypes(body, path) {
   return out;
 }
 
+// The words that name a trigger: its own text nodes joined by a space, at most four words (the start of a long call to
+// action), else its title, else its aria-label; '' when it has none of them (an icon-only button: its position names it).
+export function triggerLabel(node) {
+  const words = [];
+  const visit = current => { if (!current || typeof current !== 'object') return; if (!isElement(current)) { if (String(current.x ?? '').trim()) words.push(String(current.x).trim()); return; } for (const child of current.c ?? []) visit(child); };
+  visit(node);
+  const own = slug(words.join(' ')).split('-').filter(Boolean).slice(0, 4).join('-');
+  return own || slug(attr(node, 'title') ?? '') || slug(attr(node, 'aria-label') ?? '');
+}
+
+// The place of an element without words in its row: its index in its parent and its parent's in the grandparent ('p0-3': the
+// fourth button of the first cell), the same in every row of a list.
+const placeOf = item => 'p' + item.path.slice(-2).join('-');
+
 // Clickable elements that do not navigate (2.4 "Gatilhos"), grouped by event name, with parameters and variants.
 export function triggers(root, { kind, scope, delegated = new Set(), base = root, basePath = [] } = {}) {
   const found = [];
@@ -52,7 +66,7 @@ export function triggers(root, { kind, scope, delegated = new Set(), base = root
   for (const { node, path } of elementsWithPath(root)) {
     if (node.h) { skipUnder.add(path.join('.')); continue; }
     if ([...skipUnder].some(prefix => path.join('.').startsWith(prefix + '.'))) continue;
-    if (['input', 'select', 'textarea', 'option', 'label', 'form', 'svg', 'html', 'body', 'dialog'].includes(node.t) || attr(node, 'role') === 'dialog' || attr(node, 'aria-modal') === 'true') continue;
+    if (['input', 'select', 'textarea', 'option', 'label', 'form', 'svg', 'html', 'body', 'dialog'].includes(node.t) || isModalNode(node)) continue;
     const href = node.t === 'a' ? attr(node, 'href') : null;
     const listeners = node.L ?? [];
     const type = String(attr(node, 'type') ?? '').toLowerCase();
@@ -62,22 +76,50 @@ export function triggers(root, { kind, scope, delegated = new Set(), base = root
     const clickable = node.t === 'button' || (node.t === 'a' && !isRouteHref(href, kind)) || attr(node, 'data-action') != null || attr(node, 'onclick') != null || attr(node, 'role') === 'button' || attr(node, 'role') === 'switch' || (attr(node, 'tabindex') != null && Number(attr(node, 'tabindex')) >= 0) || listeners.includes('click');
     if (!clickable) continue;
     if (!listeners.includes('click') && !inherited.get(node)?.has('click') && attr(node, 'onclick') == null && node.t !== 'a') continue;
-    const name = attr(node, 'data-action') ?? attr(node, 'id') ?? attr(node, 'aria-controls') ?? attr(node, 'data-view') ?? attr(node, 'data-page') ?? attr(node, 'data-screen') ?? (attr(node, 'aria-label') ? slug(attr(node, 'aria-label')) : null) ?? classes(node)[0] ?? node.t;
+    const name = attr(node, 'data-action') ?? attr(node, 'id') ?? attr(node, 'aria-controls') ?? attr(node, 'data-view') ?? attr(node, 'data-page') ?? attr(node, 'data-screen') ?? (attr(node, 'aria-label') ? slug(attr(node, 'aria-label')) : null) ?? classes(node)[0] ?? (slug(attr(node, 'title') ?? '') || null) ?? node.t;
     found.push({ node, path: basePath.concat(path), name, key: scope + ':click:' + name, attrs: node.a ?? [], ownOnly: !(node.t === 'button' || node.t === 'a' || attr(node, 'data-action') != null || attr(node, 'onclick') != null || attr(node, 'role') === 'button' || attr(node, 'role') === 'switch' || attr(node, 'tabindex') != null) });
   }
   // A container whose only reason is its own listener (delegation root) is not a trigger when it holds triggers.
   const isAncestor = (a, b) => b.path.length > a.path.length && a.path.every((index, i) => b.path[i] === index);
   for (let i = found.length - 1; i >= 0; i--) if (found[i].ownOnly && found.some(other => other !== found[i] && isAncestor(found[i], other))) found.splice(i, 1);
-  // Elements with the same name, no parameter and different texts are different triggers (e.g. two tabs).
+  // Elements with the same name and no parameter are different triggers (two tabs, a call to action and a tab bar): each is
+  // named by its own words (at most four), else its title or aria-label, else its position among them. One element without
+  // words never cancels the names of the others, and two distinct elements are never one trigger. The items of a list (more
+  // than eight siblings of one parent: the days of a calendar) stay one trigger whose items are its variants.
   const sameName = new Map();
   for (const item of found) { if (!sameName.has(item.name)) sameName.set(item.name, []); sameName.get(item.name).push(item); }
   for (const items of sameName.values()) {
     if (items.length < 2 || items.some(item => item.attrs.some(([n]) => PARAM_ALWAYS.has(n)))) continue;
-    const texts = items.map(item => slug(textOf(item.node).trim()));
-    if (new Set(texts).size !== items.length || texts.some(text => !text)) continue;
     const dataNames = new Set(items.flatMap(item => item.attrs.filter(([n]) => n.startsWith('data-') && n !== 'data-action').map(([n]) => n)));
     if ([...dataNames].some(n => new Set(items.map(item => attr(item.node, n))).size > 1)) continue;
-    items.forEach((item, index) => { item.name = item.name + '-' + texts[index]; item.key = scope + ':click:' + item.name; item.byText = true; });
+    // a name the author gave (data-action, id): the elements are one action on purpose (a close icon and a Cancel button of
+    // the same modal); they are told apart by their texts only when every one has its own (as always)
+    if (items.some(item => attr(item.node, 'data-action') != null || attr(item.node, 'id') != null)) {
+      const texts = items.map(item => slug(textOf(item.node).trim()));
+      if (new Set(texts).size !== items.length || texts.some(text => !text)) continue;
+      items.forEach((item, index) => { item.name = item.name + '-' + texts[index]; item.key = scope + ':click:' + item.name; item.byText = true; });
+      continue;
+    }
+    const parentOf = item => item.path.slice(0, -1).join('.');
+    const perParent = new Map();
+    for (const item of items) perParent.set(parentOf(item), (perParent.get(parentOf(item)) ?? 0) + 1);
+    // the same words on several of them (a "Remover" in every row) is one trigger of a list, as it always was
+    const candidates = items.filter(item => perParent.get(parentOf(item)) <= 8);
+    const labelOf = new Map(candidates.map(item => [item, triggerLabel(item.node)]));
+    const count = label => candidates.filter(item => labelOf.get(item) === label).length;
+    const split = candidates.filter(item => count(labelOf.get(item)) === 1);
+    // the rows of a table named by one class (VisitaCerta 2026-10-12: Clima, Agendar, a star, a pencil and a bin in each row,
+    // every one a .btn): the same words in every row are one trigger of the list, other words another one; an element without
+    // words is named by its place in its row (the star at the start, the bin last), never merged with the others
+    const repeated = candidates.filter(item => !split.includes(item));
+    const rowLabel = item => labelOf.get(item) || placeOf(item);
+    const byRow = new Set(repeated.map(rowLabel)).size > 1 && new Set(repeated.map(rowLabel)).size < repeated.length;
+    if (byRow) repeated.forEach(item => { item.name = item.name + '-' + rowLabel(item); item.key = scope + ':click:' + item.name; item.byText = true; });
+    if (!split.length || (split.length === 1 && split.length === items.length)) continue;
+    split.forEach(item => {
+      const label = labelOf.get(item) || 'n' + (items.indexOf(item) + 1);
+      item.name = item.name + '-' + label; item.key = scope + ':click:' + item.name; item.byText = true;
+    });
   }
   // Parameters: data-id/data-delta always; other data-* whose value varies between elements of the same name.
   const byName = new Map();

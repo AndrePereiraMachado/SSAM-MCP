@@ -72,10 +72,17 @@ com ~111 entidades e 5-10 min para ~170 actions; nao reduza escopo, autorizacao 
 Recusa unica (decisao do dono, 10/10/2026): job com problema e recusado UMA vez, com todos. `apply --job <j> --base <oml>
 --out <o>` (e `--producer Nome=<oml>`) roda as fases em ordem na copia descartavel da base: preflight, checagem da base,
 apply (op que falha fica registrada, dependentes pulados; op que o preflight recusou inteira nao roda) e Verify do que aplicou.
+O `fix` segue o codigo do problema e a orientacao explicita `Fix:` da origem, nunca a gramatica de logic para uma colisao
+ou um tipo ausente. Declaracoes validas de um DDL recusado continuam conhecidas: quem depende delas recebe
+`APPLY_SKIPPED`, sem um segundo erro de tipo. Actions novas sao conferidas contra o namespace nativo (modulo, entidades,
+referencias) tambem quando o job importa produtores, respeitando os escopos de cliente e servidor; `NAME_COLLISION`
+traz `taken` e um patch verificado com nome livre. Em listas de texto, dependentes sao pulados por item e por dono,
+sem esconder o Verify de actions independentes. Patches de uma mesma fonte incluem todas as correcoes dessa fonte.
 A recusa `PREFLIGHT_REFUSED` traz em `problems[]` a uniao das fases: `phase` (preflight, base, apply, verify), `op`, `pointer`,
 `code`, `message`, `fix` e `patch` quando a correcao e unica. Erro do Verify: `code` = id do Verify, `element`, `key`, ponteiro
 ate a expressao quando o texto esta no job. O mesmo lugar sai uma vez (fica o que tem patch). Nada e salvo. O envelope traz
-`verifyRan`, `verifyReason` e `phases`. `check-job` le so o job: `verifyRan:false` com o motivo; base que nao carrega, idem.
+`verifyRan`, `verifyReason` e `phases` (as fases executadas, inclusive na rodada que verifica os patches).
+`check-job` le so o job: `verifyRan:false` com o motivo; base que nao carrega, idem.
 Fase seguinte que para sem a uniao (assinatura congelada de produtor sem o elemento) tambem: recusa do preflight, com o motivo.
 Mensagem do Verify sobre o que um op falho deixou pela metade nao entra (aviso `VERIFY_OF_FAILED_OPS_OMITTED`). Problema de
 uma fase so mantem o code e o texto de antes (DELETE_HAS_CONSUMERS, upgrade do banco) e o envelope vem completo do mesmo jeito:
@@ -96,6 +103,10 @@ Provas: `pa4-pc-four-phases.json` e `pa4-pc-isolated-action.json` (`tests/jobs-n
 Normalizacoes (lentidao 12/10/2026, `Preflight/JobNormalizer.cs`): erro de forma com uma unica leitura e reescrito no job em
 memoria antes das checagens (o arquivo nunca muda) e listado em `normalizations` ([{rule, path, from, to, message}], no
 resultado aceito, no `check-job`, no envelope da recusa e no resultado da entrega recusada), nunca recusado:
+`FLOW_KIND_PREFIX_DROPPED` tira `I<Kind>:` de uma linha de chamada recusada somente quando ela passa a ser lida;
+literais e rotulos nao mudam. `DDL_TYPE_BRACE_ADDED` fecha um bloco de tipo antes da proxima declaracao ou do fim do texto
+somente quando todos os campos formam uma declaracao valida. Statements DDL de index/event/sample resolvem seu dono
+em qualquer ordem no texto ou pelo nome na base; dono inexistente e `DDL_OWNER_UNKNOWN`.
 `SORT_KEYS_SPLIT` (sort `"A, B DESC"` vira `["A", "B DESC"]`, desempates mantidos), `LIST_ENTITY_SEGMENT_DROPPED`
 (`V.Current.T.X` e `V[i].T.X` numa `T List` de input/output/variavel ou output de call viram `V.Current.X`/`V[i].X`, so com os
 atributos de T conhecidos; `Agg.List` nunca), `NULL_FUNCTION_REWRITTEN` (com a base: `NullDateTime()`/`NullTime()` que nao sao
@@ -105,6 +116,88 @@ funcao do modulo viram o nulo do tipo alvo de assign, argumento, campo de record
 nada; qualquer outra propriedade segue `PROPERTY_NOT_WRITABLE`). Ambiguo continua recusa: chave de sort vazia, segmento que
 pode ser atributo, `NullDateTime()` sem tipo alvo (dentro de If, argumento de builtin) ou com tipo que nao e data/hora. Job com
 `expectValid:false` nao e normalizado. Provas: `tests/Anvil.Tests/JobNormalizerTests.cs`.
+Motor 2 (12/10/2026, classes que so o apply ou o Verify achavam, uma por rodada; FolhaPonto_UI: 6 entregas): normalizacoes
+listadas, no mesmo passe: `PROPERTY_ALIASED` (`Preflight/PropertyAliases.cs`: `Handler` num evento de ciclo de vida e
+`Destination`, `Destination` num evento de widget e `Handler`, `Name` numa extended property e `Property`; so quando o Model API
+diz que o elemento nao tem o nome escrito e escreve o outro; no preflight com o tipo do alvo, no apply com o elemento),
+`ICON_NAME_NORMALIZED` (catalogo do proprio Studio: no O11 o recurso de icones do plugin NRWidgets, lido sem carregar; caixa, prefixo
+`fa-` e palavras de classe (`fa fa-home`, `fa-solid fa-home`, `fas fa-home fa-fw`), `_` por `-`, forma `-o` quando so ela existe),
+`ICON_WEIGHT_DROPPED` (documento `<screen>`/`<block>` no O11: o Icon do O11 nao tem Weight), `LIST_ALIAS_REWRITTEN`
+(`<x list="S" as="a">`: `a` vira a linha da List como a correcao do HTML_FOREACH le (`ScreenDocument.AliasRow`: `S.Current`;
+agregado do documento: `Ag.List.Current.Entidade.X`) nas expressoes de dentro, nunca o nome do parametro de um evento
+`Acao(P = a)`; `as` sai; alias interno de mesmo nome fica com o seu; agregado sem fontes escritas e recusa `LIST_ALIAS_AMBIGUOUS`),
+`SCREEN_TITLE_QUOTED` (titulo que nao e expressao, ou uma palavra solta sem nome declarado parecido, vira texto; caminho com ponto
+ou nome a uma ou duas letras de um declarado e recusa `SCREEN_TITLE_UNRESOLVED`, com os mais proximos),
+`DEFAULT_MOVED_TO_INITIALIZE` (`<var default>` que nao e literal vai para o inicio do OnInitialize da tela: o que o root nomeia e
+o job declara, ou um `OnInitialize` novo ao lado das acoes da tela; nao o default que le agregado ou data action da tela, que
+buscam depois do OnInitialize: esse e recusa `DEFAULT_NOT_LITERAL` pedindo o On After Fetch da fonte), `DEFAULT_MOVED_TO_ASSIGN`
+(o mesmo para local e output de acao logic: primeiro assign), `PARAMETER_RENAMED` (`Preflight/ScopeRenames.cs`: output/local de
+data action e input/local de screen action com nome de variavel, input, agregado ou data action da tela viram `Nome2`, como o
+Studio faria, com todas as referencias do job reescritas: corpo, `DataAction.Saida` nas acoes, em cada expressao do documento
+elemento por elemento (valor de atributo, `{{ }}` de atributo de texto e de texto, expressoes dos argumentos de evento) e nos
+sets de elemento daquela tela; args de call e o nome do argumento de nivel de cima de `Acao(Param = ...)` do documento, nunca uma
+comparacao dentro dele; input nunca e atribuido, entao a chave de assign continua sendo a variavel da tela) e
+`ARGUMENT_RENAMED` (`Preflight/SystemCalls.cs`, O11: `List`/`SourceList` das acoes de lista do System pelo nome que cada uma tem)
+e `TEXT_LITERAL_QUOTED` (`Preflight/SpecTexts.cs`: valor de registro estatico ou default de atributo de texto do spec, sem aspas
+e que nao e expressao, como `Limpeza pos-obra`, vira o literal de texto; palavra solta segue com o LiteralFix; expressao fica).
+Recusas no mesmo passe, com patch quando certo: `ICON_UNKNOWN` (patch so quando o sentido e certo: tabela de nomes Material Icons
+e Font Awesome 5/6 para o FA 4.7 (`schedule` e `clock-o`, `fa-solid fa-house` e `home`), ou palavra de busca exata de um id ou
+das variantes de um id (`logout` e `sign-out`, `add` e `plus`); o patch e o html como foi mandado com so o atributo icon trocado;
+por grafia so lista opcoes, sem patch), `DEFAULT_NOT_LITERAL` (input, OnInitialize que o job nao declara, default que le dado
+buscado), `NAME_COLLISION` (duas declaracoes de um nome no documento; data action que tambem le o nome da tela, ou saida lida
+por set de elemento cuja tela o job nao diz: sem patch; parametro O11 chamado `Roles`), `NODE_NOT_ALLOWED`
+(`Preflight/NodeRules.cs`, com o tipo do modulo, mesmo em job com reference: Download em modulo Mobile, com patch que cria a client
+action `DownloadFile` com o JavaScript que decodifica o Base64 e chama ela no lugar; a rodada recusada aplica o op ja com o patch
+no apply e no Verify, nunca salvo, e diz `patchProven`; Ajax Refresh fora de Traditional). O Verify das acoes que uma op falhada
+declara (o `InvalidFlow_NoStart` da acao nascida vazia pelo documento) e cascata: sai dos problemas, com uma linha que diz quantos
+e quais. Respostas no job como foi mandado (`Preflight/SentJob.cs`): as normalizacoes marcam o que inserem (passo, acao), o que
+escrevem no lugar (sort em lista, patch do diagnostico) e as chaves que renomeiam; todo pointer e patch (preflight, base, apply,
+Verify) e o path das normalizations sao traduzidos de volta; patch com lugar dentro do que o kernel inseriu sai sem patch; patch
+que escreve inteiro um html normalizado com default movido leva junto o passo ou a acao do OnInitialize. O preflight do runner
+normaliza uma copia do job; o job do apply e lido de novo e normalizado com as marcas. Provas: `tests/Anvil.Tests/Motor2PreflightTests.cs`.
+Familias (12/10/2026, VisitaCerta_UI escrito a mao: 22 escritas, 13 recusadas; cada falha virou a regra da sua familia, em toda
+forma que escreve o mesmo lugar). Normalizacoes listadas, antes das de motor2: `DDL_DECLARATION_NORMALIZED` (`Preflight/TextForms.cs`:
+`;` no fim de uma declaracao de linha, `client variable`/`site property`/`setting`/`session variable`/`timer`, e `os:DefaultValue=v`
+como ultima clausula de uma variavel, que e o `= v` dela, o texto com as aspas; so na linha que o parser recusa ou no os:, e so se a
+linha passa a ler), `FLOW_END_AFTER_TERMINATOR` (`end` solto logo depois de `navigate`, `raise` ou `end` na mesma profundidade: a
+linha fica em branco, os numeros de linha nao mudam) e `FLOW_ASSIGN_WRITTEN` (linha `Alvo = valor` que a gramatica recusa vira
+`assign Alvo = valor`; nunca quando o alvo e um nome solto e o valor comeca como um no, `X = Acao(...)`, que tem duas leituras);
+so a linha do erro, uma por vez, mantida so se o parse passa dela. `LITERAL_FOLDED` (`Preflight/LiteralFolding.cs`): default ou
+valor de registro estatico escrito como constante (`TextToDate("2026-05-04")`, `NewDate`, `NewTime`, `NewDateTime`, `TextToTime`,
+`TextToInteger`, `IntegerToText`, `DateToDateTime`...) vira o literal do tipo do lugar, em toda forma: `set DefaultValue` cru (tipo
+do job quando ele declara a variavel), texto de dados, texto de logica (`in`/`out`/`local`), JSON de logica e spec (so chamadas),
+documento (`<var>`/`<input default>`); literal de outro tipo com um sentido so tambem (`"2026-05-04"` numa Date) fora do JSON e do
+spec (la e o LiteralFix de antes). O que nao e constante (`CurrDate()`) fica como esta: o Studio aceita alguns (html-replay 0162).
+`CSS_FUNCTION_REWRITTEN` (`Preflight/StyleSheetNormalizer.cs`, `CssCompat.ResolveMixVars`/`Render`/`MixText`): todo CSS do job
+(`set StyleSheet`, `data.css` do html); `light-dark()` de `set StyleSheet` expandido primeiro; `color-mix` com `var(--x)`:
+definida uma vez no `:root`/`html`, o valor no lugar; definida em outras regras desta folha (`:root` e `[data-theme="dark"]`, um
+escopo `.app`, o `@media` escuro do light-dark), todas as que a chamada le nas mesmas regras e uma vez em cada: uma propriedade
+derivada `--x-mix-<hash>` em cada uma dessas regras com a cor de la (o tema escuro e o escopo ficam); um lado `transparent` e a
+outra cor com a parte como alfa em qualquer espaco, `oklch(...)` inclusive. Token do OutSystems UI (`--color-` ...), regras
+diferentes entre as propriedades ou definicao fora desta folha continuam recusa `CSS_FUNCTION_UNSUPPORTED`. Recusa no mesmo passe com patch provado:
+`OPERAND_TYPES` em filtro de aggregate do documento (`Preflight/DocumentAggregates.cs`, C13): identificador ordenado contra numero;
+com o tipo do Id conhecido pelo spec do job (estatica Integer, entidade Long Integer) o patch escreve `IdentifierToInteger(X.Id)`
+no html como foi mandado, e so sai se a mesma regra nao acha nada no texto corrigido; `verifyCode`/`element` juntam o
+`OperatorIncompatibleTypes` do Verify ao mesmo lugar. Cascata (`JobRunner.Cascade.cs`): problema do apply ou do Verify que diz nao
+achar (HTML_NAME_UNKNOWN, FLOW_OWNER_UNKNOWN, FLOW_NAME_UNKNOWN, REFERENCE_UNRESOLVED, CHILD_NOT_FOUND, `*Unknown*` do Verify) um nome
+que uma parte do job que falhou declara (um texto de logica que nao leu, `*_SYNTAX`/JSON_SHAPE do preflight, ou erro do apply da
+parte; nunca so o Verify ou uma regra do preflight, que deixam a parte aplicada) sai dos problemas; a raiz leva
+`blocks: N` e `blocked` (os 3 primeiros), transitivo, e o aviso `CASCADE_FOLDED` diz quantos. O check do documento conta como
+declarado tambem o que um texto de dados do job declara (`Client.X` de um `client variable` de um spec depois do html).
+Provas: `tests/Anvil.Tests/FamilyPreflightTests.cs` (FamilyPreflightTests e FamilyCascadeTests).
+Textos `ssam-flow/1` da op `logic` (VisitaCerta 12/10/2026, `Kernel/FlowTextNormalize.cs`, chamado por `JobNormalizer.Pure`):
+`FLOW_BRANCH_FALLS_THROUGH`, `FLOW_LABEL_SPACING`, `FLOW_ASSIGNMENT_INDENT`, `FLOW_NEW_ACTION_IDS`, `FLOW_MAPPING_RELATIVE`,
+`FLOW_SORT_DIRECTION` (o texto so muda quando o editado le inteiro; com outro erro vai como veio, todo erro e um `FLOW_SYNTAX` da
+mesma recusa e os que uma edicao certa remove trazem o patch dela). So o que tem uma leitura: fall-through de corpo de
+For Each e fim de fluxo; o if/else sem terminador fica `FLOW_SYNTAX` com as duas leituras (`candidates`), tambem o ramo que
+termina num If sem passo falso (reconferencia 12/10/2026); linha de no malformada nunca vira atribuicao (palavras de no em
+qualquer caixa, `Source = R` com espacos; funcao embutida como `If(A=1, ...)` nao e chamada); `L.Current` sem forma relativa e
+`FLOW_MAPPING_CURSOR` (numa edicao, o que a leitura ja tinha e decidido pelo conteudo, nunca pelo lugar). Na releitura (as
+duas faixas, pelos tipos do modelo): `FLOW_MAPPING_PLATFORM` e `FLOW_MAPPING_STUDIO` (este so quando preenche todo atributo
+ou leva o registro inteiro: `Value: R` com destino sem atributo `Value` e R registro do item; senao `FLOW_MAPPING_TYPES`, que
+tambem nomeia o atributo que a ODC preenche sozinha quando o mapeamento o deixa de fora). ODC: mapeamento escrito sobre um
+valor existente vai pelo setter (a conversao inteira), nunca dentro do texto do valor antigo.
+Detalhes e provas: `docs/TEXTO-LOGICA.md`, secao "O que o motor normaliza no texto".
 Correcao por nome (fachada, `platforms/odc/facade/job-patch.mjs`; o kernel segue recebendo o job inteiro): o patch aceita nomes
 no caminho (`actions/<Acao>/steps/<as>/...`; identidade = primeiro texto entre name, as, key, id, label; digitos sao indice) e
 `job` parcial + `basedOn` (mesmo nome substitui, nome novo entra; remover so por patch). A fachada gera o job completo, e o
@@ -146,6 +239,47 @@ para `highWarnings` do recibo do apply; a entrega O11 (`Delivery.cs`) e a fachad
 `highWarnings`. Limites: fluxos que o job nao tocou nao sao lidos; a origem do no e o op que o criou (ou o primeiro op que
 cita o fluxo). Testes: `tests/Shared/QueryRulesScenarios.cs` (O11 e ODC).
 
+Checagem de compilacao (`CompileCheck.cs`, no fim de `ModelSession.Apply`, ao lado do QUERY_IN_LOOP, nas duas faixas; decisao
+do dono 2026-10-12: erro de publicacao = o SSAM deixou construir o que o OutSystems nao suporta; tudo que sai "entregue" tem de
+compilar). Toda regra e ERRO (nenhuma e aviso): uma recusa so com todos os problemas (phase apply, op, ponteiro do passo, fix,
+patch verificado quando e certo), antes do Verify e de salvar. `AGGREGATE_SORT_NOT_ATTRIBUTE`: sort nao dinamico que nao e UM
+atributo de uma fonte do aggregate nem uma coluna dele (o compilador quebra em AttributeSort, "Dump is not a valid invocation
+for SQLCallFunction" ou NRE em Old_IsDynamic); num aggregate que agrupa (GROUP BY ou AGG), so um atributo que o GROUP BY le
+(`Fonte.Atributo`, ou a coluna CALC agrupada pelo nome): o sort vive antes do agrupamento (coluna agrupada ou agregada ali da
+"Can't identify" no Verify) e o SQL so ordena linhas agrupadas pelo que o GROUP BY da (erro 8127); sem patch (qualquer troca
+muda as linhas ou a ordem), o fix lista as chaves. `AGGREGATE_COLUMN_NOT_ATTRIBUTE`: GROUP BY/AGG sobre expressao (o mesmo
+slot que quebrou o sort); patch no texto quando e certo: `CALC NomeRow=<expr>` e a coluna pelo nome (`GROUP BY Nome=NomeRow`,
+`AGG Nome=Fn(NomeRow)`, a forma publicada de dois modulos O11 de clientes), coluna nomeada, funcoes que o banco roda, linhas lidas campo a
+campo; o prototipo ja escreve `CALC TotalRow=A.Qtd * B.Preco` + `Sum(TotalRow)`. Coluna que nao le atributo nenhum (texto
+`AGG Total=Count()`, JSON `"attribute":""`, create cru sem set, `set Attribute ""`: sem DataType; o Verify O11 so pega se algo le a
+coluna) tambem e recusada: o parse recusa `Fn()`; Count com uma fonte so tem patch certo `Count(Fonte.Id)` (o modelo diz o
+identificador; no ODC o texto nao escreve agrupado, o fix aponta o op logic). `AGGREGATE_JOIN_NOT_NATIVE`: join que nao e
+Inner/Left/Full (os tres do Studio), join com fonte de OUTRO aggregate ou a mesma fonte dos dois lados (verbo cru; a Model API do
+ODC recusa essa escrita), ou fonte de um aggregate de varias fontes que nenhum join liga; `JOIN Right A~B`, unico
+join de duas fontes, e escrito `JOIN Left B~A` no texto e no logic (listado: `AGGREGATE_JOIN_NORMALIZED`); verbo cru com Right e
+recusado. `COMPILE_REFERENCE_OUTSIDE_MODULE`/`COMPILE_REFERENCE_DELETED` (propriedade que aponta para fora do modulo e das suas
+References, ou para elemento apagado). `COMPILE_SOAP_DEFINITION`: servico SOAP consumido so nasce da importacao nativa do WSDL
+(op soap pelo o11_deliver); cliente, metodo ou structure SOAP criado pelos verbos do job, ou WSDL/MetaData escrito por set cru,
+e recusado com a chamada exata (`suggestion`: `{"op":"soap","data":{"wsdl":...,"client":...,"methods":[...]}}`; ODC: SOAP nao
+existe, REST ou External Library). O candidato de 09/10 feito assim falhou no compilador ("Root element is missing"). Lab que
+mede os verbos SOAP declara `allowSoapWithoutImport {why >= 15}` no create do cliente: aviso HIGH
+`COMPILE_SOAP_DEFINITION_ALLOWED`, e a entrega (Delivery.cs e a fachada ODC) recusa esse job. Base que ja nao compila: as regras
+de aggregate rodam tambem em todos os aggregates do modulo que o job nao escreveu (andando a arvore sem widgets, expressoes,
+entidades e structures: ate 0,3 s nos maiores modulos do corpus e das capturas de campo) e o que acharem recusa a entrega marcado `preexisting`, com os
+ops crus por @key que corrigem quando e certo (anexados ao job como patch). Motivo: nenhuma entrega sobre essa base compila (a
+publicacao de 15:50 do VisitaCerta_CS falhou em dois sorts If que aquele job nao tocou). Job so de leitura nao e
+julgado. As classes C (dois caminhos de cascata) e B (XIF sem DLL) ja sao recusadas por `DatabaseUpgradeRules` e pela regra do
+XIF. Os escritores escrevem o sort como o Studio (`AggregateSortRule.cs`): `X DESC`, `-X`, parenteses, conversao que guarda a
+ordem (`IdentifierToLongInteger(X)`) e `If(C, 0, 1)` viram o atributo com a direcao, no texto (`FlowDiff.Sorts.cs`, antes do
+diff; chave repetida depois disso sai e e listada) e em todo `set` de `ISort.Attribute` (so quando o atributo esta no escopo
+do aggregate); tudo em `expressionRewrites` e `notes` (`AGGREGATE_SORT_NORMALIZED`). O resto e recusado com o fix: coluna
+`CALC SortKey=<expr>` e `SORT SortKey` (patch no texto quando e certo: sem GROUP BY/AGG, funcoes que o banco roda, linhas lidas
+campo a campo), ou sort dinamico.
+CLI: `anvil compile-check --oml <captura>` (e `anvil-odc`) roda as regras no modulo inteiro e conta a andanca dos aggregates:
+zero achados e a mesma contagem de aggregates nos 34 modulos do corpus (`C:\t\html-plan\unique.json`: 840 mil objetos, 1.437 aggregates,
+432 sorts, 144 colunas, 569 joins) e nas 61 capturas de campo (986 mil objetos, 2.265 aggregates), os 3 sorts ruins na
+captura da sessao VisitaCerta_CS 154543. Testes: `tests/Anvil.Tests/CompileCheckTests.cs` e `tests/Anvil.Tests.Odc/CompileCheckOdcTests.cs`.
+
 Regressao do motor: `performance-lookup.json` prova tipos compartilhados e chamada de action declarada adiante.
 
 Resumo do modulo (`Kernel/ModuleDigest.cs`, `ssam-digest/1`; uso em `docs/LEITURA-RAPIDA.md`): o modulo inteiro como texto,
@@ -159,6 +293,40 @@ valor de um dono desenhado (`ValueKinds`). Os ultimos registros de um bloco de e
 no fim, uma linha cada. Testes: `tests/Shared/ModuleDigestTests.cs` (as duas faixas) e
 `platforms/odc/facade/tests/module-digest.test.mjs` (paginas, cache, `view`, captura fixada pelo sha).
 
+Texto de dados (`ssam-ddl/1`; uso em `docs/LEITURA-RAPIDA.md`). A ida e `Kernel/DataDdl.cs`, `ssam_map view:"ddl"`, com o
+ponto fixo provado por `DataDdlParser.cs` e `DataDdlCheck.cs`. A volta e a op `spec` com `data.ddl`:
+- so as declaracoes que mudam, como lidas, com o `-- @key`;
+- sem chave e novo; mesma chave com outro nome e `rename`;
+- atributo ou registro fora de uma declaracao enviada inteira e apagado; `drop ... -- @key` apaga.
+- com `basedOn` (obrigatorio com `-- @key`: `DDL_BASE_REQUIRED`), merge de 3 vias com a leitura guardada
+  (`Kernel/DataDdlMerge.cs`): o que o Studio acrescentou depois da leitura fica, conflito fica com a entrega e vai em
+  `merged.conflicts`; sem a leitura, declaracao que difere do modulo e recusada (`DDL_BASE_UNKNOWN`, com `edit` pronto);
+  o recibo traz `nextBasedOn`. O texto de logica faz o mesmo (`Kernel/FlowMerge.cs`, partes de um no uma a uma;
+  `FLOW_BASE_REQUIRED` sem `basedOn`; leitura em `<sha>.kernel.flow-<textSha>.json`, gravada pela fachada ao servir a
+  action e pelo job). Baterias: `anvil ddl --merge-battery` e `anvil flow-merge-battery`.
+
+`Kernel/DataDdlCompile.cs` (puro) compara o texto com o do modulo. Tipos novos viram `spec`; o resto vira verbos crus.
+`Kernel/Verbs.Ddl.cs` aplica, le o modulo de novo, regrava o que a plataforma reescreveu e recusa com
+`DDL_NOT_CONVERGED` se sobrar diferenca. Recusas com a linha, todas de uma vez. Nunca reescreva o texto sem passar pelo
+ponto fixo da DL1.
+
+O que a plataforma preenche sozinha (`Kernel/DataDdlConventions.cs`, puro, antes da primeira volta e nos checks
+estaticos do job): o identificador e sempre required; identificador de estatica nunca e auto (salvo o que o modulo ja
+tem); valor omitido de registro de estatica (identificador Integer, atributo do label, do order, todo required) fica com
+o do modulo no registro mantido, ou ganha a convencao no novo (proximo Id livre, o nome, a posicao, o default), senao
+`DDL_VALUE_REQUIRED` com a linha; indice em estatica sai com nota (unique repetido: `DDL_STATIC_INDEX_DUPLICATE`);
+atributo do label/order de estatica mantida fora da declaracao, com valores nos registros: `DDL_STATIC_ATTRIBUTE_LEFT_OUT`
+com o patch (a linha como foi lida); apagar e escrever `label none` / `order none`. O
+texto completado e o mesmo em toda volta (nenhuma volta limpa o que a outra escreveu). O contrato de dados conta como
+prova cumprida a assercao cujo endereco passa por um elemento que o job apagou (`DataAssertions.PassaPorApagado`).
+Testes: `tests/Shared/DdlConventionsTests.cs` e `DdlConventionsNativeTests.cs` (corpus nas duas faixas e os jobs da
+sessao de 2026-10-12 em `tests/text-corpus/session-20261012-static.json`).
+
+Testes: `tests/Shared/TextRoundTripDataBackTests.cs` (puro) e `TextRoundTripDataBackNativeTests.cs`, com o corpus:
+- a bateria `DdlBattery`, `anvil ddl --battery --manifest <manifesto do corpus em tests\text-corpus>`;
+- o rename;
+- o pedido do transcript.
+
 Indice rico (`Kernel/ModuleRichIndex.cs`, `ssam-rich-index/1`; uso em `docs/LEITURA-RAPIDA.md`, `ssam_map` views `search`
 e `uses`): por elemento, as propriedades com valor, o texto de toda expressao, os argumentos das chamadas e as referencias
 (por propriedade e pelo grafo nativo `ReferrersOf`). Lido so por `ModelReader`; O11, ODC e o builder compilam o mesmo
@@ -170,6 +338,30 @@ quando nao e a do proprio modulo (assinaturas sob uma `Reference`). Manutencao: 
 propriedade nova que so pesa (contabilidade do modelo, descritor) entra em `Skipped`, medida nas fixtures. Testes:
 `tests/Shared/ModuleRichIndexTests.cs` (as duas faixas; um consumidor -> o seu produtor, as duas fixtures O11 do kernel, pela `GlobalKey`) e
 `platforms/odc/facade/tests/module-rich.test.mjs` (search, uses dentro e entre modulos, construcao sob pedido, paginas).
+
+Tela como HTML (`Kernel/ScreenHtml.cs` e `Kernel/ScreenHtmlModule.cs`, `ssam-html/1`; contrato em `docs/SSAM-HTML.md`,
+`ssam_map` view `html`): a fonte de uma tela ou bloco, com `k` por elemento, expressoes como texto, os dois ramos de todo
+If, eventos com destino e argumentos, `os-<Propriedade>` para o resto e `os-opaque` para tipo sem linha. Lido so por
+`ModelReader`; O11, ODC e o builder compilam os mesmos arquivos. A leitura do modulo (um passeio, sem o corpo das
+actions) fica com a captura no leitor residente (`IReadSnapshot.ReadHtml`, `{"html":"<tela>"}`); a tabela `k -> ObjectKey`
+fica ao lado do indice (`ModuleIndexStore.SaveHtmlKeys`, `<sha256>.<adaptador>.html-<htmlSha256>.json`). CLI fria:
+`anvil html-read|html-check|html-census` (e `anvil-odc`). Manutencao: toda mudanca do texto sobe `ScreenHtml.Extractor`;
+colecao do Model API sem ordem estavel (actions, eventos, argumentos, partes de aggregate) entra em ordem canonica
+(`ChildIndexes`), nunca na ordem da carga. Testes: `tests/Shared/ScreenHtmlTests.cs` (as duas faixas),
+`ScreenHtmlCoverageTests`/`ScreenHtmlCoverageOdcTests` (ponto fixo no corpus do plano com os pisos da secao 4.2; o
+manifesto fica em `tests/contracts/screen-html/`, capturas por caminho absoluto e nunca no repositorio; sem elas, pula
+com aviso)
+e `platforms/odc/facade/tests/module-html.test.mjs`.
+A volta (C2): a op `html` na forma edicao `{screen, basedOn {capture, html}, edit:[elementos com k] | html}`
+(`ScreenHtmlEdit.IsEdit`; `Verbs.ScreenHtml.cs`) planeja a diferenca por `k` contra a leitura da tela no modulo do job
+(`ScreenHtmlModule.Edit.cs`: juncao, todas as recusas de uma vez, escrita pelos verbos `create`/`set`/`rename`/`delete`/
+`move`, conferencia que rele a tela e exige o texto editado com as ObjectKeys do que ficou). Nunca usa o `HtmlDelta`, que
+limpa e recria. Tela que mudou desde o `basedOn`: merge de 3 vias com o texto daquela leitura (`ScreenHtmlMerge`, base =
+leitura, local = tela agora, estrangeira = base com a edicao; conflito fica com a entrega e vai em `rebased[].conflicts`).
+CLI fria: `anvil html-edit` e `anvil html-edit-battery`. Testes: `tests/Shared/ScreenHtmlEditTests.cs` (as duas faixas,
+regras e merge), `ScreenHtmlEditJobTests` (job O11, rebase, os 2 pedidos de correcao do transcript de 2026-10-10 e a
+bateria no corpus) e `ScreenHtmlEditBatteryOdcTests`; a bateria (`ScreenHtmlEditBattery`, secao `c2` do manifesto) exige
+100% das edicoes sinteticas relidas iguais.
 
 ## Dados: uma spec, uma entrega e uma prova
 
@@ -316,6 +508,32 @@ as alteracoes de produto continuam pelo fluxo deliver, com publicacao pelo human
    `python scripts/proof_merge.py --module ... --job ... --checks ...` e so um wrapper de `deliver`; `--publish` nesse
    script e apenas para provas em modulos de teste. No produto quem publica e o humano. Tickets-all: 3.131 ops,
    uma chamada de merge, 27,6 s no SS5, zero erros novos e um aviso declarado.
+   Referencias de produtor (familia E, `Delivery/ReferenceClosure.cs`, `Adapters.SS11/ReferenceInventory.cs`): numa entrega de
+   consumidor (ops `reference`, produtores capturados ou ligados) o kernel le as referencias do snapshot, do candidato e do
+   modulo mesclado. R5: dono de tipo estrangeiro (`foreign-owner-of`) que a base ja referencia com todos os objetos usados nao
+   entra no apply nem no `refresh_references`; a assinatura dele fica como esta (`referenceClosure.owners`). Antes do merge,
+   produtor nomeado ausente, fora da assinatura publicada ou mudanca colateral de assinatura recusam uma vez com
+   `REFERENCE_CLOSURE_REFUSED` (`problems[]` com produtor, chave, hashes e fix). Depois do merge, referencia que o modulo nao
+   manteve (hash ou exportacao do candidato) deixa o merge para revisao com `REFERENCE_NOT_RETAINED`. `MERGE_ROLLED_BACK` traz
+   `referenceSignatureChanges` (produtor, hash base -> candidato, se o job nomeou) e o estagio. Testes:
+   `tests/Anvil.Tests/FamDepsReferenceTests.cs`; prova offline nos arquivos do incidente: `C:\t\fam-deps\logs\prova-offline-r5.txt`.
+   Dialogos durante a entrega (familia D, `Kernel/OperationDialogs.cs`, bridge `StudioDialogSurface.cs`): nenhuma excecao do SSAM
+   sai de um comando do Studio (`QuietCommand`: o SDK desfaz o comando com `RollbackCurrentCommand`, sem o "Unexpected Error").
+   Janela que abre durante o merge e do merge: erro do Studio e dependencias fecham sozinhos e entram no recibo (`dialogs`);
+   recuperacao, login, consentimento ou pergunta com escolhas voltam em segundos como `STUDIO_DIALOG_PENDING` com `question`
+   e o texto exato; o merge espera a pessoa e `deliver --resume` fecha a tarefa. Prazo do socket por verbo = limite da bridge
+   + margem (`Delivery/BridgeDeadlines.cs`). Testes: `FamDepsDialogTests.cs`, `FamDepsQuietCommandTests.cs`.
+   Revisao (2026-10-13): erro do Studio fechado durante o merge nunca vale como entregue: o kernel prova o modulo contra a
+   base no mesmo call (`STUDIO_ERROR_DURING_MERGE`, `studioError` com estagio, texto e prova); a fachada projeta `dialogs` em
+   toda resposta. `CompareAndMerge` nao vai dentro de `QuietCommand` (o SDK o envolve em `Runtime.SafeExecute`; aninhado, uma
+   falha engolida deixaria merge parcial). `MERGE_ROLLED_BACK` so diz "mesmo job" com `sameJobAgain` (o kernel rodou o
+   `refresh_references` daqueles produtores e o modulo ficou na assinatura do candidato); senao, produtores como OML. R5 e
+   decidido antes do refresh (`pre-refresh.oml`): dono ligado tambem e atualizado. Dialogo web sem texto e relido por ate 10 s
+   antes de virar pergunta; presenter modal (Manage Dependencies, merge editor) entra na vigia; depois de `blocked` a vigia
+   fica com o merge ate o fim e `merge_status` devolve `pendingDialog` (o resume repete a pergunta de agora); merge que a aba
+   nao rodou no prazo e abandonado e libera o proximo (`OperationLease`). `refresh_references` tem a mesma vigia; merge,
+   refresh e publish fecham sozinhos o "Unexpected Error" e o registram. Testes: `FamDepsReviewDialogTests.cs` e os novos de
+   `FamDepsReferenceTests.cs`.
 6. **Registrar**: uma linha em `docs/PROVAS.md` (data, prova, numeros, comando) e commit.
 
 Definicao de pronto: job valido (Verify 0 erros, warnings so os esperados), checks apropriados ao escopo, merge com TrueChange 0 erros,
@@ -364,6 +582,7 @@ Aqui `anvil` significa `dotnet .local/cli/anvil.dll` no SS4 ou `dotnet .local/la
 | Session variable | Estado de sessao no servidor | Traditional apenas (`ISessionVariable` no `@espace`) | tipos de variavel do debugger: `debugger-session-variable-all-types.json` e `debugger-session-variable-compound-type.json` (session so em Traditional Web; Binary Data e List aceitos, com as sugestoes `BinaryDataSessionVariable` e `RecordListSessionVariable`) | Verify |
 | Role | Restringir tela ou action a um perfil | Reactive, Mobile, Traditional, Service | `security-config-reactive.json` (`link` em `Roles` da tela) | `get` da tela: `Roles` > 0 (no `get`, propriedades-expressao aparecem como `@chave.#Prop`; use `dump` para ver o texto) |
 | Server action | Logica de servidor: consultar, gravar, calcular, chamar REST. A tela chama um wrapper, nao a entity action (Security Warning) | Service, Reactive, Mobile, Traditional | `smoke-data-logic.json` (aggregate, If, Assign, Execute, Raise), `producer-public.json`, `aggregate-full.json` (join, sort, group) | `layout` sem sobreposicao; `find` da action |
+| Actions padrao das entidades (GERADAS: nunca escreva a mao) | Listar, ler, gravar e apagar cada entidade do modulo, com service actions: uma op `entity-actions` le o modelo de dados do proprio modulo e escreve, por entidade, Get<E>List (joins, filtros, busca, ordem, paginacao), Get<E>ById, Save<E> (validacoes, dono, erros tipados) e Remove<E> (dono, referencias), como textos de logica (secao 2.1a) | Service, Reactive, Mobile (O11 e ODC) | `entity-actions.json` (o modelo com todas as formas, a op e uma action de negocio que chama as geradas) | a mesma op de novo responde NO_CHANGE; `kept` lista as actions de mesmo nome que ficaram |
 | Action por SPEC de logica (preferir para server/service actions de negocio) | Uma op `logic` declara inputs/outputs/vars e os passos (get, assign, call, save/create/update/delete, if/then/else, foreach, raise); Start, End, ligacoes e layout sao gerados; esquema FECHADO: chave errada, entidade/action/exception inexistente ou nome repetido falham na compilacao com a lista do permitido (secao 2.1) | Service, Reactive, Mobile, Traditional | `logic-spec-services.json` (5 actions: 4 service com call+assign, 1 server com todas as formas); negativo `logic-unknown-key.json`; `cat-a-reset-typed-values.json` (action nova que repoe saidas tipadas nos valores neutros com duas exclusoes, chamada inserida num ramo de um If herdado: liga-se primeiro o no novo ao sucessor e so depois se reaponta o conector do ramo); negativo `cat-a-link-unknown-connector.json` (conector que o no nao tem) | `find` da action; nos com os nomes do `as` |
 | Service action | Expor logica de um modulo Service a outros modulos por chamada remota, sem referencia forte a entidades | Service apenas (o mapa recusa em UI) | `service-action.json`, `service-action-update.json` (le, muda e grava) | consumidor a chama com `IExecuteServerActionNode` |
 | Client action | Logica no browser/dispositivo: JavaScript, local storage, formatacao sem servidor. Chamar de uma screen action: `create IExecuteClientActionNode` + `set Action IClientAction:X` + `$no/<Input>` | Reactive, Mobile | `client-js-reactive.json`, `client-js-format-reactive.json`, `local-storage-mobile.json` | se JS, `set JavaScript` com `$parameters` |
@@ -381,6 +600,7 @@ Aqui `anvil` significa `dotnet .local/cli/anvil.dll` no SS4 ou `dotnet .local/la
 | Email | Email transacional | Traditional apenas (flow `Emails`) | `email-traditional.json`, `email-digest-foreach-traditional.json` (ForEach + timer) | `ISendEmailNode` com `Email` e `To` |
 | Referencia a outro modulo | Usar entidade, action ou bloco publico de outro modulo: `{"op":"reference","producer":"job:producer-public" ou "Headless_CS","elements":["IServerEntity:Product","IServerAction:Product_GetById"]}`; `job:` procura na pasta do job e em tests/jobs; snapshot nomeado ligado por `--producer Headless_CS=<oml>`; caminhos diretos so de fixtures; as structures que os elementos usam vem junto. Produtor sem OML local (extensao .NET, eSpace ou (System)): `anvil signature --producer <Nome> --elements "<Tipo:Nome>" --out <abs>.avsig` captura a assinatura do servidor so leitura pelo Studio logado (guarda de VersionId, fechamento de tipos) e o job liga `--producer <Nome>=<.avsig>` (`System=<.avsig>` para o (System)), com os refs `.avsig` como primeiros ops; `elements: []` refresca uma referencia existente; no deliver, `--capture-producer Nome[=Produtor]` captura na pasta da tarefa (uma vez por produtor; a retomada captura so as que faltam) e re-atesta antes do apply e do merge (`docs/proofs/2026-09-26-o11-manage-dependencies.md`) | Todos | `consume-reference.json`, `consume-reference-screens.json` (tela com Table e detalhe); ao vivo `tests/jobs-live/consume-headless-cs.json` | `find` do elemento; TrueChange sem `OutdatedReference` |
 | Papeis de usuarios finais (O11) | Conceder/revogar papeis persistentes do PROPRIO modulo a contas existentes (demo = username nos defaults `DemoLoginUsernames`/`OpsDemoLoginUsernames` do modulo dono, lidos do OML; o flag do manifesto so confirma; o `ReconcileAccess` gerado reconfere `Site.<allowlist>` em tempo de execucao antes de criar conta ou conceder a linha demo), por manifesto versionado; nunca senha, UserManager ou papeis do Users | Modulo dono do papel (referencia (System) User) | manifestos em `tests/access/` (nao sao jobs): `anvil access plan --manifest <m>` (ou `ssam access plan --lane o11`) le os papeis dos OMLs atuais, gera e prova um job privado por modulo dono; `access apply --words "..."` so prepara (comandos `deliver` com `--expected-environment` e recibo so com hashes); executar e so `--execute` no CLI (o MCP `o11_access` nunca executa), com a mesma `--port`/`--deliver-work` do preparo (senao recusa); contrato e prova em `docs/proofs/2026-09-26-o11-access.md` | recibo do plano ok, 0 mensagens novas, `publicActions 0`; depois da publicacao o usuario confere no app Users |
+| Telas padrao de entidades | Lista (tabela com paginacao, busca, filtros, ordenacao e estados), detalhe e formulario de cada entidade, gerados do modelo do modulo, das suas actions e dos seus blocos: `{"op":"screen","data":{"generate":{"entities":["Customer","Order"]}}}` (secao 3.4.1) | Reactive/Mobile (biblioteca: `patterns:true`, so os blocos) | `screen-generate-reactive.json`, `screen-generate-actions-reactive.json` (leitura e escrita pelas actions do modulo achadas pela assinatura); ODC `jobs-odc/screen-generate.json` | 0 mensagens novas; ponto fixo C1 das raizes geradas; o mesmo pedido de novo e `NO_CHANGE` |
 | Spec de telas | Catalogo, tabela, detalhe, formulario ou dashboard usando blocos do modulo (secao 3.4) | Reactive/Mobile | `screen-spec-cards-reactive.json`, `screen-spec-cards-mobile.json`, `screen-spec-table-reactive.json`, `screen-spec-detail-tabs-reactive.json`, `screen-spec-form-reactive.json`, `screen-spec-dashboard-reactive.json`, `screen-spec-store-reactive.json` | 0 mensagens novas; find de CardSectioned, Pagination, Search, Tabs, Rating |
 | Autoria HTML/CSS | Pagina inteira escrita em HTML/CSS pela LLM com manifesto tipado por chave `data-av` (secao 3.5): tags, ordem, classes e atributos preservados; dados, filtros, datas, eventos, valores derivados e funcoes JS so pelo manifesto; CSS escopado e instalado no tema; tela existente atualizada com identidade preservada | Reactive/Mobile | `html-dashboard-reactive.json`, `html-dashboard-update.json` (delta), `tests/jobs-live/html-dashboard-incidents.json` (produto); fonte `tests/html/incidents-dashboard.html` via `scripts/gen_html_job.py` | 0 mensagens novas; find de Dashboard, LoadDashboard, Page, Recent, PeriodStart |
 | Tela Reactive/Mobile | Secao 3.1 | Reactive, Mobile | `screen-reactive.json` (minima: layout, aggregate, List), `screen-form-reactive.json`, `screen-list-reactive.json`, `screen-search-refresh-reactive.json` (pesquisa com `like`, Table, Refresh Data), `table-if-reactive.json`, `widgets-reactive.json`, `gallery-native-reactive.json`; portas O11 da frente B de jobs ODC provados: `cat-b-app-events.json` (external site e eventos de aplicacao), `cat-b-block-placeholder.json` (placeholder de bloco com conteudo de exemplo e instancias), `cat-b-flow-comment-popover.json` (comentario do fluxo de UI e popover/metadata), `cat-b-theme-resource.json` (tema, script e recurso: nascimento, edicao, refatoracao e delecao) | `dump` da tela; TrueChange |
@@ -717,12 +937,34 @@ Message; nos outros nos, sem `as`, e o nome quando e identificador). `record` ac
 Expressoes sao texto OutSystems (secao 2; so funcoes de `docs/functions.md`). Mesma spec = mesmos ops, sempre. Os dados
 (entidades, static, exceptions) vem antes por `spec` ou verbos: a `logic` resolve os nomes contra o modulo e recusa o que nao existe.
 
-### 2.2 Integracoes (ops `rest`, `rest-expose`, `soap`; docs/integracoes-rest-soap.md)
+### 2.1a Actions padrao geradas (op `entity-actions`)
 
-Uma op por cliente ou servico; o contrato e `api --op rest|rest-expose|soap`. A op cria o que falta, atualiza no lugar pela chave
+`{"op":"entity-actions","data":{"entities":"all","owner":{"attribute":"CreatedBy"},"expose":{"server":true,"service":true}}}`, primeiro no job;
+as actions de negocio vem depois, como textos da op `logic`, e podem chamar as geradas. Contrato: `api --op entity-actions`.
+O kernel le o modelo de dados do modulo (a leitura ssam-ddl/1: entidades, atributos, referencias e delete rules, indices,
+atributo ativo e de label) e escreve, por server entity com identificador, textos ssam-flow/1 pela forma de texto da op
+`logic` (cada action le de volta como o seu texto): Get<E>List (um aggregate com join as entidades que as referencias
+nomeiam, filtros por referencia, texto e data indexados, busca no label e nos textos indexados, dono, ativo, ordem,
+MaxRecords/StartIndex, a pagina como a structure <E>ListItem e o total), Get<E>ById, Save<E> (existencia, dono, obrigatorios,
+tamanhos, referencias que precisam existir, chaves unicas, Create/Update ou CreateOrUpdate sem auto number; erros
+ValidationFailed, NotFound e AccessDenied, criados se faltarem) e Remove<E> (existencia, dono, registros que ainda o
+referenciam com Delete Rule Protect, ou o atributo ativo em False), mais uma service action por server action. Sem JavaScript,
+sem For Each, sem aggregate em laco; tudo nomeado e descrito. Deterministico: o mesmo modelo e os mesmos dados dao os mesmos
+textos. Nada existente e sobrescrito: action de mesmo nome que le como o texto gerado fica (unchanged; todas assim =
+NO_CHANGE), qualquer outra fica e vem em `kept` com o texto gerado. ODC app: server actions privadas (as service actions sao
+a entrada publica); entidade nao publica: actions privadas e sem service action (`notes`). Prova: `entity-actions.json` e a
+bateria do corpus `tests/Shared/EntityActionsCorpusTests.cs`. Os nomes seguem a regra N1 do dono, verbo primeiro: Get<E>List,
+Get<E>ById, Save<E>, Remove<E> e <Action>Service; `names {...}` so sobrescreve. Obrigatorios conferidos: textos, referencias
+e datas; numeros, booleanos e horas nunca (0 e False tambem sao dado, sem regra unica que diga "faltando").
+
+### 2.2 Integracoes (ops `rest`, `rest-consume`, `rest-expose`, `soap`; docs/integracoes-rest-soap.md)
+
+Uma op por cliente ou servico; o contrato e `api --op rest|rest-consume|rest-expose|soap`. A op cria o que falta, atualiza no lugar pela chave
 o que existe (quem chama continua ligado), nao toca o que nao nomeia e apaga o que `remove` lista. Todos os erros dos dados numa
 recusa so, antes de qualquer op (`REST_*`, `REST_EXPOSE_*`, codigos de SOAP), pela regra `PreflightRules.IntegrationOps`.
 - `rest`: `{"client":{"name","baseUrl","headers"},"methods":[{"name","http","path","inputs":[{"name","type","in":"url|query|header|body"}],"response":{"structure"|"sample"|"type"}}],"structures":[...],"remove":[...],"breaks":[...]}`. Expande so para os verbos crus provados; amostra JSON vira estruturas pelo plugin REST; credencial nunca no modelo (`REST_CREDENTIALS_NOT_IN_MODEL`, regra do SSAM no O11: entrada `Authorization` em header). `openapi {path, sha256, operations}`: ODC headless; O11 pelo `o11_deliver` (bridge).
+- `rest-consume` (gerador, 13/10/2026; `RestConsume.cs` puro, `Verbs.RestConsume.cs` no modulo): `{"name":"<Cliente>","baseUrl"?,"methods":[{"name","url","verb"?,"sample"?,"request"?,"resource"?,"action"?,"params"?,"try"?,"timeout"?}],"expose"?,"errors"?}`. Uma op escreve a integracao inteira de qualquer API: o cliente e os metodos pela op `rest` (estruturas explicitas, `<Recurso>Json`, inferidas da amostra: Text, Integer, Long Integer, Decimal, Boolean, Date `yyyy-MM-dd`, Date Time ISO com `T` e segundos; numero escrito como texto fica Text; null/`[]` viram Text/Text List com aviso; lista de listas fica de fora com aviso; formas iguais sao uma estrutura so), uma estrutura publica por recurso (o espelho, mesmos nomes), o mapeamento escrito atributo a atributo (`Origem mapTo {A: A, R.A: R.A}`: a conversao automatica da plataforma deixa vazias algumas formas, "Empty Mapping", nas duas faixas; registro dois niveis abaixo e lista de registros passam por funcoes privadas `<Estrutura>[List]FromJson|ToJson`), e uma service action publica por metodo com nome Verbo+Cliente+Objeto (o verbo do proprio metodo quando o nome comeca por um, `ListRepos` vira `ListGitHubRepos`; senao o do HTTP: GET `Get`, POST `Send`, PUT `Save`, PATCH `Update`, DELETE `Delete`, `Feriados` vira `GetBrasilApiFeriados`; `action` sobrepoe; ODC library: server actions publicas; `expose.serviceActions:false`: server actions; `expose:false`: so o cliente) que chama o metodo e transforma qualquer falha na user exception `errors.exception` (padrao `<Cliente>Error`, reaproveitada se existe) com log. Action que muda dado (todo verbo menos GET) checa o usuario antes (`if GetUserId() = NullIdentifier()`, no ODC `NullTextIdentifier()`, raise `AccessDenied`, a do modulo ou criada) e chama a sua `<Action>_Impl` privada, onde ficam a chamada e o handler (`expose.guard:"none"` tira a checagem). Booleano leva Is/Has/Can (`fork` vira `IsFork`, o NameInJSON fica); todo elemento tem descricao, todo assign um label e o If uma pergunta: o OutSystems padroes (estagio oml) da 0 achados nas 15 amostras, nas duas faixas. Nada de For Each nem JavaScript. Cada elemento leva na descricao a marca `ssam:rest-consume <Cliente>/<Base> #<hash>`: a mesma op de novo nao muda nada (`changed:false`, tudo em `unchanged`); amostra mudada atualiza no lugar (mesmas chaves; o que sumiu e apagado depois que as actions foram reescritas); nome usado por outro elemento vai para o proximo livre (`renamed`). O kernel nunca le a rede: metodo GET sem `sample` e recusado com `REST_CONSUME_SAMPLE_MISSING`; a fachada (`integration-documents.mjs`) faz um GET por url (10 s, 2 MB, sem credencial, listas cortadas em 20) e fixa `sample` e `sampledFrom`. O recibo traz `generated` (cliente, base, excecao e, por metodo, o URL Path, os tipos e a assinatura da action). Exemplo provado: `rest-consume-generate.json` (O11) e `jobs-odc/rest-consume-generate.json`. Provas: `tests/Anvil.Tests/RestConsumeTests.cs`, `tests/Shared/RestConsumeScenarios.cs` (as duas faixas, amostras em `tests/fixtures/rest-consume`) e `platforms/odc/facade/tests/rest-consume-sampling.test.mjs` (url por um servidor local).
+- `rest-consume` autenticada e customizada (`RestConsume.Auth.cs`, as duas faixas): `auth {type: bearer|basic|apiKey (in header|query, name)|oauth2 (tokenUrl https, scope, cacheMinutes)}`, `headers {Nome: literal}`, `methods[].headers {Nome: literal|{entrada}}`, `methods[].optional`, `correlationHeader`, `settings {baseUrl:true}`, `timeout`, `errors.status {"404": "<Excecao>"}`, `callbacks {before|after: {steps, vars}}`. Credencial nunca no modelo (`REST_CREDENTIALS_NOT_IN_MODEL`): o gerador cria as site properties (O11) / settings (ODC) vazias e secretas (`<Cliente>Token`, `<Cliente>ApiKey`, `<Cliente>ClientId`/`ClientSecret`; `basic`: no O11 `<Cliente>Username` e `<Cliente>Password`, codificados em tempo de execucao pela extensao BinaryData, `TextToBinaryData` + `BinaryToBase64`, cuja op `reference` a fachada acrescenta no fim do job e o `o11_deliver` captura, sem ela `REST_CONSUME_REFERENCE_MISSING`; no ODC `<Cliente>BasicCredentials` = Base64 de user:password; o correlation id vem de quem chama nas duas faixas, nenhum produtor de GUID offline), o `OnBeforeRequest` do cliente as le (oauth2: cliente `<Cliente>Auth` e `Get<Cliente>AccessToken` privada com Cache in Minutes) e o recibo traz `configure` (o que preencher e onde). O `OnAfterResponse` levanta a excecao do status mapeado ou `<Cliente>Error` com o status e 300 caracteres do corpo; os handlers das actions mantem a excecao mapeada. Os callbacks sao criados antes da op `logic` (que os substitui, mesmas chaves) e os tipos `HTTPHeader`/`URLQueryParameter` vao por `@chave` (cada cliente tem os seus; o ODC os nomeia `HTTPHeader5`). Callback que a op nao escreveu: `REST_CONSUME_CALLBACK_NOT_OWN`. Auth que muda apaga o que a op nao planeja mais. Op sem essas chaves escreve o mesmo de antes (modulos do commit anterior ficam `changed:false`). Leitura dos callbacks como texto: `ModelHost.RestCallbackTexts`. Exemplo provado: `rest-consume-auth.json` (O11) e `jobs-odc/rest-consume-auth.json`; provas `tests/Shared/RestConsumeAuthScenarios.cs` (O11 com a captura `tests/fixtures/rest-consume/producers/BinaryData.avsig`).
 - `rest-expose`: cada metodo e uma action de logic de tipo `rest` (dono `IRestService:<S>`, `http`, `path`, parametro `in`); `action` + `arguments` + `results` geram chamada e atribuicao; ou `steps`. Start e End sao os do proprio metodo.
 - `soap` (so O11): `{"wsdl","port"|"service"|"binding"|"soapVersion","methods","refresh","remove","breaks"}`. A selecao da porta e headless (`SoapPlan`); o import e o do Studio pela bridge (`integration_import`) dentro do `o11_deliver`; o candidato confere os tipos exatos (`SOAP_CONTRACT_TYPE_MISMATCH`). `ssam_job`/`o11_job` sem Studio: `INTEGRATION_IMPORT_NEEDS_STUDIO`.
 - Documentos: a fachada fixa URL/caminho em `.local/documents/<sha256>/` e reescreve para `{path, sha256, source}`; o kernel nunca busca na rede (`DOCUMENT_NOT_PINNED`). Job de suite usa caminho relativo (`tests/fixtures/wsdl/...`).
@@ -855,6 +1097,23 @@ validada na primeira tentativa por outra LLM lendo apenas esta secao. Negativo: 
 Provar: `ANVIL_LANE=ss5 python scripts/run_job.py <job>.json`; no PowerShell, defina `$env:ANVIL_LANE='ss5'` antes.
 Entregar: `anvil deliver --module Headless_UI --job <job>.json --checks Catalog,GetGames,Pagination1,CardSectioned1`.
 Para uma prova nova, guarde o job em `.local/lane-ss5/` e use o caminho explicito; nao reutilize OML gerado como base.
+
+### 3.4.1 Telas padrao de entidades (`screen` com `data.generate`, gen-screen/1)
+
+O modelo nao escreve lista, detalhe e formulario de uma entidade: `{"op":"screen","data":{"generate":{"entities":["Customer","Order","Product"]}}}`.
+O gerador (`ScreenGenerator.cs`; leitura do modulo e compilacao em `Verbs.ScreenGenerator.cs`) le as entidades (do modulo e das
+referencias), as actions que o modulo pode chamar e os blocos, e escreve documentos `ssam-html/1` e textos `ssam-flow/1` que a forma
+documento da op `html` e a op `logic` compilam (as mesmas regras do dono, o mesmo ponto fixo): lista em `<table class="table">` com
+`<tbody list>`, paginacao, busca nos atributos de texto, dropdown por referencia a static, cabecalhos ordenaveis (sort dinamico),
+estados de carregando, erro e vazio; detalhe em tabela de duas colunas; formulario com inputs tipados pelos atributos, dropdown por
+referencia, validacoes nativas e Save; delete com confirmacao. Leitura por aggregate ou por action achada pela assinatura (lista
+da entidade com inputs de paginacao e total; registro por identificador); escrita por action achada pela assinatura (save: um input
+obrigatorio que e o registro; delete: um input obrigatorio identificador e verbo de delete no nome) ou por `<E>_Save`/`<E>_Delete`
+criadas uma vez em volta das entity actions (a tela nunca grava do cliente). Entidade so leitura sem action: lista e detalhe, sem
+formulario nem delete (`gaps`). Blocos: layout, paginacao, confirmacao e barra de filtros achados pela assinatura no modulo ou nas
+referencias; o que falta e criado uma vez (`Pager`, `ConfirmDialog`, `FilterBar`, `PageHeader`) ou, com `blocks:"inline"`, vira
+markup. Cada raiz leva `ssam:gen-screen/1 <sha>` na descricao: o mesmo pedido sobre o modulo que ele produziu e `NO_CHANGE`. Nome
+ocupado por algo nao gerado: recusa com o patch do nome livre (`entities[].names`). Recibo: `results[].result.generate`.
 
 ### 3.5 Autoria HTML/CSS (op `html`, Reactive e Mobile)
 

@@ -27,6 +27,7 @@
     <Compile Include="../Anvil.Core/Properties/**/*.cs" />
     <Compile Include="Adapters.ODC/**/*.cs" />
     <EmbeddedResource Include="../Anvil.Core/Kernel/ScreenVocabulary.json" LogicalName="Anvil.Core.Kernel.ScreenVocabulary.json" />
+    <EmbeddedResource Include="../Anvil.Core/Kernel/OutSystemsUiClasses.txt" LogicalName="Anvil.Core.Kernel.OutSystemsUiClasses.txt" />
   </ItemGroup>
 
   <ItemGroup>

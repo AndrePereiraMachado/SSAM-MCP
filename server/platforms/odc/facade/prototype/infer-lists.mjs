@@ -19,12 +19,38 @@ function structureRatio(a, b) {
   return matched / Math.max(count(a), count(b), 1) - 0 * (onlyA.length + onlyB.length);
 }
 
+// The inline style of a classless element is its class (a React prototype styles every element inline): two siblings are
+// items of one list only when they set the same style properties (the values may vary: the last row without its border), and
+// two icons or drawn svgs only when they are the same drawing. The two lines of a hero (a label and a big clock), the three
+// lines of a button, the signal and the battery of a status bar are siblings, never a list (2.8, "Grupo repetido").
+function styleKeys(node) {
+  const style = attr(node, 'style');
+  if (!style) return '';
+  return [...new Set(String(style).split(';').map(part => part.split(':')[0].trim().toLowerCase()).filter(Boolean))].sort().join(',');
+}
+function textShape(node) {
+  if (!isElement(node)) return String(node.x ?? '').trim() ? 'x' : '';
+  return node.t + '(' + (node.c ?? []).map(textShape).filter(Boolean).join(',') + ')';
+}
+function sameKind(a, b) {
+  if ((a.icon || b.icon) && a.icon?.name !== b.icon?.name) return false;
+  if ((a.svg || b.svg) && a.svg !== b.svg) return false;
+  if (!classes(a).length && !classes(b).length && styleKeys(a) !== styleKeys(b)) return false;
+  return true;
+}
+
 // Repeated groups: consecutive sibling elements with the same tag, a common class (or none), similar structure, >= 2.
 export function repeatedGroups(root, path = [], out = []) {
   if (!isElement(root)) return out;
   const kids = elementKids(root);
   let run = [];
   const flush = () => {
+    // two classless siblings are a list only when they are written alike down to their text nodes (two cards "Trabalhadas
+    // 176:00" and "Saldo +06:30" are two panels, not the rows of a collection)
+    // (a pair styled differently, a small label over a big title, is two lines of one panel too: a pair is a list only when
+    // its two elements carry the same inline style)
+    if (run.length === 2 && !classes(run[0].child).length && !classes(run[1].child).length
+      && (textShape(run[0].child) !== textShape(run[1].child) || String(attr(run[0].child, 'style') ?? '') !== String(attr(run[1].child, 'style') ?? ''))) run = [];
     if (run.length >= 2) {
       const common = run.map(item => new Set(classes(item.child))).reduce((acc, set) => new Set([...acc].filter(token => set.has(token))));
       out.push({ parent: root, path, items: run.map(item => ({ node: item.child, index: item.index })), mode: run.length === kids.length ? 'self' : 'wrap', stable: [...common] });
@@ -38,7 +64,7 @@ export function repeatedGroups(root, path = [], out = []) {
       const ca = classes(a), cb = classes(b);
       const sameClass = (!ca.length && !cb.length) || ca.some(token => cb.includes(token));
       const between = (root.c ?? []).slice(last.index + 1, item.index).every(VOID_TEXT);
-      if (a.t === b.t && sameClass && between && structureRatio(run[0].child, b) >= 0.6 && !attr(a, 'id') && !attr(b, 'id')) { run.push(item); continue; }
+      if (a.t === b.t && sameClass && sameKind(run[0].child, b) && between && structureRatio(run[0].child, b) >= 0.6 && !attr(a, 'id') && !attr(b, 'id')) { run.push(item); continue; }
     }
     flush();
     run = [item];
@@ -129,8 +155,7 @@ function lexGreater(a, b) {
 
 export function correlate(group, meta, state, { locale, tz, context = {} } = {}) {
   const items = group.items.map(item => item.node);
-  const slots = slotsOf(items);
-  let best = null;
+  const slots = slotsOf(items);  let best = null;
   for (const collection of meta.collections) {
     const rows = state[collection.name] ?? [];
     if (!rows.length || collection.key === '#') continue;
@@ -236,8 +261,7 @@ export function correlate(group, meta, state, { locale, tz, context = {} } = {})
     if (memberOf) score -= 2;
     let coverage = 0;
     for (const [i, node] of items.entries()) { const text = textOf(node); if (collection.fields.some(field => field.type === 'Text' && String(assigned[i][field.name] ?? '').length >= 3 && text.includes(String(assigned[i][field.name])))) coverage++; }
-    const rank = [score, coverage, meta.extraNames.includes(collection.name) ? 0 : 1];
-    if (!best || lexGreater(rank, best.rank)) best = { collection: collection.name, rows: assigned, indexes: assignment, keySlot, slots: explained, score, rank, filter };
+    const rank = [score, coverage, meta.extraNames.includes(collection.name) ? 0 : 1];    if (!best || lexGreater(rank, best.rank)) best = { collection: collection.name, rows: assigned, indexes: assignment, keySlot, slots: explained, score, rank, filter };
   }
   if (!best || best.score < 3) return null;
   best.slots = explainGroupSlots(slots, best.rows, best.collection, meta, state, { locale, tz });
@@ -496,7 +520,18 @@ export function findLists(root, meta, state, options = {}) {
     const found = correlatePartial(group, meta, state, options);
     if (found) lists.push({ ...group, ...found });
   }
-  return lists;
+  // One collection shown as several lists, each a part of its rows that no rule tells apart (VisitaCerta 2026-10-12: the
+  // agenda groups its visits by day, one section per date): rows grouped by something a list filter cannot say. As lists of
+  // the collection every section would show every row; they stay as rendered (2.8: what no rule explains stays literal).
+  const split = new Map();
+  for (const list of lists) if (list.filter?.unexplained) { if (!split.has(list.collection)) split.set(list.collection, []); split.get(list.collection).push(list); }
+  const grouped = new Set([...split.values()].filter(parts => parts.length >= 2 && disjointRows(parts)).flat());
+  return grouped.size ? lists.filter(list => !grouped.has(list)) : lists;
+}
+function disjointRows(parts) {
+  const seen = new Set();
+  for (const part of parts) for (const row of part.rows ?? []) { if (seen.has(row)) return false; seen.add(row); }
+  return true;
 }
 
 // ---- union of variants -----------------------------------------------------------------------------------------------
@@ -753,7 +788,15 @@ function snapshotOf(group) {
     }
   }
   if (!attributes.length) return null;
-  return { attributes, rows: items.map((_, i) => Object.fromEntries(attributes.map(item => [item.name, item.kind === 'text' ? item.values[i].trim() : item.values[i]]))) };
+  // a text keeps the spaces that differ between the items ("%" and " km/h": the space is the second one's own, VisitaCerta
+  // 2026-10-12); only the whitespace every item has around it is the template's
+  for (const item of attributes.filter(entry => entry.kind === 'text')) {
+    const lead = item.values.map(text => text.match(/^\s*/)[0]).reduce((a, b) => a.length <= b.length ? a : b);
+    const trail = item.values.map(text => text.match(/\s*$/)[0]).reduce((a, b) => a.length <= b.length ? a : b);
+    Object.assign(item, { lead, trail });
+  }
+  const cut = (item, text) => text.slice(item.lead.length, text.length - item.trail.length);
+  return { attributes, rows: items.map((_, i) => Object.fromEntries(attributes.map(item => [item.name, item.kind === 'text' ? cut(item, item.values[i]) : item.values[i]]))) };
 }
 
 function sameChildren(a, b) {
@@ -772,7 +815,7 @@ export function snapshotTemplate(list, keyPrefix) {
     if (!isElement(node)) {
       const out = { k, x: node.x };
       const text = own.find(item => item.kind === 'text');
-      if (text) { const raw = String(node.x); out.expr = { ...field(text), prefix: raw.match(/^\s*/)[0], suffix: raw.match(/\s*$/)[0] }; }
+      if (text) { const raw = String(node.x); out.expr = { ...field(text), prefix: text.lead ?? raw.match(/^\s*/)[0], suffix: text.trail ?? raw.match(/\s*$/)[0] }; }
       return out;
     }
     const out = { k, t: node.t };
@@ -1112,6 +1155,35 @@ export function listTemplate(list, keyPrefix) {
     const name = nameFor(entry.slot.node, parentOf.get(entry.slot.node), texts);
     out.expr = { fmt: 'text', value: { field: name }, prefix: '', suffix: '', locale: null, extra: true };
     extraAttributes.push({ collection: list.collection, name, type: 'Text', values: list.rows.map((row, i) => ({ key: row[keyField], value: texts[i] })) });
+  }
+  // The inline style of an element that varies between the items with no field to explain it (a React row drawn done or to
+  // do from state outside the store): an extra attribute <Element>Style with the canonical style of each item, which the
+  // template reads, so every row looks as it was rendered (fidelity by construction, never the first item's style for all).
+  for (const entry of list.slots) {
+    const node = entry.slot.node;
+    if (!node || !isElement(node) || node.icon || node.svg) continue;
+    const out = outByNode.get(node);
+    if (!out || out.attrExpr?.style || entry.attrs?.style) continue;
+    const values = entry.slot.values.map(item => (item && isElement(item) ? String(attr(item, 'style') ?? '') : null));
+    if (values.some(value => value === null) || new Set(values).size < 2) continue;
+    const name = nameFor(node, node, []) + 'Style';
+    out.attrExpr = { ...(out.attrExpr ?? {}), style: { expr: { fmt: 'text', value: { field: name }, prefix: '', suffix: '', locale: null, extra: true } } };
+    extraAttributes.push({ collection: list.collection, name, type: 'Text', values: list.rows.map((row, i) => ({ key: row[keyField], value: values[i] })) });
+  }
+  // A node present in some items only, with no predicate of the fields to say which (a "+02h" tag on the last row of a
+  // sheet): an extra attribute <Element>Shown ("1" where the item had it, "" elsewhere) that its if reads, so no row shows a
+  // node it never had and none loses one it had.
+  const conditioned = node => { for (let current = node; current; current = parentOf.get(current)) if (outByNode.get(current)?.if) return true; return false; };
+  for (const entry of list.slots) {
+    const node = entry.slot.node ?? entry.slot.extra;
+    if (!node || !isElement(node)) continue;
+    const out = outByNode.get(node);
+    if (!out || out.if || entry.if || conditioned(parentOf.get(node))) continue;
+    const present = entry.slot.values.map(item => item != null);
+    if (present.every(Boolean) || !present.some(Boolean)) continue;
+    const name = nameFor(node, node, []) + 'Shown';
+    out.if = { op: 'truthy', l: { field: name } };
+    extraAttributes.push({ collection: list.collection, name, type: 'Text', values: list.rows.map((row, i) => ({ key: row[keyField], value: present[i] ? '1' : '' })) });
   }
   if (extraAttributes.length) template.extraAttributes = extraAttributes;
   return template;

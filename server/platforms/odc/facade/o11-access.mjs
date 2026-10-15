@@ -20,7 +20,7 @@ import { createWorkerFirstRunner } from './anvil-worker.mjs';
 import { assertSelectedO11 } from './studio-connect.mjs';
 import { readConnection } from './studio-session.mjs';
 import { trackTask, tasksDir } from './ssam-task.mjs';
-import { clean, closeState, deliveryOutcome, findKernelTask, validationMessages, WORDS_MARKER } from './o11-cycle.mjs';
+import { clean, closeState, contractRefusal, deliveryOutcome, findKernelTask, validationMessages, WORDS_MARKER } from './o11-cycle.mjs';
 
 const ACTIONS = ['plan', 'apply', 'verify', 'users'];
 const ARGUMENTS = ['action', 'manifestPath', 'words', 'operationId'];
@@ -217,8 +217,12 @@ function refusedAnswer(v, verdicts, { input, operationId, deliverWork }) {
   // The kernel names a task that still holds the module ("resume task <id> before starting another").
   const holder = /resume task ([0-9a-f]{32})/i.exec(String(v.error ?? ''))?.[1];
   const continuation = holder ? (closeState(findKernelTask(deliverWork, { taskId: holder })) === 'refused' ? closeHolder(holder) : resumeWith(holder)) : planAgain(input);
+  // A refusal of the validation contract names the part that refused and carries every problem (o11-cycle contractRefusal, as
+  // o11_deliver answers it): never only messages.
+  const refused = !merged && !v.code && invalid && task.apply ? contractRefusal(task.apply, Array.isArray(task.problems) && task.problems.length ? task.problems : null) : null;
+  if (refused?.summary && /^job rejected by validation contract; /.test(error)) error = cleanKernel('job rejected by validation contract (' + refused.summary + '); merge was not attempted', 400);
   return { ok: false, outcome: 'refused', code: v.code ?? (invalid ? 'VALIDATION_REFUSED' : 'DELIVERY_FAILED'), module: v.module, stage: task.stage ?? null,
-    taskId: v.taskId ?? null, operationId, error, ...(messages.length ? { messages } : {}), ...(omitted ? { messagesOmitted: omitted } : {}),
+    taskId: v.taskId ?? null, operationId, error, ...(refused ? refused.fields : {}), ...(messages.length ? { messages } : {}), ...(omitted ? { messagesOmitted: omitted } : {}),
     ...(failures.length ? { failures } : {}), ...(merged ? { merged: true } : {}), ...(deliveredModules.length ? { deliveredModules } : {}), continuation };
 }
 

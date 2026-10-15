@@ -140,8 +140,10 @@ STOPWORDS = {"the", "a", "an", "of", "to", "for", "and", "or", "in", "on", "by",
 DEFAULT_CONFIG = {
     "platform": "o11",
     "layerOrder": {"Foundation": 0, "Core": 1, "End-user": 2},
+    # The platform's own system extensions (BinaryData, Text, HTTPRequestHandler) are Foundation like (System).
     "modules": {"OutSystemsUI": "Foundation", "OutSystemsCharts": "Foundation", "OutSystemsMaps": "Foundation",
-                "Users": "Foundation", "(System)": "Foundation"},
+                "Users": "Foundation", "(System)": "Foundation", "BinaryData": "Foundation", "Text": "Foundation",
+                "HTTPRequestHandler": "Foundation"},
     "modulePatterns": [["*_CW", "Core"], ["*_CS", "Core"], ["*_IS", "Foundation"], ["*_TH", "Foundation"], ["*_UI", "End-user"]],
     "forbiddenRefs": [],
     "integrationModules": [],
@@ -1165,7 +1167,7 @@ class JobStage:
             return True
         if k == "if":
             cond = strip_strings(str(st.get("if")))
-            if re.search(r"Check\w*Role\s*\(|GetUserId\(\)\s*=\s*NullIdentifier\(\)", cond):
+            if re.search(r"Check\w*Role\s*\(|GetUserId\(\)\s*=\s*Null(?:Text)?Identifier\(\)", cond):
                 branch = (st.get("then") or []) + (st.get("else") or [])
                 return any(isinstance(b, dict) and step_kind(b) == "raise" for b in branch)
         return False
@@ -2557,7 +2559,8 @@ class OmlStage:
                                  suggestion="Uma server action orquestradora; atualizar localmente o output da Data Action.")
 
     # ---- AR2: guarda dominante e AllExceptions
-    GUARD_RE = re.compile(r"Check\w*Role\s*\(|GetUserId\(\)\s*=\s*NullIdentifier\(\)")
+    # ODC: the user identifier is a text one (GetUserId() = NullTextIdentifier()).
+    GUARD_RE = re.compile(r"Check\w*Role\s*\(|GetUserId\(\)\s*=\s*Null(?:Text)?Identifier\(\)")
 
     def is_guard_node(self, n):
         k, props = n.get("kind"), n.get("properties") or {}

@@ -21,9 +21,11 @@ test('compactDelivery keeps exactly the shared fields on a delivered change, pub
   // + integration (contract I7 of docs/INTEGRACOES-GITSSAM.md, lane restsoap); + warnings (I9 of docs/PACOTE-ATRITOS-2.md, A03);
   // + queue (A08: a delivery that waited in the Studio write queue); + highWarnings (data-access rules, 2026-10-09).
   assert.deepEqual(DELIVERY_FIELDS, ['publish', 'lastPublication', 'leftovers', 'leftoversTotal', 'screenRoles', 'screenRolesTotal', 'authorization', 'integration', 'integrationTotal',
+    'entityActions', // op entity-actions (2026-10-13): the generated standard actions by entity, unchanged, kept, notes
     'highWarnings', 'warnings', 'warningsTotal', 'queue', 'equivalence', 'normalized', 'normalizedTotal', // I8 of the atritos 3 package
     'phases', // lane wp of the atritos 3 package: a delivery built outside the Studio lock
-    'preview']); // C04 (servidor/fase4): the structural preview of the delivered html (preview/fragment.mjs)
+    'preview', // C04 (servidor/fase4): the structural preview of the delivered html (preview/fragment.mjs)
+    'removed', 'removedTotal']); // ssam_code (2026-10-12): what an action text or a screen edit removed
   const queue = { position: 1, waitedMs: 1200, holder: { tool: 'studio_deliver', pid: 4242, startedAt: '2026-10-06T13:38:00Z' } };
   assert.deepEqual(compactDelivery('studio_deliver', {}, { ok: true, merged: true, strictlyEqual: true, manifest: 'm.json', queue, steps: [1] }),
     { ok: true, result: 'entregue', queue, manifest: 'm.json' });

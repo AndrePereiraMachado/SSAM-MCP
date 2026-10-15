@@ -320,16 +320,24 @@ public sealed partial class ModelSession
             for (var k = 0; k < Math.Min(keys.Count, sorts.Length); k++)
             {
                 var place = k == 0 ? at : at + "/sort/" + k;
-                Expression(place, "Attribute", keys[k].Attribute, sorts[k]); Equal(place, "SortDirection", J(keys[k].Direction), J(P(sorts[k], "SortDirection")?.ToString())); Equal(place, "IsDynamic", J(false), J(P(sorts[k], "IsDynamic")));
+                // A key the set wrote as the Studio writes it (AggregateSortRule: `IdentifierToLongInteger(X)` is X, `If(C, 0, 1)` is
+                // C reversed) is required in that form.
+                var normal = AggregateSortRule.Normalize(keys[k].Attribute);
+                var attribute = normal is { Steps.Count: > 0 } ? normal.Attribute : keys[k].Attribute;
+                var direction = normal is { Flip: true } ? AggregateSortRule.Reverse(keys[k].Direction) : keys[k].Direction;
+                Expression(place, "Attribute", attribute, sorts[k]); Equal(place, "SortDirection", J(direction), J(P(sorts[k], "SortDirection")?.ToString())); Equal(place, "IsDynamic", J(false), J(P(sorts[k], "IsDynamic")));
             }
             var joins = descendants.Where(o => Implements(o, "IJoin")).ToArray(); var declaredJoins = step["joins"]?.AsArray().OfType<JsonObject>().ToArray() ?? [];
             Equal(at, "joinCount", J(declaredJoins.Length), J(joins.Length));
             for (var i = 0; i < Math.Min(joins.Length, declaredJoins.Length); i++)
             {
                 var join = declaredJoins[i]; var location = at + "/join/" + i;
-                Equal(location, "LeftSource", join["left"], J(TypeResolver.Name(P(joins[i], "LeftSource")!)));
-                Equal(location, "RightSource", join["right"], J(TypeResolver.Name(P(joins[i], "RightSource")!)));
-                Equal(location, "JoinType", J(LogicExpander.JoinKind(join["kind"]!.ToString()) ?? join["kind"]!.ToString()), J(P(joins[i], "JoinType")?.ToString())); Expression(location, "Condition", join["condition"]!.ToString(), joins[i]);
+                // The Right join of two sources is written as the Left join with them swapped (LogicExpander.NativeJoin).
+                var native = LogicExpander.NativeJoin(join["kind"]!.ToString(), declaredJoins.Length, declaredSources.Count);
+                var swapped = native is { Swapped: true };
+                Equal(location, "LeftSource", swapped ? join["right"] : join["left"], J(TypeResolver.Name(P(joins[i], "LeftSource")!)));
+                Equal(location, "RightSource", swapped ? join["left"] : join["right"], J(TypeResolver.Name(P(joins[i], "RightSource")!)));
+                Equal(location, "JoinType", J(native?.Kind ?? join["kind"]!.ToString()), J(P(joins[i], "JoinType")?.ToString())); Expression(location, "Condition", join["condition"]!.ToString(), joins[i]);
             }
             foreach (var (section, nativeKind) in new[] { ("columns", "IGroupByAttribute"), ("columns", ModelApiMetadata.AggregateColumnType), ("calculated", "ICalculatedAttribute") })
             {

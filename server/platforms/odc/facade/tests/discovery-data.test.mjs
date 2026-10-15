@@ -3,6 +3,7 @@
 // the hard byte budget. Index checks need the lane CLI built and skip otherwise; the pure checks always run.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireBytes } from './fixtures/answer-wire.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -74,7 +75,7 @@ test('selection has three tiers: a family is direct only when an element of it i
 test('through the public entry: a simple, a composite, an ambiguous and an unsupported intent, the 12000-byte budget, the expansion of what was omitted, and the static/structure regression', { skip: !odcCli && 'anvil-odc CLI not built', timeout: 240000 }, async () => {
   // Simple intent, 12000 bytes: the focused operations stay whole, the answer fits, everything omitted is expandable.
   const simple = await discover({ lane: 'odc', intent: 'renomear o atributo Email da entidade Contact e apagar o atributo Phone sem consumidores', sources: odc, budgetBytes: 12000 });
-  assert.equal(simple.ok, true); assert.ok(bytesOf(simple) <= 12000 && simple.size.bytes === bytesOf(simple), 'hard budget: ' + bytesOf(simple));
+  assert.equal(simple.ok, true); assert.ok(wireBytes(simple, { budgetBytes: 12000 }) <= 12000 && simple.size.bytes === bytesOf(simple), 'hard budget: ' + bytesOf(simple));
   assert.ok(['within', 'reduced'].includes(simple.size.status));
   const m = direct(simple)[0]; assert.equal(m.id, 'data.entity'); assert.deepEqual(m.focus.roles, ['entity attribute']); assert.ok(m.focus.ops.includes('rename') && m.focus.ops.includes('delete'));
   assert.ok(Object.keys(m.operations).includes('delete') && Object.keys(m.operations).includes('rename'), 'focused operations kept: ' + Object.keys(m.operations));
@@ -89,7 +90,7 @@ test('through the public entry: a simple, a composite, an ambiguous and an unsup
   const ex = creation.examples['data.entity']; assert.equal(ex.scope.role, 'server entity'); assert.equal(ex.scope.op, 'create');
   assert.ok(ex.ops.some(o => o.op === 'spec' && o.data?.entities?.some(e => e.indexes?.length && e.attributes?.some(a => /Identifier$/.test(a.type)))), JSON.stringify(ex.ops.map(o => o.op)));
   assert.ok(ex.focusedOps.map(k => ex.ops[k].op).includes('spec'), JSON.stringify(ex.focusedOps.map(k => ex.ops[k].op)));
-  assert.ok(bytesOf(creation) <= 40960);
+  assert.ok(wireBytes(creation, { budgetBytes: 40960 }) <= 40960);
   // Final version (after the evaluation): a refactor that names an attribute AND an index gets ONE excerpt covering
   // both roles (the job that covers the most focused pairs), so the raw `create EntityIndex` is in it; creation words
   // beside other operations add `create` to the focus; the same id named twice in one --expand is merged.
@@ -107,13 +108,13 @@ test('through the public entry: a simple, a composite, an ambiguous and an unsup
   // Unsupported operation: stated as refused with the alternative, never as a route.
   const unsupported = await discover({ lane: 'odc', intent: 'mover a entidade para outro modulo', sources: odc, budgetBytes: 12000 });
   const u = direct(unsupported).find(x => x.id === 'data.entity'); assert.ok(u && u.focus.ops.includes('move'));
-  assert.equal(u.operations.move.roles['server entity'].status, 'not-applicable'); assert.ok(bytesOf(unsupported) <= 12000);
+  assert.equal(u.operations.move.roles['server entity'].status, 'not-applicable'); assert.ok(wireBytes(unsupported, { budgetBytes: 12000 }) <= 12000);
   // Ambiguous intent: no family is direct; the hint says which words would name the element.
   const ambiguous = await discover({ lane: 'odc', intent: 'reapontar e apagar', sources: odc, budgetBytes: 12000 });
-  assert.ok(!direct(ambiguous).some(x => x.id.startsWith('data.'))); assert.ok(ambiguous.matches.some(x => x.via === 'alternative' && x.id === 'data.entity')); assert.ok(bytesOf(ambiguous) <= 12000);
+  assert.ok(!direct(ambiguous).some(x => x.id.startsWith('data.'))); assert.ok(ambiguous.matches.some(x => x.via === 'alternative' && x.id === 'data.entity')); assert.ok(wireBytes(ambiguous, { budgetBytes: 12000 }) <= 12000);
   // A budget too small for the minimal answer is said explicitly, within the budget.
   const tiny = await discover({ lane: 'odc', intent: 'renomear o atributo Email da entidade Contact e apagar o atributo Phone sem consumidores', sources: odc, budgetBytes: 4096 });
-  assert.ok(bytesOf(tiny) <= 4096); assert.ok(['insufficient', 'reduced', 'within'].includes(tiny.size.status)); if (tiny.size.status === 'insufficient') { assert.ok(tiny.size.minimalBytes > 4096); assert.match(tiny.hint, /insufficient budget/); }
+  assert.ok(wireBytes(tiny, { budgetBytes: 4096 }) <= 4096); assert.ok(['insufficient', 'reduced', 'within'].includes(tiny.size.status)); if (tiny.size.status === 'insufficient') { assert.ok(tiny.size.minimalBytes > 4096); assert.match(tiny.hint, /insufficient budget/); }
   // Expansion of the omitted parts returns the whole statement per role.
   const expanded = await discover({ lane: 'odc', expand: 'data.entity:operations+native+evidence', sources: odc, budgetBytes: 200000 });
   assert.equal(expanded.ok, true); const e = expanded.expansions['data.entity'];
@@ -121,16 +122,16 @@ test('through the public entry: a simple, a composite, an ambiguous and an unsup
   assert.ok(e.evidence.negative.some(n => n.job === 'delete-entity-in-use'));
   // Regression of the phase-2 pilot: static entities and structures still answer per role.
   const pilot = await discover({ lane: 'odc', intent: 'reapontar um registo de uma static entity para outro registo e apagar o registo antigo', sources: odc, budgetBytes: 12000 });
-  const p = direct(pilot)[0]; assert.equal(p.id, 'data.static'); assert.deepEqual(p.focus.roles, ['record']); assert.equal(p.operations.replace.roles['static entity'].evidence, 'undetermined'); assert.ok(bytesOf(pilot) <= 12000);
+  const p = direct(pilot)[0]; assert.equal(p.id, 'data.static'); assert.deepEqual(p.focus.roles, ['record']); assert.equal(p.operations.replace.roles['static entity'].evidence, 'undetermined'); assert.ok(wireBytes(pilot, { budgetBytes: 12000 }) <= 12000);
   const structure = await discover({ lane: 'odc', intent: 'reordenar um atributo de uma estrutura e duplicar a estrutura', sources: odc, budgetBytes: 12000 });
-  assert.equal(direct(structure)[0]?.id, 'data.structure'); assert.ok(bytesOf(structure) <= 12000);
+  assert.equal(direct(structure)[0]?.id, 'data.structure'); assert.ok(wireBytes(structure, { budgetBytes: 12000 }) <= 12000);
 });
 
 test('the O11 lane answers the entity family with its own proofs, the kernel-synthesized index type and the reorder refusal', { skip: !o11Cli && 'anvil.dll not built', timeout: 240000 }, async () => {
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-discovery-o11-data-')); const isolated = { ...o11, cacheDir };
   try {
     const answer = await discover({ lane: 'o11', intent: 'criar uma entidade Ticket relacionada com Contact e um indice unico', sources: isolated, budgetBytes: 12000 });
-    assert.ok(bytesOf(answer) <= 12000, 'hard budget: ' + bytesOf(answer));
+    assert.ok(wireBytes(answer, { budgetBytes: 12000 }) <= 12000, 'hard budget: ' + bytesOf(answer));
     const m = direct(answer)[0]; assert.equal(m.id, 'data.entity'); assert.deepEqual(m.focus.ops, ['create']); assert.ok(m.focus.roles.includes('index'));
     assert.ok(m.native.some(n => (n.role === 'index' && n.native === 'ServiceStudio.Model.EntityIndex') || n === 'ServiceStudio.Model.EntityIndex'), JSON.stringify(m.native));
     const full = await discover({ lane: 'o11', expand: 'data.entity:operations+native', sources: isolated, budgetBytes: 200000 });

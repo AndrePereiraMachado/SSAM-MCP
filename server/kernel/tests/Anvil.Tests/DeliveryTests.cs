@@ -48,6 +48,7 @@ public sealed class DeliveryTests
     [InlineData("new-error", false, 1)]
     [InlineData("new-warning", true, 1)] // A03 (atritos 2): a new warning blocks nothing; it comes back in result.warnings
     [InlineData("missing-check", false, 1)]
+    [InlineData("soap-lab", false, 0)] // CompileCheck: a lab that builds a SOAP client by verbs (allowSoapWithoutImport) is never delivered
     public void FullWorkflowUsesOneMergeAndStopsAtTheFailingStage(string scenario, bool delivered, int merges)
     {
         var root = Path.GetDirectoryName(typeof(DeliveryTests).Assembly.Location);
@@ -71,13 +72,16 @@ public sealed class DeliveryTests
             {
                 Assert.Equal("snapshot", File.ReadAllText(basePath)); Assert.Equal(job, jobPath);
                 File.WriteAllText(output, "foreign");
-                return new JsonObject { ["isValid"] = scenario != "invalid-apply", ["accepted"] = scenario != "invalid-apply" };
+                var applied = new JsonObject { ["isValid"] = scenario != "invalid-apply", ["accepted"] = scenario != "invalid-apply" };
+                if (scenario == "soap-lab") applied["highWarnings"] = new JsonArray(new JsonObject { ["code"] = CompileCheck.SoapAllowed, ["severity"] = "high", ["message"] = "lab" });
+                return applied;
             });
         Assert.Equal(delivered, result["delivered"]!.GetValue<bool>());
         Assert.Equal(merges, server.Calls.Count(c => c == "merge_from_oml"));
         Assert.DoesNotContain("publish", server.Calls);
         Assert.True(File.Exists(Path.Combine(result["work"]!.ToString(), "result.json")));
         if (scenario is "new-error") Assert.Contains("kept for review", result["error"]!.ToString());
+        if (scenario is "soap-lab") Assert.Contains("never delivered", result["error"]!.ToString());
         if (scenario is "new-warning")
         {
             var warning = Assert.Single(result["warnings"]!.AsArray())!;

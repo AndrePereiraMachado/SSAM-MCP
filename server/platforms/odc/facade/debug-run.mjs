@@ -18,6 +18,9 @@ import * as z from 'zod/v4';
 import { workspaceRoot } from './workspace.mjs';
 import * as W from './debug-wrapper.mjs';
 import * as P from './debug-odc-portal.mjs';
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+const portalSessions = new AsyncLocalStorage();
 import { entryChain } from './debug-entry.mjs';
 import { prepareDebugAppUser, releaseDebugAppUser, appUserWorker, appUserSummary } from './debug-app-user.mjs';
 import { o11RunSchema } from './debug-o11-run.mjs';
@@ -190,6 +193,7 @@ async function actionTree(file, sha, action) {
 
 async function context(input) {
   const portal = await P.connect(input.tenant);
+  portalSessions.getStore()?.add(portal);
   const { debugDevelopmentStage, debugAsset, debugApplicationRuntime } = await import('./debug-odc-portal-session.mjs');
   const stage = await debugDevelopmentStage(portal);
   const row = await debugAsset(portal, input.module), assetKey = row.assetKey, moduleKey = moduleKeyOf(assetKey);
@@ -720,7 +724,15 @@ const failureOf = (error, raw) => signInFailureOf(error, signInOf(raw), repeat(r
 // prepare/status answers advertise the SSAM-imposed input caps of the lane (never a platform limit).
 const withInputCapabilities = (result, lane, op) => ['prepare', 'status'].includes(op) && result && typeof result === 'object' && !result.inputCapabilities
   ? { ...result, inputCapabilities: { server: inputCapabilities(lane, 'server'), client: inputCapabilities(lane, 'client') } } : result;
-export async function debugRun(raw, { services = {} } = {}) {
+export async function debugRun(raw, options = {}) {
+  const sessions = new Set();
+  return portalSessions.run(sessions, async () => {
+    try { return await debugRunWithinScope(raw, options); }
+    finally { await Promise.allSettled([...sessions].map(portal => portal.release?.())); }
+  });
+}
+
+async function debugRunWithinScope(raw, { services = {} } = {}) {
   // Read-only lock inventory: never writes, renames, opens DPAPI or contacts a tenant.
   if (raw?.op === 'locks') {
     try { return (await import('./debug-lock-inventory.mjs')).debugLocks(raw, services.root ? { root: services.root } : {}); }

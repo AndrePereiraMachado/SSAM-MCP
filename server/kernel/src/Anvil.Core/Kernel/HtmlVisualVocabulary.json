@@ -26,7 +26,9 @@
     "div[list]": { "widget": "IList", "rule": "Source = list; as is mandatory and names the row inside {{ }}" },
     "div[if]": { "widget": "IIfWidget", "rule": "children: True branch; a <div else> right after: False branch" },
     "Block": { "widget": "IMobileBlockInstanceWidget", "rule": "name = an existing block, inputs by :Name, handlers by @Event, children by <slot name>" },
-    "ButtonGroup": { "widget": "IButtonGroup", "rule": "bind -> Variable; each <ButtonGroupItem value> an IButtonGroupItem, its text an Expression" },
+    "ButtonGroup": { "widget": "IButtonGroup", "rule": "bind -> Variable; each <ButtonGroupItem value> an IButtonGroupItem, its text an Expression; also written <button-group> and <button-group-item>" },
+    "switch": { "widget": "ISwitch", "rule": "bind names an existing Boolean variable" },
+    "upload": { "widget": "IUpload", "rule": "bind -> FileContent (a Binary Data variable), filename -> FileName" },
     "style": { "widget": "(theme)", "rule": "scoped under the root class; light-dark() expanded, @keyframes kept, @import to the top" }
   },
   "attributes": "any other attribute: an IExtendedProperty, {{ }} makes an expression",

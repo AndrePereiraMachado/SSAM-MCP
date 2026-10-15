@@ -26,6 +26,7 @@ namespace Anvil.Cli.Odc;
 ///                                                   com OML, recibo e manifesto de criacao para o bridge; nunca sobrescreve
 ///   inspect --oml &lt;modulo.oml&gt; [--work &lt;dir&gt;]      nome, tipo, objetos, referencias, validacao
 ///   digest --oml &lt;modulo.oml&gt; [--out &lt;f.txt&gt;]     resumo do modulo (ssam-digest), guardado junto do indice do modulo
+///   flow --oml &lt;modulo.oml&gt; [--action &lt;nome|@chave&gt;] [--out &lt;f&gt;]  as actions em texto (ssam-flow/1), com o ponto fixo de cada uma
 ///   rich-index --oml &lt;modulo.oml&gt;                 indice rico (ssam-rich-index): valores, expressoes, argumentos, referencias
 ///   read-serve --state &lt;f&gt; --generation &lt;g&gt;       leitor residente so de leitura (resumo e indice rico do ssam_map)
 ///   references --oml &lt;modulo.oml&gt;                  as referencias registradas no modulo
@@ -95,7 +96,21 @@ usage: anvil-odc <comando> [--flags]
         "inspect" => Inspect(args),
         "debug-scope" => NativeDebugScope.Read(Host(args), Need(args, "--oml"), Need(args, "--expected-sha256"), Need(args, "--node-key"), Need(args, "--function-key"), Opt(args, "--previous-node-key")),
         "digest" => Digest(args),
+        "ddl" => Ddl(args),
+        "flow" => Flow(args),
+        "flow-battery" => FlowBatteryCmd(args),
+        // Checagem de compilação over a whole module (CompileCheck.cs): zero findings on what the Studio made.
+        "compile-check" => CompileCheck.Module(Host(args), File.ReadAllBytes(Need(args, "--oml")), Path.GetFileNameWithoutExtension(Need(args, "--oml")),
+            int.TryParse(Opt(args, "--max"), out var compileMax) ? compileMax : 40),
+        "flow-merge-battery" => FlowMergeBatteryCmd(args),
+        "flow-create-battery" => FlowCreateBatteryCmd(args),
         "rich-index" => RichIndex(args),
+        "html-census" => HtmlCensus(args),
+        "html-read" => HtmlRead(args),
+        "html-check" => HtmlCheck(args),
+        "html-edit" => HtmlEdit(args),
+        "html-edit-battery" => HtmlEditBattery(args),
+        "html-recreate" => HtmlRecreate(args),
         "read-serve" => ReadServe(args),
         "census" => Census(args),
         "references" => Host(args).References(File.ReadAllBytes(Need(args, "--oml"))),
@@ -230,6 +245,137 @@ usage: anvil-odc <comando> [--flags]
         return KernelSnapshotReading.Serve(Need(args, "--state"), Need(args, "--generation"), Opt(args, "--work") ?? Path.Combine(Path.GetTempPath(), "anvil-odc-reading"));
     }
 
+    // `ddl --oml <capture> [--out <file>]`: the data text (ssam-ddl/1) of the capture, from the store beside its module index,
+    // else built from the model and stored; --out writes the text. `ddl --oml <capture> --check [--out <file>]`: its fixed
+    // point (print, parse, compare with the model; DdlCheck), never stored; --out writes the report.
+    private static object Ddl(string[] args)
+    {
+        if (args.Contains("--merge-battery")) {
+            // The three-way merge of the data text: a Studio edit and a model edit of the same read, merged (DdlMergeBattery).
+            var lane = Anvil.Reading.ModuleIndexStore.Default()?.Lane ?? "odc";
+            var seed = int.TryParse(Opt(args, "--seed"), out var s) ? s : 1;
+            var rounds = int.TryParse(Opt(args, "--rounds"), out var r) ? r : 2;
+            var (total, modules) = Opt(args, "--manifest") is { } list
+                ? DdlMergeBattery.RunManifest(Host(args), list, lane, seed, rounds, Log, Opt(args, "--only"))
+                : (DdlMergeBattery.Run(Host(args), Need(args, "--oml"), lane, seed, rounds, Log), new System.Text.Json.Nodes.JsonArray());
+            var report = total.ToJson(); report["lane"] = lane; report["modules"] = modules;
+            if (Opt(args, "--out") is { } reportFile) File.WriteAllText(reportFile, report.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            Log("ddl merge battery: " + total.Exact + " of " + total.Cases + " cases exact (disjoint " + total.DisjointExact + "/" + total.Disjoint + ", overlapping " + total.OverlapExact + "/" + total.Overlap + ")");
+            return report;
+        }
+        if (args.Contains("--battery")) {
+            // DL2: edits of the data text applied back to the module, which must read back as the edited text (DdlBattery).
+            var lane = Anvil.Reading.ModuleIndexStore.Default()?.Lane ?? "odc";
+            var edits = int.TryParse(Opt(args, "--edits"), out var e) ? e : 0;
+            var seed = int.TryParse(Opt(args, "--seed"), out var s) ? s : 11;
+            var (total, modules) = Opt(args, "--manifest") is { } list
+                ? DdlBattery.RunManifest(Host(args), list, lane, edits, seed, Log, Opt(args, "--only"))
+                : (DdlBattery.Run(Host(args), Need(args, "--oml"), lane, edits > 0 ? edits : 24, seed, log: Log), new System.Text.Json.Nodes.JsonArray());
+            var report = total.ToJson(); report["lane"] = lane; report["modules"] = modules;
+            if (Opt(args, "--out") is { } reportFile) File.WriteAllText(reportFile, report.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            Log("ddl battery: " + total.Exact + " of " + total.Edits + " edits back equal, " + total.Failures.Count + " failing batches");
+            return report;
+        }
+        if (args.Contains("--check") && Opt(args, "--manifest") is { } manifest) {
+            // Every capture of this lane the manifest lists ([{label, lane, oml}], the fixed-point corpus): one report.
+            var lane = Anvil.Reading.ModuleIndexStore.Default()?.Lane ?? "odc";
+            var modules = new System.Text.Json.Nodes.JsonArray(); int elements = 0, exact = 0, differences = 0;
+            foreach (var entry in System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(manifest))!.AsArray()) {
+                if (entry!["lane"]?.ToString() != lane) continue;
+                var oml = entry["oml"]!.ToString();
+                if (!File.Exists(oml)) { modules.Add(new System.Text.Json.Nodes.JsonObject { ["label"] = entry["label"]?.ToString(), ["missing"] = oml }); continue; }
+                var one = Host(args).CheckDdl(File.ReadAllBytes(oml), lane).ToJson(int.TryParse(Opt(args, "--samples"), out var n) ? n : 40);
+                one["label"] = entry["label"]?.ToString();
+                elements += one["elements"]!.GetValue<int>(); exact += one["exact"]!.GetValue<int>(); differences += one["mismatches"]!.GetValue<int>();
+                Log("ddl check " + one["label"] + ": " + one["exact"] + " of " + one["elements"] + " exact, " + one["mismatches"] + " differences" + (one["parseError"] is { } e ? ", parse error " + e : ""));
+                modules.Add(one);
+            }
+            var batch = new System.Text.Json.Nodes.JsonObject { ["lane"] = lane, ["elements"] = elements, ["exact"] = exact, ["differences"] = differences, ["modules"] = modules };
+            if (Opt(args, "--out") is { } batchFile) File.WriteAllText(batchFile, batch.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            return new System.Text.Json.Nodes.JsonObject { ["lane"] = lane, ["elements"] = elements, ["exact"] = exact, ["differences"] = differences, ["modules"] = modules.Count };
+        }
+        if (args.Contains("--check")) {
+            var report = Host(args).CheckDdl(File.ReadAllBytes(Need(args, "--oml")), Anvil.Reading.ModuleIndexStore.Default()?.Lane ?? "odc").ToJson(int.TryParse(Opt(args, "--samples"), out var samples) ? samples : 40);
+            if (Opt(args, "--out") is { } reportFile) File.WriteAllText(reportFile, report.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            Log("ddl check: " + report["exact"] + " of " + report["elements"] + " elements exact, " + report["mismatches"] + " differences" + (report["parseError"] is { } error ? ", parse error " + error : ""));
+            return report;
+        }
+        var store = Anvil.Reading.ModuleIndexStore.Default()
+            ?? throw new InvalidOperationException("No module index store: set SSAM_MODULE_INDEX_ROOT or run inside an SSAM workspace");
+        var answer = Anvil.Reading.DataDdl.Ensure(store, Need(args, "--oml"), (bytes, sha) => Host(args).BuildDdl(bytes, sha, store.Lane));
+        if (Opt(args, "--out") is { } outFile) {
+            File.WriteAllText(outFile, store.LoadDdl(answer["sourceSha256"]!.ToString())!.Text);
+            answer["out"] = Path.GetFullPath(outFile);
+        }
+        Log("ddl: " + answer["bytes"] + " bytes, " + answer["elements"] + " elements, " + (answer["built"]!.GetValue<bool>() ? "built" : "stored") + " " + answer["path"]);
+        return answer;
+    }
+
+    /// <summary>`flow --oml &lt;capture&gt; [--action &lt;name|@key&gt;] [--out &lt;file&gt;]`: the flow reading (ssam-flow/1) of
+    /// the capture, from the store beside its module index, else built from the model and stored. Answers its counts and
+    /// fixed point; --action answers one action's text and ids; --out writes every action's text (or the one asked).</summary>
+    private static object Flow(string[] args)
+    {
+        var store = Anvil.Reading.ModuleIndexStore.Default()
+            ?? throw new InvalidOperationException("No module index store: set SSAM_MODULE_INDEX_ROOT or run inside an SSAM workspace");
+        var (flow, path, built) = Anvil.Reading.ModuleFlow.Ensure(store, Need(args, "--oml"), (bytes, sha) => Host(args).BuildFlow(bytes, sha, store.Lane));
+        var answer = flow.Answer(path, built);
+        var selected = flow.Actions.ToList();
+        if (Opt(args, "--action") is { } wanted) {
+            selected = flow.Actions.Where(a => a.Key == wanted.TrimStart('@') || a.Name == wanted || a.Name.EndsWith("/" + wanted, StringComparison.Ordinal)).ToList();
+            if (selected.Count == 0) throw new ArgumentException("no action " + wanted + " in this capture");
+            answer["selected"] = new System.Text.Json.Nodes.JsonArray(selected.Select(a => (System.Text.Json.Nodes.JsonNode)new System.Text.Json.Nodes.JsonObject {
+                ["key"] = a.Key, ["kind"] = a.Kind, ["name"] = a.Name, ["fixedPoint"] = a.FixedPoint, ["textSha"] = a.TextSha, ["text"] = a.Text,
+                ["opaque"] = a.Opaque is { Count: > 0 } opaque ? new System.Text.Json.Nodes.JsonArray(opaque.Select(o => (System.Text.Json.Nodes.JsonNode)o).ToArray()) : null,
+                ["ids"] = new System.Text.Json.Nodes.JsonObject(a.Ids.Select(p => KeyValuePair.Create(p.Key, (System.Text.Json.Nodes.JsonNode?)p.Value))),
+                ["problems"] = new System.Text.Json.Nodes.JsonArray(a.Problems.Select(p => (System.Text.Json.Nodes.JsonNode)p).ToArray()) }).ToArray());
+            // The read of each action served, kept as ssam_map view flow keeps it: an edit of it is merged three ways (FlowMerge).
+            foreach (var action in selected.Where(a => a.FixedPoint)) store.SaveFlowReading(Anvil.Reading.FlowReading.Of(action, store.Lane, flow.SourceSha256));
+        }
+        if (Opt(args, "--out") is { } outFile) {
+            File.WriteAllText(outFile, string.Concat(selected.Select(a => a.Text + "\n")));
+            answer["out"] = Path.GetFullPath(outFile);
+        }
+        Log("flow: " + answer["actions"] + " actions, " + answer["fixedPoint"] + " fixed points, " + (built ? "built" : "stored") + " " + path);
+        return answer;
+    }
+
+    /// <summary>`flow-battery --oml &lt;capture&gt; [--every N] [--seed S] [--kinds expression,call,...]`: the LG2 battery over one
+    /// module (FlowBattery): synthetic edits of its actions written back through the logic op's text form and read again.</summary>
+    private static object FlowBatteryCmd(string[] args)
+    {
+        var file = Need(args, "--oml");
+        var tally = Anvil.Core.FlowBattery.Run(Host(args), File.ReadAllBytes(file), Path.GetFileNameWithoutExtension(file),
+            int.TryParse(Opt(args, "--seed"), out var seed) ? seed : 1, int.TryParse(Opt(args, "--every"), out var every) ? every : 1,
+            Opt(args, "--kinds")?.Split(','), Log);
+        Log("flow-battery: " + tally.Edits + " edits, " + tally.Exact + " exact, " + tally.Reverts + " undone, " + tally.RevertsExact + " exact");
+        return tally.ToJson();
+    }
+
+    /// <summary>`flow-merge-battery --oml &lt;capture&gt; [--every N] [--seed S] [--disjoint N]`: the battery of the three-way merge of
+    /// the logic text over one module (FlowMergeBattery): a Studio edit and a model edit of the same read, disjoint and
+    /// overlapping, merged, written and read again.</summary>
+    private static object FlowMergeBatteryCmd(string[] args)
+    {
+        var file = Need(args, "--oml");
+        var tally = Anvil.Core.FlowMergeBattery.Run(Host(args), File.ReadAllBytes(file), Path.GetFileNameWithoutExtension(file), "odc",
+            int.TryParse(Opt(args, "--seed"), out var seed) ? seed : 1, int.TryParse(Opt(args, "--every"), out var every) ? every : 1,
+            int.TryParse(Opt(args, "--disjoint"), out var disjoint) ? disjoint : 2, Log);
+        Log("flow-merge-battery: " + tally.Cases + " cases, " + tally.Exact + " exact (disjoint " + tally.DisjointExact + "/" + tally.Disjoint + ", overlapping " + tally.OverlapExact + "/" + tally.Overlap + ")");
+        return tally.ToJson();
+    }
+
+    /// <summary>`flow-create-battery --oml &lt;capture&gt; [--every N] [--seed S]`: the creation battery over one module
+    /// (FlowCreateBattery): screen and data actions born from texts without @key whose header names their screen or block.</summary>
+    private static object FlowCreateBatteryCmd(string[] args)
+    {
+        var file = Need(args, "--oml");
+        var tally = Anvil.Core.FlowCreateBattery.Run(Host(args), File.ReadAllBytes(file), Path.GetFileNameWithoutExtension(file),
+            int.TryParse(Opt(args, "--seed"), out var seed) ? seed : 1, int.TryParse(Opt(args, "--every"), out var every) ? every : 1, Log);
+        Log("flow-create-battery: " + tally.Created + " created, " + tally.Exact + " exact, " + tally.Traditional + " Traditional owners");
+        return tally.ToJson();
+    }
+
     // `digest --oml <capture> [--out <file.txt>]`: the module digest (ssam-digest) of the capture, from the store beside its
     // module index (a hit binds no ODC Studio), else built from the model and stored; --out writes the text.
     private static object Digest(string[] args)
@@ -243,6 +389,68 @@ usage: anvil-odc <comando> [--flags]
         }
         Log("digest: " + answer["bytes"] + " bytes, " + answer["tokens"] + " tokens, " + (answer["built"]!.GetValue<bool>() ? "built" : "stored") + " " + answer["path"]);
         return answer;
+    }
+
+    /// <summary>`html-read --oml &lt;capture&gt; [--path &lt;screen|Kind:Name|@key&gt;] [--out &lt;file.html&gt;] [--explain &lt;name&gt;]`: the screen or block as
+    /// ssam-html/1 (Anvil.Reading.ScreenHtml), with its keys; without --path every screen and block.</summary>
+    private static object HtmlRead(string[] args)
+    {
+        var answer = Host(args).HtmlRead(File.ReadAllBytes(Need(args, "--oml")), Opt(args, "--path"), explain: Opt(args, "--explain"));
+        if (Opt(args, "--out") is { } outFile && answer["documents"]!.AsArray() is [var single]) {
+            File.WriteAllText(outFile, single!["html"]!.GetValue<string>());
+            answer["out"] = Path.GetFullPath(outFile);
+        }
+        return answer;
+    }
+
+    /// <summary>`html-edit --oml &lt;capture&gt; --data &lt;data.json&gt; [--out &lt;result.oml&gt;]`: one html op in its edit form
+    /// ({screen, basedOn, edit|html}, C2 of the plan "Texto do SSAM") applied to the capture, as a job applies it.</summary>
+    private static object HtmlEdit(string[] args)
+    {
+        var data = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Need(args, "--data")))!.AsObject();
+        return Host(args).HtmlEdit(File.ReadAllBytes(Need(args, "--oml")), data["data"] as System.Text.Json.Nodes.JsonObject ?? data, Opt(args, "--out"));
+    }
+
+    /// <summary>`html-edit-battery --oml &lt;capture&gt; [--seed N] [--per-kind N] [--root Name] [--out report.json]`: the synthetic
+    /// edits of every screen and block of the capture (C2 acceptance), each applied and rolled back.</summary>
+    private static object HtmlEditBattery(string[] args)
+    {
+        var report = Host(args).HtmlEditBattery(File.ReadAllBytes(Need(args, "--oml")), int.Parse(Opt(args, "--seed") ?? "1"), int.Parse(Opt(args, "--per-kind") ?? "1"),
+            line => Console.Error.WriteLine(line), Opt(args, "--root"));
+        if (Opt(args, "--out") is { } outFile) {
+            File.WriteAllText(outFile, report.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            return new { edits = report["edits"]!.GetValue<int>(), ok = report["ok"]!.GetValue<int>(), kinds = report["kinds"]!.ToJsonString(), @out = Path.GetFullPath(outFile) };
+        }
+        return report;
+    }
+
+    /// <summary>`html-recreate --oml &lt;capture&gt; [--path &lt;screen&gt;] [--blocks] [--verify] [--out &lt;report.json&gt;]`: the
+    /// recreation proof of the document form (B1): every screen (and, with --blocks, block) read by ssam-html/1 is compiled
+    /// again in the loaded copy without it and read back (same text, keys mapped), with --verify the Verify of each step.
+    /// Nothing is saved.</summary>
+    private static object HtmlRecreate(string[] args)
+    {
+        var report = Anvil.Core.ScreenRecreationProof.Run(Host(args), File.ReadAllBytes(Need(args, "--oml")), Opt(args, "--path"), args.Contains("--blocks"), args.Contains("--verify"), Log);
+        if (Opt(args, "--out") is { } outFile) { File.WriteAllText(outFile, report.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true })); return new { roots = report["roots"]!.GetValue<int>(), outcomes = report["outcomes"]!.ToJsonString(), @out = Path.GetFullPath(outFile) }; }
+        return report;
+    }
+
+    /// <summary>`html-check --oml &lt;capture&gt; [--html-dir &lt;dir&gt;] [--out &lt;report.json&gt;]`: the fixed point of the
+    /// ssam-html/1 reading over every screen and block (read, parse back, compare: no difference), with sizes and times.</summary>
+    private static object HtmlCheck(string[] args)
+    {
+        var report = Host(args).HtmlCheck(File.ReadAllBytes(Need(args, "--oml")), Opt(args, "--html-dir"));
+        if (Opt(args, "--out") is { } outFile) { File.WriteAllText(outFile, report.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true })); return new { documents = report["documents"]!.AsArray().Count, @out = Path.GetFullPath(outFile) }; }
+        return report;
+    }
+
+    /// <summary>`html-census --oml &lt;capture&gt; [--out &lt;file.json&gt;]`: every property and child kind of the screens and
+    /// blocks of the capture (Anvil.Reading.ScreenHtmlCensus), to measure the ssam-html/1 tables.</summary>
+    private static object HtmlCensus(string[] args)
+    {
+        var census = Host(args).HtmlCensus(File.ReadAllBytes(Need(args, "--oml")));
+        if (Opt(args, "--out") is { } outFile) { File.WriteAllText(outFile, census.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true })); return new { kinds = census.Count, @out = Path.GetFullPath(outFile) }; }
+        return census;
     }
 
     // `rich-index --oml <capture>`: the rich module index (ssam-rich-index) of the capture, from the store beside its module

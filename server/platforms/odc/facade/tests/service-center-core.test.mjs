@@ -69,6 +69,9 @@ class Operations extends Client {
     this.transport = transport; this.before = detail(action); this.after = after; this.reads = 0;
   }
   async detail() { this.reads++; return this.reads > 1 && this.after ? this.after : this.before; }
+  // A Run Now answer reads the timer back (listing, then detail) before it returns (da1ab3ca); serve that read locally,
+  // so every request the transport sees is still a send.
+  async resourceListing() { return { truncated: false, rows: [{ links: [{ name: 'Worker', href: BASE + 'Timer_Edit.aspx?id=7' }] }] }; }
 }
 const isProtocol = pattern => error => error instanceof ProtocolError && (!pattern || pattern.test(error.message));
 

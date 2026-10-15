@@ -33,7 +33,7 @@ import { authorizationContext } from '../authorization-context.mjs';
 import {readPerformanceEvents} from './performance-events.mjs';
 
 export const SESSION = ['session-status', 'session-sign-in', 'session-web-sign-in', 'session-close'];
-export const WEB_READS = ['lifetime-capabilities', 'lifetime-web-status', 'timer-events', 'timers', 'site-properties', 'property-value', 'logs', 'error-detail', 'trace', 'bpt-processes', 'bpt-process',
+export const WEB_READS = ['lifetime-capabilities', 'lifetime-web-status', 'timer-events', 'timers', 'site-properties', 'property-value', 'logs', 'integration-log-detail', 'error-detail', 'trace', 'bpt-processes', 'bpt-process',
   'bpt-instance', 'bpt-activity', 'integrations', 'integration-detail', 'db-connections', 'application-runtime-settings', 'solutions', 'solution-versions', 'solution-download', 'solution-download-status', 'async-operation-status', 'page-layout', 'module-references', 'module-dependencies', 'application-dependency-graph', 'application-relationships', 'application-owners'];
 const API_READS = Object.keys(API_READ_TABLE);
 export const READS = ['capabilities', 'receipt', ...WEB_READS, ...API_READS];
@@ -126,7 +126,7 @@ export function capabilities() {
   authentication: 'studio (the connected Studio\'s own session) -> the stored credential profile of the host (Windows Credential Manager, '
     + 'credential-profiles) -> only when the host has nothing stored, the private Windows prompt (windows-o11-credential.ps1 -Mode bootstrap) '
     + 'in its own window, waited for in the same call up to SSAM_PROMPT_WAIT_MS (never past the read budget), then CREDENTIAL_PROMPT_PENDING, '
-    + 'resumable. No browser or Studio login dialog is opened. Missing headless SSO support is reported explicitly. Reads share a 29-second budget.',
+    + 'resumable. No browser or Studio login dialog is opened. Missing headless SSO support is reported explicitly. Service Center reads share a 90-second budget, including cold SSO authentication.',
   session: SESSION, reads: { 'studio-api': API_READS, pages: WEB_READS, local: ['capabilities', 'receipt'] },
   writes: { pages: [...Object.keys(ACTIONS), ...Object.keys(WEB_WRITES)], 'studio-api': [...Object.keys(API_WRITE_TABLE), 'delete'], local: RECEIPT_ACTIONS },
   default: 'prepare only; execute requires the user words, a UUID operation-id and the journal reservation; never replayed. delete '
@@ -405,14 +405,13 @@ export async function main(argv, deps = {}) {
         auth.attempts.push({path:'vault-sso-cache',outcome:auth.bridge?'same-principal-profile-studio-memory-session':'same-principal-explicit-profile-memory-session',headless:true});
       }
       transport.authenticateSso = async () => {
-        const identity = deps.createSso ? deps.createSso(auth) : new ServiceCenterSso({ host, principal: auth.user,
+        const create = () => deps.createSso ? deps.createSso(auth) : new ServiceCenterSso({ host, principal: auth.user,
           target: auth.credentialTarget, ...readOptions('authentication') });
-        deps.authResources.push(identity);
-        await identity.authenticateSc();
-        const key=deps.ssoCache.put(auth,identity.jar);if(key)deps.ssoKeys.push(key);
+        const {key,jar}=await deps.ssoCache.authenticate(auth,create);if(key)deps.ssoKeys.push(key);
+        deps.authResources.push({close:()=>jar.removeAllCookies()});
         // Only a reserved download may persist these tool-owned SC cookies,
         // encrypted outside the repository. Community tokens stay in memory.
-        transport.jar = ownedSsoJar(identity.jar,host,{onUpdate:jar=>deps.ssoCache.update?.(auth,jar)});
+        transport.jar = ownedSsoJar(jar,host,{onUpdate:jar=>deps.ssoCache.update?.(auth,jar)});
         transport.preauthenticated = true;
         auth.path = 'vault-sso';
         auth.attempts.push({ path: 'vault-sso', outcome: 'protected-read-verified', headless: true, sessionReuse:key?'memory-scoped':'not-retained' });
@@ -611,6 +610,7 @@ export async function main(argv, deps = {}) {
     case 'module-references': required(args, 'module_id'); result = await client.moduleReferences(args.module_id, args.limit, args.max_pages); break;
     case 'page-layout': required(args, 'path'); result = await client.pageLayout(args.path); break;
     case 'error-detail': required(args, 'error_id'); result = await client.errorDetail(args.error_id); break;
+    case 'integration-log-detail': required(args, 'request_key', 'log_action'); result = await client.integrationLogDetail({ requestKey: args.request_key, action: args.log_action, moduleId: args.module_id }); break;
     case 'trace': required(args, 'request_key'); result = await client.trace(args.request_key, args.limit, args.max_pages); break;
     case 'bpt-processes': result = await client.bptProcesses(args.module, args.process, args.limit, args.max_pages); break;
     case 'bpt-process': required(args, 'process_key', 'module_key'); result = await client.bptProcess(args.process_key, args.module_key, args.limit, args.max_pages); break;
@@ -660,7 +660,7 @@ export function sameCall(argv) {
 // network failures are never serialized (they may contain a form value or credential).
 export async function runServiceCenter(argv, deps = {}) {
   if (WRITES.includes(argv[0])) return runServiceCenterWithinBudget(argv, deps);
-  const result = await boundedRead('o11-sc:' + JSON.stringify(argv), () => runServiceCenterWithinBudget(argv, deps), { timeoutMs: deps.readTimeoutMs ?? 29000 });
+  const result = await boundedRead('o11-sc:' + JSON.stringify(argv), () => runServiceCenterWithinBudget(argv, deps), { timeoutMs: deps.readTimeoutMs ?? 90000 });
   if (result?.code === 'READ_DEADLINE_EXCEEDED') result.continuation = { ...sameCall(argv), why: 'Check the original pending read without resending; its result belongs to the original request context.' };
   return result;
 }
@@ -671,7 +671,9 @@ async function runServiceCenterWithinBudget(argv, deps) {
   catch (error) {
     // Terminal failure evicts the session after any bounded same-identity GET
     // recovery. Protected writes are never replayed; the next call starts fresh.
-    for(const key of ssoKeys)ssoCache.drop(key);
+    // Local validation and layout refusals say nothing about authentication.
+    // Evict only an authentication failure, not a healthy session after a bad input.
+    if(error instanceof AuthRequired)for(const key of ssoKeys)ssoCache.drop(key);
     // A pending private prompt is resumable: the next call is this same one (A13).
     if (error instanceof AuthRequired && ['CREDENTIAL_PROMPT_PENDING', 'CREDENTIAL_SELECTION_PENDING', 'CREDENTIAL_SELECTION_REQUIRED', 'CREDENTIAL_SELECTION_CANCELLED', 'CREDENTIAL_METADATA_UNAVAILABLE'].includes(error.code) && !error.continuation) {
       try { error.continuation = { ...sameCall(argv), why: 'the same call goes on once the login is stored in the private prompt; nothing else to do' }; }

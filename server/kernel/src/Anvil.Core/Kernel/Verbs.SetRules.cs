@@ -99,6 +99,12 @@ public sealed partial class ModelSession
     /// quotes are unbalanced.</summary>
     private string Expression(object target, string prop, string text, string path)
     {
+        // A flow text is the source: its expressions are written as the text has them (Verbs.Flow.cs).
+        if (_verbatim) return text;
+        // The sort of an aggregate is one attribute and a direction, as the Studio writes it (AggregateSortRule.cs): before the
+        // other rules, which would read `Name DESC` as plain words.
+        if (prop == "Attribute" && Implements(target, "ISort") && SortAttribute(target, text, path) is var sorted && !string.Equals(sorted, text, StringComparison.Ordinal))
+            return sorted;
         var (rewritten, rule, syntax) = ExpressionRewrite(text);
         if (syntax != null)
             throw new KernelRefusalException("EXPRESSION_SYNTAX", $"set {prop} on {Describe(target)}: {syntax}: {text}",

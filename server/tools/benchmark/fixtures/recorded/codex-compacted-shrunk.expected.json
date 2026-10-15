@@ -1,0 +1,16 @@
+{
+  "source": "recorded",
+  "records": 1,
+  "bytes": 58328,
+  "originalBytes": 160023,
+  "originalRecordBytes": 160022,
+  "shrunk": [
+    "/0/payload/replacement_history/19/encrypted_content",
+    "/0/payload/replacement_history/14/content/1/text"
+  ],
+  "removed": [],
+  "measuredMetrics": {
+    "compactions": 1
+  },
+  "shrinkReason": "Only compaction count, record shapes, timestamps and recorded counters are measured; replacement-history prose and encrypted reasoning are not measured by this excerpt."
+}

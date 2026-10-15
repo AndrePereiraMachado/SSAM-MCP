@@ -126,6 +126,11 @@ test('a refused preflight answers PREFLIGHT_REFUSED with every problem, from the
   const b = await (await serve(t, fromCli.deps))({ module: 'Orders', job: fromCli.job('g.json', { ops: [{ op: 'get', target: 'X:Y' }] }), authorize: WORDS });
   assert.equal(b.code, 'PREFLIGHT_REFUSED'); assert.equal(b.problems.length, 3);
   assert.equal(preflightProblems([{ message: 'm'.repeat(1000) }])[0].message.length, 300);
+  const [mapping] = preflightProblems([{ message: 'map', text: 't'.repeat(5000), corrected: { steps: [{ call: 'ListAppendAll' }] },
+    patch: [{ op: 'replace', path: '/ops/0/data/actions/0/steps/0', value: { call: 'ListAppendAll' } }] }]);
+  assert.equal(mapping.text.length, 4000);
+  assert.deepEqual(mapping.corrected, { steps: [{ call: 'ListAppendAll' }] });
+  assert.equal(mapping.patch[0].value.call, 'ListAppendAll');
 });
 
 // ---- C27: producers captured by name

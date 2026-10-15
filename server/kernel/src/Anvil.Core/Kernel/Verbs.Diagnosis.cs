@@ -321,6 +321,8 @@ public sealed partial class ModelSession
     public List<JsonObject> VerifyProblems(IReadOnlyList<MessageInfo> blocking, JsonArray ops, string? opsPointer, string lane, IReadOnlyDictionary<string, VerifyHint>? hints)
     {
         var problems = new List<JsonObject>();
+        var patchSources = new Dictionary<int, JsonObject>();
+        var patchedText = new Dictionary<string, string>(StringComparer.Ordinal);
         if (blocking.Count == 0) return problems;
         // One walk of the module for every message (the owners of expressions are not in the session's key map).
         Dictionary<string, IObjectSignature>? byKey = null;
@@ -345,6 +347,11 @@ public sealed partial class ModelSession
             for (var o = owner; o != null && op == null && failed == null; o = o.Parent as IObjectSignature)
                 if (_anchors.TryGetValue(o, out var i)) { op = i; anchored = o; }
                 else if (_failedAnchors.TryGetValue(o, out var f)) failed = f;
+            // An owner the walk does not reach (an expression of a widget an html edit kept): the screen that holds it, when an op
+            // wrote that screen.
+            if (op == null && failed == null && Owner(m.ScreenKey) is { } screen)
+                if (_anchors.TryGetValue(screen, out var s)) op = s;
+                else if (_failedAnchors.TryGetValue(screen, out var f)) failed = f;
             // What a failed op left half-built: its failure is already a problem of the apply.
             if (failed is { } failedOp) { omitted.Add(failedOp); continue; }
             // The property the message is about, when a set of this job wrote it, is that set's (the anchor of the widget is
@@ -365,6 +372,7 @@ public sealed partial class ModelSession
             var source = op is { } index && index < ops.Count ? ops[index] as JsonObject : null;
             var kind = source?["op"]?.ToString();
             var pointer = op is { } at && opsPointer != null ? $"{opsPointer}/{at}" : null;
+            var sourcePointer = pointer;
             string? inner = null;
             JsonObject? action = null;
             if (!alone && kind == "logic" && owner != null && ActionOf(owner, source!) is { } found)
@@ -376,16 +384,30 @@ public sealed partial class ModelSession
                     if (ExpressionPointer(owner, m, found.Declaration, found.Action) is { } deeper) { inner = $"/data/actions/{found.Index}{deeper}"; pointer += deeper; }
                 }
             }
+            else if (!alone && kind == "logic" && owner != null && pointer != null && TextOf(owner, source!) is { } flowText) pointer += "/data" + flowText;
             else if (!alone && kind == "set" && source!["value"] != null && pointer != null) { inner = "/value"; pointer += "/value"; }
             else if (!alone && kind != "logic" && source != null && pointer != null && owner != null && PropertyPointer(owner, m, source) is { } held) { inner = held; pointer += held; }
-            var patch = inner != null && pointer != null && Text(source, inner) is { } text ? CertainPatch(m, pointer, text) : null;
+            var patchSource = op is { } sourceIndex && source != null
+                ? patchSources.TryGetValue(sourceIndex, out var editedSource) ? editedSource : patchSources[sourceIndex] = source.DeepClone().AsObject()
+                : source;
+            var modelPatch = ModelSourcePatch(m, owner, patchSource, sourcePointer);
+            if (modelPatch is { } edit && patchSource != null && sourcePointer != null)
+                RememberSourceEdits(patchSource, sourcePointer, edit.Patch, patchedText);
+            var patch = modelPatch ?? (inner != null && pointer != null && Text(source, inner) is { } text ? CertainPatch(m, pointer, text) : null);
             var message = $"{m.Type} {m.Id}: {VerifyHints.OneLine(m.Detail, 400)} @ {m.Path}";
             var problem = JobPreflight.Problem(op, pointer, m.Id, "error", message, patch?.Fix ?? Fix(m, owner, action, source, lane, hints), patch?.Patch, kind ?? "verify");
             problem["phase"] = "verify";
             problem["element"] = m.Path;
             if (m.OwnerKey != null) problem["key"] = m.OwnerKey;
+            // a message on an element a prototype op generated names its capture k (1.4.1: the facade degrades that item)
+            if (PrototypeOrigin(owner) is { } origin) { problem["k"] = origin.K; problem["widgetKey"] = origin.Key; }
             problems.Add(problem);
         }
+        // Several Verify messages can repair the same HTML or flow item. Each problem carries the complete combined edit,
+        // so applying every offered patch is order-independent and cannot discard another correction.
+        foreach (var problem in problems)
+            foreach (var edit in (problem["patch"] as JsonArray ?? new JsonArray()).OfType<JsonObject>())
+                if (edit["path"]?.ToString() is { } path && patchedText.TryGetValue(path, out var finalText)) edit["value"] = finalText;
         if (omitted.Count > 0)
             problems.Add(JobPreflight.Problem(null, null, "VERIFY_OF_FAILED_OPS_OMITTED", "warning",
                 $"the Verify messages on what failed op(s) #{string.Join(", #", omitted)} left half-built are not reported: they are those failures again",
@@ -410,6 +432,44 @@ public sealed partial class ModelSession
             if (matches.Count > 1)
                 matches = matches.Where(x => Preflight.JobFacts.Owner(x.Action!) is var owned && (owned == "@espace" || owned.EndsWith(":" + parent, StringComparison.OrdinalIgnoreCase) || owned.EndsWith("/" + parent, StringComparison.OrdinalIgnoreCase))).ToList();
             if (matches.Count > 0) return (matches[0].n, matches[0].Action!, o);
+        }
+        return null;
+    }
+
+    /// <summary>The model keys of an element and of every element above it, the element first (the patch round of JobRunner: a
+    /// Verify message under a node a fix wrote is that fix's). Empty when no element has the key.</summary>
+    internal List<string> KeyChain(string key)
+    {
+        try
+        {
+            // One walk for every message of the round (the model does not change once the round's job is applied).
+            _keyChainIndex ??= new KernelModelReader().Walk(_es).Concat(Descendants()).Where(d => !d.WasDeleted && d.ObjectKey != null)
+                .GroupBy(d => d.ObjectKey!.ToString()!).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        }
+        catch { _keyChainIndex = new(StringComparer.Ordinal); }
+        var found = _keyChainIndex.GetValueOrDefault(key);
+        var chain = new List<string>();
+        for (var o = found; o != null; o = o.Parent as IObjectSignature)
+            if (o.ObjectKey?.ToString() is { } k) chain.Add(k);
+        return chain;
+    }
+
+    private Dictionary<string, IObjectSignature>? _keyChainIndex;
+
+    /// <summary>The text of a logic op in the text form (its pointer under data: /flow, /flow/j) whose action holds
+    /// <paramref name="owner"/>: the nearest action ancestor named by the header of one text of the op.</summary>
+    private static string? TextOf(IObjectSignature owner, JsonObject op)
+    {
+        if (op["data"] is not JsonObject data || !data.ContainsKey("flow")) return null;
+        List<(string Text, string? BasedOn, string Pointer)> texts;
+        try { texts = FlowTextForm.Texts(data); } catch (Exception) { return null; }
+        var names = texts.Select(t => { try { return Anvil.Reading.ModuleFlow.Read(t.Text).Name; } catch (FormatException) { return ""; } }).ToList();
+        for (var o = owner; o != null; o = o.Parent as IObjectSignature)
+        {
+            var type = o.GetInterface()?.Name ?? "";
+            if (!ActionKinds.Contains(type) && !type.EndsWith("Action", StringComparison.Ordinal)) continue;
+            var at = names.FindIndex(n => string.Equals(n, TypeResolver.Name(o), StringComparison.OrdinalIgnoreCase));
+            if (at >= 0) return texts[at].Pointer;
         }
         return null;
     }

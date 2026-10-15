@@ -40,7 +40,7 @@ export class CommunityIdentity {
   constructor({ host, principal, target, fetchImpl = fetch, login = vaultIdentityLogin, signal, stage = ()=>{} }) {
     if (hostedContext()) throw new AuthRequired('HOSTED_STUDIO_SESSION_ONLY', 'Single sign-on with the identity provider is direct HTTPS from the SSAM server with a profile of its vault, '
       + 'never used in hosted mode: only the session of the user\'s own Service Studio is a path. Nothing was sent.');
-    Object.assign(this,{host,principal,target,fetch:fetchImpl,login,signal:signal??AbortSignal.timeout(29000),stage});
+    Object.assign(this,{host,principal,target,fetch:fetchImpl,login,signal:signal??AbortSignal.timeout(90000),stage});
     this.jar = new CookieJar(); this.tokens = null; this.endpoints = null;
   }
   url(value) {

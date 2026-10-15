@@ -69,7 +69,8 @@ test('every tool of the server with one budget field takes the other name, in an
     const props = tool.inputSchema.properties;
     assert.ok(!(props.budget && props.budgetBytes), tool.name + ' has one of the two');
     const own = props.budget ? 'budget' : 'budgetBytes';
-    const required = Object.fromEntries((tool.inputSchema.required ?? []).map(r => [r, 'x']));
+    // A required field takes a value its schema accepts: the first of its enum (ssam_code: lane, action), else 'x'.
+    const required = Object.fromEntries((tool.inputSchema.required ?? []).map(r => [r, props[r]?.enum?.[0] ?? 'x']));
     for (const other of own === 'budget' ? ['budgetBytes', 'budget_bytes', 'BudgetBytes'] : ['budget', 'Budget']) {
       const n = normalizeArguments(tool.inputSchema, { ...required, [other]: 8000 });
       assert.deepEqual(n.violations, [], `${tool.name} {${other}}`);

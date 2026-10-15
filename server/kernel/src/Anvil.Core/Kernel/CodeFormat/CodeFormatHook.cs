@@ -20,6 +20,8 @@ public sealed partial class ModelSession
     private JsonObject CodeFormatRule(object target, JsonObject op)
     {
         var prop = op["prop"]?.ToString();
+        // A flow text is the source: its SQL and JavaScript are written line by line as the text has them (Verbs.Flow.cs).
+        if (_verbatim) return op;
         if (prop is not ("StyleSheet" or "Statement" or "JavaScript") || op["value"] is not JsonValue v || !v.TryGetValue<string>(out var text)) return op;
         if (CodeFormat.LanguageOf(prop, name => Implements(target, name)) is not { } language) return op;
         var element = (target is IObjectSignature sig ? PathOf(sig) : null) is { Length: > 0 } path ? path : op["target"]?.ToString() ?? Describe(target);

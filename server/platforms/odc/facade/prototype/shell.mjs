@@ -6,7 +6,7 @@
 // prefix and suffix are the regions, the differing stretch is the mount. Dynamic values of the shell become block
 // inputs (View, the global dimensions it reads, the records and values it shows, Aviso/AvisoErro of the toast); shell
 // triggers that change a global dimension or close the toast become block events.
-import { attr, classes, isElement, walk } from './ir.mjs';
+import { attr, classes, isElement, isModalNode, walk } from './ir.mjs';
 import { renderKey, alignTrees } from './align.mjs';
 import { annotateRegion } from './infer-lists.mjs';
 import { recordInputName, aggregateInputName, changedEvent, words, slug } from './names.mjs';
@@ -68,7 +68,7 @@ export function buildShell({ session, interactions, lang, locale, tz }) {
   return null;
 }
 
-const isDialog = node => node.t === 'dialog' || attr(node, 'role') === 'dialog' || attr(node, 'aria-modal') === 'true';
+const isDialog = isModalNode;
 
 // Body children of a body-level shell: every element except the mount, dialogs, the hosts of a modal (a hidden
 // container a dialog is written into) and the containers a toast was seen in (siblings).
@@ -115,9 +115,13 @@ function spaShell({ session, interactions, lang, locale, tz, bodyLevel = false }
     const probe = observations.find(item => item.info.type === 'control' && item.info.scope === 'shell' && item.info.view === defaultView && (item.info.control.info.id === dim.key || item.info.control.key === dim.controlKey));
     if (probe) push(probe.after, defaultView.key, defaultView.state, { [dim.key]: String(probe.info.value) });
   }
+  // the mount may be deeper than a child of the app root (a React frame: stage > scale > phone > screen): the path inside
+  // the region that holds it is kept and only the mount element itself is emptied (its placeholder goes there)
+  const inner = bodyLevel ? [] : discovery.mount.slice(2);
+  const emptyAt = (node, path) => (!path.length ? { ...node, c: [] } : { ...node, c: (node.c ?? []).map((child, index) => index === path[0] ? emptyAt(child, path.slice(1)) : child) });
   const trees = entries.map(entry => {
     const root = rootOf(entry.render.body);
-    return { ...root, c: (root.c ?? []).map((child, index) => index === mountIndex ? { ...child, c: [] } : child) };
+    return { ...root, c: (root.c ?? []).map((child, index) => index === mountIndex ? emptyAt(child, inner) : child) };
   });
   const contexts = entries.map(entry => ({ view: entry.view, dims: entry.dims }));
   const sources = entries.map(entry => shellSources(entry, { session, meta, state: meta.state(entry.render), lang }));
@@ -189,7 +193,7 @@ function spaShell({ session, interactions, lang, locale, tz, bodyLevel = false }
     if (effects.some(effect => effect.kind === 'setDimension' && effect.dimension === 'aviso')) events.push({ name: words(lang).close + words(lang).notice, event: event.key });
   }
   return {
-    root, regions, mount: { region: mountAt, path: [mountAt] }, siblings: siblings.map(sibling => sibling.root), regionInfo,
+    root, regions, mount: { region: mountAt, path: [mountAt, ...inner] }, siblings: siblings.map(sibling => sibling.root), regionInfo,
     inputs, events, unexplained: region.unexplained, map: region.map, appIndex, mountIndex, bodyLevel, top: keptOrder
   };
 }

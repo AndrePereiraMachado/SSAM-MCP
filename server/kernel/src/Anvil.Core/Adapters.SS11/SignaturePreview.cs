@@ -40,8 +40,11 @@ public static class SignaturePreview
             catch (Exception ex) when (ex is not OutOfMemoryException)
             { return new JsonObject { ["ran"] = false, ["reason"] = "the base or candidate could not be loaded for the preview: " + Errors.Text(ex) }; }
             var plan = ReferenceSignatureMerge.Analyze(local, foreign, basis);
+            // fam-deps R8: the plan itself (producer key, base, local and candidate hashes) travels with the answer, so a
+            // rollback of the live merge names the exact references even when the bridge's receipt has no plan.
+            var planJson = System.Text.Json.JsonSerializer.SerializeToNode(new { Changes = plan.Changes });
             if (plan.HasConflicts)
-                return new JsonObject { ["ran"] = true, ["accepted"] = false, ["changes"] = plan.Changes.Count,
+                return new JsonObject { ["ran"] = true, ["accepted"] = false, ["changes"] = plan.Changes.Count, ["plan"] = planJson,
                     ["error"] = "Reference signature merge conflicts: " + string.Join("; ", plan.Conflicts.Select(c => c.ProducerKey + " [" + c.Code + "]: " + c.Message)) };
             if (!plan.HasChanges) return new JsonObject { ["ran"] = true, ["accepted"] = true, ["changes"] = 0 };
             try
@@ -51,8 +54,8 @@ public static class SignaturePreview
                 ReferenceSignatureMerge.VerifyApplied(local, foreign, basis, plan);
             }
             catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
-            { return new JsonObject { ["ran"] = true, ["accepted"] = false, ["changes"] = plan.Changes.Count, ["error"] = Errors.Text(ex) }; }
-            return new JsonObject { ["ran"] = true, ["accepted"] = true, ["changes"] = plan.Changes.Count };
+            { return new JsonObject { ["ran"] = true, ["accepted"] = false, ["changes"] = plan.Changes.Count, ["plan"] = planJson, ["error"] = Errors.Text(ex) }; }
+            return new JsonObject { ["ran"] = true, ["accepted"] = true, ["changes"] = plan.Changes.Count, ["plan"] = planJson };
         }
         finally { ModelHost.Release(local); ModelHost.Release(foreign); ModelHost.Release(basis); }
     }

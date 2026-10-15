@@ -358,7 +358,7 @@ export function createEvidenceReader({ roots = evidenceRoots(), maxBytes = MAX_F
     }
 
     // Rows: deep = every object below the pointer (depth = object levels); an array its items; an object its entries.
-    const listing = input.deep || clauses.length || malformed.length || input.fields || input.groupBy || input.offset !== undefined || input.max !== undefined;
+    const listing = input.deep || clauses.length || malformed.length || input.fields || input.groupBy || input.offset !== undefined || input.max !== undefined || input.table;
     let rows;
     if (input.deep) rows = nodesBelow(base.value, input.depth ?? Infinity);
     else if (Array.isArray(base.value)) rows = base.value.map((value, i) => ({ ref: { key: i }, value }));
@@ -388,6 +388,9 @@ export function createEvidenceReader({ roots = evidenceRoots(), maxBytes = MAX_F
       const groups = [...counts].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])));
       return page(groups, input, budget, meta, { total: rows.length, distinct: groups.length }, g => g, 'groups', 0);
     }
+    // table:true (the paged answers of 2026-10-12): the rows as one table, {columns, rows: [[cell, ...]]}, every row that fits
+    // the budget (max up to 1000): a listing of hundreds of rows in one call instead of pages of objects.
+    if (input.table) return tableAnswer(rows, input, budget, meta, { total: rows.length, ...(showAt ? { at: toPointer(base.keys) } : {}) });
     const shape = row => {
       let body = row.value;
       if (fields && (isObject(body) || Array.isArray(body))) {
@@ -473,6 +476,26 @@ function page(rows, input, budget, meta, head, shape, name, lift) {
   return answer;
 }
 
+// table:true: the rows as {columns, rows}, one array of cells per row (a scalar as it is, a long text cut at 400 characters,
+// anything else as its JSON cut at 160), as many rows as the budget holds from offset (next continues). The columns are
+// `fields`, else the keys of the first 50 rows; a filtered listing adds "#", the index of each row.
+const tableCell = v => (v === null || v === undefined || ['number', 'boolean'].includes(typeof v) ? v ?? null : typeof v === 'string' ? cut(v, 400)
+  : cut(JSON.stringify(v) ?? 'null', 160));
+function tableAnswer(rows, input, budget, meta, head) {
+  const total = rows.length;
+  const max = Math.min(MAX_ITEMS, input.max ?? MAX_ITEMS);
+  const start = input.offset === undefined ? 0 : input.offset < 0 ? Math.max(0, total + input.offset) : Math.min(input.offset, total);
+  const slice = rows.slice(start, start + max);
+  const columns = input.fields?.length ? input.fields : [...new Set(slice.slice(0, 50).map(r => r.value).filter(isObject).flatMap(v => Object.keys(v)))].slice(0, 40);
+  const keys = columns.map(c => parsePath(c));
+  const indexed = Boolean(input.where);
+  const lines = slice.map(r => [...(indexed ? [refKeys(r.ref).join('/')] : []), ...(isObject(r.value) || Array.isArray(r.value) ? keys.map(k => { const x = resolve(r.value, k); return x.found ? tableCell(x.value) : null; }) : [tableCell(r.value)])]);
+  const answer = n => ({ ok: true, ...head, ...(start ? { offset: start } : {}), columns: [...(indexed ? ['#'] : []), ...columns], rows: lines.slice(0, n), ...(start + n < total ? { next: start + n } : {}), ...meta });
+  let lo = 0, hi = lines.length;
+  if (size(answer(hi)) > budget) { while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (size(answer(mid)) <= budget) lo = mid; else hi = mid - 1; } hi = lo; }
+  return answer(Math.max(hi, Math.min(1, lines.length)));
+}
+
 // A single value: the richest rendering that fits; a long string pages by characters; a container that does not fit
 // even one level deep is listed as entries instead.
 function valueAnswer(value, input, budget, meta) {
@@ -527,7 +550,8 @@ export function registerSsamEvidence(server, deps = {}) {
       + 'or with deep:true every object below pointer, each with its `at` pointer; depth limits deep): where "field op value" '
       + '(op = != ~ contains !~ > >= < <=; several clauses all match; no field = the item itself or any text in it; a bare field '
       + '"error" keeps the items where it exists and is not false/null/empty, "!error" the others), fields to '
-      + 'project, groupBy field for counts, offset (negative = from the end: offset:-20 is a journal tail), max (0 = only total). '
+      + 'project, groupBy field for counts, offset (negative = from the end: offset:-20 is a journal tail), max (0 = only total); '
+      + 'table:true returns the rows as one table {columns, rows} (hundreds of rows in one call, budgetBytes up to 65536). A paged answer already carries its large arrays as tables (paged.tables) and the one call for what is missing. '
       + 'A kernel envelope {format, sha256, payload} (task.json, receipts) is read as its payload (envelope: verified). '
       + 'Secrets (password, token, secret, authorization, cookie, authorize words) come back as [redacted].',
     inputSchema: z.object({
@@ -541,6 +565,7 @@ export function registerSsamEvidence(server, deps = {}) {
       groupBy: pathSpec.optional().describe('Count the items by this field'),
       offset: z.number().int().optional().describe('First item (negative: from the end); a long string pages by characters'),
       max: z.number().int().min(0).max(MAX_ITEMS).optional().describe('Items per page (default 50; 0 = only the total)'),
+      table: z.boolean().optional().describe('The rows as one table {columns, rows:[[cell,...]]}: every row that fits budgetBytes (max up to 1000), columns = fields or the keys of the rows'),
       budgetBytes: z.number().int().min(MIN_BUDGET).max(MAX_BUDGET).optional().describe('Answer size limit (default 2000)'),
     }).strict(),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },

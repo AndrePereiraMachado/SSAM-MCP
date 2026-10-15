@@ -307,7 +307,7 @@ export function loadVerbTable() {
 }
 export async function loadContracts(sources, { noCli = false } = {}) {
   const out = {}; if (noCli || !exists(sources.cli)) return { available: false, reason: noCli ? '--no-cli' : 'ODC CLI not built: ' + sources.cli, namedTypes: {} };
-  for (const op of ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-expose', 'soap']) {
+  for (const op of ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-consume', 'rest-expose', 'soap', 'entity-actions']) {
     try { const { stdout } = await run('dotnet', [sources.cli, 'api', '--op', op], { windowsHide: true, maxBuffer: 16 * 1024 * 1024, cwd: sources.kernel }); const env = JSON.parse(stdout); out[op] = env.ok ? env.data : { error: env.error }; }
     catch (e) { out[op] = { error: String(e.message).slice(0, 200) }; }
   }

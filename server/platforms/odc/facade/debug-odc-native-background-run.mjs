@@ -135,7 +135,7 @@ export async function runOdcNativeBackground(input, prepared, readers, services 
       Object.assign(report,{instanceCorrelationProved:found.instanceCorrelationProved===true,executionCompleted:found.executionCompleted===true&&!uncertain,outcome:found.outcome??'unproved'});
       if(services.timerInstance){try{report.portalCredentialsReleased=(await services.timerInstance.release?.())?.released!==false;}catch{report.portalCredentialsReleased=false;} uncertain ||= !report.portalCredentialsReleased;}
     }
-    if(ownsBroker){try{await broker.jar.removeAllCookies();broker.secrets.fill('');broker.authenticated=false;report.portalCredentialsReleased=true;}catch{report.portalCredentialsReleased=false;uncertain=true;}}
+    if(ownsBroker){try{await broker.jar.removeAllCookies();broker.credentialRegistry?.reset();broker.authenticated=false;report.portalCredentialsReleased=true;}catch{report.portalCredentialsReleased=false;uncertain=true;}}
     report.finishedAt=new Date().toISOString();report.uncertain=uncertain;
     if(uncertain)report.executionCompleted=false;
     report.ok=report.state==='scheduled'&&!uncertain&&(trace.mode==='none'||report.backgroundTrace?.requestBound===true);

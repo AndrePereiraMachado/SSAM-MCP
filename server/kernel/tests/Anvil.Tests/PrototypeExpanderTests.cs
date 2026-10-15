@@ -850,12 +850,12 @@ public class PrototypeExpanderTests(ITestOutputHelper output)
     private void Expansion()
     {
         PrototypeFakes.Plan(PrototypeFakes.Minimal); // the JIT of the planner is not the capture's cost
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        var (plan, _) = PrototypeFakes.Plan(PrototypeFakes.FarmaVirtual);
-        var ms = sw.ElapsedMilliseconds;
+        // The cost of the expansion, not the load of the machine: the CPU time of this thread, the fastest of three (CpuBudget).
+        var runs = CpuBudget.Measure(Enumerable.Range(0, 3).Select(_ => (Func<PrototypePlan>)(() => PrototypeFakes.Plan(PrototypeFakes.FarmaVirtual).Plan)));
+        var plan = runs[0].Result; var ms = CpuBudget.Best(runs);
         Assert.Empty(plan.Problems);
-        output.WriteLine($"FarmaVirtual expansion {ms} ms: {plan.OpCount} ops, {PrototypeFakes.Widgets(plan).Count()} widgets, {plan.Screens.Count} screens");
-        Assert.True(ms <= 3000, $"expansion took {ms} ms (budget 3 s, docs/PROTOTIPO-NATIVO.md 6)");
+        output.WriteLine($"FarmaVirtual expansion {CpuBudget.Describe(runs)}: {plan.OpCount} ops, {PrototypeFakes.Widgets(plan).Count()} widgets, {plan.Screens.Count} screens");
+        Assert.True(ms <= 3000, $"expansion took {CpuBudget.Describe(runs)} (budget 3 s, docs/PROTOTIPO-NATIVO.md 6)");
         // the acceptance numbers of 8.1 the plan already decides
         Assert.Equal(["Carrinho", "Catalogo", "GestaoPedidos", "GestaoProdutos", "MeusPedidos", "PedidoDetalhe"], plan.Screens.Values.Order(StringComparer.Ordinal));
         Assert.Equal("FarmaVirtualShell", plan.ShellName);

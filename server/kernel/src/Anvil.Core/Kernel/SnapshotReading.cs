@@ -12,6 +12,11 @@ public interface IReadSnapshot : IDisposable
     ModuleIndex BuildIndex(string lane, string adapter, string sourceSha256, long sourceBytes);
     ModuleDigest BuildDigest(string lane, string sourceSha256, long sourceBytes);
     ModuleRichIndex BuildRich(string lane, string sourceSha256, long sourceBytes);
+    // ssam-html/1 (ScreenHtml): one screen or block by name, Kind:Name or @key; the module is read once per snapshot.
+    ScreenHtmlDocument ReadHtml(string target);
+    IReadOnlyList<(string Name, string Kind, string Key)> HtmlRoots();
+    DataDdl BuildDdl(string lane, string sourceSha256, long sourceBytes);
+    ModuleFlow BuildFlow(string lane, string sourceSha256, long sourceBytes);
 }
 
 // Owned exclusively by a read process. Never share these native objects with a write worker.
@@ -26,6 +31,13 @@ public sealed class ReadSnapshot<T>(T root, ModelReader<T> reader, string name, 
         ModuleDigest.Build(root, reader, lane, sourceSha256, sourceBytes);
     public ModuleRichIndex BuildRich(string lane, string sourceSha256, long sourceBytes) =>
         ModuleRichIndex.Build(root, reader, lane, sourceSha256, sourceBytes);
+    private ScreenHtmlModule<T>? html;
+    public ScreenHtmlDocument ReadHtml(string target) => (html ??= ScreenHtml.Module(root, reader)).Read(target);
+    public IReadOnlyList<(string Name, string Kind, string Key)> HtmlRoots() => (html ??= ScreenHtml.Module(root, reader)).Roots;
+    public DataDdl BuildDdl(string lane, string sourceSha256, long sourceBytes) =>
+        DataDdl.Build(root, reader, lane, sourceSha256, sourceBytes);
+    public ModuleFlow BuildFlow(string lane, string sourceSha256, long sourceBytes) =>
+        ModuleFlow.Build(root, reader, lane, sourceSha256, sourceBytes);
     public JsonObject Read(string? path, ReadingOptions options, string[]? select, string file)
     {
         options.Validate();
@@ -84,6 +96,9 @@ public sealed class SnapshotReadCache(Func<byte[], IReadSnapshot> load, ModuleIn
         if (request["index"] is { } mode) return EnsureIndex(mode.GetValue<string>(), bytes, actual, total);
         if (request["digest"] is { } digestMode) return EnsureDigest(digestMode.GetValue<string>(), bytes, actual, total);
         if (request["rich"] is { } richMode) return EnsureRich(richMode.GetValue<string>(), bytes, actual, total);
+        if (request["html"] is { } htmlTarget) return ReadHtml(htmlTarget.GetValue<string>(), request["keys"]?.GetValue<bool>() == true, bytes, actual, total);
+        if (request["ddl"] is { } ddlMode) return EnsureDdl(ddlMode.GetValue<string>(), bytes, actual, total);
+        if (request["flow"] is { } flowMode) return EnsureFlow(flowMode.GetValue<string>(), bytes, actual, total);
         var cold = request["cold"]?.GetValue<bool>() == true;
         var modelHit = snapshot != null && hash == actual && !cold;
         // Include the file because the legacy module map includes its source path.
@@ -166,6 +181,26 @@ public sealed class SnapshotReadCache(Func<byte[], IReadSnapshot> load, ModuleIn
             ["timings"] = new JsonObject { ["loadMs"] = loadMs, ["digestMs"] = buildMs, ["serverMs"] = total.Elapsed.TotalMilliseconds } };
     }
 
+    // {"flow":"ensure"}: the capture's flow reading (ModuleFlow, ssam-flow/1) is stored beside its index, built from the
+    // model (loaded here when needed) when absent or invalid. The facade reads the file and serves it by element.
+    private JsonObject EnsureFlow(string mode, byte[] bytes, string actual, Stopwatch total)
+    {
+        if (mode != "ensure") throw new ArgumentException("flow accepts only \"ensure\"");
+        if (indexes == null) throw new InvalidOperationException("No module index store: set SSAM_MODULE_INDEX_ROOT or run the reader inside an SSAM workspace");
+        var flow = indexes.LoadFlow(actual); var built = false; double loadMs = 0, buildMs = 0;
+        if (flow == null) {
+            var phase = total.Elapsed.TotalMilliseconds;
+            if (snapshot == null || hash != actual) { Dispose(); snapshot = load(bytes); hash = actual; loads++; }
+            loadMs = total.Elapsed.TotalMilliseconds - phase; phase = total.Elapsed.TotalMilliseconds;
+            flow = snapshot.BuildFlow(indexes.Lane, actual, bytes.Length);
+            indexes.SaveFlow(flow); built = true;
+            buildMs = total.Elapsed.TotalMilliseconds - phase;
+        }
+        return new JsonObject { ["ok"] = true, ["sourceSha256"] = actual, ["flow"] = flow.Answer(indexes.FlowPathOf(actual), built),
+            ["cache"] = new JsonObject { ["loads"] = loads },
+            ["timings"] = new JsonObject { ["loadMs"] = loadMs, ["flowMs"] = buildMs, ["serverMs"] = total.Elapsed.TotalMilliseconds } };
+    }
+
     // {"rich":"ensure"}: the capture's rich index (ModuleRichIndex) is stored beside its index, built from the model (loaded
     // here when needed) only when absent or invalid. Never built by any other request: it is large and asked for on purpose.
     private JsonObject EnsureRich(string mode, byte[] bytes, string actual, Stopwatch total)
@@ -184,6 +219,50 @@ public sealed class SnapshotReadCache(Func<byte[], IReadSnapshot> load, ModuleIn
         return new JsonObject { ["ok"] = true, ["sourceSha256"] = actual, ["rich"] = rich.Answer(indexes.RichPathOf(actual), built),
             ["cache"] = new JsonObject { ["loads"] = loads },
             ["timings"] = new JsonObject { ["loadMs"] = loadMs, ["richMs"] = buildMs, ["serverMs"] = total.Elapsed.TotalMilliseconds } };
+    }
+
+    // {"html":"<screen>"}: the screen or block as ssam-html/1 (ScreenHtml), its key table stored beside the capture's index
+    // (ModuleIndexStore.SaveHtmlKeys) so an edit based on {capture, html} finds its keys; {"html":""} lists the screens and
+    // blocks. The capture stays loaded, and the module reading with it (the next screen reads in milliseconds).
+    private JsonObject ReadHtml(string target, bool withKeys, byte[] bytes, string actual, Stopwatch total)
+    {
+        var phase = total.Elapsed.TotalMilliseconds; double loadMs = 0;
+        if (snapshot == null || hash != actual) { Dispose(); snapshot = load(bytes); hash = actual; loads++; loadMs = total.Elapsed.TotalMilliseconds - phase; }
+        if (target.Length == 0)
+            return new JsonObject { ["ok"] = true, ["sourceSha256"] = actual, ["html"] = new JsonObject { ["schema"] = ScreenHtml.Schema, ["model"] = snapshot.Name,
+                ["roots"] = new JsonArray(snapshot.HtmlRoots().Select(r => (JsonNode)new JsonObject { ["name"] = r.Name, ["kind"] = r.Kind, ["key"] = r.Key }).ToArray()) },
+                ["cache"] = new JsonObject { ["loads"] = loads }, ["timings"] = new JsonObject { ["loadMs"] = loadMs, ["serverMs"] = total.Elapsed.TotalMilliseconds } };
+        phase = total.Elapsed.TotalMilliseconds;
+        var document = snapshot.ReadHtml(target);
+        var readMs = total.Elapsed.TotalMilliseconds - phase;
+        var answer = document.Json(withKeys);
+        answer["model"] = snapshot.Name;
+        if (indexes != null) {
+            try { answer["keysFile"] = indexes.SaveHtmlKeys(actual, document); }
+            catch (Exception error) { answer["keysError"] = error.GetBaseException().Message; }
+        }
+        return new JsonObject { ["ok"] = true, ["sourceSha256"] = actual, ["html"] = answer, ["cache"] = new JsonObject { ["loads"] = loads },
+            ["timings"] = new JsonObject { ["loadMs"] = loadMs, ["readMs"] = readMs, ["serverMs"] = total.Elapsed.TotalMilliseconds } };
+    }
+
+    // {"ddl":"ensure"}: the capture's data text (DataDdl, ssam-ddl/1) is stored beside its index (built from the model, loaded
+    // here when needed, when absent or invalid). The facade reads and pages the file (ssam_map view:"ddl").
+    private JsonObject EnsureDdl(string mode, byte[] bytes, string actual, Stopwatch total)
+    {
+        if (mode != "ensure") throw new ArgumentException("ddl accepts only \"ensure\"");
+        if (indexes == null) throw new InvalidOperationException("No module index store: set SSAM_MODULE_INDEX_ROOT or run the reader inside an SSAM workspace");
+        var ddl = indexes.LoadDdl(actual); var built = false; double loadMs = 0, buildMs = 0;
+        if (ddl == null) {
+            var phase = total.Elapsed.TotalMilliseconds;
+            if (snapshot == null || hash != actual) { Dispose(); snapshot = load(bytes); hash = actual; loads++; }
+            loadMs = total.Elapsed.TotalMilliseconds - phase; phase = total.Elapsed.TotalMilliseconds;
+            ddl = snapshot.BuildDdl(indexes.Lane, actual, bytes.Length);
+            indexes.SaveDdl(ddl); built = true;
+            buildMs = total.Elapsed.TotalMilliseconds - phase;
+        }
+        return new JsonObject { ["ok"] = true, ["sourceSha256"] = actual, ["ddl"] = ddl.Answer(indexes.DdlPathOf(actual), built),
+            ["cache"] = new JsonObject { ["loads"] = loads },
+            ["timings"] = new JsonObject { ["loadMs"] = loadMs, ["ddlMs"] = buildMs, ["serverMs"] = total.Elapsed.TotalMilliseconds } };
     }
 
     // Once per loaded capture: store its index unless a valid one is already on disk. Never fails the read.

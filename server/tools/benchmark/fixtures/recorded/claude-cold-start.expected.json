@@ -1,0 +1,362 @@
+{
+  "source": "recorded",
+  "records": 13,
+  "bytes": 46062,
+  "evidence": [
+    {
+      "type": "attachment",
+      "timestamp": "2026-10-13T14:05:15.024Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": [
+        "still connecting"
+      ]
+    },
+    {
+      "type": "attachment",
+      "timestamp": "2026-10-13T14:05:15.024Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "assistant",
+      "timestamp": "2026-10-13T14:05:18.906Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 19464,
+        "cache_read_input_tokens": 44164,
+        "output_tokens": 357,
+        "output_tokens_details": {
+          "thinking_tokens": 77
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "xxxxxxxx",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 19464,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "xxxxxx",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 357,
+            "cache_read_input_tokens": 44164,
+            "cache_creation_input_tokens": 19464,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 19464
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "xxxxxxxx",
+        "fallback_credit": null
+      },
+      "tools": [
+        "ToolSearch"
+      ],
+      "markers": []
+    },
+    {
+      "type": "user",
+      "timestamp": "2026-10-13T14:05:23.932Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": [
+        "still connecting"
+      ]
+    },
+    {
+      "type": "attachment",
+      "timestamp": "2026-10-13T14:05:23.941Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": [
+        "still connecting"
+      ]
+    },
+    {
+      "type": "assistant",
+      "timestamp": "2026-10-13T14:05:26.702Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 1718,
+        "cache_read_input_tokens": 63628,
+        "output_tokens": 279,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "xxxxxxxx",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 1718,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "xxxxxx",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 279,
+            "cache_read_input_tokens": 63628,
+            "cache_creation_input_tokens": 1718,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 1718
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "xxxxxxxx",
+        "fallback_credit": null
+      },
+      "tools": [
+        "ToolSearch"
+      ],
+      "markers": []
+    },
+    {
+      "type": "user",
+      "timestamp": "2026-10-13T14:05:31.717Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": [
+        "still connecting"
+      ]
+    },
+    {
+      "type": "assistant",
+      "timestamp": "2026-10-13T14:05:33.403Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 425,
+        "cache_read_input_tokens": 65346,
+        "output_tokens": 101,
+        "output_tokens_details": {
+          "thinking_tokens": 19
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "xxxxxxxx",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 425,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "xxxxxx",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 101,
+            "cache_read_input_tokens": 65346,
+            "cache_creation_input_tokens": 425,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 425
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "xxxxxxxx",
+        "fallback_credit": null
+      },
+      "tools": [
+        "ToolSearch"
+      ],
+      "markers": []
+    },
+    {
+      "type": "user",
+      "timestamp": "2026-10-13T14:05:38.420Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": [
+        "still connecting"
+      ]
+    },
+    {
+      "type": "assistant",
+      "timestamp": "2026-10-13T14:05:40.798Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 247,
+        "cache_read_input_tokens": 65771,
+        "output_tokens": 137,
+        "output_tokens_details": {
+          "thinking_tokens": 61
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "xxxxxxxx",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 247,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "xxxxxx",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 137,
+            "cache_read_input_tokens": 65771,
+            "cache_creation_input_tokens": 247,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 247
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "xxxxxxxx",
+        "fallback_credit": null
+      },
+      "tools": [
+        "ToolSearch"
+      ],
+      "markers": []
+    },
+    {
+      "type": "attachment",
+      "timestamp": "2026-10-13T14:05:40.831Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": [
+        "[truncated]",
+        "[truncated]"
+      ]
+    },
+    {
+      "type": "assistant",
+      "timestamp": "2026-10-13T14:05:43.204Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 41909,
+        "cache_read_input_tokens": 66018,
+        "output_tokens": 222,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "xxxxxxxx",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 41909,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "xxxxxx",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 222,
+            "cache_read_input_tokens": 66018,
+            "cache_creation_input_tokens": 41909,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 41909
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "xxxxxxxx",
+        "fallback_credit": null
+      },
+      "tools": [
+        "ToolSearch"
+      ],
+      "markers": []
+    },
+    {
+      "type": "assistant",
+      "timestamp": "2026-10-13T14:05:44.912Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 7746,
+        "cache_read_input_tokens": 107927,
+        "output_tokens": 103,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "xxxxxxxx",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 7746,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "xxxxxx",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 103,
+            "cache_read_input_tokens": 107927,
+            "cache_creation_input_tokens": 7746,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 7746
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "xxxxxxxx",
+        "fallback_credit": null
+      },
+      "tools": [
+        "mcp__ssam__ssam_doctor"
+      ],
+      "markers": []
+    }
+  ],
+  "shrunk": [],
+  "removed": []
+}

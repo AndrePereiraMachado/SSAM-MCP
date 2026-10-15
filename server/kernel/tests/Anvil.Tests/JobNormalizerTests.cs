@@ -277,4 +277,166 @@ public sealed class JobNormalizerTests
         Assert.False(builtins.ContainsKey("NullDateTime"));
         Assert.True(builtins.ContainsKey("NullDate") && builtins.ContainsKey("DateToDateTime") && builtins.ContainsKey("NewTime"));
     }
+
+    // VisitaCerta 2026-10-12: the ssam-flow/1 texts of a logic op (one text, a list, {text, basedOn}) are normalized in place
+    // by the preflight (Anvil.Reading.FlowTextNormalizer) and every edit is listed with its text's pointer and line; a text
+    // with another error is left as written and every one of its errors is a FLOW_SYNTAX problem of the same refusal.
+    [Fact]
+    public void TheFlowTextsOfALogicOpAreNormalizedInPlaceAndListed()
+    {
+        // The true branch falls through to the end of the flow: going on after the block is its only reading (the end either way).
+        var falls = "server action Falls\n  in A: Boolean\n  out N: Integer\n  if A:\n    assign # Done\n      N = 2\n  end\n";
+        var broken = "server action Broken\n  out N: Integer\n  assign N = (1\n  X = Call(P=1\n  end\n";
+        var job = new JsonObject { ["ops"] = new JsonArray(new JsonObject { ["op"] = "logic", ["data"] = new JsonObject {
+            ["flow"] = new JsonArray(JsonValue.Create(falls), new JsonObject { ["text"] = broken }) } }) };
+        var (_, result) = Analyze(job.ToJsonString());
+        var normalized = Normalizations(result);
+        Assert.Contains(normalized, n => n["rule"]!.GetValue<string>() == Anvil.Reading.FlowTextEdit.FallsThrough && n["path"]!.GetValue<string>() == "/ops/0/data/flow/0" && n["line"]!.GetValue<int>() == 7);
+        Assert.Contains(normalized, n => n["rule"]!.GetValue<string>() == Anvil.Reading.FlowTextEdit.LabelSpacing && n["path"]!.GetValue<string>() == "/ops/0/data/flow/0");
+        Assert.DoesNotContain(normalized, n => n["path"]!.GetValue<string>().StartsWith("/ops/0/data/flow/1", StringComparison.Ordinal));
+        var syntax = Problems(result, "FLOW_SYNTAX");
+        Assert.Equal(2, syntax.Length);
+        Assert.All(syntax, p => Assert.Equal("/ops/0/data/flow/1", p["pointer"]!.GetValue<string>()));
+        // In place: the op holds the normalized text, which the grammar reads; the broken one is as it was sent.
+        var ops = JsonNode.Parse(job.ToJsonString())!["ops"]!.AsArray();
+        JobNormalizer.Pure(ops, "/ops", "o11");
+        var text = ops[0]!["data"]!["flow"]![0]!.GetValue<string>();
+        Assert.Contains("    assign  # Done\n      N = 2\n    -> @j1\n  end @j1\n", text);
+        Assert.Equal("Falls", Anvil.Reading.ModuleFlow.Read(text).Name);
+        Assert.Equal(broken, ops[0]!["data"]!["flow"]![1]!["text"]!.GetValue<string>());
+        // Twice is the same job: nothing more to normalize.
+        Assert.Empty(JobNormalizer.Pure(ops, "/ops", "o11"));
+    }
+
+    // A text with a certain slip and another error is not normalized (it is refused anyway): every error is named, and the
+    // errors the certain edit removes carry the op's patch, the text with that edit, verified by reading it again.
+    [Fact]
+    public void ACertainEditOfATextWithAnotherErrorIsThePatchOfTheErrorsItRemoves()
+    {
+        // The fall-through is certain (the end either way), the call on line 4 is the other error.
+        var text = "server action Mixed\n  in A: Boolean\n  out N: Integer\n  X = Call(P=1\n  if A:\n    assign N = 1\n  end\n";
+        var job = new JsonObject { ["ops"] = new JsonArray(new JsonObject { ["op"] = "logic", ["data"] = new JsonObject { ["flow"] = new JsonArray(JsonValue.Create(text)) } }) };
+        var (_, result) = Analyze(job.ToJsonString());
+        Assert.Empty(Normalizations(result));
+        var syntax = Problems(result, "FLOW_SYNTAX");
+        Assert.Equal(2, syntax.Length);
+        var falls = Assert.Single(syntax, p => p["message"]!.GetValue<string>().StartsWith("logic: line 7: ", StringComparison.Ordinal));
+        var other = Assert.Single(syntax, p => p["message"]!.GetValue<string>().StartsWith("logic: line 4: ", StringComparison.Ordinal));
+        Assert.Null(other["patch"]);
+        var written = Patched(job, Assert.IsType<JsonArray>(falls["patch"]));
+        Assert.Contains("    assign N = 1\n    -> @j1\n  end @j1\n", written);
+        // Only the other error is left in the patched text.
+        var left = Assert.IsType<Anvil.Reading.FlowSyntaxException>(Assert.ThrowsAny<FormatException>(() => Anvil.Reading.ModuleFlow.Read(written)));
+        Assert.StartsWith("line 4: ", Assert.Single(left.Errors));
+    }
+
+    // The first text of the op after a patch of the preflight (replace /ops/0/data/flow).
+    private static string Patched(JsonObject job, JsonArray patch)
+    {
+        var patched = JsonNode.Parse(job.ToJsonString())!;
+        foreach (var step in patch.OfType<JsonObject>())
+        {
+            Assert.Equal("replace", step["op"]!.GetValue<string>());
+            Assert.Equal("/ops/0/data/flow", step["path"]!.GetValue<string>());
+            patched["ops"]![0]!["data"]!["flow"] = step["value"]!.DeepClone();
+        }
+        return patched["ops"]![0]!["data"]!["flow"]![0]!.GetValue<string>();
+    }
+
+    private static JsonObject FlowJob(params string[] texts) => new() { ["ops"] = new JsonArray(new JsonObject { ["op"] = "logic", ["data"] = new JsonObject {
+        ["flow"] = new JsonArray(texts.Select(t => (JsonNode)JsonValue.Create(t)!).ToArray()) } }) };
+
+    // Review of 2026-10-12 (probe 13): an if/else whose true branch forgot its terminator reads two ways (the false branch after
+    // it, or the end). Nothing is normalized; the FLOW_SYNTAX of the line names both readings and carries the patch of each
+    // (candidates), each a text the grammar reads; the engine never picks one (no patch of its own).
+    [Fact]
+    public void AFallThroughWithTwoReadingsIsRefusedWithBothVerifiedNeverChosen()
+    {
+        var text = "server action IfElse\n  in Found: Boolean\n  out Result: Text\n  if Found:\n    assign Result = \"yes\"\n  assign Result = \"no\"\n  end\n";
+        var job = FlowJob(text);
+        var (_, result) = Analyze(job.ToJsonString());
+        Assert.Empty(Normalizations(result));
+        var problem = Assert.Single(Problems(result, "FLOW_SYNTAX"));
+        Assert.StartsWith("logic: line 6: ", problem["message"]!.GetValue<string>());
+        Assert.Null(problem["patch"]);
+        var fix = problem["fix"]!.GetValue<string>();
+        Assert.Contains("does not choose", fix);
+        Assert.Contains("-> @j1", fix);
+        Assert.Contains("`    end` before line 6", fix);
+        var candidates = problem["candidates"]!.AsArray().OfType<JsonObject>().ToList();
+        Assert.Equal(2, candidates.Count);
+        var through = Patched(job, candidates[0]["patch"]!.AsArray());
+        var ends = Patched(job, candidates[1]["patch"]!.AsArray());
+        Assert.Contains("    -> @j1\n  assign Result = \"no\" @j1\n", through);
+        Assert.Contains("    end\n  assign Result = \"no\"\n", ends);
+        Assert.Equal("IfElse", Anvil.Reading.ModuleFlow.Read(through).Name);
+        Assert.Equal("IfElse", Anvil.Reading.ModuleFlow.Read(ends).Name);
+
+        // Re-check of 2026-10-12 (probe N26, the GetWeatherForPlace shape): a true branch that ends on an If with no false step,
+        // whose true branch does a step and ends, then the outer If's false branch: two readings too, never a normalization.
+        var nested = "server action Nested\n  in A: Boolean\n  in B: Boolean\n  out R: Text\n  if A:\n    assign R = \"a\"\n    if B:\n      assign R = \"b\"\n      end\n  assign R = \"c\"\n  end\n";
+        var nestedJob = FlowJob(nested);
+        var (_, nestedResult) = Analyze(nestedJob.ToJsonString());
+        Assert.Empty(Normalizations(nestedResult));
+        var two = Assert.Single(Problems(nestedResult, "FLOW_SYNTAX"));
+        Assert.StartsWith("logic: line 10: ", two["message"]!.GetValue<string>());
+        Assert.Null(two["patch"]);
+        var readings = two["candidates"]!.AsArray().OfType<JsonObject>().ToList();
+        Assert.Equal(2, readings.Count);
+        Assert.Contains("    -> @j1\n  assign R = \"c\" @j1\n", Patched(nestedJob, readings[0]["patch"]!.AsArray()));
+        Assert.Contains("      end\n    end\n  assign R = \"c\"\n", Patched(nestedJob, readings[1]["patch"]!.AsArray()));
+    }
+
+    // Review of 2026-10-12 (probes 14 and 15): a call with a space before its parenthesis and an aggregate with a typo after an
+    // assign block stay FLOW_SYNTAX (never indented into the block as assignments, which would change what the line means).
+    [Fact]
+    public void AMalformedNodeLineIsNeverIndentedIntoTheAssignBlockAbove()
+    {
+        var call = "server action SlipCall\n  out Saved: Rec Identifier\n  local P: Rec\n  assign\n    P.Name = \"a\"\n  Created = CreateRec (Source=P)\n  assign Saved = Created.Id\n  end\n";
+        var aggregate = "server action SlipAggregate\n  out N: Integer\n  local P: Rec\n  assign\n    P.Name = \"a\"\n  R = aggregate FROM Rec WHER (Rec.Name <> \"\") MAX 5\n  assign N = R.Count\n  end\n";
+        // Re-check of 2026-10-12 (probes N21, N22, pure P1, P2, P2b): spaces around the named argument's `=`, the keywords of
+        // an aggregate in another case.
+        var spaced = call.Replace("(Source=P)", "(Source = P)");
+        var lower = aggregate.Replace("aggregate FROM Rec WHER", "aggregate from Rec WHERE");
+        var upper = aggregate.Replace("aggregate FROM Rec WHER", "Aggregate FROM Rec WHERE");
+        var (normalizedJob, result) = Analyze(FlowJob(call, aggregate, spaced, lower, upper).ToJsonString());
+        Assert.DoesNotContain(Normalizations(result), n => n["rule"]!.GetValue<string>() == Anvil.Reading.FlowTextEdit.AssignmentIndent);
+        var syntax = Problems(result, "FLOW_SYNTAX");
+        for (var i = 0; i < 3; i++)
+            Assert.Contains(syntax, p => p["pointer"]!.GetValue<string>() == "/ops/0/data/flow/" + i && p["message"]!.GetValue<string>().StartsWith("logic: line 6: ", StringComparison.Ordinal));
+        Assert.All(syntax, p => Assert.Null(p["patch"]));
+        // CX3: keyword casing has one reading and is now explicitly normalized; the malformed cases above still refuse.
+        var shapes = Normalizations(result, Anvil.Reading.FlowTextEdit.AggregateSqlShape);
+        Assert.Equal(2, shapes.Length);
+        foreach (var i in new[] { 3, 4 }) {
+            Assert.DoesNotContain(syntax, p => p["pointer"]!.GetValue<string>() == "/ops/0/data/flow/" + i);
+            Assert.Contains(shapes, n => n["path"]!.GetValue<string>() == "/ops/0/data/flow/" + i);
+            _ = Anvil.Reading.ModuleFlow.Read(normalizedJob!["ops"]![0]!["data"]!["flow"]![i]!.GetValue<string>());
+        }
+        // Pure probe P3: a built-in function whose first argument is a comparison is no named argument: the line is a slipped
+        // assignment (its one reading), indented into the block.
+        var slip = "server action SlipIf\n  in A: Integer\n  out T: Text\n  assign\n    T = \"a\"\n  T = If(A=1, \"x\", \"y\")\n  end\n";
+        var (_, slipped) = Analyze(FlowJob(slip).ToJsonString());
+        Assert.Empty(Problems(slipped, "FLOW_SYNTAX"));
+        Assert.Single(Normalizations(slipped, Anvil.Reading.FlowTextEdit.AssignmentIndent));
+    }
+
+    // Review of 2026-10-12 (probes 5 and 6): every L.Current of a mapping over L is written relative to the item, on every line;
+    // a value that reads the item whole is FLOW_MAPPING_CURSOR, never delivered as the list's cursor.
+    [Fact]
+    public void AMappingThatReadsItsListsCurrentIsRelativeOnEveryLineOrRefused()
+    {
+        var mapping = "Q.List mapTo { Name: Q.List.Current.Ent.Name, Code: Trim(Q.List.Current.Ent.City) }";
+        var twice = "server action Twice\n  out Rows: Row List\n  out Rows2: Row List\n  Q = aggregate FROM Ent MAX 10\n  assign Rows = " + mapping + "\n  assign Rows2 = " + mapping + "\n  end\n";
+        var whole = "server action Whole\n  out Wraps: Wrap List\n  Q = aggregate FROM Ent MAX 10\n  assign Wraps = Q.List mapTo { Place: Q.List.Current, Note: \"x\" }\n  end\n";
+        var job = FlowJob(twice, whole);
+        var (parsed, result) = Analyze(job.ToJsonString());
+        Assert.Equal(2, Normalizations(result, Anvil.Reading.FlowTextEdit.MappingRelative).Length);
+        var written = parsed!["ops"]![0]!["data"]!["flow"]![0]!.GetValue<string>();
+        Assert.Equal(2, written.Split("Q.List mapTo { Name: Ent.Name, Code: Trim(Ent.City) }").Length - 1);
+        Assert.DoesNotContain(".Current", written);
+        var cursor = Assert.Single(Problems(result, "FLOW_MAPPING_CURSOR"));
+        Assert.Equal("/ops/0/data/flow/1", cursor["pointer"]!.GetValue<string>());
+        Assert.Contains("line 4", cursor["message"]!.GetValue<string>());
+    }
 }

@@ -17,6 +17,7 @@ import { anvilRoot, o11Lane } from './workspace.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
 import { assertSelectedO11 } from './studio-connect.mjs';
+import { producerCacheDir, recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
 
 export const ENVIRONMENT_READS = ['inventory', 'download', 'download-app', 'templates', 'references', 'referenceable'];
 export const ENVIRONMENT_WRITES = ['create-app', 'add-modules', 'create-module', 'update-app', 'refresh-refs', 'set-user-provider', 'delete-app'];
@@ -556,9 +557,14 @@ export function registerO11Environment(server, deps = {}) {
     const operationId = uuid();
     const record = { action: input.action, target: target(input), operationId, wordsSha256: sha256(input.authorize) };
     journal({ ...record, phase: 'reserved' });
+    // F5 (producer-signatures.mjs): a write that publishes the module ends every earlier observation of it as a producer.
+    // Its end is recorded once the call proves it over; an uncertain one stays running for the ledger.
+    const publication = input.module && input.host && ((input.action === 'refresh-refs' && input.publish === true) || input.action === 'set-user-provider')
+      ? recordPublished(producerCacheDir(lane().work), { environment: input.host, module: input.module, source: 'o11_environment ' + input.action, at: now(), id: operationId }) : false;
     let value;
     try { const run = await runAnvil(argv, { timeoutMs, cwd: root }); value = interpret(input, run, { ...context, operationId, at: now().toISOString() }); }
     catch (error) { value = { ok: false, code: 'UNCERTAIN', outcome: 'uncertain', error: firstLine(error.message), continuation: inventoryRead(input.host, 'read the environment to see whether it was applied; never repeat before that') }; }
+    if (publication && !publicationOpen(value)) recordPublicationEnded(publication);
     // A publication of the call keeps its server version on the journal line of the same operationId.
     journal({ ...record, phase: 'result', outcome: value.ok ? 'ok' : value.outcome ?? 'failed', ...(value.code ? { code: value.code } : {}),
       ...(value.publication?.version != null ? { publishedVersion: value.publication.version, publishedAt: value.publication.at } : {}) });

@@ -9,6 +9,7 @@
 // fits the 12000-byte budget. Needs the lane CLIs built (the index is built from them); skips otherwise.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireBytes } from './fixtures/answer-wire.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +27,7 @@ const jobName = n => (typeof n === 'string' ? n : n.job);
 const REFACTOR = ['refactor.rename', 'refactor.replace', 'refactor.duplicate', 'refactor.move', 'refactor.delete'];
 function withinBudget(a, label) {
   assert.equal(a.ok, true, label + ': ' + (a.error ?? ''));
-  assert.ok(bytesOf(a) <= 12000 && a.size.bytes <= 12000, `${label}: hard budget, ${bytesOf(a)} bytes`);
+  assert.ok(wireBytes(a, { budgetBytes: 12000 }) <= 12000, `${label}: hard budget, ${bytesOf(a)} bytes`);
   assert.notEqual(a.size.status, 'insufficient', `${label}: minimalBytes ${a.size.minimalBytes}`);
 }
 function selected(a, id, label) {

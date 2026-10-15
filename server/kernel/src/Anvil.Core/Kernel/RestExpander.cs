@@ -438,7 +438,8 @@ public static class RestExpander
             ops.Add(Set(target, "IsMandatory", place == "url" && !query.Contains(inputName) || mandatory));
             ops.Add(Set(target, "InputPlacement", place switch { "header" => "HeaderPlacement", "body" => "BodyPlacement", _ => "UrlPlacement" }));
             if (input["originalName"] is { } original) ops.Add(Set(target, "OriginalName", original.ToString()));
-            if (place == "query" && !mandatory) ops.Add(Set(target, "DefaultValueBehavior", "DontSend"));
+            // An optional query parameter or header is not sent when the caller leaves it empty.
+            if (place is "query" or "header" && !mandatory) ops.Add(Set(target, "DefaultValueBehavior", "DontSend"));
             if (input["description"] is { } d) ops.Add(Set(target, "Description", d.ToString()));
         }
         var declaredOutputs = new HashSet<string>(StringComparer.Ordinal);

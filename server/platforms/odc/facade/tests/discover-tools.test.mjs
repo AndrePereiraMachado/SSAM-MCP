@@ -4,6 +4,24 @@
 // CLIs built (as every discover test); nothing here opens a Studio or calls a tool.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { ANSWER_BUDGETS } from '../answer-size.mjs';
+import { wireBytes } from './fixtures/answer-wire.mjs';
+
+test('answer budgets distinguish first discovery from explicit expansion in both lanes; cuts have executable calls', async () => {
+  for (const lane of ['o11', 'odc']) for (const extra of [{}, { expand: 'data.entity:contract' }, { detail: 'data.entity' }, { type: 'IEntity' }, { budgetBytes: 12000 }]) {
+    let request;
+    const answer = await discoverAll({ lane, intent: 'unmatched vocabulary', ...extra }, { discover: async input => {
+      request = input;
+      return { ok: true, lane, intent: input.intent, size: { bytes: 0, budgetBytes: input.budgetBytes, truncated: [{ section: 'context', recover: 'x'.repeat(100) }] } };
+    } });
+    assert.equal(request.budgetBytes, extra.budgetBytes ?? (Object.keys(extra).length ? 40960 : ANSWER_BUDGETS.discoverFirst));
+    const omitted = answer.size.truncated[0];
+    assert.equal(omitted.call.tool, 'ssam_discover');
+    assert.equal(omitted.call.arguments.lane, lane);
+    assert.equal(omitted.call.arguments.intent, 'unmatched vocabulary');
+    assert.ok(omitted.recover.length <= 80);
+  }
+});
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -32,13 +50,29 @@ test('integration logging inspection routes to the read even with an explicit no
   const write=routeTools({lane:'o11',intent:'mudar o nível de log da integração para Full'}).tools[0];
   assert.equal(write.tool,'o11_service_center_write');assert.equal(write.verb,'integration-log-level');
 });
+test('historical request and response route to the exact event reader',()=>{
+ const first=routeTools({lane:'o11',intent:'ver request e response da chamada de integração'}).tools[0];
+ assert.equal(first.tool,'o11_service_center_read');assert.equal(first.verb,'integration-log-detail');
+});
+test('an invisible Portal prompt has a discoverable foreground recovery',()=>{
+ for(const intent of ['trazer a janela de credenciais do portal para frente','focus the Portal credential prompt']){
+  const found=routeTools({lane:'odc',intent}).tools;
+  assert.ok(found.some(x=>x.tool==='odc_portal_login'&&x.verb==='focus'),JSON.stringify(found));
+ }
+});
 const norm = s => String(s).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9_]+/g, ' ').trim();
 const label = x => (x.tool ?? 'gap:' + x.gap) + (x.verb ? '.' + x.verb : '') + (x.otherLane ? '*' : '');
 const verbOf = (tool, verb) => { const v = data.tools[tool]?.verbs?.[verb]; return v ? { field: v.field, value: v.value } : null; };
 const hit = (item, exp) => { if (item.tool !== exp.tool) return false; if (!exp.verb) return true; const v = verbOf(item.tool, item.verb); return !!v && v.field === exp.verb.field && v.value === exp.verb.value; };
 // discover() is not byte-stable between calls: elapsedMs changes its digit count, and size.bytes, size.minimalBytes and
-// the byte counts quoted in the hint follow it by one byte. Those are left out of every deep comparison.
-const stable = answer => JSON.parse(JSON.stringify(answer, (k, v) => (['elapsedMs', 'bytes', 'minimalBytes'].includes(k) ? undefined : typeof v === 'string' ? v.replace(/\b\d+ bytes\b/g, 'N bytes') : v)));
+// the byte counts quoted in the hint follow it by one byte. The recovery budget is
+// also measured from that whole answer, so only its numeric budget is normalized;
+// the recovery tool and every other argument still participate in the comparison.
+const stable = answer => {
+  const value = structuredClone(answer);
+  for (const part of value.size?.truncated ?? []) if (part.call?.tool === 'ssam_discover') part.call.arguments.budgetBytes = 0;
+  return JSON.parse(JSON.stringify(value, (k, v) => (['elapsedMs', 'bytes', 'minimalBytes'].includes(k) ? undefined : typeof v === 'string' ? v.replace(/\b\d+ bytes\b/g, 'N bytes') : v)));
+};
 
 function score(items) {
   let n = 0, top1 = 0, top3 = 0; const misses = []; const loud = []; let capabilities = 0;
@@ -165,8 +199,12 @@ test('discoverAll keeps the model answers of the baseline (matches identical, mo
       // A screen intent whose model part would leave no room for the OutSystems UI counts is budgeted with that floor less
       // (2026-10-05, C07), and says so (size.reserved): its matches are the model answer at the budget minus the floor. At
       // the entry the same for the floor of every section of the request (size.reserved.sections, 2026-10-11).
-      const reserved = (answer.size?.reserved?.outsystemsUi ?? 0) + (answer.size?.reserved?.sections ?? 0);
-      const want = reserved ? ((await discover({ ...input, budgetBytes: Number(budget) - reserved, outsystemsUi: false })).matches ?? []).map(m => `${m.id}:${m.via}`) : expected;
+      // The same for the text route of a screen, data or logic change (B2 of the plan "Texto do SSAM", text-routes.mjs):
+      // its floor is what size.reserved.textRoute says, and the model answer is discover() at the budget minus it.
+      const reservedUi = (answer.size?.reserved?.outsystemsUi ?? 0) + (answer.size?.reserved?.sections ?? 0);
+      const reservedText = answer.size?.reserved?.textRoute ?? 0;
+      const reserved = reservedUi + reservedText;
+      const want = reserved ? ((await discover({ ...input, budgetBytes: Number(budget) - reserved, outsystemsUi: !reservedUi, textRoutes: false })).matches ?? []).map(m => `${m.id}:${m.via}`) : expected;
       if (reserved) floored++;
       if (!isDeepStrictEqual(matches, want)) diffs.push(`${lane} ${budget} ${i.id}: ${matches.join(',')} != ${want.join(',')}${reserved ? ` (floor ${reserved})` : ''}`);
     }
@@ -296,8 +334,9 @@ test('the hint leads with the model change only for a model change, and never hi
     const leftOut = new Set((a.size?.truncated ?? []).filter(x => /^left out for the tools/.test(x.recover)).map(x => x.section));
     for (const s of leftOut) assert.ok(['evidenceRule', 'lexical', 'coverage', 'identity', 'composition', 'terms'].includes(s), `${s} is metadata`);
     // The proven example, the step grammar and the values (2026-10-05, C07) come back after the tools in the room left,
-    // like the OutSystems UI section: not part of the model part.
-    const model = x => { const y = stable(x); delete y.tools; delete y.hint; delete y.size; for (const s of [...leftOut, 'provenExample', 'steps', 'values']) delete y[s]; return y; };
+    // like the OutSystems UI section: not part of the model part. The text route of the model step (B2 of the plan "Texto
+    // do SSAM") too, first among them.
+    const model = x => { const y = stable(x); delete y.tools; delete y.hint; delete y.size; for (const s of [...leftOut, 'provenExample', 'steps', 'values', 'textRoute']) delete y[s]; return y; };
     assert.deepEqual(model(a), model(plain), `${budgetBytes}: the model part is discover()'s`);
     assert.match(a.hint, plain.hint ? /\| Model change: matches/ : /^Model change: matches/);
     if (plain.hint) assert.ok(a.hint.startsWith(plain.hint));
@@ -503,7 +542,7 @@ test('tools fit the byte budget around the model part (4096, 12000, 40960)', asy
       if (raised) assert.ok(raised.from === budgetBytes && raised.rule === 'raise-to-minimal' && raised.to > budgetBytes && raised.to <= 38912, JSON.stringify(raised));
       const B = raised?.to ?? budgetBytes;
       assert.equal(a.size.budgetBytes, B);
-      assert.ok(Buffer.byteLength(JSON.stringify(a), 'utf8') <= B, `${lane} ${budgetBytes} ${intent}: within budget`);
+      assert.ok(wireBytes(a) <= B, `${lane} ${budgetBytes} ${intent}: within budget`);
       assert.equal(a.size.bytes, Buffer.byteLength(JSON.stringify(a), 'utf8'), 'size.bytes measures the returned answer');
     }
 });
@@ -524,5 +563,14 @@ test('the MCP surface tells every session to start each request with ssam_discov
       assert.match(tool.description, /`tools`.*exact MCP tool, its verb/);
       assert.doesNotMatch(tool.description, /^\[odc\]/);
     } finally { await client.close(); await server.close(); }
+  }
+});
+
+test('library release through the Portal is routed (live demo 2026-10-14: "SSAM has no such function")', () => {
+  for (const intent of ['release library', 'liberar biblioteca', 'release da lib', 'versionar library', 'liberar a biblioteca LibX versão 1.0.0 no portal']) {
+    const first = routeTools({ lane: 'odc', intent }).tools[0];
+    assert.equal(first?.tool, 'odc_portal_write', intent);
+    assert.equal(first.args.operationId, 'libraries.release', intent);
+    assert.deepEqual(Object.keys(first.args.input.inputParameters), ['ApplicationKey', 'Revision', 'Version', 'ReleaseNotes']);
   }
 });

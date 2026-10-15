@@ -26,6 +26,8 @@ public sealed partial class ModelSession
         foreach (var flow in FlowGroups().ToArray())
         {
             if (before.TryGetValue(flow.Key.ObjectKey.ToString()!, out var shape) && shape == FlowShape(flow)) continue;
+            // Text and raw authoring share the final-graph policy. Value-only edits
+            // keep the shape above, preserving manual positions without a separate path.
             // Leave malformed flows to native Verify, keeping its original diagnostic.
             if (!flow.Any(n => n is IStartNode or IExceptionHandlerNode or OutSystems.Model.Processes.Nodes.IStartNode)) continue;
             results.Add(FlowLayout.Apply(flow, TypeResolver.Name(flow.Key) ?? flow.Key.ObjectKey.ToString()!));

@@ -1,0 +1,2972 @@
+{
+ "schema": "ssam-prototype-capture/1",
+ "clock": "2026-05-07T11:47:00Z",
+ "tz": "UTC",
+ "engine": {
+  "name": "jsdom",
+  "version": "30.1.1",
+  "node": "fixture"
+ },
+ "source": {
+  "root": "C:\\fixture\\folhaponto",
+  "entry": "Folha de Ponto.html",
+  "files": [],
+  "vendor": []
+ },
+ "kind": "spa-hash",
+ "app": {
+  "prefix": "FolhaPonto",
+  "title": "Folha de Ponto · V1",
+  "lang": "pt-BR"
+ },
+ "document": {
+  "html": [
+   [
+    "lang",
+    "pt-BR"
+   ]
+  ],
+  "body": [],
+  "meta": []
+ },
+ "css": {
+  "sheets": [
+   {
+    "path": "styles.css",
+    "bundle": "folhaponto-bind.bundle/sheets/8247745a7ed9434d5df56f6294f6d35d56993f4bc717ccc3c97c5fcb7d63c2d7.css",
+    "order": 0,
+    "origin": "file",
+    "page": null,
+    "bytes": 102,
+    "sha256": "8247745a7ed9434d5df56f6294f6d35d56993f4bc717ccc3c97c5fcb7d63c2d7",
+    "rules": 2,
+    "imports": [],
+    "urls": []
+   }
+  ]
+ },
+ "assets": [],
+ "icons": {
+  "library": null,
+  "defaultStrokeWidth": 2,
+  "tag": "span",
+  "set": {}
+ },
+ "dimensions": [],
+ "store": {
+  "source": "mapping:window.SCHEDULE",
+  "collections": [
+   {
+    "name": "Etapas",
+    "key": "Id",
+    "mutated": false,
+    "references": [],
+    "fields": [
+     {
+      "name": "Id",
+      "type": "Text",
+      "length": 50
+     },
+     {
+      "name": "Label",
+      "type": "Text",
+      "length": 50
+     },
+     {
+      "name": "Plan",
+      "type": "Integer"
+     },
+     {
+      "name": "Hora",
+      "type": "Text",
+      "length": 50
+     }
+    ],
+    "rows": [
+     {
+      "Id": "in",
+      "Label": "Entrada",
+      "Plan": 540,
+      "Hora": "08:58"
+     },
+     {
+      "Id": "lunch",
+      "Label": "Saída almoço",
+      "Plan": 720,
+      "Hora": "12:00"
+     },
+     {
+      "Id": "back",
+      "Label": "Retorno",
+      "Plan": 780,
+      "Hora": "13:00"
+     },
+     {
+      "Id": "out",
+      "Label": "Saída",
+      "Plan": 1080,
+      "Hora": "18:00"
+     }
+    ]
+   },
+   {
+    "name": "Dias",
+    "key": "Dia",
+    "mutated": false,
+    "references": [],
+    "fields": [
+     {
+      "name": "Dia",
+      "type": "Integer"
+     },
+     {
+      "name": "Status",
+      "type": "Text",
+      "length": 50
+     }
+    ],
+    "rows": [
+     {
+      "Dia": 1,
+      "Status": "extra"
+     },
+     {
+      "Dia": 2,
+      "Status": "weekend"
+     },
+     {
+      "Dia": 3,
+      "Status": "weekend"
+     },
+     {
+      "Dia": 4,
+      "Status": "ok"
+     },
+     {
+      "Dia": 5,
+      "Status": "extra"
+     },
+     {
+      "Dia": 6,
+      "Status": "extra"
+     },
+     {
+      "Dia": 7,
+      "Status": "today"
+     }
+    ]
+   },
+   {
+    "name": "Batidas",
+    "key": "Label",
+    "mutated": false,
+    "references": [],
+    "fields": [
+     {
+      "name": "Label",
+      "type": "Text",
+      "length": 50
+     },
+     {
+      "name": "Hora",
+      "type": "Text",
+      "length": 50
+     }
+    ],
+    "rows": [
+     {
+      "Label": "Entrada",
+      "Hora": "08:55"
+     },
+     {
+      "Label": "Saída almoço",
+      "Hora": "12:00"
+     },
+     {
+      "Label": "Retorno",
+      "Hora": "13:00"
+     },
+     {
+      "Label": "Saída",
+      "Hora": "20:00"
+     }
+    ]
+   }
+  ]
+ },
+ "shell": null,
+ "views": [
+  {
+   "key": "bater",
+   "route": "#bater",
+   "template": "bater",
+   "params": [],
+   "name": "Bater",
+   "nameSource": "text",
+   "default": true,
+   "keepRoot": true,
+   "state": {},
+   "root": {
+    "k": "v:bater",
+    "t": "div",
+    "a": [
+     [
+      "style",
+      "width: 402px; height: 874px; background: rgb(250, 250, 246); position: relative;"
+     ]
+    ],
+    "c": [
+     {
+      "k": "v:bater/0",
+      "t": "div",
+      "a": [
+       [
+        "style",
+        "padding: 8px 24px 0px;"
+       ]
+      ],
+      "c": [
+       {
+        "k": "v:bater/0/0",
+        "t": "div",
+        "a": [
+         [
+          "style",
+          "font-size: 14px; color: rgb(123, 133, 126);"
+         ]
+        ],
+        "c": [
+         {
+          "k": "v:bater/0/0/0",
+          "x": "Bom dia,"
+         }
+        ]
+       },
+       {
+        "k": "v:bater/0/1",
+        "t": "div",
+        "a": [
+         [
+          "style",
+          "font-size: 24px; font-weight: 600;"
+         ]
+        ],
+        "c": [
+         {
+          "k": "v:bater/0/1/0",
+          "x": "Carla"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "k": "v:bater/1",
+      "t": "div",
+      "a": [
+       [
+        "style",
+        "margin: 18px 16px 0px; border-radius: 28px; color: rgb(255, 255, 255);"
+       ]
+      ],
+      "c": [
+       {
+        "k": "v:bater/1/0",
+        "t": "div",
+        "a": [
+         [
+          "style",
+          "font-size: 12px; text-transform: uppercase;"
+         ]
+        ],
+        "c": [
+         {
+          "k": "v:bater/1/0/0",
+          "x": "Trabalhando há"
+         }
+        ]
+       },
+       {
+        "k": "v:bater/1/1",
+        "t": "div",
+        "a": [
+         [
+          "style",
+          "font-size: 86px; font-weight: 300;"
+         ]
+        ],
+        "c": [
+         {
+          "k": "v:bater/1/1/0",
+          "x": "02:49"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "k": "v:bater/2",
+      "t": "div",
+      "a": [
+       [
+        "style",
+        "padding: 14px 16px 0px;"
+       ]
+      ],
+      "c": [
+       {
+        "k": "v:bater/2/0",
+        "t": "button",
+        "a": [
+         [
+          "style",
+          "width: 100%; border-radius: 24px; background: rgb(255, 210, 63);"
+         ]
+        ],
+        "events": [
+         "bater:click:cta"
+        ],
+        "c": [
+         {
+          "k": "v:bater/2/0/0",
+          "t": "div",
+          "a": [
+           [
+            "style",
+            "font-size: 12px; text-transform: uppercase;"
+           ]
+          ],
+          "c": [
+           {
+            "k": "v:bater/2/0/0/0",
+            "x": "Bater ponto"
+           }
+          ]
+         },
+         {
+          "k": "v:bater/2/0/1",
+          "t": "div",
+          "a": [
+           [
+            "style",
+            "font-size: 24px; font-weight: 700;"
+           ]
+          ],
+          "c": [
+           {
+            "k": "v:bater/2/0/1/0",
+            "x": "Saída almoço"
+           }
+          ]
+         },
+         {
+          "k": "v:bater/2/0/2",
+          "t": "div",
+          "a": [
+           [
+            "style",
+            "font-size: 13px;"
+           ]
+          ],
+          "c": [
+           {
+            "k": "v:bater/2/0/2/0",
+            "x": "previsto 12:00"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "k": "v:bater/3",
+      "t": "div",
+      "a": [
+       [
+        "style",
+        "padding: 22px 28px 0px;"
+       ]
+      ],
+      "c": [
+       {
+        "k": "v:bater/3/0",
+        "t": "div",
+        "a": [
+         [
+          "style",
+          "font-size: 11px; text-transform: uppercase;"
+         ]
+        ],
+        "c": [
+         {
+          "k": "v:bater/3/0/0",
+          "x": "Hoje · qui, 7 mai"
+         }
+        ]
+       },
+       {
+        "k": "v:bater/3/1",
+        "t": "div",
+        "a": [
+         [
+          "style",
+          "display: flex; flex-direction: column;"
+         ]
+        ],
+        "list": {
+         "collection": "Etapas",
+         "mode": "self",
+         "items": 4,
+         "filter": null,
+         "sort": [],
+         "sortBy": null,
+         "snapshot": null,
+         "key": null,
+         "template": {
+          "k": "v:bater/3/1/*",
+          "t": "div",
+          "a": [
+           [
+            "style",
+            "display: flex; align-items: center; gap: 14px; padding: 12px 0px;"
+           ]
+          ],
+          "c": [
+           {
+            "k": "v:bater/3/1/*/0",
+            "t": "div",
+            "a": [
+             [
+              "style",
+              "width: 10px; height: 10px; border-radius: 50%; background: rgb(31, 181, 122);"
+             ]
+            ],
+            "c": []
+           },
+           {
+            "k": "v:bater/3/1/*/1",
+            "t": "div",
+            "a": [
+             [
+              "style",
+              "flex: 1 1 0%; font-size: 15px; color: rgb(15, 26, 20);"
+             ]
+            ],
+            "c": [
+             {
+              "k": "v:bater/3/1/*/1/0",
+              "x": "Entrada",
+              "expr": {
+               "fmt": "text",
+               "value": {
+                "field": "Label"
+               },
+               "prefix": "",
+               "suffix": "",
+               "locale": null
+              }
+             }
+            ]
+           },
+           {
+            "k": "v:bater/3/1/*/2",
+            "t": "div",
+            "a": [
+             [
+              "style",
+              "font-size: 16px; font-weight: 700;"
+             ]
+            ],
+            "c": [
+             {
+              "k": "v:bater/3/1/*/2/0",
+              "x": "08:58",
+              "expr": {
+               "fmt": "text",
+               "value": {
+                "field": "Hora"
+               },
+               "prefix": "",
+               "suffix": "",
+               "locale": null
+              }
+             }
+            ]
+           }
+          ]
+         }
+        },
+        "c": []
+       }
+      ]
+     },
+     {
+      "k": "v:bater/4",
+      "t": "div",
+      "a": [
+       [
+        "style",
+        "position: absolute; left: 16px; right: 16px; bottom: 18px; display: flex; gap: 6px;"
+       ]
+      ],
+      "c": [
+       {
+        "k": "v:bater/4/0",
+        "t": "button",
+        "a": [
+         [
+          "style",
+          "flex: 1 1 0%; border-radius: 18px; background: rgb(31, 181, 122);"
+         ]
+        ],
+        "events": [
+         "bater:click:tab-bater"
+        ],
+        "c": [
+         {
+          "k": "v:bater/4/0/0",
+          "x": "Bater"
+         }
+        ]
+       },
+       {
+        "k": "v:bater/4/1",
+        "t": "button",
+        "a": [
+         [
+          "style",
+          "flex: 1 1 0%; border-radius: 18px; background: transparent;"
+         ]
+        ],
+        "events": [
+         "bater:click:tab-espelho"
+        ],
+        "c": [
+         {
+          "k": "v:bater/4/1/0",
+          "x": "Espelho"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "elements": 30
+  },
+  {
+   "key": "espelho",
+   "route": "#espelho",
+   "template": "espelho",
+   "params": [],
+   "name": "Espelho",
+   "nameSource": "text",
+   "default": false,
+   "keepRoot": true,
+   "state": {},
+   "root": {
+    "k": "v:espelho",
+    "t": "div",
+    "a": [
+     [
+      "style",
+      "width: 402px; height: 874px; background: rgb(250, 250, 246); position: relative;"
+     ]
+    ],
+    "c": [
+     {
+      "k": "v:espelho/0",
+      "t": "div",
+      "a": [
+       [
+        "style",
+        "padding: 8px 24px 0px;"
+       ]
+      ],
+      "c": [
+       {
+        "k": "v:espelho/0/0",
+        "t": "div",
+        "a": [
+         [
+          "style",
+          "font-size: 14px; color: rgb(123, 133, 126);"
+         ]
+        ],
+        "c": [
+         {
+          "k": "v:espelho/0/0/0",
+          "x": "Espelho"
+         }
+        ]
+       },
+       {
+        "k": "v:espelho/0/1",
+        "t": "div",
+        "a": [
+         [
+          "style",
+          "font-size: 24px; font-weight: 600;"
+         ]
+        ],
+        "c": [
+         {
+          "k": "v:espelho/0/1/0",
+          "x": "Maio 2026"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "k": "v:espelho/1",
+      "t": "div",
+      "a": [
+       [
+        "style",
+        "margin: 16px 16px 0px; display: grid; grid-template-columns: 1fr 1fr;"
+       ]
+      ],
+      "c": [
+       {
+        "k": "v:espelho/1/0",
+        "t": "div",
+        "a": [
+         [
+          "style",
+          "background: rgb(31, 181, 122); padding: 18px;"
+         ]
+        ],
+        "c": [
+         {
+          "k": "v:espelho/1/0/0",
+          "t": "div",
+          "a": [
+           [
+            "style",
+            "font-size: 11px; text-transform: uppercase;"
+           ]
+          ],
+          "c": [
+           {
+            "k": "v:espelho/1/0/0/0",
+            "x": "Trabalhadas"
+           }
+          ]
+         },
+         {
+          "k": "v:espelho/1/0/1",
+          "t": "div",
+          "a": [
+           [
+            "style",
+            "font-size: 30px; font-weight: 600;"
+           ]
+          ],
+          "c": [
+           {
+            "k": "v:espelho/1/0/1/0",
+            "x": "38:00"
+           }
+          ]
+         },
+         {
+          "k": "v:espelho/1/0/2",
+          "t": "div",
+          "a": [
+           [
+            "style",
+            "font-size: 11.5px;"
+           ]
+          ],
+          "c": [
+           {
+            "k": "v:espelho/1/0/2/0",
+            "x": "de 176:00"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "k": "v:espelho/1/1",
+        "t": "div",
+        "a": [
+         [
+          "style",
+          "background: rgb(255, 210, 63); padding: 18px;"
+         ]
+        ],
+        "c": [
+         {
+          "k": "v:espelho/1/1/0",
+          "t": "div",
+          "a": [
+           [
+            "style",
+            "font-size: 11px; text-transform: uppercase;"
+           ]
+          ],
+          "c": [
+           {
+            "k": "v:espelho/1/1/0/0",
+            "x": "Saldo"
+           }
+          ]
+         },
+         {
+          "k": "v:espelho/1/1/1",
+          "t": "div",
+          "a": [
+           [
+            "style",
+            "font-size: 30px; font-weight: 700;"
+           ]
+          ],
+          "c": [
+           {
+            "k": "v:espelho/1/1/1/0",
+            "x": "+06:30"
+           }
+          ]
+         },
+         {
+          "k": "v:espelho/1/1/2",
+          "t": "div",
+          "a": [
+           [
+            "style",
+            "font-size: 11.5px;"
+           ]
+          ],
+          "c": [
+           {
+            "k": "v:espelho/1/1/2/0",
+            "x": "3 dias extras"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "k": "v:espelho/2",
+      "t": "div",
+      "a": [
+       [
+        "style",
+        "padding: 12px 24px 0px;"
+       ]
+      ],
+      "c": [
+       {
+        "k": "v:espelho/2/0",
+        "t": "button",
+        "a": [
+         [
+          "style",
+          "border-radius: 16px; padding: 10px 14px;"
+         ]
+        ],
+        "events": [
+         "espelho:click:pdf"
+        ],
+        "c": [
+         {
+          "k": "v:espelho/2/0/0",
+          "x": "Exportar PDF"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "k": "v:espelho/3",
+      "t": "div",
+      "a": [
+       [
+        "style",
+        "padding: 22px 24px 0px; display: grid; grid-template-columns: repeat(7, 1fr);"
+       ]
+      ],
+      "list": {
+       "collection": "Dias",
+       "mode": "self",
+       "items": 7,
+       "filter": null,
+       "sort": [],
+       "sortBy": null,
+       "snapshot": null,
+       "key": null,
+       "template": {
+        "k": "v:espelho/3/*",
+        "t": "button",
+        "a": [
+         [
+          "style",
+          "aspect-ratio: 1 / 1; border: medium; background: transparent;"
+         ],
+         [
+          "data-dia",
+          "1"
+         ]
+        ],
+        "events": [
+         "espelho:click:dia"
+        ],
+        "c": [
+         {
+          "k": "v:espelho/3/*/0",
+          "t": "div",
+          "a": [
+           [
+            "style",
+            "width: 30px; height: 30px; font-size: 14px; color: rgb(15, 26, 20);"
+           ]
+          ],
+          "c": [
+           {
+            "k": "v:espelho/3/*/0/0",
+            "x": "1",
+            "expr": {
+             "fmt": "text",
+             "value": {
+              "field": "Dia"
+             },
+             "prefix": "",
+             "suffix": "",
+             "locale": null
+            }
+           }
+          ]
+         }
+        ]
+       }
+      },
+      "c": []
+     },
+     {
+      "k": "v:espelho/4",
+      "t": "div",
+      "a": [
+       [
+        "style",
+        "position: absolute; left: 16px; right: 16px; bottom: 18px; display: flex; gap: 6px;"
+       ]
+      ],
+      "c": [
+       {
+        "k": "v:espelho/4/0",
+        "t": "button",
+        "a": [
+         [
+          "style",
+          "flex: 1 1 0%; border-radius: 18px; background: transparent;"
+         ]
+        ],
+        "events": [
+         "espelho:click:tab-bater"
+        ],
+        "c": [
+         {
+          "k": "v:espelho/4/0/0",
+          "x": "Bater"
+         }
+        ]
+       },
+       {
+        "k": "v:espelho/4/1",
+        "t": "button",
+        "a": [
+         [
+          "style",
+          "flex: 1 1 0%; border-radius: 18px; background: rgb(31, 181, 122);"
+         ]
+        ],
+        "events": [
+         "espelho:click:tab-espelho"
+        ],
+        "c": [
+         {
+          "k": "v:espelho/4/1/0",
+          "x": "Espelho"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "elements": 30
+  }
+ ],
+ "modals": [
+  {
+   "key": "day-sheet",
+   "name": "DaySheet",
+   "container": {
+    "tag": "div",
+    "attrs": [
+     [
+      "role",
+      "dialog"
+     ]
+    ],
+    "class": null
+   },
+   "openedFrom": [
+    {
+     "view": "espelho",
+     "event": "espelho:click:dia"
+    }
+   ],
+   "params": [
+    {
+     "name": "Dia",
+     "from": "data-dia",
+     "type": "Integer"
+    }
+   ],
+   "root": {
+    "k": "m:day-sheet",
+    "t": "div",
+    "a": [
+     [
+      "style",
+      "position: absolute; inset: 0px; background: rgba(15, 26, 20, 0.45);"
+     ],
+     [
+      "role",
+      "dialog"
+     ]
+    ],
+    "c": [
+     {
+      "k": "m:day-sheet/0",
+      "t": "div",
+      "a": [
+       [
+        "style",
+        "position: absolute; left: 0px; right: 0px; bottom: 0px; background: rgb(250, 250, 246); padding: 14px 24px 30px;"
+       ]
+      ],
+      "c": [
+       {
+        "k": "m:day-sheet/0/0",
+        "t": "div",
+        "a": [
+         [
+          "style",
+          "font-size: 13px; color: rgb(123, 133, 126);"
+         ]
+        ],
+        "c": [
+         {
+          "k": "m:day-sheet/0/0/0",
+          "x": "sex, 5 de maio"
+         }
+        ]
+       },
+       {
+        "k": "m:day-sheet/0/1",
+        "t": "div",
+        "a": [
+         [
+          "style",
+          "margin-top: 18px;"
+         ]
+        ],
+        "list": {
+         "collection": "Batidas",
+         "mode": "self",
+         "items": 4,
+         "filter": null,
+         "sort": [],
+         "sortBy": null,
+         "snapshot": null,
+         "key": null,
+         "template": {
+          "k": "m:day-sheet/0/1/*",
+          "t": "div",
+          "a": [
+           [
+            "style",
+            "display: flex; gap: 14px; padding: 12px 0px;"
+           ]
+          ],
+          "c": [
+           {
+            "k": "m:day-sheet/0/1/*/0",
+            "t": "div",
+            "a": [
+             [
+              "style",
+              "flex: 1 1 0%; font-size: 15px;"
+             ]
+            ],
+            "c": [
+             {
+              "k": "m:day-sheet/0/1/*/0/0",
+              "x": "Entrada",
+              "expr": {
+               "fmt": "text",
+               "value": {
+                "field": "Label"
+               },
+               "prefix": "",
+               "suffix": "",
+               "locale": null
+              }
+             }
+            ]
+           },
+           {
+            "k": "m:day-sheet/0/1/*/1",
+            "t": "span",
+            "a": [
+             [
+              "style",
+              "font-size: 16px; font-weight: 700;"
+             ]
+            ],
+            "c": [
+             {
+              "k": "m:day-sheet/0/1/*/1/0",
+              "x": "08:55",
+              "expr": {
+               "fmt": "text",
+               "value": {
+                "field": "Hora"
+               },
+               "prefix": "",
+               "suffix": "",
+               "locale": null
+              }
+             }
+            ]
+           }
+          ]
+         }
+        },
+        "c": []
+       },
+       {
+        "k": "m:day-sheet/0/2",
+        "t": "button",
+        "a": [
+         [
+          "style",
+          "margin-top: 18px; width: 100%; border-radius: 16px;"
+         ]
+        ],
+        "events": [
+         "day-sheet:click:fechar"
+        ],
+        "c": [
+         {
+          "k": "m:day-sheet/0/2/0",
+          "x": "Fechar"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "elements": 12
+  }
+ ],
+ "events": [
+  {
+   "key": "bater:click:cta",
+   "view": "bater",
+   "on": "click",
+   "selector": "button",
+   "params": [],
+   "effects": [],
+   "when": null,
+   "handler": "v1-app.jsx:1",
+   "compiled": false
+  },
+  {
+   "key": "bater:click:tab-bater",
+   "view": "bater",
+   "on": "click",
+   "selector": "button",
+   "params": [],
+   "effects": [],
+   "when": null,
+   "handler": "v1-app.jsx:1",
+   "compiled": false
+  },
+  {
+   "key": "bater:click:tab-espelho",
+   "view": "bater",
+   "on": "click",
+   "selector": "button",
+   "params": [],
+   "effects": [],
+   "when": null,
+   "handler": "v1-app.jsx:1",
+   "compiled": false
+  },
+  {
+   "key": "espelho:click:tab-bater",
+   "view": "espelho",
+   "on": "click",
+   "selector": "button",
+   "params": [],
+   "effects": [],
+   "when": null,
+   "handler": "v1-app.jsx:1",
+   "compiled": false
+  },
+  {
+   "key": "espelho:click:tab-espelho",
+   "view": "espelho",
+   "on": "click",
+   "selector": "button",
+   "params": [],
+   "effects": [],
+   "when": null,
+   "handler": "v1-app.jsx:1",
+   "compiled": false
+  },
+  {
+   "key": "espelho:click:pdf",
+   "view": "espelho",
+   "on": "click",
+   "selector": "button",
+   "params": [],
+   "effects": [],
+   "when": null,
+   "handler": "v1-app.jsx:1",
+   "compiled": false
+  },
+  {
+   "key": "espelho:click:dia",
+   "view": "espelho",
+   "on": "click",
+   "selector": "button",
+   "params": [
+    {
+     "name": "Dia",
+     "from": "data-dia",
+     "type": "Integer"
+    }
+   ],
+   "effects": [
+    {
+     "kind": "openPopup",
+     "modal": "day-sheet",
+     "inputs": {
+      "Dia": {
+       "param": "Dia"
+      }
+     }
+    }
+   ],
+   "when": null,
+   "handler": "v1-app.jsx:1",
+   "compiled": true
+  },
+  {
+   "key": "day-sheet:click:fechar",
+   "on": "click",
+   "selector": "button",
+   "params": [],
+   "effects": [
+    {
+     "kind": "closePopup",
+     "modal": "day-sheet"
+    }
+   ],
+   "when": null,
+   "handler": "v1-app.jsx:1",
+   "compiled": true,
+   "modal": "day-sheet"
+  }
+ ],
+ "explored": [
+  {
+   "id": "v:bater@canonical",
+   "view": "bater",
+   "assign": {},
+   "tree": "tb"
+  },
+  {
+   "id": "v:espelho@canonical",
+   "view": "espelho",
+   "assign": {},
+   "tree": "te"
+  },
+  {
+   "id": "m:day-sheet@canonical",
+   "view": "espelho",
+   "modal": "day-sheet",
+   "assign": {},
+   "tree": "ts"
+  }
+ ],
+ "trees": {
+  "tb": {
+   "k": "b",
+   "t": "body",
+   "a": [],
+   "c": [
+    {
+     "k": "v:bater",
+     "t": "div",
+     "a": [
+      [
+       "style",
+       "width: 402px; height: 874px; background: rgb(250, 250, 246); position: relative;"
+      ]
+     ],
+     "c": [
+      {
+       "k": "v:bater/0",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "padding: 8px 24px 0px;"
+        ]
+       ],
+       "c": [
+        {
+         "k": "v:bater/0/0",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "font-size: 14px; color: rgb(123, 133, 126);"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:bater/0/0/0",
+           "x": "Bom dia,"
+          }
+         ]
+        },
+        {
+         "k": "v:bater/0/1",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "font-size: 24px; font-weight: 600;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:bater/0/1/0",
+           "x": "Carla"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "k": "v:bater/1",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "margin: 18px 16px 0px; border-radius: 28px; color: rgb(255, 255, 255);"
+        ]
+       ],
+       "c": [
+        {
+         "k": "v:bater/1/0",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "font-size: 12px; text-transform: uppercase;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:bater/1/0/0",
+           "x": "Trabalhando há"
+          }
+         ]
+        },
+        {
+         "k": "v:bater/1/1",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "font-size: 86px; font-weight: 300;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:bater/1/1/0",
+           "x": "02:49"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "k": "v:bater/2",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "padding: 14px 16px 0px;"
+        ]
+       ],
+       "c": [
+        {
+         "k": "v:bater/2/0",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "width: 100%; border-radius: 24px; background: rgb(255, 210, 63);"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:bater/2/0/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "font-size: 12px; text-transform: uppercase;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:bater/2/0/0/0",
+             "x": "Bater ponto"
+            }
+           ]
+          },
+          {
+           "k": "v:bater/2/0/1",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "font-size: 24px; font-weight: 700;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:bater/2/0/1/0",
+             "x": "Saída almoço"
+            }
+           ]
+          },
+          {
+           "k": "v:bater/2/0/2",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "font-size: 13px;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:bater/2/0/2/0",
+             "x": "previsto 12:00"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "k": "v:bater/3",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "padding: 22px 28px 0px;"
+        ]
+       ],
+       "c": [
+        {
+         "k": "v:bater/3/0",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "font-size: 11px; text-transform: uppercase;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:bater/3/0/0",
+           "x": "Hoje · qui, 7 mai"
+          }
+         ]
+        },
+        {
+         "k": "v:bater/3/1",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "display: flex; flex-direction: column;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:bater/3/1/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "display: flex; align-items: center; gap: 14px; padding: 12px 0px;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:bater/3/1/0/0",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "width: 10px; height: 10px; border-radius: 50%; background: rgb(31, 181, 122);"
+              ]
+             ],
+             "c": []
+            },
+            {
+             "k": "v:bater/3/1/0/1",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "flex: 1 1 0%; font-size: 15px; color: rgb(15, 26, 20);"
+              ]
+             ],
+             "c": [
+              {
+               "k": "v:bater/3/1/0/1/0",
+               "x": "Entrada"
+              }
+             ]
+            },
+            {
+             "k": "v:bater/3/1/0/2",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "font-size: 16px; font-weight: 700;"
+              ]
+             ],
+             "c": [
+              {
+               "k": "v:bater/3/1/0/2/0",
+               "x": "08:58"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "k": "v:bater/3/1/1",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "display: flex; align-items: center; gap: 14px; padding: 12px 0px;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:bater/3/1/1/0",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "width: 10px; height: 10px; border-radius: 50%; background: transparent;"
+              ]
+             ],
+             "c": []
+            },
+            {
+             "k": "v:bater/3/1/1/1",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "flex: 1 1 0%; font-size: 15px; color: rgb(123, 133, 126);"
+              ]
+             ],
+             "c": [
+              {
+               "k": "v:bater/3/1/1/1/0",
+               "x": "Saída almoço"
+              }
+             ]
+            },
+            {
+             "k": "v:bater/3/1/1/2",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "font-size: 16px; font-weight: 700;"
+              ]
+             ],
+             "c": [
+              {
+               "k": "v:bater/3/1/1/2/0",
+               "x": "12:00"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "k": "v:bater/3/1/2",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "display: flex; align-items: center; gap: 14px; padding: 12px 0px;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:bater/3/1/2/0",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "width: 10px; height: 10px; border-radius: 50%; background: transparent;"
+              ]
+             ],
+             "c": []
+            },
+            {
+             "k": "v:bater/3/1/2/1",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "flex: 1 1 0%; font-size: 15px; color: rgb(123, 133, 126);"
+              ]
+             ],
+             "c": [
+              {
+               "k": "v:bater/3/1/2/1/0",
+               "x": "Retorno"
+              }
+             ]
+            },
+            {
+             "k": "v:bater/3/1/2/2",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "font-size: 16px; font-weight: 700;"
+              ]
+             ],
+             "c": [
+              {
+               "k": "v:bater/3/1/2/2/0",
+               "x": "13:00"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "k": "v:bater/3/1/3",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "display: flex; align-items: center; gap: 14px; padding: 12px 0px;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:bater/3/1/3/0",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "width: 10px; height: 10px; border-radius: 50%; background: transparent;"
+              ]
+             ],
+             "c": []
+            },
+            {
+             "k": "v:bater/3/1/3/1",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "flex: 1 1 0%; font-size: 15px; color: rgb(123, 133, 126);"
+              ]
+             ],
+             "c": [
+              {
+               "k": "v:bater/3/1/3/1/0",
+               "x": "Saída"
+              }
+             ]
+            },
+            {
+             "k": "v:bater/3/1/3/2",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "font-size: 16px; font-weight: 700;"
+              ]
+             ],
+             "c": [
+              {
+               "k": "v:bater/3/1/3/2/0",
+               "x": "18:00"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "k": "v:bater/4",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "position: absolute; left: 16px; right: 16px; bottom: 18px; display: flex; gap: 6px;"
+        ]
+       ],
+       "c": [
+        {
+         "k": "v:bater/4/0",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "flex: 1 1 0%; border-radius: 18px; background: rgb(31, 181, 122);"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:bater/4/0/0",
+           "x": "Bater"
+          }
+         ]
+        },
+        {
+         "k": "v:bater/4/1",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "flex: 1 1 0%; border-radius: 18px; background: transparent;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:bater/4/1/0",
+           "x": "Espelho"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "te": {
+   "k": "b",
+   "t": "body",
+   "a": [],
+   "c": [
+    {
+     "k": "v:espelho",
+     "t": "div",
+     "a": [
+      [
+       "style",
+       "width: 402px; height: 874px; background: rgb(250, 250, 246); position: relative;"
+      ]
+     ],
+     "c": [
+      {
+       "k": "v:espelho/0",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "padding: 8px 24px 0px;"
+        ]
+       ],
+       "c": [
+        {
+         "k": "v:espelho/0/0",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "font-size: 14px; color: rgb(123, 133, 126);"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/0/0/0",
+           "x": "Espelho"
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/0/1",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "font-size: 24px; font-weight: 600;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/0/1/0",
+           "x": "Maio 2026"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "k": "v:espelho/1",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "margin: 16px 16px 0px; display: grid; grid-template-columns: 1fr 1fr;"
+        ]
+       ],
+       "c": [
+        {
+         "k": "v:espelho/1/0",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "background: rgb(31, 181, 122); padding: 18px;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/1/0/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "font-size: 11px; text-transform: uppercase;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/1/0/0/0",
+             "x": "Trabalhadas"
+            }
+           ]
+          },
+          {
+           "k": "v:espelho/1/0/1",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "font-size: 30px; font-weight: 600;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/1/0/1/0",
+             "x": "38:00"
+            }
+           ]
+          },
+          {
+           "k": "v:espelho/1/0/2",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "font-size: 11.5px;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/1/0/2/0",
+             "x": "de 176:00"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/1/1",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "background: rgb(255, 210, 63); padding: 18px;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/1/1/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "font-size: 11px; text-transform: uppercase;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/1/1/0/0",
+             "x": "Saldo"
+            }
+           ]
+          },
+          {
+           "k": "v:espelho/1/1/1",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "font-size: 30px; font-weight: 700;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/1/1/1/0",
+             "x": "+06:30"
+            }
+           ]
+          },
+          {
+           "k": "v:espelho/1/1/2",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "font-size: 11.5px;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/1/1/2/0",
+             "x": "3 dias extras"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "k": "v:espelho/2",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "padding: 12px 24px 0px;"
+        ]
+       ],
+       "c": [
+        {
+         "k": "v:espelho/2/0",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "border-radius: 16px; padding: 10px 14px;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/2/0/0",
+           "x": "Exportar PDF"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "k": "v:espelho/3",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "padding: 22px 24px 0px; display: grid; grid-template-columns: repeat(7, 1fr);"
+        ]
+       ],
+       "c": [
+        {
+         "k": "v:espelho/3/0",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "aspect-ratio: 1 / 1; border: medium; background: transparent;"
+          ],
+          [
+           "data-dia",
+           "1"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/3/0/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "width: 30px; height: 30px; font-size: 14px; color: rgb(15, 26, 20);"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/3/0/0/0",
+             "x": "1"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/3/1",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "aspect-ratio: 1 / 1; border: medium; background: transparent;"
+          ],
+          [
+           "data-dia",
+           "2"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/3/1/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "width: 30px; height: 30px; font-size: 14px; color: rgb(123, 133, 126);"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/3/1/0/0",
+             "x": "2"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/3/2",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "aspect-ratio: 1 / 1; border: medium; background: transparent;"
+          ],
+          [
+           "data-dia",
+           "3"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/3/2/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "width: 30px; height: 30px; font-size: 14px; color: rgb(123, 133, 126);"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/3/2/0/0",
+             "x": "3"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/3/3",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "aspect-ratio: 1 / 1; border: medium; background: transparent;"
+          ],
+          [
+           "data-dia",
+           "4"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/3/3/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "width: 30px; height: 30px; font-size: 14px; color: rgb(15, 26, 20);"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/3/3/0/0",
+             "x": "4"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/3/4",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "aspect-ratio: 1 / 1; border: medium; background: transparent;"
+          ],
+          [
+           "data-dia",
+           "5"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/3/4/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "width: 30px; height: 30px; font-size: 14px; color: rgb(15, 26, 20);"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/3/4/0/0",
+             "x": "5"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/3/5",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "aspect-ratio: 1 / 1; border: medium; background: transparent;"
+          ],
+          [
+           "data-dia",
+           "6"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/3/5/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "width: 30px; height: 30px; font-size: 14px; color: rgb(15, 26, 20);"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/3/5/0/0",
+             "x": "6"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/3/6",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "aspect-ratio: 1 / 1; border: medium; background: transparent;"
+          ],
+          [
+           "data-dia",
+           "7"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/3/6/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "width: 30px; height: 30px; font-size: 14px; color: rgb(15, 26, 20);"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/3/6/0/0",
+             "x": "7"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "k": "v:espelho/4",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "position: absolute; left: 16px; right: 16px; bottom: 18px; display: flex; gap: 6px;"
+        ]
+       ],
+       "c": [
+        {
+         "k": "v:espelho/4/0",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "flex: 1 1 0%; border-radius: 18px; background: transparent;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/4/0/0",
+           "x": "Bater"
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/4/1",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "flex: 1 1 0%; border-radius: 18px; background: rgb(31, 181, 122);"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/4/1/0",
+           "x": "Espelho"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "ts": {
+   "k": "b",
+   "t": "body",
+   "a": [],
+   "c": [
+    {
+     "k": "v:espelho",
+     "t": "div",
+     "a": [
+      [
+       "style",
+       "width: 402px; height: 874px; background: rgb(250, 250, 246); position: relative;"
+      ]
+     ],
+     "c": [
+      {
+       "k": "v:espelho/0",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "padding: 8px 24px 0px;"
+        ]
+       ],
+       "c": [
+        {
+         "k": "v:espelho/0/0",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "font-size: 14px; color: rgb(123, 133, 126);"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/0/0/0",
+           "x": "Espelho"
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/0/1",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "font-size: 24px; font-weight: 600;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/0/1/0",
+           "x": "Maio 2026"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "k": "v:espelho/1",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "margin: 16px 16px 0px; display: grid; grid-template-columns: 1fr 1fr;"
+        ]
+       ],
+       "c": [
+        {
+         "k": "v:espelho/1/0",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "background: rgb(31, 181, 122); padding: 18px;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/1/0/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "font-size: 11px; text-transform: uppercase;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/1/0/0/0",
+             "x": "Trabalhadas"
+            }
+           ]
+          },
+          {
+           "k": "v:espelho/1/0/1",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "font-size: 30px; font-weight: 600;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/1/0/1/0",
+             "x": "38:00"
+            }
+           ]
+          },
+          {
+           "k": "v:espelho/1/0/2",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "font-size: 11.5px;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/1/0/2/0",
+             "x": "de 176:00"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/1/1",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "background: rgb(255, 210, 63); padding: 18px;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/1/1/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "font-size: 11px; text-transform: uppercase;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/1/1/0/0",
+             "x": "Saldo"
+            }
+           ]
+          },
+          {
+           "k": "v:espelho/1/1/1",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "font-size: 30px; font-weight: 700;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/1/1/1/0",
+             "x": "+06:30"
+            }
+           ]
+          },
+          {
+           "k": "v:espelho/1/1/2",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "font-size: 11.5px;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/1/1/2/0",
+             "x": "3 dias extras"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "k": "v:espelho/2",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "padding: 12px 24px 0px;"
+        ]
+       ],
+       "c": [
+        {
+         "k": "v:espelho/2/0",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "border-radius: 16px; padding: 10px 14px;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/2/0/0",
+           "x": "Exportar PDF"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "k": "v:espelho/3",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "padding: 22px 24px 0px; display: grid; grid-template-columns: repeat(7, 1fr);"
+        ]
+       ],
+       "c": [
+        {
+         "k": "v:espelho/3/0",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "aspect-ratio: 1 / 1; border: medium; background: transparent;"
+          ],
+          [
+           "data-dia",
+           "1"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/3/0/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "width: 30px; height: 30px; font-size: 14px; color: rgb(15, 26, 20);"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/3/0/0/0",
+             "x": "1"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/3/1",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "aspect-ratio: 1 / 1; border: medium; background: transparent;"
+          ],
+          [
+           "data-dia",
+           "2"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/3/1/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "width: 30px; height: 30px; font-size: 14px; color: rgb(123, 133, 126);"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/3/1/0/0",
+             "x": "2"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/3/2",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "aspect-ratio: 1 / 1; border: medium; background: transparent;"
+          ],
+          [
+           "data-dia",
+           "3"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/3/2/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "width: 30px; height: 30px; font-size: 14px; color: rgb(123, 133, 126);"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/3/2/0/0",
+             "x": "3"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/3/3",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "aspect-ratio: 1 / 1; border: medium; background: transparent;"
+          ],
+          [
+           "data-dia",
+           "4"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/3/3/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "width: 30px; height: 30px; font-size: 14px; color: rgb(15, 26, 20);"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/3/3/0/0",
+             "x": "4"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/3/4",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "aspect-ratio: 1 / 1; border: medium; background: transparent;"
+          ],
+          [
+           "data-dia",
+           "5"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/3/4/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "width: 30px; height: 30px; font-size: 14px; color: rgb(15, 26, 20);"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/3/4/0/0",
+             "x": "5"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/3/5",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "aspect-ratio: 1 / 1; border: medium; background: transparent;"
+          ],
+          [
+           "data-dia",
+           "6"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/3/5/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "width: 30px; height: 30px; font-size: 14px; color: rgb(15, 26, 20);"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/3/5/0/0",
+             "x": "6"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/3/6",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "aspect-ratio: 1 / 1; border: medium; background: transparent;"
+          ],
+          [
+           "data-dia",
+           "7"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/3/6/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "width: 30px; height: 30px; font-size: 14px; color: rgb(15, 26, 20);"
+            ]
+           ],
+           "c": [
+            {
+             "k": "v:espelho/3/6/0/0",
+             "x": "7"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "k": "v:espelho/4",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "position: absolute; left: 16px; right: 16px; bottom: 18px; display: flex; gap: 6px;"
+        ]
+       ],
+       "c": [
+        {
+         "k": "v:espelho/4/0",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "flex: 1 1 0%; border-radius: 18px; background: transparent;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/4/0/0",
+           "x": "Bater"
+          }
+         ]
+        },
+        {
+         "k": "v:espelho/4/1",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "flex: 1 1 0%; border-radius: 18px; background: rgb(31, 181, 122);"
+          ]
+         ],
+         "c": [
+          {
+           "k": "v:espelho/4/1/0",
+           "x": "Espelho"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "k": "m:day-sheet",
+     "t": "div",
+     "a": [
+      [
+       "style",
+       "position: absolute; inset: 0px; background: rgba(15, 26, 20, 0.45);"
+      ],
+      [
+       "role",
+       "dialog"
+      ]
+     ],
+     "c": [
+      {
+       "k": "m:day-sheet/0",
+       "t": "div",
+       "a": [
+        [
+         "style",
+         "position: absolute; left: 0px; right: 0px; bottom: 0px; background: rgb(250, 250, 246); padding: 14px 24px 30px;"
+        ]
+       ],
+       "c": [
+        {
+         "k": "m:day-sheet/0/0",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "font-size: 13px; color: rgb(123, 133, 126);"
+          ]
+         ],
+         "c": [
+          {
+           "k": "m:day-sheet/0/0/0",
+           "x": "sex, 5 de maio"
+          }
+         ]
+        },
+        {
+         "k": "m:day-sheet/0/1",
+         "t": "div",
+         "a": [
+          [
+           "style",
+           "margin-top: 18px;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "m:day-sheet/0/1/0",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "display: flex; gap: 14px; padding: 12px 0px;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "m:day-sheet/0/1/0/0",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "flex: 1 1 0%; font-size: 15px;"
+              ]
+             ],
+             "c": [
+              {
+               "k": "m:day-sheet/0/1/0/0/0",
+               "x": "Entrada"
+              }
+             ]
+            },
+            {
+             "k": "m:day-sheet/0/1/0/1",
+             "t": "span",
+             "a": [
+              [
+               "style",
+               "font-size: 16px; font-weight: 700;"
+              ]
+             ],
+             "c": [
+              {
+               "k": "m:day-sheet/0/1/0/1/0",
+               "x": "08:55"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "k": "m:day-sheet/0/1/1",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "display: flex; gap: 14px; padding: 12px 0px;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "m:day-sheet/0/1/1/0",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "flex: 1 1 0%; font-size: 15px;"
+              ]
+             ],
+             "c": [
+              {
+               "k": "m:day-sheet/0/1/1/0/0",
+               "x": "Saída almoço"
+              }
+             ]
+            },
+            {
+             "k": "m:day-sheet/0/1/1/1",
+             "t": "span",
+             "a": [
+              [
+               "style",
+               "font-size: 16px; font-weight: 700;"
+              ]
+             ],
+             "c": [
+              {
+               "k": "m:day-sheet/0/1/1/1/0",
+               "x": "12:00"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "k": "m:day-sheet/0/1/2",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "display: flex; gap: 14px; padding: 12px 0px;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "m:day-sheet/0/1/2/0",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "flex: 1 1 0%; font-size: 15px;"
+              ]
+             ],
+             "c": [
+              {
+               "k": "m:day-sheet/0/1/2/0/0",
+               "x": "Retorno"
+              }
+             ]
+            },
+            {
+             "k": "m:day-sheet/0/1/2/1",
+             "t": "span",
+             "a": [
+              [
+               "style",
+               "font-size: 16px; font-weight: 700;"
+              ]
+             ],
+             "c": [
+              {
+               "k": "m:day-sheet/0/1/2/1/0",
+               "x": "13:00"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "k": "m:day-sheet/0/1/3",
+           "t": "div",
+           "a": [
+            [
+             "style",
+             "display: flex; gap: 14px; padding: 12px 0px;"
+            ]
+           ],
+           "c": [
+            {
+             "k": "m:day-sheet/0/1/3/0",
+             "t": "div",
+             "a": [
+              [
+               "style",
+               "flex: 1 1 0%; font-size: 15px;"
+              ]
+             ],
+             "c": [
+              {
+               "k": "m:day-sheet/0/1/3/0/0",
+               "x": "Saída"
+              }
+             ]
+            },
+            {
+             "k": "m:day-sheet/0/1/3/1",
+             "t": "span",
+             "a": [
+              [
+               "style",
+               "font-size: 16px; font-weight: 700;"
+              ]
+             ],
+             "c": [
+              {
+               "k": "m:day-sheet/0/1/3/1/0",
+               "x": "20:00"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "k": "m:day-sheet/0/2",
+         "t": "button",
+         "a": [
+          [
+           "style",
+           "margin-top: 18px; width: 100%; border-radius: 16px;"
+          ]
+         ],
+         "c": [
+          {
+           "k": "m:day-sheet/0/2/0",
+           "x": "Fechar"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "problems": [],
+ "warnings": [],
+ "outOfScope": [
+  {
+   "what": "setInterval",
+   "where": "v1-app.jsx:20",
+   "why": "sem timer de cliente nativo sem JS"
+  }
+ ],
+ "targetGuarded": [],
+ "stats": {
+  "elements": 72,
+  "views": 2,
+  "modals": 1,
+  "icons": 0,
+  "iconInstances": 0,
+  "events": 8,
+  "probes": 0
+ },
+ "timings": {}
+}

@@ -81,7 +81,7 @@ public static class HtmlVisual
     };
     // Attributes the syntax spends on the widget itself; everything else becomes an extended property with its literal value.
     private static readonly HashSet<string> Reserved = new(StringComparer.Ordinal)
-    { "class", "id", "icon", "weight", "bind", "placeholder", "type", "options", "value", "label", "onclick", "for", "src", "list", "as", "if", "else", "name", "href" };
+    { "class", "id", "icon", "weight", "bind", "placeholder", "type", "options", "value", "label", "onclick", "for", "src", "list", "as", "if", "else", "name", "href", "filename" };
     // Widgets the model gives no extended properties: an attribute they cannot carry is an error, not a silent drop.
     private static readonly HashSet<string> NoAttributes = new(StringComparer.Ordinal) { "IIfWidget", "IMobileBlockInstanceWidget" };
     private static readonly Regex Interpolation = new(@"\{\{(.*?)\}\}", RegexOptions.Singleline);
@@ -123,7 +123,9 @@ public static class HtmlVisual
             ["div[list]"] = Row("IList", "Source = list; as is mandatory and names the row inside {{ }}"),
             ["div[if]"] = Row("IIfWidget", "children: True branch; a <div else> right after: False branch"),
             ["Block"] = Row("IMobileBlockInstanceWidget", "name = an existing block, inputs by :Name, handlers by @Event, children by <slot name>"),
-            ["ButtonGroup"] = Row("IButtonGroup", "bind -> Variable; each <ButtonGroupItem value> an IButtonGroupItem, its text an Expression"),
+            ["ButtonGroup"] = Row("IButtonGroup", "bind -> Variable; each <ButtonGroupItem value> an IButtonGroupItem, its text an Expression; also written <button-group> and <button-group-item>"),
+            ["switch"] = Row(ElementWidgetMap.LanguageElements["switch"].Widget, "bind names an existing Boolean variable"),
+            ["upload"] = Row(ElementWidgetMap.LanguageElements["upload"].Widget, "bind -> FileContent (a Binary Data variable), filename -> FileName"),
             ["style"] = Row("(theme)", "scoped under the root class; light-dark() expanded, @keyframes kept, @import to the top"),
         },
         ["attributes"] = "any other attribute: an IExtendedProperty, {{ }} makes an expression",
@@ -177,7 +179,9 @@ public static class HtmlVisual
     }
 
     private static readonly HashSet<string> CompiledTags = new(StringComparer.Ordinal)
-    { "div", "i", "img", "input", "textarea", "select", "button", "a", "label", "block", "slot", "style", "br", "buttongroup", "buttongroupitem", "form" };
+    { "div", "i", "img", "input", "textarea", "select", "button", "a", "label", "block", "slot", "style", "br", "buttongroup", "buttongroupitem", "form",
+      // the rows of the language with no HTML tag of their own (ElementWidgetMap.LanguageElements, the one table)
+      "switch", "upload", "button-group", "button-group-item" };
 
     /// <summary>A tag outside the platform list that the one table replaces by a div (main in ODC, search, menuitem, a custom
     /// element, a dialog) or a span (data, picture in ODC): the element keeps its class ssam-tag-&lt;tag&gt;.</summary>
@@ -384,9 +388,9 @@ public static class HtmlVisual
                             if (!External(src)) images.Add(Find(resolve.Images, src, "image", child));
                         });
                         break;
-                    case "input": case "textarea": case "select": case "buttongroup": Check(() => Bind(child)); break;
-                    case "buttongroupitem":
-                        if (parentTag != "buttongroup") Record(Error($"{child.Where}: <ButtonGroupItem> only belongs directly inside a <ButtonGroup>"));
+                    case "input": case "textarea": case "select": case "buttongroup": case "button-group": case "switch": case "upload": Check(() => Bind(child)); break;
+                    case "buttongroupitem": case "button-group-item":
+                        if (parentTag is not ("buttongroup" or "button-group")) Record(Error($"{child.Where}: <ButtonGroupItem> only belongs directly inside a <ButtonGroup>"));
                         Check(() => Required(child, "value"));
                         break;
                     case "button": case "a":
@@ -576,8 +580,14 @@ public static class HtmlVisual
                 case "a": return Clickable(node, parent, "ILink");
                 case "label": return Label(node, parent);
                 case "br": return Simple(node, parent, "IContainer", _ => { });
-                case "buttongroup": return ButtonGroup(node, parent);
-                case "buttongroupitem": throw Error($"{node.Where}: <ButtonGroupItem> only belongs directly inside a <ButtonGroup>");
+                case "buttongroup": case "button-group": return ButtonGroup(node, parent);
+                case "buttongroupitem": case "button-group-item": throw Error($"{node.Where}: <ButtonGroupItem> only belongs directly inside a <ButtonGroup>");
+                case "switch": return Simple(node, parent, ElementWidgetMap.LanguageElements["switch"].Widget, a => Set(a, "Variable", Expression(Required(node, "bind"), node)));
+                case "upload": return Simple(node, parent, ElementWidgetMap.LanguageElements["upload"].Widget, a =>
+                {
+                    Set(a, "FileContent", Expression(Required(node, "bind"), node));
+                    if (node.Attribute("filename") is { Length: > 0 } fileName) Set(a, "FileName", Expression(fileName, node));
+                });
                 case "form":
                     var form = Create(parent, "IForm", node);
                     Attributes(node, form, "IForm");
@@ -675,7 +685,7 @@ public static class HtmlVisual
         {
             if (node.Attribute("icon") is not { Length: > 0 } icon) throw Error($"{node.Where}: <i> needs icon=\"<name>\"");
             if (node.Attribute("weight") is not { Length: > 0 } weight) throw Error($"{node.Where}: <i icon=\"{icon}\"> needs weight=\"<weight>\"; the Studio refuses an icon without a weight");
-            var alias = Create(parent, "IIcon", node);
+            var alias = Create(parent, ElementWidgetMap.LanguageElements["i"].Widget, node);
             Set(alias, "Icon", icon);
             // O11's IIcon has no Weight (Model API 11.55.69); the ODC one has. The weight is required of the author either
             // way, and it reaches the model wherever the widget can hold it.
@@ -906,7 +916,7 @@ public static class HtmlVisual
         /// variable; each item is an IButtonGroupItem with its Value and its caption as an Expression.</summary>
         private string ButtonGroup(HtmlNode node, string parent)
         {
-            var alias = Create(parent, "IButtonGroup", node);
+            var alias = Create(parent, ElementWidgetMap.LanguageElements["button-group"].Widget, node);
             ops[^1]["empty"] = true;
             Set(alias, "Variable", Expression(Required(node, "bind"), node));
             Attributes(node, alias, "IButtonGroup");
@@ -919,8 +929,8 @@ public static class HtmlVisual
                         if (HtmlNode.CollapseSpaces(child.Text).Length > 0) throw Error($"{child.Where}: the text of a <ButtonGroup> goes in its <ButtonGroupItem value=\"...\">");
                         continue;
                     }
-                    if (child.Tag != "buttongroupitem") throw Error($"{child.Where}: a <ButtonGroup> holds <ButtonGroupItem value=\"...\"> only");
-                    var item = Create(alias, "IButtonGroupItem", child);
+                    if (child.Tag is not ("buttongroupitem" or "button-group-item")) throw Error($"{child.Where}: a <ButtonGroup> holds <ButtonGroupItem value=\"...\"> only");
+                    var item = Create(alias, ElementWidgetMap.LanguageElements["button-group-item"].Widget, child);
                     Set(item, "Value", Expression(Required(child, "value"), child));
                     Attributes(child, item, "IButtonGroupItem");
                     foreach (var part in child.Children)

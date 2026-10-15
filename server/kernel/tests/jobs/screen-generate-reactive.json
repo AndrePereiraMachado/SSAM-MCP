@@ -1,0 +1,25 @@
+{
+  "description": "Screens from entities and blocks (op screen, data.generate, gen-screen/1): the list, detail and form screens of three entities generated from the data model of the job, with the Pager, ConfirmDialog and FilterBar blocks created once and the save/delete server actions around the entity actions.",
+  "base": "reactive-ui.oml",
+  "expectValid": true,
+  "expectedMessages": [],
+  "ops": [
+    {"op": "spec", "data": {
+      "static": [{"name": "CustomerStatus", "records": [{"name": "Active"}, {"name": "Inactive"}]}],
+      "entities": [
+        {"name": "Company", "attributes": [{"name": "Name", "type": "Text", "mandatory": true, "length": 100}, {"name": "Website", "type": "Text", "length": 200}]},
+        {"name": "Customer", "attributes": [
+          {"name": "Name", "type": "Text", "mandatory": true, "length": 100},
+          {"name": "Email", "type": "Email"},
+          {"name": "StatusId", "type": "CustomerStatus Identifier", "mandatory": true},
+          {"name": "CompanyId", "type": "Company Identifier"},
+          {"name": "BirthDate", "type": "Date"},
+          {"name": "CreditLimit", "type": "Decimal"},
+          {"name": "IsVip", "type": "Boolean"},
+          {"name": "Notes", "type": "Text", "length": 2000}]},
+        {"name": "Product", "attributes": [{"name": "Title", "type": "Text", "mandatory": true, "length": 80}, {"name": "Price", "type": "Currency"}, {"name": "Stock", "type": "Integer"}]}
+      ]}},
+    {"op": "create", "parent": "@espace", "type": "IRole", "name": "CustomerManager", "as": "$role"},
+    {"op": "screen", "data": {"generate": {"entities": ["Customer", "Company", "Product"]}}}
+  ]
+}

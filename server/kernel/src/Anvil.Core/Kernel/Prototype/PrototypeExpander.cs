@@ -60,6 +60,9 @@ public sealed class PrototypePlan
     /// <summary>Marked elements of a previous import that this capture no longer produces (1.6): the session deletes each one
     /// nothing outside the prefix references, and keeps and lists the others.</summary>
     public List<PrototypeElement> Vanished { get; } = [];
+    /// <summary>Event key -> the screen action that runs it (the offline validation of a binding proposal maps a failing action
+    /// back to its event).</summary>
+    public Dictionary<string, string> EventActions { get; } = new(StringComparer.Ordinal);
     public int OpCount => Steps.Sum(s => s.Ops?.Count ?? 0);
 }
 
@@ -100,11 +103,11 @@ public static class PrototypeExpander
         ["op"] = Op,
         ["shape"] = new JsonObject
         {
-            ["source"] = "absolute path of the prototype folder or of an .html inside it (read only by the facade)",
+            ["source"] = "absolute path of the prototype folder, of an .html inside it or of its .zip (read only by the facade; a .zip is extracted once, safely)",
             ["entry"] = "relative to source; default index.html, else the only .html of the root",
             ["app"] = "reactive | mobile (default: the open module)",
             ["prefix"] = "^[A-Za-z][A-Za-z0-9]*$; default: the <title> up to the first separator, in PascalCase ASCII",
-            ["mapping"] = "only when a refusal asks for it, with the exact value it gives: screens, default, routes, shell, states, modals, data, vendor, events, ignore, names",
+            ["mapping"] = "only when a refusal asks for it, with the exact value it gives: screens, default, routes, shell, states, modals, data, vendor, events, ignore, names, version",
             ["clock"] = "ISO-8601 UTC fixed clock of the capture", ["tz"] = "IANA time zone of the capture (default UTC)",
             ["home"] = "true makes the default view the module's default screen", ["seed"] = "write the store rows after publication (default true)",
             ["capture"] = "written by the facade: capture.json of the content-addressed bundle", ["captureSha256"] = "written by the facade: canonical hash of the capture",
@@ -205,11 +208,17 @@ public sealed class PrototypeOwner
     public List<(string Event, List<(string Name, string Type)> Params)> BlockEvents { get; } = [];
     public List<(string Local, string Value)> Initialize { get; } = [];
     public List<WidgetNode> Roots { get; } = [];
+    /// <summary>The popups of a screen whose prototype modal was a child of the body (a React portal): beside the shell
+    /// instance, at the screen's own level, never inside the shell's placeholder (an ancestor there may hold position:fixed).</summary>
+    public List<WidgetNode> PortalRoots { get; } = [];
     public Dictionary<WidgetNode, PrototypeWidgetSpec> Specs { get; } = new(ReferenceEqualityComparer.Instance);
     public string Parent { get; set; } = "";
     public string? Description { get; set; }
     public PrototypeWidgets.Context? Widgets { get; set; }
     public HashSet<string> EventKeys { get; } = new(StringComparer.Ordinal);
+    /// <summary>The Data Actions data.bind gives the owner (2.12): the source, its alias in the plan and whether it is fetched on
+    /// demand (a popup's, refreshed when the popup opens).</summary>
+    public List<(PrototypeBindSource Source, string Alias, bool OnDemand)> DataActions { get; } = [];
 }
 
 /// <summary>The planner behind <see cref="PrototypeExpander.Plan"/>; one instance per importation.</summary>
@@ -451,8 +460,9 @@ internal sealed class PrototypePlanner
             var path = asset["path"]!.ToString();
             var name = Name("image", PrototypeNames.Image(Prefix, path), "image");
             _imageNames[path] = name;
-            var ext = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
-            _plan.AssetUrls[path] = $"/{_module.Name}/img/{_module.Name}.{name}.{ext}";
+            // the type of the bytes, not the file's name (a JPEG saved as .png): the Studio checks the stylesheet URL by it
+            var ext = PrototypeNames.ImageExtension(AssetHead(asset), path);
+            _plan.AssetUrls[path] = $"/{_module.Name}/img/{_module.Name}.{name}{(ext.Length > 0 ? "." + ext : "")}";
         }
         foreach (var dim in _ir.Dimensions.Where(d => d["scope"]?.ToString() == "global"))
             _cvNames[dim["key"]!.ToString()] = Name("clientVariable", Prefix + dim["name"], "client variable");
@@ -485,6 +495,21 @@ internal sealed class PrototypePlanner
             _entityRef[collection] = Ref("entity", name, "$p.ent." + Safe(collection));
             _plan.EntityCollections[name] = collection;
         }
+    }
+
+    /// <summary>The first bytes of a bundled asset (its image type); empty when the bundle file cannot be read (the build
+    /// refuses it where it reads the whole file).</summary>
+    private byte[] AssetHead(JsonObject asset)
+    {
+        try
+        {
+            if (_ir.BundleFile(asset["bundle"]?.ToString() ?? "") is not { } file || !File.Exists(file)) return [];
+            using var stream = File.OpenRead(file);
+            var buffer = new byte[4096];
+            var read = stream.Read(buffer, 0, buffer.Length);
+            return buffer[..read];
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { return []; }
     }
 
     internal string EntityAlias(string collection) => _entityRef[collection];
@@ -533,6 +558,38 @@ internal sealed class PrototypePlanner
         _owners.Add(owner);
         _plan.OwnerRefs[name] = owner.Ref;
         return owner;
+    }
+
+    /// <summary>data.bind (2.12): the Data Actions of an owner ("v:&lt;view&gt;" or "m:&lt;modal&gt;"). Their names are the ones the bound
+    /// expressions read, so they are claimed before any generated local, input, aggregate or widget of the owner.</summary>
+    private void BindSources(PrototypeOwner owner, string key, bool onDemand)
+    {
+        if (_ir.Bind == null) return;
+        foreach (var declared in _ir.Bind.Sources.Where(s => s.Owner == key))
+        {
+            var source = declared;
+            // a popup's source reads the popup's parameters by their names (the modal's Dia): on a screen they are its locals
+            if (key.StartsWith("m:", StringComparison.Ordinal) && owner.Kind == "screen" && owner.Popups.TryGetValue(key[2..], out var popup) && popup.Inputs.Count > 0)
+                source = declared with { Args = declared.Args.ToDictionary(a => a.Key, a => Rename(a.Value, popup.Inputs), StringComparer.Ordinal) };
+            if (owner.DataActions.Any(d => d.Source.As.Equals(source.As, StringComparison.OrdinalIgnoreCase))) continue;
+            if (!owner.LocalNames.Claim(source.As))
+            {
+                _plan.Problems.Add(new("INPUT_INVALID", "/bind", $"prototype: the data action '{source.As}' of {owner.Name} collides with another member of it; give the source another \"as\"", false, null));
+                continue;
+            }
+            var alias = $"{(owner.Kind == "screen" ? "$p.scr." + Safe(owner.View!) : "$p.blk." + Safe(owner.Name))}.da.{source.As}";
+            owner.DataActions.Add((source, alias, onDemand));
+        }
+    }
+
+    /// <summary>An expression with each whole name of <paramref name="names"/> (outside text literals, not after a dot) replaced.</summary>
+    internal static string Rename(string expression, IReadOnlyDictionary<string, string> names)
+    {
+        var masked = PrototypeBind.StripStrings(expression);
+        var sb = new StringBuilder(expression);
+        foreach (var m in System.Text.RegularExpressions.Regex.Matches(masked, @"(?<![\w.])[A-Za-z_][A-Za-z0-9_]*(?![\w(])").Cast<System.Text.RegularExpressions.Match>().Reverse())
+            if (names.TryGetValue(m.Value, out var to)) { sb.Remove(m.Index, m.Length); sb.Insert(m.Index, to); }
+        return sb.ToString();
     }
 
     internal string DimType(string key) => _ir.Dimension(key)?["type"]?.ToString() switch { "Integer" => "Integer", "Boolean" => "Boolean", "Decimal" => "Decimal", _ => "Text" };
@@ -602,6 +659,8 @@ internal sealed class PrototypePlanner
             var modal = _ir.Modal(modalKey)!;
             var owner = NewOwner("block", blockName, "$p.blk.m." + Safe(modalKey), modal: modalKey, node: modal["root"] as JsonObject);
             owner.Description = $"Modal {modalKey} of the prototype, shown in a popup of each screen that opens it.";
+            // the block is rendered when its popup shows: its bound source fetches at start with the inputs it received
+            BindSources(owner, "m:" + modalKey, onDemand: false);
             // the record of the modal arrives as an input: the screen reads it (a list row or its own aggregate), so the block
             // re-renders when it changes and never refetches in a lifecycle event (S1)
             if (modal["record"]?["collection"]?.ToString() is { } rc && _ir.Collection(rc) != null)
@@ -623,6 +682,7 @@ internal sealed class PrototypePlanner
             var key = view["key"]!.ToString();
             var owner = NewOwner("screen", _plan.Screens[key], "$p.scr." + Safe(key), view: key, node: view["root"] as JsonObject);
             owner.Description = $"View {key} of the prototype ({view["route"]}).";
+            BindSources(owner, "v:" + key, onDemand: false);
             foreach (var p in PrototypeCapture.Objects(view["params"])) { owner.Inputs.Add((p["name"]!.ToString(), p["type"]?.ToString() ?? "Integer", true)); owner.LocalNames.Claim(p["name"]!.ToString()); }
             // the global dimensions: locals initialized from their Client Variables in OnInitialize (only Assign)
             foreach (var dim in _ir.Dimensions.Where(d => d["scope"]?.ToString() == "global"))
@@ -650,6 +710,8 @@ internal sealed class PrototypePlanner
                 {
                     trees.Add(modal["root"] as JsonObject);
                     events.AddRange(EventsOf(mk));
+                    // a popup of the screen: its bound source is fetched on demand, when the popup opens
+                    BindSources(owner, "m:" + mk, onDemand: true);
                 }
             }
             foreach (var e in events) owner.EventKeys.Add(e);
@@ -1181,7 +1243,10 @@ internal sealed class PrototypePlanner
             Platform = Platform, Capture = _ir, Element = _seams.Element!, Scope = scope, Names = owner.WidgetNames,
             ImageOf = path => _imageNames.GetValueOrDefault(path),
             Event = (key, _) => owner.Bindings.GetValueOrDefault(key),
-            List = list => owner.ByList.TryGetValue(list, out var agg) ? new PrototypeListBinding(agg.Name, agg.Entity, agg.Collection, agg.Joins) : null,
+            // a list bound by data.bind iterates the producer's output list (2.12); the others their aggregate
+            List = list => list["bound"]?.GetValue<bool>() == true && list["source"]?.ToString() is { } bound
+                ? new PrototypeListBinding("", list["itemType"]?.ToString() ?? "", "", new Dictionary<string, string>(), bound, list["item"]?.ToString() ?? bound + ".Current")
+                : owner.ByList.TryGetValue(list, out var agg) ? new PrototypeListBinding(agg.Name, agg.Entity, agg.Collection, agg.Joins) : null,
             Variable = (control, s) =>
             {
                 // the shell's control of a global dimension edits its local copy of the input (OwnersAndData)
@@ -1270,7 +1335,10 @@ internal sealed class PrototypePlanner
                     else if (modal["root"] is JsonObject modalRoot) children.AddRange(builder.Nodes(modalRoot, PopupScope(owner, popup)));
                     var widget = new WidgetNode("IPopup", "m:" + popup.Modal, null, null, [], null, null, null, null, children, null, "wrapper");
                     context.Specs[widget] = spec;
-                    owner.Roots.Add(widget);
+                    // a modal the prototype mounted on the body (VisitaCerta 2026-10-12: the page's own transform animation made the
+                    // fixed backdrop of a popup inside the placeholder cover only the page) sits beside the shell instance
+                    if (_plan.ShellName != null && modal["portal"]?.GetValue<bool>() == true) owner.PortalRoots.Add(widget);
+                    else owner.Roots.Add(widget);
                     if (!_plan.Roots.ContainsKey("m:" + popup.Modal)) _plan.Roots["m:" + popup.Modal] = widget;
                 }
                 foreach (var (node, s) in context.Specs) owner.Specs[node] = s;
@@ -1302,6 +1370,10 @@ internal sealed class PrototypePlanner
     private void Steps()
     {
         var steps = _plan.Steps;
+        // data.bind (2.12): the producer's elements the binding reads, referenced first (Manage Dependencies headless, the verb
+        // reference); a frozen signature (.avsig) was imported before the edit transaction by the job runner
+        if (_ir.Bind is { ProducerFile: { } producerFile } bind && !producerFile.EndsWith(".avsig", StringComparison.OrdinalIgnoreCase) && bind.Elements.Count > 0)
+            steps.Add(new("reference", "producer reference", [new JsonObject { ["op"] = "reference", ["producer"] = producerFile, ["elements"] = new JsonArray(bind.Elements.Select(e => (JsonNode)e).ToArray()) }]));
         // images
         var images = new List<JsonObject>();
         foreach (var asset in _ir.Assets)
@@ -1381,7 +1453,11 @@ internal sealed class PrototypePlanner
         var actions = ordered.SelectMany(o => o.Actions).Select(a => (JsonNode)a.DeepClone()).ToArray();
         steps.Add(new("logic:ui", "screen and block actions", actions.Length > 0 ? [new JsonObject { ["op"] = "logic", ["data"] = new JsonObject { ["actions"] = new JsonArray(actions) } }] : []));
         steps.Add(new("wiring", "wiring", ordered.SelectMany(o => o.Wiring.Where(w => !(w["target"]?.ToString() ?? "").StartsWith("$p.inst.", StringComparison.Ordinal))).ToList()));
-        foreach (var owner in ordered) steps.Add(new("widgets", $"widgets {owner.Name}", Widgets: new PrototypeWidgetsJob(owner.Ref, owner.Parent, owner.Roots, owner.Specs, owner.Name)));
+        foreach (var owner in ordered)
+        {
+            steps.Add(new("widgets", $"widgets {owner.Name}", Widgets: new PrototypeWidgetsJob(owner.Ref, owner.Parent, owner.Roots, owner.Specs, owner.Name)));
+            if (owner.PortalRoots.Count > 0) steps.Add(new("widgets", $"popups {owner.Name}", Widgets: new PrototypeWidgetsJob(owner.Ref, owner.Ref, owner.PortalRoots, owner.Specs, owner.Name)));
+        }
         steps.Add(new("wiring", "block instance handlers", ordered.SelectMany(o => o.Wiring.Where(w => (w["target"]?.ToString() ?? "").StartsWith("$p.inst.", StringComparison.Ordinal))).ToList()));
         if (_ir.Data["home"]?.GetValue<bool>() == true && _ir.Views.FirstOrDefault(v => v["default"]?.GetValue<bool>() == true)?["key"]?.ToString() is { } home)
             steps.Add(new("home", "default screen", [Set("@espace", "DefaultScreen", ScreenOf(home)!.Ref)]));
@@ -1399,7 +1475,7 @@ internal sealed class PrototypePlanner
         // build of the compiler. The same capture over the module it produced (every element there, marked, nothing vanished)
         // is NO_CHANGE.
         var options = _ir.Data.DeepClone().AsObject();
-        foreach (var key in new[] { "capture", "captureSha256", "source", "entry", "seed" }) options.Remove(key);
+        foreach (var key in new[] { "capture", "captureSha256", "source", "entry", "seed" }.Concat(options.Select(p => p.Key).Where(k => k.StartsWith('_')).ToList())) options.Remove(key);
         _plan.PlanSha = PrototypeExpander.Sha(PrototypeCapture.Canonical(new JsonObject
         {
             ["capture"] = _ir.Sha256, ["options"] = options, ["platform"] = Platform, ["module"] = _module.Name, ["compiler"] = PrototypeExpander.CompilerId,
@@ -1410,6 +1486,17 @@ internal sealed class PrototypePlanner
             && complete && _plan.Vanished.Count == 0)
             _plan.NoChange = true;
         foreach (var step in steps.Where(s => s.Special == "flow-description")) step.Arguments!["description"] = FlowDescription();
+    }
+
+    /// <summary>A regular entity of the receipt; attributes (field of the capture -> attribute) when a field got another name, so
+    /// the seed writes each row value to its attribute.</summary>
+    private JsonObject EntityReport(PrototypeDataModel.Entity e)
+    {
+        var o = new JsonObject { ["name"] = e.Name, ["collection"] = e.Collection, ["rows"] = e.Rows.Count, ["autoNumber"] = false };
+        var attributes = new JsonObject();
+        foreach (var (field, attribute) in _ir.AttributeMap) if (e.Fields.Any(f => f.Name == attribute)) attributes[field] = attribute;
+        if (attributes.Count > 0) o["attributes"] = attributes;
+        return o;
     }
 
     internal string FlowDescription() => Describe($"Prototype {Prefix} imported as native screens.\ncapture {_ir.Sha256}\nplan {_plan.PlanSha}");
@@ -1472,7 +1559,8 @@ internal sealed class PrototypePlanner
             ops.Add(Set(reference, "Description", Describe(entity.Static
                 ? $"Collection {entity.Collection} of the prototype store; no event writes it, so its rows are static records."
                 : $"Collection {entity.Collection} of the prototype store, written by its events; Integer Id without AutoNumber (the prototype keys show on screen), rows written by the seed after publication.")));
-            foreach (var field in entity.Fields.Where(f => f.Name != entity.Key && !(entity.Static && f.Name is "Label" or "Order")))
+            // a field label/order of a static entity IS its built-in Label/Order, in any case (PrototypeFieldNames gave it that name)
+            foreach (var field in entity.Fields.Where(f => f.Name != entity.Key && !(entity.Static && PrototypeDataModel.IsBuiltIn(f.Name))))
             {
                 var attribute = existing.FirstOrDefault(c => c.Kind == "IEntityAttribute" && c.Name == field.Name);
                 var attrRef = attribute != null ? "@" + attribute.Key : reference + "." + field.Name;
@@ -1495,8 +1583,8 @@ internal sealed class PrototypePlanner
                 if (record == null) records.Add(Create(reference, "IRecord", name, recordRef));
                 records.Add(Set(recordRef + "/" + entity.Key, "Value", PrototypeExpr.Literal(row[entity.Key], "Integer")));
                 records.Add(Set(recordRef + "/Label", "Value", PrototypeExpr.Quote(Truncate(PrototypeDataModel.RecordLabel(entity, row), 250))));
-                records.Add(Set(recordRef + "/Order", "Value", (entity.Fields.Any(f => f.Name == "Order") && row["Order"] != null ? row["Order"]!.ToString() : order.ToString())));
-                foreach (var field in entity.Fields.Where(f => f.Name != entity.Key && f.Name is not ("Label" or "Order")))
+                records.Add(Set(recordRef + "/Order", "Value", PrototypeDataModel.BuiltInValue(entity, row, "Order") is { } ownOrder ? ownOrder.ToString() : order.ToString()));
+                foreach (var field in entity.Fields.Where(f => f.Name != entity.Key && !PrototypeDataModel.IsBuiltIn(f.Name)))
                     if (row[field.Name] is { } v) records.Add(Set(recordRef + "/" + field.Name, "Value", field.References != null ? PrototypeExpr.Literal(v, "Integer") : PrototypeDataModel.FieldLiteral(field, v)));
             }
         }
@@ -1599,6 +1687,7 @@ internal sealed class PrototypePlanner
             if (local.Default != null) ops.Add(Set(alias, "DefaultValue", local.Default));
         }
         foreach (var agg in owner.Aggregates.Values) ops.AddRange(AggregateOps(owner, agg));
+        foreach (var (source, alias, onDemand) in owner.DataActions) ops.AddRange(DataActionOps(owner, source, alias, onDemand));
         if (owner.Kind == "screen")
         {
             if (_plan.ShellName != null && Shell is { } shell)
@@ -1648,6 +1737,40 @@ internal sealed class PrototypePlanner
         return null;
     }
 
+    /// <summary>A Data Action that calls the producer's server action and exposes its outputs: the ops of HtmlExpander.ActionSource
+    /// (data action, outputs, Start, one Execute Server Action, one Assign, End, layout), fetched at start or on demand.</summary>
+    private IEnumerable<JsonObject> DataActionOps(PrototypeOwner owner, PrototypeBindSource source, string alias, bool onDemand)
+    {
+        yield return Create(owner.Ref, "IDataAction", source.As, alias);
+        yield return OpOf(("op", "delete"), ("target", alias + "/Out1"));
+        yield return Set(alias, "Description", Describe($"Data of the prototype {(source.Owner.StartsWith("m:", StringComparison.Ordinal) ? "popup " + source.Owner[2..] : "view " + source.Owner[2..])}: {_ir.Bind!.Producer}.{source.Action} (data.bind)."));
+        if (onDemand) yield return Set(alias, "Fetch", "OnDemand");
+        foreach (var output in source.Outputs)
+        {
+            yield return Create(alias, "IOutputParameter", output.Name, $"{alias}.out.{output.Name}");
+            yield return Set($"{alias}.out.{output.Name}", "DataType", output.Type);
+        }
+        yield return Create(alias, "IStartNode", null, alias + ".start");
+        yield return Create(alias, "IExecuteServerActionNode", "ReadSource", alias + ".call");
+        yield return Set(alias + ".call", "Action", "IServerAction:" + source.Action);
+        foreach (var (input, value) in source.Args) yield return Set(alias + ".call/" + input, "Value", value);
+        yield return Create(alias, "IAssignNode", null, alias + ".assign");
+        yield return Set(alias + ".assign", "Label", "SetOutputs");
+        var i = 0;
+        foreach (var output in source.Outputs)
+        {
+            i++;
+            yield return Create(alias + ".assign", "IAssignment", null, $"{alias}.assign.{i}");
+            yield return Set($"{alias}.assign.{i}", "Variable", output.Name);
+            yield return Set($"{alias}.assign.{i}", "Value", "ReadSource." + output.Name);
+        }
+        yield return Create(alias, "IEndNode", null, alias + ".end");
+        yield return OpOf(("op", "link"), ("from", alias + ".start"), ("to", alias + ".call"));
+        yield return OpOf(("op", "link"), ("from", alias + ".call"), ("to", alias + ".assign"));
+        yield return OpOf(("op", "link"), ("from", alias + ".assign"), ("to", alias + ".end"));
+        yield return OpOf(("op", "layout"), ("target", alias));
+    }
+
     private IEnumerable<JsonObject> AggregateOps(PrototypeOwner owner, PrototypeAggregate agg)
     {
         yield return Create(owner.Ref, "IScreenAggregate", agg.Name, agg.Alias);
@@ -1681,8 +1804,17 @@ internal sealed class PrototypePlanner
         foreach (var (name, kind, attribute) in agg.Columns)
         {
             c++;
+            // An aggregated column names one attribute (CompileCheck: AGGREGATE_COLUMN_NOT_ATTRIBUTE): a computed value, such as
+            // Sum(A.Qty * B.Price), is a calculated column aggregated by name, the published form (AGG X=Sum(XRow) CALC XRow=...).
+            var value = attribute;
+            if (AggregateSortRule.Plain(attribute) == null)
+            {
+                value = name + "Row";
+                yield return Create(agg.Alias, "ICalculatedAttribute", value, $"{agg.Alias}.k{c}");
+                yield return Set($"{agg.Alias}.k{c}", "Value", attribute);
+            }
             yield return Create(agg.Alias, "IAggregateAttribute", name, $"{agg.Alias}.c{c}");
-            yield return Set($"{agg.Alias}.c{c}", "Attribute", attribute);
+            yield return Set($"{agg.Alias}.c{c}", "Attribute", value);
             yield return Set($"{agg.Alias}.c{c}", "AggregationType", kind);
         }
         yield return Set(agg.Alias, "Name", agg.Name);
@@ -1745,13 +1877,28 @@ internal sealed class PrototypePlanner
         {
             ["staticEntities"] = new JsonArray(_data.Entities.Where(e => e.Static).Select(e => (JsonNode)new JsonObject { ["name"] = e.Name, ["records"] = e.Rows.Count }).Concat(
                 _data.Options.Select(o => (JsonNode)new JsonObject { ["name"] = o.Name, ["records"] = o.Rows.Count, ["options"] = o.Control, ["byKey"] = o.ByKey })).ToArray()),
-            ["entities"] = new JsonArray(_data.Entities.Where(e => !e.Static).Select(e => (JsonNode)new JsonObject { ["name"] = e.Name, ["collection"] = e.Collection, ["rows"] = e.Rows.Count, ["autoNumber"] = false }).ToArray()),
+            ["entities"] = new JsonArray(_data.Entities.Where(e => !e.Static).Select(e => (JsonNode)EntityReport(e)).ToArray()),
             ["extraAttributes"] = new JsonArray(),
             ["serverActions"] = _logic!.ServerDeclarations().Count(),
             ["clientVariables"] = r["clientVariables"]?.DeepClone() ?? new JsonArray(),
             ["exception"] = _exception,
         };
         r.Remove("clientVariables");
+        foreach (var owner in _owners) foreach (var (key, binding) in owner.Bindings) if (binding.Action != null) _plan.EventActions.TryAdd(key, binding.Action);
+        if (_ir.Bind is { } bind)
+        {
+            var bound = bind.Report.DeepClone().AsObject();
+            bound["producer"] = bind.Producer;
+            bound["references"] = new JsonArray(bind.Elements.Select(e => (JsonNode)e).ToArray());
+            bound["dataActions"] = new JsonArray(_owners.SelectMany(o => o.DataActions.Select(d => (JsonNode)new JsonObject
+            {
+                ["owner"] = o.Name, ["name"] = d.Source.As, ["action"] = d.Source.Action, ["fetch"] = d.OnDemand ? "OnDemand" : "AtStart",
+                ["args"] = new JsonObject(d.Source.Args.Select(a => KeyValuePair.Create(a.Key, (JsonNode?)a.Value))),
+                ["outputs"] = new JsonArray(d.Source.Outputs.Select(p => (JsonNode)(p.Name + ": " + p.Type)).ToArray()),
+            })).ToArray());
+            bound["collections"] = new JsonArray(bind.BoundCollections.Order(StringComparer.Ordinal).Select(c => (JsonNode)c).ToArray());
+            ((JsonObject)r["data"]!)["bound"] = bound;
+        }
         var degraded = new JsonArray(); var unevaluable = new JsonArray(); var references = new JsonArray();
         foreach (var owner in _owners.Where(o => o.Widgets != null))
         {
@@ -1764,7 +1911,9 @@ internal sealed class PrototypePlanner
         var css = _plan.CssReport?.DeepClone() as JsonObject;
         css?.Remove("selectors");
         r["fidelity"] = new JsonObject { ["unevaluable"] = unevaluable, ["references"] = references, ["css"] = css };
-        r["renamed"] = _renamed.DeepClone();
+        var allRenamed = _renamed.DeepClone().AsArray();
+        foreach (var a in _ir.AttributeRenames) allRenamed.Add(a!.DeepClone());
+        r["renamed"] = allRenamed;
         r["vanished"] = new JsonArray(_plan.Vanished.Select(v => (JsonNode)new JsonObject { ["kind"] = v.Kind, ["name"] = v.Name, ["key"] = v.Key }).ToArray());
         r["counts"] = new JsonObject
         {

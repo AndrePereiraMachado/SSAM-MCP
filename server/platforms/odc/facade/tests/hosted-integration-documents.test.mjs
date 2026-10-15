@@ -192,3 +192,24 @@ test('a pinned import never lands outside its documents folder (a relative name 
   for (const d of local.documents) assert.ok(d.path.startsWith(pinned + path.sep), d.path);
   assert.ok(!fs.existsSync(path.join(b.root, 'evil.xsd')) && !fs.existsSync(path.join(path.parse(b.root).root, 'evil.xsd')));
 });
+
+// servidor/fase4-25 (G1 of C:\t\vps-a5\CORRECAO.md): the rest-consume op of marco-a5 reads one GET sample per method
+// without one. Hosted, that GET goes through the public-only client like every document of the job (hosted/public-fetch.mjs),
+// never through the global fetch of the server: an internal address answers REST_CONSUME_SAMPLE_FETCH_FAILED and nothing is
+// pinned in the job.
+test('hosted: a rest-consume sample is read only by the public-only client, never by the global fetch (no internal address)', async () => {
+  const b = box();
+  const job = b.job([{ op: 'rest-consume', data: { name: 'Internal', methods: [{ name: 'Probe', url: 'http://127.0.0.1:9/internal' }] } }]);
+  const original = globalThis.fetch;
+  const asked = [];
+  globalThis.fetch = async (url, options) => { asked.push({ url: String(url), redirect: options?.redirect ?? null }); return new Response('{"internal":true}', { status: 200, headers: { 'content-type': 'application/json' } }); };
+  let result;
+  try { result = await prepareIntegrationJob(job, { ...b.hosted, localRoot: b.ws('o11', '.local') }); }
+  finally { globalThis.fetch = original; }
+  assert.deepEqual(asked, [], 'the global fetch of the server was never called');
+  assert.equal(result.ok, false);
+  const sample = (result.problems ?? []).find(p => p.code === 'REST_CONSUME_SAMPLE_FETCH_FAILED');
+  assert.ok(sample, JSON.stringify(result.problems));
+  assert.match(sample.message ?? sample.error ?? JSON.stringify(sample), /not public|127\.0\.0\.1/);
+  assert.equal(JSON.stringify(JSON.parse(fs.readFileSync(job, 'utf8'))).includes('"internal"'), false, 'no sample was written into the job');
+});

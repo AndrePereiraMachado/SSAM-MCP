@@ -4,8 +4,9 @@ import { readConfig } from './config.mjs';
 import { OAuthClient } from './auth.mjs';
 import { prepareRequest } from './request.mjs';
 import { requestBytes, readJson } from './http.mjs';
-import { fail, redact, publicError } from './errors.mjs';
+import { fail, publicError } from './errors.mjs';
 import { SEARCH_POSTS } from './effects.mjs';
+import { projectForAgent, trustedProjection } from './agent-projection.mjs';
 
 export class OdcBridge {
   constructor({ catalog = new Catalog(), config = readConfig(), fetchImpl = globalThis.fetch, now = Date.now, auth } = {}) {
@@ -59,6 +60,10 @@ export class OdcBridge {
   }
 
   async execute(operationId, input = {}, mode = 'read') {
+    return projectForAgent(() => this.executeRaw(operationId, input, mode));
+  }
+
+  async executeRaw(operationId, input = {}, mode = 'read') {
     let operation;
     try {
       ({ operation } = this.catalog.get(operationId));
@@ -100,7 +105,7 @@ export class OdcBridge {
         sha256: crypto.createHash('sha256').update(response.bytes).digest('hex'),
         reason: 'Non-JSON response is not exposed to the model.' };
       if (response.ok) this.lastSuccessfulRequest = this.now();
-      return redact({ ok: response.ok, operationId, status: response.status, data,
+      return trustedProjection({ ok: response.ok, operationId, status: response.status, data,
         ...(response.status === 429 ? { retryAfter: response.headers.get('retry-after'), automaticRetry: false } : {}),
         ...(!response.ok ? { error: { code: response.status === 401 ? 'API_UNAUTHORIZED' : response.status === 403 ? 'API_FORBIDDEN' : 'API_ERROR',
           message: response.status === 401 ? 'The API rejected the client token.' : response.status === 403 ? 'The API client is not authorized for this operation.' : 'The API returned an unsuccessful response.',
@@ -108,7 +113,7 @@ export class OdcBridge {
         } } : {}),
       }, this.auth.secrets());
     } catch (error) {
-      return redact({ ok: false, operationId, error: { ...publicError(error),
+      return trustedProjection({ ok: false, operationId, error: { ...publicError(error),
         ...(!operation?.readOnly && operation ? { retrySafety: 'If a mutation may have been sent, reconcile its outcome before retrying.' } : {}),
       } }, this.auth.secrets());
     }

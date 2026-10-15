@@ -1,0 +1,27 @@
+{
+  "schema": "ssam-recorded-fixture/1",
+  "source": "recorded",
+  "tool": "mcp__ssam__studio_deliver",
+  "result": {
+    "outcome": "refused",
+    "code": null,
+    "problemCodes": [],
+    "publishFailedAfterDelivery": false,
+    "shape": {
+      "keys": [
+        "error",
+        "failed",
+        "job",
+        "jobSha256",
+        "ok"
+      ],
+      "code": null,
+      "failed": "build",
+      "outcome": null
+    }
+  },
+  "records": 1,
+  "bytes": 1539,
+  "shrunk": [],
+  "removed": []
+}

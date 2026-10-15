@@ -24,7 +24,7 @@ export function laneEnvironment({ lane = o11Lane.lane, root = anvilRoot, env = p
 }
 
 // run(args, {input, timeoutMs, cwd, cli}) -> {ok, exitCode, envelope|null, stderr[], wallMs, line}
-export function createAnvilRunner({ lane = o11Lane.lane, root = anvilRoot, env = process.env, execFileFn = execFile, dotnet = 'dotnet' } = {}) {
+export function createAnvilRunner({ lane = o11Lane.lane, root = anvilRoot, env = process.env, environment = laneEnvironment, execFileFn = execFile, dotnet = 'dotnet' } = {}) {
   return function runAnvil(args, { input, timeoutMs = 900000, cwd = root, cli } = {}) {
     const assembly = cli ?? o11LaneOf(lane, { root, env }).cli;
     const argv = [assembly, ...args.map(String)];
@@ -37,7 +37,7 @@ export function createAnvilRunner({ lane = o11Lane.lane, root = anvilRoot, env =
     return new Promise(resolve => {
       let child;
       try {
-        child = execFileFn(dotnet, argv, { cwd: hosted ? hosted.cwd : cwd, env: hosted ? hosted.env : laneEnvironment({ lane, root, env }), windowsHide: true,
+        child = execFileFn(dotnet, argv, { cwd: hosted ? hosted.cwd : cwd, env: hosted ? hosted.env : environment({ lane, root, env }), windowsHide: true,
           maxBuffer: 256 * 1024 * 1024, timeout: timeoutMs, encoding: 'utf8' }, (error, stdout, stderr) => {
           const text = String(stdout ?? '').trim();
           let envelope = null;

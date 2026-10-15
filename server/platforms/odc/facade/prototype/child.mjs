@@ -22,10 +22,37 @@ let warm = Promise.resolve();
 let cache = null;
 const ruleCache = new Map();
 
+// The page's own errors that escape every handler of the page (a promise of the page rejected with no catch, an exception
+// thrown by its code in a microtask: a fetch to the network without .catch, the page's Babel throwing on a JSX it cannot
+// compile, a .jsx it cannot fetch) end the process by default. A browser logs them and the page goes on: here they are
+// written to the log of the window that runs (a rejection as a warning, as the browser console shows it; an exception as a
+// script error of the page, as a script that throws at load) and the capture goes on.
+// While a window opens (openPage loads the page) its log does not exist yet: what escapes then waits in `opening` and goes to
+// the window's log when it is there.
+let active = null, opening = null;
+const describe = error => String(error?.stack ?? error?.message ?? error).split('\n').slice(0, 3).join(' | ').slice(0, 600);
+const record = item => {
+  if (opening) { opening.push(item); return; }
+  if (active) { if (item.problem) active.log.problems.push(item.problem); else active.log.warn(item.warning); return; }
+  process.stderr.write('uncaught outside a window: ' + (item.problem?.message ?? item.warning?.message) + '\n');
+};
+process.on('unhandledRejection', reason => {
+  try { record({ warning: { code: 'PrototypeUnhandledRejection', message: 'a promise of the page was rejected with no catch: ' + describe(reason) } }); } catch { /* the window is gone */ }
+});
+process.on('uncaughtException', error => {
+  try { record({ problem: { reason: 'script', message: 'uncaught error of the page: ' + describe(error) } }); } catch { /* the window is gone */ }
+});
+
 async function fresh(batch) {
   const html = files.text(batch.page);
   if (html == null) throw new Error('page ' + batch.page + ' does not exist in source');
-  const page = await openPage({ html, entry: batch.page, files, cache, vendors, clock: config.clock, seed: config.seed ?? 1, storage: batch.storage ?? null, mapping: config.mapping ?? {}, ruleCache });
+  active = null; opening = [];
+  let page;
+  try { page = await openPage({ html, entry: batch.page, files, cache, vendors, clock: config.clock, seed: config.seed ?? 1, storage: batch.storage ?? null, mapping: config.mapping ?? {}, ruleCache }); }
+  finally {
+    const waiting = opening; opening = null; active = page ?? null;
+    for (const item of waiting) record(item);
+  }
   // An in-memory store (store.live, found by the load inspect): every snapshot carries its value read again.
   if (batch.live) page.liveStore = () => liveStore(page, batch.live);
   return page;
@@ -95,7 +122,8 @@ async function runBatch(batch) {
     windows++;
     const failure = await prefix();
     beforeSnap = page.snapshot('before');
-    baseline = JSON.stringify([page.local.__dump(), beforeSnap.store ?? null]);
+    // both storages: a window is reused only when neither changed (a probe never sees the writes of another one)
+    baseline = JSON.stringify([page.local.__dump(), page.sessionStore?.__dump?.() ?? null, beforeSnap.store ?? null]);
     baselineBody = JSON.stringify(beforeSnap.body);
     return failure;
   };
@@ -118,12 +146,14 @@ async function runBatch(batch) {
     results.push({ key: probe.key, snaps, failure, icons, warnings });
     dirty = true;
     const last = probe === batch.probes[batch.probes.length - 1];
-    if (!last && page && !failure && JSON.stringify([page.local.__dump(), page.liveStore?.() ?? null]) === baseline && !page.log.problems.length) {
+    if (!last && page && !failure && JSON.stringify([page.local.__dump(), page.sessionStore?.__dump?.() ?? null, page.liveStore?.() ?? null]) === baseline && !page.log.problems.length) {
       try {
         const after = snaps.findLast?.(snap => snap.tag === 'after') ?? snaps[snaps.length - 1];
         if (batch.shared) dirty = false;
         else if (after && after.url === beforeSnap?.url && JSON.stringify(after.body) === baselineBody) { dirty = false; reused++; }
-        else if (!(await prefix()) && JSON.stringify(page.serialize(page.window.document.body)) === baselineBody) { dirty = false; reused++; }
+        // the prefix played again on the same window: reused only when the page AND both storages are back to the baseline
+        else if (!(await prefix()) && JSON.stringify(page.serialize(page.window.document.body)) === baselineBody
+          && JSON.stringify([page.local.__dump(), page.sessionStore?.__dump?.() ?? null, page.liveStore?.() ?? null]) === baseline) { dirty = false; reused++; }
       } catch { dirty = true; }
     }
   }
@@ -136,7 +166,7 @@ process.on('message', async message => {
   try {
     if (message.type === 'init') {
       config = message.config;
-      files = new SourceFiles(config.root);
+      files = new SourceFiles(config.root, { aliases: config.aliases ?? {} });
       vendors = new Map((config.vendors ?? []).map(vendor => [vendor.url, vendor]));
       for (const script of config.prewarm ?? []) { try { cache.classic(files.text(script.file) ?? '', script.file); } catch { /* reported when the window runs it */ } }
       process.send({ type: 'ready', tz: process.env.TZ ?? null, offset: new Date(0).getTimezoneOffset() });

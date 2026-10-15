@@ -22,7 +22,7 @@ public static class XifCommand
             return verb switch
             {
                 "check" => XifBuild.Check(Spec(args), Opt(args, "--base")),
-                "read" => Read(Need(args, "--xif")),
+                "read" => Read(Need(args, "--xif"), Opt(args, "--resources-out")),
                 "build" => Build(args),
                 "diff" => Diff(Need(args, "--base"), Need(args, "--new")),
                 _ => Usage(),
@@ -38,10 +38,11 @@ public static class XifCommand
         _ => XifRefusal.Single(XifCodes.SpecInvalid, "xif build needs --stage model or --stage final.", "Pass --stage model first, then --stage final with the stubs and dependencies.").ToJson(),
     };
 
-    private static JsonObject Read(string file)
+    private static JsonObject Read(string file, string? resourcesOut)
     {
         var document = XifPackage.Read(file);
         var described = document.Describe();
+        if (resourcesOut != null) described["exported"] = document.ExportResources(resourcesOut);
         described["ok"] = true;
         return described;
     }

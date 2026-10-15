@@ -21,8 +21,28 @@ public static class PreflightChecks
         if (!verifyRules) return found;
         var job = JobFacts.From(ops);
         Run(found, nameof(NameRules), () => NameRules.Check(ops, prefix, lane, job));
+        Run(found, nameof(ActionNameRules), () => ActionNameRules.Check(ops, prefix, null));
         Run(found, nameof(CallRules), () => CallRules.Check(ops, prefix, job, null));
         Run(found, nameof(ExpressionRules), () => ExpressionRules.Check(ops, prefix, lane, job, null));
+        // motor2: what the normalizations left (an unknown icon, a default that could not move, two names in one document, a
+        // name with two meanings in one body), in the same pass.
+        Run(found, nameof(HtmlDocumentRules), () => HtmlDocumentRules.Check(ops, prefix, lane));
+        Run(found, nameof(ScopeRenames), () => ScopeRenames.Check(ops, prefix, null));
+        // Familias (C13): an identifier ordered against a number in the filter of a document's aggregate.
+        Run(found, nameof(DocumentAggregates), () => DocumentAggregates.Check(ops, prefix, lane));
+        return found;
+    }
+
+    /// <summary>motor2: the rules that need only the module type and the base's own screens, never the names a producer
+    /// imports: they run for every job that expects a valid module, with the other problems of the base phase (a job with a
+    /// reference op included, which skips <see cref="WithBase"/>).</summary>
+    public static Found WithModule(JsonArray ops, string? prefix, string lane, IBaseFacts model)
+    {
+        var found = new Found([], []);
+        var job = JobFacts.From(ops);
+        Run(found, nameof(ActionNameRules), () => ActionNameRules.Check(ops, prefix, model));
+        Run(found, nameof(NodeRules), () => NodeRules.Check(ops, prefix, job, model.ModuleType));
+        Run(found, nameof(ScopeRenames), () => ScopeRenames.Check(ops, prefix, model.ScreenNames));
         return found;
     }
 

@@ -13,11 +13,25 @@ export function pinned(pin) {
   check(digest(bytes) === pin.sha256, 'PREVIEW_PIN_CHANGED', 'A prepared preview file changed; prepare the profile again.');
   return bytes;
 }
-export function atomicJson(file, value) {
+// Windows refuses to replace a file while another process has it open (EPERM; EACCES or EBUSY from a scan): the manager
+// reads the worker's receipt while the worker replaces it, and with a reader polling, most replaces of a tight loop fail.
+// A lost receipt left the worker running with a stale state ('starting' after a startup failure, 'stopping' after a
+// stop). The replace is retried with backoff, bounded, as debug-odc-active-binding.mjs does.
+const TRANSIENT = new Set(['EPERM', 'EACCES', 'EBUSY']);
+const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+function retrying(action, budgetMs) {
+  const deadline = performance.now() + budgetMs;
+  for (let attempt = 0; ; attempt++) {
+    try { return action(); }
+    catch (error) { if (!TRANSIENT.has(error.code) || performance.now() >= deadline) throw error; pause(Math.min(100, 2 ** attempt, Math.max(1, deadline - performance.now()))); }
+  }
+}
+export function atomicJson(file, value, { retryMs = 4000 } = {}) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = file + '.' + process.pid + '.tmp';
   fs.writeFileSync(temporary, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
-  fs.renameSync(temporary, file);
+  try { retrying(() => fs.renameSync(temporary, file), retryMs); }
+  catch (error) { try { fs.unlinkSync(temporary); } catch { /* already gone */ } throw error; }
 }
 export function loadProfile(pin) {
   const p = JSON.parse(pinned(pin));

@@ -222,6 +222,8 @@ export function classifyWindow(title, texts = []) {
   const hasButton = all.includes('[Button]');
   if (!hasButton && String(title ?? '').trim().toLowerCase() === 'progress') return 'Progress';
   if (!hasButton && (PROGRESS_WORDS.some(w => lower.includes(w)) || all.includes('%'))) return 'Progress';
+  // fam-deps: the Studio's crash report (DialogPolicy.UnexpectedError); it asks nothing and close_dialog closes it by title.
+  if (String(title ?? '').trim().toLowerCase() === 'unexpected error') return 'UnexpectedError';
   if (lower.includes('discard') && lower.includes('open')) return 'Recovery';
   if (lower.includes('dependencies') || lower.includes('references') || lower.includes('[button] apply')) return 'ManageDependencies';
   if (['[button] ok', '[button] cancel', '[button] yes'].some(b => lower.includes(b))) return 'MessageBox';
@@ -240,8 +242,9 @@ export function dialogsFromWindows(windows = []) {
   }
   return found;
 }
-// A window close_dialog can close: titled and owned. A native window in BlockedBy is owned; a web one may not be.
-const closable = d => Boolean(d.title?.trim()) && d.source === 'window' && (d.owned ?? d.contentKind === 'native');
+// A window close_dialog can close: titled and owned. A native window in BlockedBy is owned; a web one may not be. The
+// Studio's crash report (UnexpectedError) is closed by its exact title even without an owner (fam-deps, WindowsHandler).
+const closable = d => Boolean(d.title?.trim()) && d.source === 'window' && (d.kind === 'UnexpectedError' || (d.owned ?? d.contentKind === 'native'));
 function projectDialog(d) {
   const title = typeof d.title === 'string' && d.title.trim() ? d.title : null;
   const canClose = closable(d);

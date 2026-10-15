@@ -11,6 +11,7 @@
 // Needs the lane CLIs built (the index is built from them); skips otherwise.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireBytes } from './fixtures/answer-wire.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -193,7 +194,7 @@ for (const lane of ['odc', 'o11']) for (const [lang, intent] of Object.entries(S
   test(`[${lane}] critical composed scenario (${lang}): within 12000 bytes, logic.flow direct with a node role in focus, the typed inventory and the action capability present, the branch insertion backed by the lane's own proof job`, { ...T, skip: skip(lane) }, async () => {
     const a = await ask(lane, intent);
     assert.equal(a.ok, true, a.error);
-    assert.ok(a.size.bytes <= 12000, `hard budget: ${a.size.bytes}`);
+    assert.ok(wireBytes(a, { budgetBytes: 12000 }) <= 12000, `hard budget: ${a.size.bytes}`);
     assert.notEqual(a.size.status, 'insufficient', `insufficient: minimal ${a.size.minimalBytes} ${show(a)}`);
     const flow = direct(a).find(m => m.id === 'logic.flow');
     assert.ok(flow, `logic.flow is a direct match: ${show(a)}`);
@@ -223,7 +224,7 @@ for (const lane of ['odc', 'o11']) {
       assert.ok(x.size.minimalBytes > x.size.budgetBytes);
       const budgetBytes = x.size.minimalBytes + 1024;
       x = await discover({ ...input, budgetBytes });
-      assert.ok(x.size.bytes <= budgetBytes);
+      assert.ok(wireBytes(x, { budgetBytes: budgetBytes }) <= budgetBytes);
     }
     assert.notEqual(x.size?.status, 'insufficient', `insufficient: minimal ${x.size?.minimalBytes}`);
     assert.ok(x.expansions?.['logic.flow']?.operations, 'requested operations recovered');

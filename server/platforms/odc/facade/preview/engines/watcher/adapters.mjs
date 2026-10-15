@@ -5,8 +5,9 @@ import {pathToFileURL,fileURLToPath} from 'node:url';
 import {signalClient,bridgeClient} from './pipe.mjs';
 
 export const sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
-export const readJson=file=>JSON.parse(fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''));
-export function atomicJson(file,value){fs.mkdirSync(path.dirname(file),{recursive:true});const tmp=file+'.'+process.pid+'.tmp';fs.writeFileSync(tmp,JSON.stringify(value,null,2)+'\n');fs.renameSync(tmp,file);}
+// The preview's JSON files are read and replaced by one implementation (the replace survives a concurrent reader on Windows).
+import {readJson,atomicJson} from '../../profile.mjs';
+export {readJson,atomicJson};
 const fail=(code,message)=>{throw Object.assign(new Error(message),{code,retryable:false});};
 // The tenant host this watcher is authorized for, by the SHA-256 of its name (no client name in the code).
 const AUTHORIZED_HOST_SHA256='d33eb6003a66d394419bfb2551bca77ac1eb81d9cdd874444291054723e6b860';

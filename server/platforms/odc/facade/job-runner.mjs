@@ -29,10 +29,13 @@ import { hostedContext, seamFields, usesWorkspace, workspacePath } from './execu
 import { highWarningsOf } from './delivery-warnings.mjs';
 import { jobSummary } from './job-summary.mjs';
 import { refusalFields, diagnosisOf, normalizationsOf } from './refusal-problems.mjs';
+import { withNormalizationsOf } from './normalizations.mjs';
+import { textFormRefusal, partReader } from './text-routes.mjs';
+import { normalizeCodeOps } from './ssam-code.mjs';
 // The prototype op of a headless run (docs/PROTOTIPO-NATIVO.md 1.1, the rehearsal of the delivery): the capture first, the
 // rebuild of 1.4.1, the receipt.
-import { expandJobFile, capturePrototype, buildWithDegradation, buildProblems, journalTo, kernelPrototypeReport, findNativeDom,
-  measurePrototypeFidelity, prototypeReceipt } from './prototype-op.mjs';
+import { expandJobFile, capturePrototype, buildWithDegradation, buildProblems, journalTo, kernelPrototypeReport, findNativeDom, withoutIdentityPatches, untypedBuildRefusal, readJobDocument,
+  measurePrototypeFidelity, prototypeReceipt, bindingCorrection } from './prototype-op.mjs';
 import {captureJobArtifacts,bindJobArtifacts} from './job-artifacts.mjs';
 
 export const JOB_LANES = ['o11', 'odc'];
@@ -97,7 +100,9 @@ export function problemsOf(list) {
   });
 }
 // The problems field of an answer, fitted to the budget, with whether the Verify ran and the phases.
-const refusalOf = (list, source) => { const problems = problemsOf(list); return problems?.length ? refusalFields(problems, source, { limit: 300 }) : diagnosisOf(source); };
+// With the job file it ran, a problem that only follows from another failed op of it is summarized (CASCADE).
+const jobDocumentOf = file => { if (typeof file !== 'string' || !file) return null; try { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, '')); } catch { return null; } };
+const refusalOf = (list, source, job = null) => { const problems = problemsOf(list); return problems?.length ? refusalFields(problems, source, { limit: 300, job: jobDocumentOf(job), jobFile: job }) : diagnosisOf(source); };
 // A successful run answers in about 1 KB (C19): what it proved (ok, accepted, isValid, counts) and where the whole result
 // is (resultFile, read with ssam_evidence). Results, details and messages stay in that file; the results of a small read
 // job still come inline when they fit.
@@ -137,8 +142,14 @@ export function summarize({ lane, job, out, resultFile, saved, note, quiet = fal
     value.validation = Object.fromEntries(Object.entries(x.validation).filter(([, v]) => Array.isArray(v) || typeof v !== 'object').map(([k, v]) => [k, Array.isArray(v) ? v.length : v]));
   if (x.dataContract) value.dataContract = { count: x.dataContract.count ?? null, accepted: x.dataContract.accepted ?? null,
     ...(!value.ok && x.dataContract.differences?.length ? { differences: x.dataContract.differences.slice(0, 10) } : {}) };
+  // F5: a capture the kernel reused from the workspace (same producer, environment and published version, observed lately,
+  // no publication since: no lease) says so.
   if (saved.capturedProducers) value.capturedProducers = saved.capturedProducers.map(r => ({ producer: r?.producer, kind: r?.kind,
-    versionIdBefore: r?.versionIdBefore, signatureHash: r?.signatureHash, avsigPath: r?.avsigPath, avsigSha256: r?.avsigSha256 }));
+    versionIdBefore: r?.versionIdBefore, signatureHash: r?.signatureHash, avsigPath: r?.avsigPath, avsigSha256: r?.avsigSha256,
+    ...(r?.reused === true ? { reused: true, observed: r?.observed?.by ?? 'ledger', mergeReady: false } : {}) }));
+  // The candidate of a job round built on a signature nothing read on the server now is not valid for a direct OML merge.
+  if (value.capturedProducers?.some(r => r.reused === true))
+    value.capturedProducersNote = 'assinatura de produtor reaproveitada do cache, sem leitura no servidor agora: este resultado não vale para merge direto do OML; o o11_deliver confere a versão de cada produtor no servidor antes do merge';
   if (note) value.worker = note;
   // The HIGH warnings of the data-access rules (QUERY_IN_LOOP legacy/allowed, AGGREGATES_MERGEABLE): always in the answer,
   // success or refusal, outside the 1 KB budget of a success (never blocking, never hidden).
@@ -160,7 +171,7 @@ export function summarize({ lane, job, out, resultFile, saved, note, quiet = fal
   // A refusal of the job (I2): every problem of every phase, from the CLI's error envelope or from the apply's own
   // preflight, with verifyRan and the phases (primeira-certa A3).
   // A candidate only the Verify refused carries its errors the same way (data.problems).
-  Object.assign(value, refusalOf(saved.problems ?? x.problems ?? x.preflight?.problems, saved.problems ? saved : x));
+  Object.assign(value, refusalOf(saved.problems ?? x.problems ?? x.preflight?.problems, saved.problems ? saved : x, job));
   if (x.messages !== undefined) value.messages = Array.isArray(x.messages) ? x.messages.slice(0, 10).map(m => clip(typeof m === 'string' ? m : JSON.stringify(m), 300)) : x.messages;
   if (x.details?.length) { value.details = x.details.slice(0, 10).map(d => clip(d)); if (x.details.length > 10) value.detailsTotal = x.details.length; }
   if (x.preflight?.actions) value.preflight = { actions: x.preflight.actions, publicActions: x.preflight.publicActions, helpers: x.preflight.helpers,
@@ -191,11 +202,13 @@ export async function runJob(request = {}, deps = {}) {
   const abs = p => path.resolve(root, String(p));
   const laneLocal = lane === 'odc' ? odcLocal : o11.local;
   let job; let partial; let basedOnFile = null;
+  // The op shapes of one meaning taken as meant (ssam-code.mjs normalizeCodeOps), listed on the answer (normalizations).
+  let jobNotes = [];
   if (request.patch != null || request.basedOn != null) {
     const patched = resolvePatchedJob({ job: request.job, patch: request.patch, basedOn: request.basedOn }, { root, inlineDir: path.join(laneLocal, 'jobs', 'inline'),
       work: lane === 'o11' ? o11.work : null, journalDir: path.join(laneLocal, 'journal'), tool: lane === 'odc' ? 'ssam_job' : 'o11_job', uuid: deps.uuid ?? randomUUID });
     if (!patched.ok) return { ...patched, lane };
-    job = patched.path; partial = patched.partial;
+    job = patched.path; partial = patched.partial; jobNotes = patched.normalizations ?? [];
     // the job it corrects: the kernel's preflight refuses CSS the correction dropped (CSS_RULES_DROPPED)
     basedOnFile = typeof patched.basedOn?.job === 'string' ? patched.basedOn.job : null;
   } else if (typeof request.job === 'string' && request.job.trim()) job = abs(request.job);
@@ -203,9 +216,20 @@ export async function runJob(request = {}, deps = {}) {
     const folder = path.join(lane === 'odc' ? odcLocal : o11.local, 'jobs', 'inline');
     fs.mkdirSync(folder, { recursive: true });
     job = path.join(folder, (deps.uuid ?? randomUUID)() + '.json');
-    fs.writeFileSync(job, JSON.stringify(request.job, null, 2), 'utf8');
+    const shaped = normalizeCodeOps(request.job); jobNotes = shaped.normalizations;
+    fs.writeFileSync(job, JSON.stringify(shaped.job, null, 2), 'utf8');
   } else return refusal('job-required', 'job is required: a path (absolute or relative to the kernel root) or the job itself (object, or array of ops)', { lane });
   if (!fs.existsSync(job)) return refusal('job-not-found', 'Job file not found: ' + job, { lane, job });
+  // A job file with op shapes of one meaning (the ssam_code aliases, set props{}, ...) runs as a new inline file in the kernel form.
+  { let aliased = null; try { aliased = normalizeCodeOps(JSON.parse(fs.readFileSync(job, 'utf8').replace(/^\uFEFF/, ''))); } catch { /* the kernel reports it */ }
+    if (aliased?.changed) { jobNotes = [...jobNotes, ...aliased.normalizations]; const folder = path.join(laneLocal, 'jobs', 'inline'); fs.mkdirSync(folder, { recursive: true }); job = path.join(folder, (deps.uuid ?? randomUUID)() + '.json'); fs.writeFileSync(job, JSON.stringify(aliased.job, null, 2), 'utf8'); } }
+  // WIRED (text-routes.mjs): a text form whose way back is not wired is refused here too, before the kernel runs.
+  {
+    let document = null;
+    try { document = JSON.parse(fs.readFileSync(job, 'utf8').replace(/^\uFEFF/, '')); } catch { /* the kernel reports an unreadable job */ }
+    const unwired = textFormRefusal(document, undefined, { readPart: partReader(job, fs, path) });
+    if (unwired) return { ...unwired, lane, job };
+  }
   // Integration ops (rest, rest-expose, soap): the documents they name are pinned once (integration-documents.mjs, I6).
   // A headless job writes nothing to a Studio, so the destructive-words rule of the deliveries does not apply here.
   const prepare = deps.prepareIntegrationJob ?? (await import('./integration-documents.mjs')).prepareIntegrationJob;
@@ -265,7 +289,7 @@ export async function runJob(request = {}, deps = {}) {
     fs.mkdirSync(path.dirname(out), { recursive: true });
     if (lane === 'odc') {
       const argv = ['apply', '--job', file, '--out', out, ...(base ? ['--base', base] : []), ...producers.flatMap(p => ['--producer', p]), ...(basedOnFile ? ['--based-on', basedOnFile] : []),
-        '--work', path.join(odcLocal, 'jobs', 'work')];
+        '--work', request.work ?? path.join(odcLocal, 'jobs', 'work')];
       let envelope = null; let via = 'worker odc';
       if (worker) {
         const w = await worker.run(argv);
@@ -283,11 +307,11 @@ export async function runJob(request = {}, deps = {}) {
       // An error envelope carries error/stack, no data: run_job.py printed it and wrote no result file.
       if (envelope.data == null) {
         return { answer: { ok: false, lane, job: file, via, command: envelope.command, elapsedMs: envelope.elapsedMs, wallMs, ...(envelope.code ? { code: envelope.code } : {}),
-          error: clip(envelope.error ?? 'the CLI returned no data', 2000), ...refusalOf(envelope.problems, envelope), ...(note ? { worker: note } : {}) }, envelope };
+          error: clip(envelope.error ?? 'the CLI returned no data', 2000), ...refusalOf(envelope.problems, envelope, file), ...(note ? { worker: note } : {}) }, envelope };
       }
       return { saved: { ok: Boolean(envelope.ok), data: envelope.data, via, wallMs }, out, note };
     }
-    const argv = ['apply', '--job', file, '--out', out, '--work', o11.work, ...(base ? ['--base', base] : []), ...producers.flatMap(p => ['--producer', p]),
+    const argv = ['apply', '--job', file, '--out', out, '--work', request.work ?? o11.work, ...(base ? ['--base', base] : []), ...producers.flatMap(p => ['--producer', p]),
       ...(basedOnFile ? ['--based-on', basedOnFile] : [])];
     let envelope = null;
     if (worker) {
@@ -317,7 +341,8 @@ export async function runJob(request = {}, deps = {}) {
     if (b.rebuilt) job = b.jobFile;
     if (b.refusal) return { ...b.refusal, lane, job: proto.original };
   } else applied = await applyOnce(job);
-  if (applied.answer) return applied.answer;
+  const noted = v => withNormalizationsOf(v, jobNotes);
+  if (applied.answer) return noted(applied.answer);
   const { saved, out, note } = applied;
   if (receipts.length) saved.capturedProducers = receipts;
   if (boundInputs) {
@@ -329,7 +354,7 @@ export async function runJob(request = {}, deps = {}) {
   }
   const resultFile = withSuffix(out, '.result.json');
   fs.writeFileSync(resultFile, JSON.stringify(saved, null, 2), 'utf8');
-  let value = summarize({ lane, job, out, resultFile, saved, note, quiet: request.quiet === true });
+  let value = noted(summarize({ lane, job, out, resultFile, saved, note, quiet: request.quiet === true }));
   // What the proven job creates or changes (job-summary.mjs), outside the 1 KB budget of a success, as highWarnings: the
   // same summary a delivery of it answers with.
   if (value.ok && !proto) { try { const summary = jobSummary(JSON.parse(fs.readFileSync(job, 'utf8').replace(/^﻿/, ''))); if (summary) value.summary = summary; } catch { /* a summary never changes the run */ } }
@@ -345,6 +370,12 @@ export async function runJob(request = {}, deps = {}) {
       phases: { captureMs: proto.timings?.captureMs, buildMs: buildMs ?? saved.wallMs, fidelityMs: measured.fidelityMs } });
     if (receipt.timings.expandMs == null && proto.timings?.expandMs != null) receipt.timings.expandMs = proto.timings.expandMs;
     value = { ...value, prototype: receipt, prototypeJob: proto.original };
+    // data.bind (2.12): the proposals of PROTOTYPE_BINDING_REQUIRED as one strict patch and the corrected call
+    if (value.code === 'PROTOTYPE_BINDING_REQUIRED') Object.assign(value, bindingCorrection(saved.problems ?? saved.data?.problems ?? value.problems, readJobDocument(proto.original)));
+    // a kernel refusal of the import (PROTOTYPE_NAME_COLLISION) never offers a patch that leaves the call as it was
+    if (value.ok === false) value = withoutIdentityPatches(value, readJobDocument(proto.original));
+    // a build the Verify refused on what no item of the capture names (nothing to degrade): never an untyped answer
+    if (value.ok === false && !value.code) value = untypedBuildRefusal(value);
   }
   // A partial job: what it replaced and added in the earlier job (the whole job is `job`).
   return partial ? { ...value, partial } : value;
@@ -386,7 +417,7 @@ export function jobToolRequest(input = {}) {
 // The job file that ran, with its sha256 and nextBasedOn {job, sha256} (the next call patches or completes it with that
 // basedOn; jobShape 'array' when its patch paths are /<i>/...) and, on a failure, the op the kernel refused when its own
 // error names it (job-patch.mjs failedOpOf) and each patch of the problems also by name (patchByName).
-function withJobIdentity(result) {
+export function withJobIdentity(result) {
   if (!result || typeof result !== 'object' || typeof result.job !== 'string') return result;
   const { jobSha256, jobShape, nextBasedOn } = jobIdentity(result.job);
   const failedOp = result.ok ? null : failedOpOf(result.error, result.job);

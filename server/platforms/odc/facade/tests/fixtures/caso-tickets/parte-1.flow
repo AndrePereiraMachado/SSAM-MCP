@@ -1,0 +1,117 @@
+/// Valida conteúdo, categoria ativa e prioridade antes de gravar.
+server action ValidateTicketFields
+  in Title: Text
+  in Description: Text
+  in CategoryId: TicketCategory Identifier
+  in PriorityId: TicketPriority Identifier
+  if Length(Trim(Title)) = 0 or Length(Trim(Title)) > 200:  # Título é válido?
+    raise TicketValidationError("Informe um título com até 200 caracteres.")
+  if Length(Trim(Description)) = 0 or Length(Description) > 20000:  # Descrição é válida?
+    raise TicketValidationError("Informe uma descrição com até 20000 caracteres.")
+  ActiveCategory = aggregate FROM TicketCategory WHERE (TicketCategory.Id = CategoryId and TicketCategory.IsActive) MAX 1
+  if ActiveCategory.List.Empty:  # Categoria está ativa?
+    raise TicketValidationError("Selecione uma categoria ativa.")
+  if PriorityId <> Entities.TicketPriority.Low and PriorityId <> Entities.TicketPriority.Normal and PriorityId <> Entities.TicketPriority.High and PriorityId <> Entities.TicketPriority.Urgent:  # Prioridade é válida?
+    raise TicketValidationError("Selecione uma prioridade válida.")
+  end
+
+/// Registra histórico de campo somente quando seu valor mudou.
+server action RecordTicketFieldChange
+  in TicketId: Ticket Identifier
+  in Event: Text
+  in PreviousValue: Text
+  in NewValue: Text
+  if PreviousValue = NewValue:  # Campo permaneceu igual?
+    end
+  RecordTicketHistory(TicketId=TicketId, Event=Event, PreviousValue=Substr(PreviousValue,0,2000), NewValue=Substr(NewValue,0,2000))
+  end
+
+/// Abre uma solicitação em nome do usuário autenticado.
+server action CreateNewTicket public
+  in Title: Text
+  in Description: Text
+  in CategoryId: TicketCategory Identifier
+  in PriorityId?: TicketPriority Identifier = Entities.TicketPriority.Normal
+  out TicketData: Ticket
+  local CurrentTime: Date Time
+  Session = RequireTicketSession()
+  ValidateTicketFields(Title=Title, Description=Description, CategoryId=CategoryId, PriorityId=PriorityId)
+  assign  # Preparar ticket aberto
+    CurrentTime = CurrDateTime()
+    TicketData.Title = Trim(Title)
+    TicketData.Description = Trim(Description)
+    TicketData.CategoryId = CategoryId
+    TicketData.StatusId = Entities.TicketStatus.Open
+    TicketData.PriorityId = PriorityId
+    TicketData.RequesterId = Session.CurrentUserId
+    TicketData.AssigneeId = NullIdentifier()
+    TicketData.CreatedOn = CurrentTime
+    TicketData.UpdatedOn = CurrentTime
+    TicketData.ResolvedOn = NullDate()
+  PersistTicket = CreateTicket(Source=TicketData)
+  assign TicketData.Id = PersistTicket.Id  # Retornar identificador criado
+  RecordTicketHistory(TicketId=TicketData.Id, Event="TicketCreated", NewValue=IntegerToText(Entities.TicketStatus.Open))
+  end
+
+/// Edita conteúdo sem alterar solicitante, responsável ou estado.
+server action UpdateTicketDetails public
+  in TicketId: Ticket Identifier
+  in Title: Text
+  in Description: Text
+  in CategoryId: TicketCategory Identifier
+  in PriorityId: TicketPriority Identifier
+  out TicketData: Ticket
+  local PreviousTicket: Ticket
+  Access = RequireTicketAccess(TicketId=TicketId, LockForUpdate=True)
+  if Access.TicketData.StatusId = Entities.TicketStatus.Closed or Access.TicketData.StatusId = Entities.TicketStatus.Cancelled:  # Ticket permite edição?
+    raise TicketValidationError("Tickets fechados ou cancelados não podem ser editados.")
+  if not Access.IsStaff and Access.TicketData.StatusId <> Entities.TicketStatus.Open and Access.TicketData.StatusId <> Entities.TicketStatus.WaitingForRequester:  # Solicitante pode editar neste estado?
+    raise TicketAccessDenied("O solicitante pode editar tickets abertos ou aguardando sua resposta.")
+  ValidateTicketFields(Title=Title, Description=Description, CategoryId=CategoryId, PriorityId=PriorityId)
+  assign  # Preservar vínculos e editar conteúdo
+    PreviousTicket = Access.TicketData
+    TicketData = Access.TicketData
+    TicketData.Title = Trim(Title)
+    TicketData.Description = Trim(Description)
+    TicketData.CategoryId = CategoryId
+    TicketData.PriorityId = PriorityId
+    TicketData.UpdatedOn = CurrDateTime()
+  UpdateTicket(Source=TicketData)
+  RecordTicketFieldChange(TicketId=TicketId, Event="TitleChanged", PreviousValue=PreviousTicket.Title, NewValue=TicketData.Title)
+  RecordTicketFieldChange(TicketId=TicketId, Event="DescriptionChanged", PreviousValue=PreviousTicket.Description, NewValue=TicketData.Description)
+  RecordTicketFieldChange(TicketId=TicketId, Event="CategoryChanged", PreviousValue=LongIntegerToText(PreviousTicket.CategoryId), NewValue=LongIntegerToText(TicketData.CategoryId))
+  RecordTicketFieldChange(TicketId=TicketId, Event="PriorityChanged", PreviousValue=IntegerToText(PreviousTicket.PriorityId), NewValue=IntegerToText(TicketData.PriorityId))
+  end
+
+/// Atribui o atendimento a um membro ativo da equipe ou remove a atribuição.
+server action AssignTicket public
+  in TicketId: Ticket Identifier
+  in AssigneeId?: User Identifier = NullIdentifier()
+  out TicketData: Ticket
+  local PreviousAssigneeId: User Identifier
+  Access = RequireTicketAccess(TicketId=TicketId, LockForUpdate=True)
+  if not Access.IsStaff:  # Usuário pertence à equipe?
+    raise TicketAccessDenied("Somente agentes ou administradores podem atribuir tickets.")
+  if Access.TicketData.StatusId = Entities.TicketStatus.Closed or Access.TicketData.StatusId = Entities.TicketStatus.Cancelled:  # Ticket permite atribuição?
+    raise TicketValidationError("Tickets fechados ou cancelados não podem receber atribuições.")
+  assign TicketData = Access.TicketData  # Preparar retorno
+  if TicketData.AssigneeId = AssigneeId:  # Responsável já é o solicitado?
+    end
+  assign  # Preparar nova atribuição
+    PreviousAssigneeId = TicketData.AssigneeId
+    TicketData.AssigneeId = AssigneeId
+    TicketData.UpdatedOn = CurrDateTime()
+  if AssigneeId <> NullIdentifier():  # Foi informado responsável?
+    ActiveAssignee = aggregate FROM User WHERE (User.Id = AssigneeId and User.Is_Active) MAX 1
+    if ActiveAssignee.List.Empty:  # Responsável está ativo?
+      raise TicketValidationError("O responsável deve ser um usuário ativo.")
+    AssigneeAgent = CheckTicketAgentRole(UserId=AssigneeId)
+    AssigneeAdmin = CheckTicketAdministratorRole(UserId=AssigneeId)
+    if not AssigneeAgent.HasRole and not AssigneeAdmin.HasRole:  # Responsável é membro da equipe?
+      raise TicketValidationError("O responsável deve ser agente ou administrador.")
+    UpdateTicket(Source=TicketData)
+    RecordTicketHistory(TicketId=TicketId, Event="AssigneeChanged", PreviousValue=LongIntegerToText(PreviousAssigneeId), NewValue=LongIntegerToText(AssigneeId))
+    end
+  UpdateTicket(Source=TicketData)
+  RecordTicketHistory(TicketId=TicketId, Event="AssigneeChanged", PreviousValue=LongIntegerToText(PreviousAssigneeId), NewValue=LongIntegerToText(AssigneeId))
+  end

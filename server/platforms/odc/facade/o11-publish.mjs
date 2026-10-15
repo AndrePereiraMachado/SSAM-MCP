@@ -39,6 +39,18 @@ import { o11Studio, ASK_PERSON, publishFixContinuation, readInventory, allDialog
 import * as writeLock from './studio-write-lock.mjs';
 import { clean, WORDS_MARKER } from './o11-cycle.mjs';
 import * as standingGrants from './standing-grants.mjs';
+import { producerCacheDir, recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
+
+// F5: every publication this tool starts is recorded in the workspace's producer ledger, and its end (never throws): no
+// observation of the module as a producer made before the end counts.
+function notePublication(ctx, active) {
+  // The ledger's times are the machine's clock (the kernel and the other sessions read the same files), never ctx.now.
+  try { return recordPublished(producerCacheDir(ctx.lane?.()?.work), { environment: active?.environment, module: active?.name, key: active?.key ?? null, source: TOOL }); }
+  catch { return false; /* a record that cannot be written never changes the publication */ }
+}
+function notePublicationEnded(handle) {
+  try { recordPublicationEnded(handle); } catch { /* see above */ }
+}
 
 export const TOOL = 'o11_publish';
 export const PUBLISHED = Object.freeze({ ok: true, result: 'publicado' });
@@ -302,6 +314,10 @@ async function publish(input, ctx, options = {}) {
     // I2 (C07): the publication is a server operation of this module, addressed by its key: the Studio's write lock narrows to
     // the module (a write of another module of the same Studio runs meanwhile). Inert where the lock lacks it.
     try { writeLock.narrowStudioWrite?.({ module: active.name, moduleKey: active.key ?? null }); } catch { /* the publication goes on under the Studio lock */ }
+    // F5 (producer-signatures.mjs): from now on no earlier observation of this module as a producer counts; the next delivery
+    // that references it observes it on the server again (and captures it again when the version moved).
+    const publication = notePublication(ctx, active);
+    try {
     try { data = await bridge.ok('publish', params, signal ? { signal } : undefined); value = publishOutcome({ data }, active, operationId); }
     catch (error) { value = publishOutcome({ error }, active, operationId); data = error?.reply?.data ?? null; }
     // MB2: the dependencies dialog stopped the publication before anything reached the server: answered (Cancel, or the
@@ -319,6 +335,7 @@ async function publish(input, ctx, options = {}) {
         }
       }
     }
+    } finally { if (!publicationOpen(value)) notePublicationEnded(publication); }
     // A bridge that answers the failure without its messages: read them as o11_studio publish-log does (one read, no retry).
     let log = data?.publishLog ?? null;
     if (value.code === 'PUBLISH_FAILED' && !value.messages) {

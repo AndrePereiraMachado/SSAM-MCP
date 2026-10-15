@@ -31,6 +31,10 @@ public static class ExpressionSyntax
                     return (Unexpected(t.Text), FixOf(t.Text));
                 case TokenKind.Other:
                     break;   // the member access after a call or an index: F(x).Name
+                // An integer with a leading zero (00000-000, 07): the parser reads 0 and refuses the digit after it
+                // (ParserUnexpectedElement '0'); a decimal 0.5 is a number.
+                case TokenKind.Number when t.Text.Length > 1 && t.Text[0] == '0' && char.IsDigit(t.Text[1]):
+                    return ($"the number {t.Text} starts with 0: the language has no such number", "write the number without the leading zeros, or quote the text");
                 case TokenKind.Open:
                     // A call: a name right before the parenthesis; any other operand before it is two operands in a row.
                     if (previous != null && previous.Kind is TokenKind.Number or TokenKind.Text or TokenKind.Date or TokenKind.Close or TokenKind.CloseIndex)

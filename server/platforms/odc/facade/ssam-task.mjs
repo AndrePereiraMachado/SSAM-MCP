@@ -50,8 +50,13 @@ export function listTasks({ dir = tasksDir(), limit = 20, tool } = {}) {
 
 export const stateOf = value => value?.ok === true ? 'ok' : value?.outcome === 'uncertain' ? 'uncertain' : 'failed';
 const KEPT = ['result', 'valid', 'outcome', 'code', 'stage', 'taskId', 'writeState'];
+// A refusal's record says what refused (VisitaCerta 2026-10-12: two VALIDATION_REFUSED records kept only "job rejected by
+// validation contract"): the contract's summary and the problems, short (code and pointer or element, at most 10).
 const brief = value => scrub({ ok: value?.ok === true, ...Object.fromEntries(KEPT.filter(k => value?.[k] != null).map(k => [k, value[k]])),
-  ...(value?.error ? { error: String(value.error).slice(0, 300) } : {}) });
+  ...(value?.error ? { error: String(value.error).slice(0, 300) } : {}),
+  ...(value?.contract?.summary ? { contract: String(value.contract.summary).slice(0, 300) } : {}),
+  ...(Array.isArray(value?.problems) && value.problems.length ? { problemsTotal: value.problems.length,
+    problems: value.problems.slice(0, 10).map(p => [p?.code, p?.pointer ?? p?.element].filter(Boolean).join(' ').slice(0, 200)) } : {}) });
 
 // Runs fn(task) and records it: `running` before, the state of its value after (ok:true -> ok, outcome 'uncertain' ->
 // uncertain, anything else -> failed). An exception becomes {ok:false, error}, as every tool answer does.

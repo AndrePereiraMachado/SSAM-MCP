@@ -36,7 +36,7 @@ export const MCP_TOOLS = Object.freeze([
   'ssam_status', 'ssam_doctor', 'ssam_license', 'ssam_setup', 'ssam_update', 'ssam_credentials', 'ssam_reprove', 'ssam_task',
   'ssam_connect', 'ssam_friction', 'ssam_grant', 'ssam_evidence',
   // knowledge
-  'ssam_discover', 'ssam_map', 'ssam_app_url', 'hybrid_tenants', 'ssam_reference',
+  'ssam_discover', 'ssam_map', 'ssam_code', 'ssam_app_url', 'hybrid_tenants', 'ssam_reference',
   // O11 lane
   'context', 'propose', 'continue', 'status', 'o11_job', 'o11_data', 'o11_access', 'o11_dependencies', 'ssam_job',
   'o11_service_center_session', 'o11_service_center_read', 'o11_service_center_write',
@@ -110,11 +110,15 @@ const TABLE = {
   CREDENTIAL_PROMPT_OPENED: c('ssam_credentials', { action: 'status', kind: '<kind>', host: '<host>' }, 'a janela privada está aberta; a pessoa digita lá, nunca no chat; confira e repita a chamada'),
   // F8 (A13, 2026-10-06): the call waits for the prompt within SSAM_PROMPT_WAIT_MS and, past it, is the continuation itself.
   CREDENTIAL_PROMPT_PENDING: c(SAME_TOOL, { '<arguments>': '<the same>' }, 'uma janela privada do Windows está aberta; a pessoa digita lá, nunca no chat; repita a mesma chamada, que retoma de onde parou'),
+  CREDENTIAL_PROMPT_WINDOW_UNAVAILABLE: c('odc_portal_login', { action: 'focus', tenant: '<tenant>' }, 'recupere a janela privada; só uma confirmação de visibilidade permite dizer que ela abriu'),
+  CREDENTIAL_PROMPT_UNAVAILABLE: c('odc_portal_login', { action: 'focus', tenant: '<tenant>' }, 'o processo privado não confirmou uma janela; tente recuperar pelo gerenciador do próprio prompt'),
+  CREDENTIAL_FOCUS_DENIED: c('odc_portal_login', { action: 'focus', tenant: '<tenant>' }, 'o Windows não confirmou o foco da janela privada; não afirme que ela está na frente'),
+  CREDENTIAL_PROMPT_CANCELLED: c('odc_portal_login', { action: 'prompt', tenant: '<tenant>' }, 'a janela foi cancelada; reabra somente quando a pessoa pedir para continuar'),
   AUTH_NOT_CONFIGURED: c('ssam_doctor', { checks: ['vault'] }, 'sem sessão do Studio, sem credencial guardada, e a janela privada não abriu; o doctor mostra o cofre e a janela'),
   PORTAL_VAULT_UNAVAILABLE: c('ssam_doctor', { checks: ['vault'] }, 'o cofre do Windows não pôde ser lido; o doctor mostra o motivo'),
   API_CLIENT_VAULT_UNAVAILABLE: c('ssam_doctor', { checks: ['vault'] }, 'o cofre do Windows não pôde ser lido; o doctor mostra o motivo'),
-  PORTAL_AUTH_REQUIRED: c('odc_portal_login', { tenant: '<tenant>' }, 'abre a janela do Portal dentro do ODC Studio para a pessoa entrar uma vez (SSO e MFA incluídos); depois repita'),
-  WEB_SIGN_IN_REQUIRED: c('odc_portal_login', { tenant: '<tenant>' }, 'a janela do Portal dentro do ODC Studio não está logada; a pessoa entra lá uma vez; depois repita'),
+  PORTAL_AUTH_REQUIRED: c('odc_portal_login', { tenant: '<tenant>' }, 'autentique pela sessão nativa compatível ou pelo perfil privado salvo; autenticação que exige outro provedor ou interação será informada explicitamente'),
+  WEB_SIGN_IN_REQUIRED: c('odc_portal_login', { tenant: '<tenant>' }, 'confira a autenticação do Portal; sem credencial guardada, a ferramenta abre e verifica sua própria janela privada'),
   O11_STUDIO_OPERATION_UNAVAILABLE: c('o11_environment', { action: 'inventory', host: '<host>' }, 'esta operação não tem caminho pela sessão do Studio conectado; o11_environment só oferece as ações que têm (inventory, download, create-app...)'),
 
   // ---- update (ssam_update, J)
@@ -194,6 +198,10 @@ const TABLE = {
   MODULE_TAB_NOT_CLOSABLE: c('o11_publish', { module: '<module>' }, 'a aba tem mudanças não salvas, ainda abre ou tem uma operação pendente; nada foi fechado: o publish salva o módulo (com as palavras do usuário), depois feche a aba'),
   MODULE_TAB_AMBIGUOUS: c('o11_studio', { command: 'status' }, 'duas abas do Studio têm esse nome; o status mostra as abas com a key de cada uma: passe moduleKey'),
   REFERENCES_REFRESH_FAILED: c('o11_studio', { command: 'refresh-references', args: { module: '<module>' } }, 'o diálogo de dependências foi respondido (Cancel), mas o refresh das referências falhou; repita o refresh do módulo e depois a mesma chamada'),
+
+  // ---- F5, the family rule of producer signatures (producer-signatures.mjs, Delivery.ProducerChangedCode): a producer
+  //      published again since the capture a delivery reused, seen right before the merge; nothing was written.
+  PRODUCER_CHANGED: c('o11_deliver', { module: '<module>', job: '<job.json>', authorize: WORDS }, 'um produtor foi publicado de novo desde a captura; nada foi gravado: a mesma entrega de novo (com closePrevious da tarefa recusada) captura a versão nova; no ODC, a mesma studio_deliver'),
 };
 
 // The same code answered by the other lane with another call: continuationFor(code, {lane}) prefers these.
@@ -224,6 +232,8 @@ export const PACKAGE_3_CODES = Object.freeze(['PUBLISH_BLOCKED_BY_DIALOG', 'EVID
 export const BUILD_POOL_CODES = Object.freeze(['BUILD_QUEUE_TIMEOUT']);
 // The O11 tab and dependencies-dialog codes (lane mb2 and the 16th release), outside the contract's section 5.3.
 export const O11_TAB_CODES = Object.freeze(['MODULE_TAB_NOT_CLOSABLE', 'MODULE_TAB_AMBIGUOUS', 'REFERENCES_REFRESH_FAILED']);
+// F5: the producer signature codes (no C# mirror needed: the facade answers the continuation).
+export const PRODUCER_SIGNATURE_CODES = Object.freeze(['PRODUCER_CHANGED']);
 
 // The codes the kernel answers itself (lane S mirrors them in McpContinuations.cs): DialogPolicy.Hint (Recovery,
 // ManageDependencies, MergeEditor, WebDialog, default) and MergeHandler.cs:74 (B); ScSecrets.cs:134;

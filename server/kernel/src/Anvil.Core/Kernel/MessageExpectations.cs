@@ -355,7 +355,7 @@ public static class MessageExpectations
     /// <summary>The lane whose Verify ids a job declares: the build this file is compiled into (Anvil.Core: O11, whose
     /// manifests are catalog/verify-messages-*.json; Anvil.Core.Odc: ODC, catalog/odc/). The ODC verifier has ids the
     /// O11 one never emits (UnusedGlobalEvent, ...) and the other way round, so neither lane accepts the other's list.</summary>
-    public static string Lane => typeof(MessageExpectations).Assembly.GetName().Name == "Anvil.Core.Odc" ? "odc" : "o11";
+    public static string Lane => KernelLane.Current;
 
     public static string CatalogDirectory(string root, string lane)
         => lane == "odc" ? Path.Combine(root, "catalog", "odc") : Path.Combine(root, "catalog");

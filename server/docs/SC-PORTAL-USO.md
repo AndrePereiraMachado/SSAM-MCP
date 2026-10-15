@@ -24,6 +24,32 @@ O SSAM nunca abre a janela de login do Studio nem um navegador.
   `CREDENTIAL_PROMPT_OPENED`; repita a chamada depois de salvar. A conta do Portal, a conta de um banco externo e
   o valor secreto de uma setting usam `windows-portal-credential.ps1 -Mode bootstrap`.
 
+### Janela privada ODC verificada (14/10/2026)
+
+As ferramentas ODC usam agora o gerenciador `windows-credential-prompt.ps1` para a entrada privada
+de Portal, API Client, banco e setting. O processo auxiliar inicia com `Start-Process` e `-STA`,
+sem `DETACHED_PROCESS`. `CREDENTIAL_PROMPT_OPENED` e `CREDENTIAL_PROMPT_PENDING` exigem confirmação
+de uma janela nativa visível, com PID, instante de criação e proprietário do handle conferidos.
+O estado compartilhado entre sessões contém só metadados da janela; nunca usuário ou senha.
+
+- `odc_portal_login {action:"status", tenant}` lê o estado real da janela, sem abrir outra.
+- `odc_portal_login {action:"focus", tenant}` recupera e traz à frente a janela privada do Portal;
+  `window.foreground:true` comprova o foco. `action:"prompt"` também permite reabrir após cancelamento.
+- Processo encerrado não deixa uma falsa pendência por tempo. Mutexes por contexto impedem duplicatas;
+  um processo vivo que não confirma a janela retorna `CREDENTIAL_PROMPT_WINDOW_UNAVAILABLE`.
+- `CREDENTIAL_FOCUS_DENIED` informa que o Windows não confirmou o foco; `CREDENTIAL_PROMPT_CANCELLED`
+  informa cancelamento. Nenhum desses resultados deve ser descrito como login concluído.
+- Guardar credenciais e autenticar são passos distintos. `PORTAL_LOGIN_PROVIDER_UNSUPPORTED`, SSO/MFA
+  e rejeição da conta continuam explícitos; não se troca de usuário nem se pede senha no chat.
+
+O login pessoal em `id.outsystems.com/community/login` é suportado pelo broker com o mesmo perfil
+selecionado, preservando o PKCE e o estado do Portal. A sessão só é confirmada após uma leitura
+protegida. Desafios interativos e aceitação de termos continuam a exigir ação da pessoa.
+Prova: [autenticação e releases ODC](proofs/2026-10-14-odc-community-auth.md).
+
+Essa prova de janela é da rota ODC. O prompt legado de credencial de banco O11 ainda apresentou
+janela não visível nesta sessão e permanece como defeito separado.
+
 ## Reutilização
 
 - O valor fica no Gerenciador de Credenciais (Credenciais genéricas): `SSAM/O11/<host>/ServiceCenter`,

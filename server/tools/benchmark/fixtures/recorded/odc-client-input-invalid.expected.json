@@ -1,0 +1,21 @@
+{
+  "schema": "ssam-recorded-fixture/1",
+  "source": "recorded",
+  "tool": "mcp__ssam__studio_deliver",
+  "result": {
+    "outcome": "refused",
+    "code": "CLIENT_INPUT_INVALID",
+    "problemCodes": [],
+    "publishFailedAfterDelivery": false,
+    "shape": {
+      "keys": [],
+      "code": "CLIENT_INPUT_INVALID",
+      "failed": null,
+      "outcome": null
+    }
+  },
+  "records": 1,
+  "bytes": 1228,
+  "shrunk": [],
+  "removed": []
+}

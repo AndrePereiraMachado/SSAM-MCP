@@ -1,0 +1,2 @@
+{"timestamp":"2026-01-01T00:00:00Z","type":"session_meta","payload":{"id":"id-000000001","parent_thread_id":"id-0000000002"}}
+{"timestamp":"2026-01-01T00:00:02Z","type":"event_msg","payload":{"type":"item_completed","thread_id":"id-0000000002","started_at_ms":1767225601000,"completed_at_ms":1767225602000,"item":{"type":"McpToolCall","server":"ssam-test","tool":"ssam_map","arguments":{"lane":"o11"},"status":"completed","duration":{"secs":1,"nanos":0},"result":{"structuredContent":{"ok":true}}}}}

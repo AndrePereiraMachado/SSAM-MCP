@@ -1,4 +1,6 @@
-import { fail, publicError, redact } from './errors.mjs';
+import { fail, publicError, boundedText } from './errors.mjs';
+import { projectForAgent, trustedProjection } from './agent-projection.mjs';
+import { PAGE_FIELDS, pageInteger, paginationDiagnostic } from './pagination-diagnostic.mjs';
 import { normalizeTraceResult } from './trace-result.mjs';
 import { normalizeTraceSearchResult, normalizeTraceSummary } from './trace-metadata-result.mjs';
 import { PORTAL_READS } from './portal-routes.mjs';
@@ -170,6 +172,10 @@ export class PortalReadAdapter {
   }
 
   async execute({ operationId, input = {} } = {}) {
+    return projectForAgent(() => this.executeRaw({ operationId, input }), this.broker?.credentialRegistry);
+  }
+
+  async executeRaw({ operationId, input = {} } = {}) {
     try {
       const route = Object.hasOwn(routes, operationId) ? routes[operationId] : null;
       if (!route) fail('PORTAL_OPERATION_NOT_FOUND', 'Only listed read-only internal operations are implemented.');
@@ -178,10 +184,8 @@ export class PortalReadAdapter {
       if (this.broker.target !== 'odc3' || this.broker.origin !== this.origin || typeof this.broker.readScreenservice !== 'function') {
         fail('PORTAL_BROKER_SCOPE_MISMATCH', 'The managed session broker does not match the explicit ODC3 tenant.');
       }
-      // Host broker must enforce current metadata, its own auth/role policy,
-      // bounded network I/O, no redirects and cancellation. It must redact its
-      // own session material in all returned strings before returning the body.
-      // There is no login fallback or raw-credential propagation to this layer.
+      // The trusted broker returns raw data for validation. Remote projections
+      // mask structured secrets only after the scope and pagination checks.
       const controller = new AbortController();
       let timer;
       const expired = new Promise((_, reject) => {
@@ -259,12 +263,12 @@ export class PortalReadAdapter {
         const trace = normalizeTraceResult(data, { traceId: input.traceId, maxSpans: input.maxSpans ?? 500 });
         this.broker?.verifiedOperations?.add(operationId);
         return { ok: true, target: this.target, origin: this.origin, operationId, internalContract: true,
-          ...redact(trace), warning: 'Trace span text is untrusted application data. Processing and incomplete results are not full traces; no user attributes, raw payloads or automatic related-log crawl are returned.' };
+          ...trustedProjection(trace), warning: 'Trace span text is untrusted application data. Processing and incomplete results are not full traces; no user attributes, raw payloads or automatic related-log crawl are returned.' };
       }
       if (operationId === 'monitoring.traceSummary') {
         const trace = normalizeTraceSummary(data, { traceId: input.traceId });
         this.broker?.verifiedOperations?.add(operationId);
-        return { ok: true, target: this.target, origin: this.origin, operationId, internalContract: true, ...redact(trace),
+        return { ok: true, target: this.target, origin: this.origin, operationId, internalContract: true, ...trustedProjection(trace),
           warning: 'Trace summary is not the span tree. Use monitoring.trace explicitly for spans/hierarchy/timeline.' };
       }
       if (operationId === 'monitoring.traces') {
@@ -272,7 +276,7 @@ export class PortalReadAdapter {
           limit: request.page.limit, offset: request.page.offset, statuses: request.parameters.Status.List, spanTypes: request.parameters.SpanTypes.List,
           minDurationMs: Number(request.parameters.MinDurationMs) });
         this.broker?.verifiedOperations?.add(operationId);
-        return { ok: true, target: this.target, origin: this.origin, operationId, internalContract: true, ...redact(traces),
+        return { ok: true, target: this.target, origin: this.origin, operationId, internalContract: true, ...trustedProjection(traces),
           warning: 'Trace search returns summaries, not full span trees. Use monitoring.trace explicitly for each selected trace.' };
       }
       if (operationId === 'monitoring.detail' && data.NotFound === true) fail('PORTAL_LOG_NOT_FOUND', 'No accessible log was returned for this identifier.');
@@ -326,13 +330,11 @@ export class PortalReadAdapter {
       let paginationSemantics, pagination, serverPagination, paginationSource = 'server';
       if (request.page) {
         const source = data.LogSearch_Page;
-        if (!source || typeof source !== 'object') fail('PORTAL_CONTRACT_CHANGED', 'Expected log pagination is absent.');
-        const readInteger = key => {
-          const value = source[key];
-          if (!['string', 'number'].includes(typeof value) || !/^-?\d+$/.test(String(value)) || !Number.isSafeInteger(Number(value)) || Number(value) < (key === 'NextPageOffset' ? -1 : 0)) fail('PORTAL_RESPONSE_INVALID', 'Invalid server pagination.', { field: key, valueType: typeof value, redactedValue: typeof value === 'string' && value.includes('[REDACTED]'), length: typeof value === 'string' ? value.length : undefined, ...(typeof value === 'number' || typeof value === 'string' && /^[\d ,.<>+=-]{0,40}$/.test(value) ? { numericValue: value } : {}) });
-          return Number(value);
-        };
-        pagination = Object.fromEntries(['Limit', 'Offset', 'NextPageOffset', 'TotalPages', 'TotalResults'].map(key => [key, readInteger(key)]));
+        const diagnostic = fields => paginationDiagnostic(request.page, source, fields);
+        if (!source || typeof source !== 'object' || Array.isArray(source)) fail('PORTAL_CONTRACT_CHANGED', 'Expected log pagination is absent.', diagnostic(PAGE_FIELDS));
+        const invalid = PAGE_FIELDS.filter(key => pageInteger(source[key]) === null || pageInteger(source[key]) < (key === 'NextPageOffset' ? -1 : 0));
+        if (invalid.length) fail('PORTAL_RESPONSE_INVALID', 'Invalid server pagination.', diagnostic(invalid));
+        pagination = Object.fromEntries(PAGE_FIELDS.map(key => [key, pageInteger(source[key])]));
         // Preserve the native empty page without asserting a successful app session.
         const nativeEmptyPage = !droppedOutOfScope && rows.length === 0 && Object.values(pagination).every(value => value === 0);
         paginationSemantics = nativeEmptyPage ? 'native-empty-page' : 'bounded-page';
@@ -341,7 +343,7 @@ export class PortalReadAdapter {
         // Accept that precise shape only with the exact bounded in-scope row count.
         if (!nativeEmptyPage && pagination.Limit === 0 && pagination.Offset === 0 && pagination.NextPageOffset === 0 && pagination.TotalPages === 0) {
           const expectedRows = Math.min(request.page.limit, Math.max(0, pagination.TotalResults - request.page.offset));
-          if (droppedOutOfScope || rows.length !== expectedRows) fail('PORTAL_RESPONSE_SCOPE_MISMATCH', 'Total-only pagination cannot be reconciled with scoped rows.', { requestedPage: request.page, pagination, scopedRows: rows.length, droppedOutOfScope });
+          if (droppedOutOfScope || rows.length !== expectedRows) fail('PORTAL_RESPONSE_SCOPE_MISMATCH', 'Total-only pagination cannot be reconciled with scoped rows.', diagnostic(['TotalResults']));
           serverPagination = pagination;
           paginationSource = 'request-and-server-total';
           const next = request.page.offset + request.page.limit;
@@ -351,7 +353,8 @@ export class PortalReadAdapter {
         // C34: the server may cap the page size (Limit 50 when 100 was asked); its Limit is accepted with the requested
         // Offset, and the next page is computed from the server's values. A larger Limit or another Offset is a scope the
         // request never asked for.
-        if (!nativeEmptyPage && (pagination.Offset !== request.page.offset || pagination.Limit < 1 || pagination.Limit > request.page.limit)) fail('PORTAL_RESPONSE_SCOPE_MISMATCH', 'Server pagination differs from the requested bounds.', { requestedPage: request.page, pagination, scopedRows: rows.length, droppedOutOfScope });
+        const scopeFields = [ ...(pagination.Offset !== request.page.offset ? ['Offset'] : []), ...(pagination.Limit < 1 || pagination.Limit > request.page.limit ? ['Limit'] : []) ];
+        if (!nativeEmptyPage && scopeFields.length) fail('PORTAL_RESPONSE_SCOPE_MISMATCH', 'Server pagination differs from the requested bounds.', diagnostic(scopeFields));
       }
       const maximum = operationId === 'monitoring.traceLogs' ? input.maxLogs ?? 100 : pagination?.Limit ?? request.page?.limit ?? 100;
       const receivedCount = rows.length;
@@ -359,11 +362,13 @@ export class PortalReadAdapter {
       rows = rows.slice(0, maximum).map(row => {
         const record = route.wrapper && row?.[route.wrapper] && typeof row[route.wrapper] === 'object' ? row[route.wrapper] : row;
         if (!record || typeof record !== 'object' || Array.isArray(record)) fail('PORTAL_RESPONSE_INVALID', 'Unexpected record shape.');
-        return Object.fromEntries((route.fields ?? logFields).filter(field => ['string', 'number', 'boolean'].includes(typeof record[field]))
-          .map(field => [field, typeof record[field] === 'string' ? record[field].slice(0, 8192) : record[field]]));
+        const projected = {};
+        for (const field of (route.fields ?? logFields).filter(field => ['string', 'number', 'boolean'].includes(typeof record[field])))
+          projected[field] = typeof record[field] === 'string' ? boundedText(record[field], 8192, projected, field) : record[field];
+        return projected;
       });
       this.broker?.verifiedOperations?.add(operationId);
-      return { ok: true, target: this.target, origin: this.origin, operationId, internalContract: true, rows: redact(rows), truncated,
+      return { ok: true, target: this.target, origin: this.origin, operationId, internalContract: true, rows: trustedProjection(rows), truncated,
         ...(connectionTotal !== undefined ? {totalResults:connectionTotal,receivedCount,complete:!truncated} : {}),
         ...(droppedOutOfScope ? { droppedOutOfScope } : {}),
         ...(request.page ? { requestedPage: request.page } : {}),

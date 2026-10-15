@@ -11,6 +11,8 @@ import { kernelReading } from './kernel-reading.mjs';
 import { selectedO11Publisher } from './debug-o11-publisher.mjs';
 import { selectedO11Compiler } from './debug-o11-compiler.mjs';
 import * as W from './debug-wrapper.mjs';
+import { o11LaneOf } from './o11-lane.mjs';
+import { producerCacheDir, recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
 
 const exec = promisify(execFile), KEY = /^[A-Za-z0-9_+]{22}$/, NAME = /^[A-Za-z_][A-Za-z0-9_]{0,120}$/;
 const fail = code => { throw new Error(code); };
@@ -143,7 +145,7 @@ export async function operationalO11Cli(verb, args, { timeoutMs = 360000 } = {})
   return reply.data ?? { ok: false, state: 'refused', error: 'publish_oml_runtime_unavailable' };
 }
 
-export function createO11Lifecycle({ cli = operationalO11Cli, readTree = nativeReadTree, root = workspaceRoot, nativeInventory } = {}) {
+export function createO11Lifecycle({ cli = operationalO11Cli, readTree = nativeReadTree, root = workspaceRoot, nativeInventory, signatureCache } = {}) {
   async function inventory(target, directory, { requireModuleId = false } = {}) {
     let reply = await cli('inventory', ['--host', target.host, '--module', target.module, '--read-only']);
     let row = matchPublishedModule(reply, target);
@@ -283,15 +285,30 @@ export function createO11Lifecycle({ cli = operationalO11Cli, readTree = nativeR
       o11Write(requestPath, { ...request, mode, ...(reconcilePublishedVersionId ? { reconcilePublishedVersionId } : {}) });
     }
     let reply;
+    // F5 (producer-signatures.mjs): the debugger publishes the module (wrapper in, wrapper out); it may be a producer, so
+    // the publication is recorded in the workspace's producer ledger from its start to its proven end.
+    const publication = mode === 'publish' ? notePublication(request, operation.operationId) : false;
     try { reply = await cli('publish-oml', ['--request', requestPath], { timeoutMs: 630000 }); }
     catch (error) {
       reply = fs.existsSync(operation.receiptPath) ? o11Read(operation.receiptPath) : null;
       if (!reply && mode === 'publish' && error?.publicationStage === 'publisher-selection' &&
-          /^debug_o11_publisher_[a-z_]+$/.test(error?.code ?? ''))
+          /^debug_o11_publisher_[a-z_]+$/.test(error?.code ?? '')) {
+        if (publication) recordPublicationEnded(publication);   // nothing was submitted
         return { ok: false, state: 'refused', error: error.code, operationId: operation.operationId,
           nativeSubmission: false, phase: 'publisher-selection' };
+      }
     }
-    return outcome(reply);
+    const result = outcome(reply);
+    if (publication && !publicationOpen(result)) recordPublicationEnded(publication);
+    return result;
+  }
+  function notePublication(request, operationId) {
+    try {
+      // The O11 lane's producer cache; a lifecycle over another root (tests) keeps it under that root.
+      const dir = signatureCache !== undefined ? signatureCache
+        : root === workspaceRoot ? producerCacheDir(o11LaneOf(o11Lane.lane, { root: anvilRoot }).work) : path.join(root, '.local', 'producer-cache');
+      return recordPublished(dir, { environment: request.host, module: request.module, key: request.moduleKey ?? null, source: 'ssam_debug', id: operationId });
+    } catch { return false; }
   }
   async function exists(base, selector) {
     const parts = /^([A-Za-z][A-Za-z0-9]*):([A-Za-z_][A-Za-z0-9_]*)$/.exec(selector);

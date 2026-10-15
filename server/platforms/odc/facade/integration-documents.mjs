@@ -12,6 +12,8 @@
 // IRestStructure, IRestService, IRestServiceAction, ISOAPClient, ISOAPAction, ISOAPStructure), any `breaks`, and a change of
 // the verb or path of an existing exposed method need the user's own words naming each target (whole words) and each
 // consumer `breaks` lists; a target is written Type:Name (never $alias or @key); a standing grant never covers them.
+// Samples (rest-consume): a GET method without sample is read once (sampleRestConsume: 10 s, 2 MB, no credentials, JSON,
+// lists cut to 20 items) and the sample pinned in the op with sampledFrom {url, status, bytes, sha256}; never a POST.
 // Every problem in one refusal, before anything happens; only the words' sha256 is ever journaled (by the callers).
 // Hosted (servidor/fase4-24, findings 1 and 3 of the confinement review): inside a hosted call (or with `workspace`) the
 // documents are read for a customer, so every LOCAL file this module is about to read, the main document and each file a
@@ -36,8 +38,14 @@ import { MAX_REDIRECTS, createPublicFetch, publicUrlProblem } from './hosted/pub
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
 export const MAX_DOCUMENTS = 32;
 export const FETCH_TIMEOUT_MS = 30000;
+// rest-consume (the generator, kernel RestConsume.cs): a GET method without a sample is sampled once here, never by the
+// kernel: 10 s, at most 2 MB, no credentials, JSON only; every list of the answer is cut to its first 20 items (the kernel
+// types a list from all the items it is given).
+export const SAMPLE_TIMEOUT_MS = 10000;
+export const SAMPLE_MAX_BYTES = 2 * 1024 * 1024;
+export const SAMPLE_LIST_ITEMS = 20;
 export const INTEGRATION_TYPES = Object.freeze(['IRestClient', 'IRestAction', 'IRestStructure', 'IRestService', 'IRestServiceAction', 'ISOAPClient', 'ISOAPAction', 'ISOAPStructure']);
-const INTEGRATION_OPS = new Set(['rest', 'rest-expose', 'soap']);
+const INTEGRATION_OPS = new Set(['rest', 'rest-consume', 'rest-expose', 'soap']);
 const sha256 = data => createHash('sha256').update(data).digest('hex');
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
 const isUrl = text => /^https?:\/\//i.test(String(text ?? ''));
@@ -315,6 +323,117 @@ async function pin(source, { kind, localRoot, fetchImpl, at, jobDir, confine = n
   return { document, files: files.map(f => ({ source: f.source, path: f.path, sha256: sha256(f.bytes), bytes: f.bytes.length })) };
 }
 
+// ---- rest-consume samples ---------------------------------------------------------------------------------------------
+
+const PLACEHOLDER = /\{([^{}=]*)(?:=([^{}]*))?\}/g;
+
+/**
+ * The URL a method of rest-consume is sampled with: its url (absolute, or relative to data.baseUrl) with each {p=example}
+ * or {p} filled from the example or method.try. -> {url} | {problem}.
+ */
+export function sampleUrl(data, method, at = '') {
+  const raw = String(method?.url ?? '').trim();
+  const base = typeof data?.baseUrl === 'string' ? data.baseUrl.trim().replace(/\/+$/, '') : null;
+  const absolute = isUrl(raw) ? raw : base && isUrl(base) ? base + (raw.startsWith('/') ? '' : '/') + raw : null;
+  if (!absolute) return { problem: problem('REST_CONSUME_URL_INVALID', `rest-consume: url '${raw}' of '${method?.name}' is not an http(s) URL and the op has no baseUrl`, '"url": "https://host/path"', { path: `${at}/url` }) };
+  const tries = method?.try && typeof method.try === 'object' ? method.try : {};
+  const missing = [];
+  const url = absolute.replace(PLACEHOLDER, (whole, name, example) => {
+    const key = String(name).trim();
+    const value = tries[key] ?? example;
+    if (value == null || String(value) === '') { missing.push(key); return whole; }
+    return encodeURIComponent(String(value));
+  });
+  if (missing.length) return { problem: problem('REST_CONSUME_TRY_MISSING', `rest-consume: to sample '${method?.name}' the url needs a value for ${missing.map(m => `{${m}}`).join(', ')}`,
+    `write each one with an example, {${missing[0]}=<value>}, or "try": {"${missing[0]}": <value>}; or give "sample": <the JSON response>`, { path: `${at}/url` }) };
+  return { url };
+}
+
+/** Every list of a JSON value cut to its first `max` items (the kernel types a list from the items it sees). */
+export function trimSample(value, max = SAMPLE_LIST_ITEMS) {
+  let trimmed = false;
+  const walk = v => {
+    if (Array.isArray(v)) { if (v.length > max) trimmed = true; return v.slice(0, max).map(walk); }
+    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]));
+    return v;
+  };
+  return { value: walk(value), trimmed };
+}
+
+/** One GET of a sample URL: JSON only, the limits above, no credentials. -> {sample, sampledFrom} | {problem}. */
+export async function fetchSample(url, { fetchImpl = globalThis.fetch, at = '' } = {}) {
+  if (typeof fetchImpl !== 'function') return { problem: problem('REST_CONSUME_SAMPLE_FETCH_FAILED', `no HTTP client to sample ${url}`, 'give "sample": <the JSON response>', { path: at }) };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SAMPLE_TIMEOUT_MS);
+  try {
+    const response = await fetchImpl(url, { method: 'GET', redirect: 'follow', credentials: 'omit', signal: controller.signal,
+      headers: { accept: 'application/json', 'user-agent': 'SSAM-Hybrid rest-consume sample' } });
+    if (!response.ok) return { problem: problem('REST_CONSUME_SAMPLE_FETCH_FAILED', `GET ${url} answered ${response.status}`,
+      'check the url and its example values ({p=value} or "try"), or give "sample": <the JSON response>', { path: at, status: response.status }) };
+    const declared = Number(response.headers?.get?.('content-length') ?? 0);
+    if (declared > SAMPLE_MAX_BYTES) return { problem: problem('REST_CONSUME_SAMPLE_TOO_LARGE', `${url} declares ${declared} bytes, more than ${SAMPLE_MAX_BYTES}`, 'sample a smaller page (a query that limits the items), or give "sample"', { path: at }) };
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > SAMPLE_MAX_BYTES) return { problem: problem('REST_CONSUME_SAMPLE_TOO_LARGE', `${url} has ${bytes.length} bytes, more than ${SAMPLE_MAX_BYTES}`, 'sample a smaller page (a query that limits the items), or give "sample"', { path: at }) };
+    let json;
+    try { json = JSON.parse(bytes.toString('utf8').replace(/^﻿/, '')); } catch {
+      return { problem: problem('REST_CONSUME_SAMPLE_NOT_JSON', `GET ${url} answered ${response.headers?.get?.('content-type') ?? 'no content type'}, not JSON`, 'give "sample": <the JSON response>, or consume a JSON endpoint', { path: at }) };
+    }
+    const { value, trimmed } = trimSample(json);
+    return { sample: value, sampledFrom: { url, status: response.status, bytes: bytes.length, sha256: sha256(bytes), ...(trimmed ? { trimmedTo: SAMPLE_LIST_ITEMS } : {}) } };
+  } catch (error) {
+    return { problem: problem('REST_CONSUME_SAMPLE_FETCH_FAILED', `GET ${url} failed: ${error?.name === 'AbortError' ? `no answer in ${SAMPLE_TIMEOUT_MS / 1000} s` : String(error?.message ?? error).split('\n')[0]}`,
+      'check the url, or give "sample": <the JSON response>', { path: at }) };
+  } finally { clearTimeout(timer); }
+}
+
+/** The samples of a rest-consume op: each GET method without one is sampled once and pinned in the op. */
+async function sampleRestConsume(op, i, { fetchImpl }) {
+  const problems = [];
+  let changed = false;
+  const methods = Array.isArray(op.data?.methods) ? op.data.methods : [];
+  // An authenticated API answers 401 to a GET without credentials, and the sampler never sends any: no request, one problem
+  // per method without a sample.
+  const auth = op.data?.auth && typeof op.data.auth === 'object' ? String(op.data.auth.type ?? 'none') : 'none';
+  for (const [j, method] of methods.entries()) {
+    if (!method || typeof method !== 'object' || method.sample !== undefined) continue;
+    if (String(method.verb ?? 'GET').toUpperCase() !== 'GET') continue; // no request is ever sent that could change data
+    const at = `/ops/${i}/data/methods/${j}`;
+    if (auth !== 'none') {
+      problems.push(problem('REST_CONSUME_SAMPLE_MISSING', `rest-consume: method '${method.name}' has no sample and the API is authenticated (auth ${auth}): the sampler never sends credentials`,
+        'give "sample": <the JSON response> (from the API\'s documentation or a call made with the credentials)', { path: `${at}/sample` }));
+      continue;
+    }
+    const target = sampleUrl(op.data, method, at);
+    if (target.problem) { problems.push(target.problem); continue; }
+    const read = await fetchSample(target.url, { fetchImpl, at: `${at}/url` });
+    if (read.problem) { problems.push(read.problem); continue; }
+    method.sample = read.sample;
+    method.sampledFrom = read.sampledFrom;
+    changed = true;
+  }
+  return { problems, changed };
+}
+
+// rest-consume auth basic on O11 encodes user:password at runtime with the system extension BinaryData (in every O11
+// environment): the job references its two actions. An op of the job that already references BinaryData gets the missing
+// elements; otherwise one op is appended at the end (no op of the model moves; the kernel imports a frozen reference
+// before the edit, and o11_deliver captures every producer a reference op names, read-only). ODC: none (the setting holds
+// the Base64). Kernel: RestConsume.BinaryDataReference.
+export const BINARY_DATA_REFERENCE = Object.freeze({ op: 'reference', producer: 'BinaryData', elements: Object.freeze(['IServerAction:TextToBinaryData', 'IServerAction:BinaryToBase64']) });
+
+export function addBinaryDataReference(ops, lane) {
+  if (lane !== 'o11' || !ops.some(op => op?.op === 'rest-consume' && op.data?.auth?.type === 'basic')) return false;
+  const existing = ops.find(op => op?.op === 'reference' && String(op.producer ?? '').toLowerCase() === 'binarydata');
+  if (existing) {
+    const elements = Array.isArray(existing.elements) ? existing.elements : (existing.elements = []);
+    const missing = BINARY_DATA_REFERENCE.elements.filter(e => !elements.includes(e));
+    elements.push(...missing);
+    return missing.length > 0;
+  }
+  ops.push({ op: 'reference', producer: BINARY_DATA_REFERENCE.producer, elements: [...BINARY_DATA_REFERENCE.elements] });
+  return true;
+}
+
 // ---- the preparation --------------------------------------------------------------------------------------------------
 
 // The document paths of one op the kernel resolves against the job's folder (JobRunner.ResolveDocuments): a soap wsdl
@@ -375,6 +494,14 @@ export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '',
       problems.push(problem('SOAP_LANE_UNSUPPORTED', 'soap: SOAP is not available on ODC (the platform consumes REST only)', 'consume the service through a REST facade (op rest), or an External Library that calls it', { path: `/ops/${i}` }));
       continue;
     }
+    if (op.op === 'rest-consume') {
+      // servidor/fase4-25: the same client as the documents (hosted, the public-only one; local, fetchImpl or the global
+      // fetch, as before), never the server's global fetch for a hosted customer.
+      const sampled = await sampleRestConsume(op, i, { fetchImpl: client });
+      problems.push(...sampled.problems);
+      if (sampled.changed) changed = true;
+      continue;
+    }
     const slot = op.op === 'soap' ? { owner: op.data, key: 'wsdl', kind: 'wsdl' } : op.op === 'rest' && op.data.openapi && typeof op.data.openapi === 'object' ? { owner: op.data.openapi, key: 'path', kind: 'openapi' } : null;
     if (!slot) continue;
     const value = slot.owner[slot.key];
@@ -389,6 +516,7 @@ export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '',
     else Object.assign(op.data.openapi, { path: pinned.document.path, sha256: pinned.document.sha256, source: pinned.document.source, ...(pinned.document.external ? { external: { ...(op.data.openapi.external ?? {}), ...pinned.document.external } } : {}) });
     changed = true;
   }
+  if (addBinaryDataReference(copyOps, lane)) changed = true;
   if (problems.length) {
     const codes = [...new Set(problems.map(p => p.code))];
     return { ok: false, code: codes.length === 1 ? codes[0] : codes.includes('INTEGRATION_DELETE_WORDS') ? 'INTEGRATION_DELETE_WORDS' : codes[0],

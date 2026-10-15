@@ -24,14 +24,16 @@ try {
   let stopping;
   async function stop() {
     if (stopping) return stopping;
-    status='stopping'; receipt(describe());
+    // A receipt that cannot be written never stops the stop: the host and the control server close all the same, so the
+    // worker never outlives it (the manager then reads an unreachable session and reports it as uncertain).
+    status='stopping'; try { receipt(describe()); } catch { /* the final receipt follows */ }
     stopping=(async()=>{
       let failure;
       try { await watcher?.stop(); } catch(e) { failure=e; }
       try { await host.close(); } catch(e) { failure??=e; }
       status=failure?'failed':'stopped';
-      receipt({...describe(),ok:!failure,...(failure?{code:'PREVIEW_STOP_FAILED',error:failure.message}:{})});
-      server.close();server.closeIdleConnections?.();
+      try { receipt({...describe(),ok:!failure,...(failure?{code:'PREVIEW_STOP_FAILED',error:failure.message}:{})}); }
+      finally { server.close();server.closeIdleConnections?.(); }
     })();
     return stopping;
   }

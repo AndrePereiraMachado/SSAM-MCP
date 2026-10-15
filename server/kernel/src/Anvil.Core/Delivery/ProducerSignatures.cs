@@ -14,7 +14,24 @@ public interface IProducerSignatureAuthority
     /// "@originalKey" (typed by the payload). An authority without it cannot capture owners.</summary>
     JsonObject CaptureByKey(string producerKey, IReadOnlyList<string> elements, string destination, string environment)
         => throw new NotSupportedException("This producer authority captures producers by name only; the owner " + producerKey + " is not captured");
+    /// <summary>F5: re-observes several envelopes at once, each with its own outcome (the observation, or the exception
+    /// Attest would have thrown), in the order given. The Studio authority does it in one read-only lease with one read of
+    /// each catalog; this default attests one by one.</summary>
+    IReadOnlyList<ProducerAttestation> AttestAll(IReadOnlyList<string> avsigPaths, string environment)
+    {
+        var outcomes = new List<ProducerAttestation>();
+        foreach (var path in avsigPaths)
+        {
+            try { outcomes.Add(new ProducerAttestation(path, Attest(path, environment), null)); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { outcomes.Add(new ProducerAttestation(path, null, ex)); }
+        }
+        return outcomes;
+    }
 }
+
+/// <summary>The outcome of one re-observation: Observed ({producer, environment, guard, versionId, advertisedSignatureHash,
+/// attested}) or the Error that refuses it.</summary>
+public sealed record ProducerAttestation(string Path, JsonObject? Observed, Exception? Error);
 
 /// <summary>Pure helpers over the job graph and the recorded producer envelopes (no model, no server).</summary>
 public static class ProducerSignatures

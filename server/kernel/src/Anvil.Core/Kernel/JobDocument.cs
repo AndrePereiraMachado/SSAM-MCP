@@ -105,6 +105,8 @@ public static class JobDocument
 
     private static readonly Field Logic = Obj(new()
     {
+        // The text form (ssam-flow/1): one action text, or a list of texts or {text, basedOn}; basedOn is a text's textSha.
+        ["flow"] = Any, ["basedOn"] = Text,
         ["actions"] = List(Obj(new()
         {
             ["name"] = Text, ["kind"] = Text, ["owner"] = Text, ["public"] = Bool, ["description"] = Text, ["function"] = Bool, ["replace"] = Bool,
@@ -165,7 +167,7 @@ public static class JobDocument
             if (key == "data")
             {
                 // The compact languages: spec and logic have a closed shape here; the others an object (their grammar reads it).
-                var shape = kind switch { "spec" => Spec, "logic" => Logic, "screen" or "html" or "rest" or "rest-expose" or "soap" => Obj(values: Any), _ => Any };
+                var shape = kind switch { "spec" => Spec, "logic" => Logic, "screen" or "html" or "rest" or "rest-consume" or "rest-expose" or "soap" or "entity-actions" => Obj(values: Any), _ => Any };
                 Walk(value, shape, At(pointer, key), key, found);
                 continue;
             }

@@ -26,6 +26,14 @@ test('identity helper refuses cross-host profiles and absent principal before in
     await assert.rejects(vaultIdentityLogin(t, o, {run:()=>{throw Error('must not run');}}), /same-host/);
   }
 });
+test('the same private identity helper accepts only same-host ODC Portal entries, never API Client or settings',async()=>{
+ const base=`SSAM/ODC3/${host}/Portal`;
+ for(const entry of [base,base+'/Profiles/'+'a'.repeat(64)+'/11111111-2222-3333-4444-555555555555']){
+  assert.deepEqual(await vaultIdentityLogin(entry,options,{run:async(_script,input)=>{assert.equal(input.target,entry);assert.equal(input.principal,principal);return {ok:true,tokens};}}),tokens);
+ }
+ for(const entry of [base.replace(host,'other.example'),`SSAM/ODC3/${host}/APIClient`,`SSAM/ODC3/${host}/Setting/A`])
+  await assert.rejects(vaultIdentityLogin(entry,options,{run:()=>assert.fail('must not read')}),/same-host/);
+});
 
 test('private protocol strips unexpected token response fields and does not expose transport errors', async () => {
   assert.deepEqual(await vaultIdentityLogin(target, options, {run:async()=>({ok:true,tokens:{...tokens,password:'do-not-return'}})}),tokens);

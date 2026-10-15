@@ -86,6 +86,33 @@ export function namesPrototype(value, budget = { left: 4000000 }, depth = 0) {
   return Object.values(value).some(item => namesPrototype(item, budget, depth + 1));
 }
 
+// ---- servidor/fase4-25 (D2 of C:\t\vps-a5\PLANO.md, 3.2-E): whether a value names a generator op
+// The generators of generators.mjs (GENERATOR_APPROVAL): entity-actions, rest-consume, and the op screen with data.generate
+// (gen-screen). The id of the first one a value names, anywhere: an op {op:"entity-actions"}, {op:"screen", data:{generate}},
+// a patch entry that turns an op into one ({path:".../op", value:"rest-consume"}) or that adds data.generate
+// ({path:".../data/generate"}); JSON text is read as JSON; else null. A value too large or too deep to read whole is
+// 'unreadable' (the gate fails closed). wanted(id): which generators count (the gate passes the pending ones, policy.mjs),
+// so an approved one never hides a pending one further on; every one by default.
+const GENERATOR_NAMES = new Map([['entity-actions', 'entity-actions'], ['gen-entity', 'entity-actions'], ['rest-consume', 'rest-consume'],
+  ['gen-rest', 'rest-consume'], ['gen-screen', 'gen-screen']]);
+const generatorOfName = value => (typeof value === 'string' ? GENERATOR_NAMES.get(value.trim().toLowerCase()) ?? null : null);
+export function namesGenerator(value, wanted = () => true, budget = { left: 4000000 }, depth = 0) {
+  if (looksLikeJson(value)) { try { return namesGenerator(JSON.parse(value), wanted, budget, depth + 1); } catch { return null; } }
+  if (value === null || typeof value !== 'object') return null;
+  if (--budget.left < 0 || depth > 128) return 'unreadable';
+  if (Array.isArray(value)) { for (const item of value) { const found = namesGenerator(item, wanted, budget, depth + 1); if (found) return found; } return null; }
+  const hit = id => (id && wanted(id) ? id : null);
+  const byName = hit(generatorOfName(value.op));
+  if (byName) return byName;
+  if (typeof value.op === 'string' && value.op.trim().toLowerCase() === 'screen' && isObject(value.data) && value.data.generate != null && hit('gen-screen')) return 'gen-screen';
+  if (typeof value.path === 'string') {
+    if (/(^|[/.])op$/.test(value.path) && hit(generatorOfName(value.value))) return generatorOfName(value.value);
+    if (/(^|\/)data\/generate(\/|$)/.test(value.path) && hit('gen-screen')) return 'gen-screen';
+  }
+  for (const item of Object.values(value)) { const found = namesGenerator(item, wanted, budget, depth + 1); if (found) return found; }
+  return null;
+}
+
 // ---- where a call carries jobs
 // The pointers where the JSON text of a job is the job itself (vel-hosted, narrowed here): the job of the four job tools,
 // and the query of ssam_reference check-job (the job, or the partial job of {basedOn, patch, job}). Anywhere else a value
@@ -228,9 +255,10 @@ const unchecked = (pointer, why) => new PathRefusal('JOB_PATHS_UNCHECKED', `The 
 class JobWalk {
   // resolve(value) -> the absolute workspace path of a ws:, agent:, absolute or relative value (policy.mjs resolveValue,
   // role 'in'), or throws a PathRefusal. prototype: whether D2 asks (the walk then also notes the prototype op).
-  constructor({ workspace, resolve, prototype }) {
-    this.workspace = path.resolve(workspace); this.resolver = resolve; this.prototypeOn = prototype;
-    this.prototype = false; this.unknown = false; this.refusal = null; this.files = 0; this.seen = new Set(); this.resolved = new Map();
+  // generator(id) -> whether the gate refuses that generator (policy.mjs; null: the generators are not asked).
+  constructor({ workspace, resolve, prototype, generator = null }) {
+    this.workspace = path.resolve(workspace); this.resolver = resolve; this.prototypeOn = prototype; this.generatorOn = generator;
+    this.prototype = false; this.generator = null; this.unknown = false; this.refusal = null; this.files = 0; this.seen = new Set(); this.resolved = new Map();
   }
   // One resolution per value and call (an agent: file is brought once).
   async resolve(value) {
@@ -248,10 +276,16 @@ class JobWalk {
   }
   inside(file) { return insideVisible(this.workspace, file); }
   notePrototype(doc) { if (this.prototypeOn && !this.prototype && namesPrototype(doc)) this.prototype = true; }
+  noteGenerator(doc) {
+    if (!this.generatorOn || this.generator) return;
+    const id = namesGenerator(doc, this.generatorOn);
+    if (id) this.generator = id;
+  }
 
   // One document: every path-typed field checked (and, inline, rewritten in place).
   async document(doc, { mode, dir, at, depth }) {
     this.notePrototype(doc);
+    this.noteGenerator(doc);
     for (const field of [...pathFields(doc)]) {
       const value = field.owner[field.key];
       const next = await this.value(value, field.kind, { mode, dir, pointer: at + field.at, depth });
@@ -338,11 +372,13 @@ class JobWalk {
 // {resolved, prototype, refusal}: the arguments with every inline job rewritten (a fresh copy), whether a document the
 // call reaches names the prototype op or could not be read whole (only when prototype is asked), and the first PathRefusal
 // (its pointer set) or null. options: workspace, resolve(value) (policy.mjs, with the call's lane), prototype (D2).
-export async function confineJobs(name, resolved, { workspace, resolve, prototype = false } = {}) {
-  if (!jobSlot(name, resolved)) return { resolved, prototype: false, refusal: null };
+// generator(id): servidor/fase4-25, whether the gate refuses that generator op (null: not asked); the answer then names the
+// first refused generator the call reaches, or 'unreadable' for a part the gate could not read whole.
+export async function confineJobs(name, resolved, { workspace, resolve, prototype = false, generator = null } = {}) {
+  if (!jobSlot(name, resolved)) return { resolved, prototype: false, generator: null, refusal: null };
   const copy = structuredClone(resolved);
   const { holder, at, key } = jobSlot(name, copy);
-  const walk = new JobWalk({ workspace, resolve, prototype });
+  const walk = new JobWalk({ workspace, resolve, prototype, generator });
   const jobAt = at + '/' + key;
   const job = holder[key];
   // The job: inline (rewritten in the copy), or a file of the workspace (checked where it is). A missing or invalid job
@@ -371,7 +407,8 @@ export async function confineJobs(name, resolved, { workspace, resolve, prototyp
       if (effective !== undefined) await walk.document(effective, { mode: 'moved', dir: path.dirname(base), at: at + '/basedOn/job (patched) > ', depth: 1 });
     }
   }
-  return { resolved: copy, prototype: prototype && (walk.prototype || walk.unknown), refusal: walk.refusal };
+  return { resolved: copy, prototype: prototype && (walk.prototype || walk.unknown),
+    generator: generator ? walk.generator ?? (walk.unknown ? 'unreadable' : null) : null, refusal: walk.refusal };
 }
 
 // The base job of basedOn: {job} (already confined by tools.json) or {taskId} (the job an O11 delivery of this customer

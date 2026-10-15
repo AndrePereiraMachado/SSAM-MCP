@@ -307,6 +307,15 @@ test('an older bridge refusing an External Library producer is BRIDGE_UPGRADE_RE
   assert.equal(withBridgeUpgrade({ ok: false, error: 'Producer is not available to the consumer session: X' }).code, undefined, 'any other refusal stays as it is');
 });
 
+// CompileCheck (class D): a lab that builds a consumed SOAP service by verbs (allowSoapWithoutImport) is accepted by the kernel
+// with a HIGH warning, and the delivery never delivers it.
+test('a lab escape of the SOAP rule is never delivered', () => {
+  const lab = { code: 'COMPILE_SOAP_DEFINITION_ALLOWED', severity: 'high', message: 'the consumed SOAP service X ... (never delivered)' };
+  const refused = interpretKernelResult({ ok: true, data: { accepted: true, isValid: true, flowLayoutEngine: requiredFlowLayoutEngine, highWarnings: [lab] } }, { output: 'o' });
+  assert.equal(refused.ok, false); assert.equal(refused.code, 'COMPILE_SOAP_DEFINITION'); assert.match(refused.error, /never delivered/);
+  const other = interpretKernelResult({ ok: true, data: { accepted: true, isValid: true, flowLayoutEngine: requiredFlowLayoutEngine, highWarnings: [{ code: 'AGGREGATES_MERGEABLE', severity: 'high' }] } }, { output: 'o' });
+  assert.equal(other.ok, true);
+});
 // I7: what the integration ops of a job imported reaches the delivery answer (at most 10, with the total).
 test('data.integration of the kernel result reaches the delivery report', async t => {
   const integration = Array.from({ length: 12 }, (_, i) => ({ op: 'rest', client: { name: 'Api' + i, key: 'k' + i, created: true }, imported: ['Get'], skipped: [], updated: [], removed: [], consumersBroken: [], warnings: [] }));

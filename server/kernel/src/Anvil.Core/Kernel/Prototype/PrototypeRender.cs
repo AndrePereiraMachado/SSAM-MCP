@@ -295,6 +295,8 @@ public static class PrototypeRender
         public IReadOnlyList<(string Left, string Right, string Condition, string Kind)> Joins { get; init; } = [];
         /// <summary>The aggregation columns (Sum, Count, Max, Min, Average) of an aggregate without group by: one row.</summary>
         public IReadOnlyList<(string Name, string Attribute, string Function)> Columns { get; init; } = [];
+        /// <summary>The calculated columns (name, value) the aggregation columns may aggregate by name (Sum(TotalRow)).</summary>
+        public IReadOnlyList<(string Name, string Value)> Calculated { get; init; } = [];
         /// <summary>The order its OnAfterFetch gives the list (the compiler's Ordenar&lt;Lista&gt;: a Switch of ListSort calls on a bare
         /// attribute): each case's condition, the attribute and the direction.</summary>
         public IReadOnlyList<(string When, string By, string Ascending)> AfterFetchSorts { get; init; } = [];
@@ -353,7 +355,7 @@ public static class PrototypeRender
     private static Aggregate ReadAggregate<T>(ModelReader<T> reader, T aggregate) where T : class
     {
         var sources = new List<(string, string)>(); var filters = new List<string>(); var sorts = new List<(string, bool)>(); var joined = false;
-        var joins = new List<(string, string, string, string)>(); var columns = new List<(string, string, string)>();
+        var joins = new List<(string, string, string, string)>(); var columns = new List<(string, string, string)>(); var calculated = new List<(string, string)>();
         var stack = new Stack<T>(reader.ChildrenOf(aggregate).Reverse());
         while (stack.Count > 0)
         {
@@ -372,13 +374,15 @@ public static class PrototypeRender
                 case "AggregateAttribute" or "CalculatedAttribute":
                     if (Prop(reader, node, "Attribute") is { Length: > 0 } column)
                         columns.Add((reader.NameOf(node), column, Prop(reader, node, "AggregationType") ?? ""));
+                    else if (kind == "CalculatedAttribute" && Prop(reader, node, "Value") is { Length: > 0 } value)
+                        calculated.Add((reader.NameOf(node), value));
                     break;
             }
             foreach (var child in reader.ChildrenOf(node).Reverse()) stack.Push(child);
         }
         var afterFetch = Raw(reader, aggregate, "OnAfterFetch") is T handler && Raw(reader, handler, "Destination") is T action ? SortSwitch(reader, action) : null;
         return new Aggregate(reader.NameOf(aggregate), sources, filters, sorts, Prop(reader, aggregate, "MaxRecords"), joined || sources.Count > 1)
-            { Joins = joins, Columns = columns, AfterFetchSorts = afterFetch ?? [] };
+            { Joins = joins, Columns = columns, Calculated = calculated, AfterFetchSorts = afterFetch ?? [] };
     }
 
     /// <summary>The cases of an action that is a Switch whose every case is one ListSort call (Start -> Switch -> ListSort -> End);
@@ -482,10 +486,27 @@ public static class PrototypeRender
         public readonly Dictionary<string, int> Unverified = new(StringComparer.Ordinal);
         private readonly string _prefix = capture["app"]?["prefix"]?.ToString() ?? "";
         private readonly JsonObject? _nativeKeys = capture["nativeKeys"] as JsonObject;
+        // the file-name part of each asset's module image (3.5: <Prefix><file name>, the prefix the job gave) -> the asset's path
+        private readonly List<(string Stem, string Path)> _imageAssets = (capture["assets"] as JsonArray ?? []).OfType<JsonObject>()
+            .Select(a => a["path"]?.ToString()).Where(p => !string.IsNullOrEmpty(p)).Select(p => (PrototypeNames.Image("", p!), p!))
+            .Where(x => x.Item1.Length > 0).OrderByDescending(x => x.Item1.Length).ToList();
+
+        /// <summary>The asset of the capture a Static image shows (its Image names the module image, &lt;Prefix&gt;&lt;file name&gt;; the
+        /// longest file name that ends it): the measure compares it with the prototype's src (data-ssam-asset; the runtime's src is
+        /// the module image URL).</summary>
+        public string? ImageAsset(string? image)
+        {
+            if (image is not { Length: > 0 }) return null;
+            var name = image.Trim('"');
+            foreach (var (stem, path) in _imageAssets) if (name.EndsWith(stem, StringComparison.OrdinalIgnoreCase)) return path;
+            return null;
+        }
 
         public Scope StateScope(RootModel model, IReadOnlyList<Variable> clients, JsonObject state)
         {
             var scope = new Scope(Rows);
+            // data.bind (2.12): the example outputs of the Data Actions of the view and of its popups, and the producer's records
+            foreach (var (name, value) in SampleVars(capture["nativeSamples"] as JsonObject, StateSampleOwners(capture["nativeSamples"] as JsonObject, state["view"]?.ToString()))) scope.Vars[name] = value;
             foreach (var client in clients) scope.Client[client.Name] = Initial(client, scope);
             foreach (var input in model.Inputs) scope.Vars[input.Name] = Initial(input, scope);
             foreach (var local in model.Locals) scope.Vars[local.Name] = Initial(local, scope);
@@ -519,6 +540,10 @@ public static class PrototypeRender
             }
             return scope;
         }
+
+        private IEnumerable<string> Popups() => (capture["nativeSamples"] as JsonObject ?? []).Select(p => p.Key).Where(k => k.StartsWith("m:", StringComparison.Ordinal));
+
+        public IEnumerable<(string, object?)> BlockSamples() => SampleVars(capture["nativeSamples"] as JsonObject, Popups());
 
         private static IEnumerable<(string, object?)> RouteParameters(JsonObject? view)
         {
@@ -690,6 +715,7 @@ public static class PrototypeRender
                 host.SetAttr("data-block", blockName);
                 var blockModel = model(block, "b:" + reader.KeyOf(block));
                 var blockScope = new Scope(scope.RowsOf);
+                foreach (var (name, value) in BlockSamples()) blockScope.Vars[name] = value;
                 foreach (var (name, value) in scope.Client) blockScope.Client[name] = value;
                 foreach (var input in blockModel.Inputs) blockScope.Vars[input.Name] = Initial(input, blockScope);
                 foreach (var local in blockModel.Locals) blockScope.Vars[local.Name] = Initial(local, blockScope);
@@ -723,6 +749,9 @@ public static class PrototypeRender
             var tagName = row?.Element is { } e && !e.StartsWith('{') ? e : widget.Props.GetValueOrDefault("Tag") is { Length: > 0 } t ? Unquote(t) : "div";
             var node = hostElement.Add(Mark(DomNode.Element(tagName), widget));
             Attributes(node, widget, row, scope);
+            // a Static image shows a module image: the asset it came from, for the measure (the runtime src is the module URL)
+            if (widget.Basic == "Image" && ImageAsset(widget.Props.GetValueOrDefault("Image")) is { } asset && !node.Attributes.Any(a => a.Name == "src"))
+                node.SetAttr("data-ssam-asset", asset);
             switch (widget.Basic)
             {
                 case "Expression" or "InlineExpression":
@@ -849,6 +878,37 @@ public static class PrototypeRender
             return element;
         }
     }
+
+    // ---- data.bind: the example outputs of the Data Actions ---------------------------------------------------------
+
+    /// <summary>The variables the example outputs give (docs/PROTOTIPO-NATIVO.md 2.12): each Data Action of the owners as a record of
+    /// its outputs, every list with its path as owner (so &lt;path&gt;.Current is the row the List widget iterates), and Entities with
+    /// the identifiers of the producer's static records.</summary>
+    /// <summary>The owners whose example outputs a state of <paramref name="view"/> reads, in the order they are assigned: the popups
+    /// first, the view last, so the view's own Data Action wins over a popup's of the same name hosted on another screen (FolhaPonto:
+    /// Bater's ObterResumoHoje and the DaySheet's, hosted on Espelho).</summary>
+    internal static IReadOnlyList<string> StateSampleOwners(JsonObject? samples, string? view)
+        => [.. (samples ?? []).Select(p => p.Key).Where(k => k.StartsWith("m:", StringComparison.Ordinal)), "v:" + view];
+
+    internal static IEnumerable<(string Name, object? Value)> SampleVars(JsonObject? samples, IEnumerable<string> owners)
+    {
+        if (samples == null) yield break;
+        foreach (var owner in owners)
+            foreach (var (name, value) in samples[owner] as JsonObject ?? [])
+                yield return (name, SampleValue(value, name));
+        if (samples["@entities"] is JsonObject entities) yield return ("Entities", SampleValue(entities, "Entities"));
+    }
+
+    private static object? SampleValue(JsonNode? node, string path) => node switch
+    {
+        JsonObject o => new RecordValue(o.ToDictionary(p => p.Key, p => SampleValue(p.Value, path + "." + p.Key))),
+        JsonArray a => new ListValue(a.Select(x => SampleValue(x, path + ".Current")).ToList(), path),
+        JsonValue v when v.TryGetValue<bool>(out var b) => b,
+        JsonValue v when v.TryGetValue<long>(out var l) => l,
+        JsonValue v when v.TryGetValue<decimal>(out var d) => d,
+        JsonValue v when v.TryGetValue<string>(out var s) => s,
+        _ => null,
+    };
 
     // ---- expressions: the closed subset ---------------------------------------------------------------------------
 
@@ -997,7 +1057,14 @@ public static class PrototypeRender
                 var fields = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
                 foreach (var (name, attribute, function) in aggregate.Columns)
                 {
-                    var values = list.OfType<RecordValue>().Select(r => { var rs = With(null, null); foreach (var (n, v) in r.Fields) rs.Vars[n] = v; return Expressions.Evaluate(attribute, rs); }).ToList();
+                    var values = list.OfType<RecordValue>().Select(r =>
+                    {
+                        var rs = With(null, null);
+                        foreach (var (n, v) in r.Fields) rs.Vars[n] = v;
+                        // a calculated column the aggregation names (Sum(TotalRow), CALC TotalRow=...) is the row's own value
+                        foreach (var (n, value) in aggregate.Calculated) rs.Vars[n] = Expressions.Evaluate(value, rs);
+                        return Expressions.Evaluate(attribute, rs);
+                    }).ToList();
                     fields[name] = function switch
                     {
                         "Sum" => values.Aggregate(0m, (sum, v) => sum + Expressions.ToDecimalValue(v)) is var total && values.All(v => v is long or int) ? (object)(long)total : total,
@@ -1028,6 +1095,8 @@ public static class PrototypeRender
             // the conversions the compiler writes between entity identifiers, integers and long integers (an identity here)
             "IdentifierToInteger", "IntegerToIdentifier", "LongIntegerToInteger", "IntegerToLongInteger", "IdentifierToLongInteger", "LongIntegerToIdentifier",
             "DateTimeToText",
+            // the formats data.bind writes over the producer's outputs (durations in seconds or minutes, times)
+            "Mod", "TimeToText",
         };
 
         public static decimal ToDecimalValue(object? value) => value == null ? 0m : ToDecimal(value);
@@ -1079,6 +1148,8 @@ public static class PrototypeRender
         public static string? ListOwner(string source)
         {
             var text = source.Trim();
+            // an output list of a Data Action (data.bind: Resumo.Resumo.Dia.Etapas) is owned by its whole path
+            if (text.Contains('.') && !text.EndsWith(".List", StringComparison.Ordinal) && System.Text.RegularExpressions.Regex.IsMatch(text, @"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$")) return text;
             var dot = text.IndexOf('.');
             return dot > 0 ? text[..dot] : text.Length > 0 ? text : null;
         }
@@ -1136,7 +1207,8 @@ public static class PrototypeRender
                 var left = Additive();
                 while (true)
                 {
-                    string? op = Symbol("<>") ? "<>" : Symbol("<=") ? "<=" : Symbol(">=") ? ">=" : Symbol("=") ? "=" : Symbol("<") ? "<" : Symbol(">") ? ">" : null;
+                    // gen-screen: `like` of an aggregate filter (the search of a generated list), SQL's: % any run, _ one character.
+                    string? op = Symbol("<>") ? "<>" : Symbol("<=") ? "<=" : Symbol(">=") ? ">=" : Symbol("=") ? "=" : Symbol("<") ? "<" : Symbol(">") ? ">" : Keyword("like") ? "like" : null;
                     if (op == null) return left;
                     left = new Binary(op, left, Additive());
                 }
@@ -1286,6 +1358,8 @@ public static class PrototypeRender
                         "List" => list,
                         "Count" => (long)list.Items.Count,
                         "IsDataFetched" => true,
+                        // the rendered state is the fetch that succeeded (a generated list shows its error state otherwise)
+                        "HasFetchError" => false,
                         _ => throw new UnevaluableException($"{a.Aggregate.Name}.{member} is outside the evaluated subset"),
                     };
                 case ListValue l:
@@ -1294,6 +1368,8 @@ public static class PrototypeRender
                         "Current" => l.Owner != null && scope.Current.TryGetValue(l.Owner, out var current) ? current : l.Items.Count > 0 ? l.Items[0] : RecordValue.Default,
                         "Length" => (long)l.Items.Count,
                         "Empty" => l.Items.Count == 0,
+                        // the row a List widget is rendering (data.bind's row variants: the last row)
+                        "CurrentRowNumber" => l.Owner != null && scope.Current.TryGetValue(l.Owner, out var row) ? (long)Math.Max(0, l.Items.IndexOf(row)) : 0L,
                         _ => throw new UnevaluableException($"List.{member} is outside the evaluated subset"),
                     };
                 case RecordValue r:
@@ -1372,6 +1448,13 @@ public static class PrototypeRender
                 case "identifiertointeger" or "integertoidentifier" or "longintegertointeger" or "integertolonginteger" or "identifiertolonginteger" or "longintegertoidentifier":
                     return Arg(0) == null ? 0L : ToLong(Arg(0));
                 case "datetimetotext": return ToText(Arg(0));
+                case "mod":
+                {
+                    var divisor = ToLong(Arg(1));
+                    if (divisor == 0) throw new UnevaluableException("Mod by zero");
+                    return ToLong(Arg(0)) % divisor;
+                }
+                case "timetotext": return ToDate(Arg(0)).ToString("HH:mm:ss", CultureInfo.InvariantCulture);
                 case "nullidentifier": return 0L;
                 case "nulltextidentifier": return "";
                 case "nulldate": return new DateTime(1900, 1, 1);
@@ -1391,6 +1474,8 @@ public static class PrototypeRender
                 case ">": return Compare(left, right) > 0;
                 case "<=": return Compare(left, right) <= 0;
                 case ">=": return Compare(left, right) >= 0;
+                case "like": return System.Text.RegularExpressions.Regex.IsMatch(ToText(left), "^" + string.Concat(ToText(right).Select(c => c == '%' ? ".*" : c == '_' ? "." : System.Text.RegularExpressions.Regex.Escape(c.ToString()))) + "$",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
                 case "+" when left is string || right is string: return ToText(left) + ToText(right);
             }
             if (!IsNumber(left) || !IsNumber(right)) throw new UnevaluableException($"'{op}' needs numbers");

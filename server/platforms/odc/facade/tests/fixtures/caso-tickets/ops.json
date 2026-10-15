@@ -1,0 +1,580 @@
+[
+  {
+    "op": "reference",
+    "producer": "BinaryData",
+    "elements": [
+      "IServerActionSignature:BinaryDataSize"
+    ]
+  },
+  {
+    "op": "logic",
+    "data": {
+      "actions": [
+        {
+          "name": "RequireTicketSession",
+          "kind": "server",
+          "description": "Recusa sessão anônima ou usuário inativo e resolve permissões da equipe no servidor.",
+          "outputs": [
+            {
+              "name": "CurrentUserId",
+              "type": "User Identifier"
+            },
+            {
+              "name": "IsStaff",
+              "type": "Boolean"
+            },
+            {
+              "name": "IsAdmin",
+              "type": "Boolean"
+            }
+          ],
+          "steps": [
+            {
+              "if": "GetUserId() = NullIdentifier()",
+              "label": "Sessão está autenticada?",
+              "then": [
+                {
+                  "raise": "TicketAccessDenied",
+                  "message": "\"Autenticação necessária.\""
+                }
+              ]
+            },
+            {
+              "get": "User",
+              "as": "ActiveUser",
+              "where": "User.Id = GetUserId() and User.Is_Active",
+              "max": 1
+            },
+            {
+              "if": "ActiveUser.List.Empty",
+              "label": "Usuário está ativo?",
+              "then": [
+                {
+                  "raise": "TicketAccessDenied",
+                  "message": "\"Usuário inexistente ou inativo.\""
+                }
+              ]
+            },
+            {
+              "call": "CheckTicketAgentRole",
+              "as": "AgentRole",
+              "args": {
+                "UserId": "GetUserId()"
+              }
+            },
+            {
+              "call": "CheckTicketAdministratorRole",
+              "as": "AdminRole",
+              "args": {
+                "UserId": "GetUserId()"
+              }
+            },
+            {
+              "assign": {
+                "CurrentUserId": "GetUserId()",
+                "IsStaff": "AgentRole.HasRole or AdminRole.HasRole",
+                "IsAdmin": "AdminRole.HasRole"
+              },
+              "as": "ResolvePermissions"
+            }
+          ]
+        },
+        {
+          "name": "RequireTicketAccess",
+          "kind": "server",
+          "description": "Restringe acesso ao solicitante ou à equipe e bloqueia a linha nas operações de escrita.",
+          "inputs": [
+            {
+              "name": "TicketId",
+              "type": "Ticket Identifier",
+              "mandatory": true
+            },
+            {
+              "name": "LockForUpdate",
+              "type": "Boolean",
+              "mandatory": false,
+              "default": "False"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "TicketData",
+              "type": "Ticket"
+            },
+            {
+              "name": "CurrentUserId",
+              "type": "User Identifier"
+            },
+            {
+              "name": "IsStaff",
+              "type": "Boolean"
+            },
+            {
+              "name": "IsAdmin",
+              "type": "Boolean"
+            }
+          ],
+          "steps": [
+            {
+              "call": "RequireTicketSession",
+              "as": "Session"
+            },
+            {
+              "if": "TicketId = NullIdentifier()",
+              "then": [
+                {
+                  "raise": "TicketNotFound",
+                  "message": "\"Ticket não encontrado.\""
+                }
+              ],
+              "label": "Identificador foi informado?"
+            },
+            {
+              "if": "LockForUpdate",
+              "label": "Operação precisa bloquear o ticket?",
+              "then": [
+                {
+                  "call": "IEntityActionSignature:GetTicketForUpdate",
+                  "as": "LockedTicket",
+                  "args": {
+                    "Id": "TicketId"
+                  }
+                },
+                {
+                  "assign": {
+                    "TicketData": "LockedTicket.Record"
+                  },
+                  "as": "LoadLockedTicket"
+                }
+              ],
+              "else": [
+                {
+                  "get": "Ticket",
+                  "as": "TicketById",
+                  "where": "Ticket.Id = TicketId",
+                  "max": 1
+                },
+                {
+                  "if": "TicketById.List.Empty",
+                  "then": [
+                    {
+                      "raise": "TicketNotFound",
+                      "message": "\"Ticket não encontrado.\""
+                    }
+                  ],
+                  "label": "Ticket existe?"
+                },
+                {
+                  "assign": {
+                    "TicketData": "TicketById.List.Current.Ticket"
+                  },
+                  "as": "LoadTicket"
+                }
+              ]
+            },
+            {
+              "if": "not Session.IsStaff and TicketData.RequesterId <> Session.CurrentUserId",
+              "label": "Usuário pode acessar este ticket?",
+              "then": [
+                {
+                  "raise": "TicketAccessDenied",
+                  "message": "\"Ticket não encontrado ou acesso não permitido.\""
+                }
+              ]
+            },
+            {
+              "assign": {
+                "CurrentUserId": "Session.CurrentUserId",
+                "IsStaff": "Session.IsStaff",
+                "IsAdmin": "Session.IsAdmin"
+              },
+              "as": "ReturnPermissions"
+            }
+          ]
+        },
+        {
+          "name": "RecordTicketHistory",
+          "kind": "server",
+          "description": "Grava o autor da sessão e os valores da alteração na transação do ticket.",
+          "inputs": [
+            {
+              "name": "TicketId",
+              "type": "Ticket Identifier",
+              "mandatory": true
+            },
+            {
+              "name": "Event",
+              "type": "Text",
+              "mandatory": true
+            },
+            {
+              "name": "PreviousValue",
+              "type": "Text",
+              "mandatory": false
+            },
+            {
+              "name": "NewValue",
+              "type": "Text",
+              "mandatory": false
+            }
+          ],
+          "vars": [
+            {
+              "name": "HistoryRecord",
+              "type": "TicketHistory",
+              "description": "Registro de auditoria da alteração autorizada."
+            }
+          ],
+          "steps": [
+            {
+              "assign": {
+                "HistoryRecord.TicketId": "TicketId",
+                "HistoryRecord.AuthorId": "GetUserId()",
+                "HistoryRecord.Event": "Event",
+                "HistoryRecord.PreviousValue": "Substr(PreviousValue,0,2000)",
+                "HistoryRecord.NewValue": "Substr(NewValue,0,2000)",
+                "HistoryRecord.CreatedOn": "CurrDateTime()"
+              },
+              "as": "PrepareHistory"
+            },
+            {
+              "call": "CreateTicketHistory",
+              "as": "SaveHistory",
+              "args": {
+                "Source": "HistoryRecord"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GetTickets",
+          "kind": "server",
+          "public": true,
+          "description": "Retorna a página de tickets visíveis com filtros e quantidade total.",
+          "inputs": [
+            {
+              "name": "Search",
+              "type": "Text",
+              "mandatory": false
+            },
+            {
+              "name": "StatusId",
+              "type": "TicketStatus Identifier",
+              "mandatory": false
+            },
+            {
+              "name": "PriorityId",
+              "type": "TicketPriority Identifier",
+              "mandatory": false
+            },
+            {
+              "name": "CategoryId",
+              "type": "TicketCategory Identifier",
+              "mandatory": false
+            },
+            {
+              "name": "AssigneeId",
+              "type": "User Identifier",
+              "mandatory": false
+            },
+            {
+              "name": "OnlyMine",
+              "type": "Boolean",
+              "mandatory": false,
+              "default": "False"
+            },
+            {
+              "name": "OnlyAssignedToMe",
+              "type": "Boolean",
+              "mandatory": false,
+              "default": "False"
+            },
+            {
+              "name": "StartIndex",
+              "type": "Integer",
+              "mandatory": false,
+              "default": "0"
+            },
+            {
+              "name": "PageSize",
+              "type": "Integer",
+              "mandatory": false,
+              "default": "0"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Tickets",
+              "type": "Ticket List"
+            },
+            {
+              "name": "TotalCount",
+              "type": "Long Integer"
+            }
+          ],
+          "vars": [
+            {
+              "name": "PageLimit",
+              "type": "Integer",
+              "description": "Limite efetivo da página."
+            }
+          ],
+          "steps": [
+            {
+              "call": "RequireTicketSession",
+              "as": "Session"
+            },
+            {
+              "if": "StartIndex < 0 or PageSize < 0",
+              "label": "Paginação é válida?",
+              "then": [
+                {
+                  "raise": "TicketValidationError",
+                  "message": "\"Índice inicial e tamanho da página não podem ser negativos.\""
+                }
+              ]
+            },
+            {
+              "assign": {
+                "PageLimit": "If(PageSize = 0, Site.TicketDefaultPageSize, Min(PageSize,Site.TicketMaxPageSize))"
+              },
+              "as": "LimitPage"
+            },
+            {
+              "get": "Ticket",
+              "as": "TicketsPage",
+              "where": "(Session.IsStaff or Ticket.RequesterId = Session.CurrentUserId) and (Trim(Search) = \"\" or Ticket.Title like \"%\" + Trim(Search) + \"%\") and (StatusId = NullIdentifier() or Ticket.StatusId = StatusId) and (PriorityId = NullIdentifier() or Ticket.PriorityId = PriorityId) and (CategoryId = NullIdentifier() or Ticket.CategoryId = CategoryId) and (AssigneeId = NullIdentifier() or Ticket.AssigneeId = AssigneeId) and (not OnlyMine or Ticket.RequesterId = Session.CurrentUserId) and (not OnlyAssignedToMe or Ticket.AssigneeId = Session.CurrentUserId)",
+              "sort": "Ticket.Id desc",
+              "start": "StartIndex",
+              "max": "PageLimit"
+            },
+            {
+              "assign": {
+                "Tickets": "TicketsPage.List",
+                "TotalCount": "TicketsPage.Count"
+              },
+              "as": "ReturnTickets"
+            }
+          ]
+        },
+        {
+          "name": "GetTicketDetail",
+          "kind": "server",
+          "public": true,
+          "description": "Retorna o ticket autorizado e páginas de comentários, anexos e histórico, protegendo notas internas.",
+          "inputs": [
+            {
+              "name": "TicketId",
+              "type": "Ticket Identifier",
+              "mandatory": true
+            },
+            {
+              "name": "CommentStartIndex",
+              "type": "Integer",
+              "mandatory": false,
+              "default": "0"
+            },
+            {
+              "name": "AttachmentStartIndex",
+              "type": "Integer",
+              "mandatory": false,
+              "default": "0"
+            },
+            {
+              "name": "HistoryStartIndex",
+              "type": "Integer",
+              "mandatory": false,
+              "default": "0"
+            },
+            {
+              "name": "PageSize",
+              "type": "Integer",
+              "mandatory": false,
+              "default": "0"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "TicketData",
+              "type": "Ticket"
+            },
+            {
+              "name": "Comments",
+              "type": "TicketComment List"
+            },
+            {
+              "name": "Attachments",
+              "type": "TicketAttachment List"
+            },
+            {
+              "name": "History",
+              "type": "TicketHistory List"
+            },
+            {
+              "name": "CommentCount",
+              "type": "Long Integer"
+            },
+            {
+              "name": "AttachmentCount",
+              "type": "Long Integer"
+            },
+            {
+              "name": "HistoryCount",
+              "type": "Long Integer"
+            },
+            {
+              "name": "CanEdit",
+              "type": "Boolean"
+            },
+            {
+              "name": "CanManage",
+              "type": "Boolean"
+            }
+          ],
+          "vars": [
+            {
+              "name": "PageLimit",
+              "type": "Integer",
+              "description": "Limite de cada coleção do detalhe."
+            }
+          ],
+          "steps": [
+            {
+              "call": "RequireTicketAccess",
+              "as": "Access",
+              "args": {
+                "TicketId": "TicketId",
+                "LockForUpdate": "False"
+              }
+            },
+            {
+              "if": "CommentStartIndex < 0 or AttachmentStartIndex < 0 or HistoryStartIndex < 0 or PageSize < 0",
+              "label": "Paginação é válida?",
+              "then": [
+                {
+                  "raise": "TicketValidationError",
+                  "message": "\"Índices e tamanho da página não podem ser negativos.\""
+                }
+              ]
+            },
+            {
+              "assign": {
+                "PageLimit": "If(PageSize = 0,Site.TicketDefaultPageSize,Min(PageSize,Site.TicketMaxPageSize))"
+              },
+              "as": "LimitCollections"
+            },
+            {
+              "get": "TicketComment",
+              "as": "CommentsPage",
+              "where": "TicketComment.TicketId = TicketId and (Access.IsStaff or not TicketComment.IsInternal)",
+              "sort": "TicketComment.Id",
+              "start": "CommentStartIndex",
+              "max": "PageLimit"
+            },
+            {
+              "get": "TicketAttachment",
+              "as": "AttachmentsPage",
+              "where": "TicketAttachment.TicketId = TicketId",
+              "sort": "TicketAttachment.Id desc",
+              "start": "AttachmentStartIndex",
+              "max": "PageLimit"
+            },
+            {
+              "get": "TicketHistory",
+              "as": "HistoryPage",
+              "where": "TicketHistory.TicketId = TicketId and (Access.IsStaff or TicketHistory.Event <> \"InternalNoteAdded\")",
+              "sort": "TicketHistory.Id desc",
+              "start": "HistoryStartIndex",
+              "max": "PageLimit"
+            },
+            {
+              "assign": {
+                "TicketData": "Access.TicketData",
+                "Comments": "CommentsPage.List",
+                "Attachments": "AttachmentsPage.List",
+                "History": "HistoryPage.List",
+                "CommentCount": "CommentsPage.Count",
+                "AttachmentCount": "AttachmentsPage.Count",
+                "HistoryCount": "HistoryPage.Count",
+                "CanEdit": "Access.TicketData.StatusId <> Entities.TicketStatus.Closed and Access.TicketData.StatusId <> Entities.TicketStatus.Cancelled and (Access.IsStaff or Access.TicketData.StatusId = Entities.TicketStatus.Open or Access.TicketData.StatusId = Entities.TicketStatus.WaitingForRequester)",
+                "CanManage": "Access.IsStaff"
+              },
+              "as": "ReturnDetail"
+            }
+          ]
+        },
+        {
+          "name": "GetDashboardSummary",
+          "kind": "server",
+          "public": true,
+          "description": "Calcula totais por estado em uma consulta parametrizada com o escopo de acesso do usuário.",
+          "outputs": [
+            {
+              "name": "Summary",
+              "type": "TicketDashboardSummary"
+            }
+          ],
+          "steps": [
+            {
+              "call": "RequireTicketSession",
+              "as": "Session"
+            },
+            {
+              "get": "TicketDashboardSummary",
+              "as": "DashboardCounts",
+              "sql": true,
+              "statement": "SELECT COUNT(*) AS TotalCount, COALESCE(SUM(CASE WHEN {Ticket}.[StatusId] = @OpenStatusId THEN 1 ELSE 0 END), 0) AS OpenCount, COALESCE(SUM(CASE WHEN {Ticket}.[StatusId] = @InProgressStatusId THEN 1 ELSE 0 END), 0) AS InProgressCount, COALESCE(SUM(CASE WHEN {Ticket}.[StatusId] = @WaitingStatusId THEN 1 ELSE 0 END), 0) AS WaitingCount, COALESCE(SUM(CASE WHEN {Ticket}.[StatusId] = @ResolvedStatusId THEN 1 ELSE 0 END), 0) AS ResolvedCount, COALESCE(SUM(CASE WHEN {Ticket}.[StatusId] = @ClosedStatusId THEN 1 ELSE 0 END), 0) AS ClosedCount, COALESCE(SUM(CASE WHEN {Ticket}.[StatusId] = @CancelledStatusId THEN 1 ELSE 0 END), 0) AS CancelledCount FROM {Ticket} WHERE @IsStaff = 1 OR {Ticket}.[RequesterId] = @CurrentUserId",
+              "params": {
+                "IsStaff": {
+                  "type": "Boolean",
+                  "value": "Session.IsStaff"
+                },
+                "CurrentUserId": {
+                  "type": "User Identifier",
+                  "value": "Session.CurrentUserId"
+                },
+                "OpenStatusId": {
+                  "type": "TicketStatus Identifier",
+                  "value": "Entities.TicketStatus.Open"
+                },
+                "InProgressStatusId": {
+                  "type": "TicketStatus Identifier",
+                  "value": "Entities.TicketStatus.InProgress"
+                },
+                "WaitingStatusId": {
+                  "type": "TicketStatus Identifier",
+                  "value": "Entities.TicketStatus.WaitingForRequester"
+                },
+                "ResolvedStatusId": {
+                  "type": "TicketStatus Identifier",
+                  "value": "Entities.TicketStatus.Resolved"
+                },
+                "ClosedStatusId": {
+                  "type": "TicketStatus Identifier",
+                  "value": "Entities.TicketStatus.Closed"
+                },
+                "CancelledStatusId": {
+                  "type": "TicketStatus Identifier",
+                  "value": "Entities.TicketStatus.Cancelled"
+                }
+              },
+              "max": 1
+            },
+            {
+              "assign": {
+                "Summary.TotalCount": "DashboardCounts.List.Current.List.TotalCount",
+                "Summary.OpenCount": "DashboardCounts.List.Current.List.OpenCount",
+                "Summary.InProgressCount": "DashboardCounts.List.Current.List.InProgressCount",
+                "Summary.WaitingCount": "DashboardCounts.List.Current.List.WaitingCount",
+                "Summary.ResolvedCount": "DashboardCounts.List.Current.List.ResolvedCount",
+                "Summary.ClosedCount": "DashboardCounts.List.Current.List.ClosedCount",
+                "Summary.CancelledCount": "DashboardCounts.List.Current.List.CancelledCount"
+              },
+              "as": "ReturnSummary"
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

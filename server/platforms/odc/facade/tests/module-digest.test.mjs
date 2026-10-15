@@ -117,6 +117,7 @@ test('a large digest: overview first, bodies after, nothing dropped, every cut s
     assert.ok(bytes(p) <= budgetBytes, `page ${p.page}: ${bytes(p)} > ${budgetBytes}`);
     assert.equal(p.sourceSha256, c.sha256); assert.equal(p.file, c.file);
     assert.equal(p.contents != null, p.page === 1, 'contents only on page 1');
+    assert.equal(p.note != null, p.page === 1, 'fixed reading note only on page 1');
   }
   // Page 1: the header, the entities with the records folded, the structures, the whole action index (with calls and
   // callers), and no action body.

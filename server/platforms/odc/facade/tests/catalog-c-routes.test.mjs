@@ -7,6 +7,7 @@
 // lane, surface the declared refusals and stay within the byte budget.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { wireBytes } from './fixtures/answer-wire.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -63,7 +64,7 @@ async function ask(lane, intent, budgetBytes = BUDGET) {
   const sources = indexes[lane];
   const answer = await discover({ lane, intent, sources, budgetBytes });
   assert.equal(answer.ok, true, JSON.stringify(answer).slice(0, 400));
-  assert.ok(answer.size.bytes <= budgetBytes, `${lane} '${intent}': ${answer.size.bytes} > ${budgetBytes}`);
+  assert.ok(wireBytes(answer, { budgetBytes: budgetBytes }) <= budgetBytes, `${lane} '${intent}': ${answer.size.bytes} > ${budgetBytes}`);
   return answer;
 }
 const direct = a => a.matches.filter(m => m.via === 'match').map(m => m.id);

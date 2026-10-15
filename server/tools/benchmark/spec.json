@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "domain": "Library",
+  "round": { "min": 1, "max": 99, "format": "two digits", "o11Module": "BenchSSAM_<RR>_CS", "odcLibrary": "BenchSSAM_<RR>" },
+  "conventions": {
+    "clock": "Capture one Now() at action entry; Today is DateTimeToDate(Now()). Dates use the environment local calendar.",
+    "money": "Decimal with 2 places, round half up; never float.",
+    "null": "Optional identifiers and dates use the platform null value. Required references must exist and be active.",
+    "transactions": "Each mutating public action is atomic; failure rolls back every change. Lock affected records before checking mutable preconditions.",
+    "ordering": "Always break equal sort values by Id ascending. Lists contain at most 50 records and are active only unless explicitly stated otherwise.",
+    "names": "Name is a required Text(200) label on every entity, including a readable reference on Loan, Reservation and Fine. Generated references are Loan:<CopyId>:<Now>, Reservation:<BookId>:<MemberId>:<Now>, Fine:<LoanId>. This supplies the exact Name lookup for entities without another unique field.",
+    "errors": "Raise BusinessRule with the exact message given; unknown or inactive required records: Record not found. Never silently invent a default for an input.",
+    "security": "Server-side actions only. Do not build UI, authentication, sample data, integrations or publish unless this request explicitly asks for it."
+  },
+  "commonFields": [
+    { "name": "Id", "type": "Identifier", "primaryKey": true, "autoNumber": true },
+    { "name": "Name", "type": "Text(200)", "required": true },
+    { "name": "IsActive", "type": "Boolean", "default": true },
+    { "name": "CreatedOn", "type": "DateTime", "required": true, "default": "Now()" }
+  ],
+  "entities": [
+    { "name": "Branch", "lookupField": "Name", "textFields": ["Name"], "fields": [] },
+    { "name": "Author", "lookupField": "Name", "textFields": ["Name"], "fields": [] },
+    { "name": "Publisher", "lookupField": "Name", "textFields": ["Name"], "fields": [] },
+    { "name": "Category", "lookupField": "Name", "textFields": ["Name"], "fields": [] },
+    { "name": "Book", "lookupField": "Isbn", "textFields": ["Name", "Title", "Isbn"], "fields": [
+      { "name": "Title", "type": "Text(300)", "required": true },
+      { "name": "Isbn", "type": "Text(32)", "required": true, "unique": true },
+      { "name": "AuthorId", "type": "Author Identifier", "required": true },
+      { "name": "PublisherId", "type": "Publisher Identifier", "required": true },
+      { "name": "CategoryId", "type": "Category Identifier", "required": true },
+      { "name": "Year", "type": "Integer", "required": true, "validation": "1..9999" }
+    ] },
+    { "name": "BookCopy", "lookupField": "Barcode", "textFields": ["Name", "Barcode"], "fields": [
+      { "name": "BookId", "type": "Book Identifier", "required": true },
+      { "name": "BranchId", "type": "Branch Identifier", "required": true },
+      { "name": "Barcode", "type": "Text(64)", "required": true, "unique": true },
+      { "name": "StatusId", "type": "CopyStatus Identifier", "required": true, "default": "Available" }
+    ] },
+    { "name": "Member", "lookupField": "Email", "textFields": ["Name", "Email"], "fields": [
+      { "name": "Email", "type": "Text(254)", "required": true, "unique": true },
+      { "name": "MaxLoans", "type": "Integer", "required": true, "default": 3, "validation": ">=1" },
+      { "name": "SuspendedUntil", "type": "Date", "required": false }
+    ] },
+    { "name": "Loan", "lookupField": "Name", "textFields": ["Name"], "fields": [
+      { "name": "CopyId", "type": "BookCopy Identifier", "required": true },
+      { "name": "MemberId", "type": "Member Identifier", "required": true },
+      { "name": "LoanedOn", "type": "Date", "required": true },
+      { "name": "DueOn", "type": "Date", "required": true, "validation": ">=LoanedOn" },
+      { "name": "ReturnedOn", "type": "Date", "required": false, "validation": "null or >=LoanedOn" },
+      { "name": "StatusId", "type": "LoanStatus Identifier", "required": true, "default": "Open" }
+    ] },
+    { "name": "Reservation", "lookupField": "Name", "textFields": ["Name"], "fields": [
+      { "name": "BookId", "type": "Book Identifier", "required": true },
+      { "name": "MemberId", "type": "Member Identifier", "required": true },
+      { "name": "PlacedOn", "type": "DateTime", "required": true },
+      { "name": "StatusId", "type": "ReservationStatus Identifier", "required": true, "default": "Waiting" }
+    ] },
+    { "name": "Fine", "lookupField": "Name", "textFields": ["Name"], "fields": [
+      { "name": "LoanId", "type": "Loan Identifier", "required": true, "unique": true },
+      { "name": "Amount", "type": "Decimal(12,2)", "required": true, "validation": ">=0" },
+      { "name": "PaidOn", "type": "DateTime", "required": false },
+      { "name": "Waived", "type": "Boolean", "default": false }
+    ] }
+  ],
+  "staticEntities": {
+    "CopyStatus": ["Available", "OnLoan", "Lost", "Repair"],
+    "LoanStatus": ["Open", "Returned", "Late", "Lost"],
+    "ReservationStatus": ["Waiting", "Ready", "Cancelled", "Fulfilled"]
+  },
+  "structures": {
+    "CloseDaySummary": "LoansScanned Integer, LoansMarkedLate Integer, FinesCreated Integer, FinesUpdated Integer, ReservationsExpired Integer, MembersSuspended Integer, FineTotal Decimal(12,2)",
+    "BranchDailySummary": "CheckoutCount Integer, ReturnCount Integer, AvailableCopies Integer, OverdueLoans Integer",
+    "TopBook": "BookId Book Identifier, Title Text(300), LoanCount Integer",
+    "ValidationMessage": "Field Text(100), Message Text(300)"
+  },
+  "cases": {
+    "S1": { "measured": false, "newActions": 0, "purpose": "Criar o módulo e todo o modelo de dados, estáticas e estruturas descritos; nenhum dado de negócio ou action pública. Não publicar." },
+    "S2": {
+      "measured": false, "newActions": 1, "action": "Library_CloseDay", "inputs": "AsOf Date (required)", "outputs": "Summary CloseDaySummary",
+      "targetLines": 150,
+      "steps": [
+        "Capturar Now uma vez; rejeitar AsOf nulo ou futuro com Invalid closing date.",
+        "Declarar DailyFine Decimal(12,2) = 0.50 em UMA atribuição isolada e FineCap = 20.00. Nenhum outro literal 0.50 no fluxo.",
+        "Inicializar individualmente os sete campos de Summary com zero; declarar temporários tipados para datas, valores, contadores e registros.",
+        "Consultar todos os Loan ativos com ReturnedOn nulo e Status Open ou Late, ordenados por Id; sem limite de 50 nesta rotina em lote.",
+        "Para cada Loan, incrementar LoansScanned; recarregar e bloquear o registro; ignorar se deixou de estar ativo, aberto ou sem devolução.",
+        "Ler a cópia e o sócio; ignorar o Loan se alguma referência não existir; calcular DaysLate = Max(0, DiffDays(DueOn, AsOf)).",
+        "Se DaysLate = 0, não alterar status nem multa e avançar para o próximo Loan.",
+        "Se DaysLate > 0 e Status Open, atribuir Late, persistir e incrementar LoansMarkedLate; Loan já Late não incrementa esse contador.",
+        "Calcular RawAmount = DaysLate * DailyFine; arredondar para duas casas e limitar Amount a FineCap.",
+        "Consultar Fine por LoanId, incluindo inativos; a chave LoanId é única para impedir duplicação.",
+        "Se Fine inexistente, inicializar TODOS os campos (Name Fine:<LoanId>, IsActive true, CreatedOn Now, LoanId, Amount, PaidOn nulo, Waived false), criar e incrementar FinesCreated.",
+        "Se Fine existente, ativa, não paga, não perdoada e Amount diferente, atualizar somente Amount e incrementar FinesUpdated. Caso contrário não modificar.",
+        "Somar a Summary.FineTotal o Amount atual somente das multas ativas, não pagas e não perdoadas processadas nesta execução; uma soma por Loan.",
+        "Após terminar empréstimos, consultar todas as Reservation ativas com Status Ready, ordenadas por Id, sem limite de lote.",
+        "Para cada reserva, bloquear e reler; considerar PlacedOn como início da janela Ready (o modelo não tem ReadyOn).",
+        "Se ainda Ready e PlacedOn < DateToDateTime(AddDays(AsOf,-2)), marcar Cancelled, persistir e incrementar ReservationsExpired. Igual ao limite não expira.",
+        "Consultar todos os Member ativos por Id, sem limite; para cada sócio contar Loan ativos com ReturnedOn nulo, Status Open ou Late e DueOn < AsOf.",
+        "Se contagem >=3, definir NewUntil=AddDays(AsOf,7); bloquear e reler sócio; se SuspendedUntil nulo ou menor que NewUntil, atualizar e incrementar MembersSuspended.",
+        "Não reduzir suspensão existente, não suspender sócio inativo, não devolver cópia, não criar empréstimo nem reativar registros.",
+        "Arredondar FineTotal a duas casas; retornar Summary. Em falha técnica, reverter a execução inteira e propagar a exceção.",
+        "Manter loops, consultas, guardas, atribuições e persistências explícitos, cerca de 150 linhas de fluxo legível (faixa 130–170); sem comentários vazios ou operações inúteis para inflar tamanho. Documentar contagem no recibo; prioridade à semântica."
+      ]
+    },
+    "C1": {
+      "measured": true, "newActions": 1, "action": "Loan_Checkout", "inputs": "CopyId BookCopy Identifier, MemberId Member Identifier", "outputs": "LoanId Loan Identifier",
+      "rules": [
+        "Bloquear Member por MemberId; inexistente ou IsActive=false: Member is inactive.",
+        "SuspendedUntil não nulo e >=Today: Member is suspended.",
+        "Bloquear BookCopy por CopyId; inexistente, inativa ou StatusId diferente de Available: Copy is unavailable.",
+        "Contar Loan ativos do sócio com ReturnedOn nulo e StatusId Open ou Late; se contagem >= MaxLoans: Loan limit reached.",
+        "Criar Loan com Name=Loan:<CopyId>:<Now>, IsActive=true, CreatedOn=Now, CopyId, MemberId, LoanedOn=Today, DueOn=AddDays(Today,14), ReturnedOn nulo e StatusId=Open.",
+        "Atualizar somente BookCopy.StatusId para OnLoan; devolver o Id criado; tudo na mesma transação. Não publicar."
+      ]
+    },
+    "C2": { "measured": true, "newActions": 0, "action": "Library_CloseDay", "rule": "Mudar somente a atribuição DailyFine de 0.50 para 0.75. Nenhuma outra linha, assinatura, comentário, consulta, condição ou constante muda. Mostrar diff de uma linha; não publicar." },
+    "C3": { "measured": true, "newActions": 20 },
+    "C4": { "measured": true, "newActions": 100 }
+  },
+  "businessActions": [
+    { "name": "Loan_Return", "inputs": "LoanId Loan Identifier", "outputs": "FineAmount Decimal(12,2)", "rule": "Loan ativo Open/Late e ReturnedOn nulo, senão Loan is not open; bloquear Loan e cópia; ReturnedOn=Today, Status=Returned, cópia Available; multa Max(0,DiffDays(DueOn,Today))*0.75, teto20; upsert Fine por LoanId somente se Amount>0 e não paga/perdoada; preencher campos comuns; retornar multa devida (0 se paga/perdoada); transação única." },
+    { "name": "Loan_Renew", "inputs": "LoanId Loan Identifier", "outputs": "DueOn Date", "rule": "Loan ativo Open, ReturnedOn nulo e DueOn>=Today; sócio ativo e não suspenso; nenhuma reserva ativa Waiting/Ready do mesmo livro por outro sócio; senão Renewal is not allowed; bloquear Loan e estender DueOn existente em 14 dias; retornar nova data." },
+    { "name": "Loan_MarkLost", "inputs": "LoanId Loan Identifier", "outputs": "Success Boolean", "rule": "Exigir Loan ativo Open/Late e não devolvido, senão Loan is not open; bloquear Loan e cópia, marcar Loan Lost e cópia Lost, manter ReturnedOn nulo, retornar true; sem multa adicional." },
+    { "name": "Loan_ListOverdue", "inputs": "AsOf Date", "outputs": "Loans List<Loan>", "rule": "AsOf obrigatório; retornar até50 Loan ativos Open/Late, ReturnedOn nulo e DueOn<AsOf, por DueOn asc, Id asc; não escrever." },
+    { "name": "Reservation_Place", "inputs": "BookId Book Identifier, MemberId Member Identifier", "outputs": "ReservationId Reservation Identifier", "rule": "Livro e sócio ativos, sócio não suspenso; bloquear sócio; impedir outra reserva ativa Waiting/Ready do par com Reservation already exists; criar Waiting, PlacedOn=Now e campos comuns; retornar Id." },
+    { "name": "Reservation_Cancel", "inputs": "ReservationId Reservation Identifier", "outputs": "Success Boolean", "rule": "Reserva ativa Waiting/Ready, senão Reservation is not pending; bloquear e marcar Cancelled; retornar true." },
+    { "name": "Reservation_Fulfil", "inputs": "ReservationId Reservation Identifier, CopyId BookCopy Identifier", "outputs": "LoanId Loan Identifier", "rule": "Reserva ativa Waiting/Ready e cópia do mesmo BookId, senão Reservation cannot be fulfilled; bloquear reserva; executar Loan_Checkout para sócio da reserva e cópia; marcar Fulfilled; retornar LoanId, tudo atomicamente." },
+    { "name": "Fine_Calculate", "inputs": "LoanId Loan Identifier, AsOf Date", "outputs": "Amount Decimal(12,2)", "rule": "Loan existente ativo, AsOf obrigatório; data final=menor entre ReturnedOn e AsOf quando ReturnedOn existe, senão AsOf; Max(0,DiffDays(DueOn,data final))*0.75 arredondado, teto20; somente cálculo, sem escrita." },
+    { "name": "Fine_Pay", "inputs": "FineId Fine Identifier", "outputs": "Success Boolean", "rule": "Fine ativa, não paga e não perdoada, senão Fine is not payable; bloquear e definir PaidOn=Now; retornar true." },
+    { "name": "Fine_Waive", "inputs": "FineId Fine Identifier", "outputs": "Success Boolean", "rule": "Fine ativa, não paga e não perdoada, senão Fine cannot be waived; bloquear e definir Waived=true; preservar Amount e PaidOn; retornar true." },
+    { "name": "Member_Suspend", "inputs": "MemberId Member Identifier, Until Date", "outputs": "Success Boolean", "rule": "Sócio ativo e Until>=Today, senão Invalid suspension; bloquear e usar maior de Until e suspensão existente; retornar true." },
+    { "name": "Member_Reinstate", "inputs": "MemberId Member Identifier", "outputs": "Success Boolean", "rule": "Sócio existente ativo; bloquear e limpar SuspendedUntil; não alterar IsActive, empréstimos ou multas; retornar true." },
+    { "name": "Member_CanBorrow", "inputs": "MemberId Member Identifier", "outputs": "CanBorrow Boolean, Reason Text(100)", "rule": "Sem escrita; primeira falha: inexistente/inativo => false, Member is inactive; suspensão>=Today => false, Member is suspended; Loan ativos Open/Late sem devolução >=MaxLoans => false, Loan limit reached; senão true e Reason vazio." },
+    { "name": "Member_LoanHistory", "inputs": "MemberId Member Identifier", "outputs": "Loans List<Loan>", "rule": "Sócio existente (inclusive inativo); retornar até50 Loan do sócio inclusive inativos e devolvidos, por LoanedOn desc, Id asc; sem escrita." },
+    { "name": "Book_AvailableCopies", "inputs": "BookId Book Identifier, BranchId Branch Identifier (optional)", "outputs": "Copies List<BookCopy>", "rule": "Livro ativo; BranchId nulo significa todas, valor informado exige filial ativa; cópias ativas Available correspondentes, por Barcode asc, Id asc, máximo50." },
+    { "name": "Book_Search", "inputs": "Query Text(300)", "outputs": "Books List<Book>", "rule": "Trim(Query); busca substring sem distinguir maiúsculas em Title ou Isbn ou Name; vazio aceita todos; só ativos, Title asc e Id asc, máximo50; sem escrita." },
+    { "name": "Copy_Transfer", "inputs": "CopyId BookCopy Identifier, BranchId Branch Identifier", "outputs": "Success Boolean", "rule": "Cópia ativa Available e filial destino ativa, senão Copy cannot be transferred; bloquear cópia e atualizar BranchId; mesmo destino é sucesso sem escrita; retornar true." },
+    { "name": "Copy_SendToRepair", "inputs": "CopyId BookCopy Identifier", "outputs": "Success Boolean", "rule": "Cópia ativa Available, senão Copy cannot be repaired; bloquear e definir StatusId=Repair; retornar true." },
+    { "name": "Branch_DailySummary", "inputs": "BranchId Branch Identifier, Day Date", "outputs": "Summary BranchDailySummary", "rule": "Filial ativa e Day obrigatório; considerando a filial atual de cada cópia: contar Loan ativos LoanedOn=Day, ReturnedOn=Day, cópias ativas Available e Loan ativos Open/Late não devolvidos DueOn<Day; sem limite nos counts, sem escrita." },
+    { "name": "Report_TopBooks", "inputs": "From Date, To Date", "outputs": "Books List<TopBook>", "rule": "From e To obrigatórios e From<=To, senão Invalid date range; agrupar Loan ativos LoanedOn no intervalo inclusivo por BookId da cópia; livros ativos, ordenar LoanCount desc e BookId asc; retornar até10 BookId,Title,LoanCount; sem escrita." }
+  ],
+  "crudTemplates": [
+    { "verb": "Create", "inputs": "Record {Entity} (Id, CreatedOn and IsActive ignored)", "outputs": "Id {Entity} Identifier", "behavior": "Trim text; run {Entity}_Validate; if invalid raise Validation failed: followed by messages in field order. Check unique fields across active AND inactive rows (excluding no row). Set Id auto, CreatedOn=Now and IsActive=true. Apply declared defaults when omitted; persist atomically and return Id." },
+    { "verb": "Update", "inputs": "Id {Entity} Identifier, Record {Entity}", "outputs": "Success Boolean", "behavior": "Lock existing row including inactive, else Record not found. Replace every business field, preserving Id, CreatedOn and IsActive. Trim text; run Validate with current Id to exclude itself from uniqueness. Persist atomically; return true." },
+    { "verb": "Delete", "inputs": "Id {Entity} Identifier", "outputs": "Success Boolean", "behavior": "Lock existing row including inactive, else Record not found; set only IsActive=false. Already inactive succeeds. Never physically delete or cascade; return true." },
+    { "verb": "Get", "inputs": "Id {Entity} Identifier", "outputs": "Record {Entity}, Found Boolean", "behavior": "Find by Id including inactive; if absent return empty typed record and Found=false, otherwise full row and true. No write." },
+    { "verb": "List", "inputs": "Query Text(300), SortBy Text(100), Descending Boolean, Limit Integer", "outputs": "Records List<{Entity}>", "behavior": "Active rows only; Trim(Query), case-insensitive substring OR across {TextFields}, empty matches all. SortBy empty means Name; allow only Name, CreatedOn, Id, else Invalid sort field. Use requested direction then Id ascending; Limit 1..50, else Invalid limit. No pagination or write." },
+    { "verb": "Count", "inputs": "Query Text(300)", "outputs": "Count LongInteger", "behavior": "Count all active rows using exactly the same text predicate across {TextFields} as List; no 50-row cap; no write." },
+    { "verb": "Exists", "inputs": "Value Text(300)", "outputs": "Exists Boolean", "behavior": "Return whether any active row has {LookupField} equal to Trim(Value), case-insensitive text comparison; blank Value returns false. No write." },
+    { "verb": "Activate", "inputs": "Id {Entity} Identifier", "outputs": "Success Boolean", "behavior": "Lock existing row including inactive, else Record not found; set only IsActive=true; already active succeeds; no cascading or business status change; return true." },
+    { "verb": "Deactivate", "inputs": "Id {Entity} Identifier", "outputs": "Success Boolean", "behavior": "Lock existing row including inactive, else Record not found; set only IsActive=false; already inactive succeeds; no cascading or business status change; return true." },
+    { "verb": "Validate", "inputs": "Record {Entity} (Id optional, used only to exclude same row)", "outputs": "IsValid Boolean, Messages List<ValidationMessage>", "behavior": "No write or exception. In declaration order validate required nonblank text (after Trim), text maximum lengths, required references existing and active, numeric/date constraints, valid static status, and declared unique fields against ALL rows excluding Record.Id. Messages Field=<field>, Message=<field> is required / is too long / is invalid / already exists as appropriate. Ignore auto Id, CreatedOn and IsActive as create-controlled fields. IsValid iff Messages empty." }
+  ]
+}

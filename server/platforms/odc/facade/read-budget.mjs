@@ -28,7 +28,7 @@ export async function boundedRead(key, work, { timeoutMs = 29000 } = {}) {
     return state.timedOut ? timeoutAnswer(state) : state.answer;
   }
   if (pending.size >= 128) return { ok: false, code: 'READ_PENDING_LIMIT', stage: 'queue', error: 'Too many unobserved reads; reconcile the pending calls before starting more.' };
-  state = { id: randomUUID(), startedAt: Date.now(), deadline: Date.now() + Math.min(29000, Math.max(1, timeoutMs)), stage: 'preflight', controller: new AbortController(), timedOut: false };
+  state = { id: randomUUID(), startedAt: Date.now(), deadline: Date.now() + Math.min(120000, Math.max(1, timeoutMs)), stage: 'preflight', controller: new AbortController(), timedOut: false };
   pending.set(fingerprint, state);
   let timer;
   // Defer work until the shared answer is installed: simultaneous callers join

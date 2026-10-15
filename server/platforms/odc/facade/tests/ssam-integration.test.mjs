@@ -29,14 +29,23 @@ test('one server answers an O11 delivery with "entregue" and the job it used (ne
     lock: { o11Root: root, odcRoot: root, connection: () => null } } });
   const client = await connect(server);
   try {
-    const reply = await client.callTool({ name: 'o11_deliver', arguments: { module: 'Quotes_CS', job: { ops: [{ op: 'rename', from: 'A', to: 'B' }] }, authorize: 'pode entregar' } });
+    const reply = await client.callTool({ name: 'o11_deliver', arguments: { module: 'Quotes_CS', job: { ops: [{ op: 'rename', target: 'A', name: 'B' }] }, authorize: 'pode entregar' } });
     assert.notEqual(reply.isError, true, JSON.stringify(reply));
     assert.equal(JSON.parse(reply.content[0].text).result, 'entregue');
     assert.equal(runAnvil.calls[0].args[0], 'deliver');
     // The inline job became a file the CLI read; the words never reached the CLI.
     const job = runAnvil.calls[0].args[runAnvil.calls[0].args.indexOf('--job') + 1];
-    assert.deepEqual(JSON.parse(reply.content[0].text), { ok: true, result: 'entregue', nextBasedOn: { job, sha256: sha256(fs.readFileSync(job)) } });
+    // The job in the kernel form (rename {target, name}) is summarized too (job-summary.mjs, 24-1).
+    assert.deepEqual(JSON.parse(reply.content[0].text), { ok: true, result: 'entregue', nextBasedOn: { job, sha256: sha256(fs.readFileSync(job)) }, summary: { edited: { count: 1, targets: ['A'] }, ops: 1 } });
     assert.ok(fs.existsSync(job)); assert.doesNotMatch(runAnvil.calls[0].args.join(' '), /pode entregar/);
+    // A shape with one meaning (rename {from, to}, ops beside the job) is delivered in the kernel form and listed.
+    const shaped = await client.callTool({ name: 'o11_deliver', arguments: { module: 'Quotes_CS', ops: [{ op: 'rename', from: 'A', to: 'B' }], authorize: 'pode entregar' } });
+    const value = JSON.parse(shaped.content[0].text);
+    assert.equal(value.result, 'entregue', JSON.stringify(value));
+    assert.deepEqual(value.normalizations.map(n => n.rule), ['job-ops', 'job-op']);
+    const delivered = runAnvil.calls.filter(c => c.args[0] === 'deliver').at(-1).args;
+    const second = delivered[delivered.indexOf('--job') + 1];
+    assert.deepEqual(JSON.parse(fs.readFileSync(second, 'utf8')).ops, [{ op: 'rename', target: 'A', name: 'B' }]);
   } finally { await client.close(); await server.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });
 

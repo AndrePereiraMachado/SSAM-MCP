@@ -1522,7 +1522,8 @@
    "parent": "$User_Permissions",
    "type": "IForEachNode",
    "name": "EachMembership",
-   "as": "$User_Permissions_fe11"
+   "as": "$User_Permissions_fe11",
+   "allowForEach": {"why": "a proof job written before the owner rule reached raw ops: the loop maps the rows into a list (T2), kept as written and listed"}
   },
   {
    "op": "set",

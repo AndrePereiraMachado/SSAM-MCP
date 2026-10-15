@@ -5,6 +5,7 @@
 //   -> {ok: false, problems: [{code, path, message, patch?, alternatives?}], warnings}
 // CLI: node platforms/odc/facade/prototype/capture.mjs <source> --out <dir> [--entry x] [--mapping <json>] [--clock <iso>] [--tz <iana>] [--pool n]
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +17,7 @@ import { resolveVendors, defaultVendorCache, suggestedVendorPath, downloadVendor
 import { localPath, ORIGIN } from './network.mjs';
 import { annotateRegion, listTemplate, pooledList, snapshotTemplate, listSort, findLists, rewriteListRefs, fieldVars } from './infer-lists.mjs';
 import { writeBundle } from './bundle.mjs';
-import { irHash, validateIr, sha256, SCHEMA, attr, classes, countElements, isElement, stripObservation, treeHash, walk, textOf, canonical } from './ir.mjs';
+import { irHash, validateIr, sha256, SCHEMA, attr, classes, countElements, isElement, isModalNode, stripObservation, treeHash, walk, textOf, canonical } from './ir.mjs';
 import { analyzeInteractions, eventCases, sortEffects } from './effects.mjs';
 import { buildShell } from './shell.mjs';
 import { iconInstances, iconSet } from './icons.mjs';
@@ -24,6 +25,9 @@ import { inventory } from './css-inventory.mjs';
 import { collectAssets } from './assets.mjs';
 import { prefixFrom, pascal, slug } from './names.mjs';
 import { separate } from './predicates.mjs';
+import { isArchive, extractArchive, ARCHIVE_MARKER } from './archive.mjs';
+import { compileBabelSources } from './babel.mjs';
+import { rankEntries } from './entry.mjs';
 
 const require = createRequire(import.meta.url);
 const { version: JSDOM_VERSION } = require('jsdom/package.json');
@@ -80,14 +84,21 @@ export function mappingPatches(mapping, additions, pointer) {
   return out;
 }
 
-function resolveSource(source, entry) {
+// The source: a folder, an .html in it, or the .zip it came in (extracted once into sourcesDir/<sha256>, archive.mjs), then
+// the same entry rules as a folder. archive: {path, sha256} when the facade already extracted it (the IR records it).
+function resolveSource(source, entry, { sourcesDir = null, archive = null } = {}) {
   const problems = [];
-  if (!source || typeof source !== 'string') return { problems: [{ code: 'PROTOTYPE_SOURCE_INVALID', field: 'source', message: 'source must be an absolute path to the prototype folder or to an .html file inside it' }] };
+  if (!source || typeof source !== 'string') return { problems: [{ code: 'PROTOTYPE_SOURCE_INVALID', field: 'source', message: 'source must be an absolute path to the prototype folder, to an .html file inside it or to its .zip' }] };
   let root = path.resolve(source), file = entry ?? null;
   let stat;
   try { stat = fs.statSync(root); } catch { return { problems: [{ code: 'PROTOTYPE_SOURCE_INVALID', field: 'source', message: 'source ' + source + ' does not exist' }] }; }
-  if (stat.isFile()) {
-    if (!/\.html?$/i.test(root)) return { problems: [{ code: 'PROTOTYPE_SOURCE_INVALID', field: 'source', message: 'source ' + source + ' is not a folder nor an .html file' }] };
+  if (stat.isFile() && isArchive(root)) {
+    const extracted = extractArchive(root, { sourcesDir: sourcesDir ?? path.join(os.tmpdir(), 'ssam-prototype-sources') });
+    if (!extracted.ok) return { problems: [{ code: 'PROTOTYPE_SOURCE_INVALID', field: 'source', message: 'the archive ' + source + ' cannot be used (nothing was extracted): ' + extracted.problems.map(item => item.message).slice(0, 6).join('; ') }] };
+    archive = { path: root, sha256: extracted.sha256 };
+    root = extracted.root;
+  } else if (stat.isFile()) {
+    if (!/\.html?$/i.test(root)) return { problems: [{ code: 'PROTOTYPE_SOURCE_INVALID', field: 'source', message: 'source ' + source + ' is not a folder, an .html file nor a .zip' }] };
     file = file ?? path.basename(root);
     root = path.dirname(root);
   }
@@ -99,25 +110,43 @@ function resolveSource(source, entry) {
     else {
       const top = htmlFiles.filter(name => !name.includes('/'));
       if (top.length === 1) file = top[0];
-      else problems.push({ code: 'PROTOTYPE_SOURCE_INVALID', field: 'entry', message: 'entry is ambiguous: ' + (top.length ? top.join(', ') : 'no .html at the root'), candidates: top.length ? top : htmlFiles });
+      else {
+        // the page that runs the app first (prototype/entry.mjs): the patch names it, the others are the alternatives
+        const ranked = top.length ? rankEntries(root, top) : [];
+        problems.push({ code: 'PROTOTYPE_SOURCE_INVALID', field: 'entry', message: 'entry is ambiguous: ' + (ranked.length ? ranked.map(item => item.why).join('; ') : 'no .html at the root'), candidates: ranked.length ? ranked.map(item => item.page) : htmlFiles });
+      }
     }
   } else {
     file = String(file).replace(/\\/g, '/').replace(/^\.\//, '');
     if (!files.includes(file)) problems.push({ code: 'PROTOTYPE_SOURCE_INVALID', field: 'entry', message: 'entry ' + file + ' does not exist in ' + root, candidates: htmlFiles.filter(name => !name.includes('/')) });
   }
-  return { root, entry: file, files, htmlFiles, problems };
+  return { root, entry: file, files: files.filter(name => name !== ARCHIVE_MARKER), htmlFiles, problems, archive };
 }
 
 // Files the capture reads statically: the entry, its scripts and module graph, stylesheets and their url() files, README.
-function staticScan(root, entry, files) {
+// aliases: mapping.version, the entry's app script -> the version the owner chose ({"v1-app.jsx": "v2-app.jsx"}).
+function staticScan(root, entry, files, aliases = {}) {
   const { JSDOM } = require('jsdom');
   const html = fs.readFileSync(path.join(root, entry), 'utf8');
-  const dom = new JSDOM(html, { url: ORIGIN + '/' + entry });
+  const dom = new JSDOM(html, { url: ORIGIN + '/' + entry, includeNodeLocations: true });
   const document = dom.window.document;
-  const plan = planScripts(document);
+  const plan = planScripts(document, { nodeLocation: element => { try { return dom.nodeLocation(element); } catch { return null; } } });
   const read = new Set([entry]);
   const scriptSources = [];
   const remote = new Set(remoteScriptUrls(plan));
+  // text/babel and text/jsx scripts: source code the page's Babel compiles (compiled here after the vendors resolve)
+  const babelSources = [];
+  // local files the entry names that the folder does not have: a text/babel script (the page's Babel would fetch it and throw)
+  // and a stylesheet (the page would render without it): each one refuses, named, never skipped in silence
+  const missing = [];
+  for (const item of plan.filter(entryItem => entryItem.kind === 'babel')) {
+    const local = item.local != null ? aliases[item.local] ?? item.local : null;
+    if (local != null && files.includes(local)) { read.add(local); babelSources.push({ file: item.local, read: local, text: fs.readFileSync(path.join(root, local), 'utf8') }); }
+    else if (local != null) missing.push({ kind: 'script', file: item.local });
+    else if (item.text != null) babelSources.push({ file: entry, text: item.text, line: item.line ?? 1 });
+  }
+  // the app script a version replaces: the last local script the entry loads (babel or classic)
+  const appScript = [...plan].reverse().find(item => (item.kind === 'babel' || item.kind === 'classic') && item.local != null && files.includes(item.local))?.local ?? null;
   let importMap = null;
   for (const item of plan.filter(entryItem => entryItem.kind === 'importmap')) { try { importMap = JSON.parse(item.text); } catch { /* reported by the child */ } }
   const moduleQueue = [];
@@ -148,14 +177,51 @@ function staticScan(root, entry, files) {
     }
   }
   for (const link of document.querySelectorAll('link[rel~="stylesheet"][href]')) {
-    const relative = localPath(new URL(link.getAttribute('href'), document.URL).href);
+    let relative = null;
+    try { relative = localPath(new URL(link.getAttribute('href'), document.URL).href); } catch { relative = null; }
     if (relative != null && files.includes(relative)) read.add(relative);
+    else if (relative != null && !link.hasAttribute('disabled')) missing.push({ kind: 'stylesheet', file: relative });
   }
   const readme = files.find(name => /^readme[^/]*\.md$/i.test(name));
   if (readme) read.add(readme);
   dom.window.close();
   const classicFiles = plan.filter(item => item.kind === 'classic' && item.local != null && files.includes(item.local)).map(item => item.local);
-  return { read, scriptSources, remote: [...remote], readme, title: document.title, classicFiles };
+  // the Babel the page loads (standalone build): the static scan compiles the text/babel scripts with the same one
+  const babelUrl = babelSources.length ? remoteScriptUrls(plan).find(url => /babel(?:-standalone|\/standalone)?(?:@[^/]*)?\/(?:babel(?:\.min)?\.js)?$|@babel\/standalone/i.test(url)) ?? null : null;
+  const babelLocal = babelSources.length ? plan.find(item => item.kind === 'classic' && item.local != null && /babel(\.min)?\.js$/i.test(item.local))?.local ?? null : null;
+  // the integrity (SRI) each CDN script of the page pins: the vendor resolution never runs other bytes
+  const integrity = Object.fromEntries(plan.filter(item => item.url && item.remote && item.element?.getAttribute?.('integrity')).map(item => [item.url, item.element.getAttribute('integrity')]));
+  return { read, scriptSources, remote: [...remote], readme, title: document.title, classicFiles, babelSources, babelUrl, babelLocal, appScript, integrity, missing };
+}
+
+// The files of the folder whose names are close to a missing one (same extension; case, accents or a few letters apart):
+// the refusal names them, the closest first.
+const plainName = name => String(name).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+function editDistance(a, b) {
+  const row = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let previous = row[0]; row[0] = i;
+    for (let j = 1; j <= b.length; j++) { const keep = row[j]; row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1)); previous = keep; }
+  }
+  return row[b.length];
+}
+export function similarFiles(wanted, files) {
+  const ext = path.posix.extname(wanted).toLowerCase();
+  const target = plainName(wanted);
+  const limit = Math.max(2, Math.floor(target.length / 4));
+  return files.filter(name => path.posix.extname(name).toLowerCase() === ext && name !== wanted)
+    .map(name => ({ name, distance: Math.min(editDistance(plainName(name), target), editDistance(plainName(path.posix.basename(name)), plainName(path.posix.basename(wanted))) + (path.posix.dirname(name) === path.posix.dirname(wanted) ? 0 : 1)) }))
+    .filter(item => item.distance <= limit).sort((a, b) => a.distance - b.distance || (a.name < b.name ? -1 : 1)).map(item => item.name);
+}
+
+function missingProblems(missing, files, pointer) {
+  return missing.map(item => {
+    const near = similarFiles(item.file, files);
+    return { code: 'PROTOTYPE_RENDER_FAILED', path: pointer,
+      message: item.kind + ' ' + item.file + ' does not exist in source' + (near.length ? '; the folder has ' + near.slice(0, 3).join(', ') : '') + ' (the page refers to it and would render without it)',
+      fix: 'The page refers to a file the prototype does not have' + (near.length ? ' (a similar name is there: ' + near[0] + ')' : '') + ': the owner adds the file or corrects the reference in the prototype; nothing in the call resolves it.',
+      ...(near.length ? { alternatives: near.slice(0, 8) } : {}) };
+  });
 }
 
 function clockFrom(root, names) {
@@ -524,11 +590,16 @@ function annotateSelects(region, contexts, meta, prefix, nameFor) {
   }
 }
 
-function annotateControls(region, dims) {
+// A control the capture named by its id, or (no id, name nor data-* to name it: VisitaCerta's selects of 2026-10-12) by its
+// tag and its place under the region root (select@1.0.1 is v:<view>/1/0/1), which is how its dimension was keyed.
+function annotateControls(region, dims, keyPrefix = null) {
   for (const dim of dims) {
-    if (!dim.target?.id) continue;
+    const at = !dim.target?.id && keyPrefix ? /^([a-z]+)@([\d.]*)$/.exec(String(dim.controlKey ?? dim.key ?? '')) : null;
+    if (!dim.target?.id && !at) continue;
+    const placeKey = at ? keyPrefix + (at[2] ? '/' + at[2].split('.').join('/') : '') : null;
     for (const [original, out] of region.map) {
-      if (!isElement(original) || attr(original, 'id') !== dim.target.id || !['input', 'select', 'textarea'].includes(original.t)) continue;
+      if (!isElement(original) || !['input', 'select', 'textarea'].includes(original.t)) continue;
+      if (at ? original.t !== at[1] || out?.k !== placeKey : attr(original, 'id') !== dim.target.id) continue;
       out.control = { kind: original.t === 'select' ? 'select' : original.t === 'textarea' ? 'textarea' : String(attr(original, 'type') ?? 'text'), var: dim.name, dimension: dim.key, initial: dim.initial == null ? null : String(dim.initial), type: dim.type ?? 'Text' };
       break;
     }
@@ -561,7 +632,7 @@ function composeExplored(body, { appIndex, mountPath, viewKey, modalKey, modalPa
     const kids = [];
     (node.c ?? []).forEach((child, index) => {
       const childPath = path.concat(index);
-      const isModal = isElement(child) && (child.t === 'dialog' || attr(child, 'role') === 'dialog' || attr(child, 'aria-modal') === 'true');
+      const isModal = isModalNode(child);
       if (isModal && (child.h || !modalPath || childPath.join('.') !== modalPath.join('.'))) return;
       if (dropHiddenUnder && path.join('.') === dropHiddenUnder.join('.') && isElement(child) && child.h) return;
       let childKey;
@@ -634,7 +705,7 @@ function dedupe(list) {
   return list.filter(item => { const key = canonical(item); if (seen.has(key)) return false; seen.add(key); return true; });
 }
 
-export function buildIr(session, interactions, { root, entry, clockIso, tz, scan, mapping, vendors, pool }) {
+export function buildIr(session, interactions, { root, entry, clockIso, tz, scan, mapping, vendors, pool, archive = null, aliases = {}, files: allFiles = [] }) {
   const { discovery, meta, records, observations, forms, modals } = interactions;
   const kind = discovery.kind;
   const s0 = session.s0;
@@ -666,8 +737,9 @@ export function buildIr(session, interactions, { root, entry, clockIso, tz, scan
   const defaultView = views.find(view => view.default) ?? views[0];
   if (shell && appIndex != null && mountPath.length >= 2) {
     const appRoot = defaultView.render.body.c[appIndex];
-    elementsTotal += countContent(appRoot, [mountPath[1]]);
-    countedTrees.push({ ...appRoot, c: (appRoot.c ?? []).map((child, index) => index === mountPath[1] ? { ...child, c: [] } : child) });
+    elementsTotal += countContent(appRoot, mountPath.slice(1));
+    const emptyAt = (node, path) => (!path.length ? { ...node, c: [] } : { ...node, c: (node.c ?? []).map((child, index) => index === path[0] ? emptyAt(child, path.slice(1)) : child) });
+    countedTrees.push(emptyAt(appRoot, mountPath.slice(1)));
     for (const index of Object.keys(regionNames)) { const sibling = defaultView.render.body.c[index]; elementsTotal += countContent(sibling); countedTrees.push(sibling); }
   } else if (shell?.multiPage) {
     // multi-page shell: its regions once (the pages count only their own stretch)
@@ -712,7 +784,7 @@ export function buildIr(session, interactions, { root, entry, clockIso, tz, scan
     finalizeLists(region.root, region, entries, meta, interactions, warnings, extraAttributes, { prefix, screen: view.name, taken: snapshotEntities, locale, tz });
     regionEvents(region, records.events, view.key);
     annotateNav(region.root, views, kind);
-    annotateControls(region, allDims.filter(dim => (dim.view === view.key && !dim.modal) || dim.scope === 'global'));
+    annotateControls(region, allDims.filter(dim => (dim.view === view.key && !dim.modal) || dim.scope === 'global'), 'v:' + view.key);
     annotateSelects(region, contexts, meta, prefix, node => pascal(attr(node, 'id') ?? attr(node, 'name') ?? 'Select'));
     annotateOptions(region.root, prefix, node => pascal(attr(node, 'id') ?? attr(node, 'name') ?? 'Select'));
     unexplained.push(...region.unexplained);
@@ -752,7 +824,7 @@ export function buildIr(session, interactions, { root, entry, clockIso, tz, scan
     finalizeLists(region.root, region, ordered.map(item => ({ render: item.after, dims: {} })), meta, interactions, warnings, extraAttributes, { prefix, screen: kindInfo.name, taken: snapshotEntities, locale, tz });
     regionEvents(region, records.events, kindInfo.key);
     // its own dimensions, and a global one whose control lives in the modal (the account chosen in a login dialog)
-    annotateControls(region, allDims.filter(dim => dim.modal === kindInfo.key || dim.scope === 'global'));
+    annotateControls(region, allDims.filter(dim => dim.modal === kindInfo.key || dim.scope === 'global'), 'm:' + kindInfo.key);
     annotateSelects(region, contexts, meta, prefix, node => pascal(attr(node, 'id') ?? attr(node, 'name') ?? 'Select'));
     annotateOptions(region.root, prefix, node => pascal(attr(node, 'id') ?? attr(node, 'name') ?? 'Select'));
     unexplained.push(...region.unexplained);
@@ -760,6 +832,8 @@ export function buildIr(session, interactions, { root, entry, clockIso, tz, scan
     elementsTotal += count;
     countedTrees.push(containers[0]);
     outModals.push({
+      // a container that is a child of the body (a React portal, a dialog at the end of the page): the popup sits beside the shell
+      ...(Array.isArray(modalPath) && modalPath.length === 1 ? { portal: true } : {}),
       key: kindInfo.key, name: kindInfo.name, container: kindInfo.container, openedFrom: kindInfo.openedFrom.map(item => ({ view: item.view, event: item.event, modal: item.modal ?? undefined })),
       params: kindInfo.params, screens: kindInfo.screens, record: collection ?? null, root: region.root, elements: count
     });
@@ -826,8 +900,13 @@ export function buildIr(session, interactions, { root, entry, clockIso, tz, scan
     view: dim.view ?? null, modal: dim.modal ?? null, collection: dim.collection ?? null
   }));
   const storeInfo = s0.inspect.store ?? {};
+  // a store taken from configuration lists says so, with each list's role and the alternative (2.7, never silent)
+  if (Array.isArray(storeInfo.configuration) && storeInfo.configuration.length)
+    warnings.push({ code: 'PrototypeStoreFromConfiguration', lists: storeInfo.configuration.map(item => ({ value: item.value, collection: item.collection, role: item.role })),
+      alternatives: [{ value: 'none', role: 'mapping.data "none": no store; every list stays as rendered (snapshot entities) and the module\'s own actions bring the data' }] });
   const store = {
     source: storeInfo.source ?? null,
+    ...(Array.isArray(storeInfo.configuration) && storeInfo.configuration.length ? { configuration: storeInfo.configuration.map(item => ({ value: item.value, collection: item.collection, rows: item.rows, role: item.role })) } : {}),
     collections: meta.collections.map(collection => ({
       name: collection.name, key: collection.key, mutated: mutated.has(collection.name), fields: collection.fields, references: collection.references, rows: collection.rows,
       origin: meta.extraNames.includes(collection.name) ? 'array:' + ((s0.inspect.arrays ?? []).find(array => array.name === collection.name)?.path ?? collection.name) : 'store'
@@ -843,13 +922,17 @@ export function buildIr(session, interactions, { root, entry, clockIso, tz, scan
   const icons = iconSet(session.iconSvg, instances, [...new Set(allInstances.map(icon => icon.name))]);
   const read = new Set([...scan.read, ...session.read, ...assets.map(asset => asset.path)]);
   const files = [...read].sort().map(relative => { const data = readBytes(relative); return data ? { path: relative, bytes: data.length, sha256: sha256(data) } : null; }).filter(Boolean);
+  const unreferenced = allFiles.filter(name => /\.(jsx|tsx|js|mjs|ts|html?)$/i.test(name) && !read.has(name) && !Object.values(aliases).includes(name)).sort();
   const outOfScope = dedupe(records.outOfScope
     .concat(warnings.filter(item => item.code === 'PrototypeTimerSkipped' || item.code === 'PrototypeIntervalSkipped').map(item => ({ what: item.code === 'PrototypeTimerSkipped' ? 'timer de ' + item.delay + ' ms' : 'setInterval', where: item.where, why: 'sem timer de cliente nativo sem JS' })))
     .concat((s0.inspect.listeners ?? []).filter(item => ['keydown', 'keyup', 'keypress', 'error', 'focus', 'blur', 'scroll', 'resize'].includes(item.type) && item.handler).map(item => ({ what: 'listener de ' + item.type, where: item.handler.file + ':' + item.handler.line, why: item.type.startsWith('key') ? 'teclado programático que repete o clique' : 'comportamento de navegador sem equivalente nativo' }))));
   const ir = {
     schema: SCHEMA, clock: clockIso, tz,
     engine: { name: 'jsdom', version: JSDOM_VERSION, node: process.version },
-    source: { root, entry, files, vendor: vendors.map(vendor => ({ url: vendor.url, sha256: vendor.sha256 })) },
+    source: { root, entry, files, vendor: vendors.map(vendor => ({ url: vendor.url, sha256: vendor.sha256 })), ...(archive ? { archive: { path: archive.path, sha256: archive.sha256 } } : {}),
+      // the scripts and pages of the folder the entry never loads (the other versions of a design canvas: v2.jsx, v3.jsx),
+      // listed so the receipt says what was left out; mapping.version swaps the entry's app script for one of them
+      ...(unreferenced.length ? { unreferenced } : {}), ...(Object.keys(aliases).length ? { version: Object.entries(aliases).map(([from, to]) => ({ from, to }))[0] } : {}) },
     kind,
     app: { prefix, title: doc.title ?? '', lang: doc.lang ?? '' },
     document: { html: doc.html ?? [], body: doc.body ?? [], meta: doc.meta ?? [] },
@@ -902,6 +985,8 @@ export function refusalProblems(session, interactions, { mapping, pointer }) {
       problems.push({ code: 'PROTOTYPE_AMBIGUOUS', path: pointer + '/mapping/states', message: problem.message + (problem.fallbackText ? " ('" + problem.fallbackText + "')" : ''), key: ['states', slug(view.replace(/\/\{id\}/g, '')) || view], value });
     } else if (problem.key === 'default') {
       problems.push({ code: 'PROTOTYPE_AMBIGUOUS', path: pointer + '/mapping/default', message: problem.message, key: ['default'], value: problem.value });
+    } else if (problem.key === 'mappedClick') {
+      problems.push({ code: 'PROTOTYPE_AMBIGUOUS', path: pointer + '/mapping/states/' + pointerEscape(problem.view), message: problem.message + '; name the trigger by its exact words or a CSS selector that matches it' });
     }
   }
   if (!discovery.mount && session.mountCandidates?.length && (discovery.kind === 'spa-hash' || discovery.kind === 'spa-path')) {
@@ -924,7 +1009,9 @@ export function refusalProblems(session, interactions, { mapping, pointer }) {
       return groups > 0;
     });
     const candidates = storeInfo.candidates ?? [];
-    if (hasLists && candidates.length) problems.push({ code: 'PROTOTYPE_AMBIGUOUS', path: pointer + '/mapping/data', message: 'há listas no DOM que correlacionam com dados, mas nenhum store foi achado', key: ['data'], value: candidates[0], alternatives: candidates.slice(1) });
+    const roles = storeInfo.roles ?? {};
+    const said = candidates.map(candidate => candidate + ': ' + (roles[candidate] ?? 'candidate')).concat(['"none": no store, every list stays as rendered']).join('; ');
+    if (hasLists && candidates.length) problems.push({ code: 'PROTOTYPE_AMBIGUOUS', path: pointer + '/mapping/data', message: 'há listas no DOM que correlacionam com dados, mas nenhum store foi achado; candidatos e o papel de cada um: ' + said, key: ['data'], value: candidates[0], alternatives: candidates.slice(1) });
   }
   if (storeInfo.error) problems.push({ code: 'PROTOTYPE_AMBIGUOUS', path: pointer + '/mapping/data', message: storeInfo.error, key: ['data'], value: (storeInfo.candidates ?? [])[0] ?? mapping.data, alternatives: (storeInfo.candidates ?? []).slice(1) });
   // Modals with the same title and different structures: one problem per title, a name for every split kind.
@@ -1034,12 +1121,12 @@ export async function capturePrototype(args = {}) {
   return strip({ ...first, problems, verified: { mapping: candidate, ok: Boolean(second.ok), left: [...left] } });
 }
 
-async function captureOnce({ source, entry, mapping = {}, clock, tz = 'UTC', out, timeoutMs = 20000, pool, pointer = '/ops/0/data', vendorCache, download, resident = true } = {}) {
+async function captureOnce({ source, entry, mapping = {}, clock, tz = 'UTC', out, timeoutMs = 20000, pool, pointer = '/ops/0/data', vendorCache, download, resident = true, archive = null, sourcesDir = null } = {}) {
   const started = performance.now();
   const timings = {};
   const warnings = [];
   mapping = mapping ?? {};
-  const resolved = resolveSource(source, entry);
+  const resolved = resolveSource(source, entry, { sourcesDir: sourcesDir ?? (out ? path.join(path.resolve(out), '..', 'sources') : null), archive });
   if (resolved.problems.length) {
     return { ok: false, problems: resolved.problems.map(problem => ({
       code: problem.code, path: pointer + '/' + problem.field, message: problem.message,
@@ -1049,7 +1136,20 @@ async function captureOnce({ source, entry, mapping = {}, clock, tz = 'UTC', out
   }
   const { root, files, htmlFiles } = resolved;
   entry = resolved.entry;
-  const scan = staticScan(root, entry, files);
+  let scan = staticScan(root, entry, files);
+  // mapping.version: another version of the app script the entry loads (a prototype with v1/v2/v3 files): that file is
+  // served in place of the entry's own app script; the IR names both
+  let aliases = {};
+  if (mapping.version != null) {
+    const wanted = String(mapping.version).replace(/\\/g, '/').replace(/^\.\//, '');
+    const scripts = files.filter(name => /\.(jsx|tsx|js|mjs)$/i.test(name));
+    if (!scan.appScript || !scripts.includes(wanted)) {
+      return { ok: false, problems: [{ code: 'PROTOTYPE_SOURCE_INVALID', path: pointer + '/mapping/version',
+        message: !scan.appScript ? 'mapping.version: the entry ' + entry + ' loads no local app script to replace' : 'mapping.version ' + JSON.stringify(mapping.version) + ' is not a script of the prototype folder',
+        alternatives: scripts.filter(name => !scan.read.has(name)).slice(0, 8) }], warnings };
+    }
+    if (wanted !== scan.appScript) { aliases = { [scan.appScript]: wanted }; scan = staticScan(root, entry, files, aliases); }
+  }
   const readmeText = scan.readme ? fs.readFileSync(path.join(root, scan.readme), 'utf8') : null;
   const clockIso = clock ?? clockFrom(root, [...scan.read]);
   const clockMs = Date.parse(clockIso);
@@ -1057,24 +1157,47 @@ async function captureOnce({ source, entry, mapping = {}, clock, tz = 'UTC', out
   // Vendors (CDN scripts) are resolved before any window opens.
   const cacheDir = vendorCache ?? defaultVendorCache();
   const downloader = download === undefined ? (process.env.SSAM_PROTOTYPE_OFFLINE ? null : downloadVendor) : download;
-  const vendorResult = await resolveVendors(scan.remote, { mapping, cacheDir, download: downloader, source: root });
-  if (vendorResult.problems.length) {
-    const additions = vendorResult.problems.map(problem => ({ keys: ['vendor', problem.url], value: suggestedVendorPath(root, problem.url) }));
-    const patches = mappingPatches(mapping, additions, pointer);
-    return { ok: false, problems: vendorResult.problems.map((problem, index) => ({ code: 'PROTOTYPE_RENDER_FAILED', path: pointer + '/mapping/vendor/' + pointerEscape(problem.url), message: problem.message + '; give a local file with the same content', patch: patches[index] })), warnings };
+  const vendorResult = await resolveVendors(scan.remote, { mapping, cacheDir, download: downloader, source: root, integrity: scan.integrity ?? {} });
+  // where a copy of a script the capture cannot fetch is saved: beside the prototype folder or the .zip the model gave, never
+  // inside the internal extraction folder of an archive
+  const vendorBase = resolved.archive?.path ? path.dirname(path.resolve(resolved.archive.path)) : root;
+  const missing = missingProblems(scan.missing ?? [], files, pointer);
+  if (vendorResult.problems.length || missing.length) {
+    const problems = [...missing];
+    // a file mapping.vendor names that cannot be read: the call is wrong (a path), never an SSAM defect, and no patch repeats it
+    for (const problem of vendorResult.problems.filter(item => item.reason === 'mapping-file'))
+      problems.push({ code: 'PROTOTYPE_SOURCE_INVALID', path: pointer + '/mapping/vendor/' + pointerEscape(problem.url), message: problem.message + '; save there a copy of ' + problem.url + ' (the owner downloads it) or correct the path',
+        fix: 'Save the script at the path mapping.vendor names (the bytes of the URL), or correct the path; then call again with the same job.' });
+    const unfetched = vendorResult.problems.filter(item => item.reason !== 'mapping-file');
+    problems.push(...vendorProblems(unfetched.map(problem => ({ url: problem.url, message: problem.message })), { mapping, pointer, vendorBase }));
+    return { ok: false, problems, warnings };
   }
   const vendors = [...vendorResult.vendors.values()];
+  // the text/babel scripts read statically, compiled with the page's own Babel in this process (never in the child)
+  if (scan.babelSources.length) {
+    // only a Babel the SSAM vouches for runs here (babel.mjs trustedBabel): a copy in the prototype folder is prototype content
+    const babelVendor = scan.babelUrl ? vendors.find(vendor => vendor.url === scan.babelUrl) ?? null
+      : scan.babelLocal ? { url: null, from: 'local', text: fs.readFileSync(path.join(root, scan.babelLocal), 'utf8') } : null;
+    const compiled = compileBabelSources(babelVendor, scan.babelSources);
+    scan.scriptSources.push(...compiled.sources);
+    scan.warnings = compiled.warnings;
+  }
   const size = pool ?? defaultPoolSize();
-  const workers = await acquirePool({ size, tz, timeoutMs, resident, config: { root, clock: clockMs, seed: 1, mapping: { ignore: mapping.ignore ?? [], data: mapping.data }, vendors, prewarm: scan.classicFiles.map(file => ({ file })) } });
+  const workers = await acquirePool({ size, tz, timeoutMs, resident, config: { root, clock: clockMs, seed: 1, mapping: { ignore: mapping.ignore ?? [], data: mapping.data }, vendors, aliases, prewarm: scan.classicFiles.map(file => ({ file })) } });
   try {
     const analysis = analyzeScripts(scan.scriptSources);
     const session = new Session({ root, entry, mapping, clock: clockMs, tz, pool: workers, analysis, readme: readmeText, htmlFiles, files, vendors, pointer, warmIdle: true });
+    for (const warning of scan.warnings ?? []) session.warn(warning);
     const t0 = performance.now();
     const first = await session.run([{ key: 'load', steps: [{ do: 'inspect', tag: 'S0' }] }]);
     const s0 = first.get('load')?.snaps?.[0];
     timings.loadMs = Math.round(performance.now() - t0);
-    if (!s0) return { ok: false, problems: [{ code: 'PROTOTYPE_RENDER_FAILED', path: pointer, message: 'the entry page could not be loaded: ' + String(first.get('load')?.failure?.error ?? 'unknown').split('\n')[0] }], warnings: session.warnings };
-    const loadProblems = renderProblems(s0.inspect.problems, { root, mapping, pointer });
+    const babelSyntax = (scan.warnings ?? []).filter(warning => warning?.code === 'PrototypeBabelSyntax');
+    if (!s0) {
+      const why = babelProblems(babelSyntax, pointer);
+      return { ok: false, problems: why.length ? why : [{ code: 'PROTOTYPE_RENDER_FAILED', path: pointer, message: 'the entry page could not be loaded: ' + String(first.get('load')?.failure?.error ?? 'unknown').split('\n')[0] }], warnings: session.warnings };
+    }
+    const loadProblems = renderProblems(s0.inspect.problems, { root, mapping, pointer, vendorBase, babelSyntax });
     if (loadProblems.length) return { ok: false, problems: loadProblems, warnings: session.warnings };
     session.s0 = s0;
     const decided = staticKind({ s0, entry, htmlFiles, analysis });
@@ -1086,7 +1209,7 @@ async function captureOnce({ source, entry, mapping = {}, clock, tz = 'UTC', out
     const problems = refusalProblems(session, interactions, { mapping, pointer });
     if (problems.length) return { ok: false, problems, warnings: session.warnings };
     const t2 = performance.now();
-    const built = buildIr(session, interactions, { root, entry, clockIso, tz, scan, mapping, vendors, pool: workers });
+    const built = buildIr(session, interactions, { root, entry, clockIso, tz, scan, mapping, vendors, pool: workers, archive: resolved.archive, aliases, files });
     timings.inferMs = Math.round(performance.now() - t2);
     // the model's field names in PascalCase before anything hashes or reads the IR
     const ir = pascalFields(built.ir);
@@ -1102,7 +1225,9 @@ async function captureOnce({ source, entry, mapping = {}, clock, tz = 'UTC', out
     if (bundleDir) capturePath = writeBundle(bundleDir, ir, built.payloads);
     const summary = {
       kind: ir.kind, views: ir.views.length, modals: ir.modals.length, elements: ir.stats.elements, icons: ir.stats.icons,
-      events: ir.events.length, compiled: ir.events.filter(event => event.compiled).length, probes: workers.stats.probes, windows: workers.stats.windows, pool: size
+      events: ir.events.length, compiled: ir.events.filter(event => event.compiled).length, probes: workers.stats.probes, windows: workers.stats.windows, pool: size,
+      ...(ir.source.unreferenced?.length ? { unreferenced: ir.source.unreferenced } : {}), ...(ir.source.version ? { version: ir.source.version } : {}),
+      ...(ir.source.archive ? { archive: ir.source.archive } : {}), ...(ir.store.configuration ? { configuration: ir.store.configuration } : {})
     };
     return { ok: true, capturePath, bundle: bundleDir, sha256: hash, summary, problems: [], warnings: ir.warnings, ir };
   } finally {
@@ -1110,22 +1235,45 @@ async function captureOnce({ source, entry, mapping = {}, clock, tz = 'UTC', out
   }
 }
 
-function renderProblems(list, { root, mapping, pointer }) {
+// A script the capture cannot fetch (offline, the hosted SSAM, a host outside the allowlist): the patch maps its URL to a copy
+// saved beside the source (mapping.vendor). The copy does not exist yet, so the patch is never applied for the model:
+// needsFile names the file to save first, and the refusal offers no correctedJob for it (2.11: a patch is offered only when
+// the call with it works).
+function vendorProblems(items, { mapping, pointer, vendorBase }) {
+  if (!items.length) return [];
+  const files = items.map(item => suggestedVendorPath(vendorBase, item.url));
+  const patches = mappingPatches(mapping, items.map((item, index) => ({ keys: ['vendor', item.url], value: files[index] })), pointer);
+  return items.map((item, index) => ({ code: 'PROTOTYPE_RENDER_FAILED', path: pointer + '/mapping/vendor/' + pointerEscape(item.url),
+    message: item.message + '; save a copy of ' + item.url + ' at ' + files[index] + ' (the owner downloads it), then apply the patch',
+    fix: 'The script must exist before the patch can work: the owner saves a copy of ' + item.url + ' at ' + files[index] + '; then apply this patch (mapping.vendor) in ONE call. No correctedJob is offered for it.',
+    patch: patches[index], needsFile: files[index] }));
+}
+
+export function renderProblems(list, { root, mapping, pointer, vendorBase = root, babelSyntax = [] }) {
   const problems = [];
   const vendorAdds = [];
   for (const problem of list ?? []) {
     if (problem.reason === 'bare-specifier') {
-      vendorAdds.push({ problem, url: problem.specifier });
+      vendorAdds.push({ url: problem.specifier, message: problem.message });
       continue;
     }
-    if (problem.reason === 'vendor' && problem.url) { vendorAdds.push({ problem, url: problem.url }); continue; }
+    if (problem.reason === 'vendor' && problem.url) { vendorAdds.push({ url: problem.url, message: problem.message }); continue; }
+    // a script error of a page whose text/babel script does not compile: the cause is the compile error (file, line, column)
+    if (babelSyntax.length && problem.reason === 'script') continue;
     problems.push({ code: 'PROTOTYPE_RENDER_FAILED', path: pointer, message: problem.message });
   }
-  if (vendorAdds.length) {
-    const patches = mappingPatches(mapping, vendorAdds.map(item => ({ keys: ['vendor', item.url], value: suggestedVendorPath(root, item.url) })), pointer);
-    vendorAdds.forEach((item, index) => problems.push({ code: 'PROTOTYPE_RENDER_FAILED', path: pointer + '/mapping/vendor/' + pointerEscape(item.url), message: item.problem.message, patch: patches[index] }));
-  }
+  problems.push(...babelProblems(babelSyntax, pointer, (list ?? []).some(problem => problem.reason === 'script')));
+  problems.push(...vendorProblems(vendorAdds, { mapping, pointer, vendorBase }));
   return problems;
+}
+
+// The text/babel scripts that do not compile (PrototypeBabelSyntax of the static scan, the same Babel the page loads), as the
+// cause of a page that did not render: the file, the line and the column of the error.
+function babelProblems(babelSyntax, pointer, failed = true) {
+  if (!failed) return [];
+  return babelSyntax.map(warning => ({ code: 'PROTOTYPE_RENDER_FAILED', path: pointer,
+    message: 'the text/babel script ' + String(warning.where ?? '').replace(/^babel:/, '') + ' does not compile, so the page renders nothing from it: ' + warning.message,
+    fix: 'The prototype has a JSX syntax error (file, line and column in the message): the owner corrects that file of the prototype; nothing in the call resolves it.' }));
 }
 
 // ---- CLI ------------------------------------------------------------------------------------------------------------

@@ -1,0 +1,65 @@
+{
+ "type": "FeatureCollection",
+ "metadata": {
+  "generated": 1760367600000,
+  "url": "https://earthquake.usgs.gov/fdsnws/event/1/query",
+  "title": "USGS Earthquakes",
+  "status": 200,
+  "count": 2
+ },
+ "features": [
+  {
+   "type": "Feature",
+   "id": "us7000abcd",
+   "properties": {
+    "mag": 4.5,
+    "place": "10 km S of Somewhere",
+    "time": 1760367600000,
+    "tsunami": 0,
+    "felt": null,
+    "types": ",origin,phase-data,"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -70.1,
+     -20.2,
+     35
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "us7000abce",
+   "properties": {
+    "mag": 5,
+    "place": "Offshore",
+    "time": 1760367700000,
+    "tsunami": 1,
+    "felt": 12,
+    "types": ",origin,"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       1,
+       2
+      ],
+      [
+       3,
+       4
+      ]
+     ]
+    ]
+   }
+  }
+ ],
+ "bbox": [
+  -180,
+  -90,
+  180,
+  90
+ ]
+}

@@ -60,9 +60,40 @@
     <Compile Include="../Shared/ModelReadingTests.cs" Link="ModelReadingTests.cs" />
     <Compile Include="../Shared/ModuleIndexTests.cs" Link="ModuleIndexTests.cs" />
     <Compile Include="../Shared/ModuleDigestTests.cs" Link="ModuleDigestTests.cs" />
+    <Compile Include="../Shared/TextRoundTripTests.cs" Link="TextRoundTripTests.cs" />
+    <Compile Include="../Shared/FlowEditTests.cs" Link="FlowEditTests.cs" />
+    <Compile Include="../Shared/FlowTextNormalizeTests.cs" Link="FlowTextNormalizeTests.cs" />
+    <Compile Include="../Shared/FlowAggregateShapeTests.cs" Link="FlowAggregateShapeTests.cs" />
+    <Compile Include="../Shared/FlowMergeTests.cs" Link="FlowMergeTests.cs" />
+    <Compile Include="../Shared/FlowBatteryCorpus.cs" Link="FlowBatteryCorpus.cs" />
+    <Compile Include="../Shared/EntityActionsCorpusTests.cs" Link="EntityActionsCorpusTests.cs" />
+    <Compile Include="../Shared/MergeBatteryCorpus.cs" Link="MergeBatteryCorpus.cs" />
+    <Compile Include="../Shared/FlowApplyScenarios.cs" Link="FlowApplyScenarios.cs" />
     <Compile Include="../Shared/ModuleRichIndexTests.cs" Link="ModuleRichIndexTests.cs" />
+    <Compile Include="../Shared/ScreenHtmlTests.cs" Link="ScreenHtmlTests.cs" />
+    <Compile Include="../Shared/ScreenHtmlCoverage.cs" Link="ScreenHtmlCoverage.cs" />
+    <Compile Include="../Shared/ScreenHtmlEditTests.cs" Link="ScreenHtmlEditTests.cs" />
+    <Compile Include="../Shared/ScreenHtmlEditCorpus.cs" Link="ScreenHtmlEditCorpus.cs" />
+    <Compile Include="../Shared/ScreenHtmlFamilyCorpus.cs" Link="ScreenHtmlFamilyCorpus.cs" />
+    <Compile Include="../Shared/ScreenRecreationCorpus.cs" Link="ScreenRecreationCorpus.cs" />
+    <Compile Include="../Shared/ScreenGeneratorCorpus.cs" Link="ScreenGeneratorCorpus.cs" />
+    <Compile Include="../Shared/TextRoundTripDataTests.cs" Link="TextRoundTripDataTests.cs" />
+    <Compile Include="../Shared/TextRoundTripDataBackTests.cs" Link="TextRoundTripDataBackTests.cs" />
+    <Compile Include="../Shared/DdlMergeTests.cs" Link="DdlMergeTests.cs" />
+    <Compile Include="../Shared/TextRoundTripDataBackNativeTests.cs" Link="TextRoundTripDataBackNativeTests.cs" />
+    <Compile Include="../Shared/DdlConventionsTests.cs" Link="DdlConventionsTests.cs" />
+    <Compile Include="../Shared/DdlConventionsNativeTests.cs" Link="DdlConventionsNativeTests.cs" />
     <Compile Include="../Shared/AutomaticFlowLayoutTests.cs" Link="AutomaticFlowLayoutTests.cs" />
     <Compile Include="../Shared/DataContractIdentityScenarios.cs" Link="DataContractIdentityScenarios.cs" />
     <Compile Include="../Shared/QueryRulesScenarios.cs" Link="QueryRulesScenarios.cs" />
+    <Compile Include="../Shared/RestConsumeScenarios.cs" Link="RestConsumeScenarios.cs" />
+    <Compile Include="../Shared/RestConsumeAuthScenarios.cs" Link="RestConsumeAuthScenarios.cs" />
+    <Compile Include="../Shared/FamiliasRevisaoScenarios.cs" Link="FamiliasRevisaoScenarios.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Shared/DdlStatementOrderTests.cs" Link="DdlStatementOrderTests.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Shared/ActionNameCollisionTests.cs" Link="ActionNameCollisionTests.cs" />
   </ItemGroup>
 </Project>

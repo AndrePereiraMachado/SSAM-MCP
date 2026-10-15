@@ -16,10 +16,11 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { alignTrees } from './align.mjs';
 import { attr, classes, isElement, textOf, walk } from './ir.mjs';
+import { localReference } from './css-inventory.mjs';
 
 const require = createRequire(import.meta.url);
 
-const RUNTIME_ATTRIBUTES = new Set(['data-container', 'data-advancedhtml', 'data-link', 'data-block', 'data-checkbox', 'data-expression', 'data-button', 'data-input', 'data-dropdown', 'data-textarea', 'data-popup', 'data-list', 'data-image', 'data-form', 'data-radio-button', 'data-radio-group', 'data-switch', 'data-label', 'data-placeholder', 'data-text', 'data-icon', 'data-ssam-k', 'novalidate', 'disable-virtualization']);
+const RUNTIME_ATTRIBUTES = new Set(['data-container', 'data-advancedhtml', 'data-link', 'data-block', 'data-checkbox', 'data-expression', 'data-button', 'data-input', 'data-dropdown', 'data-textarea', 'data-popup', 'data-list', 'data-image', 'data-form', 'data-radio-button', 'data-radio-group', 'data-switch', 'data-label', 'data-placeholder', 'data-text', 'data-icon', 'data-ssam-k', 'data-ssam-asset', 'novalidate', 'disable-virtualization']);
 const DYNAMIC = /:(hover|focus|focus-visible|focus-within|active|visited|target|checked-dynamic)\b|::?(before|after|placeholder|backdrop|marker|selection|first-letter|first-line|file-selector-button|-webkit-[a-z-]+|-moz-[a-z-]+)/i;
 const LIMIT = 50;
 const ID_REFERENCES = new Set(['aria-labelledby', 'aria-describedby', 'aria-controls', 'aria-owns', 'aria-activedescendant', 'aria-details', 'aria-errormessage', 'for', 'form', 'list']);
@@ -68,14 +69,19 @@ function iconName(node) {
 
 // A popup of the runtime renders where its widget is (inside the screen's content, fixed on top); the prototype's modal
 // container is a child of <body>. Documented equivalence: the popup's outermost runtime element is compared at <body> level.
-export function relocatePopups(tree) {
+export function relocatePopups(tree, proto = null) {
   if (!tree || tree.t !== 'body') return tree;
+  // a modal the prototype mounts inside a screen (a React bottom sheet inside the screen it opens on): the popup goes into the
+  // native element of the same k as the prototype's parent, after the sibling of the same k (the measure compares it where it
+  // was, never against the screen's next element)
+  const deep = proto ? deepModalPlaces(proto) : new Map();
+  if (deep.size) tree = placeDeepPopups(tree, deep);
   let moved = [];
   const visit = node => {
-    if (!isElement(node)) return node;
+    if (!isElement(node) || node.placed) return node;
     const kids = [];
     for (const child of node.c ?? []) {
-      if (isElement(child) && child.rt === 'IPopup') { moved.push(child); continue; }
+      if (isElement(child) && child.rt === 'IPopup' && !child.placed) { moved.push(child); continue; }
       kids.push(visit(child));
     }
     return { ...node, c: kids };
@@ -83,15 +89,91 @@ export function relocatePopups(tree) {
   // the top elements as the measure sees them (the runtime's wrappers at the top, a block instance, spliced away); each popup
   // goes right after the top element that holds it (the shell's root: a modal of the prototype follows #app)
   const flat = [];
-  const expand = node => { if (isElement(node) && !node.k && !node.rt?.startsWith?.('IPopup')) (node.c ?? []).forEach(expand); else flat.push(node); };
+  const expand = node => { if (isElement(node) && !node.k && !(node.rt?.startsWith?.('IPopup') && !node.placed)) (node.c ?? []).forEach(expand); else flat.push(node); };
   (tree.c ?? []).forEach(expand);
   const top = [];
   for (const child of flat) {
     moved = [];
-    top.push(child.rt === 'IPopup' ? child : visit(child));
+    top.push(child.rt === 'IPopup' && !child.placed ? child : visit(child));
     top.push(...moved);
   }
-  return { ...tree, c: top };
+  return { ...tree, c: proto ? bodyOrder(top, proto) : top };
+}
+
+// A popup that sits at the top already (a modal the prototype mounted on the body is an IPopup beside the shell instance, not in
+// its placeholder: modals[].portal) goes where its modal was among the body's children: after the element of the same k as the
+// modal's previous sibling (FarmaVirtual: #app, the dialog, then the notifications region).
+function bodyOrder(top, proto) {
+  const after = new Map();
+  let previous = null;
+  for (const child of proto.c ?? []) {
+    if (!isElement(child)) continue;
+    if (typeof child.k === 'string' && /^m:[^/]+$/.test(child.k)) { after.set(child.k, previous); continue; }
+    if (typeof child.k === 'string') previous = child.k;
+  }
+  if (!after.size) return top;
+  const holds = node => { let found = null; walk(node, current => { if (found) return false; if (isElement(current) && typeof current.k === 'string' && after.has(current.k)) found = current.k; }); return found; };
+  const out = top.filter(node => !(isElement(node) && node.rt === 'IPopup' && holds(node)));
+  for (const popup of top.filter(node => isElement(node) && node.rt === 'IPopup' && holds(node))) {
+    const anchor = after.get(holds(popup));
+    const at = anchor == null ? -1 : out.findIndex(node => isElement(node) && node.k === anchor);
+    if (anchor != null && at < 0) { out.push(popup); continue; }
+    out.splice(at + 1, 0, popup);
+  }
+  return out;
+}
+
+// The prototype's modal roots (k m:<key>) whose parent is no body-level element: k -> {parent k, previous sibling k}.
+function deepModalPlaces(proto) {
+  const out = new Map();
+  const visit = (node, depth) => {
+    if (!isElement(node)) return;
+    let previous = null;
+    for (const child of node.c ?? []) {
+      if (!isElement(child)) continue;
+      if (typeof child.k === 'string' && /^m:[^/]+$/.test(child.k) && depth >= 1 && typeof node.k === 'string') out.set(child.k, { parent: node.k, after: previous });
+      else visit(child, depth + 1);
+      if (typeof child.k === 'string') previous = child.k;
+    }
+  };
+  visit(proto, 0);
+  return out;
+}
+function placeDeepPopups(tree, places) {
+  const popups = new Map();
+  const holds = node => { let found = null; walk(node, current => { if (found) return false; if (isElement(current) && typeof current.k === 'string' && places.has(current.k)) found = current.k; }); return found; };
+  const strip = node => {
+    if (!isElement(node)) return node;
+    const kids = [];
+    for (const child of node.c ?? []) {
+      const key = isElement(child) && child.rt === 'IPopup' ? holds(child) : null;
+      if (key) { popups.set(key, { ...child, placed: true }); continue; }
+      kids.push(strip(child));
+    }
+    return { ...node, c: kids };
+  };
+  let out = strip(tree);
+  for (const [key, popup] of popups) {
+    const { parent, after } = places.get(key);
+    let placed = false;
+    // right after the native sibling of the same k (the view's content sits in the shell's placeholder, so the prototype's
+    // parent, the mount element, may have no native counterpart), else first in the native parent of the same k
+    const afterSibling = node => {
+      if (!isElement(node) || placed) return node;
+      const index = after == null ? -1 : (node.c ?? []).findIndex(child => isElement(child) && child.k === after);
+      if (index >= 0) { const kids = [...node.c]; kids.splice(index + 1, 0, popup); placed = true; return { ...node, c: kids }; }
+      return { ...node, c: (node.c ?? []).map(afterSibling) };
+    };
+    const first = node => {
+      if (!isElement(node) || placed) return node;
+      if (node.k === parent) { placed = true; return { ...node, c: [popup, ...(node.c ?? [])] }; }
+      return { ...node, c: (node.c ?? []).map(first) };
+    };
+    out = afterSibling(out);
+    if (!placed) out = first(out);
+    if (!placed) out = { ...out, c: [...(out.c ?? []), popup] };
+  }
+  return out;
 }
 
 // Native tree for the alignment: wrappers (no k) spliced into their parents.
@@ -173,12 +255,24 @@ function compareTrees(proto, native, state) {
       if (name === 'href' && /^#/.test(value) && got != null) got = value;
       if (name === 'type' && value === 'submit' && classes(other.original ?? other).includes('ssam-submit')) got = value;
       if (ID_REFERENCES.has(name) && got != null && got === String(value).split(/\s+/).map(id => runtimeIds.get(id) ?? id).join(' ')) got = value;
+      // a drawn svg with its own (paint-free) style: its span carries the size, the literal color and that style (icon.from)
+      if (node.icon && name === 'style' && got != null && (node.icon.from ?? []).some(([key, own]) => key === 'style' && norm(own) === norm(got))) got = value;
+      // a Static image: the runtime src is the module image URL; the render names the asset it shows (data-ssam-asset), equal
+      // when it is the file the prototype's src names (decoded: 'foto%20grande.png' is 'foto grande.png')
+      if (name === 'src' && got == null) {
+        const asset = attr(other.original ?? other, 'data-ssam-asset');
+        const file = localReference(String(value), null);
+        if (asset != null && file != null && (asset === file || asset.endsWith('/' + file))) got = value;
+      }
       if (got === value) counts.matchedAttributes++;
       else { ok = false; mismatches.push({ k: node.k, state, kind: 'attribute', name, expected: value, got: got ?? null }); }
       nativeAttributes.delete(name);
     }
     for (const [name, value] of nativeAttributes) {
       if (name === 'href' || name === 'type') continue;
+      // the substitution svg <-> span.ssam-icon: a drawn svg sizes itself by width/height (and paints one literal color); its
+      // span carries exactly that as style (the icon's own attributes, icon.from), never a difference
+      if (node.icon && name === 'style' && (node.icon.from ?? []).some(([key, own]) => key === 'style' && norm(own) === norm(value))) continue;
       // HTML: an option without a value attribute has its text as value; the selected option of an unmarked select is state
       if (node.t === 'option' && name === 'value' && norm(value) === norm(textOf(node))) continue;
       if (node.t === 'option' && name === 'selected' && unmarked.has(node)) continue;
@@ -303,7 +397,7 @@ export function measureFidelity({ capture, nativeDom, sheets = null, bundle = nu
   for (const state of ir.explored ?? []) {
     const proto = ir.trees?.[state.tree];
     if (!proto) continue;
-    const nativeTree = relocatePopups(states.get(state.id));
+    const nativeTree = relocatePopups(states.get(state.id), proto);
     if (!nativeTree) {
       let count = 0; walk(proto, node => { if (node !== proto && isElement(node)) count++; });
       totals.elements += count;

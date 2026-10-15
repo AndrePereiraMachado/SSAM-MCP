@@ -155,6 +155,62 @@ public static class ProducerSignatureCapture
             ["versionId"] = now.VersionId, ["advertisedSignatureHash"] = now.AdvertisedHash, ["attested"] = true };
     }
 
+    /// <summary>F5: <see cref="Attest(HeadlessSession, string, string)"/> of several envelopes over one read-only lease, with
+    /// one read of each catalog (referenceable, modules, extensions) for all of them: the same checks, observed at the same
+    /// moment. Each envelope gets its own outcome; a failure of one never hides the others.</summary>
+    public static IReadOnlyList<ProducerAttestation> AttestMany(HeadlessSession session, IReadOnlyList<string> avsigPaths, string environment)
+    {
+        var outcomes = new List<ProducerAttestation>();
+        if (!session.IsReadOnly)
+        {
+            var refused = new SignatureCaptureException("NotReadOnly", "re-attestation requires a read-only environment lease");
+            return avsigPaths.Select(p => new ProducerAttestation(p, null, refused)).ToArray();
+        }
+        IReadOnlyList<ReferenceableSummary>? referenceable = null;
+        ModuleSummary[]? modules = null, extensions = null;
+        IReadOnlyList<ReferenceableSummary> Referenceable() => referenceable ??= session.ListReferenceable().ToArray();
+        ModuleSummary[] Listed(bool extension) => extension ? extensions ??= session.ListExtensions().ToArray() : modules ??= session.ListModules().ToArray();
+        foreach (var path in avsigPaths)
+        {
+            try
+            {
+                var snapshot = NativeReferenceSnapshot.Read(path);
+                snapshot.RequireDeliverable(environment);
+                var attestation = snapshot.Attestation ?? throw new InvalidOperationException("Producer signature has no attestation to re-check: " + snapshot.Name);
+                if (!string.Equals(session.Host, environment, StringComparison.OrdinalIgnoreCase))
+                    throw new SignatureCaptureException("WrongEnvironment", $"the read-only lease is connected to {session.Host}, not {environment}");
+                var kind = snapshot.IsExtension ? "Extension" : "eSpace";
+                var matches = Referenceable().Where(r => SameKey(r.Key, snapshot.ModuleKey)).ToArray();
+                if (matches.Length == 0) throw new SignatureCaptureException("ProducerNotFound", $"{snapshot.Name} is not referenceable in {session.Host}");
+                if (matches.Length > 1) throw new SignatureCaptureException("IdentityMismatch", $"{snapshot.Name} is ambiguous in the referenceable catalog; pass --key");
+                var producer = matches[0];
+                if (!string.Equals(producer.Name, snapshot.Name, StringComparison.OrdinalIgnoreCase))
+                    throw new SignatureCaptureException("IdentityMismatch", $"key {snapshot.ModuleKey} belongs to {producer.Name}, not {snapshot.Name}");
+                if (!string.Equals(producer.Kind, kind, StringComparison.OrdinalIgnoreCase))
+                    throw new SignatureCaptureException("IdentityMismatch", $"{producer.Name} is {producer.Kind}, not {kind}");
+                Observation now;
+                if (IsSystem(producer)) now = new(null, null, "signature-hash", producer.SignatureHash);
+                else
+                {
+                    var extension = producer.Kind == "Extension";
+                    var listed = Listed(extension).Where(m => SameKey(m.Key, producer.Key)).ToArray();
+                    if (listed.Length != 1)
+                        throw new SignatureCaptureException("NotActive", $"{producer.Name} has no single published {(extension ? "extension" : "module")} version in {session.Host}");
+                    now = new(listed[0].VersionId, listed[0].IsActive, extension ? "extension-version" : "module-version", producer.SignatureHash);
+                }
+                if (now.Guard != attestation.Guard) throw new SignatureCaptureException("IdentityMismatch", snapshot.Name + " is no longer the kind of producer it was captured as");
+                if (now.IsActive == false) throw new SignatureCaptureException("NotActive", snapshot.Name + " is not active in " + environment);
+                if (now.Guard == "signature-hash" ? !SameHash(now.AdvertisedHash, attestation.AdvertisedSignatureHash) : now.VersionId != attestation.VersionId)
+                    throw new SignatureCaptureException(now.Guard == "signature-hash" ? "SignatureHashChanged" : "VersionIdChanged",
+                        $"{snapshot.Name} changed since its capture ({attestation.VersionId?.ToString() ?? attestation.AdvertisedSignatureHash} -> {now.VersionId?.ToString() ?? now.AdvertisedHash}); capture it again");
+                outcomes.Add(new ProducerAttestation(path, new JsonObject { ["producer"] = snapshot.Name, ["environment"] = environment, ["guard"] = now.Guard,
+                    ["versionId"] = now.VersionId, ["advertisedSignatureHash"] = now.AdvertisedHash, ["attested"] = true }, null));
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { outcomes.Add(new ProducerAttestation(path, null, ex)); }
+        }
+        return outcomes;
+    }
+
     /// <summary>"@originalKey" entries as "Type:@originalKey", by the visible exports of the payload; a key it does not show
     /// raises ElementNotFound naming every such key.</summary>
     private static IReadOnlyList<string> TypeByKey(ReferenceInfo info, IReadOnlyList<string> elements)
@@ -272,5 +328,16 @@ public sealed class StudioProducerAuthority(Func<string, HeadlessSession> openRe
                 EnvironmentCut.RepeatedIn(ex));
         }
         finally { session?.Dispose(); }
+    }
+
+    /// <summary>F5: every envelope re-observed in ONE read-only lease (ProducerSignatureCapture.AttestMany); a lease that
+    /// cannot be opened refuses each of them with its error.</summary>
+    public IReadOnlyList<ProducerAttestation> AttestAll(IReadOnlyList<string> avsigPaths, string environment)
+    {
+        if (avsigPaths.Count == 0) return [];
+        HeadlessSession session;
+        try { session = openReadOnly(environment); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return avsigPaths.Select(p => new ProducerAttestation(p, null, ex)).ToArray(); }
+        using (session) return ProducerSignatureCapture.AttestMany(session, avsigPaths, environment);
     }
 }

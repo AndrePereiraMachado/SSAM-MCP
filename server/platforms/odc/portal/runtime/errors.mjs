@@ -1,3 +1,53 @@
+import { observeCredentials } from './projection-context.mjs';
+import { processCredentials, credentialStateVersion } from './credential-registry.mjs';
+import { createCredentialMatcher } from './credential-matcher.mjs';
+
+let processMatcher, matcherVersion = -1;
+const explicitMatchers = new WeakMap();
+const truncatedFields = new WeakMap();
+export function markTruncatedField(target, field) {
+  let fields = truncatedFields.get(target);
+  if (!fields) { fields = new Set(); truncatedFields.set(target, fields); }
+  fields.add(field);
+}
+function copyTruncation(source, target) {
+  const fields = truncatedFields.get(source);
+  if (fields) truncatedFields.set(target, fields);
+  return target;
+}
+function matcherFor(secrets) {
+  if (secrets === undefined || secrets === processCredentials()) {
+    const version = credentialStateVersion();
+    if (version !== matcherVersion) {
+      processMatcher = createCredentialMatcher(processCredentials()); matcherVersion = version;
+    }
+    return processMatcher;
+  }
+  if (Number.isSafeInteger(secrets?.version) && typeof secrets.values === 'function') {
+    let cached = explicitMatchers.get(secrets);
+    if (!cached || cached.version !== secrets.version) {
+      cached = { version: secrets.version, matcher: createCredentialMatcher([...secrets.values()]) };
+      explicitMatchers.set(secrets, cached);
+    }
+    return cached.matcher;
+  }
+  const values = typeof secrets?.values === 'function' ? [...secrets.values()] : Array.isArray(secrets) ? secrets : [];
+  if (Array.isArray(secrets) && Object.isFrozen(secrets)) {
+    let matcher = explicitMatchers.get(secrets);
+    if (!matcher) { matcher = createCredentialMatcher(values); explicitMatchers.set(secrets, matcher); }
+    return matcher;
+  }
+  return createCredentialMatcher(values);
+}
+export function boundedText(value, limit, target, field) {
+  const clean = redactValues(value, undefined, { trimPrefixes: false, patterns: false });
+  return limitedText(clean, limit, target, field);
+}
+export function limitedText(value, limit, target, field) {
+  if (value.length > limit && target) markTruncatedField(target, field);
+  return value.slice(0, limit);
+}
+
 export class OdcError extends Error {
   constructor(code, message, details = {}) {
     super(message);
@@ -29,36 +79,32 @@ export const SENSITIVE_KEY = /(?:authorization|cookie|password|passwd|secret|(?:
 export const PUBLIC_KEYS = Object.freeze(new Set(['versionToken']));
 export const isSensitiveKey = key => key !== 'isSecret' && !PUBLIC_KEYS.has(key) && SENSITIVE_KEY.test(key);
 
-export function redact(value, secrets = []) {
-  const replacements = secrets.filter(s => typeof s === 'string' && s.length > 0)
-    .flatMap(s => [s, encodeURIComponent(s)]).sort((a, b) => b.length - a.length);
-  function visit(item, field = '') {
+// Typed proof metadata names contain "secret" but never carry secret values.
+function publicMetadata(key, value) {
+  if (['hasCredentialValues', 'credentialConfigured', 'bootstrapRequired', 'authenticated', 'secretValuesVerified'].includes(key))
+    return typeof value === 'boolean';
+  return key === 'secretRefs' && value && !Array.isArray(value)
+    && Object.keys(value).every(k => ['count', 'entries', 'resolvedBy', 'resolutionConfirmed'].includes(k))
+    && Number.isSafeInteger(value.count) && value.count >= 0 && Array.isArray(value.entries)
+    && value.entries.every(entry => typeof entry === 'string' && /^SSAM\/ODC3\/[^/]+\/(DB|Setting)\/[^\r\n]+$/.test(entry))
+    && value.resolvedBy === 'bridge, inside the ODC Studio'
+    && (value.resolutionConfirmed === undefined || typeof value.resolutionConfirmed === 'boolean');
+}
+
+export function redactValues(value, secrets, { trimPrefixes = true, patterns = true, remote = false } = {}) {
+  const matcher = matcherFor(secrets);
+  function visit(item, truncated = false) {
     if (typeof item === 'string') {
-      // Public UUID identifiers must round-trip. A short password fragment can occur in a UUID by chance;
-      // replacing that fragment destroys environment/application keys. Never exempt secret-named fields (below),
-      // an exact secret value, free text, URLs, or arbitrary non-UUID identifiers.
-      const publicUuid = /(?:key|id)$/i.test(field) && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(item);
-      const publicTraceId = /^(?:id|traceId|spanId|parentSpanId)$/i.test(field) && /^(?:[0-9a-f]{16}|[0-9a-f]{32})$/i.test(item);
-      const publicLogId = /^logId$/i.test(field) && /^[A-Za-z0-9_-]{20,64}$/.test(item);
-      const publicTimestamp = /^(?:time|instant|timestamp|startTime|endTime)$/i.test(field) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(item) && Number.isFinite(Date.parse(item));
-      // TimerRunInformation uses these typed dates, including the no-run sentinel
-      // 1900-01-01T00:00:00 without an offset. Cookie flags must not corrupt them.
-      const publicTimerTimestamp = /^(?:currentStartedOn|lastRunStartedOn|lastRunFinishedOn|nextRunStartsOn)$/i.test(field)
-        && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})?$/.test(item) && Number.isFinite(Date.parse(item));
-      // Numeric telemetry is a typed public field, including 64-bit values that
-      // must remain strings. Cookie flags such as "0" must not destroy it.
-      const publicInteger = /^(?:limit|offset|nextPageOffset|totalPages|totalResults|duration|numberOfSpans|numberOfErrors|maxSupportedSpans|(?:origin)?(?:application|asset|library)Version|startTimeUnixNano|endTimeUnixNano)$/i.test(field) && /^-?\d{1,30}$/.test(item);
-      if (publicInteger) return item;
-      if (publicUuid || publicTraceId || publicLogId || publicTimestamp || publicTimerTimestamp) return replacements.includes(item) ? '[REDACTED]' : item;
-      let result = item.replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]');
-      for (const secret of replacements) result = result.split(secret).join('[REDACTED]');
+      let result = patterns ? item.replace(remote ? /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi : /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer [REDACTED]') : item;
+      result = matcher.replace(result);
+      if (trimPrefixes && truncated) result = matcher.trimPrefix(result);
       // Download links may carry capability credentials, even when their field
       // is only named "url". Preserve link context but remove signed query data.
-      result = result.replace(/https?:\/\/[^\s<>"']+/gi, link => {
+      if (patterns) result = result.replace(/https?:\/\/[^\s<>"']+/gi, link => {
         try {
           const url = new URL(link);
           let changed = false;
-          if (url.username || url.password) { url.username = ''; url.password = ''; changed = true; }
+          if (url.username || url.password) { url.username = '[REDACTED]'; url.password = ''; changed = true; }
           for (const key of [...url.searchParams.keys()]) if (/(?:signature|^sig$|token|secret|api.?key|credential|^x-amz-|^x-goog-)/i.test(key)) {
             url.searchParams.set(key, '[REDACTED]');
             changed = true;
@@ -68,15 +114,28 @@ export function redact(value, secrets = []) {
       });
       return result;
     }
-    if (Array.isArray(item)) return item.map(visit);
-    if (item && typeof item === 'object') return Object.fromEntries(Object.entries(item)
-      .map(([key, entry]) => [key, (isSensitiveKey(key) && !(key === 'hasCredentialValues' && typeof entry === 'boolean')
+    if (Array.isArray(item)) return copyTruncation(item, item.map((entry, index) => visit(entry, truncatedFields.get(item)?.has(index))));
+    if (item && typeof item === 'object') return copyTruncation(item, Object.fromEntries(Object.entries(item)
+      .map(([key, entry]) => [key, visit(entry, truncatedFields.get(item)?.has(key))])));
+    return item;
+  }
+  return visit(value);
+}
+
+export function redact(value, secrets) {
+  observeCredentials(secrets);
+  // Share one compiled matcher and traversal for all strings in this projection.
+  const clean = redactValues(value, secrets, { trimPrefixes: false, remote: true });
+  function visit(item, field = '') {
+    if (Array.isArray(item)) return copyTruncation(item, item.map(entry => visit(entry)));
+    if (item && typeof item === 'object') return copyTruncation(item, Object.fromEntries(Object.entries(item)
+      .map(([key, entry]) => [key, (isSensitiveKey(key) && !publicMetadata(key, entry)
           && !(/^isSecret$/i.test(key)&&typeof entry==='boolean')
           && !(key==='BinarySetting_Secret_MaxFileSize'&&(typeof entry==='number'||typeof entry==='string'&&/^(?:0|[1-9]\d{0,6})(?:\.\d{1,8})?$/.test(entry))&&Number.isFinite(Number(entry))&&Number(entry)>=0&&Number(entry)<=1048576))
         || (/^isSecret$/i.test(key)&&typeof entry!=='boolean')
         || ((item.isSecret === true||item.IsSecret===true) && /^(?:value|defaultValue|deployedValue)$/i.test(key))
-        ? '[REDACTED]' : visit(entry, key)]));
+        ? '[REDACTED]' : visit(entry, key)])));
     return item;
   }
-  return visit(value);
+  return visit(clean);
 }

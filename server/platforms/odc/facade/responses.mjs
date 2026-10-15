@@ -318,7 +318,7 @@ function validationErrors(v) {
 }
 // What a refused job delivery is corrected from (the job, its hash, the op that failed, the job it was patched from, the
 // basedOn of the next call, what a partial job merged): kept as given, top level first, else from the raw refusal.
-const CORRECTION = ['job', 'jobSha256', 'jobShape', 'failedOp', 'basedOn', 'nextBasedOn', 'partial', 'patchByNameOmitted'];
+const CORRECTION = ['job', 'jobSha256', 'jobShape', 'failedOp', 'basedOn', 'nextBasedOn', 'partial', 'patchByNameOmitted', 'verifiedPatch'];
 // What a delivered job keeps for the next call (lane "patch por nome"): the basedOn of the job it used and what a partial
 // job merged.
 // summary (job-summary.mjs, 2026-10-12): what the delivered job created or changed, so no map of the module follows it;
@@ -344,8 +344,13 @@ const NEXT = ['nextBasedOn', 'partial', 'summary', 'normalizations'];
 // {buildMs, queuedMs, applyMs, buildQueue?, moduleQueue?, rebased?}.
 // `highWarnings` (data-access rules of 2026-10-09: QUERY_IN_LOOP legacy/allowed, AGGREGATES_MERGEABLE): the HIGH warnings,
 // also first in `warnings`; they never block (A03) but are always shown, on "entregue" and on a refusal alike.
-export const DELIVERY_FIELDS = ['publish', 'lastPublication', 'leftovers', 'leftoversTotal', 'screenRoles', 'screenRolesTotal', 'authorization', 'integration', 'integrationTotal',
-  'highWarnings', 'warnings', 'warningsTotal', 'queue', 'equivalence', 'normalized', 'normalizedTotal', 'phases', 'preview'];
+// `removed` (ssam_code, 2026-10-12): what an action text or a screen edit of the job removed (the lines and elements it left
+// out), at most 20 plus removedTotal; a deletion is never silent.
+// `entityActions` (op entity-actions, entity-actions.mjs): the generated standard actions by entity, the unchanged count, the
+// kept ones with why, and the notes.
+// `preview` (C04, servidor/fase4): the structural preview of the delivered html (preview/fragment.mjs).
+export const DELIVERY_FIELDS = ['publish', 'lastPublication', 'leftovers', 'leftoversTotal', 'screenRoles', 'screenRolesTotal', 'authorization', 'integration', 'integrationTotal', 'entityActions',
+  'highWarnings', 'warnings', 'warningsTotal', 'queue', 'equivalence', 'normalized', 'normalizedTotal', 'phases', 'preview', 'removed', 'removedTotal'];
 // I8: a refusal that says the merge already reached the Studio (merged:true, uncertain) is read, never delivered again.
 const mergedReading = (value, args) => (typeof value.evidence === 'string' && value.evidence
   ? { tool: 'ssam_evidence', arguments: { file: value.evidence.replace(/[\\/]+$/, '') + (/\\/.test(value.evidence) || !/\//.test(value.evidence) ? '\\' : '/') + 'deliver-result.json' }, why: 'o merge já foi integrado; leia o recibo dele e não repita a entrega' }
@@ -357,7 +362,9 @@ const sharedFields = value => Object.fromEntries(DELIVERY_FIELDS.filter(key => v
 // degraded items. Kept apart from DELIVERY_FIELDS (the shared contract of the 2026-10-05 package).
 export const PROTOTYPE_FIELDS = ['prototype', 'patch', 'correctedJob', 'ssamDefect', 'degraded'];
 const prototypeFields = value => Object.fromEntries(PROTOTYPE_FIELDS.filter(key => value[key] != null).map(key => [key, value[key]]));
-const inputFields = value => Object.fromEntries(['inputAdjusted', ...(value.code === 'INPUT_INVALID' ? ['violations', 'corrected'] : [])]
+// normalizations (call-shapes.mjs and the job op shapes of ssam-code.mjs normalizeCodeOps): what the call and its job were
+// taken to mean, on a delivery and on a refusal alike.
+const inputFields = value => Object.fromEntries(['inputAdjusted', 'normalizations', ...(value.code === 'INPUT_INVALID' ? ['violations', 'corrected'] : [])]
   .filter(key => value[key] != null).map(key => [key, value[key]]));
 export function compactDelivery(tool, args, value) {
   if (tool !== 'studio_deliver' || !value || typeof value !== 'object' || Array.isArray(value)) return value;

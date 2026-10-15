@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Anvil.Reading;
 
 namespace Anvil.Core.Preflight;
 
@@ -30,6 +31,8 @@ public static class ExpressionRules
     {
         var problems = new List<JsonObject>();
         var builtins = Builtins.For(lane);
+        // Familias (C13): the Id base type of the entities the job declares, for the conversion an OPERAND_TYPES patch writes.
+        var bases = DocumentAggregates.IdentifierBases(ops);
         foreach (var action in job.Actions)
         {
             var scan = LogicScan.Of(action.Declaration);
@@ -46,8 +49,23 @@ public static class ExpressionRules
                 var patch = written == null || pointer == null || site.Key == "sort" ? null : new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = pointer, ["value"] = written });
                 problems.Add(JobPreflight.Problem(action.Op, pointer, code, "error", message, fix, patch, "logic"));
             }
-            foreach (var site in scan.Expressions)
+            foreach (var whole in scan.Expressions)
             {
+                // The source is in the action scope; mapping fields are expressions relative to an item. Keep the whole
+                // value in LogicScan for renames/normalizations, but never resolve a field as an action operand or name.
+                var mapping = whole.AllowsMapping ? FlowMapping.Split(whole.Text) : null;
+                var site = mapping is { } mapped ? whole with { Text = mapped.Source } : whole;
+                if (mapping is { } fields)
+                    foreach (var (field, value) in fields.Fields)
+                        if (ExpressionSyntax.Check(value) is { } fieldSyntax && model == null)
+                            Add(whole, "EXPRESSION_SYNTAX", $"mapping field {field}: {value}: {fieldSyntax.Problem}", fieldSyntax.Fix);
+                if (ExpressionText.Tokens(site.Text).Any(t => t.Kind == TokenKind.Name && t.Is("mapTo"))) {
+                    if (model == null) Add(whole, "EXPRESSION_SYNTAX", $"{whole.Text}: mapTo is only valid as a whole assignment or call argument value",
+                        "use mapTo only as a whole assign/argument value: Source mapTo { Field: value }");
+                    continue;
+                }
+                void MappedPatch(ExpressionSite part, string code, string message, string fix, string? written) =>
+                    Patched(part, code, message, fix, written != null && mapping is { } original ? FlowMapping.Compose(written, original.Fields) : written);
                 // primeira-certa A4: an expression whose syntax does not hold is that problem alone (its tokens mean nothing
                 // to the other rules); said once, by the pure pass.
                 if (ExpressionSyntax.Check(site.Text) is { } syntax)
@@ -59,13 +77,13 @@ public static class ExpressionRules
                 var calls = ExpressionText.Calls(site.Text, tokens);
                 if (builtins != null) Arity(site, calls, builtins, job, model, Add);
                 if (site.Aggregate != null) DatabaseFunctions(site, calls, builtins, action, job, model, Add);
-                Operands(site, tokens, action, locals, scan, job, model, builtins, Add);
-                Identifiers(site, tokens, action, locals, scan, job, model, lane, Patched);
+                Operands(site, tokens, action, locals, scan, job, model, builtins, MappedPatch, bases);
+                Identifiers(site, tokens, action, locals, scan, job, model, lane, MappedPatch);
                 // `a mod b` (C19): OutSystems has no mod operator. ODC's own rule (OdcPlatformRules) says it there.
                 if (!string.Equals(lane, "odc", StringComparison.OrdinalIgnoreCase) && tokens.Any(t => t.Kind == TokenKind.Operator && t.Is("mod")))
                 {
                     var written = ExpressionRewrites.Mod(site.Text, ExpressionRewrites.HasMod(lane));
-                    Patched(site, "EXPR_UNKNOWN_IDENTIFIER", $"can't identify 'mod' in {site.Text}: OutSystems has no mod operator (the Verify answers ParserUnexpectedElement)",
+                    MappedPatch(site, "EXPR_UNKNOWN_IDENTIFIER", $"can't identify 'mod' in {site.Text}: OutSystems has no mod operator (the Verify answers ParserUnexpectedElement)",
                         written != null ? $"write {written} (the built-in Mod(n, m) is the remainder)" : "write Mod(n, m), the built-in that returns the remainder", written);
                 }
             }
@@ -162,7 +180,8 @@ public static class ExpressionRules
     private static readonly HashSet<string> Ordering = new(StringComparer.Ordinal) { "<", ">", "<=", ">=" };
 
     private static void Operands(ExpressionSite site, List<Token> tokens, ActionFact action, Dictionary<string, string> locals, LogicScan scan,
-        JobFacts job, IBaseFacts? model, IReadOnlyDictionary<string, BuiltinFact>? builtins, Action<ExpressionSite, string, string, string> add)
+        JobFacts job, IBaseFacts? model, IReadOnlyDictionary<string, BuiltinFact>? builtins, Action<ExpressionSite, string, string, string, string?> add,
+        IReadOnlyDictionary<string, string> bases)
     {
         string? TypeAt(int index, bool left)
         {
@@ -229,7 +248,7 @@ public static class ExpressionRules
             {
                 var operand = TypeAt(k + 1, left: false);
                 if (operand != null && (IsIdentifier(operand) || operand is "Text" or "Boolean"))
-                    add(site, "OPERAND_TYPES", $"operator '-' cannot be applied to operand {tokens[k + 1].Text} of type '{operand}'", Conversion(operand, "-"));
+                    add(site, "OPERAND_TYPES", $"operator '-' cannot be applied to operand {tokens[k + 1].Text} of type '{operand}'", Conversion(operand, "-"), null);
                 continue;
             }
             if (!Arithmetic.Contains(t.Text) && !Ordering.Contains(t.Text)) continue;
@@ -237,7 +256,18 @@ public static class ExpressionRules
             if (a == null || b == null) continue;
             var wrong = WrongOperand(t.Text, a, b, site.Aggregate != null);
             if (wrong == null) continue;
-            add(site, "OPERAND_TYPES", $"cannot apply '{t.Text}' to '{a}' together with '{b}' ({Around(tokens, k)})", Conversion(wrong, t.Text));
+            // Familias (C13): an identifier against a number, whose Id base type the job declares (a static entity's Id is an
+            // Integer, an entity's a Long Integer): the patch converts that operand, when this Studio runs the conversion there.
+            string? written = null;
+            if (IsIdentifier(wrong) && Numeric.Contains(wrong == a ? b : a) && tokens[wrong == a ? k - 1 : k + 1] is { Kind: TokenKind.Name } operandToken
+                && bases.TryGetValue(wrong[..^" Identifier".Length], out var basis))
+            {
+                var conversion = basis == "Integer" ? "IdentifierToInteger" : "IdentifierToLongInteger";
+                var client = action.IsClientSide && site.Aggregate?.Sources.Any(s => job.ClientEntities.Contains(s) || model?.IsClientEntity(s) == true) == true;
+                if (builtins != null && builtins.TryGetValue(conversion, out var f) && (site.Aggregate == null || (client ? f.ClientAggregates : f.ServerAggregates)))
+                    written = site.Text[..operandToken.Start] + conversion + "(" + operandToken.Text + ")" + site.Text[(operandToken.Start + operandToken.Text.Length)..];
+            }
+            add(site, "OPERAND_TYPES", $"cannot apply '{t.Text}' to '{a}' together with '{b}' ({Around(tokens, k)})", written != null ? $"write {written} (the patch)" : Conversion(wrong, t.Text), written);
         }
     }
 

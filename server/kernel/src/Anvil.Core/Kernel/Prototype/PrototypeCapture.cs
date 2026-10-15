@@ -12,7 +12,7 @@ namespace Anvil.Core;
 /// collects every problem (PROTOTYPE_IR_INVALID, a defect of the SSAM, never of the model): the schema, the closed sets of
 /// effects and annotations, the references between views, modals, dimensions, collections and events, and the bundle files,
 /// whose sha256 must be the one the IR records. The canonical hash (sorted keys, document order, without timings,
-/// engine.node and source.root) is the one data.captureSha256 carries.
+/// engine.node, source.root and source.archive.path) is the one data.captureSha256 carries.
 /// </summary>
 public sealed class PrototypeCapture
 {
@@ -20,9 +20,10 @@ public sealed class PrototypeCapture
     public const string IrInvalid = "PROTOTYPE_IR_INVALID";
     public const string NameCollision = "PROTOTYPE_NAME_COLLISION";
 
-    public static readonly IReadOnlyList<string> DataKeys = ["source", "entry", "app", "prefix", "mapping", "clock", "tz", "home", "seed", "capture", "captureSha256"];
-    public static readonly IReadOnlyList<string> MappingKeys = ["screens", "default", "routes", "shell", "states", "modals", "data", "vendor", "events", "ignore", "names"];
-    public static readonly IReadOnlyList<string> Effects = ["navigate", "openPopup", "closePopup", "setDimension", "toggle", "increment", "remove", "update", "insert", "upsert", "insertFrom", "updateFrom", "removeWhere", "validate", "toast"];
+    public static readonly IReadOnlyList<string> DataKeys = ["source", "entry", "app", "prefix", "mapping", "bind", "clock", "tz", "home", "seed", "capture", "captureSha256"];
+    public static readonly IReadOnlyList<string> MappingKeys = ["screens", "default", "routes", "shell", "states", "modals", "data", "vendor", "events", "ignore", "names", "version"];
+    /// <summary>The effects the planner compiles: the closed class of the capture (2.6) plus call, which only data.bind writes (2.12).</summary>
+    public static readonly IReadOnlyList<string> Effects = ["navigate", "openPopup", "closePopup", "setDimension", "toggle", "increment", "remove", "update", "insert", "upsert", "insertFrom", "updateFrom", "removeWhere", "validate", "toast", "call"];
     public static readonly IReadOnlyList<string> DataEffects = ["toggle", "increment", "remove", "update", "insert", "upsert", "insertFrom", "updateFrom", "removeWhere"];
     public static readonly IReadOnlyList<string> PredicateOps = ["truthy", "not", "eq", "ne", "gt", "ge", "lt", "le", "in", "contains", "len-ge", "len-le", "len-gt", "len-lt", "and", "or"];
 
@@ -46,6 +47,22 @@ public sealed class PrototypeCapture
     public JsonObject? Shell { get; }
     public JsonObject Icons { get; }
     public double DefaultStrokeWidth { get; }
+    /// <summary>The fields whose attribute has another name (<see cref="PrototypeFieldNames"/>): [{kind, collection, field, name, renamedFrom, why}].</summary>
+    public JsonArray AttributeRenames { get; init; } = [];
+    /// <summary>field name of the capture -> attribute name, for the fields whose attribute has another name.</summary>
+    public IReadOnlyDictionary<string, string> AttributeMap { get; init; } = new Dictionary<string, string>();
+    /// <summary>data.bind compiled over this capture (2.12): the Data Actions, the producer reference and the example outputs; null
+    /// without a binding.</summary>
+    public PrototypeBindPlan? Bind { get; private init; }
+
+    /// <summary>The same capture (path, hash, data, attribute names) with the IR the binding rewrote (PrototypeBind.Apply); the
+    /// renames of the collections the binding replaced leave with them (no entity is created for those).</summary>
+    public PrototypeCapture Rebound(JsonObject json, PrototypeBindPlan bind)
+    {
+        var kept = Objects(json["store"]?["collections"]).Select(c => c["name"]?.ToString() ?? "").ToHashSet(StringComparer.Ordinal);
+        var renames = new JsonArray(AttributeRenames.OfType<JsonObject>().Where(r => r["collection"]?.ToString() is not { } c || kept.Contains(c)).Select(r => (JsonNode)r.DeepClone()).ToArray());
+        return new(json, CapturePath, Sha256, Data) { Bind = bind, AttributeRenames = renames, AttributeMap = AttributeMap };
+    }
 
     private PrototypeCapture(JsonObject json, string path, string sha, JsonObject data)
     {
@@ -92,6 +109,7 @@ public sealed class PrototypeCapture
                     if (value is not JsonValue v || !v.TryGetValue<string>(out var to) || !PrototypeNames.IsWidgetName(to) || key.Length == 0 || key.EndsWith('/'))
                         problems.Add(new("INPUT_INVALID", "/mapping/names/" + key.Replace("~", "~0").Replace("/", "~1"), $"prototype: mapping.names '{key}' must map to an identifier (^[A-Za-z][A-Za-z0-9_]*$), got '{value?.ToJsonString()}'", false, null));
         }
+        problems.AddRange(PrototypeBind.Shape(data));
         if (data["prefix"] is { } prefixNode && (prefixNode is not JsonValue pv || !pv.TryGetValue<string>(out var prefixText) || !PrototypeNames.PrefixShape.IsMatch(prefixText)))
             problems.Add(new("INPUT_INVALID", "/prefix", "prototype: prefix must match ^[A-Za-z][A-Za-z0-9]*$", false, null));
         if (data["capture"] is not JsonValue cv || !cv.TryGetValue<string>(out var path) || path.Length == 0)
@@ -106,14 +124,18 @@ public sealed class PrototypeCapture
         var sha = CanonicalSha256(json);
         if (data["captureSha256"] is JsonValue hv && hv.TryGetValue<string>(out var given) && given.Length > 0 && !string.Equals(given, sha, StringComparison.OrdinalIgnoreCase))
             problems.Add(new(IrInvalid, "/captureSha256", $"prototype: the capture hash is {sha}, data.captureSha256 says {given}; the facade recaptures a stale capture before the kernel runs", true, null));
-        // the hash is the facade's, over the capture as written; the compiler reads it in its own spelling (PrototypeDialect)
+        // the attribute names of the store's fields (entity name scopes, mapping.names "<Entity>/<field>"), then the compiler's
+        // spelling (PrototypeDialect); the hash is the facade's, over the capture as written
+        var prefixOf = data["prefix"] is JsonValue pfx && pfx.TryGetValue<string>(out var pfxText) ? pfxText : json["app"]?["prefix"]?.ToString() ?? PrototypeNames.PrefixOf(json["app"]?["title"]?.ToString(), null);
+        var fieldNames = PrototypeFieldNames.Canonicalize(json, data["mapping"]?["names"] as JsonObject, prefixOf);
+        json = fieldNames.Ir;
         try { json = PrototypeDialect.Normalize(json); }
         catch (Exception ex) when (ex is InvalidOperationException or FormatException or ArgumentException or KeyNotFoundException or NullReferenceException)
         {
             problems.Add(new(IrInvalid, "/capture", $"prototype: the capture {path} could not be read in the compiler's form: {ex.Message}", true, null));
             return null;
         }
-        var capture = new PrototypeCapture(json, Path.GetFullPath(path), sha, data);
+        var capture = new PrototypeCapture(json, Path.GetFullPath(path), sha, data) { AttributeRenames = fieldNames.Renamed, AttributeMap = fieldNames.Map };
         capture.Validate(problems);
         return capture;
     }
@@ -297,7 +319,7 @@ public sealed class PrototypeCapture
         var copy = capture.DeepClone().AsObject();
         copy.Remove("timings");
         if (copy["engine"] is JsonObject engine) engine.Remove("node");
-        if (copy["source"] is JsonObject source) source.Remove("root");
+        if (copy["source"] is JsonObject source) { source.Remove("root"); if (source["archive"] is JsonObject archive) archive.Remove("path"); }
         var sb = new StringBuilder();
         Canonical(copy, sb);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()))).ToLowerInvariant();

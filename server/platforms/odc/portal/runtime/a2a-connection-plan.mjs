@@ -5,6 +5,22 @@ const record=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const text=x=>typeof x==='string'&&x.trim().length>0;
 const invalid=()=>fail('INPUT_INVALID','A2A preparation requires an explicit HTTPS agent base URL, a complete version 0.3.0 JSON-RPC card without authentication, one explicit stage and a portfolio UUID.');
 const modes=x=>Array.isArray(x)&&x.length>0&&x.every(text);
+// Explicit agent input must not be a copy of an already projected card.
+// Receipt-backed planning passes the trusted card separately and preserves it.
+export function rejectRedactedA2aCard(card){
+ const markedFields=[],seen=new Set();
+ function visit(value,path){
+  if(typeof value==='string'){
+   if(/\[REDACTED\]|%5BREDACTED%5D|\[INVALID URL\]/i.test(value))markedFields.push(path);
+  }else if(value&&typeof value==='object'&&!seen.has(value)){
+   seen.add(value);
+   for(const [key,entry] of Object.entries(value))visit(entry,Array.isArray(value)?path+'['+key+']':path+'.'+key);
+   seen.delete(value);
+  }
+ }
+ visit(card,'card');
+ if(markedFields.length)fail('A2A_CARD_REDACTED_COPY','The explicit card contains projection markers. Omit card and use discoveryOperationUuid from the confirmed discovery receipt. Nothing was sent.',{markedFields});
+}
 function endpoint(value){
  let u;try{u=new URL(value);}catch{invalid();}
  if(u.protocol!=='https:'||u.username||u.password||u.hash||u.search)invalid();
@@ -44,7 +60,8 @@ export function validateA2aCard(card){
  if(fields.length)fail('INPUT_INVALID','The A2A card does not satisfy the supported no_auth 0.3.0 JSONRPC contract.',{invalidFields:fields});
  return structuredClone(card);
 }
-export function a2aConnectionPlan({name,description='',portfolioKey,stage,card,agentUrl,configurationType='json'}){
+export function a2aConnectionPlan({name,description='',portfolioKey,stage,card,agentUrl,configurationType='json'}, {receiptCard=false}={}){
+ if(!receiptCard)rejectRedactedA2aCard(card);
  if(!['json','url'].includes(configurationType))invalid();
  if(!text(name)||name.length>100||typeof description!=='string'||description.length>500||!isUuid(portfolioKey)
   ||!record(stage)||!isUuid(stage.Key)||!text(stage.Name)||!text(stage.Purpose))invalid();

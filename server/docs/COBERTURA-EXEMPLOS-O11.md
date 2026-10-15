@@ -95,7 +95,7 @@ Padrões que as sessões reais de clientes enfrentaram (06 e 07/10).
 | Produtor com action pública | `pat-producer-public-action` | entidade, structure e server action públicas |
 | Consumidor por referência | `pat-consumer-reference-action` | op `reference` e chamada pelo nome; ao vivo `producer` é o nome do módulo, com `captureProducers: ["<Módulo>"]` |
 | Static num Dropdown | `pat-static-dropdown` | registros pela spec, aggregate ordenado, `Entities.X.Y` no OnInitialize |
-| Timer | `pat-timer-typical` | action que trabalha em lote e `Schedule` "Every day at 02:00" |
+| Timer | `pat-timer-typical` | action que trabalha em lote e `Schedule` "02:00" (diariamente) |
 | Role na tela | `pat-role-check-screen` | `Roles` da tela, `CheckApproverRole` no OnInitialize e no servidor, If no lugar de Visible |
 | Button Group | `pat-osui-buttongroup` | no Reactive O11 o Button Group do OutSystems UI é o widget nativo `IButtonGroup`; `OnChange` refaz a consulta |
 | Tabs | `pat-osui-tabs` | aba ativa em variável e `OnTabChange` |

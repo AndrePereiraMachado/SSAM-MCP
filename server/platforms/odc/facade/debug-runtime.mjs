@@ -112,11 +112,13 @@ export async function privateAppUserValues(descriptor, binding, { vault = privat
 }
 async function odcDebugToken(input) {
   const { connect } = await import('./debug-odc-portal.mjs');
-  const { bridge } = await connect(input.tenant);
+  const portal = await connect(input.tenant), { bridge } = portal;
+  try {
   const live = await bridge.execute('portfolio-api-v2:get:/environments', {}, 'read');
   const rows = Array.isArray(live.data) ? live.data : live.data?.results;
   if (!live.ok || !rows?.some(e => [e.builtinDomain, e.defaultDomain].includes(new URL(input.runtimeUrl).hostname))) throw new Error('debug_runtime_not_in_tenant');
-  return bridge.auth.getToken();
+    return await bridge.auth.getToken();
+  } finally { await portal.release?.(); }
 }
 export async function selectedO11Studio(services = {}) {
   const { LANES, anvilLaneFacts } = await import('./lanes.mjs');

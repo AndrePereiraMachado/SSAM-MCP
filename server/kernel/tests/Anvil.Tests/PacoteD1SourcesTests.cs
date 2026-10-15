@@ -102,7 +102,11 @@ public sealed class PacoteD1SourcesTests
         Assert.StartsWith(second["work"]!.ToString(), reused["path"]!.ToString());
         Assert.True(second["producerAttestation"]!.AsArray().Single()!["attested"]!.GetValue<bool>());
 
-        environment.Version = 8;   // republished: the cached capture no longer attests and is captured again
+        // Republished by SSAM (F5: the facade records each publication it starts): the ledger no longer vouches for the
+        // capture, the server re-attests it, it no longer attests and the producer is captured again.
+        Thread.Sleep(20);
+        ProducerLedger.ForWork(work)!.Published("lab.example", "ZZHighCodePrimitives", null, "o11_publish", DateTime.UtcNow);
+        environment.Version = 8;
         var third = Deliver();
         Assert.Equal(2, environment.Operations.Count(o => o == "signature"));
         Assert.Null(third["capturedProducers"]!["Primitive"]!["reusedFromCache"]);

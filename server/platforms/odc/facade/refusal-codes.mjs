@@ -17,9 +17,10 @@ export const isCode = value => typeof value === 'string' && CODE_PATTERN.test(va
 
 // The refusals of the prototype importer (docs/PROTOTIPO-NATIVO.md 1.4; prototype-op.mjs): the source, the headless
 // render, an ambiguity with its ready mapping, a requested name that collides, and an IR or bundle the SSAM itself got
-// wrong (ssamDefect). A divergent capture is captured again, never refused: there is no CAPTURE_STALE.
+// wrong (ssamDefect). A divergent capture is captured again, never refused: there is no CAPTURE_STALE. data.bind (2.12) refuses
+// PROTOTYPE_BINDING_REQUIRED with every list, text and event its producer must cover, each proposal built offline first.
 export const PROTOTYPE_CODES = Object.freeze(['PROTOTYPE_SOURCE_INVALID', 'PROTOTYPE_RENDER_FAILED', 'PROTOTYPE_AMBIGUOUS',
-  'PROTOTYPE_NAME_COLLISION', 'PROTOTYPE_IR_INVALID']);
+  'PROTOTYPE_NAME_COLLISION', 'PROTOTYPE_IR_INVALID', 'PROTOTYPE_BINDING_REQUIRED']);
 
 // The codes of the html op (docs/PROTOTIPO-NATIVO.md 5, H1-H16; kernel HtmlExpander/HtmlVisual/JobPreflight): the refusals
 // the page and fragment forms answer with every problem at once, and the warnings of a page that compiles (one per class,

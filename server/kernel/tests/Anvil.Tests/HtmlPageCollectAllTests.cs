@@ -1,10 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
-using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json.Nodes;
 using Anvil.Core;
 using Xunit;
+using Xunit.Abstractions;
 namespace Anvil.Tests;
 
 /// <summary>
@@ -13,7 +13,7 @@ namespace Anvil.Tests;
 /// cfb79d98: the delivered page) and the FarmaVirtual prototype as the browser renders it. No Studio: the ops and the problems
 /// are the proof (HtmlDeltaTests and ElementWidgetMapTests prove the Verify and the theme).
 /// </summary>
-public sealed class HtmlPageCollectAllTests
+public sealed class HtmlPageCollectAllTests(ITestOutputHelper output)
 {
     private const string Job79 = "job79-cc36c64b", Job88 = "job88-0f7ceafe", Job105 = "job105-cfb79d98";
 
@@ -22,11 +22,13 @@ public sealed class HtmlPageCollectAllTests
     [Fact] public void H1_TheJob79IsOneAnswerWithEveryProblemAndTheNineCausesWithTheirCountsInUnderASecond()
     {
         JobPreflight.Analyze(new JsonArray(JsonNode.Parse("""{"op":"html","data":{"screen":"Warm","html":"<p>x</p>"}}""")), JsonNode.Parse("{}")); // JIT and rule discovery
-        var job = HtmlPageFixtures.Job(Job79);
-        var clock = Stopwatch.StartNew();
-        var result = JobPreflight.Analyze(job["ops"]!.AsArray(), job);
-        clock.Stop();
-        Assert.True(clock.ElapsedMilliseconds < 1000, $"preflight of job 79 took {clock.ElapsedMilliseconds} ms");
+        // The cost of the preflight, not the load of the machine: the CPU time of this thread, the fastest of three runs over
+        // fresh copies of the job (CpuBudget).
+        var jobs = Enumerable.Range(0, 3).Select(_ => HtmlPageFixtures.Job(Job79)).ToList();
+        var runs = CpuBudget.Measure(jobs.Select(job => (Func<JsonObject>)(() => JobPreflight.Analyze(job["ops"]!.AsArray(), job))));
+        output.WriteLine($"preflight of job 79: {CpuBudget.Describe(runs)}");
+        Assert.True(CpuBudget.Best(runs) < 1000, $"preflight of job 79 took {CpuBudget.Describe(runs)}");
+        var result = runs[0].Result;
         var problems = result["problems"]!.AsArray().OfType<JsonObject>().ToList();
         // The only problems left are the 5 bindings without element the job carried (latent in an\html-compiler.md 2.2), all at
         // once, each with the patch that removes it; the 9 causes of the 10 refusals compile now.

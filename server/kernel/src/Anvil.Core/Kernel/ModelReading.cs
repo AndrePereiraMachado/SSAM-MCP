@@ -78,6 +78,8 @@ public abstract class ModelReader<T> where T : class
     }
     // ModuleDigest reads through these, with the same rules as Read (Display, kind names, children, property lookup).
     internal IEnumerable<T> ChildrenOf(T node) => Children(node);
+    // ScreenHtml walks once and keeps the children: the kind names without Describe's Parent and Children reads.
+    internal IReadOnlySet<string> KindNamesOf(T node) => KindNames(node);
     internal string KeyOf(T node) => Key(node);
     internal string KindOf(T node) => Kind(node);
     internal string NameOf(T node) => Name(node);
@@ -86,13 +88,36 @@ public abstract class ModelReader<T> where T : class
     internal Func<object?>? PropertyOf(T node, string name) => FindProperty(node, name);
     internal IEnumerable<(string Name, Func<object?> Read)> PropertiesOf(T node) => Properties(node);
     internal string? ExpressionText(object value) => Expression(value);
+    // The type of fact a property that is null would hold, from its declared type: 't' text, 'e' expression, 'r' reference,
+    // 'l' list of references (ScreenHtml: an attribute a C2 edit writes on a property the node has empty, such as the Name of
+    // a new widget). Null when the adapter cannot tell.
+    protected virtual char? NullFactType(T node, string name) => null;
+    internal char? NullFactTypeOf(T node, string name) => NullFactType(node, name);
     // ModuleRichIndex reads the native graph (who refers to a node) and the parent chain of a consumer that is no row.
     internal IEnumerable<T> ReferrersOf(T node) => Referrers(node);
     internal T? ParentOf(T node) => Parent(node);
     internal static bool IsNoise(string property) => Noise.Contains(property);
+    // The record mapping an assignment or an argument keeps outside its expression (O11: its TypeConversion, which is no
+    // child and no Model API property); null when it has none or the platform keeps mappings in the expression text (ODC).
+    protected internal virtual NativeMapping? RecordMapping(T node) => null;
+    // The field values of the record mapping of an assignment or an argument that the model binds to an element of the action
+    // (an input, a local, a variable) whose name the mapping's source has as an attribute now: read again, the text would bind
+    // the name to the attribute (inside a mapping the source's attributes come first). One sentence per field; null or empty:
+    // none (the reader of a model without bindings says none).
+    protected internal virtual IReadOnlyList<string>? MappingCaptures(T node) => null;
+    // Whether the platform keeps record mappings beside the expression (O11): there a "mapTo" inside an expression's own
+    // text is no mapping (its parser does not read it).
+    protected internal virtual bool MappingsBeside => false;
     // Indexes of a server entity when the adapter reads them outside Children (the O11 Model API lists no index child);
     // null means the digest reads the EntityIndex children.
     protected internal virtual IReadOnlyList<(string Name, bool Unique, bool Auto, string[] Attributes)>? Indexes(T node) => null;
+    // The index elements themselves (with their keys and properties) when the adapter reads them outside Children; null
+    // means they are the EntityIndex children. The data text (DataDdl) reads them through this.
+    protected internal virtual IReadOnlyList<T>? IndexNodes(T node) => null;
+    // Whether the Model API lets a property be set (it has a setter on a Model API interface). A property that cannot be
+    // set is computed by the platform; the data text's fixed point compares every property that can. Unknown: settable.
+    protected virtual bool Writable(T node, string property) => true;
+    internal bool IsWritable(T node, string property) => Writable(node, property);
     // Tree with --properties Name: true when the Name property projects exactly to Name(node), false when the node has
     // no Name property (propertiesMissing), null when only the model can reproduce the answer.
     internal bool? NameProjection(T node, string modelName)

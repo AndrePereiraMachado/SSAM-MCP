@@ -23,6 +23,18 @@ async function connect(access) {
   return { client, close: async () => { await client.close(); await server.close(); } };
 }
 const CLI = /`odc |odc portal|internal-routes|pwsh|powershell|\.ps1|python|--match|--tenant|--view/i;
+test('Portal prompt recovery and live status are exposed through MCP without a secret argument',async()=>{
+ const seen=[];const {client,close}=await connect({portalLogin:async input=>{seen.push(input);return {ok:true};}});
+ try {
+  for(const action of ['focus','prompt','status']){
+   const result=await client.callTool({name:'odc_portal_login',arguments:{tenant:'example.test',action}});
+   assert.equal(result.structuredContent.ok,true);
+  }
+  assert.deepEqual(seen.map(x=>x.action),['focus','prompt','status']);
+  const denied=await client.callTool({name:'odc_portal_login',arguments:{tenant:'example.test',action:'focus',password:'private'}}).catch(()=>({isError:true}));
+  assert.equal(denied.isError,true);assert.equal(seen.length,3);
+ }finally{await close();}
+});
 for(const conversion of [false,true])test('native secret binary MCP forwards a vault selector for '+(conversion?'conversion':'upload'),async()=>{
  const seen=[];const {client,close}=await connect({portalWrite:async input=>{seen.push(input);return {ok:true};}});
  try{const input={tenant:'corp.outsystems.dev',auth:'auto',operationId:conversion?'mobileExtensibility.convertFile':'mobileExtensibility.uploadFile',input:{inputParameters:{[conversion?'BinaryData':'FileContent']:''}},vaultFile:'OwnSecretFile',authorize:'Own synthetic secret binary fixture',operationUuid:crypto.randomUUID(),confirmTenant:'corp.outsystems.dev',authorizationContext:'C:/private/approval.json'};
@@ -297,6 +309,11 @@ test('odc_asset_delete states the consumers rule and forwards CONSUMERS_WOULD_BR
     assert.match(del.description, /every consumer/); assert.match(del.description, /CONSUMERS_WOULD_BREAK/); assert.match(del.description, /DEPENDENCY_CHECK_UNAVAILABLE/);
     assert.doesNotMatch(del.description, /Consider odc_write dependency-management deletion-analyses first/);
     assert.match(tools.find(t => t.name === 'odc_portal_write').description, /externalLibraries\.publishJob/);
+    // Library release (live demo 2026-10-14: the model did not find it): the routes, the exact input and the prerequisites.
+    const write = tools.find(t => t.name === 'odc_portal_write').description, read = tools.find(t => t.name === 'odc_portal_read').description;
+    assert.match(write, /libraries\.release \(/); assert.match(write, /ApplicationKey, Revision, Version:"x\.y\.z", ReleaseNotes/);
+    assert.match(write, /untagged revision/); assert.match(write, /Finished publication/); assert.match(write, /preExisting:true/);
+    assert.match(read, /libraries\.releaseSettings/); assert.match(read, /libraries\.releaseRevision/);
     const out = await client.callTool({ name: 'odc_asset_delete', arguments: { assetKey: 'lib-1', authorize: 'delete SSAMTextTools now', operationUuid: '11111111-1111-4111-8111-111111111111' } });
     assert.equal(out.isError, true); assert.equal(out.structuredContent.code, 'CONSUMERS_WOULD_BREAK'); assert.deepEqual(out.structuredContent.consumers, ['OrdersApp']);
   } finally { await close(); }

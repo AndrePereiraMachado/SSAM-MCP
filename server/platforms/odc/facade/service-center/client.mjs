@@ -22,6 +22,7 @@ import { excelTime, xlsxRows } from './xlsx.mjs';
 import { asyncStatusArguments, parseAsyncStatus } from './async-status.mjs';
 import { solutionDownload, solutionDownloadAbandon, solutionDownloadStatus } from './solution-download.mjs';
 import { timerLogSnapshot, compareTimerLogs, observeTimerErrors } from './timer-observation.mjs';
+import { selectIntegrationRecord, exactIntegrationRow, integrationPayloadControl, integrationPayloadPage, payloadFailure } from './integration-payload.mjs';
 import { OwnerSelectionStore } from './owner-selection.mjs';
 
 // The Timers log is Cyclic_Job_Logs.aspx (Monitoring > Timers, live on 11.42); Timer_Logs.aspx does not exist.
@@ -76,6 +77,31 @@ export const STALE_SENDING_MS = 30 * 60 * 1000;
 // The text of a local failure for a receipt: our own refusal texts, never the text of a foreign error (it may carry a value).
 const localReason = error => (error instanceof ProtocolError ? error.message : String(error?.name ?? 'Error')).slice(0, 300);
 const NEVER = /^(?:never|-|—|n\/a|none|not run yet|)$/i;
+
+// Stable public result for Run Now: transport receipt, execution evidence and
+// attribution are separate facts. HTTP 200 alone is never reported as success.
+export function timerRunOutcome(receipt) {
+  const observed=receipt.observed ?? receipt.resolution?.observed;
+  const before=receipt.plan?.lastRunBefore, after=observed?.lastRun;
+  const moved=before!==undefined && typeof after==='string' && !NEVER.test(after.trim()) && fold(after)!==fold(String(before ?? ''));
+  const executed=receipt.executionObserved===true || moved || (receipt.resolution?.observed?.newRuns?.length??0)>0;
+  const failed=receipt.failedAttemptObserved===true;
+  const acknowledged=receipt.schedulerResponse?.schedulingAcknowledged===true || receipt.state==='accepted';
+  const notSent=['refused','rejected'].includes(receipt.state);
+  const outcome=failed?'execution-failed':executed?'execution-observed':notSent?'not-sent'
+    :receipt.state==='obsolete'?'timer-absent':receipt.state==='not-executed'?'not-executed':acknowledged?'scheduled':'unknown';
+  const result={...receipt, outcome, ok:['scheduled','execution-observed'].includes(outcome),
+    requestStatus:notSent?'not-sent':acknowledged?'accepted':'unconfirmed',
+    executionObserved:executed, executionCompleted:executed?null:false, attributedToRequest:false,
+    evidence:{basis:executed?(moved?'last-run-changed':'new-exact-timer-log-rows'):acknowledged?'scheduler-acknowledgment':'no-confirmation',
+      lastRunBefore:before??null,lastRunAfter:after??null,status:observed?.status??null},replayed:false};
+  if(!result.ok)result.code=outcome==='unknown'?'TIMER_RUN_OUTCOME_UNKNOWN':outcome==='execution-failed'?'TIMER_EXECUTION_FAILED':receipt.code??'TIMER_RUN_NOT_EXECUTED';
+  else {delete result.code;delete result.error;}
+  if(['unknown','scheduled'].includes(outcome))result.continuation={tool:'o11_service_center_write',
+    arguments:{action:'verify',host:receipt.identity.host,operationId:receipt.operationId},
+    why:'Read this receipt and timer execution evidence without sending Run Now again.'};
+  return result;
+}
 
 // repr() of a short text, as the Python messages quote names.
 export const repr = text => { const s = String(text); const q = s.includes("'") && !s.includes('"') ? '"' : "'";
@@ -140,6 +166,8 @@ export function checked(page) {
   // An expired session answers with the login page at the asked URL: its form posts to Login.aspx.
   const loginForm = page.doc.all('form').some(f => /^_?login(?:sso)?\.aspx$/i.test(urlsplit(f.attr('action', '') || '').path.split('/').pop()));
   if (urlsplit(page.url).path.toLowerCase().endsWith('/login.aspx') || loginForm) throw new ProtocolError('Service Center login required or session expired', 'SC_AUTH_EXPIRED');
+  if (['permission denied', 'access denied'].includes(fold(heading(page))))
+    throw new ProtocolError('Service Center denied access to this resource; no identity or permissions were changed.', 'SC_PERMISSION_DENIED');
   // Feedback may echo a password/property value. Never return raw server feedback.
   if (errors(page).length) throw new ProtocolError('Service Center reported a validation/permission error');
   return page;
@@ -1183,6 +1211,42 @@ export class Client {
     return { file, size: body.length, sha256: sha256(body) };
   }
 
+  async integrationLogDetail({ requestKey, action, moduleId = null }) {
+    if (!/^[A-Za-z0-9_-]{8,100}$/.test(requestKey ?? '') || typeof action !== 'string' || !action.trim() || action.length > 200
+        || /[\r\n]/.test(action) || moduleId !== null && !/^[1-9][0-9]*$/.test(String(moduleId)))
+      throw new ProtocolError('integration-log-detail requires requestKey, exact logAction and an optional numeric moduleId.');
+    let event = { requestKey, action, ...(moduleId !== null ? { moduleId: String(moduleId) } : {}) };
+    try {
+      const trace = await this.trace(requestKey, 5000);
+      if (!trace.logs.complete) return payloadFailure('SC_INTEGRATION_EVENT_INCOMPLETE', 'incomplete-list', event, 'The request-event listing is incomplete.');
+      const events = trace.logs.rows.filter(r => r.fields.Element === action && /^(REST|SOAP) \((Consume|Expose)\)$/.test(r.fields['Event Type'])
+        && (moduleId === null || !r.links.length || r.links.some(l => new URL(l.href, trace.logs.source).searchParams.get('EspaceId') === String(moduleId))));
+      if (!events.length) return payloadFailure('SC_INTEGRATION_EVENT_NOT_FOUND', 'event-not-found', event, 'The request log contains no matching integration action.');
+      const instant = events.map(r => r.fields['Time of Event']).sort().at(-1);
+      const filters = { application: '__ossli_all', module: '__ossli_all', type: '__ossli_all', server: '', action, since: instant, until: instant };
+      const listing = await this.logs('integration', 5000, filters, { exportAll: true });
+      if (!listing.export?.file || listing.truncated) return payloadFailure('SC_INTEGRATION_EVENT_INCOMPLETE', 'incomplete-list', event,
+        'The complete native export is required to bind this row to the request key.');
+      const selected = selectIntegrationRecord(listing.rows, { requestKey, action, moduleId, instant });
+      if (selected.ok === false) return selected;
+      event = selected;
+      // Session filters are mutable. Reapply every selector immediately before
+      // reading the native row; never trust a prior call's persisted filter.
+      const original = await this.get(LOG_PAGES.integration);
+      const [filter, updates] = this.logFilters('integration', original, filters);
+      const page = await this.click(original, filter, updates);
+      const matched = exactIntegrationRow(page, event);
+      if (matched.ok === false) return matched;
+      const control = integrationPayloadControl(page, matched.row, event);
+      if (control.ok === false) return control;
+      return { ...integrationPayloadPage(await this.get(control.url), event), observedAt: utc() };
+    } catch (error) {
+      if (error.code === 'SC_PERMISSION_DENIED') return payloadFailure('SC_PERMISSION_DENIED', 'permission-denied', event,
+        'The authenticated principal was denied access to the native resource. No permissions or identity were changed.');
+      throw error;
+    }
+  }
+
   async errorDetail(errorId) {
     if (!/^[A-Za-z0-9_-]{1,100}$/.test(errorId)) throw new ProtocolError('Invalid error ID');
     const page = await this.get('Show_Error.aspx?Error_Id=' + errorId);
@@ -1337,6 +1401,11 @@ export class Client {
   }
 
   async verify(receipt, journal, value = null) {
+    const result = await this.verifyState(receipt, journal, value);
+    return receipt.identity?.action === 'timer-run' ? timerRunOutcome(result) : result;
+  }
+
+  async verifyState(receipt, journal, value = null) {
     const identity = receipt.identity;
     if (identity.host !== this.vault.host) throw new ProtocolError('Receipt belongs to another host');
     const action = identity.action;
@@ -1366,6 +1435,9 @@ export class Client {
       const errors = await observeTimerErrors(comparison, identity, id => this.errorDetail(id));
       const observation = { ...comparison, ...errors };
       const persisted = journal.recordTimerObservation(receipt, observation);
+      if (comparison.executionObserved === true && UNSURE.includes(receipt.state) && journal.rawState(receipt.operationId) !== 'sending')
+        journal.resolve(receipt, 'confirmed', 'A new execution of this exact timer was observed after the baseline; the triggering writer is not identified.',
+          { observed: { newRuns: comparison.newRuns } });
       return { ...receipt, ...observation, timerObservation: persisted, replayed: false };
     }
     else if (action === 'timer-schedule') {
@@ -1387,7 +1459,19 @@ export class Client {
     } else {
       const fresh = await this.detail(identity.moduleId, 'timers', identity.name);
       const expected = ACTIONS[action === 'timer-activate' ? 'timer-deactivate' : 'timer-activate'];
-      try { button(fresh, expected); confirmed = true; } catch (error) { if (!(error instanceof ProtocolError)) throw error; confirmed = false; }
+      try { button(fresh, expected); confirmed = true; } catch (error) {
+        if (!(error instanceof ProtocolError)) throw error;
+        confirmed = false;
+        // A completed synchronous toggle can be reconciled from the exact opposite state. Never release an in-flight send.
+        const opposite = ACTIONS[action];
+        if (opposite && receipt.cause === 'Expected one available control: ' + expected.join('/')) {
+          button(fresh, opposite);
+          if (journal.rawState(receipt.operationId) !== 'sending' && UNSURE.includes(receipt.state)) {
+            journal.resolve(receipt, 'not-executed', 'The completed toggle did not establish its desired state; the opposite action is still available',
+              { observed: { availableAction: opposite[0] } });
+          }
+        }
+      }
     }
     if (confirmed) journal.reconcile(receipt);
     return { ...receipt, observedDesiredState: confirmed, replayed: false };
@@ -1402,11 +1486,11 @@ export class Client {
   async resolveTimerRun(receipt, journal, now = Date.now()) {
     const { moduleId, name } = receipt.identity;
     const out = extra => ({ ...receipt, ...extra, replayed: false });
-    if (!UNSURE.includes(receipt.state)) return out({ verification: `This receipt is ${receipt.state}; nothing to resolve` });
+    if (!UNSURE.includes(receipt.state) && receipt.state !== 'accepted') return out({ verification: `This receipt is ${receipt.state}; nothing to resolve` });
     const listing = await this.resourceListing(moduleId, 'timers');
     const names = listing.rows.flatMap(r => r.links).map(a => a.name);
     const count = names.filter(n => n === name).length;
-    if (count === 0 && !listing.truncated) {
+    if (count === 0 && !listing.truncated && UNSURE.includes(receipt.state)) {
       const resolved = journal.resolve(receipt, 'obsolete', `the timer ${name} is not in the complete timer listing of module ${moduleId} (deleted or renamed): this Run Now has nothing left to run`,
         { observed: { timers: names.length, source: listing.source ?? null } });
       return out({ ...resolved, observedDesiredState: false });
@@ -1419,11 +1503,11 @@ export class Client {
     const age = now - Date.parse(receipt.createdAt);
     const running = /\b(?:running|executing|in progress)\b/i.test(observed.status ?? '');
     if (before !== undefined && lastRun && !NEVER.test(lastRun) && fold(lastRun) !== fold(strip(before ?? ''))) {
-      const resolved = journal.resolve(receipt, 'confirmed', `Last Run of ${name} moved from ${repr(before ?? 'never')} to ${repr(lastRun)} after the attempt`, { observed });
-      return out({ ...resolved, observed, observedDesiredState: true });
+      const resolved = UNSURE.includes(receipt.state) ? journal.resolve(receipt, 'confirmed', `Last Run of ${name} moved from ${repr(before ?? 'never')} to ${repr(lastRun)} after the attempt`, { observed }) : receipt;
+      return out({ ...resolved, observed, observedDesiredState: true, executionObserved: true, attributedToRequest: false, executionCompleted: null });
     }
     const unchanged = before !== undefined ? fold(lastRun) === fold(strip(before ?? '')) : NEVER.test(lastRun);
-    if (unchanged && !running && age >= TIMER_RUN_GRACE_MS) {
+    if (unchanged && !running && age >= TIMER_RUN_GRACE_MS && UNSURE.includes(receipt.state)) {
       const resolved = journal.resolve(receipt, 'not-executed', `${Math.round(age / 60000)} min after the attempt Last Run of ${name} is still ${repr(lastRun || 'never')}`
         + `${before !== undefined ? ' as before the send' : ''} and the timer is not running: the Run Now did not run; one new Run Now may be sent`, { observed });
       return out({ ...resolved, observed, observedDesiredState: false });
@@ -1451,6 +1535,18 @@ export class Client {
     const click = await assumed(page, what, () => button(page, ACTIONS[action]));
     const form = click.ancestor('form');
     const plan = { host: this.vault.host, action, moduleId: String(moduleId), name, target: page.url, control: click.attr('name', null), execute: false };
+    if (action === 'timer-activate') {
+      const native = nativeScheduleControls(page, form);
+      const at = native ? shown(native.at).trim() : null;
+      if (at && at.split(/\s+/).some(time => !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time))) {
+        const module = timerFields(page).module ?? '<module>';
+        throw new BridgeError('TIMER_SCHEDULE_INVALID', `The native schedule of ${name} contains invalid times; activation would report success without scheduling it. Nothing was sent.`, {
+          executed: false, timer: name, currentSchedule: { at, recurrence: shown(native.recurrence) },
+          continuation: { tool: 'ssam_map', arguments: { lane: 'o11', target: module, view: 'ddl', element: name },
+            why: 'Correct the timer Schedule to native HH:mm times in the module and publish before activating it.' },
+        });
+      }
+    }
     // Run Now: the Last Run seen before the send, the reference a later verify compares with (P6).
     if (action === 'timer-run') { const fields = timerFields(page); plan.lastRunBefore = fields.lastRun ?? null; plan.statusBefore = fields.status ?? null; }
     let target = null;
@@ -1493,7 +1589,12 @@ export class Client {
     if (execute) {
       if (!userWords || !strip(userWords) || !operationId || !journal) throw new ProtocolError("Execution requires the user's words, operation-id and a durable journal");
       const existing = journal.lookup(operationId, identity);
-      if (existing) return { ...existing, replayed: false, existingReceipt: true };
+      if (existing) {
+        if (action === 'timer-run') return journal.rawState(operationId) === 'sending'
+          ? timerRunOutcome({ ...existing, existingReceipt: true, readback: { status: 'sender-active' } })
+          : { ...await this.verify(existing, journal), existingReceipt: true };
+        return { ...existing, replayed: false, existingReceipt: true };
+      }
     }
     const [plan, page, click, target] = await this.prepare(action, moduleId, name, action === 'timer-schedule' ? value : null);
     if (action === 'timer-schedule' && value !== null && value !== undefined) plan.schedule = this.scheduleRequest(target, value);
@@ -1530,7 +1631,7 @@ export class Client {
         ? timerLogSnapshot(await this.logs('timer', 1000, { timer: name }), identity, plan.target) : targetCheck; }
       catch (error) { plan.timerLogBaseline = { available: false, reason: error.code ?? 'log-read-failed' }; }
     }
-    return journal.reserve(operationId, identity, userWords, plan, null, async receipt => {
+    const result = await journal.reserve(operationId, identity, userWords, plan, null, async receipt => {
       let tracker = {};
       // Plans carry no secret; the receipt keeps the one it executed so a later verify knows what to expect.
       receipt.plan = plan;
@@ -1591,6 +1692,12 @@ export class Client {
       receipt.updatedAt = utc();
       return receipt;
     });
+    if (action !== 'timer-run') return result;
+    if (['accepted', 'accepted-unverified', 'uncertain'].includes(result.state)) {
+      try { return await this.verify(result, journal); }
+      catch (error) { return timerRunOutcome({ ...result, readback: { status: 'unavailable', code: error.code ?? 'READBACK_FAILED' } }); }
+    }
+    return timerRunOutcome(result);
   }
 
   // ---- BPT (Monitoring > Processes)

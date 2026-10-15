@@ -29,7 +29,7 @@ export function modalName(title) {
 
 // Prefix (1.2): the <title> up to the first separator, in PascalCase ASCII; otherwise the folder name.
 export function prefixFrom(title, folder) {
-  const head = String(title ?? '').split(/[|\-–—:]/)[0].trim();
+  const head = String(title ?? '').split(/[|\-–—:·•]/)[0].trim();
   const fromTitle = pascal(head);
   if (/^[A-Za-z][A-Za-z0-9]*$/.test(fromTitle)) return fromTitle;
   const fromFolder = pascal(folder);

@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import readline from 'node:readline';
 import { createNativeClientInspection, connectNativeClientInspector, redactNativeClientValue, clientInspectionEnableOptions } from '../debug-native-client-inspection.mjs';
-import { createPrivateInspectionChannel } from '../debug-private-inspection.mjs';
+import { createPrivateInspectionChannel, privateInspectionVault, PRIVATE_VAULT_CALL_TIMEOUT_MS } from '../debug-private-inspection.mjs';
 import { createNativeClientInspectionCore } from '../debug-native-client-inspection-core.mjs';
 import { createPrivateCompareSession } from '../debug-private-compare.mjs';
 import { createHash, randomBytes } from 'node:crypto';
@@ -676,8 +676,14 @@ for (const platform of ['o11','odc']) test(`${platform}: native return tree page
  s.dispose();
 });
 
-for (const platform of ['o11', 'odc']) for (const finishPaused of [false, true, 'stop']) for (const hostPrivate of [false,true])
-test(`${platform}: actual external V8 pause (${hostPrivate ? 'host private channel' : 'worker private channel'}) supports inspection and ${finishPaused === 'stop' ? 'stop command without resuming' : finishPaused ? 'private cleanup without resuming' : 'native stepping'}`, { timeout: 20000 }, async () => {
+// The real-vault cases (ODC, host channel, finished paused, Windows) call powershell.exe once per vault call: Seal+Open per
+// private read, Open per consume, Forget per invalidate/close (7 calls today; the 8th covers the non-vault work). Their
+// lease, channel expiry and test timeout cover REAL_VAULT_CALLS calls at the vault's own per-call bound, so load can fail
+// a call (vault_unavailable) but never expire the lease mid-test (1.4-3.5 s per call under load); the calls are counted.
+const REAL_VAULT_CALLS = 8, REAL_VAULT_WINDOW_MS = REAL_VAULT_CALLS * PRIVATE_VAULT_CALL_TIMEOUT_MS;
+for (const platform of ['o11', 'odc']) for (const finishPaused of [false, true, 'stop']) for (const hostPrivate of [false,true]) {
+const realVault=hostPrivate && platform==='odc' && Boolean(finishPaused) && process.platform==='win32';
+test(`${platform}: actual external V8 pause (${hostPrivate ? 'host private channel' : 'worker private channel'}) supports inspection and ${finishPaused === 'stop' ? 'stop command without resuming' : finishPaused ? 'private cleanup without resuming' : 'native stepping'}`, { timeout: realVault ? REAL_VAULT_WINDOW_MS + 20000 : 20000 }, async () => {
   const moduleUrl = new URL('../debug-native-client-inspection.mjs', import.meta.url).href;
   const source = `import vm from 'node:vm'; import readline from 'node:readline';
     import {createNativeClientInspection,openNativeClientInspector} from ${JSON.stringify(moduleUrl)};
@@ -700,9 +706,9 @@ test(`${platform}: actual external V8 pause (${hostPrivate ? 'host private chann
     const events = [], waiters = [];
     const sealed=new Map();let nextRef=0;
     const hostChannel={publish(e){const reference=String(++nextRef);sealed.set(reference,structuredClone(e));return {reference};},consume(d,c){const e=sealed.get(d.reference);if(!e||['sessionId','stop','generation','frame'].some(k=>e.context[k]!==c[k]))throw new Error('stale');return e.value;},invalidate(){sealed.clear();return {completed:true,pending:0};},close(){return this.invalidate();}};
-    const realVault=hostPrivate && platform==='odc' && finishPaused && process.platform==='win32';
-    const channel=realVault ? createPrivateInspectionChannel({binding:{lane:'odc',runtimeUrl:'https://fixture.outsystems.app/Fixture/',app:'Fixture',sessionId:'a'.repeat(32),module:'Fixture',moduleKey:'A'.repeat(22)},sources:modules,expiresAt:new Date(Date.now()+60000).toISOString()}) : hostChannel;
-    driver = await connectNativeClientInspector({ ...capability, privateChannel:hostPrivate?channel:undefined, leaseMs: realVault?15000:5000, terminate: () => child.kill(),
+    let vaultCalls=0;const countedVault=(...call)=>{vaultCalls++;return privateInspectionVault(...call);};
+    const channel=realVault ? createPrivateInspectionChannel({binding:{lane:'odc',runtimeUrl:'https://fixture.outsystems.app/Fixture/',app:'Fixture',sessionId:'a'.repeat(32),module:'Fixture',moduleKey:'A'.repeat(22)},sources:modules,expiresAt:new Date(Date.now()+REAL_VAULT_WINDOW_MS).toISOString()},{vault:countedVault}) : hostChannel;
+    driver = await connectNativeClientInspector({ ...capability, privateChannel:hostPrivate?channel:undefined, leaseMs: realVault?REAL_VAULT_WINDOW_MS:5000, terminate: () => child.kill(),
       onEvent: e => { events.push(e); for (const fn of waiters.splice(0)) fn(); } });
     const waitPause = async count => { while (events.filter(e => e.kind === 'paused').length < count) await new Promise(resolve => waiters.push(resolve)); };
     child.stdin.write('run\n'); await waitPause(1);
@@ -732,6 +738,7 @@ test(`${platform}: actual external V8 pause (${hostPrivate ? 'host private chann
       await exited;
       assert.equal(output.includes('done'), false, 'cleanup must not resume the interrupted action');
       await assert.rejects(driver.command({ op: 'read', ref: second.variables[0].ref }), /stale_reference/);
+      if (realVault) assert.ok(vaultCalls > 0 && vaultCalls <= REAL_VAULT_CALLS, `${vaultCalls} real vault calls exceed the lease budget of ${REAL_VAULT_CALLS}`);
       return;
     }
     const done = once(lines, 'line'); await driver.command({ op: 'continue' });
@@ -740,6 +747,7 @@ test(`${platform}: actual external V8 pause (${hostPrivate ? 'host private chann
     assert.equal((await once(child, 'exit'))[0], 0);
   } finally { await driver?.close(); child.kill(); lines.close(); }
 });
+}
 
 for (const platform of ['o11', 'odc']) test(platform + ': exception stop reports reason exception with a redacted native type; breakpoint stops are unaffected', () => {
   const globalObject = {}, errors = new Map(); let onException = false;

@@ -8,6 +8,18 @@ const auth={host:'lab.example',user:'tester@example.test',credentialTarget:'SSAM
 function cache(options={}){return new SsoSessionCache({schedule:()=>null,cancel:()=>{},...options});}
 function cookies(){const jar=new CookieJar();jar.setCookieSync('SCSession=own-private-cookie; Path=/ServiceCenter/; Secure','https://lab.example/ServiceCenter/');jar.setCookieSync('IdToken=identity-secret; Path=/; Secure','https://id.outsystems.com/');return jar;}
 
+test('concurrent pages share a cold login and own independent jars; a failure is not replayed',async()=>{
+ const c=cache();let release,logins=0,closes=0;
+ const create=()=>{const jar=cookies();return{jar,authenticateSc:async()=>{logins++;await new Promise(r=>{release=r;});},close:async()=>{closes++;jar.removeAllCookiesSync();}};};
+ const a=c.authenticate(auth,create),b=c.authenticate(auth,create);
+ await new Promise(r=>setImmediate(r));assert.equal(logins,1);release();
+ const [first,second]=await Promise.all([a,b]);assert.equal(closes,1);
+ first.jar.removeAllCookiesSync();assert.ok(second.jar.getCookieStringSync('https://lab.example/ServiceCenter/'));assert.ok(c.get(auth));
+ let failures=0;const fail=()=>({authenticateSc:async()=>{failures++;throw Error('refused');},close:async()=>{}});
+ const results=await Promise.allSettled([c.authenticate(auth,fail),c.authenticate(auth,fail)]);
+ assert.equal(failures,1);assert.ok(results.every(r=>r.status==='rejected'));assert.equal(c.authenticating.size,0);c.clear();
+});
+
 test('cookie updates preserve cache expiry, never cross identity and retain removal',()=>{
  let time=0;const c=cache({now:()=>time,ttlMs:10}),source=cookies();c.put(auth,source);
  time=5;source.setCookieSync('SCSession=rotated-private-cookie; Path=/ServiceCenter/; Secure','https://lab.example/ServiceCenter/');
@@ -47,4 +59,17 @@ test('public reads reuse a scoped SC cookie, still resolve identity, allow only 
  assert.doesNotMatch(JSON.stringify(second),/own-private-cookie|identity-secret|SCSession/);
  expired=true;const before=reads,failed=await call();assert.equal(failed.ok,false);assert.equal(failed.code,'SC_AUTH_EXPIRED');assert.equal(reads,before+2);assert.equal(logins,2);assert.equal(closes,2);assert.equal(profiles,3);assert.equal(c.entries.size,0);
  expired=false;assert.equal((await call()).ok,true);assert.equal(logins,3);assert.equal(closes,3);c.clear();
+});
+
+test('a layout refusal retains the valid authenticated session for the next call',async()=>{
+ let logins=0,unknown=false;
+ const c=cache(),deps={ssoCache:c,present:async()=>true,
+  locate:async()=>({...auth.bridge,supports:async()=>true,capabilities:async()=>new Set(['sc_http:studioSession']),session:async()=>({studio:{signedIn:true,user:auth.user}}),web:async()=>({signedIn:false})}),
+  profiles:{resolve:async()=>({ok:true,principal:auth.user,target:auth.credentialTarget})},
+  createSso:()=>{const jar=cookies();return{jar,authenticateSc:async()=>{logins++;},close:async()=>jar.removeAllCookiesSync()};},
+  send:async req=>!req.headers.Cookie?{status:302,location:'https://id.outsystems.com/community/login',setCookie:[],body:Buffer.alloc(0)}
+   :{status:200,contentType:'text/html',setCookie:[],body:unknown?Buffer.from('<main>Unexpected layout</main>'):fs.readFileSync(new URL('./fixtures/sc-pages/error-logs-1.html',import.meta.url))}};
+ const call=()=>serviceCenterTool(['logs','--host',auth.host,'--limit','1'],deps);
+ assert.equal((await call()).ok,true);unknown=true;assert.equal((await call()).ok,false);
+ assert.ok(c.get(auth));unknown=false;assert.equal((await call()).ok,true);assert.equal(logins,1);c.clear();
 });

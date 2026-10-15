@@ -1,0 +1,89 @@
+{
+  "source": "recorded",
+  "records": 8,
+  "bytes": 16393,
+  "evidence": [
+    {
+      "type": "user",
+      "timestamp": "2026-10-13T14:09:26.816Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "user",
+      "timestamp": "2026-10-13T14:09:35.855Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "user",
+      "timestamp": "2026-10-13T14:09:35.922Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "user",
+      "timestamp": "2026-10-13T14:09:39.040Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "user",
+      "timestamp": "2026-10-13T14:10:04.060Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "system",
+      "timestamp": "2026-10-13T14:10:12.778Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "user",
+      "timestamp": "2026-10-13T14:12:41.289Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "user",
+      "timestamp": "2026-10-13T14:14:13.981Z",
+      "started": null,
+      "completed": null,
+      "duration": null,
+      "usage": null,
+      "tools": [],
+      "markers": []
+    }
+  ],
+  "shrunk": [],
+  "removed": []
+}

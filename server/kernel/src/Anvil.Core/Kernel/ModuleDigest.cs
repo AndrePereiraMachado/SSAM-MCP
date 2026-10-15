@@ -67,6 +67,14 @@ public sealed class ModuleDigest
         };
     }
 
+    // The digest text of every action with a flow, by key, as the digest renders it (indentation of its block removed).
+    internal static IReadOnlyDictionary<string, string> ActionTexts<T>(T root, ModelReader<T> reader, string lane) where T : class
+    {
+        var writer = new DigestWriter<T>(root, reader, lane, "", 0);
+        writer.Write();
+        return writer.ActionTexts;
+    }
+
     // Cold reads (kernel CLIs, builder): the stored digest of these bytes, else built from the model the caller loads and
     // stored. load is called only on a miss; the answer names the file and whether it was built.
     public static JsonObject Ensure(ModuleIndexStore store, string file, Func<byte[], string, ModuleDigest> load)
@@ -224,6 +232,9 @@ internal sealed class DigestWriter<T>(T root, ModelReader<T> reader, string lane
         public readonly List<T> Calls = [];
     }
     private readonly List<ActionInfo> actions = [];
+    // The text of every action rendered with a flow, by key, without the indentation of the block that holds it (the
+    // flow reading, ModuleFlow, compares its size per action with it).
+    internal readonly Dictionary<string, string> ActionTexts = new(StringComparer.Ordinal);
     private readonly Stack<ActionInfo> owners = new();
     private string scope = "", sectionId = "";
     private int records;
@@ -636,7 +647,9 @@ internal sealed class DigestWriter<T>(T root, ModelReader<T> reader, string lane
                 }
             foreach (var child in reader.ChildrenOf(action).Where(c => reader.KindOf(c) == "UILifeCycleEvent")) { Cover(child); Arguments(child); }
             foreach (var line in FlowLines(action)) text.Append('\n').Append(indent).Append("  ").Append(line);
-            return text.ToString();
+            var result = text.ToString();
+            ActionTexts[reader.KeyOf(action)] = indent.Length == 0 ? result : result.Replace("\n" + indent, "\n");
+            return result;
         } finally { owners.Pop(); }
     }
 

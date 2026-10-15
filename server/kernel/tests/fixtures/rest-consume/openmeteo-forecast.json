@@ -1,0 +1,33 @@
+{
+ "latitude": -23.55,
+ "longitude": -46.625,
+ "generationtime_ms": 0.0431,
+ "utc_offset_seconds": -10800,
+ "timezone": "America/Sao_Paulo",
+ "elevation": 760,
+ "current_units": {
+  "time": "iso8601",
+  "temperature_2m": "°C",
+  "wind_speed_10m": "km/h"
+ },
+ "current": {
+  "time": "2026-10-13T15:00:00",
+  "interval": 900,
+  "temperature_2m": 24.3,
+  "wind_speed_10m": 11.2
+ },
+ "hourly": {
+  "time": [
+   "2026-10-13T00:00:00",
+   "2026-10-13T01:00:00"
+  ],
+  "temperature_2m": [
+   19.1,
+   18.7
+  ],
+  "precipitation_probability": [
+   10,
+   5
+  ]
+ }
+}

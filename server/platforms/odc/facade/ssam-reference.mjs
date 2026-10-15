@@ -21,6 +21,8 @@ import { closest } from './tool-input.mjs';
 import { refusalFields } from './refusal-problems.mjs';
 import { resolvePatchedJob, jobIdentity, withNamedPatches } from './job-patch.mjs';
 import { TYPED_NULLS } from './builtin-functions.mjs';
+import { grammarCard } from './ssam-code.mjs';
+import { generatorApproval, generatorShown, jobOffered } from './generators.mjs';
 
 // The base a job names ({"base": "..."}), or null: a job without one is checked alone (the CLI's default fixture is not
 // the module the job was written for).
@@ -53,13 +55,15 @@ export const API_OP_LINES = Object.freeze({
   'html-visual': 'fragment form of op html: HTML inside an existing parent widget (parent with file or html)',
   verbs: 'the raw job verbs (create, set, link...) and the reference grammar',
   rest: 'a consumed REST API: client, methods and structures, or an OpenAPI document',
+  'rest-consume': 'generator: a consumed REST API from its URLs and JSON samples in one call (client, structures, public structures, mapping, service actions, exception; auth bearer|basic|apiKey|oauth2 with empty secret settings, headers, callbacks)',
   'rest-expose': 'an exposed REST API: service and methods',
   soap: 'a consumed SOAP web service from its WSDL (O11 only)',
   agent: 'an AI agent (ODC): model, messages, inputs and tools',
   prototype: 'an approved prototype folder imported in one call as native screens, theme, data and logic',
+  'entity-actions': 'the standard actions of the data model, generated from the module: list, read, save, delete and service wrappers per entity',
 });
 export const API_OPS = Object.keys(API_OP_LINES);
-const INLINE_LIMIT = 48 * 1024;
+const INLINE_LIMIT = 8192;
 const FIND_CAP = 50;
 
 const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value.ok === false ? { isError: true } : {}) });
@@ -348,7 +352,12 @@ function exampleAnswer(root, lane, query, sized) {
     const matches = [];
     for (const e of listExamples(root, lane)) {
       let description = '';
-      if (e.kind === 'job' || e.kind === 'example') { try { description = JSON.parse(fs.readFileSync(e.file, 'utf8').replace(/^﻿/, '')).description ?? ''; } catch { continue; } }
+      if (e.kind === 'job' || e.kind === 'example') {
+        let job; try { job = JSON.parse(fs.readFileSync(e.file, 'utf8').replace(/^﻿/, '')); } catch { continue; }
+        // A proof job of a pending generator is listed only when the search names that generator (the generator gate).
+        if (!jobOffered(job, q.find)) continue;
+        description = job.description ?? '';
+      }
       if (e.kind === 'matrix') description = `coverage matrix of the ${lane} proven examples (${MATRIX_DOCS[lane]})`;
       const text = fold(e.id + ' ' + description);
       if (words.length && words.every(w => text.includes(w))) matches.push({ id: e.id, kind: e.kind, ...(description ? { description: description.slice(0, 300) } : {}) });
@@ -393,6 +402,7 @@ function odcRecipe(root, query) {
     const name = f.slice(0, -5); let text; let job;
     try { text = fs.readFileSync(path.join(dir, f), 'utf8').replace(/^﻿/, ''); job = JSON.parse(text); } catch { continue; }
     const exact = name === q.find.trim();
+    if (!exact && !jobOffered(job, q.find)) continue;
     if (!exact && !(words.length && words.every(w => fold(name + ' ' + (job.description ?? '') + ' ' + text).includes(w)))) continue;
     const ops = Array.isArray(job.ops) ? job.ops : [];
     const take = Math.min(remaining, ops.length); remaining -= take;
@@ -486,7 +496,7 @@ function nextLookup(lane, kind, query) {
   const asked = typeof query === 'object' ? query?.op : undefined;
   if (name && kind === 'api' && lane === 'o11' && asked === undefined) return again(lane, kind, { op: 'native', type: name }, 'the type as loaded in the installed Studio');
   if (kind === 'api' && typeof asked === 'string' && asked !== 'verbs')
-    return again(lane, kind, { op: 'verbs', ...(name ? { name } : {}) }, 'the job verbs (create, set, link...) and the reference grammar; the grammars are ' + API_OPS.filter(op => op !== 'verbs').join(', '));
+    return again(lane, kind, { op: 'verbs', ...(name ? { name } : {}) }, 'the job verbs (create, set, link...) and the reference grammar; the grammars are ' + API_OPS.filter(op => op !== 'verbs' && generatorShown(generatorApproval(op)?.op === op ? op : null, String(query?.op ?? ''))).join(', '));
   return doctor(lane, 'check the lane CLI and its Studio installation');
 }
 
@@ -517,16 +527,50 @@ function cliRefusal(lane, kind, query, envelope, verbTable = null) {
   const unknown = unknownOpOf(kind, query, envelope);
   if (unknown) {
     const list = text => text.split(',').map(s => s.trim()).filter(Boolean);
-    const allowed = list(unknown[3]); const verbs = list(unknown[4]);
+    // An op that is a pending generator is neither suggested nor listed for a guessed op (named literally, it is).
+    const generatorOp = op => (generatorApproval(op)?.op === op ? op : null);
+    const shown = op => generatorShown(generatorOp(op), unknown[1]);
+    const allowed = list(unknown[3]).filter(shown); const verbs = list(unknown[4]).filter(shown);
     const verbLine = op => Object.entries(verbTable && typeof verbTable === 'object' ? verbTable : {}).find(([verb]) => verb.toLowerCase() === op.toLowerCase())?.[1];
-    const candidates = opCandidates(unknown[1], [...new Set([...allowed, ...verbs])], unknown[2] ?? null).map(op => ({ op,
+    const candidates = opCandidates(unknown[1], [...new Set([...allowed, ...verbs])], unknown[2] && shown(unknown[2]) ? unknown[2] : null).map(op => ({ op,
       line: API_OP_LINES[op] ?? verbLine(op) ?? (verbs.includes(op) ? `job verb ${op}: api --op ${op} answers its line of the verb table` : `api --op ${op}`) }));
     if (candidates.length)
       return refusal('UNKNOWN_OP', `unknown op '${unknown[1]}'; candidates: ${candidates.map(c => c.op).join(', ')} (candidates[] has the line of each)`,
         again(lane, kind, { op: candidates[0].op, ...(query.name !== undefined ? { name: query.name } : {}) }, `the contract of the first candidate, ${candidates[0].op}`),
         { op: unknown[1], candidates, allowed });
+    return refusal('CLI_REFUSED', `unknown op '${unknown[1]}'; allowed: ${allowed.join(', ')}`, nextLookup(lane, kind, query));
   }
   return refusal('CLI_REFUSED', firstLine(envelope.error), nextLookup(lane, kind, query));
+}
+
+// The ssam_code part a lookup names, 'all' for the code form in general, or null (owner session 2026-10-12: {op:"ddl"}
+// answered "unknown op" and "ssam-text ddl syntax" notFound). {op:"logic"|"html"} stay the kernel's JSON op grammars.
+const CODE_OPS = { ddl: 'ddl', 'ssam-ddl': 'ddl', sql: 'ddl', flow: 'logic', 'ssam-flow': 'logic', pseudocode: 'logic', 'ssam-html': 'html',
+  code: 'all', 'ssam-code': 'all', ssam_code: 'all', 'ssam-text': 'all', text: 'all' };
+// Only a lookup of a grammar is answered with the card: api {op} (or the bare name of a code form), and the free words of
+// example/recipe that name ssam_code (or ask the syntax of ddl/flow/html) and are not a path or an example's id. A check
+// (check-job, check-delivery, verify-message) and the team rules are never answered with it: their ok:true read as an
+// approval and the job was never checked (finding 2026-10-12).
+const CODE_FREE_KINDS = ['example', 'recipe'];
+export function codePartOf(kind, query) {
+  const q = typeof query === 'string' ? { text: query } : query && typeof query === 'object' ? query : {};
+  if (kind === 'api') {
+    if (typeof q.op === 'string' && CODE_OPS[q.op.toLowerCase()]) return CODE_OPS[q.op.toLowerCase()];
+    const bare = typeof q.text === 'string' ? q.text.trim().toLowerCase() : '';
+    return /^(ddl|ssam-ddl|ssam-flow|ssam-html|ssam-code|ssam_code|ssam-text)$/.test(bare) ? CODE_OPS[bare] : null;
+  }
+  if (!CODE_FREE_KINDS.includes(kind)) return null;
+  const words = [q.text, q.find, q.name, q.id].filter(v => typeof v === 'string').join(' ').toLowerCase();
+  if (!words || /[\\/]|\.(json|html|oml|ddl|flow|txt)\b/.test(words)) return null;
+  // An example's or recipe's id ("spec-ddl-roundtrip") is one token with hyphens: it names a file, never the grammar.
+  if (/^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(words.trim()) && !/^ssam-(text|code|ddl|flow|html)$/.test(words.trim())) return null;
+  const named = /\bssam[-_ ]?(text|texto|code|codigo|código)\b|\bssam-(ddl|flow|html)\b/.test(words)
+    || (/\b(syntax|sintaxe|grammar|gramatica|gramática)\b/.test(words) && /\b(ddl|flow|html|logic|logica|lógica|pseudo\w*)\b/.test(words));
+  if (!named) return null;
+  if (/\b(ddl|sql)\b/.test(words)) return 'ddl';
+  if (/\b(flow|logic|logica|lógica|pseudo\w*)\b/.test(words)) return 'logic';
+  if (/\bhtml\b/.test(words)) return 'html';
+  return 'all';
 }
 
 export function registerSsamReference(server, deps = {}) {
@@ -551,11 +595,13 @@ export function registerSsamReference(server, deps = {}) {
   const outDir = lane => (deps.outDir ? path.join(deps.outDir, lane) : path.join(local(lane), 'reference'));
   function sized(lane, data) {
     const text = JSON.stringify(data ?? null);
-    if (text.length <= INLINE_LIMIT) return { data };
+    const size = Buffer.byteLength(text, 'utf8');
+    if (size <= INLINE_LIMIT) return { data };
     const file = path.join(outDir(lane), createHash('sha256').update(text).digest('hex').slice(0, 16) + '.json');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, text);
-    return { file, bytes: text.length, preview: Array.isArray(data) ? { count: data.length, first: data.slice(0, 20) } : { keys: Object.keys(data ?? {}).slice(0, 40) } };
+    return { file, bytes: size, preview: Array.isArray(data) ? { count: data.length, first: data.slice(0, 20) } : { keys: Object.keys(data ?? {}).slice(0, 40) },
+      continuation: { tool: 'ssam_evidence', arguments: { file } } };
   }
 
   // A contract of `api --op` (or a native description) by argv, read once per server: api {op, name} reads the asked op
@@ -676,6 +722,11 @@ export function registerSsamReference(server, deps = {}) {
   }
 
   async function reference({ lane, kind, query }) {
+    // The code parts of ssam_code (ddl, logic, html; also flow and the ssam-* form names): their grammar card, from any kind.
+    const part = codePartOf(kind, query);
+    if (part) return { ...grammarCard(part === 'all' ? null : part, lane), kind, query,
+      note: 'the code form of ' + part + ' (ssam_code); the JSON op grammars stay at api {op:"spec"|"logic"|"html"}',
+      continuation: { tool: 'ssam_code', arguments: { lane, action: 'grammar', ...(part === 'all' ? {} : { part }) }, why: 'the same card from the tool that reads and writes it' } };
     if (lane === 'odc' && !ODC_KINDS.includes(kind))
       return refusal('KIND_NOT_IN_LANE', `the ODC CLI (anvil-odc) has no ${kind}; it answers ${ODC_KINDS.join(', ')}`,
         again('o11', kind, query, 'the O11 lane answers it from the same kernel, for Service Studio 11; confirm it applies to ODC'));
@@ -789,7 +840,9 @@ export function registerSsamReference(server, deps = {}) {
       + 'rules "all" | "<section number, words of a heading or of the text>" | "padroes" | {doc?: "time"|"padroes", section?}: the team rules to read '
       + 'before generating or changing modules (how to work, standards, platform lessons; padroes: the 35 OutSystems padrões rules), '
       + 'the same text on both lanes. Lane odc answers api (a name is described by op native), check-job, verify-message, recipe, '
-      + 'example and rules. Static answers are cached for the session.',
+      + 'example and rules. Static answers are cached for the session. The module as code (ssam_code: parts ddl, logic, html): '
+      + 'api {op:"ddl"|"flow"|"ssam-html"|"code"} or a query naming ssam_code, ssam-text or the DDL answers the ssam_code grammar card '
+      + '(syntax and a from-scratch example) on both lanes.',
     inputSchema: z.object({
       lane: z.enum(['o11', 'odc']),
       kind: z.enum(REFERENCE_KINDS),

@@ -5,7 +5,7 @@ import { CREDENTIAL, createPowerShellRunner } from './vault.mjs';
 import { AuthRequired, ProtocolError } from './errors.mjs';
 import { readOptions } from '../read-budget.mjs';
 
-const PROFILE = /^SSAM\/O11\/([a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)\/ServiceCenter(?:\/Profiles\/[a-f0-9]{64}\/[a-f0-9-]{36})?$/;
+const PROFILE = /^SSAM\/(?:O11\/([a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)\/ServiceCenter|ODC3\/([a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)\/Portal)(?:\/Profiles\/[a-f0-9]{64}\/[a-f0-9-]{36})?$/;
 
 export const IDENTITY_CONFIG_PS = String.raw`
 $metadata = [Net.HttpWebRequest]::Create('https://id.outsystems.com/community/moduleservices/auth/configs')
@@ -20,7 +20,7 @@ try {
 export const IDENTITY_SEND_PS = String.raw`
 $web = [Net.HttpWebRequest]::Create('https://cognito-idp.us-east-1.amazonaws.com/')
 $web.Method = 'POST'; $web.AllowAutoRedirect = $false; $web.KeepAlive = $false
-$web.Timeout = 15000; $web.ReadWriteTimeout = 15000
+$web.Timeout = 45000; $web.ReadWriteTimeout = 45000
 $web.ContentType = 'application/x-amz-json-1.1'
 $web.Headers['X-Amz-Target'] = 'AWSCognitoIdentityProviderService.InitiateAuth'
 $payload = @{ AuthFlow = 'USER_PASSWORD_AUTH'; ClientId = $provider.configs.amplifyClientId; AuthParameters = @{ USERNAME = $user; PASSWORD = $secret } } | ConvertTo-Json -Compress -Depth 5
@@ -99,11 +99,13 @@ try {
 const CODES = new Set(['IDENTITY_PROVIDER_UNSUPPORTED', 'AUTH_REQUIRED', 'AUTH_PRINCIPAL_MISMATCH', 'IDENTITY_LOGIN_REJECTED', 'IDENTITY_LOGIN_UNCERTAIN', 'IDENTITY_TIMEOUT', 'IDENTITY_PROVIDER_UNAVAILABLE', 'IDENTITY_CHALLENGE_REQUIRED', 'IDENTITY_RESPONSE_INVALID']);
 export async function vaultIdentityLogin(target, { host, principal, expectedClientId = null }, { run = null, script = identityScript() } = {}) {
   const match = PROFILE.exec(target ?? '');
-  if (!match || match[1] !== host || typeof principal !== 'string' || !principal.trim() || principal.length > 256 || /[\r\n]/.test(principal))
-    throw new ProtocolError('Identity authentication requires a same-host Service Center profile and its expected principal.');
+  if (!match || (match[1] ?? match[2]) !== host || typeof principal !== 'string' || !principal.trim() || principal.length > 256 || /[\r\n]/.test(principal))
+    throw new ProtocolError('Identity authentication requires a same-host Service Center or ODC Portal profile and its expected principal.');
   let answer;
   const budget = readOptions('authentication');
-  run ??= createPowerShellRunner({ timeoutMs: Math.min(29000, budget.timeoutMs ?? 29000) });
+  // Startup + provider discovery + the 45 s credential exchange must fit in
+  // the caller's budget. The old 29 s process limit killed valid cold logins.
+  run ??= createPowerShellRunner({ timeoutMs: Math.min(65000, budget.timeoutMs ?? 65000) });
   try { answer = await run(script, { target, principal, ...(expectedClientId ? { expectedClientId } : {}) }); }
   catch { throw new AuthRequired('IDENTITY_LOGIN_UNCERTAIN', 'Identity authentication did not return a result; no automatic retry was attempted.'); }
   if (answer?.ok !== true) {

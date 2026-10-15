@@ -20,24 +20,29 @@ public static class SpecExpander
 {
     private static readonly Dictionary<string, string[]> Shapes = new()
     {
-        ["data"] = ["static", "entities", "clientEntities", "structures"],
-        ["static"] = ["name", "public", "description", "attributes", "records"],
-        ["entity"] = ["name", "public", "readOnly", "description", "label", "id", "idType", "attributes", "updateBehavior", "indexes"],
-        ["attribute"] = ["name", "type", "mandatory", "length", "default", "description", "label", "deleteRule"],
-        ["structure"] = ["name", "public", "description", "attributes"],
-        ["structureAttribute"] = ["name", "type", "mandatory", "length", "label", "default", "description"],
+        ["data"] = ["static", "entities", "clientEntities", "structures", "ddl", "basedOn"],
+        ["static"] = ["name", "public", "description", "attributes", "records", "folder", "labelAttribute", "activeAttribute", "restrictedInQueries"],
+        ["entity"] = ["name", "public", "readOnly", "description", "label", "id", "idType", "attributes", "updateBehavior", "indexes", "folder", "labelAttribute"],
+        ["attribute"] = ["name", "type", "mandatory", "length", "decimals", "default", "description", "label", "deleteRule", "nameInJSON"],
+        ["structure"] = ["name", "public", "description", "attributes", "folder"],
+        ["structureAttribute"] = ["name", "type", "mandatory", "length", "decimals", "label", "default", "description", "nameInJSON"],
         ["record"] = ["name", "id", "label", "order"],
         ["index"] = ["name", "unique", "attributes"]
     };
     public static JsonObject Schema() => new()
     {
         ["op"] = "spec", ["shapes"] = System.Text.Json.JsonSerializer.SerializeToNode(Shapes),
-        ["rules"] = "Closed keys. Static records also accept the names of custom attributes declared on their entity. Entity id defaults to Long Integer; client ids have no AutoNumber. Static entity ids are Integer and never AutoNumber: each record gets its Id from `id` (positive, unique in the entity) or, when omitted, its position 1..n. Types and identifiers are declared before fields. Long Text attributes default to Text Length 2000000. Server entities default to Optimized (Changed Attributes) update behavior unless `updateBehavior` is given."
+        ["rules"] = "Closed keys (a key starting with '_' is a note and is ignored). `ddl` instead of the other sections: the data text, see `ddl`. `folder` (into that folder, created when missing), `labelAttribute`/`activeAttribute`, `restrictedInQueries` (ODC static entity), `decimals` and `nameInJSON` (attributes). Static records also accept the names of custom attributes declared on their entity. Entity id defaults to Long Integer; client ids have no AutoNumber. Static entity ids are Integer and never AutoNumber: each record gets its Id from `id` (positive, unique in the entity) or, when omitted, its position 1..n. Types and identifiers are declared before fields. Long Text attributes default to Text Length 2000000. Server entities default to Optimized (Changed Attributes) update behavior unless `updateBehavior` is given.",
+        // The data text (DL2 of the plan "Texto do SSAM") has its own key: an answer that cites the rules of the op does not carry it,
+        // the text route data.ddl does.
+        ["ddl"] = "`ddl` (alone) is the module's data text as `ssam_map view:\"ddl\"` reads it (ssam-ddl/1): send only the statements that change, each as read with its `-- @key`; a statement without a key is new, the same key with another name is a rename, an attribute or a record left out of a statement sent whole is deleted, `drop <what> <Name>; -- @key` deletes an element; `basedOn` (needed with any `-- @key`) is the sha256 of the read or the nextBasedOn of a receipt (merged three ways). "
+            + "What the platform fills may be left out (the receipt notes each fill): the identifier is always required; a static entity is `Id Integer identifier required` (never auto, no index: one is left out after its values are checked), Label and Order only when wanted (left out of a new one's attributes, it has none; a kept one's statement that leaves out its Label or Order while records have values is refused with the line as read, `order none` / `label none` deletes it); "
+            + "a static record may leave out Id (the next free integer: its position in a new entity), Label (its name), Order (its position) and a required attribute with a default; a kept record that leaves them out keeps its values; a required value nothing gives is refused with its line."
     };
     private static void Keys(JsonObject value, string shape, IEnumerable<string>? extra = null)
     {
         var allowed = Shapes[shape].Concat(extra ?? []).ToArray();
-        var unknown = value.Select(kv => kv.Key).Except(allowed, StringComparer.Ordinal).ToArray();
+        var unknown = value.Select(kv => kv.Key).Where(k => !k.StartsWith('_')).Except(allowed, StringComparer.Ordinal).ToArray();
         if (unknown.Length != 0) throw new InvalidOperationException($"spec {shape}: unknown keys {string.Join(", ", unknown)}; allowed: {string.Join(", ", allowed)}");
     }
 
@@ -49,6 +54,9 @@ public static class SpecExpander
     public static List<JsonObject> Expand(JsonObject data, List<(string Pointer, string From, string To)>? rewrites)
     {
         Keys(data, "data");
+        // The data text (DL2): without the module only what it creates is known (the spec of the new types and the creates of
+        // new parts of kept elements); the apply compiles it against the module (ModelSession.DdlSpec).
+        if (data["ddl"] != null) return DdlCreation(data).Expanded;
         var ops = new List<JsonObject>();
         _rewrites = rewrites;
         try
@@ -99,6 +107,8 @@ public static class SpecExpander
             extra.Add(an);
             Attribute(ops, "$" + name, name, ao, create: an is not ("Id" or "Label" or "Order"), at: $"{_at}/attributes/{k}");
         }
+        Placement(ops, name, s);
+        if (s["restrictedInQueries"]?.GetValue<bool>() is { } restricted) ops.Add(Set("$" + name, "IsRestrictedInQueries", restricted));
         var types = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var x in attributes.OfType<JsonObject>()) if (x["name"]?.ToString() is { } n) types[n] = x["type"]?.ToString() ?? "Text";
         var i = 0;
@@ -146,6 +156,7 @@ public static class SpecExpander
         else if (!client) ops.Add(Set("$" + name, "UpdateBehavior", "Optimized"));
         var attributes = e["attributes"]?.AsArray() ?? new JsonArray();
         for (var k = 0; k < attributes.Count; k++) Attribute(ops, "$" + name, name, attributes[k]!.AsObject(), at: $"{_at}/attributes/{k}");
+        Placement(ops, name, e);
         foreach (var index in e["indexes"]?.AsArray() ?? new JsonArray())
         {
             var ix = index!.AsObject();
@@ -172,9 +183,11 @@ public static class SpecExpander
         if (longText && a["length"] == null) ops.Add(Set(alias, "Length", 2000000));
         if (a["mandatory"]?.GetValue<bool>() is { } mandatory) ops.Add(Set(alias, "IsMandatory", mandatory));
         if (a["length"]?.GetValue<int>() is { } len) ops.Add(Set(alias, "Length", len));
+        if (a["decimals"]?.GetValue<int>() is { } decimals) ops.Add(Set(alias, "Decimals", decimals));
         if (a["default"] is { } dv) ops.Add(Set(alias, "DefaultValue", Literal(type, dv, at + "/default")));
         if (a["description"]?.GetValue<string>() is { } d) ops.Add(Set(alias, "Description", d));
         if (a["label"]?.GetValue<string>() is { } l) ops.Add(Set(alias, "Label", l));
+        if (a["nameInJSON"]?.GetValue<string>() is { } json) ops.Add(Set(alias, "NameInJSON", json));
         if (a["deleteRule"]?.GetValue<string>() is { } dr)
         {
             // C19 (atritos 3): a reference of an entity to itself cannot cascade (Verify BadDeleteRule, a client's messaging module); it
@@ -211,10 +224,92 @@ public static class SpecExpander
             if (ao["mandatory"]?.GetValue<bool>() is { } mandatory) ops.Add(Set(alias, "IsMandatory", mandatory));
             // C21 (atritos 3): a structure attribute takes length and label as an entity attribute does.
             if (ao["length"]?.GetValue<int>() is { } len) ops.Add(Set(alias, "Length", len));
+            if (ao["decimals"]?.GetValue<int>() is { } decimals) ops.Add(Set(alias, "Decimals", decimals));
             if (ao["label"]?.GetValue<string>() is { } label) ops.Add(Set(alias, "Label", label));
             if (ao["default"] is { } dv) ops.Add(Set(alias, "DefaultValue", Literal(type, dv, $"{_at}/attributes/{k}/default")));
             if (ao["description"]?.GetValue<string>() is { } ad) ops.Add(Set(alias, "Description", ad));
+            if (ao["nameInJSON"]?.GetValue<string>() is { } json) ops.Add(Set(alias, "NameInJSON", json));
         }
+        if (st["folder"]?.GetValue<string>() is { } folder) ops.Add(Op("move", ("target", "$" + name), ("into", "folder:" + folder)));
+    }
+
+    /// <summary>DL2: the folder of an entity or static entity (`folder`: moved into the folder of that name in its branch of
+    /// the module tree, created when missing) and the attributes it names (`labelAttribute`, `activeAttribute`), after its
+    /// attributes exist.</summary>
+    private static void Placement(List<JsonObject> ops, string name, JsonObject e)
+    {
+        if (e["labelAttribute"]?.GetValue<string>() is { } label) ops.Add(Set("$" + name, "LabelAttribute", $"${name}.{label}"));
+        if (e["activeAttribute"]?.GetValue<string>() is { } active) ops.Add(Set("$" + name, "IsActiveAttribute", $"${name}.{active}"));
+        if (e["folder"]?.GetValue<string>() is { } folder) ops.Add(Op("move", ("target", "$" + name), ("into", "folder:" + folder)));
+    }
+
+    /// <summary>The creation a data text declares (DL2), compiled without the module: the spec of its new types, their ops
+    /// (expanded) and the creates of new parts of the elements it keeps. A text that does not parse, or names what it cannot,
+    /// is refused with every problem (DDL_SYNTAX, DDL_INVALID), each with its line.</summary>
+    public static (Anvil.Reading.DdlCompilation Compilation, List<JsonObject> Expanded) DdlCreation(JsonObject data)
+    {
+        if (data["ddl"] is not JsonValue v || !v.TryGetValue<string>(out var text)) throw new InvalidOperationException("spec: 'ddl' is the data text (a string)");
+        var extra = data.Select(kv => kv.Key).Where(k => k is not ("ddl" or "basedOn") && !k.StartsWith('_')).ToArray();
+        if (extra.Length > 0) throw new InvalidOperationException($"spec: 'ddl' goes alone (with 'basedOn'); write {string.Join(", ", extra)} in the text, or in another spec op");
+        var document = DdlParse(text);
+        // What the platform fills by itself, as the apply gives it (DdlConventions), on what the text alone decides (its new
+        // statements): the static checks read the values the records will have, and refuse a required one none gives.
+        var conventions = Anvil.Reading.DdlConventions.Apply(document, null);
+        var compilation = Anvil.Reading.DdlCompiler.Compile(document, null, MessageExpectations.Lane, "$ddl", text);
+        var problems = conventions.Problems.Concat(compilation.Problems).OrderBy(p => p.Line).ToList();
+        if (problems.Count > 0) throw DdlRefusal("DDL_INVALID", problems);
+        var expanded = compilation.Spec != null ? Expand(compilation.Spec) : new List<JsonObject>();
+        expanded.AddRange(compilation.Steps.Select(s => s.Op));
+        return (compilation, expanded);
+    }
+
+    /// <summary>The spec sections a spec op declares: its own, or those its data text creates (DL2). The static checks read
+    /// these (declared names, defaults, records).</summary>
+    public static JsonObject Sections(JsonObject? data)
+    {
+        if (data == null) return new JsonObject();
+        if (data["ddl"] == null) return data;
+        try { return DdlCreation(data).Compilation.Spec ?? new JsonObject(); } catch { return new JsonObject(); }
+    }
+
+    /// <summary>Every name a data text writes (DL2): its elements, old and new; empty for a spec of JSON sections or a text
+    /// that does not parse (the preflight refuses that one with its lines).</summary>
+    public static IEnumerable<string> DdlNames(JsonObject? data)
+    {
+        if (data?["ddl"] is not JsonValue v || !v.TryGetValue<string>(out var text)) return [];
+        try { return Names(Anvil.Reading.DdlParser.Parse(text, MessageExpectations.Lane)); }
+        catch (Anvil.Reading.DdlParseException error) { return error.Partial == null ? [] : Names(error.Partial); }
+        catch { return []; }
+
+        static List<string> Names(Anvil.Reading.DdlDocument document)
+            => document.All().Where(e => e.Name.Length > 0).Select(e => e.Name).Distinct(StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>The data text parsed, every syntax problem at once (DDL_SYNTAX), each with its line.</summary>
+    public static Anvil.Reading.DdlDocument DdlParse(string text)
+    {
+        try { return Anvil.Reading.DdlParser.Parse(text, MessageExpectations.Lane); }
+        catch (Anvil.Reading.DdlParseException error)
+        {
+            throw DdlRefusal("DDL_SYNTAX", error.Errors.Select(e => new Anvil.Reading.DdlProblem(e.Line, "DDL_SYNTAX", e.Message,
+                "write the statement as `ssam_map view:\"ddl\"` reads it (ssam-ddl/1)")).ToList());
+        }
+    }
+
+    /// <summary>A refusal of a data text: one problem per fault, each with the pointer of the text in the op's data (/ddl),
+    /// its line and its fix; the corrected text, when the fix is certain, is the patch.</summary>
+    public static KernelRefusalException DdlRefusal(string code, IReadOnlyList<Anvil.Reading.DdlProblem> problems)
+    {
+        var list = new JsonArray();
+        foreach (var p in problems)
+        {
+            var problem = JobPreflight.Problem(null, "/ddl", p.Code, "error", $"line {p.Line}: {p.Message}", p.Fix,
+                p.Corrected == null ? null : new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = "/ddl", ["value"] = p.Corrected }), "spec");
+            problem["line"] = p.Line;
+            if (p.Data != null) foreach (var (name, value) in p.Data) problem[name] = value?.DeepClone();
+            list.Add(JobPreflight.PublicProblem(problem));
+        }
+        return new KernelRefusalException(code, string.Join(" | ", problems.Select(p => $"line {p.Line} [{p.Code}]: {p.Message}")), list);
     }
 
     private static JsonObject Op(string op, params (string Key, object Value)[] fields)
@@ -259,11 +354,20 @@ public static class SpecExpander
     internal static string Literal(string type, JsonNode value, string pointer)
     {
         string written, literal;
-        if (value is JsonValue v && v.TryGetValue<string>(out var text)) { written = text; literal = JobPreflight.LiteralFix(type, text) ?? text; }
+        if (value is JsonValue v && v.TryGetValue<string>(out var text)) { written = text; literal = JobPreflight.LiteralFix(type, text) ?? TextNoExpression(type, text) ?? text; }
         else if (value is JsonValue b && b.TryGetValue<bool>(out var flag)) { written = value.ToJsonString(); literal = flag ? "True" : "False"; }
         else { written = value.ToJsonString(); literal = written; }
         if (literal != written || value is not JsonValue s || !s.TryGetValue<string>(out _)) _rewrites?.Add((pointer, written, literal));
         return literal;
     }
+    /// <summary>motor2 (C14, Haiku_CS: record Limpeza, Nome "Limpeza pos-obra", ParserUnexpectedElement 'pos'): a value of a
+    /// text type that has no quote and is no expression at all is the text it says, written as a text literal (a default and
+    /// a static record's value take only literals). An expression, or a text with quotes of its own, stays as written.</summary>
+    internal static string? TextNoExpression(string type, string text)
+    {
+        if (text.Trim().Length == 0 || text.Contains('"') || type.Trim().ToLowerInvariant() is not ("text" or "long text" or "email" or "phone number")) return null;
+        return Preflight.ExpressionSyntax.Check(text) == null ? null : "\"" + text + "\"";
+    }
+
     private static string Req(JsonObject o, string k) => o[k]?.GetValue<string>() ?? throw new InvalidOperationException($"spec: missing '{k}' in {o.ToJsonString()}");
 }

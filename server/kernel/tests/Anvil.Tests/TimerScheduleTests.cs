@@ -16,6 +16,8 @@ public class TimerScheduleTests
     [Theory]
     [InlineData("every one minute")]
     [InlineData("every five minutes")]
+    [InlineData("Every day at 03:00")]
+    [InlineData("Every 1 minutes")]
     [InlineData("*/5 * * * *")]
     [InlineData("25:00")]
     [InlineData("12:60")]
@@ -36,6 +38,18 @@ public class TimerScheduleTests
     [Fact]
     public void PublishedDisplayLabelBecomesNativeToken() =>
         Assert.Equal("WhenPublished", TimerScheduleValue.Prepare(JsonValue.Create("When Published"), false).Value);
+
+    [Theory]
+    [InlineData("Every day at 03:00")]
+    [InlineData("Every 1 minutes")]
+    public void DdlRejectsInvalidScheduleBeforeCreatingTimer(string schedule)
+    {
+        var text = "-- ssam-ddl/1\ntimer InvalidTimer schedule \"" + schedule + "\"";
+        var document = Anvil.Reading.DdlParser.Parse(text);
+        var compiled = Anvil.Reading.DdlCompiler.Compile(document, null, "o11");
+        Assert.Contains(compiled.Problems, p => p.Code == "TIMER_SCHEDULE_INVALID");
+        Assert.Equal(0, compiled.Count);
+    }
 
     [Theory]
     [InlineData(1)]

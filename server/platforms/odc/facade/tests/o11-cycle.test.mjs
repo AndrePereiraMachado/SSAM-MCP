@@ -76,10 +76,13 @@ test('the three tools are exposed with the distribution schema', async t => {
   const deliver = tools.o11_deliver.inputSchema;
   assert.deepEqual(Object.keys(deliver.properties).sort(), ['authorize', 'basedOn', 'captureProducers', 'checks', 'close', 'closePrevious', 'expectedEnvironment', 'job',
     'module', 'patch', 'producers', 'publish', 'resume', 'until']);
-  assert.equal(deliver.properties.patch.maxItems, 50);
-  assert.deepEqual(deliver.properties.patch.items.properties.op.enum, ['add', 'remove', 'replace', 'test']);
-  assert.equal(deliver.properties.patch.items.additionalProperties, false);
-  assert.deepEqual(deliver.properties.patch.items.required, ['op', 'path'], 'remove takes no value');
+  // A written patch (at most 50), or "verified" (every verified patch of the refusal of that job).
+  const patch = deliver.properties.patch.anyOf.find(x => x.type === 'array');
+  assert.ok(deliver.properties.patch.anyOf.some(x => x.const === 'verified' || x.enum?.includes('verified')));
+  assert.equal(patch.maxItems, 50);
+  assert.deepEqual(patch.items.properties.op.enum, ['add', 'remove', 'replace', 'test']);
+  assert.equal(patch.items.additionalProperties, false);
+  assert.deepEqual(patch.items.required, ['op', 'path'], 'remove takes no value');
   assert.equal(deliver.properties.basedOn.anyOf.length, 2);
   assert.deepEqual(Object.keys(deliver.properties.close.properties).sort(), ['reason', 'taskId']);
   // authorize: the user's words, or absent when a standing grant covers the module (contract I6).
@@ -171,9 +174,10 @@ test('a Studio that is no longer selected refuses with ssam_connect, never a she
 test('an inline job becomes a file under the lane jobs folder and that file is what deliver gets', async t => {
   const box = setup(t);
   const { call, close } = await serve(box.deps); t.after(close);
-  const job = { ops: [{ op: 'set', target: 'ServerAction:SaveOrder', property: 'Description', value: 'Saves' }] };
+  const job = { ops: [{ op: 'set', target: 'ServerAction:SaveOrder', prop: 'Description', value: 'Saves' }] };
   const result = await call('o11_deliver', { module: 'Orders', job, authorize: WORDS });
   assert.equal(result.structuredContent.result, 'entregue');
+  assert.equal(result.structuredContent.normalizations, undefined, 'a job in the kernel form is taken as it is');
   const inline = path.join(box.local, 'jobs', 'inline');
   const files = fs.readdirSync(inline);
   assert.equal(files.length, 1); assert.match(files[0], /^[0-9a-f-]{36}\.json$/);
@@ -183,6 +187,12 @@ test('an inline job becomes a file under the lane jobs folder and that file is w
   // an array of ops is a job too
   await call('o11_deliver', { module: 'Orders', job: job.ops, authorize: WORDS });
   assert.equal(fs.readdirSync(inline).length, 2);
+  // an op shape with one meaning (property for prop) is written in the kernel form and said so
+  const shaped = await call('o11_deliver', { module: 'Orders', job: { ops: [{ op: 'set', target: 'ServerAction:SaveOrder', property: 'Description', value: 'Saves' }] }, authorize: WORDS });
+  assert.equal(shaped.structuredContent.result, 'entregue', JSON.stringify(shaped.structuredContent));
+  assert.deepEqual(shaped.structuredContent.normalizations, [{ rule: 'job-op', at: '/ops/0', note: 'set: property is prop' }]);
+  const written = fs.readdirSync(inline).map(f => path.join(inline, f)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+  assert.deepEqual(JSON.parse(fs.readFileSync(written, 'utf8')), job);
 });
 
 // 2026-10-12 (production test): after "entregue" the session read the whole module digest again (31 KB) to confirm the

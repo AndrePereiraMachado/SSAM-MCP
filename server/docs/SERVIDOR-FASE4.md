@@ -706,3 +706,40 @@ por faixa, antes do servidor de várias versões (`C:\t\multiver\DESIGN.md`, rev
 - Seção Privacidade do `docs/AGENTE-CLIENTE.md` igual ao que o servidor grava: retenção do log (depende da limpeza
   semanal), primeira máquina e alertas sem prazo, campos do Hello que ficam só na memória. `privacy-record.test.mjs` liga
   cada campo gravado ao texto.
+
+## 10. marco-a5 do produto (`fase4-25/marco-a5`)
+
+Merge `--no-ff` de `integracao/marco-a5` (`40a8e835`) sobre `fase4-24/combinada` (`41e538f0`), base comum `1b26c2b4`.
+O marco-a5 traz o 24.1 (Texto do SSAM, `ssam_code`, famílias, importador), F5 (assinaturas de produtor por versão),
+fam-deps, CX1-CX5, CX7, CX9, CX10, X1, os geradores atrás da aprovação e as correções do Codex. Plano:
+`C:\t\vps-a5\PLANO.md`; relatório: `C:\t\vps-a5\LINHA.md`.
+
+1. **Conflitos (19 arquivos, 31 trechos).** A guarda hospedada ganha. Destaques:
+   - `ssam.mjs`: o corpo do produto (respostas por tipo e paginadas, `VERBATIM`, o mapa `handlers`) dentro do invólucro de
+     qualidade da linha. As respostas ficam em `ws:o11/answers` (as encurtadas por tipo também). O mapa `handlers` guarda
+     o handler **com o portão**.
+   - `lib.mjs`: a janela de credencial do produto (`credential-prompt.mjs`) só existe no ramo local; o prompt hospedado
+     recusa.
+   - `portal/runtime/access.mjs`: `prompt` e `focus` do `odc_portal_login` respondem `HOSTED_PROMPT_UNAVAILABLE` antes do
+     Studio, do cofre e dos perfis.
+   - `Delivery.cs`: o `Acquire` do F5, e um corte do ambiente (`ENVIRONMENT_CALL_CUT`) nunca apaga o cache (prazos B).
+2. **Regra D (bridge O11 completa).** Os 8 arquivos de `kernel/src/Anvil.Bridge` que o produto mudou ficam com os bytes de
+   `41e538f0`, e `StudioDialogSurface.cs` e `MergeStageException.cs` não entram. A fina linka 6 deles e a guarda de
+   fronteira proíbe o `Anvil.Core` nela: tomar o fam-deps da bridge pede pacote novo. `agent/**`, a fina e a bridge ODC
+   (v97) não mudam. O kernel olha as capacidades novas (`merge_from_oml:dialog_watch`...) e, sem elas, segue o caminho
+   antigo (não provado em execução com a fina atual).
+3. **Ajustes hospedados.**
+   - `ssam_code` indisponível (`SSAM_CODE_HOSTED_PENDING`), fora das instruções hospedadas.
+   - Geradores pendentes recusados no portão (`GENERATOR_PENDING`, chave `HOSTED_GENERATOR_OPS`).
+   - Amostra do `rest-consume` pelo cliente só-público.
+   - Componentes do ambiente desligados (`COMPONENTS_HOSTED_PENDING`).
+   - `hosted/tools.json`: 96 ferramentas (23 / 33 / 22 / 18).
+   - Guarda de nomes de cliente: 0 achados (comentários anonimizados; corpora de teste, `tools/benchmark` e 3 docs do
+     Texto do SSAM fora da imagem pelo `.dockerignore`).
+4. **F5 no hospedado.** O11: o cache de produtores fica desligado (não há `.local` acima de `ws:o11/work`). ODC: liga, por
+   cliente, em `ws:odc/.local/producer-cache`; um `studio_deliver` com `until:"merge"` reaproveita o `reference-snapshot`
+   por até 1800 s (`ANVIL_PRODUCER_TRUST_SECONDS`).
+5. **Overlays de release.** Sete patches ficaram velhos (o marco-a5 já os trazia velhos). Recapturados;
+   `stage check --from-worktree` ok com 53 overlays. A imagem compila a fonte crua.
+6. **`kernel.json` e pacote.** Iguais aos de hoje: `{"o11":"11.55.92","odc":"1.7.28","odcBridge":"v97",
+   "odcBridgeAccepted":["v96","v48","v45"]}` e `C:\t\pack-comb\ssam-agent.zip`.

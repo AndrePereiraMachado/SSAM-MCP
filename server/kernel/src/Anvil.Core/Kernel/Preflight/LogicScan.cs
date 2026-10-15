@@ -26,7 +26,7 @@ public sealed record NodeFact(string Name, string Kind, JsonObject Step, string 
 
 /// <summary>One OutSystems expression of a logic step: its text, the JSON pointer relative to the action, the step and
 /// the aggregate whose filter, sort, join or column it is (null elsewhere).</summary>
-public sealed record ExpressionSite(string Text, string Pointer, JsonObject Step, string Key, NodeFact? Aggregate);
+public sealed record ExpressionSite(string Text, string Pointer, JsonObject Step, string Key, NodeFact? Aggregate, bool AllowsMapping = false);
 
 /// <summary>A `call` step: the target, its args and where it is (relative to the action).</summary>
 public sealed record CallSite(string Target, JsonObject Step, string Pointer);
@@ -96,12 +96,12 @@ public sealed class LogicScan
             {
                 if (name != null) Nodes.TryAdd(name, new NodeFact(name, "call", step, at));
                 Calls.Add(new CallSite(target, step, at));
-                if (step["args"] is JsonObject args) foreach (var (key, value) in args) Text(value, $"{at}/args/{Escape(key)}", step, key, null);
+                if (step["args"] is JsonObject args) foreach (var (key, value) in args) Text(value, $"{at}/args/{Escape(key)}", step, key, null, allowsMapping: true);
             }
             else if (step["assign"] is JsonObject pairs)
             {
                 if (name != null) Nodes.TryAdd(name, new NodeFact(name, "assign", step, at));
-                foreach (var (key, value) in pairs) Text(value, $"{at}/assign/{Escape(key)}", step, key, null);
+                foreach (var (key, value) in pairs) Text(value, $"{at}/assign/{Escape(key)}", step, key, null, allowsMapping: true);
             }
             else if (new[] { "save", "create", "update", "delete" }.FirstOrDefault(step.ContainsKey) is { } verb && step[verb] is JsonValue entity)
             {
@@ -163,8 +163,8 @@ public sealed class LogicScan
         else Text(node, pointer, step, key, aggregate);
     }
 
-    private void Text(JsonNode? node, string pointer, JsonObject step, string key, NodeFact? aggregate)
+    private void Text(JsonNode? node, string pointer, JsonObject step, string key, NodeFact? aggregate, bool allowsMapping = false)
     {
-        if (node is JsonValue v && v.TryGetValue<string>(out var text) && !string.IsNullOrWhiteSpace(text)) Expressions.Add(new ExpressionSite(text, pointer, step, key, aggregate));
+        if (node is JsonValue v && v.TryGetValue<string>(out var text) && !string.IsNullOrWhiteSpace(text)) Expressions.Add(new ExpressionSite(text, pointer, step, key, aggregate, allowsMapping));
     }
 }

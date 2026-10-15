@@ -1,0 +1,9 @@
+{
+  "source": "recorded",
+  "records": 1,
+  "bytes": 36591,
+  "outcome": "refused",
+  "code": "PREFLIGHT_REFUSED",
+  "shrunk": [],
+  "removed": []
+}

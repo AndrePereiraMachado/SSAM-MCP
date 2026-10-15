@@ -46,30 +46,108 @@ public static class JobNormalizer
         => Entry(PropertyDropped, path, $"set {prop} on {target}", null,
             $"{shownType} has no way to write {prop} (a documentation property): the set is dropped, nothing else of the job changes");
 
-    /// <summary>What the job alone decides: the sorts and the entity segment where the job declares the record.</summary>
+    /// <summary>What the job alone decides: the sorts and the entity segment where the job declares the record; motor2: the
+    /// property aliases, the html of the op (icons, weights, list aliases, titles, defaults) and the scope renames; VisitaCerta:
+    /// the certain edits of the ssam-flow/1 texts of the logic ops (Anvil.Reading.FlowTextNormalizer).</summary>
     public static List<JsonObject> Pure(JsonArray ops, string? prefix, string lane)
     {
         var done = new List<JsonObject>();
+        Motor2(ops, prefix, lane, null, done);
         try
         {
             Sorts(ops, prefix, done);
             Expressions(ops, prefix, lane, null, done);
         }
         catch { /* a normalization never refuses: the checks judge what stays */ }
+        // VisitaCerta (tx-visitacerta): the certain edits of the ssam-flow/1 texts of the logic ops (FlowTextNormalizer).
+        try { FlowTexts(ops, prefix, done); }
+        catch { /* a normalization never refuses: the checks judge what stays */ }
+        // motor2 review: each path is one of the job as sent (a step the kernel inserted shifts nothing the author wrote).
+        SentJob.TranslateEntries(done, ops, prefix);
         return done;
+    }
+
+    // ---- the ssam-flow/1 texts (FlowTextNormalizer) -----------------------------------------------------------------------
+
+    // Every text of the text form of a logic op (data.flow: one text, a list of texts or of {text, basedOn}) with its certain
+    // edits, each listed with the line it changed (from: the line before, to: what it reads now; an inserted line has from
+    // "before line N").
+    private static void FlowTexts(JsonArray ops, string? prefix, List<JsonObject> done)
+    {
+        for (var i = 0; i < ops.Count; i++)
+        {
+            if (ops[i] is not JsonObject op || op["op"]?.ToString() != "logic" || op["data"] is not JsonObject data || !data.ContainsKey("flow")) continue;
+            var at = prefix == null ? null : $"{prefix}/{i}/data/flow";
+            switch (data["flow"])
+            {
+                case JsonValue single when single.TryGetValue<string>(out var text):
+                    if (One(text, at, done) is { } written) data["flow"] = written;
+                    break;
+                case JsonArray list:
+                    for (var j = 0; j < list.Count; j++)
+                    {
+                        if (list[j] is JsonValue item && item.TryGetValue<string>(out var itemText))
+                        {
+                            if (One(itemText, at == null ? null : at + "/" + j, done) is { } itemWritten) list[j] = itemWritten;
+                        }
+                        else if (list[j] is JsonObject entry && entry["text"] is JsonValue inner && inner.TryGetValue<string>(out var entryText))
+                        {
+                            if (One(entryText, at == null ? null : at + "/" + j + "/text", done) is { } entryWritten) entry["text"] = entryWritten;
+                        }
+                    }
+                    break;
+            }
+        }
+
+        static string? One(string text, string? path, List<JsonObject> done)
+        {
+            var normalized = Anvil.Reading.FlowTextNormalizer.Normalize(text);
+            if (normalized.Edits.Count == 0 || normalized.Text == text) return null;
+            foreach (var edit in normalized.Edits)
+            {
+                var entry = Entry(edit.Rule, path, edit.Insert ? "before line " + edit.Line : "line " + edit.Line + ": " + (edit.From ?? ""), edit.To, edit.Message);
+                entry["line"] = edit.Line;
+                done.Add(entry);
+            }
+            return normalized.Text;
+        }
     }
 
     /// <summary>The same again with the base (attributes of module records, callees of the module) plus the null functions.</summary>
     public static List<JsonObject> WithBase(JsonArray ops, string? prefix, string lane, IBaseFacts model)
     {
         var done = new List<JsonObject>();
+        Motor2(ops, prefix, lane, model, done);
         try
         {
             Sorts(ops, prefix, done);
             Expressions(ops, prefix, lane, model, done);
         }
         catch { /* a normalization never refuses: the checks judge what stays */ }
+        SentJob.TranslateEntries(done, ops, prefix);
         return done;
+    }
+
+    /// <summary>motor2 (2026-10-12): the normalizations of the classes found only at apply, each on its own (one that fails
+    /// leaves the others): PROPERTY_ALIASED, the html rules (HtmlDocumentRules: ICON_NAME_NORMALIZED, ICON_WEIGHT_DROPPED,
+    /// LIST_ALIAS_REWRITTEN, SCREEN_TITLE_QUOTED, DEFAULT_MOVED_TO_INITIALIZE, DEFAULT_MOVED_TO_ASSIGN), PARAMETER_RENAMED
+    /// (with the base, the screens the module already has too), ARGUMENT_RENAMED (the list actions of the O11 System) and
+    /// TEXT_LITERAL_QUOTED (a static or default text that is no expression).
+    /// Idempotent: a second pass finds nothing to do.</summary>
+    private static void Motor2(JsonArray ops, string? prefix, string lane, IBaseFacts? model, List<JsonObject> done)
+    {
+        // Familias (2026-10-12): the lines of the text forms the grammar rejects with one reading (DDL_DECLARATION_NORMALIZED,
+        // FLOW_END_AFTER_TERMINATOR, FLOW_ASSIGN_WRITTEN), then the literal-only slots written as a constant (LITERAL_FOLDED,
+        // before the defaults motor2 moves), and the CSS the theme does not render with one rendering (CSS_FUNCTION_REWRITTEN).
+        try { TextForms.Normalize(ops, prefix, lane, done); } catch { }
+        try { LiteralFolding.Normalize(ops, prefix, lane, done); } catch { }
+        try { StyleSheetNormalizer.Normalize(ops, prefix, done); } catch { }
+        try { SharedStyleNormalizer.Normalize(ops, prefix, done); } catch { }
+        try { PropertyAliases.Normalize(ops, prefix, lane, done); } catch { }
+        try { HtmlDocumentRules.Normalize(ops, prefix, lane, done); } catch { }
+        try { ScopeRenames.Normalize(ops, prefix, lane, model == null ? null : model.ScreenNames, done); } catch { }
+        try { SystemCalls.Normalize(ops, prefix, lane, model, done); } catch { }
+        try { SpecTexts.Normalize(ops, prefix, done); } catch { }
     }
 
     /// <summary>Adds the entries of <paramref name="more"/> that <paramref name="into"/> does not have yet (same rule and path).</summary>
@@ -84,6 +162,8 @@ public static class JobNormalizer
     public static bool Same(JsonObject a, JsonObject b)
     {
         if (a["rule"]?.ToString() != b["rule"]?.ToString() || a["from"]?.ToString() != b["from"]?.ToString()) return false;
+        // Identical statements on different lines are separate normalizations, not duplicate reports of one rewrite.
+        if (a["line"] != null && b["line"] != null && !JsonNode.DeepEquals(a["line"], b["line"])) return false;
         var p = a["path"]?.ToString(); var q = b["path"]?.ToString();
         return p == q || p != null && q != null && (p.StartsWith(q + "/", StringComparison.Ordinal) || q.StartsWith(p + "/", StringComparison.Ordinal));
     }
@@ -112,6 +192,7 @@ public static class JobNormalizer
                         case JsonValue v when v.TryGetValue<string>(out var text) && SplitKeys(text) is { } keys:
                             var list = new JsonArray(keys.Select(k => (JsonNode)k).ToArray());
                             step["sort"] = list;
+                            SentJob.Replaced(list);
                             done.Add(Entry(SortKeysSplit, path, text, list.ToJsonString(),
                                 $"comma-separated sort = {keys.Count} keys in order, tie-breaks kept"));
                             break;
@@ -122,6 +203,7 @@ public static class JobNormalizer
                                 if (item is JsonValue iv && iv.TryGetValue<string>(out var t) && SplitKeys(t) is { } parts) foreach (var part in parts) flat.Add(part);
                                 else flat.Add(item?.DeepClone());
                             step["sort"] = flat;
+                            SentJob.Replaced(flat);
                             done.Add(Entry(SortKeysSplit, path, before, flat.ToJsonString(),
                                 "comma-separated sort key = several keys in order, tie-breaks kept"));
                             break;

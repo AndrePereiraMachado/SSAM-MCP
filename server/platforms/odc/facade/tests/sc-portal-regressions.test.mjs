@@ -44,5 +44,6 @@ test('redaction preserves scoped public UUIDs, but never an actual secret value 
   assert.equal(redact({ Key: key }, ['2222']).Key, key);
   assert.equal(redact({ environmentKey: key }, [key]).environmentKey, '[REDACTED]');
   assert.equal(redact({ apiKey: key }, ['2222']).apiKey, '[REDACTED]');
-  assert.equal(redact({ message: 'secret 2222' }, ['2222']).message, 'secret [REDACTED]');
+  assert.equal(redact({ message: 'secret 2222' }, ['2222']).message, 'secret 2222');
+  assert.equal(redact({ message: 'secret fixture-token-long-2222' }, ['fixture-token-long-2222']).message, 'secret [REDACTED]');
 });

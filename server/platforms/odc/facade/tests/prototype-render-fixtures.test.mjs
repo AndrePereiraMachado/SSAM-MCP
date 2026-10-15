@@ -280,8 +280,11 @@ test('11g. react-like: targets found through __reactProps$ (no attribute marks t
   assert.equal(result.ok, true, JSON.stringify(result.problems));
   assert.equal(result.ir.kind, 'spa-state');
   assert.deepEqual(result.ir.views.map(view => view.key), ['shop', 'cart']);
+  // the tab bar only moves its active tab between the views: it is the frame (shell), the section under it the screen
+  // (crawl.mjs deepens the mount as for screen switches; VisitaCerta 2026-10-12, its side menu)
   const nav = Object.fromEntries(result.ir.events.filter(event => event.effects[0].kind === 'navigate').map(event => [event.key, event.effects[0].view]));
-  assert.deepEqual(nav, { 'shop:click:tab-cart': 'cart', 'cart:click:tab-shop': 'shop' });
+  assert.deepEqual(nav, { 'shell:click:tab-cart': 'cart', 'shell:click:tab-shop': 'shop' });
+  assert.ok(result.ir.shell, 'the tab bar is the shell');
   const add = result.ir.events.find(event => event.key === 'shop:click:add');
   assert.deepEqual(add.params, [{ name: 'Id', from: 'record', type: 'Integer' }]);
   assert.deepEqual(add.effects, [{ kind: 'increment', collection: 'Item', field: 'Qty', key: { param: 'Id' }, by: { lit: 1 } }]);

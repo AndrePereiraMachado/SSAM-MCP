@@ -1,0 +1,50 @@
+/// Centraliza transições autorizadas, data de resolução e histórico.
+server action ChangeTicketStatus public
+  in TicketId: Ticket Identifier
+  in NewStatusId: TicketStatus Identifier
+  out TicketData: Ticket
+  Access = RequireTicketAccess(TicketId=TicketId, LockForUpdate=True)
+  assign TicketData = Access.TicketData  # Preparar retorno
+  if NewStatusId = Access.TicketData.StatusId:  # Estado já é o solicitado?
+    end
+  if not ((Access.TicketData.StatusId = Entities.TicketStatus.Open and ((NewStatusId = Entities.TicketStatus.InProgress and Access.IsStaff) or NewStatusId = Entities.TicketStatus.Cancelled)) or (Access.TicketData.StatusId = Entities.TicketStatus.InProgress and ((Access.IsStaff and (NewStatusId = Entities.TicketStatus.WaitingForRequester or NewStatusId = Entities.TicketStatus.Resolved)) or NewStatusId = Entities.TicketStatus.Cancelled)) or (Access.TicketData.StatusId = Entities.TicketStatus.WaitingForRequester and (NewStatusId = Entities.TicketStatus.InProgress or (NewStatusId = Entities.TicketStatus.Resolved and Access.IsStaff) or NewStatusId = Entities.TicketStatus.Cancelled)) or (Access.TicketData.StatusId = Entities.TicketStatus.Resolved and (NewStatusId = Entities.TicketStatus.Open or NewStatusId = Entities.TicketStatus.Closed))):  # Transição é permitida?
+    raise TicketValidationError("Transição de estado não permitida.")
+  assign  # Aplicar estado e datas
+    TicketData.StatusId = NewStatusId
+    TicketData.UpdatedOn = CurrDateTime()
+    TicketData.ResolvedOn = If(NewStatusId = Entities.TicketStatus.Resolved, CurrDateTime(), If(NewStatusId = Entities.TicketStatus.Closed, Access.TicketData.ResolvedOn, NullDate()))
+  UpdateTicket(Source=TicketData)
+  RecordTicketHistory(TicketId=TicketId, Event="StatusChanged", PreviousValue=IntegerToText(Access.TicketData.StatusId), NewValue=IntegerToText(NewStatusId))
+  end
+
+/// Resolve um ticket em atendimento ou aguardando solicitante.
+server action ResolveTicket public
+  in TicketId: Ticket Identifier
+  out TicketData: Ticket
+  ChangeStatus = ChangeTicketStatus(TicketId=TicketId, NewStatusId=Entities.TicketStatus.Resolved)
+  assign TicketData = ChangeStatus.TicketData  # Retornar ticket atualizado
+  end
+
+/// Reabre um ticket resolvido para novo atendimento.
+server action ReopenTicket public
+  in TicketId: Ticket Identifier
+  out TicketData: Ticket
+  ChangeStatus = ChangeTicketStatus(TicketId=TicketId, NewStatusId=Entities.TicketStatus.Open)
+  assign TicketData = ChangeStatus.TicketData  # Retornar ticket atualizado
+  end
+
+/// Confirma o fechamento de um ticket resolvido.
+server action CloseTicket public
+  in TicketId: Ticket Identifier
+  out TicketData: Ticket
+  ChangeStatus = ChangeTicketStatus(TicketId=TicketId, NewStatusId=Entities.TicketStatus.Closed)
+  assign TicketData = ChangeStatus.TicketData  # Retornar ticket atualizado
+  end
+
+/// Cancela um ticket ativo.
+server action CancelTicket public
+  in TicketId: Ticket Identifier
+  out TicketData: Ticket
+  ChangeStatus = ChangeTicketStatus(TicketId=TicketId, NewStatusId=Entities.TicketStatus.Cancelled)
+  assign TicketData = ChangeStatus.TicketData  # Retornar ticket atualizado
+  end

@@ -1,0 +1,917 @@
+{
+  "schema": "ssam-benchmark-cases/1",
+  "cases": [
+    {
+      "name": "T",
+      "client": "codex",
+      "file": ".codex/archived_sessions/rollout-2026-10-13T11-57-13-01a135c4-8333-7190-b72c-bb2c32460f1d.jsonl",
+      "start": "2026-10-13T15:32:03.137Z",
+      "end": "2026-10-13T15:42:22.336Z",
+      "metrics": [
+        {
+          "metric": "wallMin",
+          "value": 10.3,
+          "tolerance": 0.1,
+          "source": "CX6"
+        },
+        {
+          "metric": "rounds",
+          "value": 21,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "writtenKB",
+          "value": 47.3,
+          "tolerance": {
+            "relative": 0.03
+          },
+          "source": "CX6"
+        },
+        {
+          "metric": "readKB",
+          "value": 85.9,
+          "tolerance": {
+            "relative": 0.03
+          },
+          "source": "CX6"
+        },
+        {
+          "metric": "ssamSec",
+          "value": 22.9,
+          "tolerance": 0.1,
+          "source": "CX6"
+        },
+        {
+          "metric": "refusalsByCode.PREFLIGHT_REFUSED",
+          "value": 3,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "lanes.o11.firstTimeRight",
+          "value": false,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "ssamCalls.n",
+          "value": 44,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "ssamCalls.secSum",
+          "value": 44.7,
+          "tolerance": 0.5,
+          "source": "esperas-rede/resumo.json"
+        },
+        {
+          "metric": "ssamCalls.byCategory.deliver.n",
+          "value": 4,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "ssamCalls.byCategory.deliver.sec",
+          "value": 20.2,
+          "tolerance": 0.5,
+          "source": "esperas-rede/resumo.json"
+        },
+        {
+          "metric": "ssamCalls.byCategory.read.n",
+          "value": 40,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "ssamCalls.byCategory.read.sec",
+          "value": 24.5,
+          "tolerance": 0.5,
+          "source": "esperas-rede/resumo.json"
+        },
+        {
+          "metric": "ssamCalls.failed",
+          "value": 4,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "waits.execYields",
+          "value": 0,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "waits.waitCalls",
+          "value": 0,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "timeSplit.ownerWaitSec",
+          "value": 0,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "context.requests",
+          "value": 61,
+          "tolerance": 0,
+          "source": "contexto/saida/medidas.json"
+        },
+        {
+          "metric": "context.inputTokens",
+          "value": 7035604,
+          "tolerance": 0,
+          "source": "contexto/saida/medidas.json"
+        },
+        {
+          "metric": "context.ssamPct",
+          "value": 54.1,
+          "tolerance": 0.5,
+          "source": "contexto/saida/estimativas.json"
+        },
+        {
+          "metric": "output.tokens",
+          "value": 27174,
+          "tolerance": 0,
+          "source": "raciocinio/por-pedido-codex.txt"
+        },
+        {
+          "metric": "output.reasoningTokens",
+          "value": 7218,
+          "tolerance": 0,
+          "source": "token_usage_record / message.usage"
+        },
+        {
+          "metric": "repeats.contractRequeries.sameThread",
+          "value": 1,
+          "tolerance": 0,
+          "source": "raciocinio/consultas-repetidas.txt",
+          "explanation": "O par conhecido de dois subagentes reproduz sameContext=0/sameThread=1. O pedido T completo, com principal e demais filhos, contém 8 duplicatas ativas e 1 consulta já vista antes da janela: sameContext=0/sameThread=9. IDs completos e provas em complement-outcomes/contract-audit.json."
+        },
+        {
+          "metric": "acceptedAt",
+          "value": "15:41:33",
+          "tolerance": 0,
+          "source": "CX6",
+          "transform": "utc-time"
+        },
+        {
+          "metric": "waits.coldStart.method",
+          "value": "not-recorded",
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "waits.waitStillRunning",
+          "value": 0,
+          "tolerance": 0,
+          "source": "CORRECAO-CX10-b item1"
+        },
+        {
+          "metric": "context.ssamToolsPct",
+          "value": 52.6,
+          "tolerance": 0,
+          "source": "estimativas.mjs portado: apenas ssam:*"
+        },
+        {
+          "metric": "repeats.contractRequeries.sameContext",
+          "value": 0,
+          "tolerance": 0,
+          "source": "CORRECAO-CX10-b: IDs completos"
+        }
+      ]
+    },
+    {
+      "name": "B",
+      "client": "codex",
+      "file": ".codex/archived_sessions/rollout-2026-10-13T11-57-13-01a135c4-8333-7190-b72c-bb2c32460f1d.jsonl",
+      "start": "2026-10-13T15:48:31.955Z",
+      "end": "2026-10-13T16:06:49.887Z",
+      "metrics": [
+        {
+          "metric": "wallMin",
+          "value": 18.3,
+          "tolerance": 0.1,
+          "source": "CX6"
+        },
+        {
+          "metric": "writtenKB",
+          "value": 40.1,
+          "tolerance": {
+            "relative": 0.03
+          },
+          "source": "CX6"
+        },
+        {
+          "metric": "subagentTurns",
+          "value": 6,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "refusalsByCode.PREFLIGHT_REFUSED",
+          "value": 3,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "refusalsByCode.VALIDATION_REFUSED",
+          "value": 1,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "ssamCalls.n",
+          "value": 54,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "ssamCalls.secSum",
+          "value": 74.8,
+          "tolerance": 0.5,
+          "source": "esperas-rede/resumo.json"
+        },
+        {
+          "metric": "ssamCalls.byCategory.deliver.n",
+          "value": 5,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "ssamCalls.byCategory.deliver.sec",
+          "value": 63.2,
+          "tolerance": 0.5,
+          "source": "esperas-rede/resumo.json"
+        },
+        {
+          "metric": "ssamCalls.byCategory.read.n",
+          "value": 49,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "ssamCalls.byCategory.read.sec",
+          "value": 11.6,
+          "tolerance": 0.5,
+          "source": "esperas-rede/resumo.json"
+        },
+        {
+          "metric": "ssamCalls.failed",
+          "value": 4,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "timeSplit.ownerWaitSec",
+          "value": 0,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "context.requests",
+          "value": 77,
+          "tolerance": 0,
+          "source": "contexto/saida/medidas.json"
+        },
+        {
+          "metric": "context.inputTokens",
+          "value": 13637167,
+          "tolerance": 0,
+          "source": "contexto/saida/medidas.json"
+        },
+        {
+          "metric": "context.ssamPct",
+          "value": 55.1,
+          "tolerance": 0.5,
+          "source": "contexto/saida/estimativas.json"
+        },
+        {
+          "metric": "output.tokens",
+          "value": 63071,
+          "tolerance": 0,
+          "source": "raciocinio/por-pedido-codex.txt"
+        },
+        {
+          "metric": "output.reasoningTokens",
+          "value": 22259,
+          "tolerance": 0,
+          "source": "token_usage_record / message.usage"
+        },
+        {
+          "metric": "acceptedAt",
+          "value": "16:06:12",
+          "tolerance": 0,
+          "source": "CX6",
+          "transform": "utc-time"
+        },
+        {
+          "metric": "writtenKBTotal",
+          "value": 63.2,
+          "tolerance": {
+            "relative": 0.03
+          },
+          "source": "CX6",
+          "transform": "subtract-main-written"
+        },
+        {
+          "metric": "context.ssamToolsPct",
+          "value": 54,
+          "tolerance": 0,
+          "source": "estimativas.mjs portado: apenas ssam:*"
+        }
+      ]
+    },
+    {
+      "name": "O",
+      "client": "codex",
+      "file": ".codex/sessions/2026/10/13/rollout-2026-10-13T12-00-43-01a135c7-b752-7dc2-9d59-d5ad9229fd1b.jsonl",
+      "start": "2026-10-13T15:37:14.568Z",
+      "end": "2026-10-13T15:44:23.449Z",
+      "metrics": [
+        {
+          "metric": "wallMin",
+          "value": 7.15,
+          "tolerance": 0.1,
+          "source": "CX6"
+        },
+        {
+          "metric": "writtenKB",
+          "value": 15.2,
+          "tolerance": {
+            "relative": 0.03
+          },
+          "source": "CX6"
+        },
+        {
+          "metric": "ssamSec",
+          "value": 0,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "context.requests",
+          "value": 45,
+          "tolerance": 0,
+          "source": "contexto/saida/medidas.json"
+        },
+        {
+          "metric": "context.inputTokens",
+          "value": 3558091,
+          "tolerance": 0,
+          "source": "contexto/saida/medidas.json"
+        },
+        {
+          "metric": "output.tokens",
+          "value": 11917,
+          "tolerance": 0,
+          "source": "raciocinio/por-pedido-codex.txt"
+        },
+        {
+          "metric": "output.reasoningTokens",
+          "value": 2840,
+          "tolerance": 0,
+          "source": "token_usage_record / message.usage"
+        },
+        {
+          "metric": "writtenKBTotal",
+          "value": 15.9,
+          "tolerance": {
+            "relative": 0.03
+          },
+          "source": "CX6",
+          "transform": "subtract-main-written"
+        },
+        {
+          "metric": "subagents",
+          "value": 2,
+          "tolerance": 0,
+          "source": "CX6",
+          "transform": "find-name:Meitner:turns"
+        },
+        {
+          "metric": "context.mainOtherToolsPct",
+          "value": 34.9,
+          "tolerance": 0.5,
+          "source": "contexto/saida/tabelas.md"
+        }
+      ]
+    },
+    {
+      "name": "P1",
+      "client": "claude",
+      "file": ".claude/projects/C--Users-<user>-SSAM-Hybrid-proto/7427c081-1701-4dd3-a1a7-c966a91e7d8d.jsonl",
+      "start": "2026-10-13T14:09:25Z",
+      "end": "2026-10-13T14:14:51Z",
+      "metrics": [
+        {
+          "metric": "wallMin",
+          "value": 5.4,
+          "tolerance": 0.1,
+          "source": "CX6"
+        },
+        {
+          "metric": "toolSecSum",
+          "value": 138,
+          "tolerance": 6,
+          "source": "CX6"
+        },
+        {
+          "metric": "writtenKB",
+          "value": 2.902,
+          "tolerance": {
+            "relative": 0.03
+          },
+          "source": "CX6"
+        },
+        {
+          "metric": "rounds",
+          "value": 9,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "refusedOrError",
+          "value": 1,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "context.requests",
+          "value": 8,
+          "tolerance": 0,
+          "source": "contexto/saida/medidas.json"
+        },
+        {
+          "metric": "context.inputTokens",
+          "value": 1145275,
+          "tolerance": 0,
+          "source": "contexto/saida/medidas.json"
+        },
+        {
+          "metric": "output.tokens",
+          "value": 3679,
+          "tolerance": 0,
+          "source": "raciocinio/por-pedido-codex.txt",
+          "explanation": "A janela CX6 inclui nove message.id e 4.227 tokens; o medidor de contexto seleciona oito requisições pelo primeiro registro e produz 3.679. A saída nova usa o máximo por id e publica 4.227. Checagem independente: soma direta dos usage máximos nesta janela."
+        },
+        {
+          "metric": "output.reasoningTokens",
+          "value": 1088,
+          "tolerance": 0,
+          "source": "token_usage_record / message.usage"
+        }
+      ]
+    },
+    {
+      "name": "P2",
+      "client": "claude",
+      "file": ".claude/projects/C--Users-<user>-SSAM-Hybrid-proto/7427c081-1701-4dd3-a1a7-c966a91e7d8d.jsonl",
+      "start": "2026-10-13T14:14:59Z",
+      "end": "2026-10-13T14:19:23Z",
+      "metrics": [
+        {
+          "metric": "wallMin",
+          "value": 4.4,
+          "tolerance": 0.1,
+          "source": "CX6"
+        },
+        {
+          "metric": "toolSecSum",
+          "value": 54,
+          "tolerance": 6,
+          "source": "CX6"
+        },
+        {
+          "metric": "writtenKB",
+          "value": 40,
+          "tolerance": {
+            "relative": 0.03
+          },
+          "source": "CX6"
+        },
+        {
+          "metric": "rounds",
+          "value": 10,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "refusedOrError",
+          "value": 1,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "context.requests",
+          "value": 8,
+          "tolerance": 0,
+          "source": "contexto/saida/medidas.json"
+        },
+        {
+          "metric": "context.inputTokens",
+          "value": 1384360,
+          "tolerance": 0,
+          "source": "contexto/saida/medidas.json"
+        },
+        {
+          "metric": "output.tokens",
+          "value": 25491,
+          "tolerance": 0,
+          "source": "raciocinio/por-pedido-codex.txt"
+        },
+        {
+          "metric": "output.reasoningTokens",
+          "value": 4862,
+          "tolerance": 0,
+          "source": "token_usage_record / message.usage"
+        }
+      ]
+    },
+    {
+      "name": "P3",
+      "client": "claude",
+      "file": ".claude/projects/C--Users-<user>-SSAM-Hybrid-proto/7427c081-1701-4dd3-a1a7-c966a91e7d8d.jsonl",
+      "start": "2026-10-13T14:19:31Z",
+      "end": "2026-10-13T14:25:44Z",
+      "metrics": [
+        {
+          "metric": "wallMin",
+          "value": 6.2,
+          "tolerance": 0.1,
+          "source": "CX6"
+        },
+        {
+          "metric": "toolSecSum",
+          "value": 48,
+          "tolerance": 6,
+          "source": "CX6"
+        },
+        {
+          "metric": "writtenKB",
+          "value": 41,
+          "tolerance": {
+            "relative": 0.03
+          },
+          "source": "CX6"
+        },
+        {
+          "metric": "rounds",
+          "value": 23,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "refusedOrError",
+          "value": 6,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "context.requests",
+          "value": 21,
+          "tolerance": 0,
+          "source": "contexto/saida/medidas.json"
+        },
+        {
+          "metric": "context.inputTokens",
+          "value": 5084951,
+          "tolerance": 0,
+          "source": "contexto/saida/medidas.json"
+        },
+        {
+          "metric": "output.tokens",
+          "value": 33104,
+          "tolerance": 0,
+          "source": "raciocinio/por-pedido-codex.txt"
+        },
+        {
+          "metric": "output.reasoningTokens",
+          "value": 12318,
+          "tolerance": 0,
+          "source": "token_usage_record / message.usage"
+        }
+      ]
+    },
+    {
+      "name": "P4",
+      "client": "claude",
+      "file": ".claude/projects/C--Users-<user>-SSAM-Hybrid-proto/7427c081-1701-4dd3-a1a7-c966a91e7d8d.jsonl",
+      "start": "2026-10-13T14:25:53Z",
+      "end": "2026-10-13T15:00:00Z",
+      "metrics": [
+        {
+          "metric": "wallMin",
+          "value": 20.9,
+          "tolerance": 0.1,
+          "source": "CX6"
+        },
+        {
+          "metric": "toolSecSum",
+          "value": 72,
+          "tolerance": 6,
+          "source": "CX6"
+        },
+        {
+          "metric": "writtenKB",
+          "value": 159,
+          "tolerance": {
+            "relative": 0.03
+          },
+          "source": "CX6"
+        },
+        {
+          "metric": "rounds",
+          "value": 13,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "refusedOrError",
+          "value": 4,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "context.requests",
+          "value": 12,
+          "tolerance": 0,
+          "source": "contexto/saida/medidas.json"
+        },
+        {
+          "metric": "context.inputTokens",
+          "value": 4831962,
+          "tolerance": 0,
+          "source": "contexto/saida/medidas.json"
+        },
+        {
+          "metric": "output.tokens",
+          "value": 139082,
+          "tolerance": 0,
+          "source": "raciocinio/por-pedido-codex.txt"
+        },
+        {
+          "metric": "output.reasoningTokens",
+          "value": 64659,
+          "tolerance": 0,
+          "source": "token_usage_record / message.usage"
+        },
+        {
+          "metric": "modelPct",
+          "value": 94,
+          "tolerance": 1,
+          "source": "CX6"
+        },
+        {
+          "metric": "output.estimators.chars.reasoningTokens",
+          "value": 62539,
+          "tolerance": {
+            "relative": 0.02
+          },
+          "source": "raciocinio/portao-p4-sensibilidade.txt"
+        },
+        {
+          "metric": "output.estimators.time.reasoningTokens",
+          "value": 73485,
+          "tolerance": {
+            "relative": 0.02
+          },
+          "source": "raciocinio/portao-p4-sensibilidade.txt"
+        }
+      ]
+    },
+    {
+      "name": "G",
+      "client": "claude",
+      "file": ".claude/projects/C--Users-<user>-SSAM-Hybrid-proto/7427c081-1701-4dd3-a1a7-c966a91e7d8d.jsonl",
+      "start": "2026-10-13T14:05:15.025Z",
+      "end": "2026-10-13T14:46:52.100Z",
+      "metrics": [
+        {
+          "metric": "context.requests",
+          "value": 58,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "context.inputTokens",
+          "value": 13294337,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "context.ssamPct",
+          "value": 47.4,
+          "tolerance": 0.5,
+          "source": "CX6"
+        },
+        {
+          "metric": "context.serverInstructions.shownChars",
+          "value": 2069,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "context.serverInstructions.truncated",
+          "value": true,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "context.schemas.loaded",
+          "value": 29,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "context.schemas.loadedChars",
+          "value": 117189,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "context.schemas.used",
+          "value": 12,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "context.schemas.usedChars",
+          "value": 41969,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "repeats.byTool.ssam:ssam_reference.repeatedPct",
+          "value": 30.5,
+          "tolerance": 0.5,
+          "source": "contexto/saida/estimativas.json"
+        },
+        {
+          "metric": "repeats.byTool.ssam:ssam_code.repeatedPct",
+          "value": 20.1,
+          "tolerance": 0.5,
+          "source": "contexto/saida/estimativas.json"
+        },
+        {
+          "metric": "repeats.byTool.ssam:ssam_discover.repeatedPct",
+          "value": 16,
+          "tolerance": 0.5,
+          "source": "contexto/saida/estimativas.json"
+        },
+        {
+          "metric": "repeats.byTool.ssam:ssam_doctor.repeatedPct",
+          "value": 10.1,
+          "tolerance": 0.5,
+          "source": "contexto/saida/estimativas.json"
+        },
+        {
+          "metric": "repeats.byTool.ssam:o11_deliver.repeatedPct",
+          "value": 41.4,
+          "tolerance": 0.5,
+          "source": "contexto/saida/estimativas.json"
+        },
+        {
+          "metric": "context.ssamToolsPct",
+          "value": 46.6,
+          "tolerance": 0,
+          "source": "estimativas.mjs portado: apenas ssam:*"
+        }
+      ]
+    },
+    {
+      "name": "G-cold",
+      "client": "claude",
+      "file": ".claude/projects/C--Users-<user>-SSAM-Hybrid-proto/7427c081-1701-4dd3-a1a7-c966a91e7d8d.jsonl",
+      "start": "2026-10-13T14:05:15.025Z",
+      "end": "2026-10-13T14:09:20.371Z",
+      "metrics": [
+        {
+          "metric": "waits.coldStart.sec",
+          "value": 21.9,
+          "tolerance": 0.2,
+          "source": "esperas-rede/RELATORIO.md"
+        },
+        {
+          "metric": "waits.coldStart.lostTurns",
+          "value": 3,
+          "tolerance": 0,
+          "source": "CX6"
+        },
+        {
+          "metric": "waits.coldStart.firstSsamCallSec",
+          "value": 7.7,
+          "tolerance": 0.2,
+          "source": "CX6"
+        }
+      ]
+    },
+    {
+      "name": "O-thread",
+      "client": "codex",
+      "file": ".codex/sessions/2026/10/13/rollout-2026-10-13T12-00-43-01a135c7-b752-7dc2-9d59-d5ad9229fd1b.jsonl",
+      "start": "2026-10-13T00:00:00Z",
+      "end": "2026-10-13T23:59:59Z",
+      "metrics": [
+        {
+          "metric": "waits.execYields",
+          "value": 7,
+          "tolerance": 0,
+          "source": "esperas-rede/polls-codex.json"
+        },
+        {
+          "metric": "waits.waitCalls",
+          "value": 15,
+          "tolerance": 0,
+          "source": "esperas-rede/polls-codex.json"
+        },
+        {
+          "metric": "waits.pollTurnInputTokens",
+          "value": 954901,
+          "tolerance": 0,
+          "source": "esperas-rede/polls-codex.json"
+        },
+        {
+          "metric": "waits.pollSec",
+          "value": 64.6,
+          "tolerance": 0.5,
+          "source": "esperas-rede/polls-codex.json"
+        },
+        {
+          "metric": "otherMcpCalls.n",
+          "value": 63,
+          "tolerance": 0,
+          "source": "esperas-rede/resumo.json"
+        },
+        {
+          "metric": "otherMcpCalls.secSum",
+          "value": 661.2,
+          "tolerance": 0.5,
+          "source": "esperas-rede/resumo.json"
+        },
+        {
+          "metric": "waits.pollTurnModelSec",
+          "value": 92.1,
+          "tolerance": 0.5,
+          "source": "esperas-rede/polls-codex.json",
+          "explanation": "A fonte mede modelGapSec=92,1 (última saída até início do wait), sem registros de término de requisição. O campo novo mede intervalos token_usage_record de requisições só de sondagem:44,506s. A função fiel W1 reproduz 92,1; os registros de geração reproduzem 44,506. É mudança declarada de método, sem alteração de campo CX6."
+        },
+        {
+          "metric": "waits.waitStillRunning",
+          "value": 8,
+          "tolerance": 0,
+          "source": "PROMPT-CX10 rev §6.3: 7exec+8wait"
+        }
+      ]
+    },
+    {
+      "name": "T-thread",
+      "client": "codex",
+      "file": ".codex/archived_sessions/rollout-2026-10-13T11-57-13-01a135c4-8333-7190-b72c-bb2c32460f1d.jsonl",
+      "start": "2026-10-13T00:00:00Z",
+      "end": "2026-10-13T23:59:59Z",
+      "metrics": [
+        {
+          "metric": "context.truncatedAnswers.n",
+          "value": 9,
+          "tolerance": 0,
+          "source": "contexto/saida/extras.json"
+        },
+        {
+          "metric": "context.truncatedAnswers.originalTokens",
+          "value": 164510,
+          "tolerance": 0,
+          "source": "contexto/saida/extras.json"
+        },
+        {
+          "metric": "repeats.byTool.ssam:ssam_discover.repeatedPct",
+          "value": 12.5,
+          "tolerance": 0.5,
+          "source": "contexto/saida/estimativas.json"
+        },
+        {
+          "metric": "repeats.byTool.ssam:ssam_code.repeatedPct",
+          "value": 11.7,
+          "tolerance": 0.5,
+          "source": "contexto/saida/estimativas.json",
+          "explanation": "A associação posicional antiga perde alinhamento após uma saída string. Associação por call_id mede 10,9078555%, mantendo W1 fiel em 11,7049095%. Verificação independente por variante gravada e prova em w6/repetition-audit.json."
+        },
+        {
+          "metric": "repeats.byTool.ssam:ssam_reference.repeatedPct",
+          "value": 9.9,
+          "tolerance": 0.5,
+          "source": "contexto/saida/estimativas.json"
+        },
+        {
+          "metric": "repeats.byTool.ssam:recusas.repeatedPct",
+          "value": 3.8,
+          "tolerance": 0.5,
+          "source": "contexto/saida/estimativas.json"
+        }
+      ]
+    }
+  ]
+}

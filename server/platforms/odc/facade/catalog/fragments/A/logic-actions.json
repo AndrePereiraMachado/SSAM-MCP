@@ -371,6 +371,73 @@
       }
     },
     {
+      "id": "logic.entity-actions",
+      "generator": "entity-actions",
+      "category": "logic",
+      "title": "CRUD generator",
+      "keywords": [
+        "crud",
+        "crud actions",
+        "acoes crud",
+        "entity actions",
+        "acoes padrao das entidades",
+        "save delete list",
+        "salvar excluir listar",
+        "list and get by id",
+        "core services",
+        "camada core",
+        "server actions das entidades",
+        "service actions das entidades",
+        "acoes das entidades",
+        "actions for every entity",
+        "actions for the entities",
+        "dono do registro",
+        "record owner",
+        "list actions das entidades",
+        "listar salvar excluir",
+        "listar ler salvar excluir",
+        "list read save delete",
+        "actions de cada entidade"
+      ],
+      "summary": "Writes the CRUD of every entity from the module's data model in one op, with its service wrappers; nothing hand-written for the standard part (the actions are named in guidance).",
+      "route": {
+        "kind": "job",
+        "operation": "{\"op\":\"entity-actions\",\"data\":{\"entities\":\"all\",\"owner\":{\"attribute\":\"CreatedBy\"},\"expose\":{\"server\":true,\"service\":true}}} first in the job; the business actions follow as logic texts (they may call the generated ones)"
+      },
+      "contract": [
+        "entity-actions.shapes",
+        "entity-actions.rules",
+        "entity-actions.example",
+        "entity-actions.signatures"
+      ],
+      "guidance": "Per server entity: Get<E>List (an aggregate with joins to the entities its references name, filters by reference, indexed text and indexed date, a search, the owner and the active attribute, sort, Max Records/Start Index paging; the page as a <E>ListItem structure mirroring the aggregate record, and the total), Get<E>ById, Save<E> (existence, owner, required fields, lengths, references that must exist, unique keys, then Create/Update; typed errors ValidationFailed/NotFound/AccessDenied) and Remove<E> (existence, owner, the records that still reference it, or the active attribute set to False), plus a service action per server action. Generated as logic texts (each reads back as its text); deterministic; an action of the same name is never overwritten (kept, listed with the generated text); the same op again is NO_CHANGE. Write by hand only what is business-specific. On ODC an app keeps server actions private (the service actions are its public entry); an entity that is not public keeps its actions private and gets no service action (notes in the receipt). names {list, byId, save, delete, service, item}; language \"pt\" writes descriptions and messages in Portuguese.",
+      "example": {
+        "ops": [
+          "entity-actions"
+        ],
+        "max": 1
+      },
+      "depends": [],
+      "alternatives": [
+        {
+          "id": "logic.server-action",
+          "when": "a business action (not a standard one of an entity): a logic text after this op in the same job"
+        }
+      ],
+      "platforms": {
+        "odc": {
+          "proofs": [
+            "entity-actions"
+          ]
+        },
+        "o11": {
+          "proofs": [
+            "entity-actions"
+          ]
+        }
+      }
+    },
+    {
       "id": "logic.client-action",
       "supersedes": ["logic.client-action"],
       "category": "logic",

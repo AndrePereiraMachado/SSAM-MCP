@@ -1,0 +1,10 @@
+{"timestamp":"2026-01-01T12:00:00Z","type":"user","isMeta":true,"message":{"content":[{"type":"text","text":"[BenchSSAM round=01 case=C1 lane=odc subagents=yes]\ncross-session-message"}]}}
+{"timestamp":"2026-01-01T12:00:01Z","type":"assistant","message":{"id":"m1","model":"claude-test","usage":{"output_tokens":10},"content":[{"type":"text","text":"Olá"},{"type":"tool_use","id":"a","name":"mcp__ssam__studio_deliver","input":{"text":"ação"}}]}}
+{"timestamp":"2026-01-01T12:00:02Z","type":"assistant","message":{"id":"m1","model":"claude-test","usage":{"output_tokens":10},"content":[{"type":"tool_use","id":"b","name":"mcp__ssam__ssam_reference","input":{}}]}}
+{"timestamp":"2026-01-01T12:00:04Z","type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"a","content":"{\"outcome\":\"refused\",\"code\":\"PREFLIGHT_REFUSED\",\"error\":\"[GRAMMAR]\",\"problems\":[{\"code\":\"GRAMMAR\"}]}"}]}}
+{"timestamp":"2026-01-01T12:00:06Z","type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"b","is_error":true,"content":"Documentation contains refused and error."}]}}
+{"timestamp":"2026-01-01T12:00:07Z","type":"assistant","message":{"id":"m2","model":"claude-test","usage":{"output_tokens":20},"content":[{"type":"tool_use","id":"c","name":"mcp__ssam__studio_deliver","input":{}}]}}
+{"timestamp":"2026-01-01T12:00:08Z","type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"c","content":[{"type":"text","text":"{\"ok\":true,\"outcome\":\"delivered\"}"}]}]}}
+{"timestamp":"2026-01-01T12:00:10Z","type":"system","subtype":"stop_hook_summary"}
+{"timestamp":"2026-01-01T12:00:12Z","type":"user","message":{"content":"Pedido sem tag"}}
+{"timestamp":"2026-01-01T12:00:14Z","type":"system","subtype":"stop_hook_summary"}

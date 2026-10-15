@@ -232,6 +232,16 @@ test('a tab header without its panel is an unknown layout', async () => {
 const timerBridge = (timer, post, extra = {}, options = {}) => new FakeBridge({ pages: { ...modulePages(), [`GET ${TIMER}`]: timer, [`POST ${SC}eSpace_Timer_Edit.aspx`]: post, ...extra }, ...options });
 const mutate = (s, bridge, action, name = 'ProcessQueue', extra = {}) => client(bridge).mutate(action, '102', name, { execute: true, words: 'go', operationId: uuid(), journal: s.journal, ...extra });
 
+test('a malformed native timer schedule refuses activation before any reservation or POST',async()=>{
+ const s=setup();
+ const invalid=html('timers/timer-edit.inactive.html',
+  ['wtSchedule_Time','wtInputTimerTimes'],['wtSchedule_Recurrence','wtSelectScheduleType'],['value="03:00"','value="Every "']);
+ const bridge=timerBridge(invalid,()=>assert.fail('must not post'));
+ const operationId=uuid();
+ await assert.rejects(mutate(s,bridge,'timer-activate','ProcessQueue',{operationId}),e=>e.code==='TIMER_SCHEDULE_INVALID');
+ assert.equal(bridge.posts().length,0);assert.equal(fs.existsSync(s.journal.path(operationId)),false);
+});
+
 test('Run Now posts the fixture form and only means scheduled', async () => {
   const s = setup();
   const bridge = timerBridge(html('timers/timer-edit.active.html'), html('timers/timer-run-now.response.html'));
@@ -251,6 +261,17 @@ test('deactivate and activate are confirmed by the opposite button', async () =>
   assertForm('timers/timer-deactivate.request.json', bridge);
   assert.equal((await mutate(s, bridge, 'timer-activate')).state, 'confirmed');
   assert.equal(sent(bridge)[1]['wt9$wtContentTop$wtActivateButton'], 'Activate');
+});
+
+test('an acknowledged toggle that leaves the opposite state resolves without repeating the POST',async()=>{
+ const s=setup();
+ const bridge=timerBridge(html('timers/timer-edit.inactive.html'),html('timers/timer-activate.response.html'));
+ const c=client(bridge);
+ const receipt=await c.mutate('timer-activate','102','ProcessQueue',{execute:true,words:'go',operationId:uuid(),journal:s.journal});
+ assert.equal(receipt.state,'uncertain');assert.equal(bridge.posts().length,1);
+ const verified=await c.verify(receipt,s.journal);
+ assert.equal(verified.state,'not-executed');assert.equal(bridge.posts().length,1);
+ assert.equal(verified.observedDesiredState,false);
 });
 
 test('Run Now saves its pre-send log baseline and verify observes an exact new log without resending', async () => {
@@ -275,6 +296,21 @@ test('Run Now saves its pre-send log baseline and verify observes an exact new l
   assert.equal(result.state, 'accepted');
   assert.equal(result.replayed, false);
   assert.equal(bridge.posts().length, writes);
+});
+
+test('unacknowledged Run Now resolves its receipt when readback finds a new exact timer log',async()=>{
+  const s=setup();let sentRun=false;
+  const bridge=timerBridge(html('timers/timer-edit.active.html'),()=>{sentRun=true;return '<div>Response received</div>';});
+  const c=client(bridge);
+  c.logs=async()=>({complete:true,truncated:false,rows:sentRun?[{
+    fields:{'Time of Log':'2026-10-14 19:30:01',Timer:'ProcessQueue',Duration:'0s'},
+    links:[{href:'https://'+HOST+TIMER+'&EspaceId=102'}]
+  }]:[]});
+  const result=await c.mutate('timer-run','102','ProcessQueue',{execute:true,words:'run',operationId:uuid(),journal:s.journal});
+  assert.equal(result.outcome,'execution-observed');assert.equal(result.state,'confirmed');
+  assert.equal(result.requestStatus,'unconfirmed');assert.equal(result.attributedToRequest,false);
+  assert.equal(result.evidence.basis,'new-exact-timer-log-rows');assert.equal(bridge.posts().length,1);
+  assert.equal(s.journal.holder(Journal.targetOf(result.identity)),null);
 });
 
 test('the schedule is set by its controls and read back', async () => {

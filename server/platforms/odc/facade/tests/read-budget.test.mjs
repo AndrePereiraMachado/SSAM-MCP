@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { boundedRead, readCheckpoint } from '../read-budget.mjs';
+import { boundedRead, readCheckpoint, readOptions } from '../read-budget.mjs';
+
+test('an explicit Service Center budget includes the cold 45-second identity exchange',async()=>{
+ const budget=await boundedRead('cold-sc-budget',()=>readOptions('authentication').timeoutMs,{timeoutMs:90000});
+ assert.ok(budget>85000 && budget<=90000);
+ const normal=await boundedRead('ordinary-budget',()=>readOptions().timeoutMs);
+ assert.ok(normal<=29000);
+});
 
 test('concurrent identical reads share one in-flight request before the deadline', async () => {
   let release, sends = 0;

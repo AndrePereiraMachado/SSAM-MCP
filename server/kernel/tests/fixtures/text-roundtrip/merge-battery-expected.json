@@ -1,0 +1,11 @@
+{
+  "note": "Floors of the three-way merge batteries (MergeBatteryCorpus), measured 2026-10-12 on the corpus of the plan with seed 1. flow: FlowMergeBattery, one action in every `every` of each module, up to two disjoint pairs and the four overlapping cases per action (measured: O11 3,593 cases, 1,058 disjoint and 2,535 overlapping, at every 6; ODC 1,845 to 1,848 cases, 470 to 471 and 1,374 to 1,378, at every 2). The count moves a little between runs: after a case that removed a node is undone, the node comes back under a key the platform gives, and the next cases of that action are made on that read. The floors are about 95% of the measure. ddl: DdlMergeBattery, `rounds` rounds of the eight disjoint and six overlapping cases per module (a case without room in a module is skipped; measured O11 217 and 168 in one round, ODC 86 and 64 in two). Every case must come back exact. Review of the junction (2026-10-12): flow adds the cases of one node (part|part, insert|part and code|code disjoint, code-same-line overlapping; measured O11 4,656 cases, 2,092 disjoint and 2,564 overlapping, ODC 2,403, 1,003 and 1,400); ddl adds the refused cases (foreign-read: a read of another module, DDL_BASE_FOREIGN; newer-element: an attribute created after the read and changed in the Studio, DDL_BASE_UNKNOWN), each refused with that code and the module unchanged (measured O11 56 in one round, ODC 24 in two; minRefused about 95%).",
+  "flow": {
+    "o11": { "every": 6, "minDisjoint": 1000, "minOverlap": 2400 },
+    "odc": { "every": 2, "minDisjoint": 440, "minOverlap": 1300 }
+  },
+  "ddl": {
+    "o11": { "rounds": 1, "minDisjoint": 217, "minOverlap": 168, "minRefused": 53 },
+    "odc": { "rounds": 2, "minDisjoint": 86, "minOverlap": 64, "minRefused": 22 }
+  }
+}

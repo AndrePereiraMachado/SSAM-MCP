@@ -30,7 +30,9 @@ const url='https://'+host+'/ServiceCenter/eSpace_Timer_Edit.aspx?id=7';
 const script="OsAjax(arguments[0] || window.event,'run','form$run','','__OSVSTATE,',''); return false;";
 function page(onclick=script) { return new Page(url,new Document('<form method="post"><input type="hidden" name="__OSVSTATE" value="state"><input type="submit" id="run" name="form$run" value="Run Now" onclick="'+onclick+'"></form>')); }
 const body=JSON.stringify('<div class="Feedback_Message_Success">Timer scheduled</div>');
-function client(http, p=page()){const c=new Client({host},http);c.detail=async()=>p;return c;}
+// A Run Now answer reads the timer back (listing, then detail) before it returns (da1ab3ca): both reads are local here,
+// so the transport only ever sees the AJAX send.
+function client(http, p=page()){const c=new Client({host},http);c.detail=async()=>p;c.resourceListing=async()=>({truncated:false,rows:[{links:[{name:'Worker',href:url}]}]});return c;}
 test('live Run Now AJAX protocol is one journaled write, not a read, and UUID never replays',async()=>{
  const journal=new Journal(temp()),operationId=uuid(),calls=[];
  const http=new Transport(host,{send:async request=>{

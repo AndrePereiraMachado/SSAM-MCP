@@ -40,6 +40,9 @@ const sameBinding=(a,b)=>a?.kind==='native-debug-session' || b?.kind==='native-d
 // cannot run until that pause is consumed. Only public script/ref/mode/roots in argv.
 // Records go to the debugger state root (debug-state-root.mjs); sourceRoot opens one legacy copy read only.
 const literal = s => "'" + s.replace(/'/g, "''") + "'";
+// Each vault call is one powershell.exe; a call slower than this bound fails as vault_unavailable. A window that wraps
+// real vault calls (a credential lease, a channel expiry) is sized as calls x this bound, never as an idle-machine guess.
+export const PRIVATE_VAULT_CALL_TIMEOUT_MS = 8000;
 export function privateInspectionVault(mode, ref, value, { sourceRoot } = {}) {
   if (!['Seal','Open','Forget'].includes(mode) || !GUID.test(ref ?? '') ||
       sourceRoot !== undefined && (mode !== 'Open' || !path.isAbsolute(sourceRoot ?? ''))) fail('vault_request_invalid');
@@ -51,7 +54,7 @@ export function privateInspectionVault(mode, ref, value, { sourceRoot } = {}) {
     input = value === undefined ? '' : JSON.stringify(value);
     if (Buffer.byteLength(input) > 4*1024*1024) fail('value_budget');
     const child = spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(code,'utf16le').toString('base64')],
-      { windowsHide:true, input, encoding:'utf8', timeout:8000, maxBuffer:4*1024*1024, stdio:['pipe','pipe','ignore'] });
+      { windowsHide:true, input, encoding:'utf8', timeout:PRIVATE_VAULT_CALL_TIMEOUT_MS, maxBuffer:4*1024*1024, stdio:['pipe','pipe','ignore'] });
     if (child.error || child.status !== 0) fail('vault_unavailable');
     output = child.stdout;
     const result = JSON.parse(output.replace(/^\uFEFF/,''));

@@ -16,13 +16,15 @@ import { readConnection } from './studio-session.mjs';
 import { registryInstallLocation } from './studio-locate.mjs';
 import { composeCatalog, applySupersedes, rewriteAliases, keywordProblems, synonymProblems, FRAGMENTS_DIR, STOP, normalize, derived, stem, words, tokens, fold, folded } from './catalog.mjs';
 import { isScreenIntent, appTypesFromKinds, appTypesFromIntent, osuiSection, osuiExpansion, osuiCatalogAvailable, namedPatterns, APP_TYPES } from './osui-catalog.mjs';
+import { textRouteSection, sectionLevels } from './text-routes.mjs';
+import { generatorOfJob, generatorShown } from './generators.mjs';
 
 const run = promisify(execFile);
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const DISCOVERY_SCHEMA = 'ssam-discovery/4';
 export const INDEX_SCHEMA = 'ssam-discovery-index/3';
 const DESCRIPTOR_FILE = path.join(here, 'discovery-capabilities.json');
-const API_OPS = ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-expose', 'soap'];
+const API_OPS = ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-consume', 'rest-expose', 'soap', 'entity-actions'];
 export const DEFAULT_BUDGET_BYTES = 40 * 1024;
 export const EXPAND_PARTS = ['contract', 'example', 'evidence', 'bindings', 'native', 'operations'];
 
@@ -31,6 +33,7 @@ const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFE
 const exists = file => { try { return fs.existsSync(file); } catch { return false; } };
 const stamp = file => { try { const s = fs.statSync(file); return `${s.size}:${Math.round(s.mtimeMs)}`; } catch { return 'absent'; } };
 const bytes = value => Buffer.byteLength(JSON.stringify(value), 'utf8');
+const recoveryBudgets = new WeakMap();
 
 // ---- lanes: where each source lives. Each lane has its own descriptor (routes, lane-specific capabilities) and both
 // share discovery-capabilities-shared.json, composed with the catalog fragments (catalog/fragments/<front>/*.json,
@@ -469,7 +472,7 @@ function loadJobs(sources) {
     const eolVariants = [...new Set([sha256(Buffer.from(lf, 'utf8')), sha256(Buffer.from(lf.replace(/\n/g, '\r\n'), 'utf8'))])].filter(h => h !== sha256(raw));
     jobs.push({ name, path: path.relative(sources.kernel, full).replaceAll('\\', '/'), ...(composite ? { composite: true } : {}), sha256: sha256(raw), sha256Eol: eolVariants, description: job.description ?? '', base: job.base ?? null,
       expectValid: job.expectValid ?? true, expectedMessages: (job.expectedMessages ?? []).map(m => ({ id: m.id, element: m.element, why: m.why })),
-      opCount: (job.ops ?? []).length, ...summarizeOps(job.ops), bindings: bindingsOf(job.ops), executed: executionOf(path.join(sources.testWork, name + '.result.json'), job.ops ?? null) });
+      opCount: (job.ops ?? []).length, generator: generatorOfJob(job), ...summarizeOps(job.ops), bindings: bindingsOf(job.ops), executed: executionOf(path.join(sources.testWork, name + '.result.json'), job.ops ?? null) });
   }
   return jobs;
 }
@@ -1356,7 +1359,8 @@ export function query(index, { intent = '', limit = 8 } = {}) {
     .map(e => { const anchor = gate(e, u.id); return anchor === null ? null : anchor ? `${e.form} [${anchor}]` : e.form; }).filter(Boolean) })).filter(x => x.hits.length)
     .map(x => ({ id: x.u.id, why: x.hits, reason: x.u.reason, evidence: x.u.evidence ?? null, negative: (x.u.negative?.[index.lane] ?? []), alternative: x.u.alternative ?? null }));
   const cited = new Set(matches.flatMap(m => (m.proofs ?? []).map(p => p.job)));
-  const relatedJobs = index.jobs.filter(j => !cited.has(j.name)).map(j => ({ j, ...scoreJob(j, terms) })).filter(x => x.score > 1).sort((a, b) => b.score - a.score).slice(0, 3)
+  // A suite job of a pending generator is its proof: never listed unasked (the generator gate; named, it is listed).
+  const relatedJobs = index.jobs.filter(j => !cited.has(j.name) && generatorShown(j.generator, intent)).map(j => ({ j, ...scoreJob(j, terms) })).filter(x => x.score > 1).sort((a, b) => b.score - a.score).slice(0, 3)
     .map(x => ({ job: x.j.name, why: x.why, description: x.j.description.slice(0, 120), level: jobLevel(x.j) }));
   const covered = new Set(matches.flatMap(m => m.why).concat(unavailable.flatMap(u => u.why)).flatMap(whyWords));
   const unmatched = raw.filter(t => ![...from.get(t) ?? []].some(c => c.split(' ').every(part => covered.has(part))));
@@ -1645,6 +1649,9 @@ function budgetStages() {
 // `keepExpansions`: the expansions are the parts asked, placed by fitAsked (whole, or reduced and named): stage F skips them.
 export function applyBudget(answer, budgetBytes, { keepExpansions = false } = {}) {
   const truncated = [];
+  // Preserve the budget of the whole pre-cut answer, not a guessed increase. Extra room
+  // accounts for the size envelope which is added below and must fit on the recovery.
+  const recoveryBudget = Math.max(4096, bytes(answer) + 2048);
   const direct = a => (a.matches ?? []).filter(m => m.via === 'match').map(m => m.id);
   const stages = budgetStages().filter(([name]) => !(keepExpansions && name === 'expansions'));
   // continuation.omitted names every part a direct match no longer carries, whatever reduced it (design or budget); it
@@ -1668,7 +1675,11 @@ export function applyBudget(answer, budgetBytes, { keepExpansions = false } = {}
   for (const [name, reduce, recover] of stages) {
     if (measure() <= budgetBytes) break;
     const before = bytes(answer); reduce(answer);
-    if (bytes(answer) < before) { truncated.push({ section: name, recover: recover(answer) }); answer.size.status = 'reduced'; refreshOmitted(); }
+    if (bytes(answer) < before) {
+      const entry = { section: name, recover: recover(answer) };
+      recoveryBudgets.set(entry, recoveryBudget);
+      truncated.push(entry); answer.size.status = 'reduced'; refreshOmitted();
+    }
   }
   // The last check is on the returned bytes: above the budget after every stage, the explicit insufficient result.
   if (measure() > budgetBytes) return insufficientAnswer(answer, budgetBytes, truncated);
@@ -2324,7 +2335,30 @@ export function fitC07(answer, extras, budgetBytes) {
 }
 
 // ---- public entry
-export async function discover({ lane = 'odc', intent = '', app = null, detail = null, expand = null, type = null, limit = 8, rebuild = false, budgetBytes = DEFAULT_BUDGET_BYTES, ceilingBytes = null, inspect = null, map = null, sources = laneSources(lane), descriptorFile = sources.descriptor, outsystemsUi = true, packet = false, digest = null, operations = null } = {}) {
+export async function discover(input = {}) {
+  return exactDiscoveryCalls(await discoverCore(input), input);
+}
+
+// The router fits model and operation sections together before their public exit.
+// Recovery calls are added only there, so metadata never changes matching decisions.
+export const discoverModel = input => discoverCore(input);
+
+// Every public discovery answer carries executable continuations, including sections
+// fitted after the model (UI and text). Repeated public entry passes are idempotent.
+export function exactDiscoveryCalls(answer, input = {}) {
+  if (!answer?.size?.truncated?.length) return answer;
+  const request = Object.fromEntries(['lane', 'intent', 'app', 'expand', 'detail', 'type', 'limit', 'catalog'].filter(k => input[k] != null).map(k => [k, input[k]]));
+  request.lane ??= 'odc';
+  const recoveryBudget = Math.max(DEFAULT_BUDGET_BYTES, ...answer.size.truncated.map(t => t.call?.arguments?.budgetBytes ?? recoveryBudgets.get(t) ?? 0));
+  answer.size.truncated = answer.size.truncated.map(t => ({ section: t.section,
+    ...(t.recover ? { recover: t.recover.slice(0, 80) } : {}),
+    call: t.call ? { ...t.call, arguments: { ...request, ...t.call.arguments } } : { tool: 'ssam_discover', arguments: { ...request, budgetBytes: recoveryBudget } } }));
+  answer.size.bytes = 0;
+  for (let i = 0, measured = bytes(answer); i < 6 && answer.size.bytes !== measured; i++) { answer.size.bytes = measured; measured = bytes(answer); }
+  return answer;
+}
+
+async function discoverCore({ lane = 'odc', intent = '', app = null, detail = null, expand = null, type = null, limit = 8, rebuild = false, budgetBytes = DEFAULT_BUDGET_BYTES, ceilingBytes = null, inspect = null, map = null, sources = laneSources(lane), descriptorFile = sources.descriptor, outsystemsUi = true, packet = false, digest = null, operations = null, textRoutes = true, components = null, producerCache = undefined } = {}) {
   // ceilingBytes: the entry's answer ceiling (discoverAll; atEntry): a budget below the minimal answer is raised to it, and
   // a minimal above the ceiling answers in pages. Without it the budget is the hard limit it always was (engine, tests).
   const started = performance.now();
@@ -2426,7 +2460,24 @@ export async function discover({ lane = 'odc', intent = '', app = null, detail =
     // catalog (builtin-functions.mjs); O11 only.
     const { loadBuiltins, intentFunctions } = await import('./builtin-functions.mjs');
     const functions = lane === 'o11' ? intentFunctions(intent, loadBuiltins(sources.kernel), { lane }) : null;
-    return workPacket({ lane, intent, app, basis: { index: index.key }, matches, unavailable: q.unavailable, functions,
+    // The text route of the packet (text-packet.mjs): the read and delivery of the text forms the intent writes, their
+    // grammar, contract slices and proven examples, over the module the packet read (the owner's re-test of 2026-10-12).
+    const { packetTextSection } = await import('./text-packet.mjs');
+    const text = textRoutes ? packetTextSection({ lane, intent, found, slice: pointer => contractNode(index, pointer) }) : null;
+    // What the environment offers for a need the platform lacks (pdf, excel, email, files, images...), named by the intent
+    // (environment-components.mjs): one answer in place of the producers, list, inspect, extension read and capture calls.
+    const { componentNeeds, laneComponents } = await import('./environment-components.mjs');
+    const needs = lane === 'o11' ? componentNeeds(intent) : [];
+    const environment = needs.length ? await (components ?? (x => laneComponents(x, { root: anvilRoot, digest: laneDigest(lane, sources) })))({ lane, intent, needs }) : null;
+    // A data, action or screen intent carries its text route: next.deliver is the ssam_code write (work-packet.mjs).
+    const textRoute = textRoutes ? textRouteSection(intent, lane, { slice: () => undefined }) : null;
+    // F6 (producer-signatures.mjs packetProducers): the producer signatures this workspace already captured that the intent
+    // needs (named, or of the module's app), with the reference op ready; o11_deliver reuses them while the version stays.
+    const { packetProducers } = await import('./producer-signatures.mjs');
+    // servidor/fase4-25: hosted, no producer cache of the server is read (the O11 cache is off hosted: no .local above ws:o11/work).
+    const producers = lane === 'o11' && !(await import('./executor.mjs')).hostedContext() ? packetProducers(producerCache === undefined ? path.join(anvilRoot, '.local', 'producer-cache') : producerCache,
+      { intent: said, module: found?.ok ? found.digest?.module?.name ?? null : null }) : null;
+    return workPacket({ lane, intent, app, basis: { index: index.key }, matches, unavailable: q.unavailable, functions, text, environment, textRoute, producers,
       categories: new Map(index.capabilities.map(c => [c.id, c.category])),
       slices: (pointers, form) => contractSlice(index, pointers, { full: form === 'full', capBytes: 3072 }),
       steps: steps ? { kinds: steps.kinds, shape: steps.shape, grammar: steps.grammar } : null,
@@ -2499,10 +2550,110 @@ export async function discover({ lane = 'odc', intent = '', app = null, detail =
     const budgeted = osui ? budgetWithFloor(copy, room, osui, keep) : applyBudget(copy, room, keep);
     return osui ? fitOutsystemsUi(budgeted, osui, room) : budgeted;
   };
-  const fit = (B, cap = null) => fitWithSteps(room => fitModel(room, cap), extras, B);
+  // B2 of the plan "Texto do SSAM" (text-routes.mjs): a screen, data or logic change also gets the route of its text form,
+  // the read and the ready delivery call of this lane (fitTextRoute): after the model part and the OutSystems UI section,
+  // before the C07 sections, which take the room left as before. The junction of 24.1 (speed + text): under the entry's cap
+  // (atEntry: a section left without a word, the model part capped so that the sections keep their floor) the route never
+  // takes the floor of the C07 extras (sectionsFloor: the forms by reference and their note), and its refit takes the route's
+  // floor out of the cap (the model part, then the OutSystems UI section above it); the answer keeps the budget it was given
+  // (size.budgetBytes), never the route's room. Without the cap the route fits as the text plan measured it.
+  const route = textRoutes ? textRouteSection(intent, lane, { slice: pointer => contractNode(index, pointer) }) : null;
+  const fitRouted = !route ? fitModel : (room, cap = null) => {
+    if (cap == null || cap >= room) return fitTextRoute(fitModel(room), route, room, fitModel);
+    const top = room - (proven || steps || values ? sectionsFloor({ extras }, room).c07 : 0);
+    const refit = r => fitModel(r + (room - top), Math.max(0, cap - (top - r)));
+    return fitTextRoute(fitModel(room, cap), route, top, refit, room);
+  };
+  const fit = (B, cap = null) => fitWithSteps(room => fitRouted(room, cap), extras, B);
   const fitAt = (B, { page = false, model = null } = {}) => (asked ? fitAsked(answer, asked, b => fit(b, model), { budgetBytes: B, lane, pageBytes: page ? ceilingBytes : null }) : { answer: fit(B, model), minimalBytes: null });
   const sections = osui || proven || steps || values ? { floor: B => sectionsFloor({ osui, extras }, B).bytes, lost: a => silentlyLost(a, { osui, extras }).length > 0 } : null;
   return atEntry(fitAt, { budgetBytes, ceilingBytes, sections });
+}
+
+// The section out of an answer, for the tools of a mixed request (tool-routing.mjs discoverAll): it comes back after them,
+// in the room they leave, like the OutSystems UI and C07 sections.
+export function stripTextRoute(answer) {
+  if (!answer || (!('textRoute' in answer) && !answer.size?.truncated?.some(t => t.section === 'textRoute'))) return { answer, section: null };
+  const { textRoute: section = null, ...rest } = answer;
+  if (rest.size?.truncated) rest.size = { ...rest.size, truncated: rest.size.truncated.filter(t => t.section !== 'textRoute') };
+  return { answer: rest, section };
+}
+// The text route goes in AFTER the model part and the OutSystems UI section were fitted (never changing them, the rule of
+// those sections): whole, then without its contract card, then the call alone, right after `intent`. When the richer forms
+// find no room, the model part is budgeted again with that form's floor less (size.reserved.textRoute), from the section
+// without its card down to the call alone, when the floor is at most a quarter of a whole budget (32 KB or more) and the
+// model part stays sufficient: the ready call and the owner's rules are what a text intent asked.
+// The whole section rides along every answer of discover() as a symbol key (JSON and structuredClone never carry it; a spread
+// copy does): the tools of a mixed request
+// (tool-routing.mjs discoverAll) place it again, at the richest form the room they leave allows.
+export const TEXT_ROUTE_SECTION = Symbol('ssam.textRoute');
+// `declared`: the budget the answer states (size.budgetBytes) when the route has less room than the whole answer (the
+// floor of the C07 extras above it); by default the route's own room.
+export function fitTextRoute(answer, section, budgetBytes, refit = null, declared = budgetBytes) {
+  const out = fitTextRouteInto(answer, section, budgetBytes, refit, declared);
+  if (section && out && typeof out === 'object') Object.defineProperty(out, TEXT_ROUTE_SECTION, { value: section, enumerable: true, configurable: true, writable: true });
+  return out;
+}
+function fitTextRouteInto(answer, section, budgetBytes, refit, declared = budgetBytes) {
+  if (!section || !answer || answer.ok === false) return answer;
+  const levels = sectionLevels(section);
+  const measure = out => { if (!out.size) return bytes(out); out.size.bytes = 0; let m = bytes(out); for (let i = 0; i < 6 && out.size.bytes !== m; i++) { out.size.bytes = m; m = bytes(out); } return m; };
+  const place = (base, s, note) => {
+    const out = {}; let placed = false;
+    for (const [k, v] of Object.entries(base)) { if (!placed && s && k === 'size') { out.textRoute = s; placed = true; } out[k] = v; if (!placed && s && k === 'intent') { out.textRoute = s; placed = true; } }
+    if (!placed && s) out.textRoute = s;
+    // A copy of size: a level measured and refused must never leave its byte count in the answer it was tried on.
+    if (out.size) out.size = { ...out.size };
+    if (note && out.size) out.size = { ...out.size, status: out.size.status === 'within' ? 'reduced' : out.size.status, truncated: [...(out.size.truncated ?? []), note] };
+    return out;
+  };
+  const recover = n => (n === levels.length - 1 ? 'raise budgetBytes for the slots, rules and contract card of the text route' : `the contract card of the text route: expand contract:${section.contract?.pointer}`);
+  const tryLevels = base => {
+    for (let n = 0; n < levels.length; n++) { const out = place(base, levels[n], n ? { section: 'textRoute', recover: recover(n) } : null); if (measure(out) <= budgetBytes) return { out, n }; }
+    return null;
+  };
+  if (answer.size?.status === 'insufficient') { const out = place(answer, levels.at(-1), null); return measure(out) <= budgetBytes ? out : answer; }
+  let first = tryLevels(answer);
+  if (first?.n === 0) return first.out;
+  // First the metadata the OutSystems UI section may yield too (related jobs, the identity detail, notes, the list of shared
+  // capabilities), each named in size.truncated: never a match, a contract, an example or the OutSystems UI list.
+  {
+    const base = structuredClone(answer); const yielded = [];
+    for (const [name, reduce, recoverOf] of budgetStages().filter(([n]) => OSUI_YIELDS.includes(n))) {
+      const before = bytes(base); reduce(base);
+      if (bytes(base) >= before) continue;
+      yielded.push({ section: name, recover: `${recoverOf(base)} (left out for the text route)` });
+      const withYields = { ...base, size: { ...base.size, status: 'reduced', truncated: [...(base.size?.truncated ?? []), ...yielded] } };
+      const got = tryLevels(withYields);
+      if (got && (!first || got.n < first.n)) first = got;
+      if (first?.n === 0) return first.out;
+    }
+  }
+  // The floors from the richer down: the section without its card (the call, the read, the slots and the owner's rules),
+  // then the call alone. A floor above a quarter of the budget, or a rest that would be insufficient, is not taken.
+  // The stages that reduce what the matches carry (bindings, examples, contracts, operations, summaries): a richer floor
+  // that would take one of them from the model part is not taken; the call alone always is.
+  const essential = new Set(budgetStages().map(([name]) => name).slice(budgetStages().findIndex(([name]) => name === 'bindings')));
+  const OSUI_LEVELS = ['lines', 'names', 'counts']; const rank = level => (level == null ? OSUI_LEVELS.length : OSUI_LEVELS.indexOf(level));
+  const lost = model => [...(model.size?.truncated ?? []).map(t => t.section).filter(s => essential.has(s) && !(answer.size?.truncated ?? []).some(t => t.section === s)),
+    // ...nor the richer OutSystems UI list the first answer had.
+    ...(answer.outsystemsUi && rank(model.outsystemsUi?.level) > rank(answer.outsystemsUi.level) ? ['outsystemsUi'] : [])];
+  for (let n = Math.min(1, levels.length - 1); n < levels.length; n++) {
+    if (first && first.n <= n) break; // the first answer already holds this level
+    const floor = bytes({ textRoute: levels[n] }) + 160;
+    // Only the whole answer (32 KB and more) reserves a floor; a smaller budget is the caller's choice for the rest (the
+    // tools of a mixed request, the sections a test pins at 8 or 12 KB): the section then takes only what is left.
+    if (!refit || floor > budgetBytes / 4 || budgetBytes < 32768) continue;
+    const model = refit(budgetBytes - floor);
+    if (!model?.size || model.size.status === 'insufficient') continue;
+    if (n < levels.length - 1 && lost(model).length) continue;
+    model.size = { ...model.size, budgetBytes: declared, reserved: { ...(model.size.reserved ?? {}), textRoute: floor } };
+    const second = tryLevels(model);
+    if (second && second.n <= n) return second.out;
+  }
+  if (first) return first.out;
+  const noted = place(answer, null, { section: 'textRoute', recover: `left out: the rest of the answer used the budget; ${section.id}: read with ${section.read?.tool}, deliver with ${section.call?.tool ?? 'none (only reading)'}; raise budgetBytes` });
+  return measure(noted) <= budgetBytes ? noted : answer;
 }
 
 // The grammar of the logic steps an intent names (kinds, grammar and the proven job by reference) is what that intent

@@ -1,0 +1,56 @@
+[
+ {
+  "id": 4294967297,
+  "node_id": "R_kgDOA",
+  "name": "alpha",
+  "full_name": "acme/alpha",
+  "private": false,
+  "owner": {
+   "login": "acme",
+   "id": 10,
+   "type": "Organization",
+   "site_admin": false
+  },
+  "description": null,
+  "fork": false,
+  "created_at": "2026-01-02T03:04:05Z",
+  "pushed_at": "2026-10-01T10:00:00Z",
+  "homepage": null,
+  "size": 120,
+  "stargazers_count": 0,
+  "language": null,
+  "license": null,
+  "topics": [],
+  "archived": false,
+  "score": 1
+ },
+ {
+  "id": 4294967298,
+  "node_id": "R_kgDOB",
+  "name": "beta",
+  "full_name": "acme/beta",
+  "private": false,
+  "owner": {
+   "login": "acme",
+   "id": 10,
+   "type": "Organization",
+   "site_admin": false
+  },
+  "description": "Second repository",
+  "fork": true,
+  "created_at": "2026-02-02T03:04:05Z",
+  "pushed_at": null,
+  "homepage": "https://acme.example",
+  "size": 0,
+  "stargazers_count": 12,
+  "language": "C#",
+  "license": {
+   "key": "mit",
+   "name": "MIT License",
+   "spdx_id": "MIT"
+  },
+  "topics": [],
+  "archived": false,
+  "score": 0.5
+ }
+]

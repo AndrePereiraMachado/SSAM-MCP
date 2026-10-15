@@ -205,6 +205,7 @@ internal sealed class PrototypeLogic
             "setDimension" => _ir.Dimension(effect["dimension"]?.ToString() ?? "")?["name"]?.ToString() ?? "Valor",
             "toast" => _p.Pt ? "Aviso" : "Notice",
             "validate" => _p.Pt ? "Formulario" : "Form",
+            "call" => effect["action"]?.ToString() ?? "Acao",
             _ => collection,
         };
     }
@@ -452,7 +453,15 @@ internal sealed class PrototypeLogic
                     FieldType = (field, via) => _p.FieldType(via != null ? _p.JoinedCollection(source, via) : source, field),
                 };
                 var column = sum["field"] is JsonValue fv ? $"{sourceEntity}.{fv}" : PrototypeExpr.Val(sum["field"], aggScope);
-                var step = new JsonObject { ["get"] = sourceEntity, ["as"] = node, ["columns"] = new JsonArray(new JsonObject { ["name"] = "Total", ["kind"] = "Sum", ["attribute"] = column }) };
+                var step = new JsonObject { ["get"] = sourceEntity, ["as"] = node };
+                // An aggregated column names one attribute (CompileCheck: AGGREGATE_COLUMN_NOT_ATTRIBUTE): a computed value, such as
+                // Quantidade * Preco, is a calculated column aggregated by name (the published form: AGG Total=Sum(TotalRow)).
+                if (AggregateSortRule.Plain(column) == null)
+                {
+                    step["calculated"] = new JsonArray(new JsonObject { ["name"] = "TotalRow", ["value"] = column });
+                    column = "TotalRow";
+                }
+                step["columns"] = new JsonArray(new JsonObject { ["name"] = "Total", ["kind"] = "Sum", ["attribute"] = column });
                 if (sources.Count > 0) { step["sources"] = sources; step["joins"] = joins; }
                 if (sum["where"] is JsonObject where) step["where"] = PrototypeExpr.Pred(where, aggScope);
                 sums.Add(step);
@@ -684,6 +693,29 @@ internal sealed class PrototypeLogic
     private bool PureNavigation(JsonObject e)
         => (e["cases"] as JsonArray ?? []).Count == 0 && e["effects"] is JsonArray effects && effects.Count == 1 && effects[0]?["kind"]?.ToString() == "navigate";
 
+    /// <summary>Whether a trigger of the event is an element whose click is an extended onclick (anything but a button or a link):
+    /// the tag of its selector, and the tags of the capture nodes that carry the event.</summary>
+    private bool NeedsHandlerAction(JsonObject e)
+    {
+        var key = e["key"]!.ToString();
+        // a submit goes on the form's button (an IButton, whose OnClick takes the destination); only clicks are asked
+        if (!key.Contains(":click:", StringComparison.Ordinal)) return false;
+        var tags = new HashSet<string>(StringComparer.Ordinal);
+        var lead = System.Text.RegularExpressions.Regex.Match(e["selector"]?.ToString() ?? "", "^[A-Za-z][A-Za-z0-9-]*").Value.ToLowerInvariant();
+        if (lead.Length > 0) tags.Add(lead);
+        void Visit(JsonNode? n)
+        {
+            if (n is not JsonObject o) return;
+            if (o["events"] is JsonArray events && events.Any(x => x?.ToString() == key) && o["t"]?.ToString() is { } t) tags.Add(t.ToLowerInvariant());
+            foreach (var child in o["c"] as JsonArray ?? []) Visit(child);
+            if (o["list"]?["template"] is JsonObject template) Visit(template);
+        }
+        foreach (var view in _ir.Views) Visit(view["root"]);
+        Visit(_ir.Shell?["root"]);
+        foreach (var modal in _ir.Modals) Visit(modal["root"]);
+        return tags.Any(t => t is not ("a" or "button"));
+    }
+
     /// <summary>The event at one owner: a navigation binding, or a screen action (and, in a block, the trigger of its block event).</summary>
     private void Bind(PrototypeOwner owner, JsonObject e)
     {
@@ -693,6 +725,22 @@ internal sealed class PrototypeLogic
         {
             var nav = (JsonObject)e["effects"]![0]!;
             var screen = _p.PlanResult.Screens.GetValueOrDefault(nav["view"]?.ToString() ?? "");
+            // a div, li or span that navigates gets the extended onclick of an HTML element, whose handler is an action, never a
+            // screen (VisitaCerta 2026-10-12: the side menu items of the shell, EventHandlerRequiredAction): an action of the owner
+            // (screen or block) that only goes to the screen; a button or a link keeps the destination on its own OnClick
+            if (screen != null && NeedsHandlerAction(e))
+            {
+                var navScope = ActionScope(owner, e, null);
+                var destination = new JsonObject { ["node"] = "IDestinationNode", ["as"] = (_p.Pt ? "IrPara" : "GoTo") + screen, ["properties"] = new JsonObject { ["Destination"] = "IMobileScreen:" + screen } };
+                var args = new JsonObject();
+                foreach (var (param, val) in nav["params"] as JsonObject ?? []) args[param] = PrototypeExpr.Val(val, navScope);
+                if (args.Count > 0) destination["args"] = args;
+                var action = ActionName(owner, (_p.Pt ? "IrPara" : "GoTo") + screen);
+                owner.Actions.Add(Screen(owner, action, $"Event {key} of the prototype: goes to the screen {screen} (handler {e["handler"]}).", [], [destination]));
+                owner.Bindings[key] = new PrototypeEventBinding(key, null, action, []);
+                _compiled.Add(key);
+                return;
+            }
             owner.Bindings[key] = new PrototypeEventBinding(key, screen, null, [], nav["params"] as JsonObject is { } np ? np.ToDictionary(p => p.Key, p => p.Value!.DeepClone()) : null);
             _compiled.Add(key);
             return;
@@ -785,8 +833,17 @@ internal sealed class PrototypeLogic
     /// <summary>A value written into a field: an integer into a key or foreign key becomes the entity identifier.</summary>
     private string ToField(string collection, string field, JsonNode? value, PrototypeScope scope)
     {
-        var text = PrototypeExpr.Val(value, scope);
-        return _p.FieldType(collection, field) == "Identifier" && PrototypeExpr.TypeOf(value, scope) != "Identifier" ? $"IntegerToIdentifier({text})" : text;
+        var fieldType = _p.FieldType(collection, field);
+        if (fieldType == "Identifier")
+        {
+            var id = PrototypeExpr.Val(value, scope);
+            return PrototypeExpr.TypeOf(value, scope) != "Identifier" ? $"IntegerToIdentifier({id})" : id;
+        }
+        // a literal is written in the attribute's own type: the date the prototype keeps as text ("2026-10-12") into a Date Time
+        // attribute is #2026-10-12 00:00:00#, never a Text the Verify refuses (VisitaCerta 2026-10-12, ExpressionInvalidExpressionType)
+        if (value is JsonObject o && o.ContainsKey("lit") && fieldType is "Text" or "Integer" or "Decimal" or "Boolean" or "DateTime")
+            return PrototypeExpr.Literal(o["lit"], fieldType);
+        return PrototypeExpr.Convert(PrototypeExpr.Val(value, scope), PrototypeExpr.TypeOf(value, scope), fieldType);
     }
 
     /// <summary>The Id argument of an entity action (an identifier) from a value that may be an integer.</summary>
@@ -989,6 +1046,46 @@ internal sealed class PrototypeLogic
                     values[popup.IsOpen] = "True";
                     steps.Add(new JsonObject { ["assign"] = values, ["as"] = (_p.Pt ? "Abrir" : "Open") + popup.Name });
                     if (popup.Record != null) steps.Add(new JsonObject { ["node"] = "IRefreshDataNode", ["properties"] = new JsonObject { ["DataSource"] = popup.Record.Alias } });
+                    // data.bind: the popup's own source is fetched now, with the inputs just assigned
+                    foreach (var (_, alias, _) in owner.DataActions.Where(d => d.OnDemand && d.Source.Owner == "m:" + modal))
+                        Refresh([new JsonObject { ["node"] = "IRefreshDataNode", ["properties"] = new JsonObject { ["DataSource"] = alias } }]);
+                    break;
+                }
+                case "call":
+                {
+                    // data.bind (2.12): the producer's server action, then what the binding says (refresh a source, a feedback message,
+                    // the download of a file the action returns)
+                    Flush();
+                    var action = effect["action"]!.ToString();
+                    var args = new JsonObject();
+                    foreach (var (input, value) in effect["args"] as JsonObject ?? []) args[input] = value?.ToString();
+                    steps.Add(new JsonObject { ["call"] = "IServerAction:" + action, ["as"] = action, ["args"] = args });
+                    var outputs = PrototypeCapture.Objects(effect["outputs"]);
+                    foreach (var then in (effect["then"] as JsonArray ?? []).Select(t => t!.ToString()))
+                    {
+                        if (then.StartsWith("refresh ", StringComparison.Ordinal))
+                        {
+                            var name = then[8..].Trim();
+                            foreach (var (_, alias, _) in owner.DataActions.Where(d => d.Source.As.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                                Refresh([new JsonObject { ["node"] = "IRefreshDataNode", ["properties"] = new JsonObject { ["DataSource"] = alias } }]);
+                        }
+                        else if (then.StartsWith("message", StringComparison.Ordinal))
+                        {
+                            var text = then[7..];
+                            var message = text.StartsWith('=') ? text[1..].Trim() : PrototypeExpr.Quote(text.Trim());
+                            steps.Add(new JsonObject { ["node"] = "IMessageNode", ["as"] = _p.Pt ? "Confirmacao" : "Feedback", ["properties"] = new JsonObject { ["Message"] = message, ["Type"] = "Success" } });
+                        }
+                        else if (then == "download")
+                        {
+                            var file = outputs.FirstOrDefault(o => o["type"]?.ToString() == "Binary Data")?["name"]?.ToString();
+                            var fileName = outputs.FirstOrDefault(o => o["type"]?.ToString() == "Text" && (o["name"]?.ToString() ?? "").Contains("Nome", StringComparison.OrdinalIgnoreCase) | (o["name"]?.ToString() ?? "").Contains("Name", StringComparison.OrdinalIgnoreCase))?["name"]?.ToString();
+                            var mime = outputs.FirstOrDefault(o => o["type"]?.ToString() == "Text" && (o["name"]?.ToString() ?? "").Contains("Mime", StringComparison.OrdinalIgnoreCase))?["name"]?.ToString();
+                            if (file == null) continue;
+                            var properties = new JsonObject { ["FileContent"] = action + "." + file, ["FileName"] = fileName != null ? action + "." + fileName : PrototypeExpr.Quote(action + ".pdf"), ["SaveToDisk"] = true };
+                            if (mime != null) properties["MimeType"] = action + "." + mime;
+                            steps.Add(new JsonObject { ["node"] = "IDownloadNode", ["as"] = _p.Pt ? "Baixar" : "Download", ["properties"] = properties });
+                        }
+                    }
                     break;
                 }
                 case "closePopup":

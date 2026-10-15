@@ -35,8 +35,12 @@
 // name the tool knows. A schema it cannot read comes back unchanged (no argsOf). F7b wires it into ssam.mjs
 // (server.registerTool; prepare holds a budget under the answer ceiling; the lane, the Studio lock and the next steps of the
 // answer read argsOf); this module never registers.
+// Before the schema, the call shapes of one meaning (call-shapes.mjs: ssam_code, the deliveries and the job runners) are
+// written as the tool takes them and listed in `normalizations` [{rule, at, note}] of the answer (refusals included).
 import { createHash } from 'node:crypto';
 import * as z from 'zod/v4';
+import { shapeCall } from './call-shapes.mjs';
+import { mergeNormalizations } from './normalizations.mjs';
 
 export const INPUT_INVALID = 'INPUT_INVALID';
 export const NEVER_ADJUSTED = Object.freeze(['authorize', 'words', 'text', 'job', 'patch', 'basedOn', 'html', 'request', 'records']);
@@ -467,6 +471,22 @@ export function withInputAdjusted(result, adjusted) {
   return { ...result, content: [...content, { type: 'text', text: JSON.stringify({ inputAdjusted: adjusted }) }] };
 }
 
+// The call shapes taken as meant (call-shapes.mjs), first in the answer's normalizations (the tool may add its own after).
+export function withNormalizations(result, normalizations) {
+  if (!result || typeof result !== 'object' || result.resultType === 'input_required' || !normalizations?.length) return result;
+  const content = Array.isArray(result.content) ? result.content : [];
+  const merged = v => ({ ...v, normalizations: mergeNormalizations(v.normalizations, normalizations) });
+  if (isObject(result.structuredContent)) {
+    const before = JSON.stringify(result.structuredContent);
+    const structuredContent = merged(result.structuredContent);
+    return { ...result, structuredContent, content: content.map((c, i) => (i === 0 && c?.type === 'text' && c.text === before ? { ...c, text: JSON.stringify(structuredContent) } : c)) };
+  }
+  if (content[0]?.type === 'text') {
+    try { const v = JSON.parse(content[0].text); if (isObject(v)) return { ...result, content: [{ ...content[0], text: JSON.stringify(merged(v)) }, ...content.slice(1)] }; } catch { /* plain text */ }
+  }
+  return { ...result, content: [...content, { type: 'text', text: JSON.stringify({ normalizations }) }] };
+}
+
 // The Standard Schema of a registration (a raw zod shape becomes z.object) and its JSON Schema, or null.
 function standardOf(schema) {
   if (!schema || (typeof schema !== 'object' && typeof schema !== 'function')) return null;
@@ -506,30 +526,33 @@ export function relaxTool(name, config, handler, { prepare } = {}) {
       return { result: await handler(parsed?.value ?? args, ctx) };
     };
     // What the layer renamed or coerced is held like what was sent (ssam.mjs: a budget under the answer ceiling).
+    // The call shapes of one meaning first (call-shapes.mjs), then the field names, then prepare.
     const prepared = raw => {
-      const n = normalize(json, raw);
-      return { n, args: n.violations.length ? null : typeof prepare === 'function' ? prepare(n.args) : n.args };
+      const shaped = shapeCall(name, raw === undefined || raw === null ? {} : raw);
+      const n = normalize(json, shaped.args);
+      return { n, shaped, args: n.violations.length ? null : typeof prepare === 'function' ? prepare(n.args) : n.args };
     };
     const relaxedHandler = async (raw, ctx) => {
-      const { n, args } = prepared(raw);
-      if (n.violations.length) return inputInvalidAnswer(name, n.violations, forEcho(n.corrected, words), { fixed: n.fixed });
+      const { n, shaped, args } = prepared(raw);
+      const noted = result => withNormalizations(result, shaped.normalizations);
+      if (n.violations.length) return noted(inputInvalidAnswer(name, n.violations, forEcho(n.corrected, words), { fixed: n.fixed }));
       if (!n.batches.length) {
         const r = await run(args, ctx);
-        return r.refused ?? withInputAdjusted(r.result, n.adjusted);
+        return noted(r.refused ?? withInputAdjusted(r.result, n.adjusted));
       }
       // select above its limit: one call per batch, in order; a refused batch ends it and answers for the call.
       const [{ key, size }] = n.batches;
       const all = args[key]; const results = [];
       for (let i = 0; i < all.length; i += size) {
         const r = await run({ ...args, [key]: all.slice(i, i + size) }, ctx);
-        if (r.refused) return r.refused;
+        if (r.refused) return noted(r.refused);
         const value = structuredOf(r.result);
-        if (r.result?.resultType === 'input_required' || r.result?.isError === true || value?.ok === false || value === undefined) return withInputAdjusted(r.result, n.adjusted);
+        if (r.result?.resultType === 'input_required' || r.result?.isError === true || value?.ok === false || value === undefined) return noted(withInputAdjusted(r.result, n.adjusted));
         results.push(r.result);
       }
       const merged = mergeValues(results.map(structuredOf));
       const structured = results.every(r => r.structuredContent !== undefined);
-      return withInputAdjusted({ content: [{ type: 'text', text: JSON.stringify(merged) }], ...(structured ? { structuredContent: merged } : {}) }, n.adjusted);
+      return noted(withInputAdjusted({ content: [{ type: 'text', text: JSON.stringify(merged) }], ...(structured ? { structuredContent: merged } : {}) }, n.adjusted));
     };
     return { config: { ...config, inputSchema: relaxed }, handler: relaxedHandler, argsOf: raw => prepared(raw).args };
   } catch {

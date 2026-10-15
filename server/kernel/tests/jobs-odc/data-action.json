@@ -119,7 +119,7 @@
   {"op": "create", "parent": "$agg2", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:WfDaRegion"}},
   {"op": "create", "parent": "$agg2", "type": "IFilter", "args": {"condition": "WfDaRegion.Code <> \"\""}},
 
-  {"op": "create", "parent": "$da2", "type": "IForEachNode", "as": "$each"},
+  {"op": "create", "parent": "$da2", "type": "IForEachNode", "as": "$each", "allowForEach": {"why": "a proof job written before the owner rule reached raw ops: the loop copies the rows into a list (T2), kept as written and listed"}},
   {"op": "set", "target": "$each", "prop": "Label", "value": "EachRegion"},
   {"op": "set", "target": "$each", "prop": "RecordList", "value": "ReadRegions.List"},
 

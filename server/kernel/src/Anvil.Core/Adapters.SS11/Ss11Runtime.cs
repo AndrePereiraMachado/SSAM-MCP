@@ -49,6 +49,9 @@ public sealed class Ss11Runtime : IStudioRuntime
 
     public IReadOnlyList<VerifyDefinition> VerifyDefinitions => VerifyCatalog.All;
 
+    /// <summary>The TypeConversion of an assignment or argument (RecordMappings).</summary>
+    public IRecordMappings? Mappings { get; } = new Ss11RecordMappings();
+
     public string? ImportsChild(AbstractObject newParent, AbstractObject source)
     {
         if (newParent is not ServiceStudio.Import.IImportTarget target) return null;

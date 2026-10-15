@@ -1,0 +1,23 @@
+{
+  "description": "ODC: screens from entities and blocks (op screen, data.generate, gen-screen/1) on the insurance app: the list, detail and form screens of three entities of the job, the reusable blocks created once and the save/delete server actions around the entity actions.",
+  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+  "expectValid": true,
+  "expectedMessages": [],
+  "ops": [
+    {"op": "spec", "data": {
+      "static": [{"name": "GenTicketPriority", "records": [{"name": "Low"}, {"name": "Normal"}, {"name": "High"}]}],
+      "entities": [
+        {"name": "GenTeam", "attributes": [{"name": "Name", "type": "Text", "mandatory": true, "length": 80}, {"name": "Email", "type": "Email"}]},
+        {"name": "GenTicket", "attributes": [
+          {"name": "Title", "type": "Text", "mandatory": true, "length": 120},
+          {"name": "PriorityId", "type": "GenTicketPriority Identifier", "mandatory": true},
+          {"name": "TeamId", "type": "GenTeam Identifier"},
+          {"name": "DueOn", "type": "Date"},
+          {"name": "Estimate", "type": "Decimal"},
+          {"name": "IsBlocked", "type": "Boolean"},
+          {"name": "Details", "type": "Text", "length": 2000}]},
+        {"name": "GenAsset", "attributes": [{"name": "Label", "type": "Text", "mandatory": true, "length": 60}, {"name": "Cost", "type": "Currency"}, {"name": "Units", "type": "Integer"}]}
+      ]}},
+    {"op": "screen", "data": {"generate": {"entities": ["GenTicket", "GenTeam", "GenAsset"]}}}
+  ]
+}

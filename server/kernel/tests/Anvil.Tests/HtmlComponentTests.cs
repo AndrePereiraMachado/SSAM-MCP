@@ -57,6 +57,25 @@ public class HtmlComponentTests
         Assert.Contains(":is(#Card,.mapped-card):hover [data-id='#Card']:where(.owner)",ids);
         Assert.Throws<InvalidOperationException>(()=>CssStylesheet.Parse("@import url('other.css');").ScopedOwned(".scope",".owner"));
     }
+    // The re-check of the 24.1 fixes (medium): a logic op the kernel planned (html components: the handler of a button is a screen
+    // action with a JavaScript node) was left out of the owner's rules in silence, nested in the html op or carried by the job as
+    // planned ops. The owner's decision keeps it, now judged and listed in highWarnings (FLOW_OWNER_RULE_PLANNED), never refused.
+    [Fact] public void TheOwnerRulesOnWhatThePlannerWroteAreListedNeverSilent()
+    {
+        StudioAssemblies.Bind(null);
+        var work=Path.Combine(Root,".local/review/component-owner-rules",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(work);var host=new ModelHost(work);
+        var fixture=Path.Combine(Root,"tests/fixtures/reactive-ui.oml");
+        const string source="<component name='FaPage' kind='screen'><script type='module'>export let count=0; export function run(){ count += 1; }</script><button id='A' onclick='run()'>A</button><p>{{ count }}</p></component>";
+        var nested=new JsonArray(new JsonObject{["op"]="html",["data"]=new JsonObject{["components"]=source}});
+        foreach(var (name,ops) in new[]{("nested",(JsonNode)nested),("planned",(JsonNode)host.PlanModuleSpecification(fixture,HtmlComponents.Compile(source)))})
+        {
+            var job=Path.Combine(work,name+".json");File.WriteAllText(job,new JsonObject{["ops"]=ops.DeepClone()}.ToJsonString());
+            var result=JsonSerializer.SerializeToNode(JobRunner.Run(host,fixture,job,Path.Combine(work,name+".oml")))!;
+            Assert.True(result["accepted"]!.GetValue<bool>(),name+": "+result["details"]);
+            var listed=(result["highWarnings"] as JsonArray??new JsonArray()).OfType<JsonObject>().Where(w=>w["code"]?.ToString()==ModelSession.OwnerRulePlannedCode).ToList();
+            Assert.Contains(listed,w=>w["rule"]?.ToString()=="FLOW_JAVASCRIPT_NOT_ISOLATED" && w["message"]!.ToString().Contains("FaPage_Handler_run",StringComparison.Ordinal));
+        }
+    }
     [Fact] public void UpdatePreservesBlockContractAndConsumerKeysAfterNativeMerge()
     {
         StudioAssemblies.Bind(null);var work=Path.Combine(Root,".local/review/component-tests");Directory.CreateDirectory(work);var host=new ModelHost(work);

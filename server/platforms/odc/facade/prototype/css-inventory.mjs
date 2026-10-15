@@ -50,12 +50,25 @@ export function cssUrls(text) {
   return out;
 }
 
+// The file of source a url()/src names: query and fragment out, the percent-encoding decoded ('foto%20grande.png' is the file
+// 'foto grande.png', as the browser reads it; a malformed escape stays as written), resolved against the sheet's folder.
 export function localReference(raw, sheetPath) {
   if (!raw || /^(data:|https?:|\/\/|#)/i.test(raw)) return null;
-  const clean = raw.split(/[?#]/)[0];
+  let clean = raw.split(/[?#]/)[0];
+  if (clean.includes('%')) { try { clean = decodeURIComponent(clean); } catch { /* as written */ } }
   const base = sheetPath ? path.posix.dirname(sheetPath) : '.';
   const resolved = path.posix.normalize(path.posix.join(base === '.' ? '' : base, clean));
   return resolved.startsWith('..') ? null : resolved;
+}
+
+// The @import statement of a remote stylesheet link (http, https or protocol-relative), with its media list; null for any
+// other href (a local file the page could not read).
+export function externalImport(href, media = null) {
+  const url = String(href ?? '').trim();
+  if (!/^(https?:)?\/\//i.test(url) || /[\x00-\x1f\x7f]/.test(url)) return null;
+  const list = String(media ?? '').trim();
+  if (/[;{}\x00-\x1f]/.test(list)) return null;
+  return '@import url(' + JSON.stringify(url) + ')' + (list && list.toLowerCase() !== 'all' ? ' ' + list : '') + ';';
 }
 
 // sheets: [{order, href, runtime, text, rules}] from the child; files: SourceFiles-like reader (bytes/text of source).
@@ -66,7 +79,17 @@ export function inventory({ sheets, runtimeStyles = [], readText, page = null })
   const pageOf = typeof page === 'function' ? page : () => page;
   for (const sheet of sheets) {
     const page = pageOf(sheet);
-    if (sheet.external) { out.push({ path: null, url: sheet.external, order: order++, origin: 'external', page, bytes: null, sha256: null, rules: null, imports: [], urls: [] }); continue; }
+    if (sheet.external) {
+      // a remote <link rel=stylesheet> (Google Fonts, a CSS framework on a CDN) is the same sheet as an @import of its URL at
+      // the same place of the order (the kernel hoists it to the top of the theme, 4.1 item 2): the bundle carries that one
+      // statement, never the remote text. A link the page could not fill (a missing local file) styles nothing: left out.
+      const statement = externalImport(sheet.external, sheet.media);
+      if (statement == null) continue;
+      const hash = sha256(Buffer.from(statement, 'utf8'));
+      out.push({ path: null, url: sheet.external, bundle: 'sheets/' + hash + '.css', order: order++, origin: 'external', page,
+        bytes: Buffer.byteLength(statement, 'utf8'), sha256: hash, rules: 1, imports: cssImports(statement), urls: [], text: statement });
+      continue;
+    }
     const text = sheet.href ? readText(sheet.href) : sheet.text ?? '';
     if (text == null) continue;
     const hash = sha256(Buffer.from(text, 'utf8'));

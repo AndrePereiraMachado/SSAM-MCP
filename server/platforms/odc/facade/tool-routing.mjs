@@ -1,4 +1,4 @@
-﻿// Tool routing for ssam_discover, the single entry of every SSAM request. A model change is answered by discover()
+// Tool routing for ssam_discover, the single entry of every SSAM request. A model change is answered by discover()
 // (discovery.mjs) exactly as before; any other request (open a module, connect, publish, deploy, create an app, data,
 // Service Center, Portal, debugger, long tasks, evidence...) also gets a top-level `tools` section: the exact MCP tool,
 // the verb (command/action/op/operation/kind/...), an arguments template, when to use it, preconditions and the next call.
@@ -12,6 +12,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalize } from './catalog.mjs';
+import { ANSWER_BUDGETS } from './answer-size.mjs';
+import { namedGenerators, describeGenerator } from './generators.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const TOOLS_FILE = path.join(here, 'catalog', 'tools.json');
@@ -664,8 +666,8 @@ const callText = item => (item.gap ? `no tool (${item.gap}): ${brief(item.when, 
 
 function levelItems(tools, level) {
   if (level === 'full') return tools.map(t => ({ ...t, when: brief(t.when, 160), ...(t.preconditions ? { preconditions: t.preconditions.map(p => brief(p, 120)) } : {}), ...(t.next ? { next: brief(t.next, 160) } : {}) }));
-  if (level === 'compact') return tools.map(t => (t.gap ? { gap: t.gap, lane: t.lane, when: brief(t.when, 120) } : { tool: t.tool, ...(t.verb ? { verb: t.verb } : {}), lane: t.lane, args: t.args, why: t.why, ...(t.otherLane ? { otherLane: true } : {}) }));
-  return tools.map(t => (t.gap ? { gap: t.gap, lane: t.lane } : { tool: t.tool, ...(t.verb ? { verb: t.verb } : {}), lane: t.lane, ...(t.otherLane ? { otherLane: true } : {}) }));
+  if (level === 'compact') return tools.map(t => (t.gap ? { gap: t.gap, lane: t.lane, when: brief(t.when, 120) } : { tool: t.tool, ...(t.verb ? { verb: t.verb } : {}), lane: t.lane, args: t.args, why: t.why, ...(t.otherLane ? { otherLane: true, note: t.note } : {}) }));
+  return tools.map(t => (t.gap ? { gap: t.gap, lane: t.lane } : { tool: t.tool, ...(t.verb ? { verb: t.verb } : {}), lane: t.lane, ...(t.otherLane ? { otherLane: true, note: t.note } : {}) }));
 }
 
 // Direct matches that are model changes (job ops): the operational capabilities of the catalog (ops.*, read.*,
@@ -695,11 +697,11 @@ function toolHint(answer, routed, lane) {
   return `${kind}: ${callText(first)}${other}. Read tools[0].preconditions first; fill every <placeholder>.${touched}`;
 }
 
-// discover()'s own hint stays when it carries model guidance (a mixed request, or a budget that was insufficient or
-// reduced); the tool sentence is appended to it. Otherwise the tool sentence is the hint.
+// Model guidance stays with a model step. A reduced non-model index is not useful
+// guidance for an operation: its actionable tool sentence is the whole hint.
 function composeHint(answer, routed, lane) {
   const sentence = toolHint(answer, routed, lane);
-  const keep = answer.hint && (routed.modelStep || routed.mixed || ['insufficient', 'reduced'].includes(answer.size?.status) || /insufficient/i.test(answer.hint));
+  const keep = answer.hint && (routed.modelStep || routed.mixed || (routed.hasModel && (['insufficient', 'reduced'].includes(answer.size?.status) || /insufficient/i.test(answer.hint))));
   return keep ? `${answer.hint} | ${sentence}` : sentence;
 }
 
@@ -816,8 +818,49 @@ export function intentRequired(lane, input = {}) {
 }
 
 // ---- the single entry: discover() unchanged, plus `tools` when the intent asks for an SSAM operation.
-export async function discoverAll(input = {}, { discover = null, file = TOOLS_FILE } = {}) {
-  const run = discover ?? (await import('./discovery.mjs')).discover;
+// A direct question about what the O11 environment offers for a need the platform lacks ("o que tenho no ambiente para gerar
+// PDF", environment-components.mjs asksEnvironment): the answer carries `environment` (the installed extensions and Forge
+// components, each with its actions and signatures, cached per environment) right after `intent`, the rest of the answer in
+// the budget it leaves. input.components replaces the reader (tests).
+export async function discoverAll(input = {}, options = {}) {
+  input = { ...input, budgetBytes: input.budgetBytes ?? (hasExpansion(input) || input.packet === true || input.catalog === true ? 40960 : ANSWER_BUDGETS.discoverFirst) };
+  // A generator asked about BY NAME ("entity-actions", "rest-consume", "gen-screen"; generators.mjs namedGenerators): the
+  // answer describes it with its state (approved or blind-test-pending), reason, report, contract and explicit call, right
+  // after `intent`, in the room it takes from the budget. Nothing else names a generator that is not approved.
+  const named = String(input.intent ?? '').trim() ? namedGenerators(input.intent).map(id => describeGenerator(id, input.lane ?? 'odc')) : [];
+  const room = named.length ? bytes({ generators: named }) + 64 : 0;
+  let answer = await discoverWithEnvironment(room ? { ...input, budgetBytes: Math.max(4096, input.budgetBytes - room) } : input, options);
+  if (room && answer && typeof answer === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(answer)) { out[k] = v; if (k === 'intent') out.generators = named; }
+    if (!('generators' in out)) out.generators = named;
+    if (out.size && typeof out.size.bytes === 'number') { out.size = { ...out.size, bytes: 0 }; for (let i = 0, m = bytes(out); i < 6 && out.size.bytes !== m; i++) { out.size.bytes = m; m = bytes(out); } }
+    answer = out;
+  }
+  return (await import('./discovery.mjs')).exactDiscoveryCalls(answer, input);
+}
+
+async function discoverWithEnvironment(input, options) {
+  const lane = input.lane ?? 'odc';
+  if (input.packet === true || lane !== 'o11' || !String(input.intent ?? '').trim()) return discoverAllCore(input, options);
+  const { asksEnvironment, componentNeeds, laneComponents, fitComponents } = await import('./environment-components.mjs');
+  if (!asksEnvironment(input.intent)) return discoverAllCore(input, options);
+  const { anvilRoot } = await import('./workspace.mjs');
+  const read = input.components ?? (x => laneComponents(x, { root: anvilRoot }));
+  const found = await read({ lane, intent: input.intent, needs: componentNeeds(input.intent) });
+  const budget = input.budgetBytes ?? 40960;
+  const environment = found?.ok === false ? found : fitComponents(found, Math.min(12288, Math.floor(budget / 2))) ?? { ok: true, schema: found.schema, needs: found.needs, note: 'reduced by budget' };
+  const answer = await discoverAllCore({ ...input, budgetBytes: Math.max(4096, budget - bytes({ environment }) - 64) }, options);
+  if (!answer || typeof answer !== 'object') return answer;
+  const out = {};
+  for (const [k, v] of Object.entries(answer)) { out[k] = v; if (k === 'intent') out.environment = environment; }
+  if (!('environment' in out)) out.environment = environment;
+  if (out.size && typeof out.size.bytes === 'number') { out.size = { ...out.size, bytes: 0 }; for (let i = 0, m = bytes(out); i < 6 && out.size.bytes !== m; i++) { out.size.bytes = m; m = bytes(out); } }
+  return out;
+}
+
+async function discoverAllCore(input = {}, { discover = null, file = TOOLS_FILE } = {}) {
+  const run = discover ?? (await import('./discovery.mjs')).discoverModel;
   const lane = input.lane ?? 'odc';
   const intent = String(input.intent ?? '');
   // The entry's answer ceiling (discovery.mjs atEntry): a budget below the minimal answer is raised to it, a minimal above
@@ -856,7 +899,7 @@ export async function discoverAll(input = {}, { discover = null, file = TOOLS_FI
   if (!compiled) return toolsError ? { ...answer, toolsError } : answer;
   if (answer.ok === false) return answer;
   routed.hasModel = modelMatchesOf(answer, compiled).length > 0;
-  const { outsystemsUiRequest, stripOutsystemsUi, fitOutsystemsUi, stripC07, fitC07, sectionsFloor, silentlyLost, withAdjustment } = await import('./discovery.mjs');
+  const { outsystemsUiRequest, stripOutsystemsUi, fitOutsystemsUi, stripC07, fitC07, sectionsFloor, silentlyLost, withAdjustment, stripTextRoute, fitTextRoute, TEXT_ROUTE_SECTION } = await import('./discovery.mjs');
   const budgetRaise = a => a.inputAdjusted?.find(x => x.path === '/budgetBytes');
   if (routed.hasModel) answer = withOperationalTitles(answer, compiled);
   // A budget raised to the minimal answer (discovery.mjs atEntry) was measured on the catalog titles: a longer operational
@@ -890,11 +933,18 @@ export async function discoverAll(input = {}, { discover = null, file = TOOLS_FI
     answer = { ...answer, inputAdjusted: answer.inputAdjusted.map(a => (a === raised ? { ...a, to: B } : a)), ...(answer.size?.budgetAdjusted ? { size: { ...answer.size, budgetAdjusted: { ...answer.size.budgetAdjusted, to: B } } } : {}) };
   }
   const osui = routed.hasModel ? await outsystemsUiRequest({ lane, intent, matches: answer.matches, context: answer.context ?? null, app: input.app ?? null, map: input.map ?? null }) : null;
-  let extras = null;
-  const strip = a => { const s = stripC07(stripOutsystemsUi(a)); extras ??= s.extras; return s.answer; };
+  // The text route of the model step (B2 of the plan "Texto do SSAM", text-routes.mjs) comes back after the tools too, before the
+  // OutSystems UI section and the C07 sections: the operation's tool, then the ready call of the text step.
+  let extras = null; let textRoute = null;
+  const strip = a => { const s = stripC07(stripOutsystemsUi(a)); extras ??= s.extras; const t = stripTextRoute(s.answer); textRoute ??= a?.[TEXT_ROUTE_SECTION] ?? t.section; return t.answer; };
   const out = await attachTools(strip(answer), routed, { budgetBytes: B, lane, rerun: async B2 => { const again = strip(await run({ ...input, budgetBytes: B2, ceilingBytes: null })); return routed.hasModel ? withOperationalTitles(again, compiled) : again; } });
-  // `room` for the C07 extras, when given: the OutSystems UI section takes the budget less it.
-  const sectionsAt = (a, budget, room = 0) => { const withOsui = osui ? fitOutsystemsUi(a, osui, budget - room) : a; return extras ? fitC07(withOsui, extras, budget) : withOsui; };
+  // `room` for the C07 extras, when given: the text route and the OutSystems UI section take the budget less it. The text
+  // route never takes the floor of the C07 extras (discovery.mjs, the junction of 24.1) and keeps the answer's budget.
+  const sectionsAt = (a, budget, room = 0) => {
+    const withText = textRoute ? fitTextRoute(a, textRoute, budget - Math.max(room, extras ? sectionsFloor({ extras }, budget).c07 : 0), null, budget) : a;
+    const withOsui = osui ? fitOutsystemsUi(withText, osui, budget - room) : withText;
+    return extras ? fitC07(withOsui, extras, budget) : withOsui;
+  };
   const final = sectionsAt(out, B);
   // At the entry no section goes without a word (review of 2026-10-11, round 3): when the tools left the OutSystems UI
   // section or the C07 extras no room even for their note, the budget rises by their floor (sectionsFloor) under the

@@ -30,7 +30,7 @@
      ]}
    ]
   }},
-  {"op": "logic", "data": {"actions": [
+  {"op": "logic", "allowForEach": {"why": "a proof job written before the owner rule reached the JSON form of the logic op: Agenda_DoDia copies the rows into a list with a For Each (T2), kept as written and listed"}, "data": {"actions": [
    {"name": "Agenda_Resumo", "kind": "server", "public": true, "description": "Resume o dia do usuario corrente: quantidade, minutos ocupados e o primeiro horario no fuso do expediente.",
     "inputs": [{"name": "Data", "type": "Date"}],
     "outputs": [{"name": "Resumo", "type": "ResumoDoDia"}],

@@ -97,20 +97,36 @@ test('failed attempts require same-host error links and matching detail identiti
  assert.equal(snapshot([r]).runs[0].fingerprint,snapshot([foreign]).runs[0].fingerprint);
 });
 
-test('verify reads linked failures without changing the receipt, replaying, or treating failed reads as success',async()=>{
- const {Client}=await import('../service-center/client.mjs');const client=Object.create(Client.prototype);
+// Since da1ab3ca a new exact run of the timer, observed after the pre-send baseline, closes an unsure Run Now receipt as
+// confirmed (the writer stays unidentified; resolveTimerRun already did the same when Last Run moved). The failed linked
+// read is still one read, never a success and never a replay; a receipt still written as 'sending' is never observed.
+test('verify reads linked failures once, never replays or treats failed reads as success, and closes an unsure receipt only from an observed exact run',async()=>{
+ const fs=await import('node:fs');const os=await import('node:os');const path=await import('node:path');
+ const {Client,Journal}=await import('../service-center/client.mjs');const client=Object.create(Client.prototype);
  const r=row();r.fields.Server='server1';
  r.links.push({name:'Module1',href:'https://sc.example.test/ServiceCenter/eSpace_Edit.aspx?EspaceId=577'},
   {href:'https://sc.example.test/ServiceCenter/Show_Error.aspx?Error_Id=1d8546e2-005b-4159-b3d9-adf9fe1c14bb'});
  client.vault={host:identity.host};client.logs=async()=>list([r]);
  let reads=0;client.errorDetail=async()=>{reads++;throw Error('unavailable');};
- const receipt={identity:{...identity,action:'timer-run'},state:'accepted-unverified',plan:{target,timerLogBaseline:snapshot([])}};
- const original=structuredClone(receipt);let stored;
- const result=await client.verify(receipt,{recordTimerObservation:(_receipt,observation)=>{stored=observation;return {observation};}});
- assert.equal(reads,1);assert.equal(result.executionObserved,true);assert.equal(result.executionCompleted,null);
- assert.equal(result.failedAttemptObserved,false);assert.equal(result.errorDetailsComplete,false);
- assert.equal(result.state,'accepted-unverified');assert.equal(result.replayed,false);assert.deepEqual(receipt,original);
- assert.equal(stored.executionObserved,true);assert.equal(stored.errorDetailsComplete,false);
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'ssam-timer-verify-'));
+ try {
+  const journal=new Journal(root);const id='12345678-1234-4234-8234-123456789abd';
+  const receipt=journal.create(id,{...identity,action:'timer-run'},'authorized test',{target,timerLogBaseline:snapshot([])});
+  receipt.state='accepted-unverified';journal.rewrite(receipt);
+  const original=JSON.parse(JSON.stringify(receipt));
+  const result=await client.verify(receipt,journal);
+  assert.equal(reads,1);assert.equal(result.executionObserved,true);assert.equal(result.executionCompleted,null);
+  assert.equal(result.failedAttemptObserved,false);assert.equal(result.errorDetailsComplete,false);assert.equal(result.replayed,false);
+  assert.equal(result.state,'confirmed');assert.equal(result.outcome,'execution-observed');assert.equal(result.attributedToRequest,false);
+  assert.match(result.resolution.reason,/writer is not identified/);
+  const stored=new Journal(root).lookup(id);
+  assert.equal(stored.state,'confirmed');assert.deepEqual(stored.plan,original.plan);assert.deepEqual(stored.authorization,original.authorization);
+  assert.equal(stored.timerObservation.observation.executionObserved,true);assert.equal(stored.timerObservation.observation.errorDetailsComplete,false);
+  const live='12345678-1234-4234-8234-123456789abe';
+  journal.create(live,{...identity,action:'timer-run'},'authorized test',{target,timerLogBaseline:snapshot([])});
+  await assert.rejects(client.verify(journal.lookup(live),journal),/Timer receipt changed or has no complete pre-send baseline/);
+  assert.equal(journal.rawState(live),'sending');
+ } finally {fs.rmSync(root,{recursive:true,force:true});}
 });
 
 test('error detail permission refusal remains distinct from an unknown layout',async()=>{

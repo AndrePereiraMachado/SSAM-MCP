@@ -161,7 +161,8 @@ test('the server\'s read tools: a number or a boolean is never renamed into a fi
     ['o11_service_center_read', { action, messages: true }, 'messages', 'message'],
     ['o11_service_center_read', { action, names: 42 }, 'names', 'name'],
     ['o11_inspect', { oml: 'x.oml', modules: true }, 'modules', 'module'],
-    ['ssam_map', { target: 'x', keys: 7 }, 'keys', 'key'],
+    // ssam_map has `keys` (a switch of view html, Texto do SSAM C1) since the junction 24.1: its text field `name` instead.
+    ['ssam_map', { target: 'x', names: 7 }, 'names', 'name'],
   ];
   // Normalized again as the layer does for a read (two passes): the first pass already has no deterministic fix.
   const chained = (schema, args) => { const n = normalizeArguments(schema, args); return n.corrections ? normalizeArguments(schema, n.corrected) : n; };

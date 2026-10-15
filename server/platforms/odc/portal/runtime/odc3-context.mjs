@@ -7,7 +7,7 @@ import { CookieJar } from 'tough-cookie';
 import {mobileExtensibilityReadInput} from './mobile-extensibility-read.mjs';
 import { PortalReadAdapter } from './portal-read.mjs';
 import { PortalMetadata } from './portal-metadata.mjs';
-import { fail, publicError, redact } from './errors.mjs';
+import { fail, publicError } from './errors.mjs';
 import { cognitoLogin } from './cognito-login.mjs';
 import { PORTAL_READS, routeOf, screenservice } from './portal-routes.mjs';
 import { DEFAULT_PORTAL_ORIGIN } from './default-origin.mjs';
@@ -17,6 +17,9 @@ import { decodeLogText } from './log-text.mjs';
 import { portalCsrf } from './portal-csrf.mjs';
 import { readLogScreenservice } from './log-screen-contract.mjs';
 import { hostedContext } from '../../facade/executor.mjs';
+import { CommunityPortalIdentity } from './community-portal.mjs';
+import { CredentialRegistry } from './credential-registry.mjs';
+import { observeCredentials } from './projection-context.mjs';
 
 const run = promisify(execFile);
 // servidor/fase4-24 (R3 of PLANO-24-PRODUCAO): this broker is direct HTTPS from the machine that runs SSAM with a Portal
@@ -26,24 +29,8 @@ const hostedDirect = () => { if (hostedContext()) fail('HOSTED_STUDIO_SESSION_ON
 // The corporate tenant of tenants.json (default-origin.mjs); other tenants pass their own origin (and get their own vault entry).
 const defaultOrigin = DEFAULT_PORTAL_ORIGIN;
 export const portalCredentialHelper = fileURLToPath(new URL('./windows-portal-credential.ps1', import.meta.url));
-const identityOrigins = ['https://id.outsystems.dev', 'https://cognito-idp.eu-west-1.amazonaws.com', 'https://cognito-idp.us-east-1.amazonaws.com'];
+const identityOrigins = ['https://id.outsystems.dev', 'https://id.outsystems.com', 'https://cognito-idp.eu-west-1.amazonaws.com', 'https://cognito-idp.us-east-1.amazonaws.com', 'https://cognito-idp.us-east-2.amazonaws.com'];
 const bundledPowerShell = path.resolve(path.dirname(process.execPath), '../../native/powershell/pwsh.exe');
-// These Portal cookies describe the selected tenant; they are not session credentials.
-// Treat only the observed names with constrained values as public metadata. Unknown
-// cookies, HttpOnly values, identity-provider cookies and malformed values remain secrets.
-// Registering a ring flag "1" or geography "US" as a secret corrupts all DTO strings.
-function publicTenantCookie(cookie, url, origin) {
-  if (url.origin !== origin || cookie.httpOnly) return false;
-  const value = cookie.value;
-  switch (cookie.key) {
-    case 'TenantDomain': return value === new URL(origin).hostname;
-    case 'TenantPref': return value === new URL(origin).hostname.split('.')[0];
-    case 'TenantGeo': return /^[A-Z]{2}$/.test(value);
-    case 'TenantRing': return /^\d{1,2}$/.test(value);
-    case 'TenantPortfolio': return /^(?:0|1)$/.test(value);
-    default: return false;
-  }
-}
 export const portalPowerShell = existsSync(bundledPowerShell) ? bundledPowerShell : 'pwsh.exe';
 export const portalBootstrapCommand = (origin = defaultOrigin) => `& "${portalPowerShell}" -NoProfile -File "${portalCredentialHelper}" -Mode bootstrap -Origin ${origin}`;
 
@@ -62,15 +49,23 @@ export async function portalVault(mode, origin = defaultOrigin, database, settin
 }
 
 export class Odc3PortalBroker {
-  constructor({ origin = defaultOrigin, credentialProvider, fetchImpl = fetch, cognito = cognitoLogin } = {}) {
+  async dispose() {
+    this.credentialRegistry.dispose();
+    this.authenticated = false;
+    await this.jar.removeAllCookies();
+  }
+  constructor({ origin = defaultOrigin, credentialProvider, fetchImpl = fetch, cognito = cognitoLogin, identityTarget, communityFactory = options => new CommunityPortalIdentity(options) } = {}) {
     hostedDirect();
     this.target = 'odc3'; this.origin = origin; this.fetch = fetchImpl;
     this.credentials = credentialProvider ?? (mode => portalVault(mode, origin));
     this.allowedOrigins = new Set([origin, ...identityOrigins]);
     this.jar = new CookieJar(undefined, { rejectPublicSuffixes: true, prefixSecurity: 'strict', allowSecureOnLocal: false });
     this.metadata = new PortalMetadata({ origin, request: (url, options) => this.request(url, options) });
-    this.authenticated = false; this.loginPending = null; this.available = false; this.secrets = [];
+    this.authenticated = false; this.loginPending = null; this.available = false;
+    this.credentialRegistry = new CredentialRegistry();
     this.cognito = cognito;
+    this.identityTarget = identityTarget ?? `SSAM/ODC3/${new URL(origin).host}/Portal`;
+    this.communityFactory = communityFactory;
     this.lastRead = null;
     // Current Portal app queries use DataActionLogSearch. The similarly named
     // AgentsLogs wrapper is not equivalent and must never be used as fallback.
@@ -104,10 +99,7 @@ export class Odc3PortalBroker {
       // Browsers ignore invalid cross-domain Set-Cookie entries as well; they
       // must neither widen our scope nor make valid module metadata unusable.
       const saved = await this.jar.setCookie(entry, url.href, { ignoreError: true });
-      if (saved?.value) {
-        this.secrets.push(saved.key + '=' + saved.value);
-        if (!publicTenantCookie(saved, url, this.origin)) this.secrets.push(saved.value);
-      }
+      this.credentialRegistry.cookie(saved, new URL(this.origin).hostname);
     }
     const reader = response.body?.getReader();
     const chunks = []; let size = 0;
@@ -137,7 +129,7 @@ export class Odc3PortalBroker {
   async redirects(value, stop, signal) {
     let url = new URL(value);
     for (let index = 0; index < 10; index++) {
-      if (!this.allowedOrigins.has(url.origin)) fail('PORTAL_LOGIN_PROVIDER_UNSUPPORTED', 'Login requires an identity provider outside the configured managed flow.');
+      if (!this.allowedOrigins.has(url.origin)) fail('PORTAL_LOGIN_PROVIDER_UNSUPPORTED', 'Login requires an identity provider outside the configured managed flow.', { reason: 'IDENTITY_ORIGIN_UNSUPPORTED', providerOrigin: url.origin, providerPath: url.pathname });
       if (stop(url)) return url;
       const response = await this.request(url.href, { signal });
       if (response.status < 300 || response.status > 399 || !response.location) return url;
@@ -155,30 +147,52 @@ export class Odc3PortalBroker {
   async login() {
     const origin = this.origin;
     let credentials;
+    let authenticationStage = 'credential';
+    let providerSummary;
+    this.credentialRegistry.reset();
+    this.authenticated = false;
+    this.verifiedOperations.clear();
+    await this.jar.removeAllCookies();
     try {
       this.available = (await this.credentials('status')).available === true;
       if (!this.available) return { ok: false, error: { code: 'PORTAL_AUTH_REQUIRED', message: 'A compatible private credential is not configured for this tenant. Headless authentication is unavailable; no window was opened.' }, session: this.status() };
       credentials = await this.credentials('read');
       if (!credentials.available || !credentials.username || !credentials.password) fail('PORTAL_AUTH_REQUIRED', 'Managed credential entry is incomplete.');
-      this.secrets = [credentials.username, credentials.password];
-      this.authenticated = false;
-      this.verifiedOperations.clear();
-      await this.jar.removeAllCookies();
       const signal = AbortSignal.timeout(90000);
+      authenticationStage = 'providers';
       const providers = await this.action('authentication', 'UnifiedAuthentication.login', 'authentication/UnifiedAuthentication/login/DataActionGetProviders', {}, {}, signal);
+      providerSummary = { cognitoEnabled: providers.data?.CognitoEnabled === true,
+        srpConfigured: providers.data?.CognitoConfig?.AuthFlow === 'USER_SRP_AUTH',
+        redirectAvailable: Boolean(providers.data?.RedirectNowUrl || providers.data?.AuthUrlExternalProvider) };
       if (providers.data?.CognitoEnabled === true && providers.data.CognitoConfig?.AuthFlow === 'USER_SRP_AUTH') {
+        authenticationStage = 'native-cognito';
         await this.nativeCognitoLogin(credentials, signal);
         credentials = null;
         return await this.confirmAuthentication(signal);
       }
       const redirect = providers.data?.RedirectNowUrl || providers.data?.AuthUrlExternalProvider;
       if (!redirect) fail('PORTAL_LOGIN_PROVIDER_UNSUPPORTED', 'Authentication provider did not supply a compatible redirect.');
-      const loginUrl = await this.redirects(redirect, url => url.origin === 'https://id.outsystems.dev' && url.pathname.startsWith('/login'), signal);
+      authenticationStage = 'identity-redirect';
+      const loginUrl = await this.redirects(redirect, url => (url.origin === 'https://id.outsystems.dev' && url.pathname.startsWith('/login'))
+        || (url.origin === 'https://id.outsystems.com' && url.pathname === '/community/login'), signal);
+      if (loginUrl.origin === 'https://id.outsystems.com') {
+        authenticationStage = 'community-identity';
+        const identity = this.communityFactory({ host: new URL(origin).host, principal: credentials.username, target: this.identityTarget,
+          fetchImpl: this.fetch, signal });
+        credentials = null;
+        try {
+          const callback = await identity.authorizePortal(loginUrl, origin);
+          // The OutSystems ID tokens this process now holds join the registry like the managed flows' tokens.
+          for (const name of ['access_token', 'id_token', 'refresh_token']) this.credentialRegistry.add(identity.tokens?.[name]);
+          await this.completePortalCallback(callback, signal);
+          return await this.confirmAuthentication(signal);
+        } finally { await identity.close(); }
+      }
       if (loginUrl.origin !== 'https://id.outsystems.dev' || !loginUrl.pathname.startsWith('/login')) fail('PORTAL_LOGIN_PROVIDER_UNSUPPORTED', 'OutSystems ID login was not reached.');
       const get = name => { const value = loginUrl.searchParams.get(name); if (!value) fail('PORTAL_CONTRACT_CHANGED', 'Login redirect parameters changed.'); return value; };
       const authorizationCode = get('authorization_code'), state = get('state'), clientId = get('client_id'), callback = new URL(get('redirect_uri'));
       if (!this.allowedOrigins.has(callback.origin)) fail('PORTAL_ORIGIN_DENIED', 'Authentication callback origin is not allowlisted.');
-      this.secrets.push(authorizationCode, state);
+      this.credentialRegistry.add(authorizationCode);
       const result = await this.request('https://cognito-idp.eu-west-1.amazonaws.com/', { method: 'POST', signal,
         headers: { 'Content-Type': 'application/x-amz-json-1.1', 'X-Amz-Target': 'AWSCognitoIdentityProviderService.InitiateAuth' },
         body: { AuthFlow: 'USER_PASSWORD_AUTH', ClientId: clientId, AuthParameters: { USERNAME: credentials.username, PASSWORD: credentials.password } } });
@@ -188,7 +202,7 @@ export class Odc3PortalBroker {
       if (identity.ChallengeName) fail('PORTAL_LOGIN_CHALLENGE_REQUIRED', 'This account requires an additional login challenge. No MFA/SSO bypass was attempted.');
       const tokens = identity.AuthenticationResult;
       if (!tokens?.AccessToken || !tokens.IdToken || !tokens.RefreshToken) fail('PORTAL_LOGIN_REJECTED', 'Identity response is incomplete.');
-      this.secrets.push(tokens.AccessToken, tokens.IdToken, tokens.RefreshToken);
+      this.credentialRegistry.tokens(tokens);
       const storage = await this.request('https://id.outsystems.dev/v1/storage', { method: 'POST', signal,
         headers: { Origin: 'https://id.outsystems.dev', Referer: loginUrl.href, 'User-Agent': 'MTSI.Web.UI' },
         body: { access_token: tokens.AccessToken, id_token: tokens.IdToken, refresh_token: tokens.RefreshToken, authorization_code: authorizationCode, stay_logged_in: false } });
@@ -197,12 +211,24 @@ export class Odc3PortalBroker {
       const complete = await this.redirects(callback.href, url => url.origin === origin && url.pathname.startsWith('/authentication/redirect') && url.searchParams.has('code'), signal);
       if (complete.origin !== origin || !complete.searchParams.get('code')) fail('PORTAL_LOGIN_REJECTED', 'Tenant authentication callback was not reached.');
       const code = complete.searchParams.get('code'), tenantState = complete.searchParams.get('state') ?? '';
-      this.secrets.push(code, tenantState);
+      this.credentialRegistry.add(code);
       await this.action('authentication', 'UnifiedAuthentication.redirect', 'authentication/UnifiedAuthentication/redirect/ActionProcessCodeRedirect',
         { Code: code, State: tenantState, IsFirstLogin: false, IsRest: false, BId: '' }, {}, signal);
       // A successful protected read, not cookie presence alone, establishes auth.
       return await this.confirmAuthentication(signal);
-    } catch (error) { this.authenticated = false; return { ok: false, error: publicError(error), session: this.status() }; }
+    } catch (error) {
+      this.authenticated = false;
+      const identityCodes = new Set(['IDENTITY_PROVIDER_UNSUPPORTED', 'AUTH_REQUIRED', 'AUTH_PRINCIPAL_MISMATCH', 'IDENTITY_LOGIN_REJECTED',
+        'IDENTITY_LOGIN_UNCERTAIN', 'IDENTITY_TIMEOUT', 'IDENTITY_PROVIDER_UNAVAILABLE', 'IDENTITY_CHALLENGE_REQUIRED', 'IDENTITY_RESPONSE_INVALID',
+        'IDENTITY_TOKEN_INVALID', 'IDENTITY_CALLBACK_INVALID', 'IDENTITY_ROLE_REQUIRED', 'IDENTITY_REQUEST_REJECTED', 'IDENTITY_RESPONSE_TOO_LARGE',
+        'IDENTITY_TRANSPORT_FAILED', 'IDENTITY_SESSION_SYNC_FAILED', 'IDENTITY_REDIRECT_INCOMPLETE', 'IDENTITY_REDIRECT_LIMIT', 'IDENTITY_ORIGIN_REFUSED']);
+      const detail = identityCodes.has(error?.code)
+        ? { code: error.code, message: 'The private OutSystems identity flow did not complete. No alternate account or challenge bypass was attempted.',
+          ...(Number.isSafeInteger(error?.diagnostic?.httpStatus) ? { identityHttpStatus: error.diagnostic.httpStatus } : {}),
+          ...(typeof error?.auth?.identityStage === 'string' ? { identityStage: error.auth.identityStage } : {}) }
+        : publicError(error);
+      return { ok: false, error: detail, authentication: { stage: authenticationStage, ...providerSummary }, session: this.status() };
+    }
     finally { credentials = null; }
   }
 
@@ -213,6 +239,16 @@ export class Odc3PortalBroker {
     return { ok: true, session: this.status() };
   }
 
+  async completePortalCallback(callback, signal) {
+    const complete = await this.redirects(callback.href, url => url.origin === this.origin && url.pathname.startsWith('/authentication/redirect') && url.searchParams.has('code'), signal);
+    if (complete.origin !== this.origin || !complete.searchParams.get('code')) fail('PORTAL_LOGIN_REJECTED', 'The Portal session callback was not reached.');
+    const code = complete.searchParams.get('code'), state = complete.searchParams.get('state') ?? '';
+    // As in the managed flows: the code is a credential; state is a correlation input.
+    this.credentialRegistry.add(code);
+    await this.action('authentication', 'UnifiedAuthentication.redirect', 'authentication/UnifiedAuthentication/redirect/ActionProcessCodeRedirect',
+      { Code: code, State: state, IsFirstLogin: false, IsRest: false, BId: '' }, {}, signal);
+  }
+
   async nativeCognitoLogin(credentials, signal) {
     const origin = this.origin;
     const start = await this.action('authentication', 'UnifiedAuthentication.oslogin', 'authentication/UnifiedAuthentication/oslogin/DataActionGetRedirect', {}, {}, signal);
@@ -221,25 +257,25 @@ export class Odc3PortalBroker {
     const names = ['scope', 'state', 'response_type', 'client_id', 'redirect_uri', 'os_data1', 'os_data2', 'os_data3'];
     if (loginUrl.origin !== origin || loginUrl.pathname !== '/authentication/login' || !loginUrl.searchParams.get('client_id') || !loginUrl.searchParams.get('redirect_uri')) fail('PORTAL_CONTRACT_CHANGED', 'Expected tenant Cognito login parameters were not returned.');
     const variables = Object.fromEntries(names.map(name => [name, loginUrl.searchParams.get(name) ?? '']));
-    this.secrets.push(variables.state, variables.os_data1, variables.os_data2, variables.os_data3);
+    // state and os_data* are transaction/correlation inputs, not credentials.
     const configResponse = await this.action('authentication', 'UnifiedAuthentication.login', 'authentication/UnifiedAuthentication/login/DataActionGetProviders', {}, variables, signal);
     const config = configResponse.data?.CognitoConfig;
     if (!config) fail('PORTAL_LOGIN_PROVIDER_UNSUPPORTED', 'Cognito metadata is unavailable for this login.');
     const tokens = await this.cognito({ config, username: credentials.username, password: credentials.password,
       request: (url, options) => this.request(url, options), signal });
-    this.secrets.push(tokens.AccessToken, tokens.IdToken, tokens.RefreshToken);
+    this.credentialRegistry.tokens(tokens);
     const processed = await this.action('authentication', 'UnifiedAuthentication.login', 'authentication/UnifiedAuthentication/login/ActionProcessCognitoToken', {
       ClientId: variables.client_id, CognitoIdToken: tokens.IdToken, CognitoAccessToken: tokens.AccessToken,
       CognitoRefreshToken: tokens.RefreshToken, InfoEmail: credentials.username, InfoClientId: '', BId: '',
     }, variables, signal);
     if (!processed.data?.AuthCode) fail('PORTAL_LOGIN_REJECTED', 'Portal did not accept the Cognito authentication result.');
-    this.secrets.push(processed.data.AuthCode);
+    this.credentialRegistry.add(processed.data.AuthCode);
     const callback = new URL(variables.redirect_uri);
     if (callback.origin !== origin) fail('PORTAL_ORIGIN_DENIED', 'Tenant callback must stay on the configured origin.');
     callback.searchParams.set('code', processed.data.AuthCode); callback.searchParams.set('state', variables.state);
     const complete = await this.redirects(callback.href, url => url.origin === origin && url.pathname.startsWith('/authentication/redirect') && url.searchParams.has('code'), signal);
     if (complete.origin !== origin || !complete.searchParams.get('code')) fail('PORTAL_LOGIN_REJECTED', 'Portal session callback was not reached.');
-    this.secrets.push(complete.searchParams.get('code'), complete.searchParams.get('state') ?? '');
+    this.credentialRegistry.add(complete.searchParams.get('code'));
     await this.action('authentication', 'UnifiedAuthentication.redirect', 'authentication/UnifiedAuthentication/redirect/ActionProcessCodeRedirect', {
       Code: complete.searchParams.get('code'), State: complete.searchParams.get('state') ?? '', IsFirstLogin: false, IsRest: false, BId: '',
     }, {}, signal);
@@ -265,6 +301,7 @@ export class Odc3PortalBroker {
   }
 
   async readScreenservice(request) {
+    observeCredentials(this.credentialRegistry);
     if (request.target !== this.target || request.origin !== this.origin || request.readOnly !== true) fail('PORTAL_ACCESS_DENIED', 'Broker scope does not match.');
     if (!this.authenticated) fail('PORTAL_AUTH_REQUIRED', 'Call odc3_authenticate explicitly before protected Portal reads.');
     if (this.blockedOperations.has(request.operationId)) fail('PORTAL_CONTRACT_CHANGED', 'Current app-log/filter contract is mapped but still requires authenticated scoped validation; no legacy or agent-log fallback is allowed.');
@@ -275,16 +312,8 @@ export class Odc3PortalBroker {
       : ['monitoring.logs', 'monitoring.errors'].includes(request.operationId)
         ? readLogScreenservice(this.action.bind(this), request)
         : this.action(request.module, request.view, request.action, request.inputParameters, request.screenVariables, request.signal, request.clientVariables, request.discoveryView ?? request.view), request.signal);
-    // These wire strings are typed counters, not free text. Parse them before
-    // secret redaction so a short credential fragment cannot corrupt pagination.
-    for (const page of [body?.data?.LogSearch_Page, body?.data?.Page]) {
-      if (!page || typeof page !== 'object' || Array.isArray(page)) continue;
-      for (const key of ['Limit', 'Offset', 'NextPageOffset', 'TotalPages', 'TotalResults']) {
-        if (typeof page[key] === 'string' && /^-?\d+$/.test(page[key]) && Number.isSafeInteger(Number(page[key]))) page[key] = Number(page[key]);
-      }
-    }
     this.lastRead = { operation: request.operationId, at: new Date().toISOString() };
-    return { target: this.target, origin: this.origin, body: redact(decodeLogText(body, request.operationId), this.secrets) };
+    return { target: this.target, origin: this.origin, body: decodeLogText(body, request.operationId) };
   }
 
   // Any listed route (portal-routes.mjs), read or write, with the raw screenservice input. A write that names secretRefs
@@ -312,6 +341,7 @@ export class Odc3PortalBroker {
     return this.recoverRead(invoke,signal);
   }
   async callScreenservice({ operationId, write = false, input, secretRefs = [], signal, privateSender, operationUuid, authorizeSha256, confirmTenant, mobileUploadOperationUuid, mobileObjectUri, mobileExpectedContent }) {
+    observeCredentials(this.credentialRegistry);
     if (!this.authenticated) fail('PORTAL_AUTH_REQUIRED', 'Authenticate the Portal session first (odc_portal_login).');
     const route = routeOf(operationId, write);
     // Agent discovery waits for the platform to fetch a remote card. The
@@ -334,12 +364,12 @@ export class Odc3PortalBroker {
         if (!csrf && privateSender.optionalCsrf !== true) fail('HEADLESS_AUTH_UNAVAILABLE', 'The private Portal session has no authenticated CSRF context and the current bridge requires it.');
         return privateSender(url, options, { cookie: await this.jar.getCookieString(url), csrf });
       } }, { ...route, ...input, signal, extra: { write, operationId, secretRefs, operationUuid, authorizeSha256, confirmTenant, ...(privateMobile?{mobileUploadOperationUuid,mobileObjectUri,mobileExpectedContent}:{}) } });
-      return redact(answer, this.secrets);
+      return answer;
     }
     const invoke = () => this.action(route.module, route.view, route.action, input.inputParameters, input.screenVariables, signal, input.clientVariables, route.discoveryView);
     const answer = await (write ? invoke() : this.recoverRead(invoke, signal));
     this.lastRead = { operation: operationId, at: new Date().toISOString() };
-    return redact(answer, this.secrets);
+    return answer;
   }
 }
 
@@ -360,6 +390,6 @@ export async function createOdc3HostContext({ env = process.env, broker: supplie
   if (env.ODC_PORTAL_ORIGIN && env.ODC_PORTAL_ORIGIN !== origin) fail('PORTAL_TARGET_INVALID', 'Configured origin differs from the verified ODC3 connection (the corporate tenant of tenants.json).');
   const broker = suppliedBroker ?? new Odc3PortalBroker();
   await broker.initialize();
-  return { target: 'odc3', origin, portalRead: new PortalReadAdapter({ target: 'odc3', origin, broker, timeoutMs: 30000 }),
+  return { target: 'odc3', origin, credentialRegistry: broker.credentialRegistry, portalRead: new PortalReadAdapter({ target: 'odc3', origin, broker, timeoutMs: 30000 }),
     status: () => broker.status(), authenticate: () => broker.authenticate() };
 }

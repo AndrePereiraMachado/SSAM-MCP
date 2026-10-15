@@ -1,0 +1,610 @@
+{
+  "ops": [
+    {
+      "op": "spec",
+      "data": {
+        "ddl": "/// Totais de tickets visíveis ao usuário por estado de atendimento.\ntype TicketDashboardSummary public = {\n  TotalCount: Long Integer;\n  OpenCount: Long Integer;\n  InProgressCount: Long Integer;\n  WaitingCount: Long Integer;\n  ResolvedCount: Long Integer;\n  ClosedCount: Long Integer;\n  CancelledCount: Long Integer;\n}"
+      }
+    },
+    {
+      "op": "reference",
+      "producer": "BinaryData",
+      "elements": [
+        "IServerActionSignature:BinaryDataSize"
+      ]
+    },
+    {
+      "op": "logic",
+      "data": {
+        "actions": [
+          {
+            "name": "RequireTicketSession",
+            "kind": "server",
+            "description": "Recusa sessão anônima ou usuário inativo e resolve permissões da equipe no servidor.",
+            "outputs": [
+              {
+                "name": "CurrentUserId",
+                "type": "User Identifier"
+              },
+              {
+                "name": "IsStaff",
+                "type": "Boolean"
+              },
+              {
+                "name": "IsAdmin",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "if": "GetUserId() = NullIdentifier()",
+                "label": "Sessão está autenticada?",
+                "then": [
+                  {
+                    "raise": "TicketAccessDenied",
+                    "message": "\"Autenticação necessária.\""
+                  }
+                ]
+              },
+              {
+                "get": "User",
+                "as": "ActiveUser",
+                "where": "User.Id = GetUserId() and User.Is_Active",
+                "max": 1
+              },
+              {
+                "if": "ActiveUser.List.Empty",
+                "label": "Usuário está ativo?",
+                "then": [
+                  {
+                    "raise": "TicketAccessDenied",
+                    "message": "\"Usuário inexistente ou inativo.\""
+                  }
+                ]
+              },
+              {
+                "call": "CheckTicketAgentRole",
+                "as": "AgentRole",
+                "args": {
+                  "UserId": "GetUserId()"
+                }
+              },
+              {
+                "call": "CheckTicketAdministratorRole",
+                "as": "AdminRole",
+                "args": {
+                  "UserId": "GetUserId()"
+                }
+              },
+              {
+                "assign": {
+                  "CurrentUserId": "GetUserId()",
+                  "IsStaff": "AgentRole.HasRole or AdminRole.HasRole",
+                  "IsAdmin": "AdminRole.HasRole"
+                },
+                "as": "ResolvePermissions"
+              }
+            ]
+          },
+          {
+            "name": "RequireTicketAccess",
+            "kind": "server",
+            "description": "Restringe acesso ao solicitante ou à equipe e bloqueia a linha nas operações de escrita.",
+            "inputs": [
+              {
+                "name": "TicketId",
+                "type": "Ticket Identifier",
+                "mandatory": true
+              },
+              {
+                "name": "LockForUpdate",
+                "type": "Boolean",
+                "mandatory": false,
+                "default": "False"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "TicketData",
+                "type": "Ticket"
+              },
+              {
+                "name": "CurrentUserId",
+                "type": "User Identifier"
+              },
+              {
+                "name": "IsStaff",
+                "type": "Boolean"
+              },
+              {
+                "name": "IsAdmin",
+                "type": "Boolean"
+              }
+            ],
+            "steps": [
+              {
+                "call": "RequireTicketSession",
+                "as": "Session"
+              },
+              {
+                "if": "TicketId = NullIdentifier()",
+                "then": [
+                  {
+                    "raise": "TicketNotFound",
+                    "message": "\"Ticket não encontrado.\""
+                  }
+                ],
+                "label": "Identificador foi informado?"
+              },
+              {
+                "if": "LockForUpdate",
+                "label": "Operação precisa bloquear o ticket?",
+                "then": [
+                  {
+                    "call": "IEntityActionSignature:GetTicketForUpdate",
+                    "as": "LockedTicket",
+                    "args": {
+                      "Id": "TicketId"
+                    }
+                  },
+                  {
+                    "assign": {
+                      "TicketData": "LockedTicket.Record"
+                    },
+                    "as": "LoadLockedTicket"
+                  }
+                ],
+                "else": [
+                  {
+                    "get": "Ticket",
+                    "as": "TicketById",
+                    "where": "Ticket.Id = TicketId",
+                    "max": 1
+                  },
+                  {
+                    "if": "TicketById.List.Empty",
+                    "then": [
+                      {
+                        "raise": "TicketNotFound",
+                        "message": "\"Ticket não encontrado.\""
+                      }
+                    ],
+                    "label": "Ticket existe?"
+                  },
+                  {
+                    "assign": {
+                      "TicketData": "TicketById.List.Current.Ticket"
+                    },
+                    "as": "LoadTicket"
+                  }
+                ]
+              },
+              {
+                "if": "not Session.IsStaff and TicketData.RequesterId <> Session.CurrentUserId",
+                "label": "Usuário pode acessar este ticket?",
+                "then": [
+                  {
+                    "raise": "TicketAccessDenied",
+                    "message": "\"Ticket não encontrado ou acesso não permitido.\""
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "CurrentUserId": "Session.CurrentUserId",
+                  "IsStaff": "Session.IsStaff",
+                  "IsAdmin": "Session.IsAdmin"
+                },
+                "as": "ReturnPermissions"
+              }
+            ]
+          },
+          {
+            "name": "RecordTicketHistory",
+            "kind": "server",
+            "description": "Grava o autor da sessão e os valores da alteração na transação do ticket.",
+            "inputs": [
+              {
+                "name": "TicketId",
+                "type": "Ticket Identifier",
+                "mandatory": true
+              },
+              {
+                "name": "Event",
+                "type": "Text",
+                "mandatory": true
+              },
+              {
+                "name": "PreviousValue",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "NewValue",
+                "type": "Text",
+                "mandatory": false
+              }
+            ],
+            "vars": [
+              {
+                "name": "HistoryRecord",
+                "type": "TicketHistory",
+                "description": "Registro de auditoria da alteração autorizada."
+              }
+            ],
+            "steps": [
+              {
+                "assign": {
+                  "HistoryRecord.TicketId": "TicketId",
+                  "HistoryRecord.AuthorId": "GetUserId()",
+                  "HistoryRecord.Event": "Event",
+                  "HistoryRecord.PreviousValue": "Substr(PreviousValue,0,2000)",
+                  "HistoryRecord.NewValue": "Substr(NewValue,0,2000)",
+                  "HistoryRecord.CreatedOn": "CurrDateTime()"
+                },
+                "as": "PrepareHistory"
+              },
+              {
+                "call": "CreateTicketHistory",
+                "as": "SaveHistory",
+                "args": {
+                  "Source": "HistoryRecord"
+                }
+              }
+            ]
+          },
+          {
+            "name": "GetTickets",
+            "kind": "server",
+            "public": true,
+            "description": "Retorna a página de tickets visíveis com filtros e quantidade total.",
+            "inputs": [
+              {
+                "name": "Search",
+                "type": "Text",
+                "mandatory": false
+              },
+              {
+                "name": "StatusId",
+                "type": "TicketStatus Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "PriorityId",
+                "type": "TicketPriority Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "CategoryId",
+                "type": "TicketCategory Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "AssigneeId",
+                "type": "User Identifier",
+                "mandatory": false
+              },
+              {
+                "name": "OnlyMine",
+                "type": "Boolean",
+                "mandatory": false,
+                "default": "False"
+              },
+              {
+                "name": "OnlyAssignedToMe",
+                "type": "Boolean",
+                "mandatory": false,
+                "default": "False"
+              },
+              {
+                "name": "StartIndex",
+                "type": "Integer",
+                "mandatory": false,
+                "default": "0"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer",
+                "mandatory": false,
+                "default": "0"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "Tickets",
+                "type": "Ticket List"
+              },
+              {
+                "name": "TotalCount",
+                "type": "Long Integer"
+              }
+            ],
+            "vars": [
+              {
+                "name": "PageLimit",
+                "type": "Integer",
+                "description": "Limite efetivo da página."
+              }
+            ],
+            "steps": [
+              {
+                "call": "RequireTicketSession",
+                "as": "Session"
+              },
+              {
+                "if": "StartIndex < 0 or PageSize < 0",
+                "label": "Paginação é válida?",
+                "then": [
+                  {
+                    "raise": "TicketValidationError",
+                    "message": "\"Índice inicial e tamanho da página não podem ser negativos.\""
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "PageLimit": "If(PageSize = 0, Site.TicketDefaultPageSize, Min(PageSize,Site.TicketMaxPageSize))"
+                },
+                "as": "LimitPage"
+              },
+              {
+                "get": "Ticket",
+                "as": "TicketsPage",
+                "where": "(Session.IsStaff or Ticket.RequesterId = Session.CurrentUserId) and (Trim(Search) = \"\" or Ticket.Title like \"%\" + Trim(Search) + \"%\") and (StatusId = NullIdentifier() or Ticket.StatusId = StatusId) and (PriorityId = NullIdentifier() or Ticket.PriorityId = PriorityId) and (CategoryId = NullIdentifier() or Ticket.CategoryId = CategoryId) and (AssigneeId = NullIdentifier() or Ticket.AssigneeId = AssigneeId) and (not OnlyMine or Ticket.RequesterId = Session.CurrentUserId) and (not OnlyAssignedToMe or Ticket.AssigneeId = Session.CurrentUserId)",
+                "sort": "Ticket.Id desc",
+                "start": "StartIndex",
+                "max": "PageLimit"
+              },
+              {
+                "assign": {
+                  "Tickets": "TicketsPage.List",
+                  "TotalCount": "TicketsPage.Count"
+                },
+                "as": "ReturnTickets"
+              }
+            ]
+          },
+          {
+            "name": "GetTicketDetail",
+            "kind": "server",
+            "public": true,
+            "description": "Retorna o ticket autorizado e páginas de comentários, anexos e histórico, protegendo notas internas.",
+            "inputs": [
+              {
+                "name": "TicketId",
+                "type": "Ticket Identifier",
+                "mandatory": true
+              },
+              {
+                "name": "CommentStartIndex",
+                "type": "Integer",
+                "mandatory": false,
+                "default": "0"
+              },
+              {
+                "name": "AttachmentStartIndex",
+                "type": "Integer",
+                "mandatory": false,
+                "default": "0"
+              },
+              {
+                "name": "HistoryStartIndex",
+                "type": "Integer",
+                "mandatory": false,
+                "default": "0"
+              },
+              {
+                "name": "PageSize",
+                "type": "Integer",
+                "mandatory": false,
+                "default": "0"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "TicketData",
+                "type": "Ticket"
+              },
+              {
+                "name": "Comments",
+                "type": "TicketComment List"
+              },
+              {
+                "name": "Attachments",
+                "type": "TicketAttachment List"
+              },
+              {
+                "name": "History",
+                "type": "TicketHistory List"
+              },
+              {
+                "name": "CommentCount",
+                "type": "Long Integer"
+              },
+              {
+                "name": "AttachmentCount",
+                "type": "Long Integer"
+              },
+              {
+                "name": "HistoryCount",
+                "type": "Long Integer"
+              },
+              {
+                "name": "CanEdit",
+                "type": "Boolean"
+              },
+              {
+                "name": "CanManage",
+                "type": "Boolean"
+              }
+            ],
+            "vars": [
+              {
+                "name": "PageLimit",
+                "type": "Integer",
+                "description": "Limite de cada coleção do detalhe."
+              }
+            ],
+            "steps": [
+              {
+                "call": "RequireTicketAccess",
+                "as": "Access",
+                "args": {
+                  "TicketId": "TicketId",
+                  "LockForUpdate": "False"
+                }
+              },
+              {
+                "if": "CommentStartIndex < 0 or AttachmentStartIndex < 0 or HistoryStartIndex < 0 or PageSize < 0",
+                "label": "Paginação é válida?",
+                "then": [
+                  {
+                    "raise": "TicketValidationError",
+                    "message": "\"Índices e tamanho da página não podem ser negativos.\""
+                  }
+                ]
+              },
+              {
+                "assign": {
+                  "PageLimit": "If(PageSize = 0,Site.TicketDefaultPageSize,Min(PageSize,Site.TicketMaxPageSize))"
+                },
+                "as": "LimitCollections"
+              },
+              {
+                "get": "TicketComment",
+                "as": "CommentsPage",
+                "where": "TicketComment.TicketId = TicketId and (Access.IsStaff or not TicketComment.IsInternal)",
+                "sort": "TicketComment.Id",
+                "start": "CommentStartIndex",
+                "max": "PageLimit"
+              },
+              {
+                "get": "TicketAttachment",
+                "as": "AttachmentsPage",
+                "where": "TicketAttachment.TicketId = TicketId",
+                "sort": "TicketAttachment.Id desc",
+                "start": "AttachmentStartIndex",
+                "max": "PageLimit"
+              },
+              {
+                "get": "TicketHistory",
+                "as": "HistoryPage",
+                "where": "TicketHistory.TicketId = TicketId and (Access.IsStaff or TicketHistory.Event <> \"InternalNoteAdded\")",
+                "sort": "TicketHistory.Id desc",
+                "start": "HistoryStartIndex",
+                "max": "PageLimit"
+              },
+              {
+                "assign": {
+                  "TicketData": "Access.TicketData",
+                  "Comments": "CommentsPage.List",
+                  "Attachments": "AttachmentsPage.List",
+                  "History": "HistoryPage.List",
+                  "CommentCount": "CommentsPage.Count",
+                  "AttachmentCount": "AttachmentsPage.Count",
+                  "HistoryCount": "HistoryPage.Count",
+                  "CanEdit": "Access.TicketData.StatusId <> Entities.TicketStatus.Closed and Access.TicketData.StatusId <> Entities.TicketStatus.Cancelled and (Access.IsStaff or Access.TicketData.StatusId = Entities.TicketStatus.Open or Access.TicketData.StatusId = Entities.TicketStatus.WaitingForRequester)",
+                  "CanManage": "Access.IsStaff"
+                },
+                "as": "ReturnDetail"
+              }
+            ]
+          },
+          {
+            "name": "GetDashboardSummary",
+            "kind": "server",
+            "public": true,
+            "description": "Calcula totais por estado em uma consulta parametrizada com o escopo de acesso do usuário.",
+            "outputs": [
+              {
+                "name": "Summary",
+                "type": "TicketDashboardSummary"
+              }
+            ],
+            "steps": [
+              {
+                "call": "RequireTicketSession",
+                "as": "Session"
+              },
+              {
+                "get": "TicketDashboardSummary",
+                "as": "DashboardCounts",
+                "sql": true,
+                "statement": "SELECT COUNT(*) AS TotalCount, COALESCE(SUM(CASE WHEN {Ticket}.[StatusId] = @OpenStatusId THEN 1 ELSE 0 END), 0) AS OpenCount, COALESCE(SUM(CASE WHEN {Ticket}.[StatusId] = @InProgressStatusId THEN 1 ELSE 0 END), 0) AS InProgressCount, COALESCE(SUM(CASE WHEN {Ticket}.[StatusId] = @WaitingStatusId THEN 1 ELSE 0 END), 0) AS WaitingCount, COALESCE(SUM(CASE WHEN {Ticket}.[StatusId] = @ResolvedStatusId THEN 1 ELSE 0 END), 0) AS ResolvedCount, COALESCE(SUM(CASE WHEN {Ticket}.[StatusId] = @ClosedStatusId THEN 1 ELSE 0 END), 0) AS ClosedCount, COALESCE(SUM(CASE WHEN {Ticket}.[StatusId] = @CancelledStatusId THEN 1 ELSE 0 END), 0) AS CancelledCount FROM {Ticket} WHERE @IsStaff = 1 OR {Ticket}.[RequesterId] = @CurrentUserId",
+                "params": {
+                  "IsStaff": {
+                    "type": "Boolean",
+                    "value": "Session.IsStaff"
+                  },
+                  "CurrentUserId": {
+                    "type": "User Identifier",
+                    "value": "Session.CurrentUserId"
+                  },
+                  "OpenStatusId": {
+                    "type": "TicketStatus Identifier",
+                    "value": "Entities.TicketStatus.Open"
+                  },
+                  "InProgressStatusId": {
+                    "type": "TicketStatus Identifier",
+                    "value": "Entities.TicketStatus.InProgress"
+                  },
+                  "WaitingStatusId": {
+                    "type": "TicketStatus Identifier",
+                    "value": "Entities.TicketStatus.WaitingForRequester"
+                  },
+                  "ResolvedStatusId": {
+                    "type": "TicketStatus Identifier",
+                    "value": "Entities.TicketStatus.Resolved"
+                  },
+                  "ClosedStatusId": {
+                    "type": "TicketStatus Identifier",
+                    "value": "Entities.TicketStatus.Closed"
+                  },
+                  "CancelledStatusId": {
+                    "type": "TicketStatus Identifier",
+                    "value": "Entities.TicketStatus.Cancelled"
+                  }
+                },
+                "max": 1
+              },
+              {
+                "assign": {
+                  "Summary.TotalCount": "DashboardCounts.List.Current.List.TotalCount",
+                  "Summary.OpenCount": "DashboardCounts.List.Current.List.OpenCount",
+                  "Summary.InProgressCount": "DashboardCounts.List.Current.List.InProgressCount",
+                  "Summary.WaitingCount": "DashboardCounts.List.Current.List.WaitingCount",
+                  "Summary.ResolvedCount": "DashboardCounts.List.Current.List.ResolvedCount",
+                  "Summary.ClosedCount": "DashboardCounts.List.Current.List.ClosedCount",
+                  "Summary.CancelledCount": "DashboardCounts.List.Current.List.CancelledCount"
+                },
+                "as": "ReturnSummary"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "op": "logic",
+      "data": {
+        "flow": [
+          "/// Valida conteúdo, categoria ativa e prioridade antes de gravar.\nserver action ValidateTicketFields\n  in Title: Text\n  in Description: Text\n  in CategoryId: TicketCategory Identifier\n  in PriorityId: TicketPriority Identifier\n  if Length(Trim(Title)) = 0 or Length(Trim(Title)) > 200:  # Título é válido?\n    raise TicketValidationError(\"Informe um título com até 200 caracteres.\")\n  if Length(Trim(Description)) = 0 or Length(Description) > 20000:  # Descrição é válida?\n    raise TicketValidationError(\"Informe uma descrição com até 20000 caracteres.\")\n  ActiveCategory = aggregate FROM TicketCategory WHERE (TicketCategory.Id = CategoryId and TicketCategory.IsActive) MAX 1\n  if ActiveCategory.List.Empty:  # Categoria está ativa?\n    raise TicketValidationError(\"Selecione uma categoria ativa.\")\n  if PriorityId <> Entities.TicketPriority.Low and PriorityId <> Entities.TicketPriority.Normal and PriorityId <> Entities.TicketPriority.High and PriorityId <> Entities.TicketPriority.Urgent:  # Prioridade é válida?\n    raise TicketValidationError(\"Selecione uma prioridade válida.\")\n  end\n",
+          "/// Registra histórico de campo somente quando seu valor mudou.\nserver action RecordTicketFieldChange\n  in TicketId: Ticket Identifier\n  in Event: Text\n  in PreviousValue: Text\n  in NewValue: Text\n  if PreviousValue = NewValue:  # Campo permaneceu igual?\n    end\n  RecordTicketHistory(TicketId=TicketId, Event=Event, PreviousValue=Substr(PreviousValue,0,2000), NewValue=Substr(NewValue,0,2000))\n  end\n",
+          "/// Abre uma solicitação em nome do usuário autenticado.\nserver action CreateNewTicket public\n  in Title: Text\n  in Description: Text\n  in CategoryId: TicketCategory Identifier\n  in PriorityId?: TicketPriority Identifier = Entities.TicketPriority.Normal\n  out TicketData: Ticket\n  local CurrentTime: Date Time\n  Session = RequireTicketSession()\n  ValidateTicketFields(Title=Title, Description=Description, CategoryId=CategoryId, PriorityId=PriorityId)\n  assign  # Preparar ticket aberto\n    CurrentTime = CurrDateTime()\n    TicketData.Title = Trim(Title)\n    TicketData.Description = Trim(Description)\n    TicketData.CategoryId = CategoryId\n    TicketData.StatusId = Entities.TicketStatus.Open\n    TicketData.PriorityId = PriorityId\n    TicketData.RequesterId = Session.CurrentUserId\n    TicketData.AssigneeId = NullIdentifier()\n    TicketData.CreatedOn = CurrentTime\n    TicketData.UpdatedOn = CurrentTime\n    TicketData.ResolvedOn = NullDate()\n  PersistTicket = CreateTicket(Source=TicketData)\n  assign TicketData.Id = PersistTicket.Id  # Retornar identificador criado\n  RecordTicketHistory(TicketId=TicketData.Id, Event=\"TicketCreated\", NewValue=IntegerToText(Entities.TicketStatus.Open))\n  end\n",
+          "/// Edita conteúdo sem alterar solicitante, responsável ou estado.\nserver action UpdateTicketDetails public\n  in TicketId: Ticket Identifier\n  in Title: Text\n  in Description: Text\n  in CategoryId: TicketCategory Identifier\n  in PriorityId: TicketPriority Identifier\n  out TicketData: Ticket\n  local PreviousTicket: Ticket\n  Access = RequireTicketAccess(TicketId=TicketId, LockForUpdate=True)\n  if Access.TicketData.StatusId = Entities.TicketStatus.Closed or Access.TicketData.StatusId = Entities.TicketStatus.Cancelled:  # Ticket permite edição?\n    raise TicketValidationError(\"Tickets fechados ou cancelados não podem ser editados.\")\n  if not Access.IsStaff and Access.TicketData.StatusId <> Entities.TicketStatus.Open and Access.TicketData.StatusId <> Entities.TicketStatus.WaitingForRequester:  # Solicitante pode editar neste estado?\n    raise TicketAccessDenied(\"O solicitante pode editar tickets abertos ou aguardando sua resposta.\")\n  ValidateTicketFields(Title=Title, Description=Description, CategoryId=CategoryId, PriorityId=PriorityId)\n  assign  # Preservar vínculos e editar conteúdo\n    PreviousTicket = Access.TicketData\n    TicketData = Access.TicketData\n    TicketData.Title = Trim(Title)\n    TicketData.Description = Trim(Description)\n    TicketData.CategoryId = CategoryId\n    TicketData.PriorityId = PriorityId\n    TicketData.UpdatedOn = CurrDateTime()\n  UpdateTicket(Source=TicketData)\n  RecordTicketFieldChange(TicketId=TicketId, Event=\"TitleChanged\", PreviousValue=PreviousTicket.Title, NewValue=TicketData.Title)\n  RecordTicketFieldChange(TicketId=TicketId, Event=\"DescriptionChanged\", PreviousValue=PreviousTicket.Description, NewValue=TicketData.Description)\n  RecordTicketFieldChange(TicketId=TicketId, Event=\"CategoryChanged\", PreviousValue=LongIntegerToText(PreviousTicket.CategoryId), NewValue=LongIntegerToText(TicketData.CategoryId))\n  RecordTicketFieldChange(TicketId=TicketId, Event=\"PriorityChanged\", PreviousValue=IntegerToText(PreviousTicket.PriorityId), NewValue=IntegerToText(TicketData.PriorityId))\n  end\n",
+          "/// Atribui o atendimento a um membro ativo da equipe ou remove a atribuição.\nserver action AssignTicket public\n  in TicketId: Ticket Identifier\n  in AssigneeId?: User Identifier = NullIdentifier()\n  out TicketData: Ticket\n  local PreviousAssigneeId: User Identifier\n  Access = RequireTicketAccess(TicketId=TicketId, LockForUpdate=True)\n  if not Access.IsStaff:  # Usuário pertence à equipe?\n    raise TicketAccessDenied(\"Somente agentes ou administradores podem atribuir tickets.\")\n  if Access.TicketData.StatusId = Entities.TicketStatus.Closed or Access.TicketData.StatusId = Entities.TicketStatus.Cancelled:  # Ticket permite atribuição?\n    raise TicketValidationError(\"Tickets fechados ou cancelados não podem receber atribuições.\")\n  assign TicketData = Access.TicketData  # Preparar retorno\n  if TicketData.AssigneeId = AssigneeId:  # Responsável já é o solicitado?\n    end\n  assign  # Preparar nova atribuição\n    PreviousAssigneeId = TicketData.AssigneeId\n    TicketData.AssigneeId = AssigneeId\n    TicketData.UpdatedOn = CurrDateTime()\n  if AssigneeId <> NullIdentifier():  # Foi informado responsável?\n    ActiveAssignee = aggregate FROM User WHERE (User.Id = AssigneeId and User.Is_Active) MAX 1\n    if ActiveAssignee.List.Empty:  # Responsável está ativo?\n      raise TicketValidationError(\"O responsável deve ser um usuário ativo.\")\n    AssigneeAgent = CheckTicketAgentRole(UserId=AssigneeId)\n    AssigneeAdmin = CheckTicketAdministratorRole(UserId=AssigneeId)\n    if not AssigneeAgent.HasRole and not AssigneeAdmin.HasRole:  # Responsável é membro da equipe?\n      raise TicketValidationError(\"O responsável deve ser agente ou administrador.\")\n    UpdateTicket(Source=TicketData)\n    RecordTicketHistory(TicketId=TicketId, Event=\"AssigneeChanged\", PreviousValue=LongIntegerToText(PreviousAssigneeId), NewValue=LongIntegerToText(AssigneeId))\n    end\n  UpdateTicket(Source=TicketData)\n  RecordTicketHistory(TicketId=TicketId, Event=\"AssigneeChanged\", PreviousValue=LongIntegerToText(PreviousAssigneeId), NewValue=LongIntegerToText(AssigneeId))\n  end\n",
+          "/// Grava comentários e atualiza o ticket na mesma transação.\nserver action AddTicketComment public\n  in TicketId: Ticket Identifier\n  in Text: Text\n  in IsInternal?: Boolean = False\n  out CommentData: TicketComment\n  out TicketData: Ticket\n  Access = RequireTicketAccess(TicketId=TicketId, LockForUpdate=True)\n  if Access.TicketData.StatusId = Entities.TicketStatus.Closed or Access.TicketData.StatusId = Entities.TicketStatus.Cancelled:  # Ticket aceita comentários?\n    raise TicketValidationError(\"Tickets fechados ou cancelados não aceitam comentários.\")\n  if IsInternal and not Access.IsStaff:  # Usuário pode escrever nota interna?\n    raise TicketAccessDenied(\"Somente a equipe pode registrar notas internas.\")\n  if Length(Trim(Text)) = 0 or Length(Text) > 20000:  # Comentário é válido?\n    raise TicketValidationError(\"Informe um comentário com até 20000 caracteres.\")\n  assign  # Preparar comentário\n    CommentData.TicketId = TicketId\n    CommentData.AuthorId = Access.CurrentUserId\n    CommentData.Text = Trim(Text)\n    CommentData.IsInternal = IsInternal\n    CommentData.CreatedOn = CurrDateTime()\n  CreatedComment = CreateTicketComment(Source=CommentData)\n  assign CommentData.Id = CreatedComment.Id  # Retornar comentário\n  assign  # Atualizar data do ticket\n    TicketData = Access.TicketData\n    TicketData.UpdatedOn = CommentData.CreatedOn\n  UpdateTicket(Source=TicketData)\n  RecordTicketHistory(TicketId=TicketId, Event=If(IsInternal,\"InternalNoteAdded\",\"CommentAdded\"), NewValue=LongIntegerToText(CommentData.Id))\n  end\n",
+          "/// Confere o tamanho real do arquivo e grava metadados e conteúdo juntos.\nserver action UploadTicketAttachment public\n  in TicketId: Ticket Identifier\n  in FileName: Text\n  in MimeType: Text\n  in FileContent: Binary Data\n  in FileSize: Long Integer\n  out AttachmentData: TicketAttachment\n  out TicketData: Ticket\n  local ContentData: TicketAttachmentContent\n  Access = RequireTicketAccess(TicketId=TicketId, LockForUpdate=True)\n  if Access.TicketData.StatusId = Entities.TicketStatus.Closed or Access.TicketData.StatusId = Entities.TicketStatus.Cancelled:  # Ticket aceita anexos?\n    raise TicketValidationError(\"Tickets fechados ou cancelados não aceitam anexos.\")\n  if Length(Trim(FileName)) = 0 or Length(FileName) > 255:  # Nome do arquivo é válido?\n    raise TicketValidationError(\"Informe um nome de arquivo com até 255 caracteres.\")\n  if Length(Trim(MimeType)) = 0 or Length(MimeType) > 255:  # Tipo do arquivo é válido?\n    raise TicketValidationError(\"Informe um tipo de arquivo válido.\")\n  FileBytes = BinaryData.BinaryDataSize(BinaryData=FileContent)\n  if FileBytes.Size <= 0 or FileBytes.Size > Site.TicketMaxAttachmentBytes:  # Arquivo respeita o limite?\n    raise TicketValidationError(\"O arquivo deve ter conteúdo e respeitar o limite configurado.\")\n  if FileSize <> FileBytes.Size:  # Tamanho informado corresponde ao arquivo?\n    raise TicketValidationError(\"O tamanho informado não corresponde ao conteúdo do arquivo.\")\n  assign  # Preparar metadados\n    AttachmentData.TicketId = TicketId\n    AttachmentData.AuthorId = Access.CurrentUserId\n    AttachmentData.Name = Trim(FileName)\n    AttachmentData.MimeType = Trim(MimeType)\n    AttachmentData.Size = FileBytes.Size\n    AttachmentData.CreatedOn = CurrDateTime()\n  CreatedAttachment = CreateTicketAttachment(Source=AttachmentData)\n  assign AttachmentData.Id = CreatedAttachment.Id  # Retornar anexo\n  assign  # Preparar conteúdo binário\n    ContentData.AttachmentId = AttachmentData.Id\n    ContentData.Content = FileContent\n  CreateTicketAttachmentContent(Source=ContentData)\n  assign  # Atualizar data do ticket\n    TicketData = Access.TicketData\n    TicketData.UpdatedOn = AttachmentData.CreatedOn\n  UpdateTicket(Source=TicketData)\n  RecordTicketHistory(TicketId=TicketId, Event=\"AttachmentAdded\", NewValue=AttachmentData.Name)\n  end\n",
+          "/// Retorna o arquivo somente ao usuário autorizado no ticket.\nserver action DownloadTicketAttachment public\n  in AttachmentId: TicketAttachment Identifier\n  out FileName: Text\n  out MimeType: Text\n  out FileContent: Binary Data\n  out FileSize: Long Integer\n  RequireTicketSession()\n  AttachmentById = aggregate FROM TicketAttachment WHERE (TicketAttachment.Id = AttachmentId) MAX 1\n  if AttachmentById.List.Empty:  # Anexo existe?\n    raise TicketNotFound(\"Anexo não encontrado.\")\n  RequireTicketAccess(TicketId=AttachmentById.List.Current.TicketAttachment.TicketId)\n  ContentById = aggregate FROM TicketAttachmentContent WHERE (TicketAttachmentContent.AttachmentId = AttachmentId) MAX 1\n  if ContentById.List.Empty:  # Conteúdo existe?\n    raise TicketNotFound(\"Conteúdo do anexo não encontrado.\")\n  assign  # Retornar arquivo autorizado\n    FileName = AttachmentById.List.Current.TicketAttachment.Name\n    MimeType = AttachmentById.List.Current.TicketAttachment.MimeType\n    FileContent = ContentById.List.Current.TicketAttachmentContent.Content\n    FileSize = AttachmentById.List.Current.TicketAttachment.Size\n  end\n",
+          "/// Cria ou renomeia categorias com permissão administrativa e nome único.\nserver action SaveTicketCategory public\n  in CategoryId?: TicketCategory Identifier\n  in Name: Text\n  out CategoryData: TicketCategory\n  Session = RequireTicketSession()\n  if not Session.IsAdmin:  # Usuário é administrador?\n    raise TicketAccessDenied(\"Somente administradores podem gerenciar categorias.\")\n  if Length(Trim(Name)) = 0 or Length(Name) > 100:  # Nome é válido?\n    raise TicketValidationError(\"Informe uma categoria com até 100 caracteres.\")\n  DuplicateCategory = aggregate FROM TicketCategory WHERE (ToLower(TicketCategory.Name) = ToLower(Trim(Name)) and TicketCategory.Id <> CategoryId) MAX 1\n  if not DuplicateCategory.List.Empty:  # Nome já existe?\n    raise TicketValidationError(\"Já existe uma categoria com esse nome.\")\n  if CategoryId = NullIdentifier():  # Categoria é nova?\n    assign  # Preparar nova categoria ativa\n      CategoryData.Name = Trim(Name)\n      CategoryData.IsActive = True\n    CreatedCategory = CreateTicketCategory(Source=CategoryData)\n    assign CategoryData.Id = CreatedCategory.Id  # Retornar categoria criada\n    end\n  ExistingCategory = GetTicketCategoryForUpdate(Id=CategoryId)\n  assign CategoryData = ExistingCategory.Record  # Preservar categoria\n  assign CategoryData.Name = Trim(Name)  # Renomear categoria\n  UpdateTicketCategory(Source=CategoryData)\n  end\n",
+          "/// Ativa ou desativa categorias sem remover os tickets existentes.\nserver action SetTicketCategoryActive public\n  in CategoryId: TicketCategory Identifier\n  in IsActive: Boolean\n  out CategoryData: TicketCategory\n  Session = RequireTicketSession()\n  if not Session.IsAdmin:  # Usuário é administrador?\n    raise TicketAccessDenied(\"Somente administradores podem gerenciar categorias.\")\n  ExistingCategory = GetTicketCategoryForUpdate(Id=CategoryId)\n  assign CategoryData = ExistingCategory.Record  # Preservar categoria\n  assign CategoryData.IsActive = IsActive  # Atualizar disponibilidade\n  UpdateTicketCategory(Source=CategoryData)\n  end\n",
+          "/// Centraliza transições autorizadas, data de resolução e histórico.\nserver action ChangeTicketStatus public\n  in TicketId: Ticket Identifier\n  in NewStatusId: TicketStatus Identifier\n  out TicketData: Ticket\n  Access = RequireTicketAccess(TicketId=TicketId, LockForUpdate=True)\n  assign TicketData = Access.TicketData  # Preparar retorno\n  if NewStatusId = Access.TicketData.StatusId:  # Estado já é o solicitado?\n    end\n  if not ((Access.TicketData.StatusId = Entities.TicketStatus.Open and ((NewStatusId = Entities.TicketStatus.InProgress and Access.IsStaff) or NewStatusId = Entities.TicketStatus.Cancelled)) or (Access.TicketData.StatusId = Entities.TicketStatus.InProgress and ((Access.IsStaff and (NewStatusId = Entities.TicketStatus.WaitingForRequester or NewStatusId = Entities.TicketStatus.Resolved)) or NewStatusId = Entities.TicketStatus.Cancelled)) or (Access.TicketData.StatusId = Entities.TicketStatus.WaitingForRequester and (NewStatusId = Entities.TicketStatus.InProgress or (NewStatusId = Entities.TicketStatus.Resolved and Access.IsStaff) or NewStatusId = Entities.TicketStatus.Cancelled)) or (Access.TicketData.StatusId = Entities.TicketStatus.Resolved and (NewStatusId = Entities.TicketStatus.Open or NewStatusId = Entities.TicketStatus.Closed))):  # Transição é permitida?\n    raise TicketValidationError(\"Transição de estado não permitida.\")\n  assign  # Aplicar estado e datas\n    TicketData.StatusId = NewStatusId\n    TicketData.UpdatedOn = CurrDateTime()\n    TicketData.ResolvedOn = If(NewStatusId = Entities.TicketStatus.Resolved, CurrDateTime(), If(NewStatusId = Entities.TicketStatus.Closed, Access.TicketData.ResolvedOn, NullDate()))\n  UpdateTicket(Source=TicketData)\n  RecordTicketHistory(TicketId=TicketId, Event=\"StatusChanged\", PreviousValue=IntegerToText(Access.TicketData.StatusId), NewValue=IntegerToText(NewStatusId))\n  end\n",
+          "/// Resolve um ticket em atendimento ou aguardando solicitante.\nserver action ResolveTicket public\n  in TicketId: Ticket Identifier\n  out TicketData: Ticket\n  ChangeStatus = ChangeTicketStatus(TicketId=TicketId, NewStatusId=Entities.TicketStatus.Resolved)\n  assign TicketData = ChangeStatus.TicketData  # Retornar ticket atualizado\n  end\n",
+          "/// Reabre um ticket resolvido para novo atendimento.\nserver action ReopenTicket public\n  in TicketId: Ticket Identifier\n  out TicketData: Ticket\n  ChangeStatus = ChangeTicketStatus(TicketId=TicketId, NewStatusId=Entities.TicketStatus.Open)\n  assign TicketData = ChangeStatus.TicketData  # Retornar ticket atualizado\n  end\n",
+          "/// Confirma o fechamento de um ticket resolvido.\nserver action CloseTicket public\n  in TicketId: Ticket Identifier\n  out TicketData: Ticket\n  ChangeStatus = ChangeTicketStatus(TicketId=TicketId, NewStatusId=Entities.TicketStatus.Closed)\n  assign TicketData = ChangeStatus.TicketData  # Retornar ticket atualizado\n  end\n",
+          "/// Cancela um ticket ativo.\nserver action CancelTicket public\n  in TicketId: Ticket Identifier\n  out TicketData: Ticket\n  ChangeStatus = ChangeTicketStatus(TicketId=TicketId, NewStatusId=Entities.TicketStatus.Cancelled)\n  assign TicketData = ChangeStatus.TicketData  # Retornar ticket atualizado\n  end\n"
+        ]
+      }
+    }
+  ]
+}

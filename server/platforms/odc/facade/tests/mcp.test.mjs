@@ -53,8 +53,14 @@ test('facade serves studio_* and odc_* tools on one stdio server', async () => {
     assert.deepEqual(map.inputSchema.properties.lane.enum, ['odc', 'o11']);
     assert.ok(map.inputSchema.properties.role.enum.includes('screen'));
     assert.match(client.getInstructions(), /To read an application, start with ssam_map \{lane, target, view:"digest"\}: the whole module as text, in pages.*read it once and work in context\. ssam_map \{lane, target\} lists every element with its @key.*studio_inspect only to go deeper into an @key \(path "@<key>" with expectedSourceSha256\)/);
-    assert.deepEqual(map.inputSchema.properties.view.enum, ['map', 'digest', 'search', 'uses']);
+    // logic: the view flow under the word of ssam_code (part logic).
+    assert.deepEqual(map.inputSchema.properties.view.enum, ['map', 'digest', 'ddl', 'flow', 'search', 'uses', 'html', 'logic']);
+    assert.match(map.description, /ssam_code/);
+    // One action whole, as text with its fixed point (ssam-flow/1).
+    assert.match(map.description, /view "flow" \{element: @key, Flow\/Screen\/Action or the action name\}: one action as ssam-flow\/1 text, whole/);
     assert.match(map.description, /view "digest": the whole module as compact text/);
+    // The data text: entities, structures, variables and timers as DDL with an @key on every element.
+    assert.match(map.description, /view "ddl": the module data as text with an @key on every element/);
     // Cross-cutting questions in one call: search and uses over one capture or the list of an app's modules.
     assert.match(map.description, /view "search" \{text, regex\?, property\?, kind\?, role\?\}.*view "uses" \{element: @key, Module\.Element/);
     assert.ok(map.inputSchema.properties.target.anyOf.some(s => s.type === 'array'), 'target takes a list');

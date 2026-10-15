@@ -1,0 +1,65 @@
+{
+  "source": "recorded",
+  "records": 4,
+  "bytes": 9539,
+  "evidence": [
+    {
+      "type": "event_msg",
+      "payloadType": "item_completed",
+      "timestamp": "2026-10-13T14:57:37.731Z",
+      "started": 1791903454269,
+      "completed": 1791903457731,
+      "duration": {
+        "secs": 3,
+        "nanos": 454207500
+      },
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "item_completed",
+      "timestamp": "2026-10-13T14:57:41.022Z",
+      "started": 1791903459958,
+      "completed": 1791903461022,
+      "duration": {
+        "secs": 1,
+        "nanos": 63915100
+      },
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "item_completed",
+      "timestamp": "2026-10-13T14:58:21.546Z",
+      "started": 1791903498027,
+      "completed": 1791903501546,
+      "duration": {
+        "secs": 3,
+        "nanos": 519646200
+      },
+      "usage": null,
+      "tools": [],
+      "markers": []
+    },
+    {
+      "type": "event_msg",
+      "payloadType": "item_completed",
+      "timestamp": "2026-10-13T14:58:37.668Z",
+      "started": 1791903510025,
+      "completed": 1791903517668,
+      "duration": {
+        "secs": 7,
+        "nanos": 643167500
+      },
+      "usage": null,
+      "tools": [],
+      "markers": []
+    }
+  ],
+  "shrunk": [],
+  "removed": []
+}

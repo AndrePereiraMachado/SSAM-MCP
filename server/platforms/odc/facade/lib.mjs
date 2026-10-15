@@ -3,7 +3,8 @@
 // Every Studio call goes through the executor seam (executor.mjs): locally today's pipe and .NET client, hosted the
 // customer's agent. Hosted, the data of this module (tenants.json, snapshots, journal, lab, requests and receipts) is the
 // customer's <ws>/odc; the code locations (bridge client, builder, studio/, portal/runtime) stay where they are.
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { createCredentialPrompt } from '../portal/runtime/credential-prompt.mjs';
 import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { writePortalRequest } from './portal-request-file.mjs';
@@ -734,16 +735,6 @@ export async function requestFile(json) {
 // The private prompt in a window of its own (windows-api-client-credential.ps1 or windows-portal-credential.ps1
 // -Mode bootstrap): the user types there and the value goes straight to the Windows Credential Manager; nothing
 // typed there passes through this process, its arguments or the chat.
-function openPrompt(script, args, powerShell) {
-  ownerSecrets(hostedPromptRefusal);
-  if (offline()) return { opened: false, reason: 'offline (SSAM_ODC_OFFLINE=1)' };
-  const command = '& "' + powerShell + '" -NoProfile -File "' + script + '" ' + args.join(' ');
-  try {
-    const child = spawn(powerShell, ['-NoProfile', '-File', script, ...args], { detached: true, stdio: 'ignore', windowsHide: false });
-    child.on('error', () => {}); child.unref();
-    return { opened: true, command };
-  } catch { return { opened: false, reason: 'spawn failed', command }; }
-}
 export function tenantEntry(host) { return tenants().tenants?.[host] ?? { portalOrigin: 'https://' + host, policyFile: null }; }
 // One OdcAccess per process, and hosted one per context: its tenants, journal, receipts and requests are the customer's.
 let access;
@@ -781,6 +772,9 @@ export async function createAccess({ env = process.env } = {}) {
   }
   const odc3 = await load('odc3-context.mjs');
   const bridges = new Map(), brokers = new Map();
+  // The private credential window (credential-prompt.mjs) exists only here: hosted, every prompt refuses above, and a served
+  // process that lost its hosted context never opens one (ownerSecrets).
+  const credentialPrompt = createCredentialPrompt({ env });
   return access = new OdcAccess({ ...shared, defaultTenant: env.SSAM_HYBRID_ODC_TENANT,
     profiles: offline() ? null : new CredentialProfiles(),
     vault: {
@@ -792,13 +786,15 @@ export async function createAccess({ env = process.env } = {}) {
       },
     },
     prompt: {
-      apiClient: async host => openPrompt(m.apiClientCredentialHelper, ['-Mode', 'bootstrap', '-Origin', 'https://' + host], m.apiClientPowerShell),
-      portal: async (host, database, setting) => openPrompt(odc3.portalCredentialHelper, ['-Mode', 'bootstrap', '-Origin', 'https://' + host,
-        ...(database ? ['-Database', database] : []), ...(setting ? ['-Setting', setting] : [])], odc3.portalPowerShell),
+      apiClient: async (host, action) => { ownerSecrets(hostedPromptRefusal); return credentialPrompt('api-client', host, '', action); },
+      portal: async (host, database, setting, action) => { ownerSecrets(hostedPromptRefusal);
+        return credentialPrompt(setting ? 'setting' : database ? 'database' : 'portal', host, setting || database || '', action); },
+      status: async host => { ownerSecrets(hostedPromptRefusal); return credentialPrompt('portal', host, '', 'status'); },
     },
     portalBroker: (host, profile = null) => {
       const key = host + ':' + (profile?.target ?? 'legacy') + ':' + (profile?.principal ?? '');
       if (!brokers.has(key)) brokers.set(key, new odc3.Odc3PortalBroker({ origin: 'https://' + host,
+        ...(profile ? { identityTarget: profile.target } : {}),
         ...(offline() ? { credentialProvider: async () => ({ available: false }) }
           : profile ? { credentialProvider: mode => odc3.portalVault(mode, 'https://' + host, null, null, profile.target, profile.principal) } : {}) }));
       return brokers.get(key);

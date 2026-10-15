@@ -6,7 +6,8 @@ namespace Anvil.Core;
 
 /// <summary>Local bridge JSON-lines. One request per connection; uncertain writes are never retried. With
 /// ANVIL_BRIDGE_FLAVOR=thin (hosted O11, read per call) every call goes through ThinBridge, which computes on the server
-/// what the full bridge computed inside the Studio and sends only primitive requests through Send.</summary>
+/// what the full bridge computed inside the Studio and sends only primitive requests through Send. The socket deadline of each
+/// call is the bridge's own bound for that verb plus a margin, never less than the effective timeout (BridgeDeadlines, F2).</summary>
 public sealed class BridgeClient(int port, int timeoutSeconds = 120) : IBridgeClient
 {
     private ThinBridge? thin;
@@ -23,7 +24,8 @@ public sealed class BridgeClient(int port, int timeoutSeconds = 120) : IBridgeCl
         var socketTimeout = ThinBridge.EffectiveTimeout(timeoutSeconds);
         using var client = new TcpClient();
         client.ConnectAsync("127.0.0.1", port).WaitAsync(TimeSpan.FromSeconds(Math.Min(timeoutSeconds, 5))).GetAwaiter().GetResult();
-        client.ReceiveTimeout = socketTimeout * 1000; client.SendTimeout = socketTimeout * 1000;
+        var deadline = BridgeDeadlines.Seconds(method, parameters, socketTimeout);
+        client.ReceiveTimeout = deadline * 1000; client.SendTimeout = deadline * 1000;
         using var stream = client.GetStream();
         using var reader = new StreamReader(stream, new UTF8Encoding(false));
         using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };

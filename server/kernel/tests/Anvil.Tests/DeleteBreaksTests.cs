@@ -100,7 +100,7 @@ public class DeleteBreaksTests
     {
         if (!StudioAvailable()) return;
         var (result, error, _) = Run(null, Ops("""
-        [{"op":"create","parent":"@espace","type":"ISOAPClient","name":"Calculator","as":"$c"},
+        [{"op":"create","parent":"@espace","type":"ISOAPClient","name":"Calculator","as":"$c","allowSoapWithoutImport":{"why":"the imported client as the importer leaves it, built by verbs for the test"}},
          {"op":"create","parent":"$c","type":"ISOAPStructure","name":"tOnlySubtract","as":"$s1"},
          {"op":"create","parent":"$s1","type":"ISOAPStructureAttribute","name":"A","as":"$s1a"},
          {"op":"set","target":"$s1a","prop":"DataType","value":"Integer"},
