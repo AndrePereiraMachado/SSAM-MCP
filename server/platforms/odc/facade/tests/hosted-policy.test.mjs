@@ -171,7 +171,7 @@ test('E2: a server-only tool answers with studioNotServed while the Studio is no
     const w = r.structuredContent.studioWarning;
     assert.deepEqual({ code: w?.code, lane: w?.lane, cause: w?.cause, installed: w?.installed, served: w?.served },
       { code: 'studioNotServed', lane: 'odc', cause: 'STUDIO_VERSION_NOT_SERVED_YET', installed: '1.7.29.10900', served: '1.7.28.5000' }, name);
-    assert.match(w.userMessage, /^Aviso: esta ferramenta só de servidor rodou com o kernel do ODC Studio 1\.7\.28\.5000/);
+    assert.match(w.userMessage, /^Aviso: esta ferramenta rodou só no servidor, com o kernel do ODC Studio 1\.7\.28\.5000/);
     assert.deepEqual(textOf(r).studioWarning, w, name + ': the text carries it too');
   }
   assert.deepEqual(notServed.calls.map(c => c.name), ['ssam_discover', 'odc_search_operations', 'ssam_map', 'studio_build', 'studio_doctor']);

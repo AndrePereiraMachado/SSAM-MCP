@@ -129,9 +129,9 @@ test('warnings: studioBuildDiffers when another build is served; studioNotServed
   const notServed = studioWarningOf(at('odc', '1.7.29.10900'));
   assert.deepEqual({ code: notServed.code, cause: notServed.cause, installed: notServed.installed, served: notServed.served },
     { code: 'studioNotServed', cause: 'STUDIO_VERSION_NOT_SERVED_YET', installed: '1.7.29.10900', served: '1.7.28.5000' });
-  assert.match(notServed.userMessage, /^Aviso: esta ferramenta só de servidor rodou com o kernel do ODC Studio 1\.7\.28\.5000, mas o ODC Studio deste computador \(1\.7\.29\.10900\) não é atendido por este servidor/);
+  assert.match(notServed.userMessage, /^Aviso: esta ferramenta rodou só no servidor, com o kernel do ODC Studio 1\.7\.28\.5000, mas o ODC Studio deste computador \(1\.7\.29\.10900\) não é atendido por este servidor/);
   assert.match(notServed.userMessage, /o dono do SSAM já foi avisado/);
-  assert.match(notServed.error, /^Warning: this server-only tool ran with the kernel of ODC Studio 1\.7\.28\.5000, but the user's ODC Studio 1\.7\.29\.10900 is not served/);
+  assert.match(notServed.error, /^Warning: this tool ran on the server only, with the kernel of ODC Studio 1\.7\.28\.5000, but the user's ODC Studio 1\.7\.29\.10900 is not served/);
   assert.equal(studioWarningOf(at('o11', '11.55.91.1')).cause, 'STUDIO_UPDATE_REQUIRED');
   assert.equal(studioWarningOf(at('odc', '1.7.28.5000')), null);
   assert.equal(studioWarningOf(at('odc', null)), null, 'no Studio installed: no claim about it');

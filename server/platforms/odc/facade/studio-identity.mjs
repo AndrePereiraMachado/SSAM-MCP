@@ -195,6 +195,6 @@ export function studioWarningOf(identity) {
       : { pt: 'Fale com o dono do SSAM se continuar.', en: 'Ask the server owner if it persists.' };
   const shown = installed ?? 'versão não lida';
   return { code: 'studioNotServed', lane, cause, installed, served, relation, policy,
-    userMessage: `Aviso: esta ferramenta só de servidor rodou com o kernel do ${S} ${served}, mas o ${S} deste computador (${shown}) não é atendido por este servidor, e as ferramentas que tocam o ${S} estão recusadas. ${todo.pt}`,
-    error: `Warning: this server-only tool ran with the kernel of ${S} ${served}, but the user's ${S} ${installed ?? '(version unread)'} is not served by this server (${cause}); tools that touch the ${S} are refused. ${todo.en}` };
+    userMessage: `Aviso: esta ferramenta rodou só no servidor, com o kernel do ${S} ${served}, mas o ${S} deste computador (${shown}) não é atendido por este servidor, e as ferramentas que tocam o ${S} estão recusadas. ${todo.pt}`,
+    error: `Warning: this tool ran on the server only, with the kernel of ${S} ${served}, but the user's ${S} ${installed ?? '(version unread)'} is not served by this server (${cause}); tools that touch the ${S} are refused. ${todo.en}` };
 }
