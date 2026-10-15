@@ -1,9 +1,9 @@
 {
   "schema": "ssam-release-record/1",
-  "note": "The kernel.json v1 of each image (multi-version design rev. 3, O.6.1 item 9, O.6.2). A deploy writes released.kernelV1 and a rollback writes the kernelV1 of the image it restores, always through kernel-pair-check.mjs print, then checks the pair inside that image (kernel-pair-check.mjs check) before up -d (DEPLOY.md 7.1 and 8). released.tag is the marco-a5 image built on 2026-10-15 from server/r25-marco-a5 187f4e2 (fase4-25/marco-a5 402ca249), on the same Studio pair and agent package as the interim prod-20261013-479e16a, which is now previous: its kernel.json does not change.",
+  "note": "The kernel.json v1 of each image (multi-version design rev. 3, O.6.1 item 9, O.6.2). A deploy writes released.kernelV1 and a rollback writes the kernelV1 of the image it restores, always through kernel-pair-check.mjs print, then checks the pair inside that image (kernel-pair-check.mjs check) before up -d (DEPLOY.md 7.1 and 8). released.tag is the marco-a5 image built on 2026-10-15 from server/r25-marco-a5 8c9c0db (fase4-25/marco-a5 e1bfb84c plus the hosted destructive stopgap aa39f65), on the same Studio pair and agent package as the interim prod-20261013-479e16a, which is now previous: its kernel.json does not change. prod-20261015-187f4e2 (402ca249) was only the rehearsal of the path and never goes to the VPS.",
   "released": {
-    "tag": "prod-20261015-187f4e2",
-    "what": "marco-a5 (integracao/marco-a5 40a8e835 on the server line fase4-25/marco-a5 402ca249): Service Studio 11.55.92 + ODC Studio 1.7.28, same agent package (pack-comb, bridge ODC v97)",
+    "tag": "prod-20261015-8c9c0db",
+    "what": "marco-a5 (integracao/marco-a5 40a8e835 on the server line fase4-25/marco-a5 e1bfb84c) + hosted destructive stopgap (feat/hosted-destructive-off aa39f65): Service Studio 11.55.92 + ODC Studio 1.7.28, same agent package (pack-comb, bridge ODC v97)",
     "o11": "11.55.92",
     "odc": "1.7.28",
     "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] }
@@ -20,6 +20,7 @@
     "prod-20261013-07e14b8": { "o11": "11.55.91", "odc": "1.7.28", "kernelV1": { "o11": "11.55.91", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } },
     "prod-20261013-9d7e5b7": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } },
     "prod-20261013-479e16a": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } },
-    "prod-20261015-187f4e2": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } }
+    "prod-20261015-187f4e2": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } },
+    "prod-20261015-8c9c0db": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } }
   }
 }
