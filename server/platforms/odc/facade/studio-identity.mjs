@@ -106,7 +106,7 @@ export function studioVersions(studios) {
 
 // ---- the texts (pt-BR for the user, English for the model), one place for the hub, the gate and the warnings
 const listOf = names => names.join(', ');
-function words(identity, stillWorks) {
+function words(identity) {
   const S = STUDIO[identity.lane];
   const { installed, served } = identity;
   const three = threePart(served);
@@ -155,7 +155,7 @@ function words(identity, stillWorks) {
     : identity.direction === 'newer'
       ? 'Show the user the userMessage (pt-BR) as it is: nothing to do on their machine until the server owner updates the server; never ask the user to roll the Studio back or to reinstall the agent. ssam_doctor shows both builds. Server-only tools still work.'
       : 'Show the user the userMessage (pt-BR) as it is. ssam_doctor shows the versions the agent reports. Server-only tools still work.';
-  return { pt: `${pt} ${nothing.pt} ${still.pt}`, en: `${en} ${nothing.en} ${still.en}`, why, stillWorks };
+  return { pt: `${pt} ${nothing.pt} ${still.pt}`, en: `${en} ${nothing.en} ${still.en}`, why };
 }
 
 // The one refusal of a Studio the server does not serve, or null when it is served (or not installed: the hub's own).
@@ -163,7 +163,7 @@ export function studioRefusal(identity, { stillWorks = null } = {}) {
   const cause = causeOf(identity);
   if (!cause) return null;
   const list = Array.isArray(stillWorks) && stillWorks.length ? [...stillWorks] : [...SERVER_ONLY_EXAMPLES[identity.lane]];
-  const w = words(identity, list);
+  const w = words(identity);
   return { ok: false, code: 'STUDIO_VERSION_MISMATCH', cause, lane: identity.lane, installed: identity.installed, served: [identity.served],
     relation: identity.relation, policy: identity.policy, outcome: 'not-sent', stillWorks: list,
     error: w.en, userMessage: w.pt, continuation: { tool: 'ssam_doctor', arguments: {}, why: w.why } };
