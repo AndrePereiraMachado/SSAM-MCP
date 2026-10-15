@@ -84,7 +84,7 @@ const filled = value => !absent(value) && value !== false && value !== '' && !(A
 function removalFields(body) {
   let value = body;
   if (typeof value === 'string') {
-    try { value = JSON.parse(value.replace(/^﻿/, '')); } catch { return REMOVAL_FIELD.test(value); }
+    try { value = JSON.parse(value.replace(/^\ufeff/, '')); } catch { return REMOVAL_FIELD.test(value); }
   }
   const budget = { left: 100000 };
   const walk = (node, depth) => {
@@ -151,7 +151,7 @@ export function hostedDestructive(name, args) {
 // {revokes: n}, or {revokes: null, unreadable}: a manifest the gate cannot read whole (not UTF-8/UTF-16 JSON, a key written
 // twice in one object, too large), refused (fail closed: the kernel's reader could see a revoke the gate does not).
 export const MAX_MANIFEST_BYTES = 16 * 1024 * 1024;
-const TRIM = /^[\s\u0085᠎​-‍⁠﻿]+|[\s\u0085᠎​-‍⁠﻿]+$/g;
+const TRIM = /^[\s\u0085\u180e\u200b-\u200d\u2060\ufeff]+|[\s\u0085\u180e\u200b-\u200d\u2060\ufeff]+$/g;
 export function manifestRevokes(file) {
   let stat;
   try { stat = fs.statSync(file); } catch { return null; }
