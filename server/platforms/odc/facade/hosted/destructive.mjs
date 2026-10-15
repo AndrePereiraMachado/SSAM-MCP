@@ -204,7 +204,7 @@ export const HOSTED_OFF = Object.freeze({
   studio_data_delete: { whole: true, where: 'ODC Studio' },
   studio_command: { part: 'data-delete, portal-call, portal-private-call, portal-api-client-fixture-cleanup and portal-session fetch', where: 'ODC Studio or the ODC Portal' },
   odc_write: { part: 'every DELETE operation, a deployment with Undeploy and a body with a non-empty removal field (userKeysToRemove, applicationRoleKeysToRemove, any field named like a removal)', where: 'the ODC Portal' },
-  o11_access: { part: 'apply of a manifest with any revoke', where: 'the Users application of the environment (or Service Center)' },
+  o11_access: { part: 'apply calls whose manifest revokes a role', where: 'the Users application of the environment (or Service Center)' },
   odc_deploy: { part: 'Undeploy', where: 'the ODC Portal' },
   odc_portal_write: { part: 'the delete routes and the raw saves connections.importEntities/importActions (use odc_external_db_connection import-entities and odc_mcp_import)', where: 'the ODC Portal' },
   odc_external_db_connection: { part: 'delete and remove-entities', where: 'the ODC Portal' },
