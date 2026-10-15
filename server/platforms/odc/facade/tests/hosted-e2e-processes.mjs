@@ -580,13 +580,19 @@ try {
     const digest = await call(clientA, 'ssam_map', { lane, target: captured, view: 'digest' }, 600000);
     const page = sc(digest);
     const next = page?.continuations?.next ?? null;
+    // servidor/fase4-25 (pre-swap Q1): marco-a5 fits each answer to its kind's budget (answer-size.mjs): a read answer may
+    // lose store and continuations from its envelope (never text or contents) and is kept whole in the customer's
+    // ws:o11/answers, named by omitted {tool:"ssam_evidence"}. Either form passes; whatever is there pins the capture.
+    const omitted = page?.omitted ?? null;
+    const viaEvidence = omitted?.tool === 'ssam_evidence' && /^ws:o11\/answers\/[0-9a-f]{64}\.json$/.test(omitted.arguments?.file ?? '');
     check(`22nd: hosted ssam_map {lane:"${lane}", view:"digest"} over a capture of the customer's workspace: the server's reader writes the digest, page 1 names the module`,
       digest.isError !== true && page?.ok === true && page.schema === 'ssam-digest-page/1' && page.page === 1 && typeof page.text === 'string' && page.text.includes(moduleName)
-        && page.file === captured && page.store?.file === '<servidor>',
-      page ? { ok: page.ok, schema: page.schema, file: page.file, store: page.store, pages: page.pages, cache: page.cache, error: page.error } : digest);
+        && page.file === captured && (page.store === undefined ? viaEvidence : page.store?.file === '<servidor>'),
+      page ? { ok: page.ok, schema: page.schema, file: page.file, store: page.store, pages: page.pages, cache: page.cache, omitted, error: page.error } : digest);
     check(`22nd: the ${lane} digest answer pins the ws: capture in its continuations and names no server path`,
-      page?.continuations?.page?.arguments?.target === captured && (next === null || next.arguments?.target === captured) && !serverPathIn(page),
-      { next, page: page?.continuations?.page ?? null });
+      (page?.continuations ? page.continuations.page?.arguments?.target === captured && (next === null || next.arguments?.target === captured) : viaEvidence)
+        && !serverPathIn(page),
+      { next, page: page?.continuations?.page ?? null, omitted });
   }
 
   const hostedCheck = sc(await call(clientA, 'ssam_reference', { lane: 'odc', kind: 'check-job', query: { base: 'tests/fixtures/odc/blank-mobile.oml', ops: pcOdc.ops } }));

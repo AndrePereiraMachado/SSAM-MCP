@@ -50,6 +50,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { insideVisible } from './mirror.mjs';
 import { PatchError, patchErrorFields, patchJob, mergePartialJob, readKernelTaskState } from '../job-patch.mjs';
+import { normalizeCodeOps } from '../ssam-code.mjs';
+// servidor/fase4-25 (pre-swap finding Q2, C:\t\vps-a5\pretroca\RELATORIO.md): the job the handler runs is the one
+// normalizeCodeOps writes (job-runner.mjs, job-patch.mjs plainJob and resolvePatchedJob, ssam.mjs studio_deliver): the keys
+// of a raw verb go up out of data, so {op:"reference", data:{producer}} runs as {op:"reference", producer}. The gate checks
+// that form. null: it could not normalize it (the caller refuses, fail closed).
+const shapedJob = doc => { try { return normalizeCodeOps(doc).job; } catch { return null; } };
 
 export class PathRefusal extends Error { constructor(code, message, value, fix) { super(message); this.code = code; this.value = value; if (fix) this.fix = fix; } }
 export const outside = value => new PathRefusal('PATH_OUTSIDE_WORKSPACE', 'Path outside the workspace of this account: ' + JSON.stringify(String(value).slice(0, 300)), value);
@@ -303,13 +309,20 @@ class JobWalk {
   }
 
   // One document: every path-typed field checked (and, inline, rewritten in place).
+  // servidor/fase4-25 (pre-swap finding Q2): a file or the moved job is checked as written AND as the handler normalizes it
+  // (shapedJob); an inline job is normalized by confineJobs before the walk, so what is rewritten here is what runs. A job
+  // the gate cannot normalize is JOB_PATHS_UNCHECKED (fail closed).
   async document(doc, { mode, dir, at, depth }) {
-    this.notePrototype(doc);
-    this.noteGenerator(doc);
-    for (const field of [...pathFields(doc)]) {
-      const value = field.owner[field.key];
-      const next = await this.value(value, field.kind, { mode, dir, pointer: at + field.at, depth });
-      if (mode === 'inline' && typeof next === 'string' && next !== value) field.owner[field.key] = next;
+    const shaped = mode === 'inline' ? doc : shapedJob(doc);
+    if (shaped === null) { this.refuse(unchecked(at || '/', 'a job the gate cannot normalize as the handler does'), at || '/'); return; }
+    for (const target of shaped === doc ? [doc] : [doc, shaped]) {
+      this.notePrototype(target);
+      this.noteGenerator(target);
+      for (const field of [...pathFields(target)]) {
+        const value = field.owner[field.key];
+        const next = await this.value(value, field.kind, { mode, dir, pointer: at + field.at, depth });
+        if (mode === 'inline' && typeof next === 'string' && next !== value) field.owner[field.key] = next;
+      }
     }
   }
 
@@ -405,8 +418,12 @@ export async function confineJobs(name, resolved, { workspace, resolve, prototyp
   // file is the tool's own answer.
   let partial;
   if (job !== null && typeof job === 'object') {
-    await walk.document(job, { mode: 'inline', dir: null, at: jobAt, depth: 0 });
-    partial = job;
+    // The handler normalizes an inline job (or partial job) before it runs it: the gate checks and rewrites that form and
+    // hands it on (normalizing it again changes nothing).
+    const shaped = shapedJob(job);
+    if (shaped === null) walk.refuse(unchecked(jobAt, 'a job the gate cannot normalize as the handler does'), jobAt);
+    else { holder[key] = shaped; await walk.document(shaped, { mode: 'inline', dir: null, at: jobAt, depth: 0 }); }
+    partial = holder[key];
   } else if (typeof job === 'string' && path.isAbsolute(job) && isFile(job)) {
     partial = walk.top(job, jobAt);
     if (partial !== undefined) await walk.document(partial, { mode: 'file', dir: path.dirname(job), at: jobAt + ' > ', depth: 1 });
