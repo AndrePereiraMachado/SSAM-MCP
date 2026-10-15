@@ -25,7 +25,9 @@
 // T2 of the CX15 review (C:\t\revisoes\cx15\REVISAO.md): deleting is off on a hosted server until the two-step
 // destructive protocol is ported. A call that deletes or may delete (destructive.mjs hostedDestructive, on the arguments the
 // tool runs and on the ones sent) is refused right after the unavailable tools, before the lane, the agent, any path, read
-// or send, by one switch (HOSTED_DESTRUCTIVE): HOSTED_UNAVAILABLE, cause DESTRUCTIVE_HOSTED_OFF, no continuation.
+// or send, by one switch (HOSTED_DESTRUCTIVE): HOSTED_UNAVAILABLE, cause DESTRUCTIVE_HOSTED_OFF, no continuation. What a
+// call names by file (the revokes of an o11_access apply manifest, hostedDestructiveFiles) is read once its path is
+// resolved in the workspace, still before the handler and any kind of the agent.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -36,7 +38,7 @@ import { agentReadable, agentSegments, insideVisible } from './mirror.mjs';
 import { agentPath, outsideWorkspaceRefusal } from '../agent-paths.mjs';
 import { JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesPrototype, outside, parseJobTexts } from './job-paths.mjs';
 import { studioIdentity, studioRefusal, studioWarningOf } from '../studio-identity.mjs';
-import { destructiveUnavailable, hostedDestructive } from './destructive.mjs';
+import { destructiveUnavailable, hostedDestructive, hostedDestructiveFiles } from './destructive.mjs';
 
 export const TOOLS_FILE = fileURLToPath(new URL('./tools.json', import.meta.url));
 let loaded = null;
@@ -463,6 +465,14 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
       resolved = jobs.resolved;
       if (name === 'ssam_job' && lane === 'odc' && (resolved.base === undefined || resolved.base === null || resolved.base === ''))
         resolved = { ...resolved, base: NEUTRAL_ODC_BASE };
+      // T2, F1 of its review: what the call names by file (an o11_access apply manifest with revokes), read once its path is
+      // resolved in the workspace, before the handler and any kind of the agent. A read that throws refuses (fail closed).
+      if (refusesDestructive) {
+        let files;
+        try { files = hostedDestructiveFiles(name, resolved); }
+        catch { files = { revokes: null, detail: 'The gate could not read what this call names by file, so it was refused as one that may delete.' }; }
+        if (files) return refusal(destructiveUnavailable(name, files));
+      }
     }
     const result = await run(context, () => handler(...(hasArgs ? [resolved, ...params.slice(1)] : params)));
     if (result?.resultType === 'input_required') return result;

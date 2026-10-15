@@ -157,6 +157,18 @@ const CASES = [
   ['o11_extension', { action: 'publish' }, false],
   ['odc_external_library', { action: 'discard' }, true],
   ['odc_external_library', { action: 'build' }, false],
+  // F1 of the review: the effect on the target, not the HTTP method. A body with a non-empty removal list (*ToRemove, or any
+  // field named like a removal) removes access or members: destructive, whatever the operation, the body as object or text.
+  ['odc_write', { operationId: 'user-access-management-api-v1:patch:/groups/{key}/users', body: { userKeysToAdd: [], userKeysToRemove: [ASSET] } }, true],
+  ['odc_write', { operationId: 'user-access-management-api-v1:patch:/groups/{key}/application-roles', body: { applicationRoleKeysToAdd: [], applicationRoleKeysToRemove: [ASSET] } }, true],
+  ['odc_write', { operationId: 'user-access-management-api-v1:patch:/groups/{key}/users', body: '{"userKeysToRemove":["' + ASSET + '"]}' }, true],
+  ['odc_write', { operationId: 'user-access-management-api-v1:patch:/groups/{key}/users', body: '{"userKeysToRemove":["' + ASSET + '"' }, true],
+  ['odc_write', { operationId: 'user-access-management-api-v1:patch:/groups/{key}/users', body: { UserKeysToRemove: ASSET } }, true],
+  ['odc_write', { operationId: 'zz-unknown-api-v9:post:/zz', body: { wrapper: [{ itemsToDelete: ['a'] }] } }, true],
+  ['odc_write', { operationId: 'user-access-management-api-v1:patch:/groups/{key}/users', body: { userKeysToAdd: [ASSET], userKeysToRemove: [] } }, false],
+  ['odc_write', { operationId: 'user-access-management-api-v1:patch:/groups/{key}/users', body: { userKeysToAdd: [ASSET] } }, false],
+  ['odc_write', { operationId: 'user-access-management-api-v1:patch:/groups/{key}/application-roles', body: { applicationRoleKeysToAdd: [ASSET], applicationRoleKeysToRemove: null } }, false],
+  ['odc_write', { operationId: 'user-access-management-api-v1:patch:/groups/{key}/users', body: '{"userKeysToAdd":["' + ASSET + '"]}' }, false],
   // F3 of the review: a selector left out is no reading of a deletion (the input layer answers INPUT_INVALID with the
   // correction and runs nothing); a selector present with a value that cannot be read stays refused (fail closed).
   ['odc_write', { operation_id: 'asset-repository-api-v1:post:/assets', body: {} }, false],
@@ -316,8 +328,9 @@ const KEPT = {
   ssam_job: { remove: 'a JSON patch op of a fixture proof' },
 };
 // Tools the MCP annotations mark destructive (they overwrite or publish) that delete nothing of the environment or tenant.
+// o11_access is no longer here (F1 of the review): an apply whose manifest revokes is refused once the manifest is read.
 const OVERWRITES_ONLY = {
-  o11_deliver: 'merges a job into the open module', o11_publish: 'publishes the open module', o11_access: 'applies roles (reversible; CX15 §6)',
+  o11_deliver: 'merges a job into the open module', o11_publish: 'publishes the open module',
   studio_data_insert: 'inserts records', studio_data_update: 'updates records', studio_close: 'discard closes after a snapshot (CX15 §6)',
   studio_refresh_references: 'refreshes references', studio_dismiss_dialog: 'answers a dialog', studio_merge: 'merges a manifest',
   studio_publish: 'publishes', studio_create: 'creates a module', studio_create_app: 'creates an app', studio_deliver: 'merges a job',
@@ -452,6 +465,7 @@ test('completeness: every tool the MCP annotations call destructive is classifie
   const all = await probes();
   const deleting = new Set(all.filter(p => classify(p.name, p.args)).map(p => p.name));
   for (const name of ['odc_write', 'odc_portal_write', 'studio_command', 'o11_data']) deleting.add(name); // free-text selectors, above
+  deleting.add('o11_access'); // a file selector: the revokes of the manifest, read by the gate (F1 tests below)
   const unreviewed = [...tools.values()].filter(t => t.annotations?.destructiveHint === true && hostedTools()[t.name] && !deleting.has(t.name) && !OVERWRITES_ONLY[t.name]).map(t => t.name);
   assert.deepEqual(unreviewed, []);
   for (const name of Object.keys(OVERWRITES_ONLY)) assert.equal(deleting.has(name), false, name + ' deletes nothing');
@@ -500,7 +514,7 @@ test('end to end through the hosted server: the incident call is refused and not
   assert.deepEqual(spawned, []); assert.deepEqual(connections, []);
 });
 
-// ---- correction 1 of the review (C:\t\revisoes\hosted-destructive-off\REVISAO.md)
+// ---- correction 1 of the review (C:\t\revisoes\hosted-destructive-off\REVISAO.md): F1, F2 and F3
 const valueOfCall = result => result.structuredContent ?? JSON.parse(result.content?.[0]?.text ?? 'null');
 
 test('F3: a call without its selector deletes nothing: INPUT_INVALID with the correction, nothing runs; a well-formed DELETE stays refused', async () => {
@@ -530,4 +544,113 @@ test('F3: a call without its selector deletes nothing: INPUT_INVALID with the co
   ]) assert.equal((await call(name, args)).cause, 'DESTRUCTIVE_HOSTED_OFF', name + ' ' + JSON.stringify(args));
   assert.equal(context.executor.calls.length, before, 'no executor kind ran');
   assert.deepEqual(spawned, []); assert.deepEqual(connections, []);
+});
+
+// A hosted server whose fake executor plays the customer's ODC Studio signed in to TENANT (it answers studio.processes,
+// auth-status and portal-call, recording each request it would send) and has an O11 connection; every other kind is
+// refused. Nothing reaches a machine.
+async function playingServer() {
+  const workspace = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'hosted-destructive-play-')), 'customers', 'tok_zzplay');
+  prepareWorkspace(workspace);
+  const kinds = [], sent = [];
+  const executor = { id: 'fake-' + randomUUID(), hosted: true,
+    async call(kind, payload) {
+      const args = payload?.args;
+      kinds.push(kind + (Array.isArray(args) ? ':' + args[0] : ''));
+      if (kind === 'studio.processes') return { processes: [{ pid: 4242 }] };
+      if (kind === 'odc.pipe' && args?.[0] === 'auth-status')
+        return { line: JSON.stringify({ ok: true, bridge: 'v95', capabilities: [], portalWindows: [], sessions: [{ host: TENANT, loggedIn: true, user: 'zz.owner@example.test', permissions: [] }] }) };
+      if (kind === 'odc.pipe' && args?.[0] === 'portal-call') {
+        const request = JSON.parse(fs.readFileSync(args[1], 'utf8'));
+        sent.push({ method: request.method, path: request.path, body: request.body });
+        return { line: JSON.stringify({ ok: true, host: TENANT, status: 200, contentType: 'application/json', body: {} }) };
+      }
+      throw Object.assign(new Error('fake executor: kind ' + kind + ' not played'), { code: 'KIND_NOT_ALLOWED', executed: false });
+    },
+    o11Connection: () => ({ pid: 6001 }), relayPort: () => null, quota: { full: () => false }, async close() {} };
+  const agent = { connected: () => true, protocolError() {}, info: () => ({ connected: true, credential: true, compatible: { odc: { ok: true }, o11: { ok: true } } }) };
+  const context = { id: randomUUID(), hosted: true, tokenId: 'tok_zzplay', customer: 'ZZ', lanes: ['odc', 'o11'], workspace, agent, executor, o11: { lane: 'o11' }, close: async () => {} };
+  const server = await runWithExecutor(context, () => createSsamServer({ hosted: { context, session: { agent, lanes: context.lanes } } }));
+  return { ...(await listing(server)), kinds, sent, workspace };
+}
+const GROUP = '22222222-2222-4222-8222-222222222222';
+const USERS = ['33333333-3333-4333-8333-333333333331', '33333333-3333-4333-8333-333333333332'];
+const ROLE = '44444444-4444-4444-8444-444444444444';
+const TENANT_WORDS = 'sim, no tenant zz-tenant, ajusta o grupo';
+const accessManifest = actions => ({ schema: 'ssam-access/1', environment: 'zz-o11.example.test', manifestVersion: 2,
+  entries: actions.map((action, i) => ({ username: 'zz.user' + i, role: 'ZZApp.ZZRole' + i, action, demo: true })) });
+
+test('F1: revoking access is refused like the DELETE of the same access: *ToRemove bodies and an o11_access apply with revokes, 0 kinds; adds and grants still pass', async () => {
+  const play = await playingServer();
+  try {
+    const call = async (name, args) => { const k = play.kinds.length, s = play.sent.length;
+      return { value: valueOfCall(await play.client.callTool({ name, arguments: args })), kinds: play.kinds.slice(k), sent: play.sent.slice(s) }; };
+    const write = (operationId, body) => call('odc_write', { tenant: TENANT, operationId, path: { key: GROUP }, body, authorize: TENANT_WORDS, operationUuid: randomUUID(), confirmTenant: TENANT });
+    const USERS_OP = 'user-access-management-api-v1:patch:/groups/{key}/users';
+    const ROLES_OP = 'user-access-management-api-v1:patch:/groups/{key}/application-roles';
+    for (const [operationId, body] of [[USERS_OP, { userKeysToAdd: [], userKeysToRemove: USERS }], [ROLES_OP, { applicationRoleKeysToAdd: [], applicationRoleKeysToRemove: [ROLE] }]]) {
+      const { value, kinds, sent } = await write(operationId, body);
+      assert.deepEqual([value.code, value.cause, value.outcome], ['HOSTED_UNAVAILABLE', 'DESTRUCTIVE_HOSTED_OFF', 'not-sent'], operationId + ' ' + JSON.stringify(value).slice(0, 300));
+      assert.deepEqual(kinds, [], operationId + ': no kind'); assert.deepEqual(sent, []);
+      assert.equal(JSON.stringify(value).includes(TENANT_WORDS), false);
+    }
+    // Controls: the same operations that only add pass the gate and are sent as before.
+    for (const [operationId, body] of [[USERS_OP, { userKeysToAdd: [USERS[0]], userKeysToRemove: [] }], [ROLES_OP, { applicationRoleKeysToAdd: [ROLE] }]]) {
+      const { value, kinds, sent } = await write(operationId, body);
+      assert.notEqual(value.cause, 'DESTRUCTIVE_HOSTED_OFF', operationId + ' ' + JSON.stringify(value).slice(0, 300));
+      assert.ok(kinds.includes('odc.pipe:portal-call'), operationId + ': ' + JSON.stringify(kinds));
+      assert.deepEqual(sent.map(s => [s.method, s.body]), [['PATCH', body]], operationId);
+    }
+    // o11_access apply: the manifest is read by the gate; one revoke refuses it before any kind, with the count.
+    const inbox = path.join(play.workspace, 'inbox');
+    fs.writeFileSync(path.join(inbox, 'revoke.json'), JSON.stringify(accessManifest(['grant', 'revoke'])));
+    fs.writeFileSync(path.join(inbox, 'grants.json'), JSON.stringify(accessManifest(['grant', 'grant'])));
+    const refused = await call('o11_access', { action: 'apply', manifestPath: 'ws:inbox/revoke.json', words: WORDS });
+    assert.deepEqual([refused.value.code, refused.value.cause, refused.value.outcome, refused.value.revokes], ['HOSTED_UNAVAILABLE', 'DESTRUCTIVE_HOSTED_OFF', 'not-sent', 1], JSON.stringify(refused.value).slice(0, 400));
+    assert.match(refused.value.detail ?? '', /1 revoke/);
+    assert.deepEqual(refused.kinds, [], 'no kind before the refusal');
+    assert.equal(JSON.stringify(refused.value).includes(WORDS), false);
+    const granted = await call('o11_access', { action: 'apply', manifestPath: 'ws:inbox/grants.json', words: WORDS });
+    assert.notEqual(granted.value.cause, 'DESTRUCTIVE_HOSTED_OFF', JSON.stringify(granted.value).slice(0, 300));
+    assert.deepEqual(granted.kinds, ['o11.selected'], 'a manifest with grants only passes the gate and reaches the Studio check');
+    assert.deepEqual(spawned, []); assert.deepEqual(connections, []);
+  } finally { await play.close(); }
+});
+
+test('F1: the revokes of an access manifest are counted as the kernel reads it (AccessManifest.Read); a manifest the gate cannot read whole is refused', async () => {
+  assert.equal(typeof destructive.manifestRevokes, 'function', 'hosted/destructive.mjs exports manifestRevokes');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hosted-destructive-manifest-'));
+  const file = (name, content) => { const target = path.join(dir, name); fs.writeFileSync(target, content); return target; };
+  const json = value => JSON.stringify(value);
+  const revokes = target => destructive.manifestRevokes(target);
+  assert.deepEqual(revokes(file('grants.json', json(accessManifest(['grant', ' GRANT '])))), { revokes: 0 });
+  assert.deepEqual(revokes(file('one.json', json(accessManifest(['grant', 'revoke'])))), { revokes: 1 });
+  // The kernel trims and lowercases (Trim, ToLowerInvariant): every spelling counts, and an action that is not a grant too.
+  assert.deepEqual(revokes(file('spellings.json', json(accessManifest(['REVOKE ', 'revoke\u0085', 'Revoke', 'grant', 7])))), { revokes: 4 });
+  // UTF-8 with its BOM and UTF-16 LE with its BOM, as File.ReadAllText reads them.
+  assert.deepEqual(revokes(file('bom8.json', '\uFEFF' + json(accessManifest(['revoke'])))), { revokes: 1 });
+  assert.deepEqual(revokes(file('utf16.json', Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(json(accessManifest(['revoke', 'revoke'])), 'utf16le')]))), { revokes: 2 });
+  // No entries, or a root that is no object: the kernel refuses the whole manifest and applies nothing.
+  assert.deepEqual(revokes(file('empty.json', json({ schema: 'ssam-access/1', entries: [] }))), { revokes: 0 });
+  assert.deepEqual(revokes(file('array.json', json([{ action: 'revoke' }]))), { revokes: 0 });
+  // Not read whole: refused (fail closed), revokes unknown.
+  for (const [name, content] of [['dup.json', '{"entries":[{"username":"a","role":"M.R","demo":true,"action":"grant","action":"revoke"}]}'],
+    ['bad.json', '{"entries":[{"action":"revoke"}'], ['utf32.json', Buffer.from([0xff, 0xfe, 0, 0, 0x7b, 0, 0, 0, 0x7d, 0, 0, 0])]]) {
+    const read = revokes(file(name, content));
+    assert.equal(read?.revokes, null, name + ' ' + JSON.stringify(read));
+    assert.equal(typeof read.unreadable, 'string', name);
+  }
+  assert.equal(revokes(path.join(dir, 'missing.json')), null, 'a missing manifest is the handler\'s MANIFEST_NOT_FOUND');
+  // The gate's check of a call: only apply, only an existing absolute manifest.
+  assert.equal(typeof destructive.hostedDestructiveFiles, 'function');
+  const one = path.join(dir, 'one.json');
+  assert.deepEqual(destructive.hostedDestructiveFiles('o11_access', { action: 'apply', manifestPath: one }), { revokes: 1, detail: destructive.hostedDestructiveFiles('o11_access', { action: 'apply', manifestPath: one }).detail });
+  assert.equal(destructive.hostedDestructiveFiles('o11_access', { action: ' Apply ', manifestPath: one })?.revokes, 1);
+  assert.equal(destructive.hostedDestructiveFiles('o11_access', { action: 'plan', manifestPath: one }), null);
+  assert.equal(destructive.hostedDestructiveFiles('o11_access', { action: 'apply', manifestPath: path.join(dir, 'grants.json') }), null);
+  assert.equal(destructive.hostedDestructiveFiles('o11_access', { action: 'apply', manifestPath: path.join(dir, 'missing.json') }), null);
+  assert.equal(destructive.hostedDestructiveFiles('o11_access', { action: 'apply' }), null);
+  assert.equal(destructive.hostedDestructiveFiles('odc_write', { action: 'apply', manifestPath: one }), null);
+  assert.equal(destructive.hostedDestructiveFiles('o11_access', { action: 'apply', manifestPath: path.join(dir, 'dup.json') })?.revokes, null);
+  assert.ok(destructive.hostedDestructiveFiles('o11_access', { action: 'apply', manifestPath: path.join(dir, 'dup.json') }));
 });
