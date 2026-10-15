@@ -8,6 +8,10 @@
 // presented: workspace paths become ws:<rel>, other paths
 // of this server become <servidor>. Nothing here touches a Studio or the agent by itself, except bringing an
 // agent:<rel> the LLM named (executor.pullFile).
+// A-M1 + E2 (C:\t\multiver\minimo\PROPOSTA.md; studio-identity.mjs): a Studio the server does not serve is ONE refusal by
+// direction (incompatible); every answer of a lane whose Studio is another build served with a warning carries
+// studioWarning studioBuildDiffers, and a server-only tool (or a state report) that ran while the lane's Studio is not
+// served carries studioWarning studioNotServed (studioNotice, withStudioWarning).
 // servidor/fase4-24 (R1 of PLANO-24-PRODUCAO): every rule here reads the arguments the tool RUNS, not the ones sent. The
 // input layer of the 24th release (tool-input.mjs) runs a renamed field under the tool's own name ({targt} runs as
 // target); ssam.mjs hands its argsOf to the gate, which resolves the path pointers on argsOf(raw) ?? raw and gives the
@@ -27,6 +31,7 @@ import { scrubDiscover, scrubEvidence, thirdPartyJobs } from './evidence.mjs';
 import { agentReadable, agentSegments, insideVisible } from './mirror.mjs';
 import { agentPath, outsideWorkspaceRefusal } from '../agent-paths.mjs';
 import { JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesPrototype, outside, parseJobTexts } from './job-paths.mjs';
+import { studioIdentity, studioRefusal, studioWarningOf } from '../studio-identity.mjs';
 
 export const TOOLS_FILE = fileURLToPath(new URL('./tools.json', import.meta.url));
 let loaded = null;
@@ -96,22 +101,29 @@ export function agentNotConnected(info, { now = Date.now(), tool = null, args = 
 export const o11NotConnected = () => ({ ok: false, code: 'O11_NOT_CONNECTED',
   error: 'No Service Studio of this account is connected to SSAM, so nothing ran on the O11 lane. The server never falls back to another Studio.',
   continuation: { tool: 'ssam_connect', arguments: { lane: 'o11' }, why: 'Ask the user to open Service Studio (the version ssam_doctor shows), then connect it and call this tool again.' } });
+// A-M1 (C:\t\multiver\minimo\PROPOSTA.md): the user's Studio as the hub judged it (compat.studio), or, from an answer
+// without it, judged here by the same rule from the versions the link reports (studio-identity.mjs studioIdentity).
+export function studioOf(lane, compat, info) {
+  if (compat?.studio) return compat.studio;
+  if (compat?.code !== 'STUDIO_VERSION_MISMATCH') return null;
+  return studioIdentity(lane, info?.studios?.[lane]?.installed ?? null, info?.kernel ?? {});
+}
+// What still works when the lane's Studio is not served: the server-only tools of the hosted catalog for that lane.
+export const serverOnlyTools = (lane, tools = hostedTools()) => Object.entries(tools)
+  .filter(([, entry]) => entry?.class === 'server' && (entry.lane === lane || entry.lane === 'none' || String(entry.lane ?? '').startsWith('arg:')))
+  .map(([name]) => name);
 export function incompatible(lane, compat, info) {
   const serverKernel = info?.kernel?.[lane] ?? null;
   const agentStudio = info?.studios?.[lane]?.installed?.version ?? null;
   const studio = STUDIO[lane];
-  // The interim server serves one Studio version per lane (agent-hub.mjs laneCompatibility): an older installed Studio is
-  // not served until the multi-version server, whatever package the customer installs.
-  if (compat.cause === 'STUDIO_VERSION_NOT_SERVED') return { ok: false, code: compat.code, cause: compat.cause, lane, serverKernel, agentStudio,
-    served: compat.served ?? (serverKernel ? [serverKernel] : []),
-    error: `This SSAM server has the kernel for ${studio} ${serverKernel}; the agent reports ${studio} ${agentStudio}. It serves only ${studio} ${serverKernel}: ${studio} ${compat.installed ?? agentStudio} has no hosted ${lane} lane on this server until the server owner installs the multi-version server, and no agent package changes that. Tools that touch the ${studio} are unavailable until the versions match. Server-only tools (ssam_discover, ssam_reference, odc_search_operations, ...) still work.`,
-    continuation: doctor(`Shows both versions. Tell the user: to use the hosted ${lane} lane now, update ${studio} to ${serverKernel} and reopen it; otherwise keep working with SSAM locally until the server owner announces the multi-version server.`) };
+  // A-M1: a Studio this server does not serve (another version, or another build under studioBuildPolicy "refuse"): ONE
+  // refusal with the direction (cause), both builds, what still works and "nothing ran", in pt-BR (userMessage) and English
+  // (error). It replaces the old continuation "install the Studio at the server's version", impossible for the ODC Studio.
+  const notServed = compat.code === 'STUDIO_VERSION_MISMATCH' ? studioRefusal(studioOf(lane, compat, info), { stillWorks: serverOnlyTools(lane) }) : null;
+  if (notServed) return { ...notServed, serverKernel, agentStudio };
   if (compat.cause === 'KERNEL_VERSION_MISSING') return { ok: false, code: compat.code, cause: compat.cause, lane, serverKernel, agentStudio,
     error: compat.message ?? `This SSAM server's kernel.json does not name the ${studio} version of its image; the ${lane} lane is off and nothing ran.`,
     continuation: doctor('Shows the state of each lane. Ask the server owner to write the kernel.json of this server image.') };
-  if (compat.code === 'STUDIO_VERSION_MISMATCH') return { ok: false, code: compat.code, lane, serverKernel, agentStudio,
-    error: `This SSAM server has the kernel for ${studio} ${serverKernel}; the agent reports ${studio} ${agentStudio}. Tools that touch the ${studio} are unavailable until the versions match. Server-only tools (ssam_discover, ssam_reference, odc_search_operations, ...) still work.`,
-    continuation: doctor(`Shows both versions. Ask the user to install ${studio} ${serverKernel}, or to wait until the server owner updates the kernel.`) };
   if (compat.code === 'AGENT_PACK_MISMATCH') return { ok: false, code: compat.code, lane, serverKernel, agentStudio,
     error: compat.message ?? `The agent package of this account does not match the ${studio} kernel of this server.`,
     continuation: doctor('Shows both versions. Ask the server owner for the current agent package.') };
@@ -336,6 +348,35 @@ export function presenter({ workspace, serverRoots = [workspaceRoot, os.homedir(
   return { string, value, result };
 }
 
+// ---- E2 and A-M1: the warning about the lane's Studio in the answer of a tool that ran
+// studioBuildDiffers: the server serves another build of the user's Studio (kernel.json studioBuildPolicy "warn"), in every
+// answer of the lane. studioNotServed: a server-only tool or a state report ran with the server's kernel while the user's
+// Studio is not served (the Studio tools are refused). Both from studio-identity.mjs studioWarningOf.
+export function studioNotice(lane, info) {
+  if (!LANED.has(lane)) return null;
+  const compat = info?.compatible?.[lane];
+  return compat ? studioWarningOf(studioOf(lane, compat, info)) : null;
+}
+// The answer with studioWarning: in structuredContent and in the text that mirrors it; an answer without structured
+// content (or whose text is another rendering) gets one more text item. The tool's own fields, warnings included, stay.
+export function withStudioWarning(answer, warning) {
+  if (!warning || !answer || typeof answer !== 'object') return answer;
+  const original = answer.structuredContent;
+  const content = Array.isArray(answer.content) ? answer.content : [];
+  if (original && typeof original === 'object' && !Array.isArray(original)) {
+    const structuredContent = { ...original, studioWarning: warning };
+    const mirror = JSON.stringify(original);
+    let mirrored = false;
+    const items = content.map(item => {
+      if (item?.type !== 'text' || item.text !== mirror) return item;
+      mirrored = true;
+      return { ...item, text: JSON.stringify(structuredContent) };
+    });
+    return { ...answer, structuredContent, content: mirrored ? items : [...items, { type: 'text', text: JSON.stringify({ studioWarning: warning }) }] };
+  }
+  return { ...answer, content: [...content, { type: 'text', text: JSON.stringify({ studioWarning: warning }) }] };
+}
+
 // ---- the gate
 // wrapHostedTool(name, config, handler, {context, link, lanes, run, argsOf}) -> the handler to register. run(context, fn)
 // puts the hosted context around the handler (runWithExecutor in ssam.mjs; tests pass (ctx, fn) => fn()). argsOf: the
@@ -406,7 +447,9 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
         resolved = { ...resolved, base: NEUTRAL_ODC_BASE };
     }
     const result = await run(context, () => handler(...(hasArgs ? [resolved, ...params.slice(1)] : params)));
-    return result?.resultType === 'input_required' ? result
-      : present.result(name === 'ssam_discover' ? scrubDiscover(result, thirdPartyJobs()) : scrubEvidence(result, thirdPartyJobs()));
+    if (result?.resultType === 'input_required') return result;
+    // A-M1 + E2: the lane's Studio as the hub judged it before the call (info), never silent when it is not the server's build.
+    return withStudioWarning(present.result(name === 'ssam_discover' ? scrubDiscover(result, thirdPartyJobs()) : scrubEvidence(result, thirdPartyJobs())),
+      studioNotice(lane, info));
   };
 }

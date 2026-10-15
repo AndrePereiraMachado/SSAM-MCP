@@ -228,6 +228,27 @@ test('per-pid version: odc.pipe, odc.attach and o11.connect refuse a Studio whos
   } finally { removeRoot(root); }
 });
 
+// A-M1 of the server (C:\t\multiver\minimo\PROPOSTA.md): the server's welcome.kernel may carry builds {odc, o11} (four
+// numbers) and studioBuildPolicy. This agent (0.3.1, the pack of 2026-10-13) reads only kernel[lane] and keeps comparing
+// three numbers: another build of the same version is the server's call (the hub serves it with studioBuildDiffers or
+// refuses it before any call reaches the agent); another version stays refused here too, as a second lock.
+test('per-pid version with a server that names its builds: three numbers here, the build is judged by the server', async () => {
+  const root = makeRoot();
+  try {
+    const kernel = { ...KERNEL, builds: { odc: '1.7.28.4000', o11: '11.55.91.9' }, studioBuildPolicy: { odc: 'refuse', o11: 'refuse' } };
+    const { kinds, counts } = kindsFor(root, { kernel });
+    const client = path.join(root, 'odc', 'studio', 'bridge', 'client', 'bin', 'Release', 'net10.0', 'ODC3.Bridge.Client.dll');
+    const bridge = path.join(root, 'odc', 'studio', 'bridge', 'bin', 'Release', 'net8.0', 'ODC3.Bridge.v35.dll');
+    for (const file of [client, bridge]) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'dll'); }
+    // PID is ODC Studio 1.7.28.4021: another build than 1.7.28.4000, same version: the agent attaches
+    assert.equal((await kinds.execute('odc.attach', { pid: PID })).attached, true);
+    assert.equal(counts.attach, 1);
+    // OLD is ODC Studio 1.7.27.100: another version, refused before anything is attached
+    await refused(kinds.execute('odc.attach', { pid: OLD }), 'STUDIO_VERSION_MISMATCH');
+    assert.equal(counts.attach, 1);
+  } finally { removeRoot(root); }
+});
+
 test('odc.pipe against a fake named pipe: the line goes out, the reply comes back relativized; another bridge version is refused', async () => {
   const root = makeRoot();
   const snapshot = path.join(root, 'odc', 'snapshots', 'Quotes.oml');

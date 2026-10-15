@@ -22,6 +22,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { fourPart } from './studio-identity.mjs';
 
 export const IMAGE_ENV = Object.freeze({ o11: 'SSAM_IMAGE_O11', odc: 'SSAM_IMAGE_ODC' });
 export const STUDIO_FILE = 'ServiceStudio.Framework.dll';
@@ -104,6 +105,21 @@ export function kernelPair(kernel, image) {
     effective[lane] = null;
   }
   return { kernel: effective, refused };
+}
+
+// A-M1 (C:\t\multiver\minimo\PROPOSTA.md): the four-part build each lane serves, which the hub compares with the build of
+// the user's Studio (studio-identity.mjs). A lane the image declares: its Studio folder (the FileVersion of
+// ServiceStudio.Framework.dll, the Studio's own build, equal to the ProductVersion of ODCStudio.exe/ServiceStudio.exe the
+// agent reports); nothing else stands in for it. Otherwise (the owner's PC) the ProductVersion of this machine's Studio
+// executable (exe), then a four-part version kernel.json pins. Only a build with the lane's three numbers counts; a lane
+// that is off, or whose build is unknown, is null (the hub then compares three numbers, as before).
+export function servedBuilds({ kernel, image, exe = {} }) {
+  return Object.fromEntries(LANES.map(lane => {
+    const three = threePart(kernel?.[lane]);
+    if (!three) return [lane, null];
+    const candidates = image?.[lane]?.declared ? [image[lane].studio] : [exe?.[lane], kernel?.[lane]];
+    return [lane, candidates.map(fourPart).find(build => build && threePart(build) === three) ?? null];
+  }));
 }
 
 // kernel.json v1 only. A v2 file beside it and the v2 markers inside it are named (event names only).

@@ -28,6 +28,7 @@ import { AGENT_PREFIX } from './server-tokens.mjs';
 import { spawn } from 'node:child_process';
 import { currentCall } from './quality-meter.mjs';
 import { agentVerbOf } from './quality-line.mjs';
+import { buildPolicyOf, servedBuildOf, studioIdentity, studioRefusal, studioVersions, studioWarningOf, threePart } from './studio-identity.mjs';
 
 // A Windows balloon on the server machine (owner test, 2026-10-08); off with SSAM_ACCESS_NOTIFY=0, never fails a call.
 function notifyOwner(title, text) {
@@ -111,30 +112,41 @@ function readProbe(req, limit, onData = () => {}) {
   });
 }
 
-// The first three numbers of a version ("11.55.91.65012" -> "11.55.91"), or null.
-export const threePart = value => { const m = /^(\d+)\.(\d+)\.(\d+)/.exec(String(value ?? '').trim()); return m ? m[1] + '.' + m[2] + '.' + m[3] : null; };
-export const normalizeKernel = (kernel = {}) => ({ o11: threePart(kernel?.o11), odc: threePart(kernel?.odc),
-  odcBridge: typeof kernel?.odcBridge === 'string' && kernel.odcBridge ? kernel.odcBridge : null,
-  ...(kernel?.o11Hook === 'h1' ? { o11Hook: 'h1' } : {}),
-  // kernel.json odcBridgeAccepted (owner, 2026-10-08): older ODC bridges the server still serves, so a bridge bump does
-  // not cut the customers that have not installed the new agent package yet.
-  ...(Array.isArray(kernel?.odcBridgeAccepted) ? { odcBridgeAccepted: kernel.odcBridgeAccepted.filter(v => typeof v === 'string' && v) } : {}) });
+// The first three numbers of a version ("11.55.91.65012" -> "11.55.91"), or null (studio-identity.mjs).
+export { threePart };
+// builds (A-M1): the four-part build each lane serves (startupKernel: the image's Studio folder), kept only with the lane's
+// three numbers; studioBuildPolicy (kernel.json): normalized per lane, kept only when kernel.json names it (the default is
+// "warn"). Both travel in welcome.kernel and info().kernel; agent 0.3.1 reads only kernel[lane].
+export const normalizeKernel = (kernel = {}) => {
+  const out = { o11: threePart(kernel?.o11), odc: threePart(kernel?.odc),
+    odcBridge: typeof kernel?.odcBridge === 'string' && kernel.odcBridge ? kernel.odcBridge : null,
+    ...(kernel?.o11Hook === 'h1' ? { o11Hook: 'h1' } : {}),
+    // kernel.json odcBridgeAccepted (owner, 2026-10-08): older ODC bridges the server still serves, so a bridge bump does
+    // not cut the customers that have not installed the new agent package yet.
+    ...(Array.isArray(kernel?.odcBridgeAccepted) ? { odcBridgeAccepted: kernel.odcBridgeAccepted.filter(v => typeof v === 'string' && v) } : {}) };
+  const builds = Object.fromEntries(LANES.map(lane => [lane, servedBuildOf({ ...out, builds: kernel?.builds }, lane)]));
+  if (Object.values(builds).some(Boolean)) out.builds = builds;
+  if (kernel?.studioBuildPolicy !== undefined && kernel?.studioBuildPolicy !== null) {
+    const { odc, o11 } = buildPolicyOf(kernel.studioBuildPolicy);
+    out.studioBuildPolicy = { odc, o11 };
+  }
+  return out;
+};
 // The O11 hooks an agent package may declare (pack.json o11Hook, docs/O11-BRIDGE-FINA.md 13): the development hook and
 // the release hook h1. A package without the field predates them and counts as "dev".
 export const O11_HOOKS = Object.freeze(['dev', 'h1']);
 
-// Three-part versions compared number by number: a < b.
-const olderThan = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i]; return false; };
-
 // Compatibility per lane (section 7): the lane is in the token and in the package, the server has a kernel for it, the
-// package was built for that kernel (ODC bridge version, Service Studio of the O11 bridge) and the Studio installed on
-// the customer's machine has the same first three numbers.
+// package was built for that kernel (ODC bridge version, Service Studio of the O11 bridge) and the server serves the
+// Studio installed on the customer's machine (studio-identity.mjs studioIdentity, the ONE identity rule).
 //   - refused (multi-version design O.6.1, kernel-image.mjs kernelPair): a lane the image refused at start because its
 //     kernel.json names another Studio version than the image carries: KERNEL_UNAVAILABLE, cause KERNEL_VERSION_MISSING.
-//   - The server serves ONE Studio version per lane until the multi-version server. A customer whose installed Studio is
-//     OLDER than it (Service Studio 11.55.91 on the 11.55.92 server) gets STUDIO_VERSION_MISMATCH with cause
-//     STUDIO_VERSION_NOT_SERVED and served [version] before any package check: no package of this server serves that
-//     Studio (a bridge built for 11.55.92 does not bind on 11.55.91), so "ask for the current package" would mislead.
+//   - A-M1 (C:\t\multiver\minimo\PROPOSTA.md): the server serves ONE Studio build per lane. Another three-part version,
+//     older or newer, and (kernel.json studioBuildPolicy "refuse") another build of the same version: STUDIO_VERSION_MISMATCH
+//     with the cause of its direction (STUDIO_UPDATE_REQUIRED, STUDIO_VERSION_NOT_SERVED_YET; STUDIO_BUILD_UNKNOWN), the
+//     identity in studio, served [build] and installed, before any package check: no package changes it (a bridge built
+//     for 11.55.92 does not bind on 11.55.91), so "ask for the current package" would mislead. Another build under "warn"
+//     (the default) is served: {ok: true, studio, warning} (studioBuildDiffers), and the gate puts it in every answer.
 export function compatibility(hello, kernel, lanes, { refused = null } = {}) {
   const k = normalizeKernel(kernel);
   return Object.fromEntries(LANES.map(lane => [lane, laneCompatibility(lane, hello, k, lanes ?? [], refused?.[lane] ?? null)]));
@@ -148,12 +160,10 @@ function laneCompatibility(lane, hello, kernel, lanes, refused) {
     + (refused.kernel ? name + ' ' + refused.kernel : 'no ' + name + ' version') + ': the ' + lane + ' lane is off and nothing runs on the user\'s ' + name
     + '. The server owner must write the kernel.json of this image.', { cause: 'KERNEL_VERSION_MISSING', image: refused.image, pinned: refused.kernel ?? null });
   if (!server || (lane === 'odc' && !kernel.odcBridge)) return no('KERNEL_UNAVAILABLE', 'This SSAM server has no kernel for ' + name + '.');
-  const installedVersion = threePart(hello?.studios?.[lane]?.installed?.version);
-  if (installedVersion && olderThan(installedVersion, server))
-    return no('STUDIO_VERSION_MISMATCH', 'This SSAM server has the kernel for ' + name + ' ' + server + '; the agent reports ' + name + ' '
-      + hello.studios[lane].installed.version + '. It serves only ' + name + ' ' + server + ': ' + name + ' ' + installedVersion + ' has no hosted ' + lane
-      + ' lane on this server until the server owner installs the multi-version server; to use it now, update ' + name + ' to ' + server + '. Server-only tools still work.',
-      { cause: 'STUDIO_VERSION_NOT_SERVED', served: [server], installed: installedVersion });
+  const installed = hello?.studios?.[lane]?.installed ?? null;
+  const studio = studioIdentity(lane, installed, kernel);
+  const notServed = refusalOf(studio);
+  if (notServed && studio.relation !== 'unknown') return notServed;
   const pack = hello?.pack;
   if (!pack || !Array.isArray(pack.lanes) || !pack.lanes.includes(lane))
     return no('AGENT_PACK_MISMATCH', 'The agent package has no ' + lane + ' lane. Ask the server owner for the current agent package.');
@@ -169,11 +179,16 @@ function laneCompatibility(lane, hello, kernel, lanes, refused) {
     if (kernel.o11Hook === 'h1' && hook !== 'h1')
       return no('AGENT_PACK_MISMATCH', 'This server accepts only agent packages with the signed release hook h1; this package uses the ' + hook + ' hook. Ask the server owner for the current agent package.');
   }
-  const installed = hello?.studios?.[lane]?.installed;
   if (!installed) return no('STUDIO_NOT_INSTALLED', 'The agent found no ' + name + ' installed on the user\'s machine; this server has the kernel for ' + name + ' ' + server + '.');
-  if (threePart(installed.version) !== server)
-    return no('STUDIO_VERSION_MISMATCH', 'This SSAM server has the kernel for ' + name + ' ' + server + '; the agent reports ' + name + ' ' + (installed.version ?? 'unknown') + '.');
-  return { ok: true };
+  // a version the agent could not read: after the package checks, as before (STUDIO_VERSION_UNKNOWN)
+  if (notServed) return notServed;
+  return studio?.warn ? { ok: true, studio, warning: studioWarningOf(studio) } : { ok: true };
+}
+// The hub's answer for a Studio the server does not serve: the gate's refusal (studio-identity.mjs studioRefusal) in the
+// shape of a compatibility entry, with the identity for the gate and the event.
+function refusalOf(studio) {
+  const refusal = studioRefusal(studio);
+  return refusal ? { ok: false, code: refusal.code, message: refusal.error, cause: refusal.cause, studio, served: refusal.served, installed: refusal.installed } : null;
 }
 
 function callError(code, message, { executed = false, delivered = false, ...extra } = {}) {
@@ -241,7 +256,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
     state = { tokenId, customer: rec?.customer ?? null, lanes: rec?.lanes ?? [], channel: null, instance: null, hello: null,
       connectedAt: null, lastSeenAt: null, pending: new Map(), transfers: new Map(), listeners: new Set(), closedFor: null, seq: 0, api: null,
       probes: new Map(), uploads: { parts: 0, slow: [] },
-      previousChannel: null, waiters: new Set() };
+      previousChannel: null, waiters: new Set(), unserved: new Map() };
     state.api = linkApi(state);
     links.set(tokenId, state);
     return state;
@@ -509,6 +524,23 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
     return w.count > limits.ratePerMinute ? Math.ceil((w.start + 60000 - at) / 1000) : 0;
   }
 
+  // E1 (A-M1, C:\t\multiver\minimo\PROPOSTA.md): a Studio the server does not serve (studio-identity.mjs) is named once per
+  // token, lane, installed and served version, when the hub first judges it (Hello or pong.versions): the owner learns who
+  // a Studio update (or a server update) cut, before the first refused call. The token id, the lane, version numbers and
+  // codes only: never a credential, a folder or an argument. A lane served again forgets its entry.
+  function noteUnserved(state, compatible) {
+    for (const lane of LANES) {
+      const entry = compatible?.[lane];
+      const studio = entry?.studio;
+      if (!studio || entry.ok !== false) { state.unserved.delete(lane); continue; }
+      const key = studio.installed + '>' + studio.served + ':' + studio.policy;
+      if (state.unserved.get(lane) === key) continue;
+      state.unserved.set(lane, key);
+      log({ event: 'studio-version-unserved', token: state.tokenId, lane, installed: studio.installed, served: studio.served, relation: studio.relation,
+        cause: entry.cause, policy: studio.policy });
+    }
+  }
+
   async function hello(state, auth, req, res) {
     const read = await readJson(req, limits.maxMessageBytes);
     if (read.tooLarge) return reply(res, 413, 'MESSAGE_TOO_LARGE', 'Hello larger than ' + limits.maxMessageBytes + ' bytes.', { connection: 'close' });
@@ -558,12 +590,15 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
     const machine = h.agent?.machine && typeof h.agent.machine === 'object'
       ? { id: String(h.agent.machine.id ?? '').slice(0, 32), name: String(h.agent.machine.name ?? '').slice(0, 64), user: String(h.agent.machine.user ?? '').slice(0, 64) } : null;
     const ip = (String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || req.socket?.remoteAddress || '').slice(0, 64);
+    // E1 (A-M1): the version of each installed Studio, the numbers only (studioVersions: never the folder).
     log({ event: resumed ? 'agent-resumed' : 'agent-connected', token: state.tokenId, agent: String(h.agent?.version ?? '?').slice(0, 32),
-      ip, machine, o11: h.o11Connection ? JSON.stringify(h.o11Connection).slice(0, 200) : null });
+      ip, machine, o11: h.o11Connection ? JSON.stringify(h.o11Connection).slice(0, 200) : null, studios: studioVersions(h.studios) });
+    const compatible = compatibility(state.hello, serverKernel, state.lanes, { refused: kernelRefused });
+    noteUnserved(state, compatible);
     const welcome = { t: 'welcome', channel: state.channel.id, customer: auth.customer, resumed,
       heartbeatMs: limits.heartbeatMs, deadAfterMs: limits.deadAfterMs, maxMessageBytes: limits.maxMessageBytes,
       inlineMaxBytes: limits.inlineMaxBytes, partBytes: limits.partBytes, maxFileBytes: limits.maxFileBytes, maxValueBytes: limits.maxValueBytes,
-      kernel: { ...serverKernel }, compatible: compatibility(state.hello, serverKernel, state.lanes, { refused: kernelRefused }) };
+      kernel: { ...serverKernel }, compatible };
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     res.end(JSON.stringify(welcome));
     return true;
@@ -602,6 +637,8 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
       if (m.versions && typeof m.versions === 'object' && state.hello) {
         if ('studios' in m.versions) state.hello.studios = m.versions.studios ?? null;
         if ('o11Connection' in m.versions) state.hello.o11Connection = m.versions.o11Connection ?? null;
+        // a Studio that changed under a connected agent is judged now (the gate reads info() on every call)
+        if ('studios' in m.versions) noteUnserved(state, compatibility(state.hello, serverKernel, state.lanes, { refused: kernelRefused }));
       }
       return;
     }

@@ -34,11 +34,11 @@ const helloOf = (over = {}) => ({ t: 'hello', protocol: 'ssam-agent/1', instance
   pack: { id: 'pack-test', lanes: ['odc', 'o11'], odcBridge: 'v35', o11BuiltFor: '11.55.91' },
   studios: studios(), o11Connection: null, ...over });
 
-async function start(limits = {}, options = {}) {
+async function start(limits = {}, { kernel = KERNEL, ...options } = {}) {
   const dir = freshDir();
   const events = [];
   const handle = await startHttpServer({ createServer: async () => new McpServer({ name: 'none', version: '1.0.0' }), dir, port: 0,
-    agents: { kernel: KERNEL, limits: { sweepMs: 50, ...limits } }, log: e => events.push(e), ...options });
+    agents: { kernel, limits: { sweepMs: 50, ...limits } }, log: e => events.push(e), ...options });
   return { handle, dir, events, store: createTokenStore(dir), base: handle.url.replace(/\/mcp$/, ''), env: { SSAM_SERVER_DIR: dir } };
 }
 
@@ -189,6 +189,79 @@ test('hello answers welcome with the kernel and the compatibility per lane (equa
     assert.match(compatibility(withHook(undefined), releaseOnly, ['odc', 'o11']).o11.message, /only agent packages with the signed release hook h1/);
     assert.deepEqual(compatibility(withHook('h1'), releaseOnly, ['odc', 'o11']).o11, { ok: true });
     assert.deepEqual(compatibility(withHook('dev'), releaseOnly, ['odc', 'o11']).odc, { ok: true }, 'the ODC lane does not depend on the O11 hook');
+  } finally { await handle.close(); }
+});
+
+// A-M1 + E1 (C:\t\multiver\minimo\PROPOSTA.md; docs/FASE2-AGENTE.md 7): the Studio is identified by its four-part build
+// against the build the server serves (kernel.builds, from the image's Studio folder). Synthetic builds.
+test('A-M1: the hub compares the four-part build; another build is served with studioBuildDiffers (warn, the default) or refused (refuse); another version is refused by direction before the package', async () => {
+  const BUILT = { ...KERNEL, builds: { odc: '1.7.28.4021', o11: '11.55.91.65012' } };
+  const { handle, store, base } = await start({}, { kernel: BUILT });
+  try {
+    const a = agentOf(base, store.issue({ customer: 'Build' }).agentCredential);
+    const same = await a.hello();
+    assert.deepEqual(same.body.compatible, { odc: { ok: true }, o11: { ok: true } }, 'the same build: nothing to say');
+    assert.deepEqual(same.body.kernel, BUILT, 'the welcome names the served builds (agent 0.3.1 reads only kernel[lane], three numbers)');
+    // another build of the same version: served with the warning, the default policy
+    const differs = (await a.hello(helloOf({ studios: studios('1.7.28.4044') }))).body.compatible.odc;
+    assert.equal(differs.ok, true);
+    assert.equal(differs.warning.code, 'studioBuildDiffers');
+    assert.deepEqual({ installed: differs.studio.installed, served: differs.studio.served, relation: differs.studio.relation, policy: differs.studio.policy },
+      { installed: '1.7.28.4044', served: '1.7.28.4021', relation: 'build-differs', policy: 'warn' });
+    // another version, newer or older: refused by direction, before any package check (a stale package changes nothing)
+    const stalePack = { id: 'old', lanes: ['odc', 'o11'], odcBridge: 'v34', o11BuiltFor: '11.54.10' };
+    const newer = (await a.hello(helloOf({ studios: studios('1.7.29.10'), pack: stalePack }))).body.compatible.odc;
+    assert.deepEqual({ ok: newer.ok, code: newer.code, cause: newer.cause, served: newer.served, installed: newer.installed },
+      { ok: false, code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_VERSION_NOT_SERVED_YET', served: ['1.7.28.4021'], installed: '1.7.29.10' });
+    assert.match(newer.message, /does not serve this version yet; the owner was notified/);
+    const older = (await a.hello(helloOf({ studios: studios('1.7.27.100', '11.55.90.1') }))).body.compatible;
+    assert.equal(older.odc.cause, 'STUDIO_UPDATE_REQUIRED'); assert.equal(older.o11.cause, 'STUDIO_UPDATE_REQUIRED');
+    assert.match(older.odc.message, /update ODC Studio to 1\.7\.28\.4021/);
+  } finally { await handle.close(); }
+  // kernel.json {"studioBuildPolicy":"refuse"}: another build is refused like another version, by direction
+  const strict = await start({}, { kernel: { ...BUILT, studioBuildPolicy: 'refuse' } });
+  try {
+    const a = agentOf(strict.base, strict.store.issue({ customer: 'Estrito' }).agentCredential);
+    const refused = (await a.hello(helloOf({ studios: studios('1.7.28.4044') }))).body.compatible.odc;
+    assert.deepEqual({ ok: refused.ok, code: refused.code, cause: refused.cause, relation: refused.studio.relation, policy: refused.studio.policy },
+      { ok: false, code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_VERSION_NOT_SERVED_YET', relation: 'build-differs', policy: 'refuse' });
+    assert.equal((await a.hello(helloOf({ studios: studios('1.7.28.4000') }))).body.compatible.odc.cause, 'STUDIO_UPDATE_REQUIRED');
+    assert.deepEqual((await a.hello()).body.compatible.odc, { ok: true });
+    assert.deepEqual(strict.handle.hub.link(strict.store.list()[0].id).info().kernel.studioBuildPolicy, { odc: 'refuse', o11: 'refuse' });
+  } finally { await strict.handle.close(); }
+  // the pure rule, with a kernel that names no build (a server that does not know its own): three numbers, as before
+  assert.deepEqual(compatibility(helloOf({ studios: studios('1.7.28.9999') }), KERNEL, ['odc', 'o11']).odc, { ok: true });
+});
+
+test('E1: agent-connected records the Studio versions (numbers only); studio-version-unserved names each refused Studio once, also after a pong', async () => {
+  const BUILT = { ...KERNEL, builds: { odc: '1.7.28.4021', o11: '11.55.91.65012' } };
+  const { handle, store, base, events } = await start({ heartbeatMs: 30 }, { kernel: BUILT });
+  try {
+    const t = store.issue({ customer: 'Eventos' });
+    const a = agentOf(base, t.agentCredential);
+    await a.hello(helloOf({ studios: studios('1.7.28.4044') }));
+    const connected = events.find(e => e.event === 'agent-connected');
+    assert.deepEqual(connected.studios, { odc: '1.7.28.4044', o11: '11.55.91.65012' });
+    assert.equal(events.some(e => e.event === 'studio-version-unserved'), false, 'a build served with a warning is not a refusal');
+    // a newer ODC Studio: one event; the same Hello again (a reconnection) does not repeat it
+    await a.hello(helloOf({ studios: studios('1.7.29.10') }));
+    await a.hello(helloOf({ studios: studios('1.7.29.10') }));
+    const unserved = events.filter(e => e.event === 'studio-version-unserved');
+    assert.deepEqual(unserved.map(({ time, ...e }) => e), [{ event: 'studio-version-unserved', token: t.id, lane: 'odc', installed: '1.7.29.10',
+      served: '1.7.28.4021', relation: 'newer', cause: 'STUDIO_VERSION_NOT_SERVED_YET', policy: 'warn' }]);
+    // the Studio changes while the agent stays connected (pong.versions): the change is judged and named at once
+    const s = await a.stream();
+    const ping = await s.lines.next(m => m.t === 'ping');
+    await a.post([{ t: 'pong', seq: ping.seq, versions: { studios: studios('1.7.28.4021', '11.55.90.1'), o11Connection: null } }]);
+    const link = handle.hub.link(t.id);
+    assert.equal(link.info().compatible.o11.cause, 'STUDIO_UPDATE_REQUIRED');
+    assert.deepEqual(link.info().compatible.odc, { ok: true });
+    const last = events.filter(e => e.event === 'studio-version-unserved').at(-1);
+    assert.deepEqual({ lane: last.lane, installed: last.installed, cause: last.cause }, { lane: 'o11', installed: '11.55.90.1', cause: 'STUDIO_UPDATE_REQUIRED' });
+    s.lines.cancel();
+    // privacy: ids and version numbers only, never the Studio folder, a credential, a token or an argument
+    const text = JSON.stringify(events);
+    for (const secret of ['Program Files', t.agentCredential, t.token, 'ssam_agent_']) assert.equal(text.includes(secret), false, secret);
   } finally { await handle.close(); }
 });
 
