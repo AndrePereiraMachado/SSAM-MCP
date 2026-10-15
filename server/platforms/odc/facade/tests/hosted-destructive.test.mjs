@@ -5,6 +5,9 @@
 // HOSTED_UNAVAILABLE, cause DESTRUCTIVE_HOSTED_OFF, outcome not-sent, no continuation, before the agent, any path, any
 // read and any send. hosted/destructive.mjs hostedDestructive(name, args) is the single classification; the hosted
 // listing says which part of each tool is off (hostedListing). Fakes only: no hub, agent, Studio, network or child process.
+// Correction 1 of its review (C:\t\revisoes\hosted-destructive-off\REVISAO.md): F1, revoking access by a *ToRemove body or
+// an o11_access manifest is refused like the DELETE of it; F2, an oracle independent of the classifier's tables; F3, a call
+// without its selector gets the input layer's INPUT_INVALID, not "deleting is off".
 import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -39,9 +42,9 @@ const { wrapHostedTool, hostedTools } = policy;
 const destructive = await import('../hosted/destructive.mjs').catch(error => ({ loadError: error }));
 const { runWithExecutor, prepareWorkspace } = await import('../executor.mjs');
 const { createSsamServer } = await import('../ssam.mjs');
-const { PORTAL_WRITES } = await import('../../portal/runtime/portal-routes.mjs');
+const { PORTAL_READS, PORTAL_WRITES } = await import('../../portal/runtime/portal-routes.mjs');
 const { DEPLOY, effectOf } = await import('../../portal/runtime/effects.mjs');
-const { Catalog } = await import('../../portal/runtime/catalog.mjs');
+const { Catalog, resolveRef } = await import('../../portal/runtime/catalog.mjs');
 const { DELETE_ACTIONS } = await import('../service-center/delete.mjs');
 const serviceCenter = await import('../service-center/index.mjs');
 const { ENVIRONMENT_WRITES } = await import('../o11-environment.mjs');
@@ -433,7 +436,9 @@ test('completeness: the server tables (Service Center deletes, delete-app, every
   // o11_environment: its one destructive write.
   assert.deepEqual(ENVIRONMENT_WRITES.filter(a => classify('o11_environment', { action: a })), ['delete-app']);
   assert.deepEqual(ENVIRONMENT_WRITES.filter(a => DELETE_WORDS.test(a)), ['delete-app']);
-  // odc_write: the effect of every catalogued operation (effects.mjs effectOf) decides; the id carries the method.
+  // odc_write: the effect of every catalogued operation (effects.mjs effectOf) decides; the id carries the method. This and
+  // the PORTAL_WRITES loop below only check that the classifier reads its tables exactly (nothing else refused, nothing
+  // dropped); whether the tables miss a removal is proven by the independent oracle of F2, at the end of this file.
   const catalog = new Catalog();
   let destructiveOps = 0;
   for (const op of catalog.operations.values()) {
@@ -653,4 +658,74 @@ test('F1: the revokes of an access manifest are counted as the kernel reads it (
   assert.equal(destructive.hostedDestructiveFiles('odc_write', { action: 'apply', manifestPath: one }), null);
   assert.equal(destructive.hostedDestructiveFiles('o11_access', { action: 'apply', manifestPath: path.join(dir, 'dup.json') })?.revokes, null);
   assert.ok(destructive.hostedDestructiveFiles('o11_access', { action: 'apply', manifestPath: path.join(dir, 'dup.json') }));
+});
+
+// ---- F2: an oracle independent of the classifier's tables (never effects.mjs effectOf nor PORTAL_WRITES effect). It reads
+// what each operation and route says it does: for every ODC public operation that is not a GET, its summary, description,
+// request-body property names and enum values, and its method (DELETE); for every Portal route, its id and its native
+// action (route[2]). Every occurrence of a removal word is refused by the gate, or listed in KEPT_REMOVALS with its reason.
+const REMOVAL = /delet|remov|revok|undeploy|unpublish|purg|prune|clear|deactivat|rotat/i;
+const KEPT_REMOVALS = {
+  'asset-repository-api-v1:patch:/assets/{assetKey}/revisions/{revisionNumber}#text': '"clears the existing revision tag": sets or unsets the tag label of a revision; the revision and its content stay',
+  'dependency-management-api-v1:post:/deletion-analyses#text': 'starts a read-only analysis of what deleting an asset would affect; deletes nothing',
+  'environment-configurations-api-v1:patch:/environments/{environmentKey}/domains/{domainKey}#text': '"clear the default app": a null application key unsets the default app of a domain; the domain and the app stay',
+  'environment-configurations-api-v1:post:/environments/{environmentKey}/private-gateway/deactivation#text': 'F6 of the review, the owner decides: deactivates the private gateway (reversible: activate it again)',
+  'environment-configurations-api-v1:post:/environments/{environmentKey}/private-gateway/key-rotation#text': 'F6 of the review, the owner decides: rotates the private gateway key (the old key stops working)',
+  'portal-read:knowledgeBases.consumers#route': 'a data action of the knowledge base delete popup that lists its consumers: odc_portal_read, reads only',
+};
+// The request-body fields of an operation: {kind:'prop'|'enum', at (pointer, '*' for an item), name}.
+function bodyFields(spec, node, at, seen, out, depth = 0) {
+  if (!node || typeof node !== 'object' || depth > 12) return out;
+  if (node.$ref) { if (seen.has(node.$ref)) return out; seen = new Set(seen).add(node.$ref); node = resolveRef(spec, node); }
+  for (const [key, child] of Object.entries(node.properties ?? {})) { out.push({ kind: 'prop', at: at + '/' + key, name: key }); bodyFields(spec, child, at + '/' + key, seen, out, depth + 1); }
+  for (const alt of [...(node.allOf ?? []), ...(node.anyOf ?? []), ...(node.oneOf ?? [])]) bodyFields(spec, alt, at, seen, out, depth + 1);
+  if (node.items) bodyFields(spec, node.items, at + '/*', seen, out, depth + 1);
+  for (const value of node.enum ?? []) if (typeof value === 'string') out.push({ kind: 'enum', at, name: value });
+  if (node.content) for (const media of Object.values(node.content)) bodyFields(spec, media.schema, at, seen, out, depth + 1);
+  return out;
+}
+// Every occurrence: {key, probes: [[tool, args]...]}, refused when the gate refuses one of its probes.
+function removalOccurrences() {
+  const catalog = new Catalog();
+  const out = [];
+  for (const op of catalog.operations.values()) {
+    if (op.method === 'GET') continue;
+    const fields = bodyFields(catalog.apis.get(op.apiId).spec, op.requestBody, '', new Set(), []);
+    const own = new Map();
+    for (const field of fields.filter(f => REMOVAL.test(f.name))) {
+      const key = op.id + (field.kind === 'prop' ? '#prop:' + field.at : '#enum:' + field.at + '=' + field.name);
+      own.set(key, { key, probes: [['odc_write', { operationId: op.id, body: field.at ? argsAt(field.at, field.kind === 'prop' ? [ASSET] : field.name) : field.name }]] });
+    }
+    if (op.method === 'DELETE') own.set(op.id + '#method', { key: op.id + '#method', probes: [['odc_write', { operationId: op.id }]] });
+    out.push(...own.values());
+    // The text of the operation says it removes: some form of the call (bare, or with each removal field) is refused.
+    if ([op.summary, op.description].some(text => typeof text === 'string' && REMOVAL.test(text)))
+      out.push({ key: op.id + '#text', probes: [['odc_write', { operationId: op.id }], ...[...own.values()].flatMap(o => o.probes)] });
+  }
+  for (const [id, entry] of Object.entries(PORTAL_WRITES))
+    if (REMOVAL.test(id) || REMOVAL.test(entry.route[2])) out.push({ key: 'portal:' + id + '#route', probes: [['odc_portal_write', { operationId: id, input: {} }]] });
+  // odc_portal_read is a read tool and is not gated: a read route whose native action names a removal must be KEPT.
+  for (const [id, entry] of Object.entries(PORTAL_READS))
+    if (REMOVAL.test(id) || REMOVAL.test(entry[2])) out.push({ key: 'portal-read:' + id + '#route', probes: [] });
+  return out;
+}
+
+test('F2: every ODC operation and Portal route whose own text, body fields, enum values, method or native action names a removal is refused at the gate, or KEPT with its reason', async () => {
+  const occurrences = removalOccurrences();
+  assert.ok(occurrences.length >= 25, 'the oracle read the catalog and the routes: ' + occurrences.length);
+  const unexplained = [], kept = [];
+  for (const occurrence of occurrences) {
+    let refused = false;
+    for (const [name, args] of occurrence.probes) {
+      const h = harness();
+      const value = valueOf(await h.gate(name)(args)) ?? {};
+      if (value.cause === 'DESTRUCTIVE_HOSTED_OFF') { refused = true; assert.deepEqual(h.calls, [], occurrence.key); break; }
+    }
+    if (refused) continue;
+    if (Object.hasOwn(KEPT_REMOVALS, occurrence.key)) kept.push(occurrence.key);
+    else unexplained.push(occurrence.key);
+  }
+  assert.deepEqual(unexplained, [], 'a removal the gate lets through without a KEPT reason');
+  assert.deepEqual(Object.keys(KEPT_REMOVALS).filter(key => !kept.includes(key)), [], 'a KEPT entry that no longer matches a removal let through');
+  for (const [key, reason] of Object.entries(KEPT_REMOVALS)) assert.ok(reason.length > 20, key);
 });
