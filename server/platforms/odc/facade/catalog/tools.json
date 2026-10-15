@@ -2562,6 +2562,26 @@
  },
  "nonVerbEnums": [
   {
+   "tool": "studio_deliver",
+   "path": "patch",
+   "reason": "patch over the job of basedOn: a JSON Patch array, or \"verified\" (every verified patch a refusal kept beside that job); an argument of the job, not a tool verb"
+  },
+  {
+   "tool": "o11_job",
+   "path": "patch",
+   "reason": "patch over the job of basedOn: a JSON Patch array, or \"verified\" (every verified patch a refusal kept beside that job); an argument of the job, not a tool verb"
+  },
+  {
+   "tool": "ssam_job",
+   "path": "patch",
+   "reason": "patch over the job of basedOn: a JSON Patch array, or \"verified\" (every verified patch a refusal kept beside that job); an argument of the job, not a tool verb"
+  },
+  {
+   "tool": "ssam_code",
+   "path": "patch",
+   "reason": "patch over the job of basedOn: a JSON Patch array, or \"verified\" (every verified patch a refusal kept beside that job); an argument of the job, not a tool verb"
+  },
+  {
    "tool": "ssam_code",
    "path": "items[].kind",
    "reason": "kind of an element assigned by plan, not a tool verb"

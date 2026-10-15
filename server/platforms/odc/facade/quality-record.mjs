@@ -21,7 +21,7 @@ export const MAX_TEXT_PARSE = 262144;
 // o11-studio.mjs COMMANDS, o11-access.mjs ACTIONS, studio-create-app.mjs CREATE_APP_ACTIONS, the friction tool's view).
 // Kept here as values so this module stays pure; quality-record.test.mjs checks them against tools/list and the constants.
 export const VERB_FIELDS = Object.freeze({
-  ssam_map: Object.freeze({ field: 'view', default: 'map', values: Object.freeze(['map', 'digest', 'search', 'uses']) }),
+  ssam_map: Object.freeze({ field: 'view', default: 'map', values: Object.freeze(['map', 'digest', 'ddl', 'flow', 'search', 'uses', 'html', 'logic']) }),
   ssam_reference: Object.freeze({ field: 'kind', default: null, values: Object.freeze(['api', 'functions', 'ui-block', 'types', 'where-can', 'recipe', 'check-job', 'check-delivery', 'verify-message', 'example', 'rules']) }),
   o11_environment: Object.freeze({ field: 'action', default: null, values: Object.freeze(['inventory', 'download', 'download-app', 'templates', 'references', 'referenceable',
     'create-app', 'add-modules', 'create-module', 'update-app', 'refresh-refs', 'set-user-provider', 'delete-app']) }),

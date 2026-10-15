@@ -17,6 +17,8 @@
 //     the Portal through the headless Studio session (odc_mcp_connection readiness), the tools unavailable hosted, the
 //     prototype op and a renamed path argument refused at the gate, and a third customer still on the v48 pack: accepted
 //     by kernel.json odcBridgeAccepted, typed refusals for what the 23rd pack lacks.
+//   - the product's marco-a5 (servidor/fase4-25, step 9j): ssam_code unavailable, the generators pending their blind test
+//     refused at the gate, odc_portal_login prompt and focus refused (no credential window).
 // Tokens and agent credentials only ever go to files under the temporary folder; nothing here prints them.
 // Ports: the server and the fake O11 bridges take free ports in 7400-7499. Never a real Studio: the fake ODC pipes use
 // unlikely pids, and the agents list only the fake Studio processes.
@@ -283,7 +285,10 @@ try {
   const ssamModule = await import(pathToFileURL(path.join(facade, 'ssam.mjs')).href);
   const { InMemoryTransport } = await import('@modelcontextprotocol/server');
   const { frictionTool } = await import(pathToFileURL(path.join(repo, 'facade', 'friction-boundary.mjs')).href);
-  const stdio = await ssamModule.createSsamServer(ssamModule.servedLanes());
+  // servidor/fase4-25: marco-a5 keeps a whole answer above its kind's budget in <answersRoot>/.local/answers even locally
+  // (answer-size.mjs); the owner's stdio server of this step writes them in the temporary folder, so kernel/.local keeps
+  // proving that no hosted call wrote there.
+  const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), deps: { answersRoot: path.join(T, 'owner-answers') } });
   const [left, right] = InMemoryTransport.createLinkedPair();
   const local = new Client({ name: 'e2e-stdio', version: '1' });
   await Promise.all([stdio.connect(left), local.connect(right)]);
@@ -784,6 +789,33 @@ try {
   check('24th (R1): the same renamed argument naming a ws: capture runs as target (the rich index over the customer\'s capture, no server path)',
     renamedInside?.ok === true && renamedInside.count >= 1 && inWs(renamedInside.captures?.[0]?.file, 'ws:odc/') && !serverPathIn(renamedInside),
     renamedInside ? { ok: renamedInside.ok, count: renamedInside.count, code: renamedInside.code ?? null, error: renamedInside.error ?? null } : renamedInside);
+
+  // 9j. The product's marco-a5 over the hosted path (servidor/fase4-25, C:\t\vps-a5\PLANO.md section 5): ssam_code is
+  // unavailable, the generators still pending their blind test are refused at the gate (rest-consume naming an internal
+  // address included: nothing is fetched), and the private credential window of odc_portal_login never opens.
+  odcSeen = odcLines(A).length; seen = o11Count();
+  const codeAnswer = sc(await call(clientA, 'ssam_code', { lane: 'o11', action: 'write', module: O11_MODULE.name, text: 'action A() {}' }));
+  check('marco-a5: ssam_code answers HOSTED_UNAVAILABLE (cause SSAM_CODE_HOSTED_PENDING, continuation ssam_map); nothing reached a Studio',
+    codeAnswer?.code === 'HOSTED_UNAVAILABLE' && codeAnswer.cause === 'SSAM_CODE_HOSTED_PENDING' && codeAnswer.continuation?.tool === 'ssam_map'
+      && odcLines(A).length === odcSeen && o11Count() === seen, codeAnswer);
+  const GENERATOR_OPS = { 'entity-actions': { op: 'entity-actions', data: { entities: 'all' } },
+    'rest-consume': { op: 'rest-consume', data: { name: 'Internal', methods: [{ name: 'Probe', url: 'http://127.0.0.1:9/internal' }] } },
+    'gen-screen': { op: 'screen', data: { generate: { entities: ['Order'] } } } };
+  const generated = {};
+  for (const [id, op] of Object.entries(GENERATOR_OPS))
+    for (const [name, args] of [['ssam_job', { lane: 'o11', job: { ops: [op] } }], ['o11_job', { job: { ops: [op] } }],
+      ['studio_deliver', { feature: 'generator', module: ODC_MODULE.name, job: { ops: [op] }, owners: ['e2e'], changes: ['A pending generator over the hosted path'] }],
+      ['o11_deliver', { module: O11_MODULE.name, job: { ops: [op] }, authorize: 'pode entregar no Headless_CS' }]])
+      generated[id + ' ' + name] = { id, value: sc(await call(clientA, name, args, 120000)) };
+  check('marco-a5 (D2): the generators pending their blind test are refused at the gate in the four job tools (HOSTED_UNAVAILABLE, cause GENERATOR_PENDING, not-sent), before any capture',
+    Object.values(generated).every(({ id, value }) => value?.code === 'HOSTED_UNAVAILABLE' && value.cause === 'GENERATOR_PENDING' && value.generator === id && value.outcome === 'not-sent')
+      && odcLines(A).length === odcSeen && o11Count() === seen,
+    Object.fromEntries(Object.entries(generated).map(([key, { value }]) => [key, { code: value?.code ?? null, cause: value?.cause ?? null, generator: value?.generator ?? null }])));
+  const windows = {};
+  for (const action of ['prompt', 'focus']) windows[action] = sc(await call(clientA, 'odc_portal_login', { tenant: ODC_MODULE.host, action }));
+  check('marco-a5: odc_portal_login prompt and focus answer HOSTED_PROMPT_UNAVAILABLE before the Studio is read; no credential window',
+    Object.values(windows).every(value => value?.code === 'HOSTED_PROMPT_UNAVAILABLE') && odcLines(A).length === odcSeen,
+    Object.fromEntries(Object.entries(windows).map(([action, value]) => [action, { ok: value?.ok ?? null, code: value?.code ?? null }])));
 
   // Customer C: the same pack, turned into the v48 pack of the 23rd. pack.json and the ODC bridge files name v48, and the
   // agent carries the lists of the 23rd (no sc_http, no reference-producers; AGENT_VERSION 0.2.0). Each edit is checked,

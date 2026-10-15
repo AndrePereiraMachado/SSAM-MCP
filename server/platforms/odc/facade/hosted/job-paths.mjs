@@ -49,7 +49,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { insideVisible } from './mirror.mjs';
-import { patchJob, mergePartialJob, readKernelTaskState } from '../job-patch.mjs';
+import { PatchError, patchErrorFields, patchJob, mergePartialJob, readKernelTaskState } from '../job-patch.mjs';
 
 export class PathRefusal extends Error { constructor(code, message, value, fix) { super(message); this.code = code; this.value = value; if (fix) this.fix = fix; } }
 export const outside = value => new PathRefusal('PATH_OUTSIDE_WORKSPACE', 'Path outside the workspace of this account: ' + JSON.stringify(String(value).slice(0, 300)), value);
@@ -121,6 +121,18 @@ export function jobTextPointers(name, args) {
   if (JOB_TOOLS.includes(name)) return ['/job'];
   if (name === 'ssam_reference' && args?.kind === 'check-job') return ['/query', '/query/job'];
   return [];
+}
+// servidor/fase4-25 (finding A1 of C:\t\vps-a5\conf-rapida\RELATORIO.md): patch "verified" makes the handler read its
+// operations from <job of basedOn>.verified-patch.json, a file the gate never reads (job-patch.mjs resolvePatchedJob,
+// verified-patch.mjs readVerifiedPatch), so the job it would build is one the gate cannot check. The pointer of such a
+// patch in a call (/patch of the four job tools, /query/patch of ssam_reference check-job), or null. The gate refuses it
+// (policy.mjs verifiedPatchUnavailable), and confineJobs refuses any patch it cannot apply itself.
+export function namesVerifiedPatch(name, args) {
+  if (!isObject(args)) return null;
+  const slot = jobSlot(name, args);
+  if (!slot || !isObject(slot.holder)) return null;
+  const patch = slot.holder.patch;
+  return typeof patch === 'string' && patch.trim().toLowerCase() === 'verified' ? slot.at + '/patch' : null;
 }
 // {holder, at, key}: the object that holds the job (key) and its basedOn and patch, with the pointer of that object.
 function jobSlot(name, args) {
@@ -251,6 +263,14 @@ function readJob(file) {
 }
 const unchecked = (pointer, why) => new PathRefusal('JOB_PATHS_UNCHECKED', `The gate could not check every path this job names (${why}), so nothing ran.`, pointer,
   'save each job file as JSON in UTF-8 (or UTF-16 with its byte-order mark), every key once per object, at most ' + MAX_JOB_BYTES + ' bytes, and call again');
+// servidor/fase4-25 (finding A1): the job a call makes over basedOn that the gate could not build (code: the handler's own
+// PatchError code when its functions refused it; fields: its at and candidates, as the handler answers them).
+const unbuilt = (pointer, code, why, error = null) => {
+  const refusal = new PathRefusal(code, `The gate could not build and check the job this call makes over basedOn (${why}), so nothing ran.`, pointer,
+    'send basedOn {job, sha256} as a refusal returned them (nextBasedOn) with patch: the JSON Patch operations themselves (at most 50), or a partial job as job; the gate checks the job they make');
+  if (error instanceof PatchError) refusal.fields = patchErrorFields(error);
+  return refusal;
+};
 
 class JobWalk {
   // resolve(value) -> the absolute workspace path of a ws:, agent:, absolute or relative value (policy.mjs resolveValue,
@@ -393,8 +413,16 @@ export async function confineJobs(name, resolved, { workspace, resolve, prototyp
   }
   // basedOn + patch or partial job: the base file where it is, then the job the handler will write from it (moved),
   // computed here with the handler's own functions (job-patch.mjs).
+  // servidor/fase4-25 (finding A1): fail closed. A job the gate could not build here is never let through unchecked: a
+  // patch that is not a JSON Patch array (patch "verified" reads a file the gate does not), a patch or partial job the
+  // handler's functions refuse (that same refusal answers here, before the handler), and a basedOn {taskId} whose recorded
+  // job the gate cannot read are each refused, and nothing runs. A basedOn {job} that names no file is the handler's own
+  // BASE_NOT_FOUND: it reads that same path and builds nothing.
   if (holder.basedOn != null || holder.patch != null) {
+    if (holder.patch != null && !Array.isArray(holder.patch)) walk.refuse(unbuilt(at + '/patch', 'PATCH_INVALID', 'a patch that is not a JSON Patch array (patch "verified" is not available on a hosted server)'), at + '/patch');
     const base = baseFile(holder.basedOn, workspace, at, walk);
+    if (!base && isObject(holder.basedOn) && holder.basedOn.taskId != null && !walk.refusal)
+      walk.refuse(unbuilt(at + '/basedOn/taskId', 'JOB_PATHS_UNCHECKED', 'no job of this customer recorded by that delivery task'), at + '/basedOn/taskId');
     const baseDoc = base ? walk.top(base, at + '/basedOn/job') : undefined;
     if (baseDoc !== undefined) {
       await walk.document(baseDoc, { mode: 'file', dir: path.dirname(base), at: at + '/basedOn/job > ', depth: 1 });
@@ -403,7 +431,10 @@ export async function confineJobs(name, resolved, { workspace, resolve, prototyp
         effective = structuredClone(baseDoc);
         if (partial !== undefined && partial !== null) effective = mergePartialJob(effective, partial).job;
         if (holder.patch != null) effective = patchJob(effective, holder.patch).job;
-      } catch { effective = undefined; } // the handler refuses the same patch or partial job, and nothing runs
+      } catch (error) {
+        effective = undefined;
+        walk.refuse(unbuilt(at + (holder.patch != null ? '/patch' : '/' + key), error?.code ?? 'JOB_PATHS_UNCHECKED', error?.message ?? String(error), error), at + (holder.patch != null ? '/patch' : '/' + key));
+      }
       if (effective !== undefined) await walk.document(effective, { mode: 'moved', dir: path.dirname(base), at: at + '/basedOn/job (patched) > ', depth: 1 });
     }
   }

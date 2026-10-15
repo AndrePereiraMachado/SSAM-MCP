@@ -31,7 +31,9 @@ function harness({ connected = true, info = {}, lanes = ['odc'], sync = false } 
   const pulls = [];
   const executor = { id: 'fake', hosted: true, quota: { full: () => false }, o11Connection: () => null,
     async call(kind, params) { return kind === 'studio.processes' ? { processes: [{ pid: 4120, path: 'C:\\Customer\\' + params.image, version: '1.7.28.4021' }] } : {}; },
-    async pullFile(value) { pulls.push(value); return write(path.join(dirs.workspace, ...value.slice(6).split('/')), 'from the agent'); } };
+    // a job file brought from the agent is a job (since fase4-24 the gate reads every job file it reaches whole, and refuses
+    // one that is not JSON as JOB_PATHS_UNCHECKED); any other file keeps its marker text.
+    async pullFile(value) { pulls.push(value); return write(path.join(dirs.workspace, ...value.slice(6).split('/')), /\.json$/i.test(value) ? '{"ops":[{"op":"find","name":"x"}]}' : 'from the agent'); } };
   const context = { id: 'ctx', hosted: true, tokenId: 'tok_test', customer: 'Test', lanes, workspace: dirs.workspace, agent: link, executor, close: async () => {} };
   const calls = [];
   const gate = (name, options = {}) => {

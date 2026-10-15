@@ -6,9 +6,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { hostedContext } from '../../facade/executor.mjs';
 
 const helper = fileURLToPath(new URL('./windows-credential-prompt.ps1', import.meta.url));
 const inFlight = new Map();
+// servidor/fase4-25: the window of the machine that runs SSAM never opens for a hosted call (the second lock; lib.mjs refuses
+// first with ownerSecrets). Same shape as a window that could not be confirmed, with the hosted code.
+const hostedWindow = () => ({ state: 'failed', visible: false, opened: false, code: 'HOSTED_PROMPT_UNAVAILABLE' });
 export function promptContext(kind, host, name = '') {
   if (!['portal', 'api-client', 'database', 'setting'].includes(kind)
       || !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(host)
@@ -28,6 +32,7 @@ export function projectPrompt(raw) {
 }
 export function createCredentialPrompt({ env = process.env, run = execFile, platform = process.platform } = {}) {
   return async (kind, host, name = '', action = 'ensure') => {
+    if (hostedContext()) return hostedWindow();
     const context = promptContext(kind, host, name);
     if (!['ensure', 'status', 'focus'].includes(action)) throw new Error('Invalid private prompt action');
     if (platform !== 'win32' || env.SSAM_ODC_OFFLINE === '1')

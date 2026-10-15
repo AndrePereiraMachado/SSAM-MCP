@@ -89,16 +89,19 @@ test('the O11 lane table port (o11LaneOf(...).bridge) is read only at the known 
   assert.deepEqual(hits(site, code), KNOWN);
 });
 
-test('credential prompt windows open only from the two openPrompt functions', () => {
+test('credential prompt windows open only from the openPrompt of the Service Center and the ODC credential window', () => {
   // The prompt is a PowerShell -File of a credential script, detached in its own window.
-  const inPrompt = { 'facade/lib.mjs': 1, 'facade/service-center/auth.mjs': 1 };
+  // servidor/fase4-25: marco-a5 moved the ODC prompt out of lib.mjs into the verified credential window of
+  // portal/runtime/credential-prompt.mjs (createCredentialPrompt), checked below with its two locks.
+  const inPrompt = { 'facade/service-center/auth.mjs': 1 };
+  const credentialWindow = 'portal/runtime/credential-prompt.mjs';
   const statusOnly = new Set(['portal/runtime/api-client-credential.mjs', 'portal/runtime/odc3-context.mjs']); // -NonInteractive status reads
   // servidor/fase4-24: the private credential-profile selector of the 24th release (credential-profiles.mjs lists and
   // launches scripts/credential-profiles.ps1) is the third -File site; both of its helpers refuse hosted before they start.
   const selector = 'facade/credential-profiles.mjs';
   const files = hits(/'-File'/g);
   for (const [name, n] of Object.entries(files)) {
-    if (/^facade\/debug-[^/]*\.mjs$/.test(name) || statusOnly.has(name) || name === selector) continue;
+    if (/^facade\/debug-[^/]*\.mjs$/.test(name) || statusOnly.has(name) || name === selector || name === credentialWindow) continue;
     assert.equal(n, inPrompt[name], name + ' starts a PowerShell -File outside openPrompt');
     const lines = sources.find(s => s.name === name).text.split(/\r?\n/);
     const start = lines.findIndex(l => /^(export )?function openPrompt\(/.test(l));
@@ -108,7 +111,22 @@ test('credential prompt windows open only from the two openPrompt functions', ()
   }
   for (const name of Object.keys(inPrompt)) assert.ok(files[name], name + ' still opens its prompt');
   // Each openPrompt refuses in hosted mode before anything opens.
-  assert.match(sources.find(s => s.name === 'facade/lib.mjs').text, /function openPrompt\([^)]*\) \{\r?\n  ownerSecrets\(hostedPromptRefusal\);/);
+  // The ODC credential window: one -File, inside createCredentialPrompt, whose call refuses hosted first (second lock);
+  // lib.mjs builds it only on the local branch of createAccess, after the hosted branch returned, and every prompt entry
+  // refuses a hosted call or a served process without context first (ownerSecrets, first lock); no other module builds it.
+  assert.equal(files[credentialWindow], 1, credentialWindow + ': one -File');
+  const windowText = sources.find(s => s.name === credentialWindow).text;
+  assert.match(windowText, /export function createCredentialPrompt\([^\n]*\) \{\r?\n  return async \([^\n]*\) => \{\r?\n    if \(hostedContext\(\)\) return hostedWindow\(\);/, credentialWindow + ': refuses hosted first');
+  const libText = sources.find(s => s.name === 'facade/lib.mjs').text;
+  assert.equal(files['facade/lib.mjs'], undefined, 'lib.mjs starts no PowerShell -File of its own');
+  assert.deepEqual(Object.keys(hits(/createCredentialPrompt\(/g)).sort(), ['facade/lib.mjs', credentialWindow].sort(), 'only lib.mjs builds the window');
+  const local = libText.indexOf('const credentialPrompt = createCredentialPrompt(');
+  assert.ok(local > libText.indexOf('hostedAccess.set(context, value);') && libText.indexOf('hostedAccess.set(context, value);') > 0, 'built after the hosted branch returned');
+  const after = libText.slice(local);
+  const entries = after.match(/(?<![\w.])credentialPrompt\(/g) ?? [];
+  const locked = after.match(/\{ ownerSecrets\(hostedPromptRefusal\);\s*(?:return )?credentialPrompt\(/g) ?? [];
+  assert.equal(entries.length, 3, 'api-client, portal and status');
+  assert.equal(locked.length, entries.length, 'every prompt entry refuses hosted first');
   assert.match(sources.find(s => s.name === 'facade/service-center/auth.mjs').text, /export function openPrompt\([^\n]*\) \{\r?\n  if \(hostedContext\(\)\) throw hostedNoPrompt\(/);
   const selectorText = sources.find(s => s.name === selector)?.text ?? '';
   assert.equal(files[selector], 1, selector + ': one -File, shared by its two helpers');

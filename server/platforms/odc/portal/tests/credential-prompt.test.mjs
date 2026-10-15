@@ -60,3 +60,20 @@ test('Portal status reads actual prompt state and explicit recovery reaches the 
   const status=await access.portalLogin({tenant:'example.test',action:'status'});assert.equal(status.window.visible,true);assert.equal(calls.length,0);
   const focus=await access.portalLogin({tenant:'example.test',action:'focus'});assert.equal(focus.window.foreground,true);assert.equal(calls[0][3],'focus');
 });
+
+// servidor/fase4-25: the second lock of the hosted server. Inside a hosted call the window never starts: no PowerShell, no
+// state folder; the answer is the hosted code (lib.mjs refuses first, this holds even if a caller forgot).
+test('hosted: the credential window never starts inside a hosted call (HOSTED_PROMPT_UNAVAILABLE, no process)', async () => {
+  const { runWithExecutor } = await import('../../facade/executor.mjs');
+  const runs = [];
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'prompt-hosted-'));
+  const prompt = createCredentialPrompt({ env: { USERPROFILE: home }, platform: 'win32', run: (...args) => { runs.push(args); args.at(-1)(null, '{}'); } });
+  const context = { hosted: true, workspace: home, executor: { call: async () => { throw new Error('no machine call'); } } };
+  for (const action of ['ensure', 'status', 'focus']) {
+    const window = await runWithExecutor(context, () => prompt('portal', 'tenant.example.com', '', action));
+    assert.deepEqual(window, { state: 'failed', visible: false, opened: false, code: 'HOSTED_PROMPT_UNAVAILABLE' }, action);
+  }
+  assert.deepEqual(runs, [], 'no PowerShell started');
+  assert.deepEqual(fs.readdirSync(home), [], 'no prompt state written');
+  fs.rmSync(home, { recursive: true, force: true });
+});

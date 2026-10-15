@@ -26,7 +26,7 @@ import { anvilRoot, workspaceRoot } from '../workspace.mjs';
 import { scrubDiscover, scrubEvidence, thirdPartyJobs } from './evidence.mjs';
 import { agentReadable, agentSegments, insideVisible } from './mirror.mjs';
 import { agentPath, outsideWorkspaceRefusal } from '../agent-paths.mjs';
-import { JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesGenerator, namesPrototype, outside, parseJobTexts } from './job-paths.mjs';
+import { JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesGenerator, namesPrototype, namesVerifiedPatch, outside, parseJobTexts } from './job-paths.mjs';
 import { generatorApproval, offered } from '../generators.mjs';
 
 export const TOOLS_FILE = fileURLToPath(new URL('./tools.json', import.meta.url));
@@ -148,7 +148,7 @@ const pathRefused = (code, error) => ({ ok: false, code, error,
 // job pointer (/job/ops/2/file; /job/jobs/0 > /ops/1/file inside a part file); the fix says where to put that file.
 function jobPathRefused(error, agentRoot) {
   const pointer = error.pointer ?? null;
-  if (error.code !== 'PATH_OUTSIDE_WORKSPACE') return { ...pathRefused(error.code, error.message), ...(pointer ? { pointer } : {}), ...(error.fix ? { fix: error.fix } : {}) };
+  if (error.code !== 'PATH_OUTSIDE_WORKSPACE') return { ...pathRefused(error.code, error.message), ...(pointer ? { pointer } : {}), ...(error.fields ?? {}), ...(error.fix ? { fix: error.fix } : {}) };
   return { ok: false, ...outsideWorkspaceRefusal(error.value, { agentRoot }), pointer,
     error: 'The job names, at ' + pointer + ', a path outside the workspace of this account: ' + JSON.stringify(String(error.value ?? '').slice(0, 300))
       + '. Files a job names (base, composite parts, a reference producer, an html file, a WSDL/OpenAPI document, a prototype folder) must be ws:<rel> or agent:inbox/<file>; nothing was read there and nothing ran.' };
@@ -207,6 +207,24 @@ export function generatorUnavailable(name, lane, generator) {
       + 'espera o teste cego independente, e este servidor não o roda. Nada rodou.',
     continuation: { tool: 'ssam_discover', arguments: { intent: generator === 'rest-consume' ? 'consume a REST API' : generator === 'gen-screen' ? 'create list and detail screens' : 'create the CRUD actions of an entity', lane: lane === 'odc' ? 'odc' : 'o11' },
       why: 'Lists the ops this server runs for the same request, written in the job by hand, without the pending generator.' } };
+}
+
+// ---- servidor/fase4-25 (finding A1 of C:\t\vps-a5\conf-rapida\RELATORIO.md): patch "verified"
+// THE choice (refuse, not check): patch "verified" applies the operations a refusal kept in <job>.verified-patch.json beside
+// the job of basedOn, a file the client can write (agent:inbox brings it to <ws>/inbox); the gate would have to read that file
+// as the handler does and check the job it makes. Today it is refused at the gate, in the four job tools and in ssam_reference
+// check-job: the same call with the JSON Patch operations themselves is checked like every patch (confineJobs).
+export function verifiedPatchUnavailable(name, lane, args, at = '/patch') {
+  const holder = at === '/query/patch' ? args?.query : args;
+  const { patch: _patch, ...rest } = holder ?? {};
+  const callArgs = at === '/query/patch' ? { ...args, query: rest } : rest;
+  return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'VERIFIED_PATCH_LOCAL', policy: 'HOSTED_VERIFIED_PATCH', tool: name, pointer: at, outcome: 'not-sent',
+    error: 'patch "verified" is available only in local use for now: on a hosted server the gate does not read the verified patches kept beside '
+      + 'the job of basedOn, so it cannot check the job they make. Nothing ran. / O patch "verified" por enquanto só funciona no uso local: no '
+      + 'servidor hospedado o portão não lê os patches verificados guardados ao lado do job de basedOn e não consegue conferir o job que eles '
+      + 'montam. Nada rodou.',
+    continuation: { tool: name, arguments: callArgs, add: { [at === '/query/patch' ? 'query.patch' : 'patch']: 'the JSON Patch operations themselves: the patch of each problem of that refusal (at most 50), or a partial job as job' },
+      why: 'The same call with the explicit patch: the gate checks the job it makes over basedOn, and the handler applies it.' } };
 }
 
 // ---- paths (6.3, 6.4)
@@ -387,6 +405,9 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
     if (refusesPrototype && hasArgs && namesPrototype(args)) return refusal(prototypeUnavailable(name, lane));
     // servidor/fase4-25: a pending generator op in the inline job, partial job or patch, at the same place.
     if (refusesGenerators && hasArgs) { const generator = namesGenerator(args, pendingGenerator); if (generator) return refusal(generatorUnavailable(name, lane, generator)); }
+    // servidor/fase4-25 (finding A1): patch "verified" reads its operations from a file the gate never reads; refused here,
+    // before the agent, any file brought from it and any capture (the explicit patch is checked: confineJobs).
+    if (hasArgs) { const at = namesVerifiedPatch(name, args); if (at) return refusal(verifiedPatchUnavailable(name, lane, args, at)); }
     if (LANED.has(lane) && !lanes.includes(lane)) return refusal(laneDisabled(lane));
     const need = agentNeed(entry.agent, args);
     // O.6.1: a lane the image refused at start is off for every tool but the state reports, before the agent and any path.

@@ -146,15 +146,20 @@ test('a paged answer is written in the customer\'s ws:o11/answers and read back 
   const sb = await hostedServer(b, { jobTool: async () => ({ ok: true }) });
   try {
     const value = await sa.call('o11_job', { job: [{ op: 'find', kind: 'Entity' }] });
-    assert.ok(value.paged, 'the answer is above the ceiling');
-    assert.match(value.paged.file, /^ws:o11\/answers\/[0-9a-f]{64}\.json$/, 'presented as a workspace path');
-    const sha = value.paged.sha256;
+    // servidor/fase4-25: marco-a5 fits each answer to the budget of its kind before the ceiling (answer-size.mjs fitResult):
+    // the whole answer is kept in the same file either way, paged (above the ceiling) or omitted (above its kind's budget),
+    // with the ssam_evidence call that reads it.
+    assert.ok(value.paged || value.omitted, 'the answer is above its budget: kept in a file');
+    const file = value.paged ? value.paged.file : value.omitted.arguments.file;
+    assert.match(file, /^ws:o11\/answers\/[0-9a-f]{64}\.json$/, 'presented as a workspace path');
+    if (value.omitted) assert.equal(value.omitted.tool, 'ssam_evidence');
+    const sha = file.match(/([0-9a-f]{64})\.json$/)[1];
     assert.ok(fs.existsSync(path.join(a.workspace, 'o11', 'answers', sha + '.json')));
     assert.equal(fs.existsSync(path.join(anvilRoot, '.local', 'answers', sha + '.json')), false, 'never in the owner\'s .local/answers');
-    const read = await sa.call('ssam_evidence', { file: value.paged.file, pointer: '/rows/1499/i' });
+    const read = await sa.call('ssam_evidence', { file, pointer: '/rows/1499/i' });
     assert.equal(read.ok, true); assert.equal(read.value, 1499);
     // Customer B: the same ws: name is B's own (absent), A's absolute path is outside B's workspace.
-    assert.equal((await sb.call('ssam_evidence', { file: value.paged.file })).ok, false);
+    assert.equal((await sb.call('ssam_evidence', { file })).ok, false);
     const outside = await sb.call('ssam_evidence', { file: path.join(a.workspace, 'o11', 'answers', sha + '.json') });
     assert.equal(outside.ok, false); assert.equal(outside.code, 'PATH_OUTSIDE_WORKSPACE');
   } finally { await sa.close(); await sb.close(); }
