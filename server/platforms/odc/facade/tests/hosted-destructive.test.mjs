@@ -475,7 +475,10 @@ test('completeness: every tool the MCP annotations call destructive is classifie
   const deleting = new Set(all.filter(p => classify(p.name, p.args)).map(p => p.name));
   for (const name of ['odc_write', 'odc_portal_write', 'studio_command', 'o11_data']) deleting.add(name); // free-text selectors, above
   deleting.add('o11_access'); // a file selector: the revokes of the manifest, read by the gate (F1 tests below)
-  const unreviewed = [...tools.values()].filter(t => t.annotations?.destructiveHint === true && hostedTools()[t.name] && !deleting.has(t.name) && !OVERWRITES_ONLY[t.name]).map(t => t.name);
+  // r25 (marco-a5 + this stopgap): a tool the hosted catalog lists as unavailable (ssam_code, SSAM_CODE_HOSTED_PENDING) is
+  // refused before this rule (wrapHostedTool: the unavailable tools first) and runs nothing on a hosted server. When it is
+  // served, its class changes and this check reviews it again.
+  const unreviewed = [...tools.values()].filter(t => t.annotations?.destructiveHint === true && hostedTools()[t.name] && hostedTools()[t.name].class !== 'unavailable' && !deleting.has(t.name) && !OVERWRITES_ONLY[t.name]).map(t => t.name);
   assert.deepEqual(unreviewed, []);
   for (const name of Object.keys(OVERWRITES_ONLY)) assert.equal(deleting.has(name), false, name + ' deletes nothing');
   assert.equal(typeof destructive.HOSTED_OFF, 'object');
