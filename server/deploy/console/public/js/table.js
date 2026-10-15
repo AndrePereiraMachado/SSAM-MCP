@@ -1,14 +1,17 @@
-// Table builder (DESIGN.md 6.4): column specs, one sort key with aria-sort, client-side filter, loading / empty /
-// error rows with the exact sentences, sticky first column, focus kept across the re-renders of polling.
+// Table builder (DESIGN.md 6.4, SPEC painel v2 3.8): column specs, one sort key with aria-sort, client-side filter,
+// loading / empty / error rows with the exact sentences, sticky header and first column, focus kept across the
+// re-renders of polling. v2 options: fit / flex sizing, a second line per cell (sub), merged headers (subLabel), group
+// rows under the default sort, maxRows (first N rows only; the count stays the total).
 // normalizeText, filterRows, compareValues and sortRows are pure and unit-tested.
 
-import { h, clear, dot } from './dom.js';
+import { h, clear } from './dom.js';
+import { icon } from './icons.js';
 
 const collator = new Intl.Collator('pt-BR', { sensitivity: 'base', numeric: true });
 
 /** Lowercase without accents, for instant filters. */
 export function normalizeText(s) {
-  return String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
 /** Rows whose fields contain the text (case and accent insensitive). fields: keys or (row) => string. */
@@ -63,18 +66,32 @@ export function countText(shown, total) {
   return shown === total ? String(total) : `${shown} de ${total}`;
 }
 
+const STATE_ICON = { good: ['check-circle', 'ok'], empty: ['info', 'muted'], error: ['alert-octagon', 'bad'] };
+
+/** A full-width state row: optional icon chip, then the sentence. */
+export function stateRowOf(ncols, text, cls, kind) {
+  const td = h('td', { colspan: ncols });
+  const ic = STATE_ICON[kind];
+  const inner = h('div', { class: 'state-in' });
+  if (ic) inner.append(h('span', { class: ['ichip', `ichip-${ic[1]}`], 'aria-hidden': 'true' }, icon(ic[0], 16)));
+  inner.append(h('span', { class: 'state-text' }, text));
+  td.append(inner);
+  return h('tr', { class: ['state', cls] }, td);
+}
+
 /**
  * createTable(opts)
- *  columns: [{key, label, num, mono, cls, ell: 'name'|'client'|'machine'|'path'|'code', wrap,
+ *  columns: [{key, label, subLabel, num, mono, cls, ell: 'name'|'client'|'machine'|'path'|'code'|..., wrap, fit, flex,
  *             sort: false | (row) => value, firstDir, text: (row) => string, title: (row) => string,
- *             cell: (row, td) => void, level: (row) => '' | 'warn' | 'bad' | 'ok'}]
- *  rowKey(row) -> string; defaultSort {key, dir, compare?}; empty, filteredEmpty: sentences;
+ *             cell: (row, td) => void, sub: (row) => string | Node, level: (row) => '' | 'warn' | 'bad' | 'ok'}]
+ *  rowKey(row) -> string; defaultSort {key, dir, compare?}; empty, filteredEmpty: sentences; emptyKind 'good' | 'empty';
  *  label: accessible table name; detail: {isOpen(row), render(row, td)}; after(tbody, ncols): extra rows;
- *  footer(tfoot, ncols); rowClass(row)
+ *  footer(tfoot, ncols); rowClass(row); groups: {key(row), label(key, n)}; maxRows: () => number | null; dense
  */
 export function createTable(opts) {
   const cols = opts.columns;
-  const table = h('table', { class: ['grid', opts.cls] });
+  const hasFlex = cols.some((c) => c.flex);
+  const table = h('table', { class: ['grid', opts.cls, opts.dense && 'dense', hasFlex && 'sized'] });
   if (opts.label) table.setAttribute('aria-label', opts.label);
   const thead = h('thead');
   const tbody = h('tbody');
@@ -82,7 +99,8 @@ export function createTable(opts) {
   table.append(thead, tbody, tfoot);
   const wrap = h('div', { class: 'table-wrap' }, table);
   // When the table is wider than its wrap (it scrolls sideways), the row actions column sticks to the right edge,
-  // as the first column sticks to the left, so the actions stay reachable without scrolling.
+  // as the first column sticks to the left, so the actions stay reachable without scrolling. Headers stick under the
+  // top bar only while the table fits (a sideways-scrolling wrap is its own scroll box).
   if (typeof ResizeObserver === 'function') {
     const ro = new ResizeObserver(() => {
       wrap.classList.toggle('overflows', table.scrollWidth > wrap.clientWidth + 1);
@@ -90,6 +108,8 @@ export function createTable(opts) {
     ro.observe(wrap);
     ro.observe(table);
   }
+
+  const sizeCls = (c) => [hasFlex && c.flex && 'flex', hasFlex && !c.flex && c.fit !== false && 'fit', c.fit === true && !hasFlex && 'fit'];
 
   const defaultSort = opts.defaultSort || { key: cols[0].key, dir: 'asc' };
   let sort = { key: defaultSort.key, dir: defaultSort.dir, isDefault: true };
@@ -101,16 +121,17 @@ export function createTable(opts) {
   const headRow = h('tr');
   const ths = new Map();
   for (const c of cols) {
-    const th = h('th', { scope: 'col', class: [c.num && 'num', c.thCls, c.key === 'actions' && 'actions'] });
+    const th = h('th', { scope: 'col', class: [c.num && 'num', c.thCls, c.key === 'actions' && 'actions', ...sizeCls(c)] });
     const sortable = c.sort !== false && (typeof c.sort === 'function' || typeof c.text === 'function');
+    const subLabel = c.subLabel ? [h('span', { class: 'sr-only' }, ' e '), h('span', { class: 'th-sub' }, c.subLabel)] : null;
     if (sortable) {
-      const arrow = h('span', { class: 'arrow', 'aria-hidden': 'true' });
-      const btn = h('button', { type: 'button', class: 'sortbtn' }, c.label, arrow);
+      const arrow = h('span', { class: 'arrow', 'aria-hidden': 'true' }, icon('chevron-down', 12));
+      const btn = h('button', { type: 'button', class: 'sortbtn' }, h('span', { class: 'th-main' }, c.label), arrow, subLabel);
       btn.addEventListener('click', () => toggleSort(c));
       th.append(btn);
       ths.set(c.key, { th, arrow, sortable: true });
     } else {
-      th.textContent = c.label;
+      th.append(h('span', { class: 'th-main' }, c.label), ...(subLabel || []));
       ths.set(c.key, { th, arrow: null, sortable: false });
     }
     headRow.append(th);
@@ -137,10 +158,10 @@ export function createTable(opts) {
       if (!sortable) continue;
       if (key === sort.key) {
         th.setAttribute('aria-sort', sort.dir === 'asc' ? 'ascending' : 'descending');
-        arrow.textContent = sort.dir === 'asc' ? ' ▲' : ' ▼';
+        arrow.className = `arrow on ${sort.dir}`;
       } else {
         th.removeAttribute('aria-sort');
-        arrow.textContent = '';
+        arrow.className = 'arrow';
       }
     }
   }
@@ -155,19 +176,20 @@ export function createTable(opts) {
   }
 
   function stateRow(text, cls, level) {
-    const td = h('td', { colspan: cols.length });
-    if (level) td.append(dot(level));
-    td.append(text);
-    return h('tr', { class: ['state', cls] }, td);
+    const kind = cls === 'error' || level === 'bad' ? 'error' : cls === 'empty' ? (opts.emptyKind || 'empty') : null;
+    return stateRowOf(cols.length, text, cls, kind);
   }
 
   function fillCell(c, r, td) {
-    if (c.cell) c.cell(r, td);
+    const sub = c.sub ? c.sub(r) : null;
+    const target = sub != null && sub !== '' ? h('span', { class: 't1' }) : td;
+    if (c.cell) c.cell(r, target);
     else {
       const t = c.text ? c.text(r) : '';
-      td.textContent = t == null ? '' : String(t);
+      target.textContent = t == null ? '' : String(t);
       if (c.ell && t) td.title = String(t);
     }
+    if (target !== td) td.append(target, h('span', { class: 't2' }, sub));
     if (c.title) {
       const t = c.title(r);
       if (t) td.title = t;
@@ -200,13 +222,26 @@ export function createTable(opts) {
       const sentence = rows.length && predicate ? (opts.filteredEmpty || opts.empty) : opts.empty;
       if (sentence) tbody.append(typeof sentence === 'function' ? sentence(stateRow) : stateRow(sentence, 'empty'));
     }
-    for (const r of sorted(list)) {
+    let ordered = sorted(list);
+    const max = opts.maxRows ? opts.maxRows() : null;
+    if (max != null && ordered.length > max) ordered = ordered.slice(0, max);
+    const groupOn = opts.groups && sort.isDefault;
+    let lastGroup = null;
+    for (const r of ordered) {
+      if (groupOn) {
+        const g = opts.groups.key(r);
+        if (g !== lastGroup) {
+          lastGroup = g;
+          const n = list.filter((x) => opts.groups.key(x) === g).length;
+          tbody.append(h('tr', { class: 'group' }, h('th', { colspan: cols.length, scope: 'rowgroup' }, opts.groups.label(g, n))));
+        }
+      }
       const key = opts.rowKey ? String(opts.rowKey(r)) : '';
       const tr = h('tr', { class: opts.rowClass ? opts.rowClass(r) : null });
       if (key) tr.dataset.key = key;
       for (const c of cols) {
         const td = h(c === cols[0] ? 'th' : 'td', {
-          class: [c.num && 'num', c.mono && 'mono', c.ell && `ell ell-${c.ell}`, c.wrap && 'wrap', c.cls],
+          class: [c.num && 'num', c.mono && 'mono', c.ell && `ell ell-${c.ell}`, c.wrap && 'wrap', c.cls, c.key === 'actions' && 'actions', ...sizeCls(c)],
         });
         if (c === cols[0]) td.setAttribute('scope', 'row');
         fillCell(c, r, td);
@@ -297,9 +332,10 @@ export function fillKv(tbody, rows, spark) {
     if (!r) continue;
     const th = h('th', { scope: 'row' }, r.label);
     const td = h('td', { class: [r.level && `lv-${r.level}`, r.mono && 'mono'] });
+    if (r.level === 'warn' || r.level === 'bad') td.append(h('span', { class: ['dot', r.level], 'aria-hidden': 'true' }));
     if (typeof r.value === 'function') r.value(td);
     else if (r.value instanceof Node) td.append(r.value);
-    else td.textContent = r.value == null ? '—' : String(r.value);
+    else td.append(r.value == null ? '—' : String(r.value));
     if (r.title) td.title = r.title;
     const tr = h('tr', null, th, td);
     if (spark) tr.append(h('td', { class: 'sparkcell' }, r.spark || ''));

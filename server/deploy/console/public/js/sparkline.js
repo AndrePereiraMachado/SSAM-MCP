@@ -1,4 +1,4 @@
-// Inline sparkline (DESIGN.md 6.7): SVG 72x16 inside a table cell only, polyline stroke --spark 1.25 px, no fill,
+// Inline sparkline (DESIGN.md 6.7): SVG 72x16 inside a table cell (or larger in a card, SPEC painel v2 3.5), polyline stroke --spark 1.25 px, no fill,
 // round joins, the last point a 2 px dot; an all-zero series is a flat --line-strong line. role="img" + aria-label.
 // The point math is pure (sparkPoints, sparkLabel) and unit-tested.
 
@@ -51,14 +51,18 @@ export function sparkLabel(prefix, values, { fmt = fmtInt, lastLabel = 'hoje', s
 
 export const fmtSparkDecimal = (v) => fmtNumMax1(v);
 
-/** SVG element for a table cell. */
-export function sparkline(values, label) {
-  const { points, flat } = sparkPoints(values);
+/**
+ * SVG element of a sparkline. Defaults: the 72 x 16 table cell (polyline --spark, 1 px end dot). opts {w, h, area}: a card
+ * sparkline (SPEC painel v2 3.5) with the series-1 line, a 12 % area wash under it (no gaps) and a 3 px end dot.
+ */
+export function sparkline(values, label, { w = SPARK_W, h = SPARK_H, area = false } = {}) {
+  const { points, flat } = sparkPoints(values, w, h);
   const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('class', flat ? 'spark flat' : 'spark');
-  svg.setAttribute('width', String(SPARK_W));
-  svg.setAttribute('height', String(SPARK_H));
-  svg.setAttribute('viewBox', `0 0 ${SPARK_W} ${SPARK_H}`);
+  const cls = ['spark', area && 'lg', flat && 'flat'].filter(Boolean).join(' ');
+  svg.setAttribute('class', cls);
+  svg.setAttribute('width', String(w));
+  svg.setAttribute('height', String(h));
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
   svg.setAttribute('role', 'img');
   svg.setAttribute('aria-label', label);
   svg.setAttribute('focusable', 'false');
@@ -66,8 +70,15 @@ export function sparkline(values, label) {
   title.textContent = label;
   svg.append(title);
   if (points.length) {
+    const pts = points.length === 1 ? [[PAD, points[0][1]], [w - PAD, points[0][1]]] : points;
+    const n = Array.isArray(values) ? values.length : 0;
+    if (area && pts.length > 1 && points.length === n) {
+      const a = document.createElementNS(NS, 'path');
+      a.setAttribute('class', 'sp-area');
+      a.setAttribute('d', `M${pts.map((p) => p.join(' ')).join('L')}L${pts[pts.length - 1][0]} ${h}L${pts[0][0]} ${h}Z`);
+      svg.append(a);
+    }
     const line = document.createElementNS(NS, 'polyline');
-    const pts = points.length === 1 ? [[PAD, points[0][1]], [SPARK_W - PAD, points[0][1]]] : points;
     line.setAttribute('points', pts.map((p) => p.join(',')).join(' '));
     svg.append(line);
     if (!flat) {
@@ -75,7 +86,7 @@ export function sparkline(values, label) {
       const c = document.createElementNS(NS, 'circle');
       c.setAttribute('cx', String(x));
       c.setAttribute('cy', String(y));
-      c.setAttribute('r', '1');
+      c.setAttribute('r', area ? '3' : '1');
       svg.append(c);
     }
   }

@@ -1,11 +1,16 @@
-// Boot of the owner console (DESIGN.md 6.2, 6.3, 6.8, 6.9; the Qualidade tab of DESIGN-QUALIDADE 4.5, shortcut 4): key from #k=, hash routes, status line, tabs,
-// polling per view (paused while the document is hidden, backoff on errors), theme, keyboard shortcuts, notices.
+// Boot of the owner console (DESIGN.md 6.2, 6.3, 6.8, 6.9; the Qualidade tab of DESIGN-QUALIDADE 4.5, shortcut 4; the
+// v2 shell of SPEC painel v2 section 2): key from #k=, hash routes, the left sidebar (icons, counts, alert dots), the
+// top bar (server, image, warm, collector, indexing), polling per view (paused while the document is hidden, backoff
+// on errors), theme (dark by default), keyboard shortcuts, toasts.
 
 import { api, initKey, getKey, on, clock, store } from './api.js';
 import { VIEWS, SERVER_WORD, WARM_WORD } from './labels.js';
 import * as F from './format.js';
-import { h, clear, dot, joinDots, textButton } from './dom.js';
+import { h, clear, dot, iconButton, iconChip } from './dom.js';
+import { icon } from './icons.js';
+import { meter } from './charts.js';
 import { createDialogs } from './dialogs.js';
+import { viewAlertLevels } from './views/common.js';
 import createVisao from './views/visao.js';
 import createLicencas from './views/licencas.js';
 import createUso from './views/uso.js';
@@ -18,10 +23,11 @@ import createHistorico from './views/historico.js';
 const $ = (id) => document.getElementById(id);
 const THEME_KEY = 'ssam-console-theme';
 const THEMES = [
-  { id: 'auto', label: 'automático' },
-  { id: 'light', label: 'claro' },
-  { id: 'dark', label: 'escuro' },
+  { id: 'auto', label: 'automático', icon: 'theme-auto' },
+  { id: 'light', label: 'claro', icon: 'sun' },
+  { id: 'dark', label: 'escuro', icon: 'moon' },
 ];
+const DEFAULT_THEME = 'dark';
 
 const state = {
   current: null,
@@ -37,14 +43,14 @@ const state = {
   rerunView: false,
 };
 
-// ---------------------------------------------------------------- theme
+// ---------------------------------------------------------------- theme (dark unless the owner chose another)
 
 function readTheme() {
   try {
     const v = localStorage.getItem(THEME_KEY);
-    return THEMES.some((t) => t.id === v) ? v : 'auto';
+    return THEMES.some((t) => t.id === v) ? v : DEFAULT_THEME;
   } catch {
-    return 'auto';
+    return DEFAULT_THEME;
   }
 }
 
@@ -52,17 +58,20 @@ function applyTheme(id) {
   const root = document.documentElement;
   if (id === 'auto') root.removeAttribute('data-theme');
   else root.setAttribute('data-theme', id);
-  const t = THEMES.find((x) => x.id === id) || THEMES[0];
-  $('btn-theme').textContent = `Tema: ${t.label}`;
+  const t = THEMES.find((x) => x.id === id) || THEMES[2];
+  const btn = $('btn-theme');
+  clear(btn);
+  btn.append(icon(t.icon, 18));
+  btn.setAttribute('aria-label', `Tema: ${t.label}`);
+  btn.title = `Tema: ${t.label}`;
 }
 
 function cycleTheme() {
-  const cur = readTheme();
+  const cur = themeOverride || readTheme();
   const idx = THEMES.findIndex((t) => t.id === cur);
   const next = THEMES[(idx + 1) % THEMES.length].id;
   try {
-    if (next === 'auto') localStorage.removeItem(THEME_KEY);
-    else localStorage.setItem(THEME_KEY, next);
+    localStorage.setItem(THEME_KEY, next);
   } catch {
     /* storage blocked: the theme holds for this page only */
   }
@@ -71,45 +80,53 @@ function cycleTheme() {
 }
 let themeOverride = null;
 
-// ---------------------------------------------------------------- notices (6.9)
+// ---------------------------------------------------------------- toasts (6.9, SPEC 2.5)
 
 const noticeTimers = new WeakMap();
+const TOAST_ICON = { ok: 'check-circle', warn: 'alert-triangle', bad: 'alert-octagon', info: 'info' };
 
 function noticeFor(section) {
-  let p = section.querySelector(':scope > .notice');
+  let p = section.querySelector(':scope > .toast');
   if (!p) {
-    p = h('p', { class: 'notice', role: 'status', tabindex: '-1', hidden: true });
+    p = h('div', { class: 'toast', role: 'status', tabindex: '-1', hidden: true });
     section.prepend(p);
   }
   return p;
 }
 
-/** One text line at the top of the active view: dot + sentence + Fechar. Errors stay; others hide after 15 s. */
+/** One toast per view, bottom right: icon + sentence + Fechar. Errors stay; others hide after 15 s. */
 function notify(text, level = 'ok', { focus = true } = {}) {
   const view = state.current ? views[state.current] : null;
   const section = view ? view.section : $('view-visao');
   const p = noticeFor(section);
   clear(p);
-  const close = textButton('Fechar', () => {
-    p.hidden = true;
-  });
-  p.append(dot(level), h('span', { class: 'ntext' }, text), ' ', close);
-  p.classList.toggle('is-error', level === 'bad');
+  const lv = TOAST_ICON[level] ? level : 'info';
+  p.append(iconChip(TOAST_ICON[lv], lv, 16, 'toast-icon'), h('p', { class: 'toast-text' }, text),
+    iconButton('x', 'Fechar', () => {
+      p.hidden = true;
+    }, { class: 'btn-sm toast-close' }));
+  p.className = `toast toast-${lv}${level === 'bad' ? ' is-error' : ''}`;
   p.hidden = false;
   clearTimeout(noticeTimers.get(p));
   if (level !== 'bad') noticeTimers.set(p, setTimeout(() => { p.hidden = true; }, 15000));
-  if (focus) p.focus({ preventScroll: false });
+  if (focus) p.focus({ preventScroll: true });
 }
 
-// ---------------------------------------------------------------- status line (6.3)
+// ---------------------------------------------------------------- top bar (6.3, SPEC 2.3)
 
-function alertsText(a) {
-  if (!a) return null;
-  const n = (a.critical || 0) + (a.warning || 0) + (a.info || 0);
-  if (!n) return 'sem alertas';
-  const base = F.plural(n, 'alerta', 'alertas');
-  if (!a.critical) return base;
-  return `${base} (${F.plural(a.critical, 'crítico', 'críticos')})`;
+const WARM_LEVEL = { warm: 'plain', partial: 'warn', warming: 'warn', cold: 'warn', unknown: 'muted' };
+
+function collectorItem(col, now) {
+  if (col.state === 'fresh' && col.collectedAt) {
+    const rel = F.fmtRelative(col.collectedAt, now);
+    return h('span', { class: 'tb-col', title: F.fmtTitle(col.collectedAt) }, icon('radar', 16), rel === 'agora' ? 'coletado agora' : `coletado ${rel}`);
+  }
+  if (col.state === 'stale') {
+    return h('span', { class: 'tb-col lv-warn strong', title: col.collectedAt ? F.fmtTitle(col.collectedAt) : '' }, icon('radar', 16), 'coletor parado');
+  }
+  if (col.state === 'missing') return h('span', { class: 'tb-col lv-bad strong' }, icon('radar', 16), 'coletor ausente');
+  if (col.state === 'invalid') return h('span', { class: 'tb-col lv-warn strong' }, icon('radar', 16), 'coletor em formato desconhecido');
+  return null;
 }
 
 function renderFacts() {
@@ -123,59 +140,76 @@ function renderFacts() {
   const now = clock.now();
   const srv = st.server || {};
   const sw = SERVER_WORD[srv.state] || SERVER_WORD.unknown;
-  let serverTxt = `Servidor ${sw.word}`;
-  if (srv.state === 'up' && srv.since) serverTxt += ` há ${F.fmtDuration(now - F.toMs(srv.since))}`;
-  const items = [h('span', { class: 'st' }, dot(sw.level), serverTxt)];
-  if (srv.imageTag) items.push(h('span', { class: 'mono' }, srv.imageTag));
-  items.push(WARM_WORD[srv.warm] || WARM_WORD.unknown);
-  items.push(F.plural(st.sessionsOpen ?? 0, 'sessão', 'sessões'));
-  items.push(F.plural(st.agentsConnected ?? 0, 'agente', 'agentes'));
-  const act = st.licenses?.active ?? 0;
-  items.push(act === 1 ? '1 licença ativa' : `${F.fmtInt(act)} licenças ativas`);
-  const at = alertsText(st.alerts);
-  if (at) items.push(st.alerts?.critical ? h('span', { class: 'lv-bad' }, at) : at);
-  const col = st.collector || {};
-  if (col.state === 'fresh' && col.collectedAt) {
-    const rel = F.fmtRelative(col.collectedAt, now);
-    items.push(h('span', { title: F.fmtTitle(col.collectedAt) }, rel === 'agora' ? 'coletado agora' : `coletado ${rel}`));
-  } else if (col.state === 'stale') {
-    items.push(h('span', { class: 'lv-warn', title: col.collectedAt ? F.fmtTitle(col.collectedAt) : '' }, 'coletor parado'));
-  } else if (col.state === 'missing') {
-    items.push(h('span', { class: 'lv-bad' }, 'coletor ausente'));
-  } else if (col.state === 'invalid') {
-    items.push(h('span', { class: 'lv-warn' }, 'coletor em formato desconhecido'));
+  const warmWord = WARM_WORD[srv.warm] || WARM_WORD.unknown;
+  const pill = h('span', { class: ['srv-pill', `pill-${sw.level}`] }, dot(sw.level), h('span', { class: 'srv-k' }, 'Servidor'), ' ',
+    h('span', { class: 'srv-w' }, sw.word));
+  const pillTitle = [];
+  if (srv.state === 'up' && srv.since) {
+    pill.append(h('span', { class: 'srv-since' }, ` · há ${F.fmtDuration(now - F.toMs(srv.since))}`));
+    pillTitle.push(`no ar desde ${F.fmtTitle(srv.since)}`);
   }
-  if (state.lastOverviewOkAt) items.push(`atualizado às ${F.fmtTimeSec(state.lastOverviewOkAt)}`);
+  pillTitle.push(warmWord);
+  pill.title = pillTitle.join(' · ');
+  const items = [pill];
+  if (srv.imageTag) items.push(h('span', { class: 'tb-chip tb-image', title: 'Imagem do servidor' }, icon('server', 16), h('span', { class: 'mono' }, srv.imageTag)));
+  const wl = WARM_LEVEL[srv.warm] || 'muted';
+  items.push(h('span', { class: ['tb-chip', 'tb-warm', `w-${wl}`], title: srv.warmDetail || warmWord }, icon('bolt', 16), warmWord));
+  items.push(h('span', { class: 'tb-spacer' }));
+  const ci = collectorItem(st.collector || {}, now);
+  if (ci) items.push(ci);
   const idx = store.meta?.indexing || ov.indexing;
   if (idx && idx.state === 'running') {
-    items.push(`indexando histórico: ${Math.round((idx.progress || 0) * 100)}%`);
+    const pct = Math.round((Number(idx.progress) || 0) * 100);
+    const m = meter({ label: 'Indexação do histórico', fraction: Number(idx.progress) || 0, level: 'accent', mini: true, valueText: `${pct}%` });
+    items.push(h('span', { class: 'tb-idx' }, 'indexando histórico', m.el, h('span', { class: 'tnum' }, `${pct}%`)));
   }
+  if (state.lastOverviewOkAt) items.push(h('span', { class: 'tb-upd' }, `atualizado às ${F.fmtTimeSec(state.lastOverviewOkAt)}`));
+  $('btn-refresh').title = state.lastOverviewOkAt ? `Atualizar agora (r). Atualizado às ${F.fmtTimeSec(state.lastOverviewOkAt)}.` : 'Atualizar agora (r)';
   clear(facts);
-  facts.append(...joinDots(items));
+  facts.append(...items);
 }
 
+// ---------------------------------------------------------------- sidebar counts and alert dots (SPEC 2.2)
+
 function renderTabCounts() {
-  const st = store.overview?.status;
-  const set = (id, text, critical) => {
-    const tab = $(`tab-${id}`);
-    const c = tab.querySelector('.tcount');
-    c.textContent = text ? ` (${text})` : '';
-    let d = tab.querySelector('.dot');
-    if (critical && !d) {
-      d = dot('bad');
-      tab.prepend(d);
-      tab.append(h('span', { class: 'sr-only' }, ', com alerta crítico'));
-    } else if (!critical && d) {
-      d.remove();
-      tab.querySelector('.sr-only')?.remove();
-    }
-  };
+  const ov = store.overview;
+  const st = ov?.status;
   if (!st) return;
   const a = st.alerts || {};
   const unacked = (a.critical || 0) + (a.warning || 0) + (a.info || 0);
-  set('visao', unacked ? String(unacked) : '', (a.critical || 0) > 0);
-  set('licencas', String(st.licenses?.active ?? 0), false);
-  set('agentes', `${st.agentsConnected ?? 0}/${st.sessionsOpen ?? 0}`, false);
+  const levels = viewAlertLevels(ov.alerts);
+  const active = st.licenses?.active ?? 0;
+  const agents = st.agentsConnected ?? 0;
+  const sessions = st.sessionsOpen ?? 0;
+  for (const v of VIEWS) {
+    const tab = $(`tab-${v.id}`);
+    let count = '';
+    let countLevel = 'neutral';
+    let countSr = '';
+    if (v.id === 'visao' && unacked) {
+      count = F.fmtInt(unacked);
+      countLevel = a.critical ? 'bad' : a.warning ? 'warn' : 'neutral';
+      countSr = `${F.plural(unacked, 'alerta aberto', 'alertas abertos')}${a.critical ? `, ${F.plural(a.critical, 'crítico', 'críticos')}` : ''}`;
+    } else if (v.id === 'licencas') {
+      count = F.fmtInt(active);
+      countSr = active === 1 ? '1 licença ativa' : `${F.fmtInt(active)} licenças ativas`;
+    } else if (v.id === 'agentes') {
+      count = `${F.fmtInt(agents)}/${F.fmtInt(sessions)}`;
+      countSr = `${F.plural(agents, 'agente conectado', 'agentes conectados')}, ${F.plural(sessions, 'sessão aberta', 'sessões abertas')}`;
+    }
+    const tc = tab.querySelector('.tcount');
+    tc.textContent = count;
+    tc.className = `tcount c-${countLevel}`;
+    tc.hidden = !count;
+    const al = v.id === 'visao' ? null : levels[v.id];
+    const dotLevel = al && (al.level === 'bad' || al.level === 'warn') ? al.level : null;
+    const td = tab.querySelector('.tdot');
+    td.className = `tdot${dotLevel ? ` lv-${dotLevel}` : ''}`;
+    td.hidden = !dotLevel;
+    const dotSr = dotLevel ? `${F.plural(al.count, 'alerta', 'alertas')}${al.critical ? ` (${F.plural(al.critical, 'crítico', 'críticos')})` : ''}` : '';
+    tab.querySelector('.tsr').textContent = [countSr, dotSr].filter(Boolean).map((x) => `, ${x}`).join('');
+    tab.title = [v.label, countSr, dotSr].filter(Boolean).join(' · ');
+  }
   const widths = $('tabs').textContent;
   if (widths !== lastTabText) {
     lastTabText = widths;
@@ -184,11 +218,19 @@ function renderTabCounts() {
 }
 let lastTabText = '';
 
+function renderMetaBits() {
+  const m = store.meta;
+  if (!m) return;
+  $('brand-host').textContent = m.publicHost || '';
+  $('side-ver').textContent = m.console?.version ? `Painel v${m.console.version}` : '';
+}
+
 function showConnLost() {
   if (!state.connLostAt) state.connLostAt = clock.now();
   const conn = $('conn');
   clear(conn);
-  conn.append(dot('bad'), `Sem conexão com o painel desde ${F.fmtTimeSec(state.connLostAt)}. O túnel SSH caiu? Rode painel-ssam.ps1 de novo.`);
+  conn.append(icon('alert-octagon', 18), h('span', null,
+    `Sem conexão com o painel desde ${F.fmtTimeSec(state.connLostAt)}. O túnel SSH caiu? Rode painel-ssam.ps1 de novo.`));
   conn.hidden = false;
   $('facts').hidden = true;
 }
@@ -200,29 +242,28 @@ function clearConnLost() {
   $('facts').hidden = false;
 }
 
-function showFatal(text) {
+/** The centered card that replaces the whole page (SPEC 2.7): no key (warn) or a refused key (bad). */
+function fatalCard(level, text) {
   state.dead = true;
-  stopTimers();
-  $('top').hidden = true;
-  $('main').hidden = true;
+  $('app').hidden = true;
   const dlg = $('dlg');
   if (dlg.open) dlg.close();
   const f = $('fatal');
   clear(f);
-  f.append(h('p', null, text));
+  f.append(h('div', { class: 'fatal-card' },
+    h('div', { class: 'fatal-brand' }, h('span', { class: 'brand-mark lg', 'aria-hidden': 'true' }, icon('brand', 22)), h('p', { class: 'fatal-name' }, 'Painel SSAM')),
+    iconChip(level === 'bad' ? 'alert-octagon' : 'alert-triangle', level, 20, 'fatal-chip'),
+    h('p', { class: 'fatal-text' }, text)));
   f.hidden = false;
 }
 
+function showFatal(text) {
+  stopTimers();
+  fatalCard('bad', text);
+}
+
 function showNoKey() {
-  state.dead = true;
-  const conn = $('conn');
-  clear(conn);
-  conn.append(dot('warn'), 'Abra o painel pelo painel-ssam.ps1: ele cria o túnel e a chave desta sessão.');
-  conn.hidden = false;
-  $('facts').hidden = true;
-  $('hbtns').hidden = true;
-  $('tabs').hidden = true;
-  $('main').hidden = true;
+  fatalCard('warn', 'Abra o painel pelo painel-ssam.ps1: ele cria o túnel e a chave desta sessão.');
 }
 
 // ---------------------------------------------------------------- data shared by the status line
@@ -248,6 +289,7 @@ async function refreshMeta() {
   state.inflight.meta = true;
   try {
     store.meta = await api.meta();
+    renderMetaBits();
     renderFacts();
     return store.meta;
   } finally {
@@ -429,6 +471,7 @@ function route() {
     for (const v of VIEWS) views[v.id].section.hidden = v.id !== id;
     state.current = id;
     setActiveTab(id);
+    if (prev) window.scrollTo(0, 0);
   }
   state.failures.view = 0;
   if (views[id].show) views[id].show(params);
@@ -472,8 +515,8 @@ function onTabsKey(e) {
   const i = tabs.indexOf(document.activeElement);
   if (i < 0) return;
   let j = null;
-  if (e.key === 'ArrowRight') j = (i + 1) % tabs.length;
-  else if (e.key === 'ArrowLeft') j = (i - 1 + tabs.length) % tabs.length;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowRight') j = (i + 1) % tabs.length;
+  else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') j = (i - 1 + tabs.length) % tabs.length;
   else if (e.key === 'Home') j = 0;
   else if (e.key === 'End') j = tabs.length - 1;
   else if (e.key === 'Enter' || e.key === ' ') {
@@ -520,7 +563,18 @@ const ctx = {
   },
 };
 
+const VIEW_ICON = { visao: 'visao', licencas: 'licencas', uso: 'uso', qualidade: 'qualidade', agentes: 'agentes', vps: 'vps', eventos: 'eventos', historico: 'historico' };
+
+/** Icons of the shell, from icons.js (nothing inline in the HTML). */
+function paintShellIcons() {
+  $('brand-mark').append(icon('brand', 18));
+  for (const v of VIEWS) $(`tab-${v.id}`).querySelector('.ticon').append(icon(VIEW_ICON[v.id], 20));
+  $('btn-keys').querySelector('.ticon').append(icon('keyboard', 20));
+  $('btn-refresh').prepend(icon('refresh', 16));
+}
+
 function boot() {
+  paintShellIcons();
   applyTheme(readTheme());
   try {
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(themeOverride || readTheme()));
@@ -541,13 +595,17 @@ function boot() {
   on('auth', () => showFatal('Chave de acesso inválida ou trocada (o painel reiniciou ou outra sessão abriu). Feche esta aba e rode painel-ssam.ps1.'));
 
   dialogs = createDialogs(ctx);
+  $('btn-keys').addEventListener('click', (e) => dialogs.shortcuts(e.currentTarget));
   const makers = {
     visao: createVisao, licencas: createLicencas, uso: createUso, qualidade: createQualidade, agentes: createAgentes, vps: createVps,
     eventos: createEventos, historico: createHistorico,
   };
   for (const v of VIEWS) {
     const section = $(`view-${v.id}`);
-    views[v.id] = makers[v.id](ctx, section);
+    // The view body is the container of the card grid's queries; toasts stay outside it (fixed to the window).
+    const body = h('div', { class: 'vbody' });
+    section.append(body);
+    views[v.id] = makers[v.id](ctx, body);
     views[v.id].section = section;
   }
 

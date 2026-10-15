@@ -3,7 +3,8 @@
 // Esc = Cancelar, except while sending and while the one-time secret panel (secret.js) is open.
 
 import * as F from './format.js';
-import { h, clear, dot, button } from './dom.js';
+import { h, clear, dot, button, iconChip } from './dom.js';
+import { icon } from './icons.js';
 import { kvTable } from './table.js';
 import { openSecretPanel } from './secret.js';
 
@@ -117,8 +118,11 @@ export function createDialogs(ctx) {
     closeDlg();
   }
 
-  /** Builds one dialog screen: title, body nodes, error line, buttons. Returns parts. */
-  function screen({ title, body, actionLabel, actionKind = 'primary', cancelLabel = 'Cancelar', onSubmit, wide }) {
+  /**
+   * Builds one dialog screen: title row (icon chip + title), body nodes, error line, button bar. Returns parts.
+   * icon / level: the title chip (SPEC painel v2 3.12), accent unless the action is destructive.
+   */
+  function screen({ title, icon: ic, level = 'accent', body, actionLabel, actionKind = 'primary', cancelLabel = 'Cancelar', onSubmit, wide }) {
     clear(dlg);
     dlg.className = wide ? 'wide' : '';
     const titleEl = h('h2', { id: 'dlg-title' }, title);
@@ -126,7 +130,8 @@ export function createDialogs(ctx) {
     const cancel = button(cancelLabel, () => closeDlg(), '', { class: 'dlg-cancel' });
     const action = actionLabel ? h('button', { type: 'submit', class: ['btn', `btn-${actionKind}`] }, actionLabel) : null;
     const form = h('form', { class: 'dlg-form', novalidate: true },
-      titleEl, h('div', { class: 'dlg-body' }, body), err, h('div', { class: 'dlg-buttons' }, cancel, action));
+      h('div', { class: 'dlg-title-row' }, ic ? iconChip(ic, level, 20) : null, titleEl),
+      h('div', { class: 'dlg-body' }, body), err, h('div', { class: 'dlg-buttons' }, cancel, action));
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (action && !action.disabled && onSubmit) onSubmit();
@@ -136,7 +141,7 @@ export function createDialogs(ctx) {
       form, err, cancel, action,
       showError(text) {
         clear(err);
-        err.append(dot('bad'), text);
+        err.append(icon('alert-octagon', 16), h('span', null, text));
         err.hidden = false;
       },
       clearError() {
@@ -175,7 +180,7 @@ export function createDialogs(ctx) {
   }
 
   /** The confirmation step shared by every license action. */
-  function confirmScreen({ title, rows, texts = [], customer, actionLabel, actionKind = 'primary', send, back }) {
+  function confirmScreen({ title, icon: ic, level, rows, texts = [], customer, actionLabel, actionKind = 'primary', send, back }) {
     const inputId = nextId('confirm');
     const input = h('input', { type: 'text', id: inputId, class: 'ctl wide', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off' });
     const body = [];
@@ -188,7 +193,7 @@ export function createDialogs(ctx) {
       'Para confirmar, digite o nome do cliente: ', h('span', { class: 'strong' }, customer)));
     body.push(input);
     const sc = screen({
-      title, body, actionLabel, actionKind,
+      title, icon: ic, level, body, actionLabel, actionKind,
       cancelLabel: 'Cancelar',
       onSubmit: async () => {
         if (!confirmMatches(input.value, customer)) return;
@@ -279,7 +284,7 @@ export function createDialogs(ctx) {
       nameErr.hidden = true;
     });
     const sc = screen({
-      title: 'Emitir licença', body, actionLabel: 'Continuar',
+      title: 'Emitir licença', icon: 'plus', body, actionLabel: 'Continuar',
       onSubmit: () => {
         sc.clearError();
         const customer = name.value.trim();
@@ -318,6 +323,7 @@ export function createDialogs(ctx) {
     const exp = req.days == null ? 'sem validade' : `até ${F.fmtDate(now + req.days * F.DAY)}, ${F.fmtTime(now + req.days * F.DAY)}`;
     confirmScreen({
       title: 'Emitir licença',
+      icon: 'plus',
       rows: [
         { label: 'Cliente', value: req.customer },
         { label: 'Validade', value: exp },
@@ -384,6 +390,7 @@ export function createDialogs(ctx) {
     paint();
     const sc = screen({
       title: `Renovar a licença de ${lic.customer}`,
+      icon: 'calendar-plus',
       body: [h('p', { class: 'dlg-text' }, `Validade atual: ${current}`), group.el, live],
       actionLabel: 'Continuar',
       onSubmit: () => {
@@ -405,6 +412,7 @@ export function createDialogs(ctx) {
     const next = renewedExpiry(lic.expiresAt, days, now);
     confirmScreen({
       title: `Renovar a licença de ${lic.customer}`,
+      icon: 'calendar-plus',
       rows: [
         { label: 'Cliente', value: lic.customer },
         { label: 'Validade atual', value: F.fmtValidity(lic, now).text },
@@ -439,6 +447,7 @@ export function createDialogs(ctx) {
     const same = h('p', { class: 'muted dlg-text', 'aria-live': 'polite' });
     const sc = screen({
       title: `Faixas de ${lic.customer}`,
+      icon: 'layers',
       body: [h('p', { class: 'dlg-text' }, `Faixas atuais: ${F.fmtLanes(lic.lanes)}`), group.el, same],
       actionLabel: 'Continuar',
       onSubmit: () => {
@@ -476,6 +485,7 @@ export function createDialogs(ctx) {
     }
     confirmScreen({
       title: `Faixas de ${lic.customer}`,
+      icon: 'layers',
       rows: [
         { label: 'Cliente', value: lic.customer },
         { label: 'Faixas', value: `${F.fmtLanes(lic.lanes)} → ${F.fmtLanes(next)}` },
@@ -506,6 +516,7 @@ export function createDialogs(ctx) {
     show(opener);
     confirmScreen({
       title: `Trocar a credencial do agente de ${lic.customer}`,
+      icon: 'key-rotate',
       texts: [{ text: 'A credencial atual deixa de valer agora e o canal do agente fecha em até 1 s. O cliente precisa rodar o setup do agente com a nova.' }],
       customer: lic.customer,
       actionLabel: 'Trocar credencial',
@@ -535,6 +546,8 @@ export function createDialogs(ctx) {
     const sess = n === 1 ? '1 sessão aberta' : `${F.fmtInt(n)} sessões abertas`;
     confirmScreen({
       title: `Revogar a licença de ${lic.customer}`,
+      icon: 'ban',
+      level: 'bad',
       texts: [{
         level: 'bad',
         text: `Revogar é definitivo. O token e a credencial do agente param na hora (403); ${sess} e o canal do agente fecham em até 1 s. O espaço de trabalho fica no disco (DEPLOY.md seção 11 explica o desligamento).`,
@@ -565,14 +578,14 @@ export function createDialogs(ctx) {
   function shortcuts(opener) {
     show(opener);
     const rows = [
-      { label: '1 a 8', value: 'troca de aba (Visão geral … Histórico)' },
-      { label: '/', value: 'vai para o filtro da aba' },
+      { label: '1 a 8', value: 'troca de seção (Visão geral … Histórico)' },
+      { label: '/', value: 'vai para o filtro da seção' },
       { label: 'r', value: 'atualiza agora' },
       { label: '?', value: 'mostra estes atalhos' },
-      { label: '← → Home End', value: 'movem entre as abas quando uma aba tem o foco' },
+      { label: '↑ ↓ ← → Home End', value: 'movem entre as seções do menu quando uma tem o foco' },
       { label: 'Esc', value: 'fecha a janela aberta (menos a dos segredos)' },
     ];
-    const sc = screen({ title: 'Atalhos do teclado', body: [kvTable(rows, { label: 'Atalhos', cls: 'dlg-kv' })], cancelLabel: 'Fechar' });
+    const sc = screen({ title: 'Atalhos do teclado', icon: 'keyboard', body: [kvTable(rows, { label: 'Atalhos', cls: 'dlg-kv' })], cancelLabel: 'Fechar' });
     sc.cancel.focus();
   }
 

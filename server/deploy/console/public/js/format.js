@@ -392,3 +392,40 @@ export function fmtPair(a, b, fmt = fmtInt) {
   if ((none(a) && none(b)) || (Number(a) === 0 && Number(b) === 0)) return DASH;
   return `${fmt(a)} / ${fmt(b)}`;
 }
+
+/**
+ * Licenses table `Validade` cell in two lines (SPEC painel v2 4.2): {main, sub, level, fraction}. main: `até 14/10/2026` ·
+ * `vence hoje` · `sem validade` · `venceu` · `revogada`; sub: `2 dias` · `às 18:00` · '' · `em 10/10/2026`; level ''
+ * | 'warn' | 'bad' (as fmtValidity); fraction: the remaining share of the term (0..1), null when there is no term.
+ */
+export function validityParts(lic, now) {
+  if (!lic) return { main: DASH, sub: '', level: '', fraction: null };
+  if (lic.state === 'revoked') return { main: 'revogada', sub: lic.revokedAt ? `em ${fmtDate(lic.revokedAt)}` : '', level: '', fraction: null };
+  if (lic.expiresAt == null) return { main: 'sem validade', sub: '', level: '', fraction: null };
+  const ms = toMs(lic.expiresAt);
+  if (!valid(ms)) return { main: DASH, sub: '', level: '', fraction: null };
+  if (lic.state === 'expired' || ms <= now) return { main: 'venceu', sub: `em ${fmtDate(ms)}`, level: 'warn', fraction: 0 };
+  const days = (ms - now) / DAY;
+  const level = days <= 2 ? 'bad' : days <= 7 ? 'warn' : '';
+  const start = toMs(lic.createdAt);
+  const fraction = valid(start) && ms > start ? Math.min(1, Math.max(0, (ms - now) / (ms - start))) : null;
+  if (sameLocalDay(ms, now)) return { main: 'vence hoje', sub: `às ${fmtTime(ms)}`, level, fraction };
+  return { main: `até ${fmtDate(ms)}`, sub: fmtDaysLeft(ms, now), level, fraction };
+}
+
+/**
+ * The two values of a p50 / p90 cell, stacked (SPEC painel v2 4.4): {dash, a, b, title}. dash when fmtPair gives a
+ * dash (both null or both 0); title is the one-line fmtPair text.
+ */
+export function pairParts(a, b, fmt = fmtInt) {
+  const title = fmtPair(a, b, fmt);
+  if (title === DASH) return { dash: true, a: DASH, b: '', title: DASH };
+  return { dash: false, a: fmt(a), b: fmt(b), title };
+}
+
+/** Age in seconds for the cards: `12 s` under a minute, the duration format above (`5 min 40 s`). */
+export function fmtAgeS(s) {
+  if (s == null || !Number.isFinite(Number(s))) return DASH;
+  const v = Math.max(0, Number(s));
+  return v < 60 ? `${nfInt.format(Math.floor(v))} s` : fmtDuration(v * 1000);
+}

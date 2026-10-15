@@ -4,7 +4,8 @@
 // back do nothing while it is open; leaving the page asks first. On close every node is removed and every
 // reference to the secret is dropped. The console never stores or re-sends these values.
 
-import { h, clear, button, textButton } from './dom.js';
+import { h, clear, button, textButton, iconChip } from './dom.js';
+import { icon } from './icons.js';
 import { slug } from './format.js';
 
 const MASK_TOKEN = 'ssam_\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
@@ -84,16 +85,17 @@ async function copyText(text, fallbackHost) {
 }
 
 function copyButton(label, getText, host) {
-  const b = button(label, async () => {
+  const text = h('span', null, label);
+  const b = button(text, async () => {
     const ok = await copyText(getText(), host);
     const was = b.dataset.label || label;
     b.dataset.label = was;
-    b.textContent = ok ? 'Copiado' : 'N\u00e3o copiou';
+    text.textContent = ok ? 'Copiado' : 'N\u00e3o copiou';
     clearTimeout(Number(b.dataset.t || 0));
     b.dataset.t = String(setTimeout(() => {
-      if (b.isConnected) b.textContent = was;
+      if (b.isConnected) text.textContent = was;
     }, 2000));
-  }, '', { class: 'btn-copy' });
+  }, '', { class: 'btn-copy btn-sm', icon: 'copy' });
   return b;
 }
 
@@ -134,8 +136,8 @@ export function openSecretPanel(dlg, p) {
   const valueCells = [];
   const preBlocks = [];
 
-  const title = h('h2', { id: 'dlg-title' }, `Segredos de ${data.customer} - guarde agora`);
-  const warn = h('p', { class: 'dlg-text lv-bad secret-warn' }, SECRET_WARNING);
+  const title = h('div', { class: 'dlg-title-row' }, iconChip('lock', 'warn', 20), h('h2', { id: 'dlg-title' }, `Segredos de ${data.customer} - guarde agora`));
+  const warn = h('p', { class: 'dlg-text secret-warn' }, icon('alert-octagon', 20), h('span', null, SECRET_WARNING));
 
   const tbody = h('tbody');
   const table = h('table', { class: 'grid secret-table', 'aria-label': 'Segredos' },
@@ -206,9 +208,10 @@ export function openSecretPanel(dlg, p) {
   });
 
   form.append(
-    title, warn, h('div', { class: 'table-wrap' }, table), blocksHead, blocksEl,
-    h('div', { class: 'dlg-buttons left' }, copyAll, download),
-    note, cbLabel,
+    title,
+    h('div', { class: 'dlg-body' }, warn, h('div', { class: 'table-wrap' }, table), blocksHead, blocksEl,
+      h('div', { class: 'dlg-buttons left' }, copyAll, download),
+      note, cbLabel),
     h('div', { class: 'dlg-buttons' }, close));
   dlg.append(form);
   if (!dlg.open) dlg.showModal();

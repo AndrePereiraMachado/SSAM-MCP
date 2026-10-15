@@ -3,7 +3,7 @@
 export const SEVERITY = {
   critical: { word: 'Crítico', level: 'bad', order: 0 },
   warning: { word: 'Atenção', level: 'warn', order: 1 },
-  info: { word: 'Info', level: 'muted', order: 2 },
+  info: { word: 'Info', level: 'info', order: 2 },
 };
 
 export const AREA = {

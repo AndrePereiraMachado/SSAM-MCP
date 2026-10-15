@@ -1,12 +1,15 @@
-// VPS (DESIGN.md 6.5): host, updates, security and SSAM server as key-value tables (sparklines of the last 24 h in
-// their own column), then containers, volumes, TLS certificates and backups. Polls every 10 s.
+// VPS (DESIGN.md 6.5, SPEC painel v2 4.6): KPI cards (CPU, memory and disk gauges, load, network, TLS, backup, updates,
+// collector), six line charts of the last 24 h, then host, updates, security and SSAM server as key-value lists (the
+// host's sparklines in their own column), containers, volumes, TLS certificates and backups. Polls every 10 s.
 
 import * as F from '../format.js';
-import { h, clear, dot, status, sectionHead } from '../dom.js';
+import { h, clear, status, pageHead, panel, inlineNotice, iconChip } from '../dom.js';
 import { createTable, kvTable } from '../table.js';
+import { createCards } from '../cards.js';
+import { meter, meterLevel, meterTicks, lines } from '../charts.js';
 import { sparkline, sparkLabel, fmtSparkDecimal } from '../sparkline.js';
 import { CONTAINER_STATE, HEALTH_WORD } from '../labels.js';
-import { errorMessage, staleText, muted } from './common.js';
+import { errorMessage, staleText } from './common.js';
 
 const okSection = (s) => s && s.ok !== false;
 const unavailable = (s) => `indisponível (${s?.error || 'sem dados'})`;
@@ -237,32 +240,202 @@ export function backupRows(b, now) {
   return rows;
 }
 
-function block(id, title, ...children) {
-  const head = sectionHead(title, { id });
-  return { head, el: h('div', { class: 'block', role: 'region', 'aria-labelledby': id }, head.el, ...children) };
+/** Memory used in % exactly as host.mjs computes memUsedPct (one decimal). */
+export function memUsedPct(mem) {
+  if (!mem || !mem.totalB) return null;
+  return Math.round((1 - (mem.availableB ?? 0) / mem.totalB) * 1000) / 10;
 }
+
+/** The fullest disk (highest usedPct), the one host.mjs reports as diskUsedPct. */
+export function fullestDisk(disks) {
+  return (Array.isArray(disks) ? disks : []).filter((d) => d && d.usedPct != null)
+    .reduce((best, d) => (!best || d.usedPct > best.usedPct ? d : best), null);
+}
+
+/** `Coletado às 23:51:00 em 2,4 s · coletor 1 · seções com erro: nenhuma.` (+ ` Coletor parado.`). */
+export function collectorLine(col) {
+  const c = col || {};
+  if (!c.collectedAt) return '';
+  const errs = Array.isArray(c.errors) ? c.errors : [];
+  const line = `Coletado às ${F.fmtTimeSec(c.collectedAt)} em ${F.fmtDuration(c.durationMs)} · coletor ${c.version ?? F.DASH} · seções com erro: ${errs.length ? errs.join(', ') : 'nenhuma'}.`;
+  return c.state === 'stale' ? `${line} Coletor parado.` : line;
+}
+
+const worstOf = (levels) => (levels.includes('bad') ? 'bad' : levels.includes('warn') ? 'warn' : 'ok');
+const pctGauge = (label, id, v, caption) => ({ label, value: v, max: 100, level: meterLevel(id, v), display: F.fmtPct(v), ticks: meterTicks(id), caption });
+const diskMeter = (caption, pct) => ({
+  kind: 'meter', label: caption, caption, fraction: pct == null ? null : pct / 100, level: meterLevel('disk', pct), ticks: meterTicks('disk'), valueText: F.fmtPct(pct),
+});
+
+/** The KPI cards of VPS (pure, from /api/vps). */
+export function kpis(d, now) {
+  const host = d?.host || {};
+  const hostOk = okSection(d?.host);
+  const cards = [];
+  if (!hostOk) {
+    cards.push({ id: 'recursos', label: 'Recursos', icon: 'cpu', span: 'w2', level: 'unknown', value: unavailable(d?.host), word: true, muted: true });
+  } else {
+    const cpu = host.cpu || {};
+    const mem = host.mem || {};
+    const mp = memUsedPct(mem);
+    const disk = fullestDisk(host.disks);
+    const items = [
+      pctGauge('CPU', 'cpu', cpu.pct ?? null, `iowait ${F.fmtPctFine(cpu.iowaitPct)} · steal ${F.fmtPctFine(cpu.stealPct)}`),
+      pctGauge('Memória', 'mem', mp, mem.totalB ? `${F.fmtBytes(mem.totalB - (mem.availableB ?? 0))} de ${F.fmtBytes(mem.totalB)}` : ''),
+      pctGauge(disk ? `Disco ${disk.mount}` : 'Disco', 'disk', disk ? disk.usedPct : null, disk ? `${F.fmtBytes(disk.usedB)} de ${F.fmtBytes(disk.sizeB)}` : ''),
+    ];
+    const meters = [];
+    for (const x of host.disks || []) if (x !== disk) meters.push(diskMeter(`Disco ${x.mount}`, x.usedPct));
+    for (const x of host.disks || []) meters.push(diskMeter(`inodes ${x.mount}`, x.inodesPct));
+    cards.push({
+      id: 'recursos', label: 'Recursos', icon: 'cpu', span: 'w2',
+      level: worstOf([...items.map((g) => g.level), ...meters.map((m) => m.level)]),
+      visual: { kind: 'gauges', items, meters },
+    });
+  }
+  const load = Array.isArray(host.load) ? host.load : [];
+  const ratio = load[0] != null && host.nproc ? load[0] / host.nproc : null;
+  cards.push(hostOk && load.length ? {
+    id: 'carga', label: 'Carga', icon: 'load', level: meterLevel('load', ratio) || 'ok', value: F.fmtNum2(load[0]), unit: '1 min',
+    context: `${F.fmtNum2(load[1])} · ${F.fmtNum2(load[2])} (${host.nproc ?? '?'} vCPU)`,
+    visual: ratio != null ? {
+      kind: 'meter', label: 'Carga por vCPU', caption: 'por vCPU (atenção a partir de 2)', fraction: ratio / 3, level: meterLevel('load', ratio),
+      ticks: meterTicks('load'), valueText: F.fmtNum2(ratio),
+    } : null,
+  } : { id: 'carga', label: 'Carga', icon: 'load', level: 'unknown', value: 'sem coleta', word: true, muted: true });
+  const net = host.net || {};
+  const rx = (d?.series?.points || []).map((p) => (p && p.rxBps != null ? p.rxBps : null));
+  cards.push(hostOk && net.rxBps != null ? {
+    id: 'rede', label: 'Rede', icon: 'network', level: 'ok', value: `↓ ${F.fmtRate(net.rxBps)}`,
+    context: [`↑ ${F.fmtRate(net.txBps)}`, net.iface].filter(Boolean).join(' · '),
+    visual: rx.filter((v) => v != null).length >= 2 ? { kind: 'spark', values: rx, label: sparkLabel('Rede, entrada', rx, { fmt: (v) => F.fmtRate(v), span: '24 h', lastLabel: 'agora' }) } : null,
+  } : { id: 'rede', label: 'Rede', icon: 'network', level: 'unknown', value: 'sem coleta', word: true, muted: true });
+
+  const certs = Array.isArray(d?.tls?.certs) ? d.tls.certs.filter((c) => c && c.daysLeft != null) : [];
+  const cert = certs.reduce((b, c) => (!b || c.daysLeft < b.daysLeft ? c : b), null);
+  if (!cert) cards.push({ id: 'tls', label: 'Certificado TLS', icon: 'lock', level: 'bad', value: 'nenhum', word: true, context: 'nenhum certificado no volume do Caddy' });
+  else {
+    const days = Number(cert.daysLeft);
+    const dd = Math.floor(days);
+    cards.push({
+      id: 'tls', label: 'Certificado TLS', icon: 'lock', level: meterLevel('tls', days), value: dd <= 0 && days <= 0 ? 'venceu' : F.fmtInt(dd), word: days <= 0,
+      unit: days <= 0 ? null : (dd === 1 ? 'dia' : 'dias'), context: `${cert.name} · até ${F.fmtDate(cert.notAfter)}`,
+      visual: {
+        kind: 'meter', label: 'Dias restantes do certificado', caption: 'dias restantes', fraction: Math.min(Math.max(days, 0), 90) / 90,
+        level: meterLevel('tls', days), ticks: meterTicks('tls'), valueText: F.plural(Math.max(0, dd), 'dia', 'dias'),
+      },
+    });
+  }
+
+  const b = d?.backups;
+  if (!okSection(b)) cards.push({ id: 'backup', label: 'Backup', icon: 'backup', level: 'unknown', value: 'indisponível', word: true, muted: true, context: `(${b?.error || 'sem dados'})` });
+  else if (!b.newest) cards.push({ id: 'backup', label: 'Backup', icon: 'backup', level: 'bad', value: 'nenhum', word: true, context: F.plural(b.count ?? 0, 'guardado', 'guardados') });
+  else {
+    const ageH = b.newest.ageH != null ? Number(b.newest.ageH) : (now - F.toMs(b.newest.mtime)) / F.HOUR;
+    cards.push({
+      id: 'backup', label: 'Backup', icon: 'backup', level: meterLevel('backup', ageH) || 'ok', value: F.fmtDuration(ageH * F.HOUR), unit: 'desde o último',
+      context: `${F.fmtBytes(b.newest.sizeB)} · ${F.plural(b.count ?? 0, 'guardado', 'guardados')}`,
+      visual: {
+        kind: 'meter', label: 'Idade do último backup', caption: 'idade (limite 26 h)', fraction: Math.min(ageH, 48) / 48, level: meterLevel('backup', ageH),
+        ticks: meterTicks('backup'), valueText: F.fmtDuration(ageH * F.HOUR),
+      },
+    });
+  }
+
+  const u = d?.updates;
+  if (!okSection(u)) cards.push({ id: 'updates', label: 'Atualizações', icon: 'update', level: 'unknown', value: 'indisponível', word: true, muted: true, context: `(${u?.error || 'sem dados'})` });
+  else {
+    cards.push({
+      id: 'updates', label: 'Atualizações', icon: 'update', level: (u.security ?? 0) > 0 || u.rebootRequired ? 'warn' : 'ok',
+      value: F.fmtInt(u.upgradable ?? 0), unit: (u.upgradable ?? 0) === 1 ? 'pacote' : 'pacotes',
+      context: `${F.fmtInt(u.security ?? 0)} de segurança · reinício pendente: ${u.rebootRequired ? 'sim' : 'não'}`,
+    });
+  }
+
+  const col = d?.collector || {};
+  if (col.ageS == null) cards.push({ id: 'coletor', label: 'Coletor', icon: 'radar', level: 'bad', value: 'sem coleta', word: true, muted: true });
+  else {
+    const errs = Array.isArray(col.errors) ? col.errors.length : 0;
+    cards.push({
+      id: 'coletor', label: 'Coletor', icon: 'radar', level: col.state === 'invalid' ? 'warn' : meterLevel('collector', col.ageS), value: F.fmtAgeS(col.ageS), unit: 'desde a coleta',
+      context: `em ${F.fmtDuration(col.durationMs)} · coletor ${col.version ?? F.DASH} · ${F.plural(errs, 'seção com erro', 'seções com erro')}`,
+      visual: {
+        kind: 'meter', label: 'Frescor da coleta', caption: 'frescor', fraction: Math.min(Number(col.ageS), 300) / 300, level: meterLevel('collector', col.ageS),
+        ticks: meterTicks('collector'), valueText: F.fmtAgeS(col.ageS),
+      },
+    });
+  }
+  return cards;
+}
+
+const CARD_DEFS = [
+  { id: 'recursos', label: 'Recursos', icon: 'cpu', span: 'w2' }, { id: 'carga', label: 'Carga', icon: 'load' }, { id: 'rede', label: 'Rede', icon: 'network' },
+  { id: 'tls', label: 'Certificado TLS', icon: 'lock' }, { id: 'backup', label: 'Backup', icon: 'backup' }, { id: 'updates', label: 'Atualizações', icon: 'update' },
+  { id: 'coletor', label: 'Coletor', icon: 'radar' },
+];
+
+/** x ticks of the 24 h charts: every 6 h of local time (00:00, 06:00, 12:00, 18:00). */
+function sixHours(t0, t1) {
+  const out = [];
+  for (let t = Math.ceil(t0 / F.HOUR) * F.HOUR; t <= t1; t += F.HOUR) {
+    const p = F.localParts(t);
+    if (p.h % 6 === 0 && p.mi === 0) out.push({ t, label: F.fmtTime(t) });
+  }
+  return out;
+}
+
+const SERIES_CHARTS = [
+  { id: 'cpu', title: 'CPU', series: [{ key: 'cpuPct', label: 'CPU', c: 's1' }], max: 100, fmt: (v) => `${F.fmtNumMax1(v)}%` },
+  { id: 'mem', title: 'Memória', series: [{ key: 'memUsedPct', label: 'Memória', c: 's1' }], max: 100, fmt: (v) => `${F.fmtNumMax1(v)}%` },
+  { id: 'load', title: 'Carga', series: [{ key: 'load1', label: 'Carga de 1 minuto', c: 's1' }], fmt: (v) => F.fmtNum2(v) },
+  { id: 'net', title: 'Rede', series: [{ key: 'rxBps', label: '↓ entrada', c: 's1' }, { key: 'txBps', label: '↑ saída', c: 's2' }], fmt: (v) => F.fmtRate(v), bytes: true },
+  { id: 'srvcpu', title: 'CPU do ssam-server', series: [{ key: 'srvCpuPct', label: 'CPU do ssam-server', c: 's1' }], fmt: (v) => `${F.fmtNumMax1(v)}%` },
+  { id: 'srvmem', title: 'Memória do ssam-server', series: [{ key: 'srvMemB', label: 'Memória do ssam-server', c: 's1' }], fmt: (v) => F.fmtBytes(v), bytes: true },
+];
 
 export default function createVps(ctx, section) {
   const { clock } = ctx;
   let lastOk = null;
 
-  const missing = h('div', { class: 'block', hidden: true },
-    h('div', { class: 'table-wrap' }, h('table', { class: 'grid notice-table' }, h('tbody', null, h('tr', { class: 'state' },
-      h('td', null, dot('bad'), 'O coletor da VPS não está instalado ou nunca rodou. Rode sh host/install.sh na VPS (DEPLOY.md seção 15).'))))));
+  const head = pageHead('t-vps', 'VPS');
+  const missing = h('section', { class: 'panel', 'aria-label': 'Coletor da VPS', hidden: true },
+    h('div', { class: 'empty-state' }, iconChip('alert-octagon', 'bad', 24),
+      h('p', null, 'O coletor da VPS não está instalado ou nunca rodou. Rode sh host/install.sh na VPS (DEPLOY.md seção 15).')));
+  const errLine = inlineNotice('bad', '');
+  errLine.el.hidden = true;
+  const cards = createCards('vps', CARD_DEFS);
 
-  const errLine = h('p', { class: 'errline', hidden: true });
-  const hostB = block('h-vps-host', 'Host');
-  const updB = block('h-vps-upd', 'Atualizações');
-  const secB = block('h-vps-sec', 'Segurança');
-  const srvB = block('h-vps-srv', 'Servidor SSAM');
+  // Últimas 24 h: six small line charts (their table twin is the Host list's spark column and the payload)
+  const lastDayP = panel('h-vps-24h', 'Últimas 24 h', { icon: 'clock' });
+  const grid = h('div', { class: 'minicharts' });
+  const charts = SERIES_CHARTS.map((c) => {
+    const ch = lines({
+      title: c.title, series: c.series, max: c.max, fmt: c.fmt, bytes: c.bytes, cls: 'flat', height: 96, xTicks: sixHours,
+      heading: (p) => F.fmtDayMonthTime(p.t), unitLabel: '',
+      aria: (pts) => sparkLabel(c.title, pts.map((p) => p.values[c.series[0].key]), { fmt: c.fmt, span: '24 h', lastLabel: 'agora' }),
+    });
+    const empty = h('p', { class: 'mc-empty', hidden: true }, 'sem dados nas últimas 24 h');
+    ch.el.querySelector('.ch-plot').append(empty);
+    grid.append(ch.el);
+    return { ...c, ch, empty };
+  });
+  lastDayP.el.append(grid);
 
-  const contHead = sectionHead('Containers', { id: 'h-vps-cont' });
+  const hostP = panel('h-vps-host', 'Host', { icon: 'vps' });
+  const srvP = panel('h-vps-srv', 'Servidor SSAM', { icon: 'server' });
+  const updP = panel('h-vps-upd', 'Atualizações', { icon: 'update' });
+  const secP = panel('h-vps-sec', 'Segurança', { icon: 'shield' });
+
+  const contP = panel('h-vps-cont', 'Containers', { icon: 'container' });
   let coolify = [];
   const contTable = createTable({
     label: 'Containers',
+    dense: true,
     columns: [
-      { key: 'service', label: 'Serviço', sort: (r) => r.service || r.name, text: (r) => r.service || r.name },
-      { key: 'name', label: 'Container', mono: true, ell: 'code', sort: (r) => r.name, text: (r) => r.name },
+      {
+        key: 'service', label: 'Serviço', subLabel: 'container', sort: (r) => r.service || r.name, text: (r) => r.service || r.name,
+        sub: (r) => h('span', { class: 'mono', title: r.name }, r.name),
+      },
       {
         key: 'state', label: 'Estado', sort: (r) => r.state,
         cell: (r, td) => {
@@ -271,7 +444,7 @@ export default function createVps(ctx, section) {
         },
       },
       {
-        key: 'health', label: 'Saúde', sort: (r) => r.health ?? null,
+        key: 'health', label: 'Saúde', cls: 'lvstrong', sort: (r) => r.health ?? null,
         text: (r) => HEALTH_WORD[r.health] || F.DASH, level: (r) => (r.health === 'unhealthy' ? 'bad' : ''),
         title: (r) => (r.failingStreak ? `${r.failingStreak} verificações seguidas com falha` : ''),
       },
@@ -290,13 +463,18 @@ export default function createVps(ctx, section) {
       },
       { key: 'cpuPct', label: 'CPU', num: true, sort: (r) => r.cpuPct ?? null, text: (r) => F.fmtPctFine(r.cpuPct) },
       {
-        key: 'memB', label: 'Memória', num: true, sort: (r) => r.memB ?? null,
+        key: 'memB', label: 'Memória', num: true, cls: 'lvstrong', sort: (r) => r.memB ?? null,
         text: (r) => (r.memB == null ? F.DASH : r.memLimitB ? `${F.fmtBytes(r.memB)} de ${F.fmtBytes(r.memLimitB)} (${F.fmtPct((r.memB / r.memLimitB) * 100)})` : F.fmtBytes(r.memB)),
         level: (r) => (r.memLimitB && r.memB / r.memLimitB >= 0.95 ? 'bad' : r.memLimitB && r.memB / r.memLimitB >= 0.85 ? 'warn' : ''),
+        sub: (r) => {
+          if (r.memB == null || !r.memLimitB) return null;
+          const p = (r.memB / r.memLimitB) * 100;
+          return meter({ label: `Memória de ${r.name}`, fraction: p / 100, level: meterLevel('containerMem', p), ticks: meterTicks('containerMem'), mini: true, cls: 'w48', valueText: F.fmtPct(p) }).el;
+        },
       },
       { key: 'net', label: 'Rede ↓/↑', num: true, sort: (r) => r.netRxB ?? null, text: (r) => `${F.fmtBytes(r.netRxB)} / ${F.fmtBytes(r.netTxB)}` },
       {
-        key: 'image', label: 'Imagem', mono: true, ell: 'code', sort: (r) => r.image,
+        key: 'image', label: 'Imagem', mono: true, flex: true, sort: (r) => r.image,
         text: (r) => (r.image ? imageTag(r.image) : F.DASH), title: (r) => r.image || '',
       },
     ],
@@ -309,80 +487,91 @@ export default function createVps(ctx, section) {
       for (const c of coolify) {
         const s = CONTAINER_STATE[c.state] || { word: c.state || F.DASH, level: 'muted' };
         tbody.append(h('tr', { dataset: { key: `coolify:${c.name}` } },
-          h('th', { scope: 'row' }, c.name),
-          h('td', { class: 'mono' }, c.name),
+          h('th', { scope: 'row' }, h('span', { class: 't1' }, c.name), h('span', { class: 't2 mono' }, c.name)),
           h('td', null, status(c.state === 'running' ? 'warn' : 'muted', s.word)),
-          h('td', { colspan: ncols - 3, class: 'muted' }, `Política de reinício: ${c.restartPolicy || F.DASH}`)));
+          h('td', { colspan: ncols - 2, class: 'muted' }, `Política de reinício: ${c.restartPolicy || F.DASH}`)));
       }
     },
   });
+  contP.el.append(contTable.el);
 
-  const volHead = sectionHead('Volumes', { id: 'h-vps-vol' });
+  const volP = panel('h-vps-vol', 'Volumes', { icon: 'disk' });
   let systemDf = null;
   const volTable = createTable({
     label: 'Volumes',
     columns: [
-      { key: 'name', label: 'Volume', mono: true, sort: (r) => r.name, text: (r) => r.name },
+      { key: 'name', label: 'Volume', mono: true, flex: true, sort: (r) => r.name, text: (r) => r.name },
       { key: 'sizeB', label: 'Tamanho', num: true, sort: (r) => r.sizeB ?? null, text: (r) => F.fmtBytes(r.sizeB) },
     ],
     rowKey: (r) => r.name,
     defaultSort: { key: 'name', dir: 'asc' },
     empty: 'Nenhum volume do projeto encontrado.',
-    footer(tfoot, ncols) {
-      if (!systemDf) return;
-      tfoot.append(h('tr', null, h('td', { colspan: ncols },
-        `Docker: imagens ${F.fmtBytes(systemDf.imagesB)} (${F.fmtBytes(systemDf.imagesReclaimableB)} recuperáveis) · volumes ${F.fmtBytes(systemDf.volumesB)}${systemDf.buildCacheB ? ` · cache de build ${F.fmtBytes(systemDf.buildCacheB)}` : ''}`)));
-    },
   });
+  const dockerLine = h('div', { class: 'panel-foot', hidden: true });
+  volP.el.append(volTable.el, dockerLine);
 
-  const tlsHead = sectionHead('Certificados TLS', { id: 'h-vps-tls' });
+  const tlsP = panel('h-vps-tls', 'Certificados TLS', { icon: 'lock' });
   const tlsTable = createTable({
     label: 'Certificados TLS',
     columns: [
       { key: 'name', label: 'Nome', sort: (r) => r.name, text: (r) => r.name },
-      { key: 'issuer', label: 'Emissor', ell: 'text', sort: (r) => r.issuer, text: (r) => r.issuer || F.DASH },
+      { key: 'issuer', label: 'Emissor', ell: 'text', flex: true, sort: (r) => r.issuer, text: (r) => r.issuer || F.DASH },
       { key: 'notBefore', label: 'Válido desde', sort: (r) => F.toMs(r.notBefore) || null, text: (r) => F.fmtDate(r.notBefore), title: (r) => F.fmtTitle(r.notBefore) },
       { key: 'notAfter', label: 'Válido até', sort: (r) => F.toMs(r.notAfter) || null, text: (r) => F.fmtDate(r.notAfter), title: (r) => F.fmtTitle(r.notAfter) },
       {
-        key: 'daysLeft', label: 'Dias restantes', num: true, sort: (r) => r.daysLeft ?? null,
+        key: 'daysLeft', label: 'Dias restantes', num: true, cls: 'lvstrong', sort: (r) => r.daysLeft ?? null,
         text: (r) => (r.daysLeft == null ? F.DASH : F.fmtInt(Math.floor(r.daysLeft))),
         level: (r) => (r.daysLeft == null ? '' : r.daysLeft < 7 ? 'bad' : r.daysLeft < 21 ? 'warn' : ''),
+        sub: (r) => (r.daysLeft == null ? null : meter({
+          label: `Dias restantes de ${r.name}`, fraction: Math.min(Math.max(r.daysLeft, 0), 90) / 90, level: meterLevel('tls', r.daysLeft),
+          ticks: meterTicks('tls'), mini: true, cls: 'w48', valueText: F.plural(Math.max(0, Math.floor(r.daysLeft)), 'dia', 'dias'),
+        }).el),
       },
     ],
     rowKey: (r) => r.name,
     defaultSort: { key: 'notAfter', dir: 'asc' },
     empty: (mk) => {
-      const tr = mk('Nenhum certificado encontrado no volume do Caddy.', 'empty');
-      tr.firstChild.prepend(dot('bad'));
+      const tr = mk('Nenhum certificado encontrado no volume do Caddy.', 'error');
+      tr.classList.remove('error');
+      tr.classList.add('empty');
       return tr;
     },
   });
+  tlsP.el.append(tlsTable.el);
 
-  const bkB = block('h-vps-bk', 'Backups');
-  const cronTable = h('table', { class: 'grid cronlog', 'aria-label': 'Últimas linhas do cron.log' });
-  const cronWrap = h('div', { class: 'table-wrap' }, cronTable);
-  const footer = muted('', 'vpsfoot');
+  const bkP = panel('h-vps-bk', 'Backups', { icon: 'backup' });
+  const bkBody = h('div');
+  const cron = h('pre', { class: 'cron', 'aria-label': 'Últimas linhas do cron.log' });
+  bkP.el.append(bkBody, h('p', { class: 'cron-head' }, 'Últimas linhas do cron.log'), cron);
 
   const body = h('div', { class: 'vps-body' },
-    errLine,
-    hostB.el, updB.el, secB.el, srvB.el,
-    h('div', { class: 'block', role: 'region', 'aria-labelledby': 'h-vps-cont' }, contHead.el, contTable.el),
-    h('div', { class: 'block', role: 'region', 'aria-labelledby': 'h-vps-vol' }, volHead.el, volTable.el),
-    h('div', { class: 'block', role: 'region', 'aria-labelledby': 'h-vps-tls' }, tlsHead.el, tlsTable.el),
-    bkB.el,
-    footer);
-  section.append(missing, body);
+    errLine.el, cards.el, lastDayP.el,
+    h('div', { class: 'cols-2 stretch' }, hostP.el, srvP.el),
+    h('div', { class: 'cols-2 stretch' }, updP.el, secP.el),
+    contP.el,
+    h('div', { class: 'cols-2' }, volP.el, tlsP.el),
+    bkP.el);
+  section.append(head.el, missing, body);
 
-  function setKv(b, rows, spark) {
-    const old = b.el.querySelector('table.kv');
-    const t = kvTable(rows, { label: b.head.h2.textContent, spark });
+  function setKv(p, rows, spark) {
+    const old = p.el.querySelector(':scope > table.kv');
+    const t = kvTable(rows, { label: p.h2.textContent, spark });
     if (spark) {
-      const thead = h('thead', null, h('tr', null,
-        h('th', { scope: 'col' }, 'Item'), h('th', { scope: 'col' }, 'Valor'), h('th', { scope: 'col' }, 'Últimas 24 h')));
-      t.prepend(thead);
+      t.prepend(h('thead', null, h('tr', null,
+        h('th', { scope: 'col' }, 'Item'), h('th', { scope: 'col' }, 'Valor'), h('th', { scope: 'col', class: 'sparkhead' }, 'Últimas 24 h'))));
     }
     if (old) old.replaceWith(t);
-    else b.el.append(t);
+    else p.el.append(t);
+  }
+
+  function paintCharts(pts) {
+    const points = (pts || []).map((p) => ({ t: F.toMs(p.t), values: p })).filter((p) => Number.isFinite(p.t));
+    for (const c of charts) {
+      const has = points.some((p) => c.series.some((s) => p.values[s.key] != null));
+      c.empty.hidden = has;
+      c.ch.el.classList.toggle('is-empty', !has);
+      c.ch.update(has ? points : []);
+    }
   }
 
   function render(d) {
@@ -390,34 +579,34 @@ export default function createVps(ctx, section) {
     const isMissing = col.state === 'missing';
     missing.hidden = !isMissing;
     body.hidden = isMissing;
+    head.setSub(isMissing ? '' : collectorLine(col));
+    head.sub.classList.toggle('lv-warn', col.state === 'stale' || col.state === 'invalid');
     if (isMissing) return;
-    errLine.hidden = true;
+    errLine.el.hidden = true;
     const pts = d.series?.points || [];
-    setKv(hostB, hostRows(d.host, pts), true);
-    setKv(updB, updatesRows(d.updates), false);
-    setKv(secB, securityRows(d.security), false);
-    setKv(srvB, serverRows(d.server), false);
+    cards.render(kpis(d, clock.now()));
+    paintCharts(pts);
+    setKv(hostP, hostRows(d.host, pts), true);
+    setKv(updP, updatesRows(d.updates), false);
+    setKv(secP, securityRows(d.security), false);
+    setKv(srvP, serverRows(d.server), false);
     coolify = Array.isArray(d.coolify) ? d.coolify : [];
     contTable.setRows(d.containers || []);
-    contHead.setCount(contTable.countText());
+    contP.setCount(contTable.countText());
     systemDf = d.systemDf || null;
     volTable.setRows(d.volumes || []);
-    tlsTable.setRows(d.tls?.certs || []);
-    setKv(bkB, backupRows(d.backups, clock.now()), false);
-    clear(cronTable);
-    const lines = d.backups?.cronLogTail || [];
-    const tb = h('tbody');
-    if (!lines.length) tb.append(h('tr', { class: 'state' }, h('td', null, 'cron.log vazio.')));
-    for (const l of lines) tb.append(h('tr', null, h('td', { class: 'mono' }, l)));
-    cronTable.append(h('thead', null, h('tr', null, h('th', { scope: 'col' }, 'Últimas linhas do cron.log'))), tb);
-    bkB.el.append(cronWrap);
-    const errs = Array.isArray(col.errors) ? col.errors : [];
-    footer.textContent = col.collectedAt
-      ? `Coletado às ${F.fmtTimeSec(col.collectedAt)} em ${F.fmtDuration(col.durationMs)} · coletor ${col.version ?? F.DASH} · seções com erro: ${errs.length ? errs.join(', ') : 'nenhuma'}.`
+    volP.setCount(volTable.countText());
+    dockerLine.textContent = systemDf
+      ? `Docker: imagens ${F.fmtBytes(systemDf.imagesB)} (${F.fmtBytes(systemDf.imagesReclaimableB)} recuperáveis) · volumes ${F.fmtBytes(systemDf.volumesB)}${systemDf.buildCacheB ? ` · cache de build ${F.fmtBytes(systemDf.buildCacheB)}` : ''}`
       : '';
-    footer.classList.toggle('lv-warn', col.state === 'stale' || col.state === 'invalid');
-    if (col.state === 'stale') footer.textContent = `${footer.textContent} Coletor parado.`;
-    for (const hd of [hostB.head, updB.head, secB.head, srvB.head, contHead, volHead, tlsHead, bkB.head]) hd.setStale('');
+    dockerLine.hidden = !systemDf;
+    tlsTable.setRows(d.tls?.certs || []);
+    clear(bkBody);
+    bkBody.append(kvTable(backupRows(d.backups, clock.now()), { label: 'Backups' }));
+    const linesTail = d.backups?.cronLogTail || [];
+    cron.textContent = linesTail.length ? linesTail.join('\n') : 'cron.log vazio.';
+    cron.classList.toggle('muted', !linesTail.length);
+    for (const p of [hostP, updP, secP, srvP, contP, volP, tlsP, bkP, lastDayP]) p.setStale('');
   }
 
   return {
@@ -430,10 +619,10 @@ export default function createVps(ctx, section) {
       } catch (e) {
         if (e.kind === 'auth') throw e;
         const msg = errorMessage(e);
-        clear(errLine);
-        errLine.append(dot('bad'), `Não foi possível carregar: ${msg}.`, lastOk ? ` ${staleText(lastOk)}` : '');
-        errLine.hidden = false;
+        errLine.set(`Não foi possível carregar: ${msg}.${lastOk ? ` ${staleText(lastOk)}` : ''}`);
+        errLine.el.hidden = false;
         for (const t of [contTable, volTable, tlsTable]) t.setError(msg);
+        cards.error(msg, lastOk ? `dados de ${F.fmtTimeSec(lastOk)}` : '');
         throw e;
       }
     },

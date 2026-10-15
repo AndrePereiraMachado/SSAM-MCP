@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
+  <meta name="color-scheme" content="dark light">
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="noindex, nofollow">
   <title>Painel SSAM</title>
@@ -12,38 +12,48 @@
   <script type="module" src="js/main.js"></script>
 </head>
 <body>
-  <header class="top" id="top">
-    <div class="statusline">
-      <h1>Painel SSAM</h1>
-      <p class="facts" id="facts">Carregando…</p>
+  <div class="app" id="app">
+    <nav class="side" id="side" aria-label="Painel SSAM">
+      <div class="brand">
+        <span class="brand-mark" id="brand-mark" aria-hidden="true"></span>
+        <div class="brand-text"><p class="brand-name">Painel SSAM</p><p class="brand-host mono" id="brand-host"></p></div>
+      </div>
+      <div class="tabs" id="tabs" role="tablist" aria-label="Seções do painel" aria-orientation="vertical">
+        <button type="button" role="tab" id="tab-visao" data-view="visao" aria-controls="view-visao" aria-selected="true" tabindex="0" title="Visão geral"><span class="ticon" aria-hidden="true"></span><span class="tmain"><span class="tlabel">Visão geral</span><span class="tcount" aria-hidden="true" hidden></span></span><span class="tdot" aria-hidden="true" hidden></span><span class="sr-only tsr"></span></button>
+        <button type="button" role="tab" id="tab-licencas" data-view="licencas" aria-controls="view-licencas" aria-selected="false" tabindex="-1" title="Licenças"><span class="ticon" aria-hidden="true"></span><span class="tmain"><span class="tlabel">Licenças</span><span class="tcount" aria-hidden="true" hidden></span></span><span class="tdot" aria-hidden="true" hidden></span><span class="sr-only tsr"></span></button>
+        <button type="button" role="tab" id="tab-uso" data-view="uso" aria-controls="view-uso" aria-selected="false" tabindex="-1" title="Uso"><span class="ticon" aria-hidden="true"></span><span class="tmain"><span class="tlabel">Uso</span><span class="tcount" aria-hidden="true" hidden></span></span><span class="tdot" aria-hidden="true" hidden></span><span class="sr-only tsr"></span></button>
+        <button type="button" role="tab" id="tab-qualidade" data-view="qualidade" aria-controls="view-qualidade" aria-selected="false" tabindex="-1" title="Qualidade"><span class="ticon" aria-hidden="true"></span><span class="tmain"><span class="tlabel">Qualidade</span><span class="tcount" aria-hidden="true" hidden></span></span><span class="tdot" aria-hidden="true" hidden></span><span class="sr-only tsr"></span></button>
+        <button type="button" role="tab" id="tab-agentes" data-view="agentes" aria-controls="view-agentes" aria-selected="false" tabindex="-1" title="Agentes e sessões"><span class="ticon" aria-hidden="true"></span><span class="tmain"><span class="tlabel">Agentes e sessões</span><span class="tcount" aria-hidden="true" hidden></span></span><span class="tdot" aria-hidden="true" hidden></span><span class="sr-only tsr"></span></button>
+        <button type="button" role="tab" id="tab-vps" data-view="vps" aria-controls="view-vps" aria-selected="false" tabindex="-1" title="VPS"><span class="ticon" aria-hidden="true"></span><span class="tmain"><span class="tlabel">VPS</span><span class="tcount" aria-hidden="true" hidden></span></span><span class="tdot" aria-hidden="true" hidden></span><span class="sr-only tsr"></span></button>
+        <button type="button" role="tab" id="tab-eventos" data-view="eventos" aria-controls="view-eventos" aria-selected="false" tabindex="-1" title="Eventos"><span class="ticon" aria-hidden="true"></span><span class="tmain"><span class="tlabel">Eventos</span><span class="tcount" aria-hidden="true" hidden></span></span><span class="tdot" aria-hidden="true" hidden></span><span class="sr-only tsr"></span></button>
+        <button type="button" role="tab" id="tab-historico" data-view="historico" aria-controls="view-historico" aria-selected="false" tabindex="-1" title="Histórico"><span class="ticon" aria-hidden="true"></span><span class="tmain"><span class="tlabel">Histórico</span><span class="tcount" aria-hidden="true" hidden></span></span><span class="tdot" aria-hidden="true" hidden></span><span class="sr-only tsr"></span></button>
+      </div>
+      <div class="side-foot">
+        <button type="button" class="nav-foot" id="btn-keys" aria-keyshortcuts="?" title="Atalhos do teclado (?)"><span class="ticon" aria-hidden="true"></span><span class="tlabel-foot">Atalhos</span></button>
+        <p class="side-ver" id="side-ver"></p>
+      </div>
+    </nav>
+    <header class="top" id="top">
+      <div class="tb-status" id="facts">Carregando…</div>
       <p class="conn" id="conn" role="alert" hidden></p>
       <div class="hbtns" id="hbtns">
-        <button type="button" class="btn" id="btn-theme">Tema: automático</button>
-        <button type="button" class="btn" id="btn-refresh">Atualizar</button>
+        <button type="button" class="btn-icon" id="btn-theme" aria-label="Tema: escuro" title="Tema: escuro"></button>
+        <button type="button" class="btn btn-sm" id="btn-refresh" title="Atualizar agora (r)">Atualizar</button>
       </div>
-    </div>
-    <nav class="tabs" id="tabs" role="tablist" aria-label="Seções do painel">
-      <button type="button" role="tab" id="tab-visao" data-view="visao" aria-controls="view-visao" aria-selected="true" tabindex="0"><span class="tlabel">Visão geral</span><span class="tcount"></span></button>
-      <button type="button" role="tab" id="tab-licencas" data-view="licencas" aria-controls="view-licencas" aria-selected="false" tabindex="-1"><span class="tlabel">Licenças</span><span class="tcount"></span></button>
-      <button type="button" role="tab" id="tab-uso" data-view="uso" aria-controls="view-uso" aria-selected="false" tabindex="-1"><span class="tlabel">Uso</span><span class="tcount"></span></button>
-      <button type="button" role="tab" id="tab-qualidade" data-view="qualidade" aria-controls="view-qualidade" aria-selected="false" tabindex="-1"><span class="tlabel">Qualidade</span><span class="tcount"></span></button>
-      <button type="button" role="tab" id="tab-agentes" data-view="agentes" aria-controls="view-agentes" aria-selected="false" tabindex="-1"><span class="tlabel">Agentes e sessões</span><span class="tcount"></span></button>
-      <button type="button" role="tab" id="tab-vps" data-view="vps" aria-controls="view-vps" aria-selected="false" tabindex="-1"><span class="tlabel">VPS</span><span class="tcount"></span></button>
-      <button type="button" role="tab" id="tab-eventos" data-view="eventos" aria-controls="view-eventos" aria-selected="false" tabindex="-1"><span class="tlabel">Eventos</span><span class="tcount"></span></button>
-      <button type="button" role="tab" id="tab-historico" data-view="historico" aria-controls="view-historico" aria-selected="false" tabindex="-1"><span class="tlabel">Histórico</span><span class="tcount"></span></button>
-    </nav>
-  </header>
-  <main id="main">
-    <section class="view" id="view-visao" role="tabpanel" aria-labelledby="tab-visao" tabindex="-1"></section>
-    <section class="view" id="view-licencas" role="tabpanel" aria-labelledby="tab-licencas" tabindex="-1" hidden></section>
-    <section class="view" id="view-uso" role="tabpanel" aria-labelledby="tab-uso" tabindex="-1" hidden></section>
-    <section class="view" id="view-qualidade" role="tabpanel" aria-labelledby="tab-qualidade" tabindex="-1" hidden></section>
-    <section class="view" id="view-agentes" role="tabpanel" aria-labelledby="tab-agentes" tabindex="-1" hidden></section>
-    <section class="view" id="view-vps" role="tabpanel" aria-labelledby="tab-vps" tabindex="-1" hidden></section>
-    <section class="view" id="view-eventos" role="tabpanel" aria-labelledby="tab-eventos" tabindex="-1" hidden></section>
-    <section class="view" id="view-historico" role="tabpanel" aria-labelledby="tab-historico" tabindex="-1" hidden></section>
-  </main>
+    </header>
+    <main id="main">
+      <section class="view" id="view-visao" role="tabpanel" aria-labelledby="tab-visao" tabindex="-1"></section>
+      <section class="view" id="view-licencas" role="tabpanel" aria-labelledby="tab-licencas" tabindex="-1" hidden></section>
+      <section class="view" id="view-uso" role="tabpanel" aria-labelledby="tab-uso" tabindex="-1" hidden></section>
+      <section class="view" id="view-qualidade" role="tabpanel" aria-labelledby="tab-qualidade" tabindex="-1" hidden></section>
+      <section class="view" id="view-agentes" role="tabpanel" aria-labelledby="tab-agentes" tabindex="-1" hidden></section>
+      <section class="view" id="view-vps" role="tabpanel" aria-labelledby="tab-vps" tabindex="-1" hidden></section>
+      <section class="view" id="view-eventos" role="tabpanel" aria-labelledby="tab-eventos" tabindex="-1" hidden></section>
+      <section class="view" id="view-historico" role="tabpanel" aria-labelledby="tab-historico" tabindex="-1" hidden></section>
+    </main>
+  </div>
   <div class="fatal" id="fatal" role="alert" hidden></div>
+  <div class="tip" id="tip" role="tooltip" hidden></div>
   <dialog id="dlg" aria-labelledby="dlg-title"></dialog>
   <noscript><p class="fatal">O painel precisa de JavaScript.</p></noscript>
 </body>

@@ -1,22 +1,20 @@
-// Qualidade (DESIGN-QUALIDADE 4.5): what the hosted server recorded of every tool call, only codes, counts and times.
-// A Resumo key-value table and nine tables: the most common error codes, the problems of the refusals by code, the
+// Qualidade (DESIGN-QUALIDADE 4.5, SPEC painel v2 4.4): what the hosted server recorded of every tool call, only codes,
+// counts and times. Seven KPI cards (calls, success and refusal gauges, deliveries, time to deliver, model turns,
+// problems of the refusals, idle time), two charts (the most common error codes, where the time goes), then a two-column
+// Resumo key-value table and nine tables: the most common error codes, the problems of the refusals by code, the
 // engine's automatic corrections by rule, the delivery phases per tool (p50 / p90) and their share of the time, the
 // rounds until "entregue" per customer and what causes them, per customer and per MCP client. Range Hoje / 7 dias /
 // 30 dias / one day; one customer or all; a CSV per table, the whole payload as JSON and the lines as JSONL.
-// Polls every 60 s (today) or 300 s (other ranges). Tables only, textContent only.
+// Polls every 60 s (today) or 300 s (other ranges). Every value goes in as text.
 
 import * as F from '../format.js';
-import { h, dot, sectionHead, select, setOptions, joinDots, textButton } from '../dom.js';
+import { h, button, pageHead, panel, inlineNotice, iconChip, select, setOptions } from '../dom.js';
 import { createTable, fillKv } from '../table.js';
+import { createCards } from '../cards.js';
+import { meter, meterLevel, meterTicks, barlist, stack100 } from '../charts.js';
 import { PHASE_KEYS, PHASE_WORD, PROBLEM_PHASE_KEYS, PROBLEM_PHASE_WORD, CLIENT_WORD, RULE_TEXT, wordOf } from '../labels.js';
-import { relTime, relSort, errorMessage, staleText, muted } from './common.js';
+import { relTime, relSort, errorMessage, staleText, periodControls } from './common.js';
 import { rangeText } from './uso.js';
-
-const RANGES = [
-  { id: 'today', label: 'Hoje' },
-  { id: '7d', label: '7 dias' },
-  { id: '30d', label: '30 dias' },
-];
 
 export const PRIVACY = 'Só códigos, contagens e tempos. Nenhum nome, expressão, caminho, job ou texto dos clientes é gravado.';
 export const UNAVAILABLE = 'O servidor ainda não grava os registros de qualidade (imagem anterior ao registro, ou SSAM_QUALITY=0).';
@@ -89,14 +87,116 @@ export function totalRound(t) {
   };
 }
 
+
 const numCol = (key, label, get, extra = {}) => ({
   key, label, num: true, sort: (r) => get(r) ?? null, text: (r) => F.fmtInt(get(r)), ...extra,
 });
-const codeCol = (key, label, get) => ({ key, label, mono: true, ell: 'code', sort: (r) => get(r) ?? null, text: (r) => get(r) || F.DASH });
-const pairCol = (key, label, a, b, fmt) => ({
+const codeCol = (key, label, get, extra = {}) => ({ key, label, mono: true, ell: 'code', sort: (r) => get(r) ?? null, text: (r) => get(r) || F.DASH, ...extra });
+/** A p50 / p90 cell: p50 on top, p90 under it (an .sr-only ' / ' between them); text keeps the one-line form. */
+const pairCol = (key, label, a, b, fmt, { strongIf } = {}) => ({
   key, label, num: true, sort: (r) => a(r) ?? null, text: (r) => F.fmtPair(a(r), b(r), fmt),
+  cell: (r, td) => {
+    const p = F.pairParts(a(r), b(r), fmt);
+    td.title = p.title;
+    if (p.dash) {
+      td.textContent = F.DASH;
+      return;
+    }
+    td.append(h('span', { class: ['t1', strongIf && strongIf(r) && 'strong'] }, p.a), h('span', { class: 'sr-only' }, ' / '), h('span', { class: 't2' }, p.b));
+  },
 });
-const toolsCol = { key: 'tools', label: 'Ferramentas', ell: 'text', sort: (r) => (r.tools || [])[0]?.tool ?? null, text: (r) => toolsText(r.tools) };
+const toolsCol = { key: 'tools', label: 'Ferramentas', ell: 'text', flex: true, sort: (r) => (r.tools || [])[0]?.tool ?? null, text: (r) => toolsText(r.tools) };
+
+const PROBLEM_SERIES = { preflight: 's1', base: 's2', apply: 's3', verify: 's4', other: 's5' };
+
+/** The seven KPI cards of Qualidade (pure, from the payload totals). */
+export function kpis(totals) {
+  const x = totals || {};
+  const calls = x.calls ?? 0;
+  const fails = x.failures ?? 0;
+  const refusals = x.refusals ?? 0;
+  const succ = calls ? ((calls - fails) / calls) * 100 : null;
+  const refu = calls ? (refusals / calls) * 100 : null;
+  const sLv = meterLevel('success', succ);
+  const rLv = meterLevel('refusal', refu);
+  const worst = [sLv, rLv].includes('bad') ? 'bad' : [sLv, rLv].includes('warn') ? 'warn' : 'ok';
+  const chains = x.chains ?? 0;
+  const allChains = chains + (x.chainsOpen ?? 0);
+  const phases = PROBLEM_PHASE_KEYS.filter((k) => (x.problemPhases?.[k] ?? 0) > 0);
+  const dash = (v, fmt) => (v == null ? { value: F.DASH, muted: true } : { value: fmt(v) });
+  return [
+    {
+      id: 'chamadas', label: 'Chamadas', icon: 'uso', level: 'ok', value: F.fmtInt(calls),
+      context: calls ? `${F.fmtInt(fails)} com falha (${F.fmtShare(fails, calls)})` : 'sem chamadas',
+    },
+    {
+      id: 'sucesso', label: 'Sucesso e recusas', icon: 'qualidade', span: 'w2', level: calls ? worst : 'ok',
+      visual: {
+        kind: 'gauges',
+        items: [
+          { label: 'Sucesso', value: succ, max: 100, level: sLv, display: F.fmtPct(succ), ticks: meterTicks('success'), missingText: 'sem chamadas', caption: calls ? `${F.fmtInt(calls - fails)} de ${F.fmtInt(calls)} chamadas` : '' },
+          { label: 'Recusas', value: refu, max: 100, level: rLv, display: F.fmtPct(refu), ticks: meterTicks('refusal'), missingText: 'sem chamadas', caption: calls ? `${F.plural(refusals, 'recusa', 'recusas')}` : '' },
+        ],
+      },
+    },
+    {
+      id: 'entregas', label: 'Entregas', icon: 'check-circle', level: 'ok', value: F.fmtInt(x.delivered ?? 0), unit: 'entregues ou criadas',
+      context: `${F.plural(refusals, 'recusa', 'recusas')} · ${F.plural(x.uncertain ?? 0, 'incerta', 'incertas')}`,
+      visual: allChains ? {
+        kind: 'meter', label: 'Cadeias entregues', caption: 'Cadeias entregues', fraction: chains / allChains, level: 'accent',
+        valueText: `${F.fmtInt(chains)} de ${F.fmtInt(allChains)}`,
+      } : null,
+    },
+    {
+      id: 'tempo', label: 'Tempo até entregar', icon: 'timer', level: 'ok', ...dash(x.wallP50Ms, F.fmtDuration), unit: x.wallP50Ms == null ? null : 'p50',
+      context: x.wallP90Ms == null ? 'sem entregas' : `p90 ${F.fmtDuration(x.wallP90Ms)}`,
+    },
+    {
+      id: 'voltas', label: 'Voltas do modelo', icon: 'loop', level: 'ok', ...dash(x.turnsPerChainP50, F.fmtInt), unit: x.turnsPerChainP50 == null ? null : 'p50 por cadeia',
+      context: x.turnsPerChainP50 == null && x.turnsPerChainP90 == null ? 'sem cadeias'
+        : `p90 ${F.fmtInt(x.turnsPerChainP90)} · chamadas por cadeia p50 ${F.fmtInt(x.callsPerChainP50)} / p90 ${F.fmtInt(x.callsPerChainP90)}`,
+    },
+    {
+      id: 'problemas', label: 'Problemas nas recusas', icon: 'wrench', level: 'ok', value: F.fmtInt(x.problems ?? 0),
+      context: `${F.fmtInt(x.withPatch ?? 0)} com correção pronta${x.problems ? ` (${F.fmtShare(x.withPatch ?? 0, x.problems)})` : ''} · ${F.plural(x.normalizations ?? 0, 'correção automática', 'correções automáticas')}`,
+      visual: phases.length ? {
+        kind: 'segbar', label: 'Problemas por fase', legend: true,
+        parts: phases.map((k) => ({ count: x.problemPhases[k], c: PROBLEM_SERIES[k], word: `${PROBLEM_PHASE_WORD[k]} ${F.fmtInt(x.problemPhases[k])}` })),
+      } : null,
+    },
+    {
+      id: 'parado', label: 'Parado entre chamadas', icon: 'pause', level: 'ok', ...dash(x.gapP50Ms, F.fmtDuration), unit: x.gapP50Ms == null ? null : 'p50',
+      context: [x.gapP90Ms == null ? null : `p90 ${F.fmtDuration(x.gapP90Ms)}`, F.plural(x.longGaps ?? 0, 'pausa acima de 10 min', 'pausas acima de 10 min')].filter(Boolean).join(' · '),
+      visual: x.idlePct != null ? {
+        kind: 'meter', label: 'Parte parada das cadeias', caption: 'Parte parada', fraction: Number(x.idlePct) / 100, level: 'accent', valueText: F.fmtPct(x.idlePct),
+      } : null,
+    },
+  ];
+}
+
+/** Slots of the time-share chart: fixed per phase; queue and the server's own time fold into `Fila e servidor`. */
+export const TIME_SEGMENTS = [
+  { key: 'capture', label: 'Captura', c: 's1' }, { key: 'compile', label: 'Compilação', c: 's2' }, { key: 'studio', label: 'Studio', c: 's3' },
+  { key: 'verify', label: 'Verificação', c: 's4' }, { key: 'publish', label: 'Publicação', c: 's5' }, { key: 'environment', label: 'Ambiente', c: 's6' },
+  { key: 'transfer', label: 'Transferência', c: 's7' }, { key: 'queueRest', label: 'Fila e servidor', c: 'other' },
+];
+
+/** Rows of the time-share chart: top n tools by total time, the phase shares (queue + rest folded). */
+export function timeShareRows(list, n = 6) {
+  return (Array.isArray(list) ? list.slice() : []).sort((a, b) => (b.sumMs ?? 0) - (a.sumMs ?? 0)).slice(0, n).map((r) => {
+    const parts = {};
+    for (const k of PHASE_KEYS) parts[k] = Number(r[`${k}Pct`]) || 0;
+    parts.queueRest = parts.queue + parts.rest;
+    return { label: r.tool, parts };
+  });
+}
+
+const CARD_DEFS = [
+  { id: 'chamadas', label: 'Chamadas', icon: 'uso' }, { id: 'sucesso', label: 'Sucesso e recusas', icon: 'qualidade', span: 'w2' },
+  { id: 'entregas', label: 'Entregas', icon: 'check-circle' }, { id: 'tempo', label: 'Tempo até entregar', icon: 'timer' },
+  { id: 'voltas', label: 'Voltas do modelo', icon: 'loop' }, { id: 'problemas', label: 'Problemas nas recusas', icon: 'wrench' },
+  { id: 'parado', label: 'Parado entre chamadas', icon: 'pause' },
+];
 
 export default function createQualidade(ctx, section) {
   const { clock } = ctx;
@@ -107,17 +207,8 @@ export default function createQualidade(ctx, section) {
   let lastOk = null;
 
   // ---- heading: range, customer, the two whole exports
-  const rangeBtns = RANGES.map((r) => {
-    const b = h('button', { type: 'button', class: 'seg', 'aria-pressed': 'false', dataset: { range: r.id } }, r.label);
-    b.addEventListener('click', () => setRange(r.id, ''));
-    return b;
-  });
-  const dayInput = h('input', { type: 'date', class: 'ctl day', 'aria-label': 'Dia' });
-  dayInput.addEventListener('change', () => {
-    if (dayInput.value) setRange('day', dayInput.value);
-  });
-  const dayLabel = h('label', { class: 'seglabel' }, 'Dia: ', dayInput);
-  const segs = h('div', { class: 'segs', role: 'group', 'aria-label': 'Período' }, ...joinDots([...rangeBtns, dayLabel]));
+  const head = pageHead('t-qualidade', 'Qualidade');
+  const period = periodControls((r, d) => setRange(r, d));
   const custSel = select('Cliente', [{ value: '', label: 'Todos os clientes' }], {
     onChange: (v) => {
       token = v;
@@ -126,33 +217,36 @@ export default function createQualidade(ctx, section) {
       ctx.refreshNow();
     },
   });
-  const allBtn = textButton('Exportar tudo (JSON)', () => exportTable('tudo', 'json', allBtn));
-  const linesBtn = textButton('Exportar linhas (JSONL)', () => exportTable('linhas', 'jsonl', linesBtn));
-  const exportsGroup = h('div', { class: 'segs', role: 'group', 'aria-label': 'Exportar' }, ...joinDots([allBtn, linesBtn]));
-  const head = sectionHead('Qualidade', { id: 'h-qualidade', controls: [segs, custSel, exportsGroup] });
-  const echo = muted('', 'echo');
-  const privacy = muted(PRIVACY, 'note');
-  const indexLine = muted('', 'note');
-  indexLine.hidden = true;
+  const allBtn = button('Exportar tudo (JSON)', () => exportTable('tudo', 'json', allBtn), '', { class: 'btn-sm', icon: 'download' });
+  const linesBtn = button('Exportar linhas (JSONL)', () => exportTable('linhas', 'jsonl', linesBtn), '', { class: 'btn-sm', icon: 'download' });
+  const exportsGroup = h('div', { class: 'btn-group', role: 'group', 'aria-label': 'Exportar' }, allBtn, linesBtn);
+  head.actions.append(period.segs, period.day, custSel, h('span', { class: 'vsep', 'aria-hidden': 'true' }), exportsGroup);
+  const privacy = inlineNotice('plain', PRIVACY, { icon: 'shield' });
+  const indexLine = inlineNotice('info', '');
+  const indexMeter = meter({ label: 'Indexação dos registros de qualidade', fraction: 0, level: 'accent', valueText: '0%', mini: true });
+  indexLine.extra.append(indexMeter.el);
+  indexLine.el.hidden = true;
 
   // ---- the notice when the server does not record yet
-  const notice = h('div', { class: 'block', hidden: true },
-    h('div', { class: 'table-wrap' }, h('table', { class: 'grid notice-table', 'aria-label': 'Registros de qualidade' },
-      h('tbody', null, h('tr', { class: 'state' }, h('td', null, dot('warn'), UNAVAILABLE))))));
+  const notice = h('section', { class: 'panel', 'aria-label': 'Registros de qualidade', hidden: true },
+    h('div', { class: 'empty-state' }, iconChip('alert-triangle', 'warn', 24), h('p', null, UNAVAILABLE)));
 
-  /** A section: heading with its count and a CSV text button, an optional note, the table. */
-  function block(id, title, table, exportName, note) {
-    const csv = textButton('CSV', () => exportTable(exportName, 'csv', csv), { 'aria-label': `${title}: exportar CSV` });
-    const hd = sectionHead(title, { id, controls: [csv] });
-    const el = h('div', { class: 'block', role: 'region', 'aria-labelledby': id }, hd.el, note ? muted(note, 'note') : null, table.el || table);
-    return { head: hd, el };
+  const cards = createCards('qualidade', CARD_DEFS);
+
+  /** A panel: heading with its count and the CSV button, an optional note, the table. */
+  function block(id, title, table, exportName, note, icon) {
+    const csv = button('CSV', () => exportTable(exportName, 'csv', csv), 'ghost', { class: 'btn-sm', icon: 'download', 'aria-label': `${title}: exportar CSV` });
+    const p = panel(id, title, { icon, controls: [csv], note });
+    p.el.append(table.el || table);
+    return { head: p, el: p.el };
   }
 
-  // 1. Resumo (key-value table Item / Valor; keeps its two columns at phone width)
-  const resumoBody = h('tbody');
-  const resumoTable = h('table', { class: 'kv kv-keep', 'aria-label': 'Resumo da qualidade' },
-    h('thead', null, h('tr', null, h('th', { scope: 'col' }, 'Item'), h('th', { scope: 'col' }, 'Valor'))), resumoBody);
-  const resumo = block('h-q-resumo', 'Resumo', { el: h('div', { class: 'table-wrap' }, resumoTable) }, 'resumo');
+  // 1. Resumo (two key-value tables side by side, rows 1-6 | 7-12; they keep their two columns at phone width)
+  const resumoBodyA = h('tbody');
+  const resumoBodyB = h('tbody');
+  const resumoA = h('table', { class: 'kv kv-keep', 'aria-label': 'Resumo da qualidade (1 de 2)' }, resumoBodyA);
+  const resumoB = h('table', { class: 'kv kv-keep', 'aria-label': 'Resumo da qualidade (2 de 2)' }, resumoBodyB);
+  const resumo = block('h-q-resumo', 'Resumo', { el: h('div', { class: 'kv-cols' }, h('div', { class: 'table-wrap' }, resumoA), h('div', { class: 'table-wrap' }, resumoB)) }, 'resumo', null, 'qualidade');
 
   // 2. Códigos de erro mais comuns
   const errTable = createTable({
@@ -169,7 +263,7 @@ export default function createQualidade(ctx, section) {
     defaultSort: { key: 'count', dir: 'desc' },
     empty: 'Nenhuma falha neste período.',
   });
-  const errors = block('h-q-erros', 'Códigos de erro mais comuns', errTable, 'erros');
+  const errors = block('h-q-erros', 'Códigos de erro mais comuns', errTable, 'erros', null, 'x-circle');
 
   // 3. Problemas das recusas por código
   const probTable = createTable({
@@ -187,59 +281,70 @@ export default function createQualidade(ctx, section) {
     empty: 'Nenhuma recusa com problemas neste período.',
   });
   const problems = block('h-q-problemas', 'Problemas das recusas por código', probTable, 'problemas',
-    'Com correção pronta: o problema veio com o patch certo na recusa (o motor já sabia corrigir).');
+    'Com correção pronta: o problema veio com o patch certo na recusa (o motor já sabia corrigir).', 'wrench');
 
   // 4. Correções automáticas por regra
   const ruleTable = createTable({
     label: 'Correções automáticas por regra',
     columns: [
       codeCol('rule', 'Regra', (r) => r.rule),
-      { key: 'what', label: 'O que o motor fez', ell: 'text', sort: (r) => wordOf(RULE_TEXT, r.rule) ?? null, text: (r) => wordOf(RULE_TEXT, r.rule) || F.DASH },
+      { key: 'what', label: 'O que o motor fez', ell: 'text', flex: true, sort: (r) => wordOf(RULE_TEXT, r.rule) ?? null, text: (r) => wordOf(RULE_TEXT, r.rule) || F.DASH },
       numCol('count', 'Correções', (r) => r.count),
       numCol('calls', 'Chamadas', (r) => r.calls),
-      toolsCol,
+      { ...toolsCol, flex: false },
       numCol('customers', 'Clientes', (r) => r.customers),
     ],
     rowKey: (r) => r.rule,
     defaultSort: { key: 'count', dir: 'desc' },
     empty: 'Nenhuma correção automática neste período.',
   });
-  const rules = block('h-q-regras', 'Correções automáticas por regra', ruleTable, 'correcoes');
+  const rules = block('h-q-regras', 'Correções automáticas por regra', ruleTable, 'correcoes', null, 'check-circle');
 
-  // 5. Fases da entrega por ferramenta (p50 / p90)
+  // 5. Fases da entrega por ferramenta (p50 / p90): the one table allowed to scroll sideways
+  const maxP50 = (r) => Math.max(0, ...PHASE_KEYS.map((k) => Number(r[k]?.p50) || 0));
   const phaseTable = createTable({
     label: 'Fases da entrega por ferramenta',
+    dense: true,
     columns: [
       { key: 'tool', label: 'Ferramenta', mono: true, ell: 'code', sort: (r) => r.tool, text: (r) => r.tool },
       numCol('calls', 'Chamadas', (r) => r.calls),
       pairCol('total', 'Total', (r) => r.total?.p50, (r) => r.total?.p90, F.fmtDuration),
-      ...PHASE_KEYS.map((k) => pairCol(k, PHASE_WORD[k], (r) => r[k]?.p50, (r) => r[k]?.p90, F.fmtDuration)),
-      { key: 'cold', label: 'Kernel frio', num: true, sort: (r) => r.kernelCold ?? null, text: coldText },
+      ...PHASE_KEYS.map((k) => pairCol(k, PHASE_WORD[k], (r) => r[k]?.p50, (r) => r[k]?.p90, F.fmtDuration,
+        { strongIf: (r) => maxP50(r) > 0 && (Number(r[k]?.p50) || 0) === maxP50(r) })),
+      { key: 'cold', label: 'Kernel frio', num: true, flex: true, sort: (r) => r.kernelCold ?? null, text: coldText },
     ],
     rowKey: (r) => r.tool,
     defaultSort: { key: 'calls', dir: 'desc' },
     empty: 'Nenhuma chamada com tempo de fase neste período.',
   });
-  const phaseNote = muted('', 'note');
-  const phases = block('h-q-fases', 'Fases da entrega por ferramenta (p50 / p90)', { el: h('div', null, phaseNote, phaseTable.el) }, 'fases');
+  const phases = block('h-q-fases', 'Fases da entrega por ferramenta (p50 / p90)', phaseTable, 'fases', ' ', 'timer');
 
   // 6. Para onde vai o tempo
+  const maxShare = (r) => Math.max(0, ...PHASE_KEYS.map((k) => Number(r[`${k}Pct`]) || 0));
   const shareTable = createTable({
     label: 'Para onde vai o tempo',
+    dense: true,
     columns: [
       { key: 'tool', label: 'Ferramenta', mono: true, ell: 'code', sort: (r) => r.tool, text: (r) => r.tool },
       { key: 'sumMs', label: 'Tempo total', num: true, sort: (r) => r.sumMs ?? null, text: (r) => F.fmtDuration(r.sumMs) },
-      ...PHASE_KEYS.map((k) => ({ key: k, label: PHASE_WORD[k], num: true, sort: (r) => r[`${k}Pct`] ?? null, text: (r) => pctCell(r[`${k}Pct`]) })),
+      ...PHASE_KEYS.map((k, i) => ({
+        key: k, label: PHASE_WORD[k], num: true, flex: i === PHASE_KEYS.length - 1, sort: (r) => r[`${k}Pct`] ?? null, text: (r) => pctCell(r[`${k}Pct`]),
+        cell: (r, td) => {
+          const v = Number(r[`${k}Pct`]) || 0;
+          td.textContent = pctCell(r[`${k}Pct`]);
+          if (v > 0 && v === maxShare(r)) td.classList.add('strong');
+        },
+      })),
     ],
     rowKey: (r) => r.tool,
     defaultSort: { key: 'sumMs', dir: 'desc' },
     empty: 'Nenhuma chamada com tempo de fase neste período.',
   });
-  const share = block('h-q-tempo', 'Para onde vai o tempo', shareTable, 'tempo', 'Soma do período, em % do tempo total de cada ferramenta.');
+  const share = block('h-q-tempo', 'Para onde vai o tempo', shareTable, 'tempo', 'Soma do período, em % do tempo total de cada ferramenta.', 'clock');
 
   // 7. Voltas até entregar (a last row Todos from the totals when more than one customer has chains)
   const roundColumns = [
-    { key: 'customer', label: 'Cliente', ell: 'name', sort: (r) => r.customer, text: (r) => r.customer || r.token },
+    { key: 'customer', label: 'Cliente', ell: 'name', flex: true, sort: (r) => r.customer, text: (r) => r.customer || r.token },
     numCol('chains', 'Cadeias', (r) => r.chains),
     numCol('open', 'Sem entrega', (r) => r.open),
     pairCol('turns', 'Voltas do modelo (p50 / p90)', (r) => r.turnsP50, (r) => r.turnsP90, F.fmtInt),
@@ -268,13 +373,13 @@ export default function createQualidade(ctx, section) {
     },
   });
   const rounds = block('h-q-voltas', 'Voltas até entregar', roundTable, 'voltas',
-    'Cadeia: as chamadas de uma sessão MCP até "entregue". Volta do modelo: chamada sem outra em andamento, 1 s ou mais depois da última resposta.');
+    'Cadeia: as chamadas de uma sessão MCP até "entregue". Volta do modelo: chamada sem outra em andamento, 1 s ou mais depois da última resposta.', 'loop');
 
   // 8. O que mais gera voltas
   const causeTable = createTable({
     label: 'O que mais gera voltas',
     columns: [
-      codeCol('code', 'Código', (r) => r.code),
+      codeCol('code', 'Código', (r) => r.code, { flex: true }),
       numCol('refusals', 'Recusas', (r) => r.refusals),
       numCol('chains', 'Cadeias', (r) => r.chains),
       numCol('extraCallsSum', 'Chamadas a mais (soma)', (r) => r.extraCallsSum),
@@ -286,13 +391,13 @@ export default function createQualidade(ctx, section) {
     empty: 'Nenhuma recusa antes de uma entrega neste período.',
   });
   const causes = block('h-q-causas', 'O que mais gera voltas', causeTable, 'causas',
-    'Uma recusa com vários códigos conta para cada um deles. Chamadas a mais: da recusa até "entregue".');
+    'Uma recusa com vários códigos conta para cada um deles. Chamadas a mais: da recusa até "entregue".', 'alert-triangle');
 
   // 9. Por cliente (hidden when one customer is selected)
   const custTable = createTable({
     label: 'Qualidade por cliente',
     columns: [
-      { key: 'customer', label: 'Cliente', ell: 'name', sort: (r) => r.customer, text: (r) => r.customer || r.token },
+      { key: 'customer', label: 'Cliente', ell: 'name', flex: true, sort: (r) => r.customer, text: (r) => r.customer || r.token },
       numCol('calls', 'Chamadas', (r) => r.calls),
       numCol('failures', 'Falhas', (r) => r.failures),
       numCol('refusals', 'Recusas', (r) => r.refusals),
@@ -306,13 +411,13 @@ export default function createQualidade(ctx, section) {
     defaultSort: { key: 'calls', dir: 'desc' },
     empty: 'Nenhuma chamada neste período.',
   });
-  const byCustomer = block('h-q-clientes', 'Por cliente', custTable, 'clientes');
+  const byCustomer = block('h-q-clientes', 'Por cliente', custTable, 'clientes', null, 'agentes');
 
   // 10. Por cliente MCP
   const clientTable = createTable({
     label: 'Qualidade por cliente MCP',
     columns: [
-      { key: 'client', label: 'Cliente MCP', sort: (r) => wordOf(CLIENT_WORD, r.client) || r.client, text: (r) => wordOf(CLIENT_WORD, r.client) || r.client || F.DASH },
+      { key: 'client', label: 'Cliente MCP', flex: true, sort: (r) => wordOf(CLIENT_WORD, r.client) || r.client, text: (r) => wordOf(CLIENT_WORD, r.client) || r.client || F.DASH },
       numCol('sessions', 'Sessões', (r) => r.sessions),
       numCol('chains', 'Cadeias', (r) => r.chains),
       numCol('turnsP50', 'Voltas do modelo (p50)', (r) => r.turnsP50),
@@ -324,7 +429,15 @@ export default function createQualidade(ctx, section) {
     defaultSort: { key: 'sessions', dir: 'desc' },
     empty: 'Nenhuma sessão MCP neste período.',
   });
-  const byClient = block('h-q-mcp', 'Por cliente MCP', clientTable, 'clientes-mcp');
+  const byClient = block('h-q-mcp', 'Por cliente MCP', clientTable, 'clientes-mcp', null, 'session');
+
+  // ---- charts: the most common error codes and where the time goes (each with its table twin)
+  const errChart = barlist({ title: 'Códigos de erro mais comuns', mono: true, n: 8, fmt: F.fmtInt, cls: 'w2', twin: () => errTable.table, empty: 'Nenhuma falha neste período.' });
+  const timeChart = stack100({
+    title: 'Para onde vai o tempo', subtitle: 'as 6 ferramentas com mais tempo, em % do tempo de cada uma', cls: 'w2',
+    segments: TIME_SEGMENTS, fmtPct: (v) => pctCell(v), twin: () => shareTable.table, empty: 'Nenhuma chamada com tempo de fase neste período.',
+  });
+  const chartsRow = h('section', { class: 'kgrid charts', 'aria-label': 'Gráficos de qualidade' }, errChart.el, timeChart.el);
 
   const blocks = [resumo, errors, problems, rules, phases, share, rounds, causes, byCustomer, byClient];
   const tables = [
@@ -333,17 +446,10 @@ export default function createQualidade(ctx, section) {
     [custTable, byCustomer.head, 'byCustomer'], [clientTable, byClient.head, 'byClient'],
   ];
 
-  section.append(
-    h('div', { class: 'block', role: 'region', 'aria-labelledby': 'h-qualidade' }, head.el, echo, privacy, indexLine),
-    notice,
-    ...blocks.map((b) => b.el),
-  );
+  section.append(head.el, privacy.el, indexLine.el, notice, cards.el, chartsRow, ...blocks.map((b) => b.el));
 
   function paintControls() {
-    for (const b of rangeBtns) b.setAttribute('aria-pressed', b.dataset.range === range ? 'true' : 'false');
-    dayLabel.classList.toggle('on', range === 'day');
-    dayInput.value = range === 'day' ? day : '';
-    dayInput.max = F.localDay(clock.now());
+    period.paint(range, day, F.localDay(clock.now()));
     byCustomer.el.hidden = !!token || !available();
     const tooLong = range === '30d';
     linesBtn.disabled = tooLong;
@@ -412,17 +518,25 @@ export default function createQualidade(ctx, section) {
 
   function render() {
     if (!data) return;
-    echo.textContent = rangeText(data.range);
+    head.setSub(rangeText(data.range));
     const idx = indexingText(data.indexing);
-    indexLine.textContent = idx;
-    indexLine.hidden = !idx;
+    indexLine.set(idx);
+    indexMeter.update({ label: 'Indexação dos registros de qualidade', fraction: Number(data.indexing?.progress) || 0, level: 'accent', valueText: `${Math.round((Number(data.indexing?.progress) || 0) * 100)}%`, mini: true });
+    indexLine.el.hidden = !idx;
     const on = data.available !== false;
     notice.hidden = on;
+    cards.el.hidden = !on;
+    chartsRow.hidden = !on;
     for (const b of blocks) b.el.hidden = !on;
     paintControls();
     if (!on) return;
-    fillKv(resumoBody, resumoRows(data.totals), false);
-    phaseNote.textContent = `Cada célula: p50 / p90 por chamada. Chamadas em paralelo do mesmo cliente ficam fora: ${F.fmtInt(data.totals?.sharedCalls ?? 0)}.`;
+    cards.render(kpis(data.totals));
+    errChart.update((data.errors || []).map((r) => ({ label: r.code, value: r.count })));
+    timeChart.update(timeShareRows(data.timeShare));
+    const rows = resumoRows(data.totals);
+    fillKv(resumoBodyA, rows.slice(0, 6), false);
+    fillKv(resumoBodyB, rows.slice(6), false);
+    phases.head.setNote(`Cada célula: p50 em cima, p90 embaixo, por chamada. Chamadas em paralelo do mesmo cliente ficam fora: ${F.fmtInt(data.totals?.sharedCalls ?? 0)}.`);
     for (const [t, hd, key] of tables) {
       t.setRows(data[key] || []);
       hd.setCount(t.countText());
@@ -448,6 +562,7 @@ export default function createQualidade(ctx, section) {
           t.setError(msg);
           if (t.hasRows()) hd.setStale(staleText(lastOk));
         }
+        cards.error(msg, lastOk ? `dados de ${F.fmtTimeSec(lastOk)}` : '');
         throw e;
       }
     },

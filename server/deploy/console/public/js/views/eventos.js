@@ -1,10 +1,13 @@
-// Eventos (DESIGN.md 6.5): the event ring, newest first, at most 500 rows in the DOM. Polls every 3 s with
-// after=lastSeq; Pausar keeps counting the new events without showing them.
+// Eventos (DESIGN.md 6.5, SPEC painel v2 4.7): four cards counting the loaded events (errors, warnings, info, the
+// newest), then the event ring, newest first, at most 500 rows in the DOM. Polls every 3 s with after=lastSeq; Pausar
+// keeps counting the new events without showing them.
 
 import * as F from '../format.js';
-import { h, sectionHead, select, setOptions, filterInput } from '../dom.js';
+import { h, clear, pageHead, panel, select, setOptions, filterInput, status, button } from '../dom.js';
+import { icon } from '../icons.js';
 import { createTable, filterRows } from '../table.js';
-import { eventColumns, errorMessage, staleText, muted } from './common.js';
+import { createCards } from '../cards.js';
+import { eventColumns, errorMessage, staleText } from './common.js';
 
 const MAX_ROWS = 500;
 const PAGE = 200;
@@ -28,6 +31,33 @@ export function mergeEvents(list, incoming, max = MAX_ROWS) {
   return all.length > max ? all.slice(all.length - max) : all;
 }
 
+/** The four cards of Eventos (pure): counts of the events loaded on the page (at most 500), the newest, the pause. */
+export function kpis(events, { lastSeq = null, paused = false, pending = 0, now } = {}) {
+  const list = Array.isArray(events) ? events : [];
+  const n = list.length;
+  const count = (lv) => list.filter((e) => e.level === lv).length;
+  const where = `nos ${F.plural(n, 'evento carregado', 'eventos carregados')}`;
+  const err = count('error');
+  const warn = count('warning');
+  const newest = list.reduce((b, e) => (!b || (e.seq ?? 0) > (b.seq ?? 0) ? e : b), null);
+  return [
+    { id: 'erros', label: 'Erros', icon: 'alert-octagon', level: err ? 'bad' : 'ok', value: F.fmtInt(err), context: where },
+    { id: 'avisos', label: 'Avisos', icon: 'alert-triangle', level: warn ? 'warn' : 'ok', value: F.fmtInt(warn), context: where },
+    { id: 'info', label: 'Informativos', icon: 'info', level: 'ok', value: F.fmtInt(count('info')), context: where },
+    {
+      id: 'recente', label: 'Mais recente', icon: 'clock', level: paused ? 'warn' : 'ok',
+      value: newest ? F.fmtRelative(newest.time, now) : 'nenhum', word: true, muted: !newest,
+      context: paused ? `Pausado · ${F.plural(pending, 'novo', 'novos')}` : (newest && lastSeq != null ? `seq ${lastSeq}` : null),
+      contextTitle: newest ? F.fmtTitle(newest.time) : null,
+    },
+  ];
+}
+
+const CARD_DEFS = [
+  { id: 'erros', label: 'Erros', icon: 'alert-octagon' }, { id: 'avisos', label: 'Avisos', icon: 'alert-triangle' },
+  { id: 'info', label: 'Informativos', icon: 'info' }, { id: 'recente', label: 'Mais recente', icon: 'clock' },
+];
+
 export default function createEventos(ctx, section) {
   const { clock } = ctx;
   let events = null;
@@ -45,12 +75,14 @@ export default function createEventos(ctx, section) {
   const typeSel = select('Tipo de evento', TYPES, { onChange: (v) => { type = v; applyFilter(); } });
   const custSel = select('Cliente', [{ value: '', label: 'Todos os clientes' }], { onChange: (v) => { customer = v; applyFilter(); } });
   const filter = filterInput('filtrar texto', (v) => { text = v; applyFilter(); });
-  const pauseBtn = h('button', { type: 'button', class: 'btn', 'aria-pressed': 'false' }, 'Pausar');
-  pauseBtn.addEventListener('click', () => setPaused(!paused));
-  const head = sectionHead('Eventos', { id: 'h-eventos', controls: [typeSel, custSel, filter, pauseBtn] });
-  const pausedLine = muted('', 'pausedline');
-  pausedLine.hidden = true;
-  pausedLine.setAttribute('role', 'status');
+  const pauseIcon = h('span', { class: 'btn-ico', 'aria-hidden': 'true' });
+  const pauseLabel = h('span', null, 'Pausar');
+  const pauseBtn = button([pauseIcon, pauseLabel], () => setPaused(!paused), '', { 'aria-pressed': 'false' });
+  const pausedLine = h('span', { class: 'pausedline', role: 'status', hidden: true });
+  const pageH = pageHead('t-eventos', 'Eventos');
+  pageH.setSub('Mais novos primeiro, até 500 na tela; atualiza a cada 3 s.');
+  const cards = createCards('eventos', CARD_DEFS);
+  const head = panel('h-eventos', 'Eventos', { controls: [typeSel, custSel, filter.wrapEl, pauseBtn, pausedLine], toolbar: true });
 
   const table = createTable({
     label: 'Eventos',
@@ -61,10 +93,16 @@ export default function createEventos(ctx, section) {
     empty: 'Nenhum evento com esse filtro.',
     filteredEmpty: 'Nenhum evento com esse filtro.',
   });
-  const moreBtn = h('button', { type: 'button', class: 'btn more', hidden: true }, 'Carregar mais antigos');
+  const moreBtn = h('button', { type: 'button', class: 'btn more' }, 'Carregar mais antigos');
   moreBtn.addEventListener('click', loadOlder);
+  const moreFoot = h('div', { class: 'panel-foot', hidden: true }, moreBtn);
+  head.el.append(table.el, moreFoot);
 
-  section.append(h('div', { class: 'block', role: 'region', 'aria-labelledby': 'h-eventos' }, head.el, pausedLine, table.el, moreBtn));
+  section.append(pageH.el, cards.el, head.el);
+
+  function paintCards() {
+    cards.render(kpis(events || [], { lastSeq, paused, pending: pending.length, now: clock.now() }));
+  }
 
   function applyFilter() {
     const t = TYPES.find((x) => x.value === type) || TYPES[0];
@@ -77,11 +115,16 @@ export default function createEventos(ctx, section) {
   }
 
   function paintPaused() {
-    pauseBtn.textContent = paused ? 'Continuar' : 'Pausar';
+    pauseLabel.textContent = paused ? 'Continuar' : 'Pausar';
+    clear(pauseIcon);
+    pauseIcon.append(icon(paused ? 'play' : 'pause', 16));
     pauseBtn.setAttribute('aria-pressed', paused ? 'true' : 'false');
     pausedLine.hidden = !paused;
-    pausedLine.textContent = paused ? `Pausado · ${F.plural(pending.length, 'novo', 'novos')}` : '';
+    clear(pausedLine);
+    if (paused) pausedLine.append(status('warn', `Pausado · ${F.plural(pending.length, 'novo', 'novos')}`));
+    if (events) paintCards();
   }
+  paintPaused();
 
   function setPaused(on) {
     paused = on;
@@ -111,8 +154,9 @@ export default function createEventos(ctx, section) {
     table.setRows(events || []);
     fresh.clear();
     applyFilter();
-    moreBtn.hidden = exhausted || (events || []).length >= MAX_ROWS;
+    moreFoot.hidden = exhausted || (events || []).length >= MAX_ROWS;
     head.setStale('');
+    paintCards();
   }
 
   async function loadOlder() {
@@ -160,6 +204,7 @@ export default function createEventos(ctx, section) {
         if (e.kind === 'auth') throw e;
         table.setError(errorMessage(e));
         if (table.hasRows()) head.setStale(staleText(lastOk));
+        cards.error(errorMessage(e), lastOk ? `dados de ${F.fmtTimeSec(lastOk)}` : '');
         throw e;
       }
     },

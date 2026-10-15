@@ -1,12 +1,16 @@
-// Licenças (DESIGN.md 6.5): the license table with its detail rows and the row actions that open the dialogs of
-// 6.10. Polls every 10 s and right after any mutation.
+// Licenças (DESIGN.md 6.5, SPEC painel v2 4.2): four KPI cards (active licenses, next expiry, calls today, workspace),
+// then the license table with merged two-line cells, mini meters, its detail rows and the icon row actions that open the
+// dialogs of 6.10. Polls every 10 s and right after any mutation.
 
 import * as F from '../format.js';
-import { h, clear, dot, status, textButton, button, sectionHead, joinDots, select, filterInput } from '../dom.js';
+import { h, statusInline, status, chip, textButton, button, iconButton, pageHead, panel, inlineNotice, select, filterInput } from '../dom.js';
 import { createTable, kvTable, filterRows, compareValues } from '../table.js';
+import { createCards } from '../cards.js';
+import { meter, meterLevel, meterTicks } from '../charts.js';
+import { icon } from '../icons.js';
 import { sparkline, sparkLabel } from '../sparkline.js';
 import { LICENSE_STATE, HISTORY_ACTION, wordOf } from '../labels.js';
-import { errorMessage, staleText, muted } from './common.js';
+import { errorMessage, staleText } from './common.js';
 import { historyDetail } from './historico.js';
 
 const FILTERS = [
@@ -18,6 +22,7 @@ const FILTERS = [
 ];
 
 const ACTION_LABEL = { renew: 'Renovar', lanes: 'Faixas', agentRotate: 'Credencial do agente', revoke: 'Revogar' };
+const ACTION_ICON = { renew: 'calendar-plus', lanes: 'layers', agentRotate: 'key-rotate', revoke: 'ban' };
 
 const sum = (a) => (Array.isArray(a) ? a.reduce((s, v) => s + (Number(v) || 0), 0) : 0);
 
@@ -60,6 +65,95 @@ export function capabilityLine(caps) {
   return null;
 }
 
+/** `5 ativas · 1 vencida · 1 revogada` from the list. */
+export function licensesSubtitle(list) {
+  const n = (st) => (list || []).filter((l) => l.state === st).length;
+  return [F.plural(n('active'), 'ativa', 'ativas'), F.plural(n('expired'), 'vencida', 'vencidas'), F.plural(n('revoked'), 'revogada', 'revogadas')].join(' · ');
+}
+
+const LEVEL_OF = { bad: 'bad', warn: 'warn' };
+
+/** The four KPI cards of Licenças (pure): from the license list only. */
+export function kpis(list, now) {
+  const all = Array.isArray(list) ? list : [];
+  const active = all.filter((l) => l.state === 'active');
+  const expired = all.filter((l) => l.state === 'expired').length;
+  const revoked = all.filter((l) => l.state === 'revoked').length;
+  const levels = active.map((l) => F.fmtValidity(l, now).level);
+  const worst = levels.includes('bad') ? 'bad' : levels.includes('warn') ? 'warn' : 'ok';
+  const cards = [{
+    id: 'ativas', label: 'Licenças ativas', icon: 'licencas', level: worst,
+    value: F.fmtInt(active.length), unit: active.length === 1 ? 'ativa' : 'ativas',
+    context: `de ${F.fmtInt(all.length)} · ${F.plural(expired, 'vencida', 'vencidas')} · ${F.plural(revoked, 'revogada', 'revogadas')}`,
+    visual: all.length ? {
+      kind: 'segbar', label: 'Licenças',
+      parts: [
+        { count: active.length, c: 'ok', word: F.plural(active.length, 'ativa', 'ativas') },
+        { count: expired, c: 'warn', word: F.plural(expired, 'vencida', 'vencidas') },
+        { count: revoked, c: 'muted', word: F.plural(revoked, 'revogada', 'revogadas') },
+      ],
+    } : null,
+  }];
+
+  const next = active.filter((l) => l.expiresAt != null && Number.isFinite(F.toMs(l.expiresAt)))
+    .sort((a, b) => F.toMs(a.expiresAt) - F.toMs(b.expiresAt))[0];
+  if (!next) {
+    cards.push({ id: 'proxima', label: 'Próxima a vencer', icon: 'calendar', level: 'ok', value: 'nenhuma', word: true, context: 'nenhuma licença ativa com validade' });
+  } else {
+    const ms = F.toMs(next.expiresAt);
+    const vp = F.validityParts(next, now);
+    const today = F.sameLocalDay(ms, now);
+    const days = F.localDayDiff(now, ms);
+    const dLeft = (ms - now) / F.DAY;
+    cards.push({
+      id: 'proxima', label: 'Próxima a vencer', icon: 'calendar', level: LEVEL_OF[F.fmtValidity(next, now).level] || 'ok',
+      value: today ? 'hoje' : F.fmtInt(Math.max(1, days)), word: today, unit: today ? `às ${F.fmtTime(ms)}` : (Math.max(1, days) === 1 ? 'dia' : 'dias'),
+      context: `${next.customer} · até ${F.fmtDate(ms)}`,
+      visual: vp.fraction != null ? {
+        kind: 'meter', label: 'Parte restante da validade', caption: 'parte restante da validade', fraction: vp.fraction,
+        level: meterLevel('validity', dLeft), valueText: F.fmtPct(vp.fraction * 100),
+      } : null,
+    });
+  }
+
+  const calls = sum(all.map((l) => l.today?.calls));
+  const fails = sum(all.map((l) => l.today?.failures));
+  const days14 = [];
+  for (const l of all) (l.daily14 || []).forEach((v, i) => { days14[i] = (days14[i] || 0) + (Number(v) || 0); });
+  cards.push({
+    id: 'chamadas', label: 'Chamadas hoje', icon: 'uso', level: failuresLevel({ calls, failures: fails }) === 'bad' ? 'bad' : 'ok',
+    value: F.fmtInt(calls), unit: calls === 1 ? 'chamada' : 'chamadas',
+    context: calls ? `${F.plural(fails, 'falha', 'falhas')} (${F.fmtShare(fails, calls)})` : 'sem chamadas',
+    visual: days14.length >= 2 ? { kind: 'spark', values: days14, label: sparkLabel('Chamadas por dia', days14) } : null,
+  });
+
+  let top = null;
+  for (const l of all) {
+    if (l.state === 'revoked') continue;
+    const p = workspacePct(l.workspace);
+    if (p != null && (!top || p > top.p)) top = { l, p };
+  }
+  if (!top) {
+    cards.push({ id: 'espaco', label: 'Espaço', icon: 'disk', level: 'ok', value: 'sem coleta', word: true, muted: true });
+  } else {
+    const ws = top.l.workspace;
+    cards.push({
+      id: 'espaco', label: 'Espaço', icon: 'disk', level: meterLevel('workspace', top.p),
+      value: F.fmtPct(top.p), unit: 'maior uso', context: `${top.l.customer} · ${F.fmtBytes(ws.bytes)} de ${F.fmtBytes(ws.quotaBytes)}`,
+      visual: {
+        kind: 'meter', label: 'Maior uso de espaço', caption: 'da cota', fraction: top.p / 100, level: meterLevel('workspace', top.p),
+        ticks: meterTicks('workspace'), valueText: F.fmtPct(top.p),
+      },
+    });
+  }
+  return cards;
+}
+
+const CARD_DEFS = [
+  { id: 'ativas', label: 'Licenças ativas', icon: 'licencas' }, { id: 'proxima', label: 'Próxima a vencer', icon: 'calendar' },
+  { id: 'chamadas', label: 'Chamadas hoje', icon: 'uso' }, { id: 'espaco', label: 'Espaço', icon: 'disk' },
+];
+
 export default function createLicencas(ctx, section) {
   const { clock } = ctx;
   let lastOk = null;
@@ -70,7 +164,13 @@ export default function createLicencas(ctx, section) {
   let filterId = 'ativas-vencidas';
   const open = new Set();
 
-  const issueBtn = button('Emitir licença', (e) => ctx.dialogs.issue(e.currentTarget, licenses || []), 'primary', { id: 'btn-issue' });
+  const head = pageHead('t-licencas', 'Licenças');
+  const issueBtn = button('Emitir licença', (e) => ctx.dialogs.issue(e.currentTarget, licenses || []), 'primary', { id: 'btn-issue', icon: 'plus' });
+  head.actions.append(issueBtn);
+  const capLine = inlineNotice('info', '');
+  capLine.el.hidden = true;
+  const cards = createCards('licencas', CARD_DEFS);
+
   const filter = filterInput('filtrar por cliente ou token', (v) => {
     text = v;
     applyFilter();
@@ -82,9 +182,7 @@ export default function createLicencas(ctx, section) {
       applyFilter();
     },
   });
-  const head = sectionHead('Licenças', { id: 'h-licencas', controls: [issueBtn, filter, sel] });
-  const capLine = muted('', 'capline');
-  capLine.hidden = true;
+  const listP = panel('h-licencas', 'Licenças', { controls: [filter.wrapEl, sel], toolbar: true });
 
   function accessAlertId(lic) {
     const alerts = ctx.store.overview?.alerts || [];
@@ -98,22 +196,24 @@ export default function createLicencas(ctx, section) {
     table.rerender();
   }
 
+  function sessionsOf(lic) {
+    const all = live?.sessions || [];
+    return all.filter((s) => s.token === lic.id);
+  }
+
   function rowActions(lic, td) {
     const a = lic.actions || {};
-    const items = [];
+    const group = h('span', { class: 'btn-group' });
     const add = (key, fn) => {
-      if (a[key]?.allowed) items.push(textButton(ACTION_LABEL[key], (e) => fn(e.currentTarget), { dataset: { fk: key } }));
+      if (!a[key]?.allowed) return;
+      group.append(iconButton(ACTION_ICON[key], ACTION_LABEL[key], (e) => fn(e.currentTarget),
+        { class: ['btn-sm', key === 'revoke' && 'danger'].filter(Boolean).join(' '), dataset: { fk: key } }));
     };
     add('renew', (el) => ctx.dialogs.renew(el, lic));
     add('lanes', (el) => ctx.dialogs.lanes(el, lic, sessionsOf(lic)));
     add('agentRotate', (el) => ctx.dialogs.agentRotate(el, lic));
     add('revoke', (el) => ctx.dialogs.revoke(el, lic, sessionsOf(lic)));
-    td.append(...joinDots(items));
-  }
-
-  function sessionsOf(lic) {
-    const all = live?.sessions || [];
-    return all.filter((s) => s.token === lic.id);
+    td.append(group.childNodes.length ? group : F.DASH);
   }
 
   function detail(lic, td) {
@@ -167,11 +267,11 @@ export default function createLicencas(ctx, section) {
       },
       {
         label: 'Uso',
-        value: (cell) => cell.append(textButton('Ver uso desta licença', () => ctx.navigate('uso', { token: lic.id }), { dataset: { fk: 'uso' } })),
+        value: (cell) => cell.append(textButton('Ver uso desta licença', () => ctx.navigate('uso', { token: lic.id }), { dataset: { fk: 'uso' }, icon: 'arrow-right' })),
       },
       {
         label: 'Qualidade',
-        value: (cell) => cell.append(textButton('Ver qualidade desta licença', () => ctx.navigate('qualidade', { token: lic.id }), { dataset: { fk: 'qualidade' } })),
+        value: (cell) => cell.append(textButton('Ver qualidade desta licença', () => ctx.navigate('qualidade', { token: lic.id }), { dataset: { fk: 'qualidade' }, icon: 'arrow-right' })),
       },
     ];
     td.append(h('div', { class: 'detail-grid' },
@@ -179,78 +279,106 @@ export default function createLicencas(ctx, section) {
       kvTable(right, { label: `Sessões, ações e histórico de ${lic.customer}` })));
   }
 
+  const maxSessions = () => live?.server?.maxSessionsPerToken ?? null;
+
   const table = createTable({
     label: 'Licenças',
+    dense: true,
+    cls: 'licencas-grid',
     columns: [
       {
-        key: 'customer', label: 'Cliente', ell: 'name', sort: (r) => r.customer,
+        key: 'customer', label: 'Cliente', subLabel: 'token', sort: (r) => r.customer,
         cell: (r, td) => {
+          const isOpen = open.has(r.id);
           const b = h('button', {
-            type: 'button', class: 'rowtoggle', 'aria-expanded': open.has(r.id) ? 'true' : 'false',
-            title: r.customer, dataset: { fk: 'toggle' },
-          }, r.customer);
+            type: 'button', class: 'rowtoggle', 'aria-expanded': isOpen ? 'true' : 'false', title: r.customer, dataset: { fk: 'toggle' },
+          }, icon(isOpen ? 'chevron-down' : 'chevron-right', 16), h('span', { class: 'rt-name' }, r.customer));
           b.addEventListener('click', () => toggle(r));
           td.append(b);
         },
+        sub: (r) => h('span', { class: 'mono', title: r.id }, r.id),
       },
       {
-        key: 'state', label: 'Estado', sort: (r) => LICENSE_STATE[r.state]?.order ?? 9, firstDir: 'asc',
+        key: 'state', label: 'Estado', subLabel: 'faixas', sort: (r) => LICENSE_STATE[r.state]?.order ?? 9, firstDir: 'asc',
         cell: (r, td) => {
           const s = LICENSE_STATE[r.state] || { word: r.state, level: 'muted' };
           td.append(status(s.level, s.word));
         },
+        sub: (r) => {
+          const lanes = F.fmtLanes(r.lanes, '|');
+          return lanes === F.DASH ? F.DASH : h('span', { class: 'chips' }, lanes.split('|').map((l) => chip(l)));
+        },
       },
-      { key: 'lanes', label: 'Faixas', sort: (r) => F.fmtLanes(r.lanes), text: (r) => F.fmtLanes(r.lanes) },
       {
         key: 'expiresAt', label: 'Validade', sort: (r) => (r.expiresAt == null ? null : F.toMs(r.expiresAt)), firstDir: 'asc',
         cell: (r, td) => {
-          const v = F.fmtValidity(r, clock.now());
-          td.textContent = v.text;
-          if (v.level) td.classList.add(`lv-${v.level}`);
+          const v = F.validityParts(r, clock.now());
+          td.append(h('span', { class: v.level ? `lv-${v.level} strong` : null }, v.main));
           const t = r.state === 'revoked' ? r.revokedAt : r.expiresAt;
-          if (t) td.title = F.fmtTitle(t);
+          if (t) td.title = `${F.fmtValidity(r, clock.now()).text} · ${F.fmtTitle(t)}`;
+        },
+        sub: (r) => {
+          const now = clock.now();
+          const v = F.validityParts(r, now);
+          const out = h('span', null, v.sub || F.DASH);
+          if (v.fraction != null) {
+            const left = (F.toMs(r.expiresAt) - now) / F.DAY;
+            out.append(meter({ label: `Validade restante de ${r.customer}`, fraction: v.fraction, level: meterLevel('validity', left), mini: true, cls: 'mblock', valueText: F.fmtPct(v.fraction * 100) }).el);
+          }
+          return out;
         },
       },
       {
-        key: 'agent', label: 'Agente',
+        key: 'agent', label: 'Agente', subLabel: 'máquina',
         sort: (r) => (r.state === 'revoked' ? 3 : { connected: 0, disconnected: 1, never: 2 }[r.agent?.state] ?? 2), firstDir: 'asc',
         cell: (r, td) => {
           const a = r.agent || { state: 'never' };
-          if (r.state === 'revoked') td.textContent = F.DASH;
+          if (r.state === 'revoked') td.append(F.DASH);
           else if (a.state === 'connected') {
-            td.append(status('ok', 'conectado'));
+            td.append(statusInline('ok', 'conectado'));
             if (a.since) td.title = `desde ${F.fmtTitle(a.since)}`;
           } else if (a.state === 'disconnected') {
             const when = a.since ? ` ${F.fmtRelative(a.since, clock.now())}` : '';
-            td.append(status('muted', `desconectado${when}`));
+            td.append(statusInline('muted', `desconectado${when}`));
             if (a.since) td.title = F.fmtTitle(a.since);
-          } else td.append(status('muted', 'sem registro'));
+          } else td.append(statusInline('muted', 'sem registro'));
         },
-      },
-      {
-        key: 'machine', label: 'Máquina', ell: 'machine', sort: (r) => (r.machine ? F.fmtMachine(r.machine) : null),
-        cell: (r, td) => {
+        sub: (r) => {
           const txt = F.fmtMachine(r.machine);
-          td.append(txt);
-          td.title = txt;
+          const out = h('span', null, h('span', { class: 'ell-line ell-name18', title: txt }, txt));
           if (r.accessAlerts > 0) {
             const link = textButton('trocou de máquina', () => {
               const id = accessAlertId(r);
               ctx.navigate('visao', null, id ? { alertId: id } : null);
             }, { class: 'lv-bad', dataset: { fk: 'machine-alert' } });
-            td.append(h('span', { class: 'sep', 'aria-hidden': 'true' }, ' · '), dot('bad'), link);
+            out.append(h('span', { class: 't3' }, icon('alert-triangle', 14), link));
           }
+          return out;
         },
       },
-      { key: 'sessionsOpen', label: 'Sessões', num: true, sort: (r) => r.sessionsOpen ?? 0, text: (r) => F.fmtInt(r.sessionsOpen ?? 0) },
+      {
+        key: 'sessionsOpen', label: 'Sessões', num: true, sort: (r) => r.sessionsOpen ?? 0,
+        cell: (r, td) => {
+          const n = r.sessionsOpen ?? 0;
+          const max = maxSessions();
+          td.append(F.fmtInt(n));
+          if (max) td.append(h('span', { class: 'muted' }, ` de ${F.fmtInt(max)}`));
+        },
+        sub: (r) => {
+          const max = maxSessions();
+          if (!max || r.state === 'revoked') return null;
+          const n = r.sessionsOpen ?? 0;
+          return meter({ label: `Sessões abertas de ${r.customer}`, fraction: n / max, level: meterLevel('seats', n / max), mini: true, cls: 'w40', valueText: `${F.fmtInt(n)} de ${F.fmtInt(max)}` }).el;
+        },
+      },
       { key: 'calls', label: 'Chamadas hoje', num: true, sort: (r) => r.today?.calls ?? 0, text: (r) => F.fmtInt(r.today?.calls ?? 0) },
       {
         key: 'failures', label: 'Falhas hoje', num: true, sort: (r) => r.today?.failures ?? 0,
-        text: (r) => F.fmtInt(r.today?.failures ?? 0), level: (r) => failuresLevel(r.today),
+        text: (r) => F.fmtInt(r.today?.failures ?? 0), level: (r) => failuresLevel(r.today), cls: 'lvstrong',
       },
       {
         key: 'daily14', label: 'Uso 14 dias', sort: (r) => sum(r.daily14), firstDir: 'desc', cls: 'sparkcell',
-        cell: (r, td) => td.append(sparkline(r.daily14 || [], sparkLabel('Chamadas por dia', r.daily14 || []))),
+        cell: (r, td) => td.append(sparkline(r.daily14 || [], sparkLabel('Chamadas por dia', r.daily14 || []), { w: 72, h: 20 })),
       },
       {
         key: 'workspace', label: 'Espaço', num: true, sort: (r) => r.workspace?.bytes ?? null,
@@ -260,27 +388,30 @@ export default function createLicencas(ctx, section) {
             td.textContent = F.DASH;
             return;
           }
-          const p = workspacePct(ws);
-          td.textContent = `${F.fmtBytes(ws.bytes)} (${F.fmtPct(p)})`;
-          if (p >= 95) td.classList.add('lv-bad');
-          else if (p >= 80) td.classList.add('lv-warn');
+          td.append(F.fmtBytes(ws.bytes));
           td.title = `${F.fmtInt(ws.files)} arquivos de ${F.fmtBytes(ws.quotaBytes)} de cota${ws.truncated ? ' (contagem parcial)' : ''} · medido ${F.fmtTitle(ws.measuredAt)}`;
+        },
+        sub: (r) => {
+          const p = workspacePct(r.workspace);
+          if (p == null) return null;
+          const lv = meterLevel('workspace', p);
+          return h('span', null, h('span', { class: lv === 'ok' ? null : `lv-${lv} strong` }, F.fmtPct(p)),
+            meter({ label: `Espaço de ${r.customer}`, fraction: p / 100, level: lv, ticks: meterTicks('workspace'), mini: true, cls: 'w48 mblock', valueText: F.fmtPct(p) }).el);
         },
       },
       {
-        key: 'lastActivity', label: 'Última atividade', sort: (r) => (r.lastActivity ? F.toMs(r.lastActivity.at) : null), firstDir: 'desc',
+        key: 'lastActivity', label: 'Última atividade', flex: true, cls: 'flex-narrow', sort: (r) => (r.lastActivity ? F.toMs(r.lastActivity.at) : null), firstDir: 'desc',
         cell: (r, td) => {
           const la = r.lastActivity;
           if (!la) {
             td.textContent = F.DASH;
             return;
           }
-          const rel = F.fmtRelative(la.at, clock.now());
-          td.textContent = la.kind === 'call' && la.tool ? `${rel} · ${la.tool}` : rel;
+          td.append(F.fmtRelative(la.at, clock.now()));
           td.title = F.fmtTitle(la.at);
         },
+        sub: (r) => (r.lastActivity?.kind === 'call' && r.lastActivity.tool ? h('span', { class: 'mono', title: r.lastActivity.tool }, r.lastActivity.tool) : null),
       },
-      { key: 'id', label: 'Token', mono: true, sort: (r) => r.id, text: (r) => r.id },
       { key: 'actions', label: 'Ações', sort: false, cls: 'actions', cell: (r, td) => rowActions(r, td) },
     ],
     rowKey: (r) => r.id,
@@ -290,8 +421,9 @@ export default function createLicencas(ctx, section) {
     filteredEmpty: 'Nenhuma licença com esse filtro.',
     detail: { isOpen: (r) => open.has(r.id), render: detail },
   });
+  listP.el.append(table.el);
 
-  section.append(h('div', { class: 'block', role: 'region', 'aria-labelledby': 'h-licencas' }, head.el, capLine, table.el));
+  section.append(head.el, capLine.el, cards.el, listP.el);
 
   function applyFilter() {
     const f = FILTERS.find((x) => x.value === filterId) || FILTERS[0];
@@ -301,18 +433,20 @@ export default function createLicencas(ctx, section) {
     else {
       table.setFilter((r) => f.match(r) && (!q.trim() || filterRows([r], q, ['customer', 'id']).length > 0));
     }
-    head.setCount(table.countText());
+    listP.setCount(table.countText());
   }
 
   function render() {
     capabilities = ctx.store.licensesCaps || capabilities;
     const line = capabilityLine(capabilities);
-    capLine.textContent = line || '';
-    capLine.hidden = !line;
+    capLine.set(line || '');
+    capLine.el.hidden = !line;
     issueBtn.hidden = capabilities?.issue === false;
+    head.setSub(licensesSubtitle(licenses));
+    cards.render(kpis(licenses || [], clock.now()));
     table.setRows(licenses || []);
     applyFilter();
-    head.setStale('');
+    listP.setStale('');
   }
 
   return {
@@ -327,7 +461,8 @@ export default function createLicencas(ctx, section) {
         const e = lr.reason;
         if (e?.kind === 'auth') throw e;
         table.setError(errorMessage(e));
-        if (table.hasRows()) head.setStale(staleText(lastOk));
+        if (table.hasRows()) listP.setStale(staleText(lastOk));
+        cards.error(errorMessage(e), lastOk ? `dados de ${F.fmtTimeSec(lastOk)}` : '');
         throw e;
       }
       const d = lr.value;

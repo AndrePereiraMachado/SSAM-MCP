@@ -1,9 +1,10 @@
-// Histórico (DESIGN.md 6.5): every license action of the console and every change made outside it. Loads on open
-// and after mutations (no polling).
+// Histórico (DESIGN.md 6.5, SPEC painel v2 4.8): four cards counting the loaded entries, then every license action of
+// the console and every change made outside it. Loads on open and after mutations (no polling).
 
 import * as F from '../format.js';
-import { h, status, sectionHead, select, setOptions } from '../dom.js';
+import { h, status, chip, pageHead, panel, select, setOptions } from '../dom.js';
 import { createTable } from '../table.js';
+import { createCards } from '../cards.js';
 import { HISTORY_ACTION, LICENSE_STATE, wordOf } from '../labels.js';
 import { relSort, errorMessage, staleText } from './common.js';
 
@@ -68,6 +69,31 @@ export function historyDetail(e) {
   }
 }
 
+/** The four cards of Histórico (pure): counts of the loaded entries (limit 500). */
+export function kpis(entries, now) {
+  const list = Array.isArray(entries) ? entries : [];
+  const outside = list.filter((e) => e.actor === 'externo').length;
+  const errors = list.filter((e) => e.result === 'error').length;
+  const newest = list.reduce((b, e) => (!b || F.toMs(e.time) > F.toMs(b.time) ? e : b), null);
+  return [
+    {
+      id: 'acoes', label: 'Ações registradas', icon: 'historico', level: 'ok', value: F.fmtInt(list.length),
+      context: newest ? `mais recente ${F.fmtRelative(newest.time, now)}` : 'nenhuma ainda',
+    },
+    {
+      id: 'painel', label: 'No painel', icon: 'brand', level: 'ok', value: F.fmtInt(list.length - outside),
+      context: 'emissões, renovações, faixas, credenciais, revogações, alertas',
+    },
+    { id: 'fora', label: 'Fora do painel', icon: 'alert-triangle', level: outside ? 'warn' : 'ok', value: F.fmtInt(outside), context: 'mudanças vistas no tokens.json' },
+    { id: 'erros', label: 'Com erro', icon: 'x-circle', level: errors ? 'bad' : 'ok', value: F.fmtInt(errors), context: `das ${F.plural(list.length, 'ação', 'ações')}` },
+  ];
+}
+
+const CARD_DEFS = [
+  { id: 'acoes', label: 'Ações registradas', icon: 'historico' }, { id: 'painel', label: 'No painel', icon: 'brand' },
+  { id: 'fora', label: 'Fora do painel', icon: 'alert-triangle' }, { id: 'erros', label: 'Com erro', icon: 'x-circle' },
+];
+
 export default function createHistorico(ctx, section) {
   const { clock } = ctx;
   let entries = null;
@@ -88,7 +114,10 @@ export default function createHistorico(ctx, section) {
       applyFilter();
     },
   });
-  const head = sectionHead('Histórico', { id: 'h-historico', controls: [custSel, actSel] });
+  const pageH = pageHead('t-historico', 'Histórico');
+  pageH.setSub('Ações de licença feitas no painel e mudanças vistas fora dele.');
+  const cards = createCards('historico', CARD_DEFS);
+  const head = panel('h-historico', 'Histórico', { controls: [custSel, actSel], toolbar: true });
 
   const table = createTable({
     label: 'Histórico de licenças',
@@ -101,10 +130,15 @@ export default function createHistorico(ctx, section) {
         },
       },
       { key: 'action', label: 'Ação', sort: (r) => actionWord(r.action), text: (r) => actionWord(r.action) },
-      { key: 'actor', label: 'Origem', sort: (r) => r.actor, text: (r) => (r.actor === 'externo' ? 'fora do painel' : 'painel') },
-      { key: 'customer', label: 'Cliente', ell: 'name', sort: (r) => r.customer, text: (r) => r.customer || F.DASH },
-      { key: 'token', label: 'Token', mono: true, sort: (r) => r.token, text: (r) => r.token || F.DASH },
-      { key: 'detail', label: 'Detalhe', ell: 'text', sort: (r) => historyDetail(r), text: (r) => historyDetail(r) },
+      {
+        key: 'actor', label: 'Origem', sort: (r) => r.actor,
+        cell: (r, td) => td.append(chip(r.actor === 'externo' ? 'fora do painel' : 'painel')),
+      },
+      {
+        key: 'customer', label: 'Cliente', subLabel: 'token', ell: 'name', sort: (r) => r.customer, text: (r) => r.customer || F.DASH,
+        sub: (r) => (r.token ? h('span', { class: 'mono' }, r.token) : null),
+      },
+      { key: 'detail', label: 'Detalhe', ell: 'text', flex: true, sort: (r) => historyDetail(r), text: (r) => historyDetail(r) },
       {
         key: 'result', label: 'Resultado', sort: (r) => (r.result === 'ok' ? 0 : 1),
         cell: (r, td) => td.append(r.result === 'ok' ? status('ok', 'ok') : status('bad', `erro ${r.code || ''}`.trim())),
@@ -116,7 +150,8 @@ export default function createHistorico(ctx, section) {
     filteredEmpty: 'Nenhuma ação com esse filtro.',
   });
 
-  section.append(h('div', { class: 'block', role: 'region', 'aria-labelledby': 'h-historico' }, head.el, table.el));
+  head.el.append(table.el);
+  section.append(pageH.el, cards.el, head.el);
 
   function applyFilter() {
     const f = ACTION_FILTERS.find((x) => x.value === action) || ACTION_FILTERS[0];
@@ -149,6 +184,7 @@ export default function createHistorico(ctx, section) {
         lastOk = clock.now();
         stale = false;
         fillCustomers();
+        cards.render(kpis(entries, clock.now()));
         table.setRows(entries);
         applyFilter();
         head.setStale('');
@@ -156,6 +192,7 @@ export default function createHistorico(ctx, section) {
         if (e.kind === 'auth') throw e;
         table.setError(errorMessage(e));
         if (table.hasRows()) head.setStale(staleText(lastOk));
+        cards.error(errorMessage(e), lastOk ? `dados de ${F.fmtTimeSec(lastOk)}` : '');
         throw e;
       }
     },

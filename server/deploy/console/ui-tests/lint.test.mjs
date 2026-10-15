@@ -1,6 +1,9 @@
-// Static lint of public/ (DESIGN.md 6.0, 6.1, 6.7, 2.3): CSP-clean pages (no HTML parsing of data, no inline style or
-// script), the owner's taste rules in the CSS (no shadows, gradients, text above 16 px, round shapes other than the
-// status dot), no external URL, no emoji, no web font, browser storage only inside try/catch, the files of 6.1.
+// Static lint of public/ (DESIGN.md 6.1, 2.3; SPEC painel v2 8.2): CSP-clean pages (no HTML parsing of data, no inline style
+// or script), SVG built only from geometry, the v2 visual rules in the CSS (text up to 32 px, radii up to 12 px, pills and
+// dots the only round shapes, shadows only through the two shadow tokens, no gradient, no web font, no url()), no
+// external URL, no emoji, browser storage only inside try/catch, the files of 6.1 and of the v2 components.
+// The DESIGN.md 6.0 "tables only" rules (no cards, gauges, pills; text up to 16 px; no shadow) were superseded by the
+// owner on 15/10 ("na verdade eu queria cards, icones, medidores").
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -25,6 +28,7 @@ test('the files of DESIGN.md 6.1 exist', () => {
     'index.html', 'app.css', 'favicon.svg', 'js/main.js', 'js/api.js', 'js/format.js', 'js/table.js', 'js/sparkline.js',
     'js/dialogs.js', 'js/secret.js', 'js/views/visao.js', 'js/views/licencas.js', 'js/views/uso.js', 'js/views/agentes.js',
     'js/views/vps.js', 'js/views/eventos.js', 'js/views/historico.js', 'js/views/qualidade.js', 'mock/dev-server.mjs',
+    'js/icons.js', 'js/charts.js', 'js/cards.js', 'js/dom.js', 'js/views/common.js',
   ];
   for (const f of need) assert.ok(files.includes(f), f);
   for (const s of ['normal', 'vazio', 'problemas', 'sem-coletor', 'sem-renovar']) {
@@ -68,37 +72,71 @@ test('index.html: no inline script or style, no event attributes, the tabs of 6.
   assert.match(read('js/main.js'), /e\.key >= '1' && e\.key <= '8'/);
 });
 
-// The owner's taste (DESIGN.md 6.0, DESIGN-QUALIDADE 4.5): tables only. No card, tile, gauge, donut, hero number, badge or
-// pill shows up as a class, a CSS selector or an element; no chart canvas, no <progress>/<meter>.
-test('no cards, tiles, gauges, donuts, hero numbers, badges or pills (classes, selectors, elements)', () => {
-  const words = /(^|[^a-z])(card|cards|tile|tiles|gauge|donut|doughnut|pie|hero|kpi|badge|pill|chip|meter|ring|stat-tile)([^a-z]|$)/i;
+// Charts stay SVG and plain elements: no <canvas>, no drawing context, no <progress>/<meter> elements (meters are
+// role="meter" with aria values). The Qualidade view still builds its tables with createTable and its Resumo as the
+// two-column key-value table, every value as text.
+test('charts: no canvas or drawing context; Qualidade keeps its tables and puts every value in as text', () => {
   const hits = [];
   for (const f of scripts.filter((x) => x.startsWith('js/'))) {
     const src = stripJs(read(f));
-    for (const m of src.matchAll(/class:\s*(\[[^\]]*\]|'[^']*'|"[^"]*")/g)) if (words.test(m[1])) hits.push(`${f}: class ${m[1]}`);
-    for (const m of src.matchAll(/classList\.(?:add|toggle)\(\s*'([^']+)'/g)) if (words.test(m[1])) hits.push(`${f}: classList ${m[1]}`);
     for (const m of src.matchAll(/\bh\(\s*'([a-z0-9]+)'/g)) if (['canvas', 'progress', 'meter'].includes(m[1])) hits.push(`${f}: <${m[1]}>`);
     if (/createElement\(\s*'(canvas|progress|meter)'/.test(src)) hits.push(`${f}: createElement chart element`);
     if (/getContext\(/.test(src)) hits.push(`${f}: canvas drawing`);
   }
-  const css = stripCss(read('app.css'));
-  for (const m of css.matchAll(/([^{}]+)\{/g)) {
-    for (const sel of m[1].split(',')) for (const c of sel.matchAll(/\.([A-Za-z0-9_-]+)/g)) if (words.test(c[1])) hits.push(`app.css: .${c[1]}`);
-  }
   const html = read('index.html');
   if (/<(canvas|progress|meter)\b/i.test(html)) hits.push('index.html: chart element');
   assert.deepEqual(hits, []);
-  // the Qualidade view builds tables and key-value tables only, and every value goes in as text
   const q = stripJs(read('js/views/qualidade.js'));
   assert.match(q, /createTable\(/);
   assert.match(q, /class: 'kv kv-keep'/);
-  assert.doesNotMatch(q, /sparkline|svg|innerHTML|insertAdjacent/);
+  assert.doesNotMatch(q, /innerHTML|insertAdjacent/);
 });
 
-test('CSS: no shadows, gradients, text above 16 px, round shapes outside .dot, web fonts or imports', () => {
+// SVG of icons and charts: only createElementNS, and only geometry, class and accessibility attributes (no style, no
+// event attribute, no href); the charts' svgEl helper refuses any other name at run time.
+const SVG_GEOMETRY = ['d', 'cx', 'cy', 'r', 'x', 'y', 'width', 'height', 'rx', 'viewBox', 'transform', 'stroke-dasharray', 'class', 'role', 'points'];
+test('icons and charts build SVG from geometry only', () => {
+  const hits = [];
+  for (const f of ['js/icons.js', 'js/charts.js']) {
+    const src = stripJs(read(f));
+    if (/document\.createElement\(\s*'(svg|path|circle|rect|g|text|line|polyline)'/.test(src)) hits.push(`${f}: SVG element without its namespace`);
+    for (const m of src.matchAll(/setAttribute\(\s*'([^']+)'/g)) {
+      if (!SVG_GEOMETRY.includes(m[1]) && !/^aria-[a-z]+$/.test(m[1])) hits.push(`${f}: setAttribute ${m[1]}`);
+    }
+    for (const m of src.matchAll(/setAttribute\(\s*([^'\s)][^,]*),/g)) {
+      if (f === 'js/charts.js' && m[1].trim() === 'k') continue;
+      hits.push(`${f}: setAttribute with a computed name (${m[1].trim()})`);
+    }
+  }
+  const charts = stripJs(read('js/charts.js'));
+  const allowed = /const SVG_ATTRS = new Set\(\[([^\]]+)\]\)/.exec(charts);
+  assert.ok(allowed, 'charts.js keeps its SVG attribute list');
+  for (const m of allowed[1].matchAll(/'([^']+)'/g)) {
+    if (!SVG_GEOMETRY.includes(m[1]) && !/^aria-[a-z]+$/.test(m[1])) hits.push(`charts.js SVG_ATTRS: ${m[1]}`);
+  }
+  assert.match(charts, /if \(!SVG_ATTRS\.has\(k\)\) throw/);
+  assert.deepEqual(hits, []);
+});
+
+test('CSS: text up to 32 px, radii up to 12 px (999px only for pills and counts, 50% only for dots), shadows only by token, no gradients, web fonts or imports', () => {
   const src = stripCss(read('app.css'));
   const hits = [];
-  for (const m of src.matchAll(/box-shadow\s*:\s*([^;}]+)/g)) if (m[1].trim() !== 'none') hits.push(`box-shadow: ${m[1].trim()}`);
+  for (const m of src.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    const selector = m[1].trim();
+    const body = m[2];
+    for (const r of body.matchAll(/box-shadow\s*:\s*([^;}]+)/g)) {
+      const v = r[1].trim();
+      if (!['none', 'var(--shadow-card)', 'var(--shadow-pop)'].includes(v)) hits.push(`box-shadow: ${v} in ${selector}`);
+    }
+    if (/border-radius\s*:\s*50%/.test(body) && !/dot/.test(selector)) hits.push(`border-radius: 50% in ${selector}`);
+    for (const r of body.matchAll(/border-radius\s*:\s*([^;}]+)/g)) {
+      for (const px of r[1].matchAll(/(\d+)px/g)) {
+        const n = Number(px[1]);
+        if (n === 999 && /pill|tcount/.test(selector)) continue;
+        if (n > 12) hits.push(`border-radius ${n}px in ${selector}`);
+      }
+    }
+  }
   if (/text-shadow\s*:/.test(src)) hits.push('text-shadow');
   if (/drop-shadow\s*\(/.test(src)) hits.push('drop-shadow');
   if (/gradient\s*\(/.test(src)) hits.push('gradient');
@@ -108,16 +146,10 @@ test('CSS: no shadows, gradients, text above 16 px, round shapes outside .dot, w
   for (const m of src.matchAll(/font-size\s*:\s*([^;}]+)/g)) {
     const v = m[1].trim();
     const px = /^(\d+(?:\.\d+)?)px$/.exec(v);
-    if (px ? Number(px[1]) > 16 : !/^(inherit|initial|unset|100%|1em|1rem|smaller)$/.test(v)) hits.push(`font-size: ${v}`);
+    if (px ? Number(px[1]) > 32 : !/^(0|inherit|initial|unset|100%|1em|1rem|smaller)$/.test(v)) hits.push(`font-size: ${v}`);
   }
-  for (const m of src.matchAll(/font\s*:\s*([^;}]+)/g)) {
-    for (const s of m[1].matchAll(/(\d+(?:\.\d+)?)px/g)) if (Number(s[1]) > 16) hits.push(`font: ${m[1].trim()}`);
-  }
-  // border-radius: 50% only in the .dot rule (selector exactly ".dot").
-  for (const m of src.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
-    const selector = m[1].trim();
-    if (/border-radius\s*:\s*50%/.test(m[2]) && selector !== '.dot') hits.push(`border-radius: 50% in ${selector}`);
-    for (const r of m[2].matchAll(/border-radius\s*:\s*(\d+)px/g)) if (Number(r[1]) > 6) hits.push(`border-radius ${r[1]}px in ${selector}`);
+  for (const m of src.matchAll(/(?:^|[;{\s])font\s*:\s*([^;}]+)/g)) {
+    for (const s2 of m[1].matchAll(/(\d+(?:\.\d+)?)px/g)) if (Number(s2[1]) > 32) hits.push(`font: ${m[1].trim()}`);
   }
   assert.deepEqual(hits, []);
   assert.match(src, /\.dot\s*\{[^}]*width:\s*8px;[^}]*height:\s*8px;/, 'the status dot is 8 px');
