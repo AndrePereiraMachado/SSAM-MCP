@@ -330,6 +330,10 @@ const KEPT = {
   o11_job: { remove: 'a JSON patch op of a fixture proof' },
   ssam_job: { remove: 'a JSON patch op of a fixture proof' },
 };
+// Refused on a hosted server though no deletion is named, each with its reason (the owner may change it).
+const OFF_FOR_NOW = {
+  'o11_access /action=apply': 'NEW-1 of review 2: the gate could not pin the manifest bytes the kernel reads (TOCTOU); every apply is off until the sha256 pin (after 19/10)',
+};
 // Tools the MCP annotations mark destructive (they overwrite or publish) that delete nothing of the environment or tenant.
 // o11_access is no longer here (F1 of the review): an apply whose manifest revokes is refused once the manifest is read.
 const OVERWRITES_ONLY = {
@@ -419,7 +423,7 @@ test('completeness: every enum value of the hosted catalog named like a deletion
     if (kept) assert.equal(got, false, probe.label + ' is KEPT: ' + kept);
   }
   assert.deepEqual(unclassified, [], 'a destructive action without classification');
-  assert.deepEqual(overRefused, [], 'an action that names no deletion is refused');
+  assert.deepEqual(overRefused, Object.keys(OFF_FOR_NOW), 'an action that names no deletion is refused (only the ones OFF_FOR_NOW, with their reason)');
   // Whole-tool deletes: every hosted tool named like a deletion is refused whatever its arguments.
   assert.deepEqual(Object.keys(hostedTools()).filter(n => DELETE_WORDS.test(n)).sort(), ['odc_a2a_connection_delete', 'odc_asset_delete', 'studio_data_delete']);
   for (const name of ['odc_a2a_connection_delete', 'odc_asset_delete', 'studio_data_delete']) assert.equal(classify(name, {}), true, name);
@@ -611,13 +615,15 @@ test('F1: revoking access is refused like the DELETE of the same access: *ToRemo
     fs.writeFileSync(path.join(inbox, 'revoke.json'), JSON.stringify(accessManifest(['grant', 'revoke'])));
     fs.writeFileSync(path.join(inbox, 'grants.json'), JSON.stringify(accessManifest(['grant', 'grant'])));
     const refused = await call('o11_access', { action: 'apply', manifestPath: 'ws:inbox/revoke.json', words: WORDS });
-    assert.deepEqual([refused.value.code, refused.value.cause, refused.value.outcome, refused.value.revokes], ['HOSTED_UNAVAILABLE', 'DESTRUCTIVE_HOSTED_OFF', 'not-sent', 1], JSON.stringify(refused.value).slice(0, 400));
-    assert.match(refused.value.detail ?? '', /1 revoke/);
+    // NEW-1 of review 2: every apply is refused by the classifier before the manifest is read, so no count comes back.
+    assert.deepEqual([refused.value.code, refused.value.cause, refused.value.outcome, refused.value.revokes], ['HOSTED_UNAVAILABLE', 'DESTRUCTIVE_HOSTED_OFF', 'not-sent', undefined], JSON.stringify(refused.value).slice(0, 400));
+    assert.match(refused.value.error ?? '', /aplicar mudanças de acesso/i);
     assert.deepEqual(refused.kinds, [], 'no kind before the refusal');
     assert.equal(JSON.stringify(refused.value).includes(WORDS), false);
+    // NEW-1 of review 2: every apply is refused for now, grants only too (fail closed), before any kind.
     const granted = await call('o11_access', { action: 'apply', manifestPath: 'ws:inbox/grants.json', words: WORDS });
-    assert.notEqual(granted.value.cause, 'DESTRUCTIVE_HOSTED_OFF', JSON.stringify(granted.value).slice(0, 300));
-    assert.deepEqual(granted.kinds, ['o11.selected'], 'a manifest with grants only passes the gate and reaches the Studio check');
+    assert.equal(granted.value.cause, 'DESTRUCTIVE_HOSTED_OFF', JSON.stringify(granted.value).slice(0, 300));
+    assert.deepEqual(granted.kinds, [], 'a manifest with grants only is refused too, before the Studio check');
     assert.deepEqual(spawned, []); assert.deepEqual(connections, []);
   } finally { await play.close(); }
 });
@@ -658,6 +664,93 @@ test('F1: the revokes of an access manifest are counted as the kernel reads it (
   assert.equal(destructive.hostedDestructiveFiles('odc_write', { action: 'apply', manifestPath: one }), null);
   assert.equal(destructive.hostedDestructiveFiles('o11_access', { action: 'apply', manifestPath: path.join(dir, 'dup.json') })?.revokes, null);
   assert.ok(destructive.hostedDestructiveFiles('o11_access', { action: 'apply', manifestPath: path.join(dir, 'dup.json') }));
+});
+
+// ---- NEW-1 of review 2 (C:\t\revisoes\hosted-destructive-off-2\review\RELATORIO.md): the gate counted the revokes of one
+// read of the manifest and the kernel read the file again; a second call pulling the same agent:inbox file in between
+// handed the kernel [grant, revoke]. Decision of the Integradora for the 19/10 image: on a hosted server every o11_access
+// apply is refused at the gate (fail closed), before the agent, any pull of the inbox and any send; plan, verify and users
+// still run. The fix that pins the counted bytes by sha256 comes after 19/10.
+async function accessServer() {
+  const workspace = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'hosted-destructive-access-')), 'customers', 'tok_zzaccess');
+  prepareWorkspace(workspace);
+  const kinds = [], kernel = [], agentInbox = new Map(), hooks = { onSelected: null };
+  const executor = { id: 'fake-' + randomUUID(), hosted: true,
+    async call(kind) {
+      kinds.push(kind);
+      if (kind === 'o11.selected') { const hook = hooks.onSelected; hooks.onSelected = null; if (hook) await hook(); return { connected: true, pid: 6001 }; }
+      throw Object.assign(new Error('fake executor: kind ' + kind + ' not played'), { code: 'KIND_NOT_ALLOWED', executed: false });
+    },
+    async pullFile(agentPath) {
+      const rel = agentPath.replace(/^agent:/, '');
+      kinds.push('file.get:' + rel);
+      if (!agentInbox.has(rel)) throw Object.assign(new Error('no such file on the agent: ' + rel), { code: 'FILE_NOT_FOUND' });
+      const dest = path.join(workspace, ...rel.split('/'));
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, agentInbox.get(rel));
+      return dest;
+    },
+    o11Connection: () => ({ ok: true, lane: 'o11', anvilLane: 'o11', pid: 6001, startedUtc: '2026-10-15T00:00:00.000Z', port: 45999, studioDir: path.join(workspace, 'fake-studio'),
+      authorityDir: path.join(workspace, 'state', 'relay-authority'), hosted: true }),
+    relayPort: () => 45999, quota: { full: () => false }, async close() {} };
+  const runAnvil = async argv => {
+    const i = argv.indexOf('--manifest');
+    let manifest = null;
+    if (i >= 0) { try { manifest = JSON.parse(fs.readFileSync(argv[i + 1], 'utf8')); } catch { manifest = null; } }
+    kernel.push({ verb: argv.slice(0, 2).join(' '), actions: manifest?.entries?.map(e => e.action) ?? null });
+    return { envelope: { data: { ok: false, code: 'FAKE_KERNEL', note: 'fake kernel of this test: nothing ran' } } };
+  };
+  const agent = { connected: () => true, protocolError() {}, info: () => ({ connected: true, credential: true, compatible: { odc: { ok: true }, o11: { ok: true } } }) };
+  const context = { id: randomUUID(), hosted: true, tokenId: 'tok_zzaccess', customer: 'ZZ', lanes: ['odc', 'o11'], workspace, agent, executor, o11: { lane: 'o11' }, close: async () => {} };
+  const server = await runWithExecutor(context, () => createSsamServer({ hosted: { context, session: { agent, lanes: context.lanes } }, deps: { access: { runAnvil } } }));
+  const linked = await listing(server);
+  const call = async (name, args) => { const k = kinds.length, n = kernel.length;
+    return { value: valueOfCall(await linked.client.callTool({ name, arguments: args })) ?? {}, kinds: kinds.slice(k), kernel: kernel.slice(n) }; };
+  return { ...linked, call, kinds, kernel, agentInbox, hooks, workspace };
+}
+
+test('NEW-1: o11_access apply is refused at the gate on a hosted server, grants only too: nothing pulled, no kind, nothing sent', async () => {
+  assert.equal(classify('o11_access', { action: 'apply', manifestPath: 'agent:inbox/g.json', words: WORDS }), true, 'the one classifier says apply');
+  assert.equal(classify('o11_access', { action: ' Apply ', manifestPath: 'agent:inbox/g.json' }), true, 'any spelling of apply');
+  for (const action of ['plan', 'verify', 'users']) assert.equal(classify('o11_access', { action, manifestPath: 'agent:inbox/g.json' }), false, action);
+  assert.equal(classify('o11_access', {}), false, 'no action: the input layer answers');
+  const play = await accessServer();
+  try {
+    const GRANTS = JSON.stringify(accessManifest(['grant', 'grant'])), REVOKES = JSON.stringify(accessManifest(['grant', 'revoke']));
+    play.agentInbox.set('inbox/g.json', GRANTS);
+    fs.writeFileSync(path.join(play.workspace, 'inbox', 'w.json'), GRANTS);
+    for (const manifestPath of ['agent:inbox/g.json', 'ws:inbox/w.json']) {
+      const { value, kinds, kernel } = await play.call('o11_access', { action: 'apply', manifestPath, words: WORDS });
+      assert.deepEqual([value.code, value.cause, value.outcome], ['HOSTED_UNAVAILABLE', 'DESTRUCTIVE_HOSTED_OFF', 'not-sent'], manifestPath + ' ' + JSON.stringify(value).slice(0, 400));
+      assert.deepEqual(kinds, [], manifestPath + ': no pull of the inbox, no kind');
+      assert.deepEqual(kernel, [], manifestPath + ': nothing reaches the kernel');
+      assert.match(value.error ?? '', /applying access changes/i);
+      assert.match(value.error ?? '', /aplicar mudanças de acesso/i);
+      assert.match(value.error ?? '', /Service Center/);
+      assert.equal(value.continuation, undefined);
+      assert.equal(JSON.stringify(value).includes(WORDS), false, 'the words never come back');
+    }
+    // The NEW-1 proof: A and B race on the same agent:inbox file, B swapping in a revoke during the window: 0 sends.
+    play.agentInbox.set('inbox/m.json', GRANTS);
+    play.hooks.onSelected = async () => { play.agentInbox.set('inbox/m.json', REVOKES); };
+    const raced = await Promise.all([
+      play.call('o11_access', { action: 'apply', manifestPath: 'agent:inbox/m.json', words: WORDS }),
+      (async () => { play.agentInbox.set('inbox/m.json', REVOKES); return play.call('o11_access', { action: 'apply', manifestPath: 'agent:inbox/m.json', words: WORDS }); })(),
+    ]);
+    for (const [i, { value }] of raced.entries()) assert.equal(value.cause, 'DESTRUCTIVE_HOSTED_OFF', 'call ' + i + ' ' + JSON.stringify(value).slice(0, 300));
+    assert.deepEqual(play.kernel, [], 'no apply reached the kernel');
+    assert.equal(play.kinds.filter(k => k.startsWith('file.get:') || k === 'o11.selected').length, 0, 'no pull, no Studio check: ' + JSON.stringify(play.kinds));
+    // Controls: plan, verify and users still pass the gate (plan reaches the kernel with the pulled manifest).
+    const plan = await play.call('o11_access', { action: 'plan', manifestPath: 'agent:inbox/g.json' });
+    assert.notEqual(plan.value.cause, 'DESTRUCTIVE_HOSTED_OFF', JSON.stringify(plan.value).slice(0, 300));
+    assert.ok(plan.kinds.includes('file.get:inbox/g.json'), 'plan pulls its manifest: ' + JSON.stringify(plan.kinds));
+    assert.deepEqual(plan.kernel.map(k => k.verb), ['access plan'], 'plan reaches the kernel');
+    for (const args of [{ action: 'verify' }, { action: 'users' }]) {
+      const { value } = await play.call('o11_access', args);
+      assert.notEqual(value.cause, 'DESTRUCTIVE_HOSTED_OFF', JSON.stringify(args) + ' ' + JSON.stringify(value).slice(0, 300));
+    }
+    assert.deepEqual(spawned, []); assert.deepEqual(connections, []);
+  } finally { await play.close(); }
 });
 
 // ---- F2: an oracle independent of the classifier's tables (never effects.mjs effectOf nor PORTAL_WRITES effect). It reads

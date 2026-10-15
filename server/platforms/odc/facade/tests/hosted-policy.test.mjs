@@ -72,7 +72,9 @@ test('mixed rules: ssam_map .oml vs module name, o11_access plan vs apply, ssam_
   assert.notEqual((await h.gate('ssam_map')({ lane: 'odc', target: 'ws:odc/snapshots/Orders-1.oml' })).isError, true);
   assert.equal(codeOf(await h.gate('ssam_map')({ lane: 'odc', target: 'Orders' })), 'AGENT_NOT_CONNECTED');
   assert.notEqual((await h.gate('o11_access')({ action: 'plan', manifestPath: 'access/m.json' })).isError, true);
-  assert.equal(codeOf(await h.gate('o11_access')({ action: 'apply', manifestPath: 'access/m.json', words: 'pode' })), 'AGENT_NOT_CONNECTED');
+  // NEW-1 of review 2: every hosted apply is refused at the gate, before the agent (HOSTED_DESTRUCTIVE, fail closed for now).
+  const apply = (await h.gate('o11_access')({ action: 'apply', manifestPath: 'access/m.json', words: 'pode' })).structuredContent;
+  assert.deepEqual([apply?.code, apply?.cause], ['HOSTED_UNAVAILABLE', 'DESTRUCTIVE_HOSTED_OFF']);
   assert.notEqual((await h.gate('ssam_job')({ lane: 'o11', job: { ops: [] }, captureProducers: [] })).isError, true);
   assert.equal(codeOf(await h.gate('ssam_job')({ lane: 'o11', job: { ops: [] }, captureProducers: ['System=(System)'] })), 'AGENT_NOT_CONNECTED');
   assert.equal(codeOf(await h.gate('ssam_app_url')({ app: 'Orders' })), 'AGENT_NOT_CONNECTED');
