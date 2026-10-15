@@ -112,6 +112,9 @@ um bundle feito a partir do Studio instalado. O instalador oficial do ODC Studio
   `cbe778bdabf6940fb5ff3a2eb63935f6075a2b7a7768ff85431bc73f63151e8c`). O `odc` do `kernel.json` (7.1) é essa versão, e o
   servidor recusa a faixa ODC de outra (`STUDIO_VERSION_MISMATCH`). O ODC Studio se atualiza sozinho: quando os clientes
   mudarem de versão, refaça o bundle, a imagem, o `kernel.json` e o `Features.plain.xml` (7.2).
+- Desde A-M1 (`feat/studio-build-identity`) o servidor compara o build inteiro (4 números) do Studio do cliente com o
+  da pasta do Studio da imagem (`ServiceStudio.Framework.dll`). Outro build da mesma versão (1.7.28.10873 numa imagem
+  1.7.28.10850) segue `studioBuildPolicy` (7.1): atende com aviso (padrão) ou recusa.
 
 Na raiz `server\` do SSAM-MCP, no Windows:
 
@@ -334,8 +337,28 @@ rm /tmp/kernel.json
 - O passo 4 também acontece sozinho no primeiro início com outra versão (`kernel-cache-reset` no log). Ele continua no
   roteiro porque a imagem do rollback (a857a1e) não faz isso.
 - Quem está no Service Studio 11.55.91 (o PC do dono também) perde a faixa O11 hospedada até a imagem de várias
-  versões: `STUDIO_VERSION_MISMATCH` com `cause: "STUDIO_VERSION_NOT_SERVED"`. Pacote novo não resolve. As ferramentas
-  só do servidor continuam. Quem está no ODC Studio 1.7.27 recebe o mesmo na faixa ODC.
+  versões: `STUDIO_VERSION_MISMATCH` com `cause: "STUDIO_UPDATE_REQUIRED"` (até A-M1, `"STUDIO_VERSION_NOT_SERVED"`).
+  Pacote novo não resolve. As ferramentas só do servidor continuam, com o aviso `studioNotServed`. Quem está no ODC
+  Studio 1.7.27 recebe o mesmo na faixa ODC. Um Studio mais novo que o da imagem recebe
+  `cause: "STUDIO_VERSION_NOT_SERVED_YET"` (o servidor ainda não tem; não volte o Studio).
+
+**Build exato do Studio (A-M1 da proposta mínima de várias versões, 15/10).** O servidor identifica o Studio do cliente pelo
+build de 4 números e compara com o build da pasta do Studio da imagem (o início grava
+`{"event":"studio-builds","builds":{"o11":"11.55.92.65269","odc":"1.7.28.10850"},"studioBuildPolicy":{...}}`).
+Para um build diferente com a mesma versão de 3 números, o campo opcional `studioBuildPolicy` do `kernel.json` decide:
+
+- sem o campo, ou `"studioBuildPolicy": "warn"` (opção D-M2a): atende, e toda resposta da faixa traz
+  `studioWarning` `studioBuildDiffers` com os dois builds. É o padrão: subir este código sozinho não corta quem é atendido
+  hoje;
+- `"studioBuildPolicy": "refuse"` (opção D-M2b): recusa como outra versão (`STUDIO_VERSION_MISMATCH`, pela direção);
+- por faixa: `"studioBuildPolicy": {"odc": "refuse", "o11": "warn"}`. Valor desconhecido recusa nas duas faixas e o
+  `studio-builds` vem com `policyInvalid: true`.
+
+O `kernel.json` continua saindo do registro (passo 1). Para recusar outro build, acrescente o campo no `kernelV1` da
+imagem em `release-record.json` (ou no `/tmp/kernel.json` antes do passo 2: `jq '. + {"studioBuildPolicy":"refuse"}'`).
+A conferência do par (passo 2) aceita o campo. Só vale depois de reiniciar o `ssam-server`. Cada Studio recusado gera
+uma vez `studio-version-unserved` no log (acesso, faixa, versões, motivo); o painel ainda não alerta sobre ele (A-P4).
+
 - Pacote do agente da interina: a fina O11 compilada contra o 11.55.92 (`agent-pack.ps1 -ExpectO11 11.55.92`, com
   `ANVIL_STUDIO_DIR` na pasta extraída do instalador assinado) e a bridge ODC v97. O pacote v97 do 11.55.91 é recusado
   na faixa O11 (`AGENT_PACK_MISMATCH`); a faixa ODC dele continua.
@@ -373,7 +396,7 @@ Com a imagem do 23º (`prod-20261011-ed0f94b`), o valor é
   `STUDIO_BRIDGE_OUTDATED` (a fina antiga não tem `sc_http`), e `studio_reference_producers` recebe
   `COMMAND_NOT_ALLOWED` do agente antigo. O resto funciona como antes.
 - Só tire uma versão de `odcBridgeAccepted` quando nenhum cliente a usar mais. O log do servidor não mostra a bridge do
-  agente (`agent-connected` traz só a versão do agente): confirme com cada cliente (`ssam-agent doctor` ou o `pack.json`
+  agente (`agent-connected` traz a versão do agente e, desde A-M1, a versão de cada Studio instalado): confirme com cada cliente (`ssam-agent doctor` ou o `pack.json`
   da pasta do agente).
 - O `kernel.json` acompanha a versão dos Studios e da bridge: no upgrade e no rollback (seção 8) ele é regravado junto.
 
@@ -865,7 +888,9 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
 | Certificado não sai | DNS não aponta para a VPS, porta 80 ou 443 fechada, ou limite do Let's Encrypt (use staging). |
 | 401 `Unknown token` / 403 `Token revoked` ou `expired` | Token errado, revogado ou vencido: `server-token list`. |
 | `AGENT_PACK_MISMATCH` | `kernel.json` (7.1) não bate com o pacote do agente do cliente: a bridge do pacote não é `odcBridge` nem está em `odcBridgeAccepted`, ou o `o11BuiltFor` não é o `o11`. |
-| `STUDIO_VERSION_MISMATCH` | O Studio do cliente não é o do `kernel.json` (7.1): Service Studio 11.55.92 na faixa O11 (interina; um 11.55.91 vem com `cause: "STUDIO_VERSION_NOT_SERVED"`), ODC Studio 1.7.28 na faixa ODC. Um ODC Studio que se atualizou sozinho pede imagem e `kernel.json` novos (bundle da seção 4, features da 7.2). |
+| `STUDIO_VERSION_MISMATCH` | O servidor não atende o Studio do cliente (7.1). `cause` diz a direção: `STUDIO_UPDATE_REQUIRED` (Studio mais velho: o cliente atualiza), `STUDIO_VERSION_NOT_SERVED_YET` (mais novo: pede imagem e `kernel.json` novos, bundle da seção 4, features da 7.2), `STUDIO_BUILD_UNKNOWN` (com `studioBuildPolicy: "refuse"`, o agente não mandou o build) ou `STUDIO_VERSION_UNKNOWN` (o agente não leu a versão). A resposta traz os dois builds e o texto em pt-BR (`userMessage`). |
+| `studioWarning` `studioBuildDiffers` numa resposta | O cliente está noutro build da mesma versão e `studioBuildPolicy` é `warn` (7.1): atendido, sem prova do par. Imagem com o build novo, ou `refuse`. |
+| `studioWarning` `studioNotServed` numa resposta | Ferramenta só de servidor rodou enquanto o Studio do cliente não é atendido (as do Studio são recusadas). |
 | 403 `Origin not allowed` | Cliente de navegador com uma origem diferente de `https://<SSAM_DOMAIN>`. |
 | `HOSTED_UNAVAILABLE` em `o11_extension`, `odc_external_library`, depurador ou preview | Esperado: essas ferramentas não rodam no servidor hospedado Linux. |
 | `HOSTED_UNAVAILABLE` em `ssam_debug_server`, `ssam_debug_client` ou `ssam_debug_matrix` | Esperado (24º): o depurador continua fora do hospedado, como o `ssam_debug`. |
@@ -882,7 +907,7 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
 ## 14. Limitações conhecidas
 
 - Imagem interina: uma versão de cada Studio (Service Studio 11.55.92, ODC Studio 1.7.28). Cliente num Studio mais
-  velho fica sem aquela faixa hospedada até a imagem de várias versões (`STUDIO_VERSION_NOT_SERVED`, 7.1).
+  velho fica sem aquela faixa hospedada até a imagem de várias versões (`STUDIO_UPDATE_REQUIRED`, 7.1).
 - A imagem foi construída e provada no Docker Desktop (seção 12), mas ainda não numa VPS: o certificado do
   Let's Encrypt, o DNS, o firewall, o IPv6 da rede `edge` com um cliente IPv6 real e o cron como usuário comum não foram
   provados lá. Os bundles dos Studios não estão neste repositório.

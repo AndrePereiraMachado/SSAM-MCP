@@ -112,7 +112,7 @@ function words(identity, stillWorks) {
   const three = threePart(served);
   const examples = listOf(SERVER_ONLY_EXAMPLES[identity.lane]);
   const still = {
-    pt: `Enquanto isso, as ferramentas só de servidor (${examples}) continuam funcionando, com o aviso studioNotServed.`,
+    pt: `Enquanto isso, as ferramentas só de servidor (${examples}) continuam funcionando, com um aviso.`,
     en: `Server-only tools (${examples}) still work, with the studioNotServed warning.`,
   };
   const nothing = { pt: 'Nada rodou no seu Studio.', en: 'Nothing ran on the user\'s Studio.' };

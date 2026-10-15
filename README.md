@@ -148,7 +148,9 @@ Este monorepo não o substitui nem o toca. Para testar a cópia, nunca use a por
 - Node 22+ (a imagem usa 24). pnpm 11.19.0 (a conferência usou o 11.25.0 que acompanha o Node do Codex).
 - .NET SDK 10. Os kernels são net8.0 com `RollForward=Major`.
 - Service Studio 11.55.92 e ODC Studio 1.7.28 (a versão do `kernel.json`; o ODC nunca mais velho que 1.7.27). O servidor
-  recusa outro Studio na faixa dele (`STUDIO_VERSION_MISMATCH`; um Studio mais velho com `cause: "STUDIO_VERSION_NOT_SERVED"`).
+  recusa outro Studio na faixa dele (`STUDIO_VERSION_MISMATCH`; desde A-M1 pelo build de 4 números, com `cause`
+  `STUDIO_UPDATE_REQUIRED` para um Studio mais velho e `STUDIO_VERSION_NOT_SERVED_YET` para um mais novo; outro build da
+  mesma versão segue `studioBuildPolicy`, `server/deploy/DEPLOY.md` 7.1).
 - Python 3.11+ só para `scripts/build.ps1` e os testes Python do kernel.
 - Não há `global.json` nem `nuget.config`. O SDK e o feed não estão fixados.
 
@@ -298,7 +300,8 @@ C:\SSAM-Agent\agent\node\node.exe C:\SSAM-Agent\agent\ssam-agent.mjs doctor --ro
   `refresh-references --producer` (a única chamada que o 1.7.28 quebrou); o resto funciona.
 - `o11BuiltFor` tem de ser o Service Studio do kernel do servidor (hoje 11.55.92: o pacote da imagem interina leva a fina
   compilada contra o 11.55.92, `agent-pack.ps1 -ExpectO11 11.55.92`). Quem está no Service Studio 11.55.91 recebe
-  `STUDIO_VERSION_MISMATCH` com `cause: "STUDIO_VERSION_NOT_SERVED"` com qualquer pacote, até a imagem de várias versões.
+  `STUDIO_VERSION_MISMATCH` com `cause: "STUDIO_UPDATE_REQUIRED"` (antes de A-M1, `"STUDIO_VERSION_NOT_SERVED"`) com
+  qualquer pacote, até a imagem de várias versões.
 - Senão o hub responde `AGENT_PACK_MISMATCH`. Um bump de bridge mexe nas duas caixas no mesmo commit.
 - Um pacote antigo aceito degrada com códigos tipados no 24º: o Service Center responde `STUDIO_BRIDGE_OUTDATED` e
   `studio_reference_producers` recebe `COMMAND_NOT_ALLOWED`. O 23º não aceita o pacote v96: no rollback do servidor, os

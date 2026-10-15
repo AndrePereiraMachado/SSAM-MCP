@@ -49,7 +49,7 @@ const AGENT_CONNECTED = { ...LOG_LINE, agent: /Quando o agente conecta:\*\* o IP
   'o11.pid': /o número do processo/, 'o11.port': /a porta local/, 'o11.studioVersion': /Com o Service Studio ligado ao agente, também a versão/,
   'o11.startedUtc': /a hora em que ele abriu/,
   // A-M1/E1 (C:\t\multiver\minimo\PROPOSTA.md): the version of each installed Studio, only the number
-  'studios.odc': /a versão do agente, a versão de cada Studio instalado \(só o número, sem a pasta\)/, 'studios.o11': /a versão de cada Studio instalado \(só o número, sem a pasta\)/ };
+  'studios.odc': /não permite recuperá-los\. Também a versão de cada Studio instalado \(só o número, sem a pasta\)/, 'studios.o11': /Também a versão de cada Studio instalado \(só o número, sem a pasta\)/ };
 // E1: a Studio the server does not serve, once per version, so the owner knows who needs an update
 const UNSERVED = { ...LOG_LINE, lane: /Quando o seu Studio não é atendido pelo servidor:\*\* a plataforma/, installed: /a versão do seu Studio/,
   served: /a versão do seu Studio, a do servidor/, relation: /como as duas se comparam/, cause: /o motivo/, policy: /e a regra do dono para builds diferentes/ };

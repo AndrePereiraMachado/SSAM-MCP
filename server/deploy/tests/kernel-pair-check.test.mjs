@@ -92,6 +92,18 @@ test('check: kernel.json v1 only; a usage or read error is exit 1', () => {
   assert.equal(run(['nope'], interim).code, 1);
 });
 
+// A-M1 (C:\t\multiver\minimo\PROPOSTA.md): kernel.json v1 may carry studioBuildPolicy ("warn" | "refuse" | per lane); the
+// pair check reads only o11 and odc, so the owner's choice D-M2b passes the same check as the record's pair.
+test('check: a kernel.json v1 with studioBuildPolicy is still v1 and passes with its own pair', () => {
+  const interim = studioRoot(INTERIM);
+  for (const studioBuildPolicy of ['refuse', 'warn', { odc: 'refuse' }]) {
+    const r = run(['check', kernelFile({ ...recordEntry(record, 'released').kernelV1, studioBuildPolicy })], interim);
+    assert.equal(r.code, 0, JSON.stringify(studioBuildPolicy)); assert.equal(JSON.parse(r.out).status, 'pair-ok');
+  }
+  assert.equal(run(['check', kernelFile({ ...recordEntry(record, 'released').kernelV1, odc: '1.7.27', studioBuildPolicy: 'warn' })], interim).code, 2,
+    'the policy never stands in for the pair');
+});
+
 test('the Studio versions are read under /studio/<lane> and one level below (the multi-version layout)', () => {
   const multi = studioRoot({ o11: ['11.55.92.65269', '11.55.91.65258'], odc: ['1.7.28.10850'] });
   assert.deepEqual(studioVersions(path.join(multi, 'o11')), ['11.55.91.65258', '11.55.92.65269']);

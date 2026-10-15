@@ -206,6 +206,7 @@ test('startupKernel: the served builds come from the image\'s Studio folders (el
   assert.deepEqual(started.kernel.studioBuildPolicy, { odc: 'refuse' }, 'as written; the hub normalizes it');
   assert.deepEqual(Object.keys(events.find(e => e.event === 'kernel').kernel).sort(), ['o11', 'o11Hook', 'odc', 'odcBridge', 'odcBridgeAccepted']);
   assert.deepEqual(events.find(e => e.event === 'studio-builds').studioBuildPolicy, { o11: 'warn', odc: 'refuse' });
+  assert.equal(events.some(e => e.event === 'kernel-json-unsupported'), false, 'the field keeps kernel.json v1');
   // a value the server does not know: both lanes refuse another build, and the start says so
   write({ ...INTERIM_FILE, studioBuildPolicy: 'block' });
   events = [];
