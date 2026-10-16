@@ -17,6 +17,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { portuguese, BILINGUAL } from './fixtures/portuguese.mjs';
 
 // Nothing of this machine is reached: child processes and TCP/pipe connections are spies installed before any facade module.
 const require = createRequire(import.meta.url);
@@ -259,15 +260,15 @@ test('every destructive call is refused at the gate: HOSTED_UNAVAILABLE / DESTRU
   }
 });
 
-test('the refusal tells the model, in English and pt-BR, that the user deletes in Service Center or the ODC Portal', async () => {
+test('the refusal tells the model, in English only, that the user deletes in Service Center or the ODC Portal', async () => {
   const value = valueOf(await harness().gate('o11_service_center_write')({ action: 'delete', prefix: 'ZZRV', words: WORDS }));
   assert.match(value.error, /hosted SSAM server/);
   assert.match(value.error, /Service Center/);
   assert.match(value.error, /ODC Portal/);
-  assert.match(value.error, /SSAM hospedado/);
-  assert.match(value.error, /Portal do ODC/);
   assert.match(value.error, /nothing was read, reserved or sent/);
-  assert.match(value.error, /nada foi lido, reservado nem enviado/);
+  // Owner rule of 2026-10-15: English only, no bilingual line (the pt-BR half of this refusal is gone).
+  assert.deepEqual(portuguese(value.error), []);
+  assert.doesNotMatch(value.error, BILINGUAL);
   assert.equal(typeof destructive.destructiveUnavailable, 'function');
   assert.deepEqual(destructive.destructiveUnavailable('o11_service_center_write'), value, 'the gate answers destructiveUnavailable as is');
 });
@@ -621,7 +622,7 @@ test('F1: revoking access is refused like the DELETE of the same access: *ToRemo
     const refused = await call('o11_access', { action: 'apply', manifestPath: 'ws:inbox/revoke.json', words: WORDS });
     // NEW-1 of review 2: every apply is refused by the classifier before the manifest is read, so no count comes back.
     assert.deepEqual([refused.value.code, refused.value.cause, refused.value.outcome, refused.value.revokes], ['HOSTED_UNAVAILABLE', 'DESTRUCTIVE_HOSTED_OFF', 'not-sent', undefined], JSON.stringify(refused.value).slice(0, 400));
-    assert.match(refused.value.error ?? '', /aplicar mudanças de acesso/i);
+    assert.match(refused.value.error ?? '', /applying access changes/i);
     assert.deepEqual(refused.kinds, [], 'no kind before the refusal');
     assert.equal(JSON.stringify(refused.value).includes(WORDS), false);
     // NEW-1 of review 2: every apply is refused for now, grants only too (fail closed), before any kind.
@@ -729,7 +730,7 @@ test('NEW-1: o11_access apply is refused at the gate on a hosted server, grants 
       assert.deepEqual(kinds, [], manifestPath + ': no pull of the inbox, no kind');
       assert.deepEqual(kernel, [], manifestPath + ': nothing reaches the kernel');
       assert.match(value.error ?? '', /applying access changes/i);
-      assert.match(value.error ?? '', /aplicar mudanças de acesso/i);
+      assert.deepEqual(portuguese(value.error ?? ''), [], 'English only, no pt-BR half (owner rule of 2026-10-15)');
       assert.match(value.error ?? '', /Service Center/);
       assert.equal(value.continuation, undefined);
       assert.equal(JSON.stringify(value).includes(WORDS), false, 'the words never come back');

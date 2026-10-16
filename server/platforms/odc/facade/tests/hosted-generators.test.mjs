@@ -12,6 +12,7 @@ import path from 'node:path';
 import { wrapHostedTool, namesGenerator, HOSTED_GENERATOR_OPS, GENERATOR_TOOLS } from '../hosted/policy.mjs';
 import { withGeneratorStates } from '../generators.mjs';
 import { fakeAgentLink, hostedDirs, cleanupHostedDirs } from './fixtures/fake-agent-link.mjs';
+import { portuguese } from './fixtures/portuguese.mjs';
 
 test.after(cleanupHostedDirs);
 const TOOLS = ['o11_deliver', 'studio_deliver', 'ssam_job', 'o11_job'];
@@ -48,7 +49,7 @@ const refusedAsGenerator = (result, name, generator) => {
   if (generator) assert.equal(value.generator, generator, name);
   assert.equal(value.outcome, 'not-sent');
   assert.match(value.error, /blind test/, name + ': English');
-  assert.match(value.error, /teste cego/, name + ': pt-BR');
+  assert.deepEqual(portuguese(value.error), [], name + ': English only, no pt-BR half (owner rule of 2026-10-15)');
   assert.equal(value.continuation.tool, 'ssam_discover');
 };
 

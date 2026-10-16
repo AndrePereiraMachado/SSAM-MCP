@@ -16,7 +16,7 @@ import path from 'node:path';
 export const AGENT_FOLDERS = ['inbox', 'odc', 'o11'];
 export const PATH_OUTSIDE_WORKSPACE = 'PATH_OUTSIDE_WORKSPACE';
 // The marker a continuation carries where the job itself goes (fase4-24: a hosted job travels inline, as compact JSON).
-export const INLINE_JOB_MARKER = '<o próprio job: o JSON, compacto>';
+export const INLINE_JOB_MARKER = '<the job itself: its JSON, compact>';
 const normalize = value => String(value).replace(/\//g, '\\').replace(/\\+$/, '');
 const fold = value => normalize(value).toLowerCase();
 
@@ -35,18 +35,18 @@ export function agentPath(abs, { agentRoot } = {}) {
 // value: the path the call named. name: its file name (a job.json when it has none).
 export function outsideWorkspaceRefusal(value, { agentRoot, tool, args = {}, field = 'job' } = {}) {
   const name = (typeof value === 'string' && path.win32.basename(normalize(value))) || 'job.json';
-  const target = agentRoot ? path.win32.join(normalize(agentRoot), 'inbox', name) : '<pasta do agente>\\inbox\\' + name;
+  const target = agentRoot ? path.win32.join(normalize(agentRoot), 'inbox', name) : '<agent folder>\\inbox\\' + name;
   const reference = 'agent:inbox/' + name;
   // fase4-24: a job file the agent cannot read is not copied there: the job itself goes inline in the same call (one
   // request straight to the server, no upload through the agent). Other files (an OML, an image) still go to the inbox.
   const inline = Boolean(tool) && field === 'job';
-  const inbox = 'grave em ' + target + ' com a ferramenta Write (UTF-8) e passe ' + reference;
+  const inbox = 'write ' + target + ' with the Write tool (UTF-8) and pass ' + reference;
   return {
     code: PATH_OUTSIDE_WORKSPACE,
     error: 'The path ' + String(value ?? '').slice(0, 300) + ' is outside the folders the agent reads (' + AGENT_FOLDERS.map(f => f + '/').join(', ') + ' of its root).',
-    fix: inline ? 'mande o próprio job inline em job (o JSON, compacto) na mesma chamada: vai direto ao servidor, sem arquivo; o inbox fica para arquivos do usuário (OML, imagens). Se o job já existe em arquivo: ' + inbox : inbox,
+    fix: inline ? 'send the job itself inline in job (its JSON, compact) in the same call: it goes straight to the server, with no file; the inbox is for the user\'s own files (OML, images). If the job already is a file: ' + inbox : inbox,
     ...(agentRoot ? { agentRoot: normalize(agentRoot), inbox: path.win32.join(normalize(agentRoot), 'inbox') } : {}),
     continuation: { tool: tool ?? 'ssam_doctor', arguments: tool ? { ...args, [field]: inline ? INLINE_JOB_MARKER : reference } : {},
-      why: !tool ? 'mostra a pasta do agente' : inline ? 'a mesma chamada com o próprio job inline (JSON compacto) no lugar do marcador' : 'a mesma chamada lendo o arquivo gravado no inbox do agente' },
+      why: !tool ? 'shows the agent folder' : inline ? 'the same call with the job itself inline (compact JSON) in place of the marker' : 'the same call reading the file written to the agent inbox' },
   };
 }

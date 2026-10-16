@@ -79,7 +79,7 @@ test('C26: an absolute path under the agent folder is its agent: path; any other
   const outside = (await deliver({ job: 'C:\\Users\\cliente\\AppData\\Local\\Temp\\claude\\job.json', module: 'Shop' })).structuredContent;
   assert.equal(outside.code, 'PATH_OUTSIDE_WORKSPACE');
   // fase4-24: a job goes inline; the fix says so first and still names the inbox file for a job that already is a file.
-  assert.match(outside.fix, /^mande o próprio job inline em job/);
+  assert.match(outside.fix, /^send the job itself inline in job/);
   assert.match(outside.fix, /C:\\SSAM-Agent\\inbox\\job\.json/);
   assert.equal(outside.inbox, 'C:\\SSAM-Agent\\inbox');
   assert.deepEqual(outside.continuation.arguments, { job: INLINE_JOB_MARKER, module: 'Shop' });

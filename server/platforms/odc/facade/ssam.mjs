@@ -289,7 +289,7 @@ async function doctorOdc({ factsCache = defaultDoctorFacts } = {}) {
 // changed). All of them keep every lane in the answer.
 export const RESTART_NEXT = 'reinicie este servidor MCP (Claude Code: /mcp e reconnect; Codex: reinicie a sessão)';
 // Hosted, only the server owner restarts the server (scripts\servidor.ps1); the customer cannot.
-export const HOSTED_RESTART_NEXT = 'o servidor SSAM hospedado mudou de versão e precisa ser reiniciado pelo dono do servidor; avise o dono e repita a chamada depois';
+export const HOSTED_RESTART_NEXT = 'the hosted SSAM server changed its release and needs a restart by the server owner; tell the owner and repeat the call afterwards';
 const releaseWait = tasks => tasks.length ? { tasks,
   next: 'The launcher reloads this server automatically when all detached tasks finish. Continue their existing operations.',
   continuation: tasks[0].continuation } : null;
@@ -400,7 +400,7 @@ export async function hostedDoctor(laneName, { context, session }, { network = f
     const refused = !connected ? agentNotConnected(info) : null;
     report.code = refused?.code === 'AGENT_RECONNECTING' ? 'AGENT_RECONNECTING' : 'DOCTOR_LANE_UNUSABLE';
     report.continuation = refused?.continuation ?? enabledLanes.find(l => l.ok !== true)?.continuation
-      ?? { tool: 'ssam_doctor', arguments: {}, why: 'esta conta não tem faixa habilitada neste servidor; peça ao dono do servidor' };
+      ?? { tool: 'ssam_doctor', arguments: {}, why: 'this account has no lane enabled on this server; ask the server owner' };
   }
   return report;
 }
@@ -409,9 +409,9 @@ export async function hostedDoctor(laneName, { context, session }, { network = f
 function laneContinuation(name, entry) {
   const studio = name === 'odc' ? 'ODC Studio' : 'Service Studio';
   if (entry.compatible && entry.compatible.ok === false) return { tool: 'ssam_doctor', arguments: { lane: name },
-    why: (entry.compatible.message ?? entry.compatible.code ?? 'versões diferentes') + ' O doctor mostra as versões dos dois lados.' };
-  if (!entry.studio?.open) return { tool: 'ssam_connect', arguments: { lane: name }, why: 'abra o ' + studio + ' normalmente (e faça login), depois chame ssam_connect; nada é salvo, publicado ou reiniciado' };
-  return { tool: 'ssam_connect', arguments: { lane: name }, why: 'o ' + studio + ' está aberto: conecte-o; nada é salvo, publicado ou reiniciado' };
+    why: (entry.compatible.message ?? entry.compatible.code ?? 'different versions') + ' The doctor shows the versions of both sides.' };
+  if (!entry.studio?.open) return { tool: 'ssam_connect', arguments: { lane: name }, why: 'open ' + studio + ' normally (and sign in), then call ssam_connect; nothing is saved, published or restarted' };
+  return { tool: 'ssam_connect', arguments: { lane: name }, why: studio + ' is open: connect it; nothing is saved, published or restarted' };
 }
 
 // The module reservations of a hosted customer (16th release, I8/A28): the kernel deliveries of this customer run with
@@ -1297,7 +1297,7 @@ export async function createSsamServer({ o11 = true, odc = true, deps = {}, host
         value = await doctor(which, { ...(deps.reservations ? { reservations: deps.reservations } : {}), ...(deps.doctor ?? {}), identity: { server: identityStarted, current, session }, activeTasks: activeTasks() });
         // The network check measures the agent's uploads over the internet: a local SSAM has no agent and no such path.
         if (network === true && value && typeof value === 'object') value = { ...value, network: { ran: false, code: 'NOT_HOSTED',
-          message: 'o teste de rede é do servidor hospedado (o agente sobe arquivos pela internet); aqui o SSAM roda nesta máquina' } };
+          message: 'the network check belongs to a hosted server (the agent uploads files over the internet); here SSAM runs on this machine' } };
       }
       return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value.ok === false ? { isError: true } : {}) };
     });

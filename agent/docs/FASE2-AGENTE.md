@@ -263,9 +263,11 @@ Teste de rede (`ssam_doctor {network:true}`, só no hospedado, uns 5 s):
   chegou e quando. O hub só manda `net.probe` a um agente cujo Hello lista o tipo (`link.supports`).
 - `hosted/network-check.mjs` junta o que o agente mediu com o que o hub viu e classifica cada subida: `ok`, `slow`,
   `stalled` (chegou ao servidor e andou a menos de 32 KiB/s ou parou) ou `unreached` (a conexão nova nunca chegou).
-  Por saída: `boa`, `lenta` ou `perde`. Veredito em palavras simples: `ok`, `slow`, `one-exit-lossy` ("uma das suas
-  saídas de internet (177.26.87.x) perde pacotes nas subidas..."), `uploads-lossy` e `new-connections-fail` (um quarto
-  ou mais das conexões novas não chegou: o caso do 5G ancorado da nota da integradora).
+  Por saída: `boa`, `lenta` ou `perde`. Veredito em palavras simples: `ok`, `slow`, `one-exit-lossy` ("one of your
+  internet exits (177.26.87.x) loses packets on uploads..."), `uploads-lossy` e `new-connections-fail` (um quarto
+  ou mais das conexões novas não chegou: o caso do 5G ancorado da nota da integradora). As mensagens são em inglês
+  desde `server/english-agent` (16/10/2026). Os valores `boa`/`lenta`/`perde` e a saída `desconhecida` continuam como
+  estão até o dono decidir.
 - Sem `network:true`, o hub mede cada parte de arquivo que sobe (`noteUpload`): uma parte acima de 3 s + 1 s por 128 KiB
   é lenta (log `agent-upload-slow`). Com partes lentas nos últimos 30 min, o doctor mostra `agent.uploads` e
   `network: {ran:false, code:"UPLOADS_SLOW", continuation: ssam_doctor {network:true}}`. O `ok` do doctor não muda.

@@ -13,8 +13,8 @@ combinada mudou de novo 2: `docs/FASE2-AGENTE.md` (Service Studio 11.55.92, a se
 recusa também as ferramentas só do servidor e esvazia os caches dela). A branch `feat/studio-build-identity` (A-M1) mudou
 `docs/FASE2-AGENTE.md` de novo (seção 7: identidade do Studio pelo build de 4 números, uma recusa por direção, avisos
 `studioBuildDiffers` e `studioNotServed`). A branch `server/english-agent` (regra do dono de 15/10/2026: todo texto que
-chega ao licenciado em inglês) mudou `docs/FASE2-AGENTE.md` (o pacote leva o guia do cliente, `docs\AGENTE-CLIENTE.md`).
-Ela não muda a bridge ODC: a frase de `tenantFollowedSession` do `StartupHook.cs` sai em inglês só com a bridge `v98`.
+chega ao licenciado em inglês) mudou `docs/FASE2-AGENTE.md`: o pacote leva o guia do cliente (`docs\AGENTE-CLIENTE.md`),
+e o exemplo do teste de rede da 2.10 está em inglês. Ela não muda a bridge ODC: a frase de `tenantFollowedSession` do `StartupHook.cs` sai em inglês só com a bridge `v98`.
 O `odc-bridge-version.test.mjs` de cada caixa recusa uma mudança no código da bridge sem versão nova.
 
 ## A regra
@@ -71,7 +71,7 @@ Sem saída, está tudo igual.
 | Arquivo (relativo à caixa) | sha256 (conteúdo com fim de linha LF) |
 | --- | --- |
 | `docs/DISTRIBUICAO.md` | `bc87ebe53ef2230f89d4ceb1162e5e84b9eecc0e2563e93905eccb78fbc9d5b1` |
-| `docs/FASE2-AGENTE.md` | `71753b0f49a2676bd321261639a17de78608a3b7da083115b2ddad72dd75c6e8` |
+| `docs/FASE2-AGENTE.md` | `1150718ff9f74ab296159959ba66e05fd45d64829f51ce9a6ca37fe881bd03a1` |
 | `docs/O11-BRIDGE-FINA.md` | `c7f24e4ad0e2b537394a537d103ad5b0654745c4c692965cdec5cc8fcc80a25d` |
 | `docs/PROVAS-AO-VIVO.md` | `b66c259ac7cb293fbc7c7165794885ac6462598a2e65e2753c85f3646d99979a` |
 | `docs/exemplos/mcp-cliente-hospedado.json` | `cabbe38805716878f03def98527dd5234b2dcfd9187df8c773305f80d8d6fa28` |

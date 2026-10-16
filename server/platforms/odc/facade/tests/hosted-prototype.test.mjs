@@ -13,6 +13,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { wrapHostedTool, namesPrototype, HOSTED_PROTOTYPE_OP, PROTOTYPE_TOOLS } from '../hosted/policy.mjs';
 import { createSsamServer } from '../ssam.mjs';
 import { fakeAgentLink, hostedDirs, cleanupHostedDirs } from './fixtures/fake-agent-link.mjs';
+import { portuguese } from './fixtures/portuguese.mjs';
 
 test.after(cleanupHostedDirs);
 const TOOLS = ['o11_deliver', 'studio_deliver', 'ssam_job', 'o11_job'];
@@ -45,7 +46,7 @@ const refusedAsPrototype = (result, name) => {
   assert.equal(value.policy, 'HOSTED_PROTOTYPE_OP', name + ': the answer names the switch');
   assert.equal(value.outcome, 'not-sent');
   assert.match(value.error, /only in local use for now/, name + ': English');
-  assert.match(value.error, /só funciona no uso local/, name + ': pt-BR');
+  assert.deepEqual(portuguese(value.error), [], name + ': English only, no pt-BR half (owner rule of 2026-10-15)');
   assert.equal(value.continuation.tool, 'ssam_discover');
   assert.ok(!JSON.stringify(value.continuation).includes('"prototype"'), 'the continuation never leads back to the prototype op');
 };

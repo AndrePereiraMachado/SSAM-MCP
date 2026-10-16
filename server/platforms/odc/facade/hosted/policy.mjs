@@ -201,8 +201,7 @@ export { namesPrototype };
 export function prototypeUnavailable(name, lane) {
   return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'PROTOTYPE_SOURCE_LOCAL', policy: 'HOSTED_PROTOTYPE_OP', tool: name, outcome: 'not-sent',
     error: 'The prototype import (op "prototype") is available only in local use for now: on a hosted server its source folder and the capture '
-      + 'of its JavaScript would run on the server machine. Nothing ran. / O importador de protótipo (op "prototype") por enquanto só funciona '
-      + 'no uso local: no servidor hospedado a pasta dele e a captura do seu JavaScript rodariam na máquina do servidor. Nada rodou.',
+      + 'of its JavaScript would run on the server machine. Nothing ran.',
     continuation: { tool: 'ssam_discover', arguments: { intent: 'port an approved prototype screen 1:1 with the html op and its style in the theme', lane: lane === 'odc' ? 'odc' : 'o11' },
       why: 'Builds the same screens with the ops this server runs (html op plus its <style>), without the prototype op; or import the prototype with an SSAM installed on the user\'s own machine.' } };
 }
@@ -222,8 +221,7 @@ export function generatorUnavailable(name, lane, generator) {
   return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'GENERATOR_PENDING', policy: 'HOSTED_GENERATOR_OPS', tool: name, generator, outcome: 'not-sent',
     ...(approval ? { state: approval.state } : {}),
     error: 'The generator op ' + JSON.stringify(generator) + ' is not available on a hosted SSAM server: it still waits for its independent blind test, '
-      + 'so this server never runs it. Nothing ran. / O gerador ' + JSON.stringify(generator) + ' não está disponível no servidor hospedado: ele ainda '
-      + 'espera o teste cego independente, e este servidor não o roda. Nada rodou.',
+      + 'so this server never runs it. Nothing ran.',
     continuation: { tool: 'ssam_discover', arguments: { intent: generator === 'rest-consume' ? 'consume a REST API' : generator === 'gen-screen' ? 'create list and detail screens' : 'create the CRUD actions of an entity', lane: lane === 'odc' ? 'odc' : 'o11' },
       why: 'Lists the ops this server runs for the same request, written in the job by hand, without the pending generator.' } };
 }
@@ -239,9 +237,7 @@ export function verifiedPatchUnavailable(name, lane, args, at = '/patch') {
   const callArgs = at === '/query/patch' ? { ...args, query: rest } : rest;
   return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'VERIFIED_PATCH_LOCAL', policy: 'HOSTED_VERIFIED_PATCH', tool: name, pointer: at, outcome: 'not-sent',
     error: 'patch "verified" is available only in local use for now: on a hosted server the gate does not read the verified patches kept beside '
-      + 'the job of basedOn, so it cannot check the job they make. Nothing ran. / O patch "verified" por enquanto só funciona no uso local: no '
-      + 'servidor hospedado o portão não lê os patches verificados guardados ao lado do job de basedOn e não consegue conferir o job que eles '
-      + 'montam. Nada rodou.',
+      + 'the job of basedOn, so it cannot check the job they make. Nothing ran.',
     continuation: { tool: name, arguments: callArgs, add: { [at === '/query/patch' ? 'query.patch' : 'patch']: 'the JSON Patch operations themselves: the patch of each problem of that refusal (at most 50), or a partial job as job' },
       why: 'The same call with the explicit patch: the gate checks the job it makes over basedOn, and the handler applies it.' } };
 }

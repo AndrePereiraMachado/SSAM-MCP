@@ -51,6 +51,6 @@ test('hosted reservations: only the customer\'s relay authority, named by file n
 });
 
 test('RELEASE_CHANGED names the server owner in hosted mode, the client restart locally', () => {
-  assert.match(HOSTED_RESTART_NEXT, /dono do servidor/);
+  assert.match(HOSTED_RESTART_NEXT, /restart by the server owner/);
   assert.notEqual(HOSTED_RESTART_NEXT, RESTART_NEXT);
 });

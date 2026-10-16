@@ -176,8 +176,8 @@ export function manifestRevokes(file) {
     && !(typeof entry.action === 'string' && entry.action.replace(TRIM, '').toLowerCase() === 'grant')).length;
   return { revokes };
 }
-const RECIPE = 'an o11_access apply with grants only still works here; the user revokes the roles in the Users application of the environment (or Service Center)'
-  + ' / um apply só com concessões continua funcionando; o usuário revoga os papéis no aplicativo Users do ambiente (ou no Service Center)';
+// The texts of a refusal are English only (owner rule of 2026-10-15: no bilingual line).
+const RECIPE = 'an o11_access apply with grants only still works here; the user revokes the roles in the Users application of the environment (or Service Center)';
 // After the gate resolved the paths of the call (policy.mjs): null, or what the refusal says ({revokes, detail}).
 export function hostedDestructiveFiles(name, args) {
   if (name !== 'o11_access' || !isObject(args) || word(args.action) !== 'apply') return null;
@@ -194,18 +194,13 @@ export function hostedDestructiveFiles(name, args) {
 // NEW-1: what an o11_access apply refusal says (every apply is off on a hosted server for now, grants too).
 const ACCESS_APPLY_OFF = 'Applying access changes (o11_access apply, granting or revoking roles) is off on a hosted SSAM server for now: this call was '
   + 'refused and nothing was read, reserved or sent. Tell the user; the user applies the change in Service Center (or the Users application of '
-  + 'the environment). o11_access plan, verify and users still work here. / Aplicar mudanças de acesso (o11_access apply, conceder ou revogar '
-  + 'papéis) fica desligado no SSAM hospedado por enquanto: esta chamada foi recusada e nada foi lido, reservado nem enviado. Diga ao usuário; '
-  + 'ele faz a mudança no Service Center (ou no aplicativo Users do ambiente). o11_access plan, verify e users continuam funcionando aqui.';
+  + 'the environment). o11_access plan, verify and users still work here.';
 // The refusal: one answer, nothing to retry, no other path offered. extra: what the gate counted (o11_access: revokes, detail).
 export const destructiveUnavailable = (name, extra = null) => ({ ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'DESTRUCTIVE_HOSTED_OFF', policy: 'HOSTED_DESTRUCTIVE', tool: name,
   outcome: 'not-sent', ...(extra ?? {}),
   error: name === 'o11_access' ? ACCESS_APPLY_OFF : 'Deleting (applications, modules, extensions, solutions, records, assets, connections, deployments, and taking access away: removing '
     + 'users or roles from a group, revoking roles) is not available on a hosted SSAM server yet: this call was refused and nothing was read, '
-    + 'reserved or sent. Tell the user; the user deletes it in Service Center or the ODC Portal (records: in Service Studio or ODC Studio). / '
-    + 'Apagar (aplicações, módulos, extensões, soluções, registros, assets, conexões, implantações, e tirar acesso: remover usuários ou papéis de '
-    + 'um grupo, revogar papéis) ainda não está disponível no SSAM hospedado: esta chamada foi recusada e nada foi lido, reservado nem enviado. '
-    + 'Diga ao usuário; ele apaga no Service Center ou no Portal do ODC (registros: no Service Studio ou no ODC Studio).' });
+    + 'reserved or sent. Tell the user; the user deletes it in Service Center or the ODC Portal (records: in Service Studio or ODC Studio).' });
 
 // The part of each tool that hostedDestructive refuses, said first in its hosted description. whole: every call.
 export const HOSTED_OFF = Object.freeze({

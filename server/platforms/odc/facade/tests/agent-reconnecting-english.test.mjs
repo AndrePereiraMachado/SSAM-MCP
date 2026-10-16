@@ -1,7 +1,8 @@
 // Owner rule of 2026-10-15 (every text SSAM emits is English only), lane A: the answers about the customer's agent
 // connection. AGENT_RECONNECTING (both ages) and AGENT_NOT_CONNECTED of the hosted gate (hosted/policy.mjs), called for
 // real, and the AGENT_RECONNECTING of the hub (agent-hub.mjs reconnectingError, read from the source) carry no
-// Portuguese: no accented letter and none of the common Portuguese words below. The codes and retryAfterSeconds stay.
+// Portuguese: no accented letter and none of the common Portuguese words of fixtures/portuguese.mjs (the detector this
+// guard shares with hosted-answers-english.test.mjs). The codes and retryAfterSeconds stay.
 import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,13 +10,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { agentNotConnected, RESTART_AFTER_MS, RETRY_AFTER_SECONDS } from '../hosted/policy.mjs';
+import { portuguese } from './fixtures/portuguese.mjs';
 
 const facade = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const WORDS = new Set(('nao voce esta este isso pelo pela para com sem uma um dos das nos nas ao em de da ou que se ja mais ainda depois quando ' +
-  'sempre nunca seu sua ele ela nada repita chamada agente sozinho reconecta usuario janela conferir peca contato servidor').split(' '));
-const portuguese = text => String(text).split(/[\s'"`(){}[\],;+=<>|!?*&]+/u)
-  .map(piece => piece.replace(/^[^\p{L}]+|[^\p{L}]+$/gu, '').toLowerCase())
-  .filter(token => token && (/[À-ÖØ-öø-ÿ]/u.test(token) || WORDS.has(token)));
 const texts = answer => [answer.error, answer.continuation?.why].filter(Boolean);
 
 test('the hosted gate answers about the agent connection in English, with the same codes', () => {

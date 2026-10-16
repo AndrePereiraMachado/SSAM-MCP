@@ -19,8 +19,14 @@ const SMALL_SLOW_MS = 2000;
 // A large upload slower than this (bytes per second, ~2 Mbit/s) is slow.
 const LARGE_SLOW_BYTES_PER_SECOND = 262144;
 
-const seconds = ms => (ms < 1000 ? Math.round(ms) + ' ms' : (ms / 1000).toFixed(1).replace('.', ',') + ' s');
-const size = bytes => (bytes >= 1048576 ? (bytes / 1048576).toFixed(bytes % 1048576 ? 1 : 0).replace('.', ',') + ' MB' : bytes >= 1024 ? Math.round(bytes / 1024) + ' KB' : bytes + ' B');
+// The texts are English only (owner rule of 2026-10-15), with a decimal point. The structured values stay as they were
+// (the owner decides whether they change): paths[].status 'boa' | 'lenta' | 'perde' and the exit key UNKNOWN_EXIT of an
+// upload whose address the hub could not read (agent-hub.mjs maskAddress gives the same value); the texts name that exit
+// "unknown".
+export const UNKNOWN_EXIT = 'desconhecida';
+const exitName = via => (via === UNKNOWN_EXIT ? 'unknown' : via);
+const seconds = ms => (ms < 1000 ? Math.round(ms) + ' ms' : (ms / 1000).toFixed(1) + ' s');
+const size = bytes => (bytes >= 1048576 ? (bytes / 1048576).toFixed(bytes % 1048576 ? 1 : 0) + ' MB' : bytes >= 1024 ? Math.round(bytes / 1024) + ' KB' : bytes + ' B');
 const median = values => { if (!values.length) return null; const sorted = [...values].sort((a, b) => a - b); return sorted[Math.floor((sorted.length - 1) / 2)]; };
 const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
 
@@ -49,7 +55,7 @@ export function summarizeProbes(probes = [], records = []) {
   });
   const groups = new Map();
   for (const row of rows.filter(r => r.state !== 'unreached')) {
-    const key = row.via ?? 'desconhecida';
+    const key = row.via ?? UNKNOWN_EXIT;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(row);
   }
@@ -64,40 +70,41 @@ export function summarizeProbes(probes = [], records = []) {
   }).sort((a, b) => b.uploads - a.uploads);
   const unreached = rows.filter(r => r.state === 'unreached').length;
   const ok = rows.filter(r => r.state === 'ok').length;
-  const describe = p => p.via + (p.largeMs != null ? ' (subiu ' + size(p.largeBytes) + ' em ' + seconds(p.largeMs) + ')' : p.smallMs != null ? ' (1 envio pequeno em ' + seconds(p.smallMs) + ')' : '');
+  const describe = p => exitName(p.via) + (p.largeMs != null ? ' (uploaded ' + size(p.largeBytes) + ' in ' + seconds(p.largeMs) + ')' : p.smallMs != null ? ' (a small upload in ' + seconds(p.smallMs) + ')' : '');
+  const exits = list => list.map(p => exitName(p.via)).join(', ');
   const bad = paths.filter(p => p.status === 'perde');
   const good = paths.filter(p => p.status === 'boa');
   let verdict, message;
   if (rows.length === 0) {
-    verdict = 'no-probes'; message = 'o agente não fez nenhum envio de teste';
+    verdict = 'no-probes'; message = 'the agent made no test upload';
   } else if (unreached > 0 && unreached * 4 >= rows.length) {
     verdict = 'new-connections-fail';
-    message = plural(unreached, 'de ' + rows.length + ' envios em conexão nova não chegou', 'de ' + rows.length + ' envios em conexão nova não chegaram') + ' ao servidor: a sua internet está perdendo conexões novas (comum em 5G ou celular ancorado). '
-      + 'O SSAM repete o que não chegou, mas cada conexão perdida custa de 15 a 20 s; uma rede cabeada ou outro Wi-Fi resolve.';
+    message = unreached + ' of ' + rows.length + ' uploads on a new connection did not reach the server: your internet is losing new connections (common on 5G or a tethered phone). '
+      + 'SSAM repeats what did not arrive, but each lost connection costs 15 to 20 s; a wired network or another Wi-Fi solves it.';
   } else if (bad.length && good.length) {
     const lost = bad.reduce((n, p) => n + p.stalled, 0), sent = bad.reduce((n, p) => n + p.uploads, 0);
     verdict = 'one-exit-lossy';
-    message = (bad.length === 1 ? 'uma das suas saídas de internet (' + bad[0].via + ') perde pacotes nas subidas: ' : 'algumas das suas saídas de internet (' + bad.map(p => p.via).join(', ') + ') perdem pacotes nas subidas: ')
-      + lost + ' de ' + sent + ' envios por ' + (bad.length === 1 ? 'ela' : 'elas') + ' travaram; ' + (good.length === 1 ? 'a outra, ' + describe(good[0]) + ', está boa. ' : 'as outras (' + good.map(describe).join('; ') + ') estão boas. ')
-      + 'A sua internet usa mais de uma saída ao mesmo tempo (roteador com duas WAN em balanceamento, ou o provedor). O SSAM repete a parte travada em conexão nova, '
-      + 'mas cada travamento custa segundos: confira o roteador ou use uma saída só.';
+    message = (bad.length === 1 ? 'one of your internet exits (' + exitName(bad[0].via) + ') loses packets on uploads: ' : 'some of your internet exits (' + exits(bad) + ') lose packets on uploads: ')
+      + lost + ' of ' + sent + ' uploads through ' + (bad.length === 1 ? 'it' : 'them') + ' stalled; ' + (good.length === 1 ? 'the other one, ' + describe(good[0]) + ', is fine. ' : 'the others (' + good.map(describe).join('; ') + ') are fine. ')
+      + 'Your internet uses more than one exit at the same time (a router with two WANs in load balancing, or the provider). SSAM repeats the stalled part on a new connection, '
+      + 'but each stall costs seconds: check the router or use a single exit.';
   } else if (bad.length) {
     const lost = bad.reduce((n, p) => n + p.stalled, 0);
     verdict = 'uploads-lossy';
-    message = 'a sua internet perde pacotes nas subidas: ' + lost + ' de ' + rows.length + ' envios em conexão nova chegaram ao servidor e travaram'
-      + (paths.length > 1 ? ' (saídas ' + paths.map(p => p.via).join(', ') + ')' : '') + '. Envios pequenos passam e arquivos travam: o SSAM repete as partes, mas cada travamento custa segundos.';
+    message = 'your internet loses packets on uploads: ' + lost + ' of ' + rows.length + ' uploads on a new connection reached the server and stalled'
+      + (paths.length > 1 ? ' (exits ' + exits(paths) + ')' : '') + '. Small uploads pass and files stall: SSAM repeats the parts, but each stall costs seconds.';
   } else if (paths.some(p => p.status === 'lenta')) {
     const largest = paths.filter(p => p.largeMs != null).map(describe);
     verdict = 'slow';
-    message = 'a sua internet está lenta nas subidas' + (largest.length ? ': ' + largest.join('; ') : '') + '. Nada travou; entregas grandes só levam mais tempo.';
+    message = 'your internet is slow on uploads' + (largest.length ? ': ' + largest.join('; ') : '') + '. Nothing stalled; large deliveries just take longer.';
   } else {
     verdict = 'ok';
     const small = median(rows.filter(r => r.ok && r.bytes <= SMALL_BYTES).map(r => r.ms));
     const large = rows.filter(r => r.ok && r.bytes > SMALL_BYTES);
-    message = 'subidas boas: ' + ok + ' de ' + rows.length + ' envios em conexão nova chegaram' + (small != null ? ' (pequenos em ' + seconds(small) + '' : '')
-      + (large.length ? (small != null ? ', ' : ' (') + size(large[0].bytes) + ' em ' + seconds(median(large.map(r => r.ms))) + ')' : small != null ? ')' : '')
-      + (paths.length > 1 ? '; a sua internet sai por ' + paths.length + ' endereços (' + paths.map(p => p.via).join(', ') + ') e todos estão bons' : '') + '.'
-      + (unreached ? ' ' + plural(unreached, 'envio não chegou', 'envios não chegaram') + ', pouco para pesar.' : '');
+    message = 'uploads are fine: ' + ok + ' of ' + rows.length + ' uploads on a new connection arrived' + (small != null ? ' (small ones in ' + seconds(small) + '' : '')
+      + (large.length ? (small != null ? ', ' : ' (') + size(large[0].bytes) + ' in ' + seconds(median(large.map(r => r.ms))) + ')' : small != null ? ')' : '')
+      + (paths.length > 1 ? '; your internet goes out through ' + paths.length + ' addresses (' + exits(paths) + ') and all of them are fine' : '') + '.'
+      + (unreached ? ' ' + plural(unreached, 'upload did not arrive', 'uploads did not arrive') + ', too few to matter.' : '');
   }
   return { verdict, message, paths, unreached, uploads: rows.length, ok };
 }
@@ -109,14 +116,14 @@ export async function networkCheck(link, { plan = DEFAULT_PLAN, now = Date.now }
   try { info = link?.info?.() ?? null; } catch { info = null; }
   let connected = false;
   try { connected = link?.connected?.() === true; } catch { connected = false; }
-  if (!connected) return { ran: false, code: 'AGENT_NOT_CONNECTED', message: 'o teste de rede roda pelo agente, que não está conectado agora' };
+  if (!connected) return { ran: false, code: 'AGENT_NOT_CONNECTED', message: 'the network check runs through the agent, which is not connected now' };
   if (typeof link.supports === 'function' && !link.supports(NET_PROBE_KIND))
     return { ran: false, code: 'AGENT_KIND_MISSING', agentVersion: info?.agentVersion ?? null,
-      message: 'o agente desta conta (' + (info?.agentVersion ?? 'versão antiga') + ') ainda não faz o teste de rede: peça ao dono do servidor o pacote do agente atual' };
+      message: 'the agent of this account (' + (info?.agentVersion ?? 'an old version') + ') does not run the network check yet: ask the server owner for the current agent pack' };
   const started = now();
   let value;
   try { value = await link.call(NET_PROBE_KIND, plan, { timeoutMs: plan.budgetMs + MARGIN_MS }); }
-  catch (error) { return { ran: false, code: error?.code ?? 'AGENT_ERROR', message: 'o teste de rede não terminou: ' + String(error?.message ?? error).slice(0, 300) }; }
+  catch (error) { return { ran: false, code: error?.code ?? 'AGENT_ERROR', message: 'the network check did not finish: ' + String(error?.message ?? error).slice(0, 300) }; }
   const probes = Array.isArray(value?.probes) ? value.probes : [];
   let records = [];
   try { records = link.probes?.(probes.map(p => p.id).filter(Boolean)) ?? []; } catch { records = []; }
@@ -130,8 +137,8 @@ export function uploadsHint(link) {
   if (!uploads || !uploads.slow) return null;
   const worst = [...(uploads.recent ?? [])].sort((a, b) => b.ms - a.ms)[0];
   return { code: 'UPLOADS_SLOW', uploads,
-    message: plural(uploads.slow, 'subida de arquivo do agente demorou', 'subidas de arquivo do agente demoraram') + ' nos últimos 30 min'
-      + (worst ? ' (a pior: ' + size(worst.bytes) + ' em ' + seconds(worst.ms) + (worst.via ? ', pela saída ' + worst.via : '') + ')' : '')
-      + ': rode o teste de rede para saber se é uma saída da internet do usuário',
-    continuation: { tool: 'ssam_doctor', arguments: { network: true }, why: 'testa as subidas do agente em conexões novas, por saída da internet (uns 5 s)' } };
+    message: plural(uploads.slow, 'file upload of the agent was slow', 'file uploads of the agent were slow') + ' in the last 30 min'
+      + (worst ? ' (the worst: ' + size(worst.bytes) + ' in ' + seconds(worst.ms) + (worst.via ? ', through the exit ' + exitName(worst.via) : '') + ')' : '')
+      + ': run the network check to find out whether it is an exit of the user\'s internet',
+    continuation: { tool: 'ssam_doctor', arguments: { network: true }, why: 'tests the agent\'s uploads on new connections, per exit of the user\'s internet (about 5 s)' } };
 }
