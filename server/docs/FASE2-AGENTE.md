@@ -988,6 +988,8 @@ conferências daquela faixa; sem `lane`, só as do agente).
   bin\o11\bridge\                Anvil.Bridge.dll (a bridge fina, sem o kernel) [+ Anvil.Bridge.deps.json] e nada mais,
                                  compilada para o Service Studio do kernel (O11-BRIDGE-FINA.md §6.1)
   agent\node\                    node.exe + LICENSE, por padrão (O11-BRIDGE-FINA.md §6.3)
+  docs\AGENTE-CLIENTE.md         o guia do cliente, em inglês (o agente, o ssam-agent.ps1 e as dicas do servidor citam
+                                 este caminho; desde server/english-agent, 15/10/2026)
   odc\README.md                  marcador da raiz da bridge ODC
   odc\studio\bridge\bin\Release\net8.0\ODC3.Bridge.v35.dll
   odc\studio\bridge\client\bin\Release\net10.0\ODC3.Bridge.Client.dll (+ deps, runtimeconfig)
@@ -1337,6 +1339,10 @@ ssam server-token revoke --id tok_xxxxxxxxxxxx                                # 
 - `-NoBuild -Prebuilt <pasta>` usa binários já prontos (é o modo dos testes; nenhum `dotnet build` em teste).
 
 ### 9.5 Guia do cliente (`docs/AGENTE-CLIENTE.md`, faixa `agent`)
+
+Em inglês desde 15/10/2026 (regra do dono: todo texto que chega ao licenciado em inglês), e o pacote o leva em
+`docs\AGENTE-CLIENTE.md`. As frases da seção "Privacy" são conferidas por `privacy-record.test.mjs` e
+`quality-privacy-doc.test.mjs` do servidor.
 
 Pré-requisitos (Windows; o Node vem no pacote, `agent\node\node.exe` com a licença em `agent\node\LICENSE`, e só um
 pacote `-NoNode` pede o Node 24 instalado com `--use-env-proxy` e `--use-system-ca`, conferidos pelo `doctor` por

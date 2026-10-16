@@ -225,6 +225,9 @@ try {
   New-Item -ItemType Directory -Force (Join-Path $agentOut 'lib') | Out-Null
   Copy-Item -LiteralPath (Join-Path $root 'agent\ssam-agent.mjs'), (Join-Path $root 'agent\ssam-agent.ps1') -Destination $agentOut
   Copy-Item -Path (Join-Path $root 'agent\lib\*.mjs') -Destination (Join-Path $agentOut 'lib')
+  # The customer guide (English), which the agent, its script and the server hints cite as docs\AGENTE-CLIENTE.md.
+  New-Item -ItemType Directory -Force (Join-Path $tree 'docs') | Out-Null
+  Copy-Item -LiteralPath (Join-Path $root 'docs\AGENTE-CLIENTE.md') -Destination (Join-Path $tree 'docs\AGENTE-CLIENTE.md')
   if ($nodeSource) {
     New-Item -ItemType Directory -Force (Join-Path $agentOut 'node') | Out-Null
     Copy-Item -LiteralPath $nodeSource -Destination (Join-Path $agentOut 'node\node.exe')
@@ -276,7 +279,7 @@ try {
     Copy-Folder $clientFrom (Join-Path $tree 'odc\studio\bridge\client\bin\Release\net10.0')
     if (-not (Test-Path -LiteralPath (Join-Path $tree 'odc\studio\bridge\client\bin\Release\net10.0\ODC3.Bridge.Client.dll'))) { throw "Falta ODC3.Bridge.Client.dll em $clientFrom" }
     # The ODC bridge finds its root by walking up from its DLL to a folder with studio\ and README.md.
-    [IO.File]::WriteAllText((Join-Path $tree 'odc\README.md'), "Raiz da bridge ODC do agente SSAM (nao apague nem mova). Dados em snapshots\, journal\ e lab\.`r`n", $utf8)
+    [IO.File]::WriteAllText((Join-Path $tree 'odc\README.md'), "Root of the ODC bridge of the SSAM agent (do not delete or move it). Data in snapshots\, journal\ and lab\.`r`n", $utf8)
   }
 
   if ($laneList -contains 'o11') {

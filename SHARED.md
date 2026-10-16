@@ -12,7 +12,9 @@ combinada mudou de novo 2: `docs/FASE2-AGENTE.md` (Service Studio 11.55.92, a se
 `docs/PROVAS-AO-VIVO.md` (Service Studio 11.55.92). O `41e538f0` mudou `docs/FASE2-AGENTE.md` de novo (a faixa desligada
 recusa também as ferramentas só do servidor e esvazia os caches dela). A branch `feat/studio-build-identity` (A-M1) mudou
 `docs/FASE2-AGENTE.md` de novo (seção 7: identidade do Studio pelo build de 4 números, uma recusa por direção, avisos
-`studioBuildDiffers` e `studioNotServed`).
+`studioBuildDiffers` e `studioNotServed`). A branch `server/english-agent` (regra do dono de 15/10/2026: todo texto que
+chega ao licenciado em inglês) mudou `platforms/odc/studio/bridge/StartupHook.cs`: só a frase de `tenantFollowedSession`
+(gravada em `odc\snapshots\modules.json` na máquina do cliente), nas mesmas duas linhas; a bridge continua `v97`.
 
 ## A regra
 
@@ -68,7 +70,7 @@ Sem saída, está tudo igual.
 | Arquivo (relativo à caixa) | sha256 (conteúdo com fim de linha LF) |
 | --- | --- |
 | `docs/DISTRIBUICAO.md` | `bc87ebe53ef2230f89d4ceb1162e5e84b9eecc0e2563e93905eccb78fbc9d5b1` |
-| `docs/FASE2-AGENTE.md` | `1de4db6644da594364bb03113ca0f131bb6835cbf93c7a2662bca8400b6bd82b` |
+| `docs/FASE2-AGENTE.md` | `71753b0f49a2676bd321261639a17de78608a3b7da083115b2ddad72dd75c6e8` |
 | `docs/O11-BRIDGE-FINA.md` | `c7f24e4ad0e2b537394a537d103ad5b0654745c4c692965cdec5cc8fcc80a25d` |
 | `docs/PROVAS-AO-VIVO.md` | `b66c259ac7cb293fbc7c7165794885ac6462598a2e65e2753c85f3646d99979a` |
 | `docs/exemplos/mcp-cliente-hospedado.json` | `cabbe38805716878f03def98527dd5234b2dcfd9187df8c773305f80d8d6fa28` |
@@ -173,7 +175,7 @@ duas caixas, e a checagem acima não o lista.
 | `platforms/odc/studio/bridge/README.md` | `722510d95bca5db8cced9ed3560f8dbb31dd2681c17c9514f01bd7a332efef9b` |
 | `platforms/odc/studio/bridge/ReferenceCommands.cs` | `615e55dec013036b12270e55ec8eea2a723cce753eb367cd232884b65adf9db0` |
 | `platforms/odc/studio/bridge/SecurityWarningsCopy.cs` | `9994c72f57a32b74fd8ca92299198e44dea11efed1023d5526f72eeb5307b698` |
-| `platforms/odc/studio/bridge/StartupHook.cs` | `3c90b44f10511f06b9f369ff4b2499fa54b57a030563a4d2e582a3337a748b0b` |
+| `platforms/odc/studio/bridge/StartupHook.cs` | `608e566457b7862a376cb06479ba9a89df0ae9991e1654474452e2cb8db1d9ab` |
 | `platforms/odc/studio/bridge/TemplateCache.cs` | `a57ef89f222983393d3249c75d543e6a2fc06aef456340a63272d8f127b3f20c` |
 | `platforms/odc/studio/bridge/client/Client.csproj` | `a5b9c2d9640b4df751a052075cd5b2bf9b568b7b2e00f72b160acb9ebdc953f2` |
 | `platforms/odc/studio/bridge/client/Program.cs` | `371ac5aff49a07d71b307252b6305165f9bf258c678e9ffdc20e7e5190482f87` |

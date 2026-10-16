@@ -1,4 +1,4 @@
-// The customer's privacy section (docs/AGENTE-CLIENTE.md "Privacidade") against what the hosted server REALLY records
+// The customer's privacy section (docs/AGENTE-CLIENTE.md "Privacy", English since 2026-10-15) against what the hosted server REALLY records
 // (privacy re-check of 2026-10-12, low findings: a few statements did not match the record, and a tool name typed by the
 // client reached the audit and server.log as typed). A real hosted HTTP server with the hub, the token store, a real MCP
 // client and a fake agent speaking ssam-agent/1 runs one session; then every field of every line it wrote is tied to the
@@ -31,7 +31,7 @@ const ROOT = path.resolve(facade, '..', '..', '..');
 const GUIDE = [path.join(ROOT, 'docs', 'AGENTE-CLIENTE.md'), path.join(ROOT, '..', 'agent', 'docs', 'AGENTE-CLIENTE.md')].find(f => fs.existsSync(f));
 const sectionOf = text => {
   const t = text.replace(/\r\n/g, '\n');
-  const start = t.indexOf('## Privacidade: o que o servidor registra sobre o seu acesso\n');
+  const start = t.indexOf('## Privacy: what the server records about your access\n');
   const end = t.indexOf('\n## ', start + 1);
   assert.ok(start >= 0, 'the privacy section');
   return t.slice(start, end < 0 ? undefined : end).replace(/\s+/g, ' ');
@@ -41,49 +41,49 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-privacy-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 // ---- the words of each recorded field
-const LOG_LINE = { time: /em cada linha, a hora/, event: /em cada linha, a hora, o evento/, token: /e o identificador do seu acesso/ };
-const SESSION = { ...LOG_LINE, session: /o número da sessão MCP/, customer: /o nome que o dono deu ao seu acesso/, ip: /o IP de onde você conecta/,
-  ua: /e o user-agent/, client: /o nome e a versão do cliente MCP/, reason: /Quando a sessão fecha, o motivo/ };
-const AGENT_CONNECTED = { ...LOG_LINE, agent: /Quando o agente conecta:\*\* o IP, a versão do agente/, ip: /Quando o agente conecta:\*\* o IP/,
-  'machine.name': /o nome do computador/, 'machine.user': /o seu usuário do Windows/, 'machine.id': /um identificador da máquina/,
-  'o11.pid': /o número do processo/, 'o11.port': /a porta local/, 'o11.studioVersion': /Com o Service Studio ligado ao agente, também a versão/,
-  'o11.startedUtc': /a hora em que ele abriu/,
+const LOG_LINE = { time: /on each line, the time/, event: /on each line, the time, the event/, token: /and the identifier of your access/ };
+const SESSION = { ...LOG_LINE, session: /the MCP session number/, customer: /the name the owner gave your access/, ip: /the IP you connect from/,
+  ua: /and the user-agent/, client: /the name and version of the MCP client/, reason: /When the session closes, the reason/ };
+const AGENT_CONNECTED = { ...LOG_LINE, agent: /When the agent connects:\*\* the IP, the agent version/, ip: /When the agent connects:\*\* the IP/,
+  'machine.name': /the computer name/, 'machine.user': /your Windows user/, 'machine.id': /a machine identifier/,
+  'o11.pid': /the process number/, 'o11.port': /the local port/, 'o11.studioVersion': /With the Service Studio connected to the agent, also its version/,
+  'o11.startedUtc': /the time it opened/,
   // A-M1/E1 (C:\t\multiver\minimo\PROPOSTA.md): the version of each installed Studio, only the number
-  'studios.odc': /não permite recuperá-los\. Também a versão de cada Studio instalado \(só o número, sem a pasta\)/, 'studios.o11': /Também a versão de cada Studio instalado \(só o número, sem a pasta\)/ };
+  'studios.odc': /does not allow recovering them\. Also the version of each installed Studio \(only the number, without the folder\)/, 'studios.o11': /Also the version of each installed Studio \(only the number, without the folder\)/ };
 // E1: a Studio the server does not serve, once per version, so the owner knows who needs an update
-const UNSERVED = { ...LOG_LINE, lane: /Quando o seu Studio não é atendido pelo servidor:\*\* a plataforma/, installed: /a versão do seu Studio/,
-  served: /a versão do seu Studio, a do servidor/, relation: /como as duas se comparam/, cause: /o motivo/, policy: /e a regra do dono para builds diferentes/ };
-const MACHINE = { id: /Na primeira conexão do agente, o servidor guarda o nome do computador, o seu usuário do Windows, o identificador/,
-  name: /o servidor guarda o nome do computador/, user: /o servidor guarda o nome do computador, o seu usuário do Windows/,
-  at: /o identificador, a hora e o IP/ };
-const ALERT = { time: /o dono recebe um alerta com a hora/, event: /o dono recebe um alerta/, token: /e o identificador do seu acesso/,
-  customer: /um alerta com a hora, o nome do seu acesso/, ip: /as duas máquinas e o IP/,
-  ...Object.fromEntries(Object.entries(MACHINE).flatMap(([k, v]) => [['first.' + k, v], ['machine.' + k, /as duas máquinas/]])) };
-const CHANNEL = { ...LOG_LINE, reason: /quando ele conecta, cai ou volta, com o motivo/, route: /um pedido recusado/, status: /um pedido recusado/,
-  code: /com o código, o tipo e quantos/, type: /uma mensagem desconhecida, um arquivo que chegou diferente ou expirou\), com o código, o tipo/,
-  transfer: /um arquivo que chegou diferente/, count: /com o código, o tipo e quantos/, kind: /Numa chamada ao agente, o tipo/, afterMs: /o tempo, se deu certo/,
-  bytes: /Uma parte de arquivo que demora para subir fica com o tamanho/, ms: /fica com o tamanho, o tempo/, via: /e o IP sem o último número/ };
+const UNSERVED = { ...LOG_LINE, lane: /When the server does not serve your Studio:\*\* the platform/, installed: /the version of your Studio/,
+  served: /the version of your Studio, the server's version/, relation: /how the two compare/, cause: /the cause/, policy: /and the owner's rule for different builds/ };
+const MACHINE = { id: /On the agent's first connection, the server keeps the computer name, your Windows user, the identifier/,
+  name: /the server keeps the computer name/, user: /the server keeps the computer name, your Windows user/,
+  at: /the identifier, the time and the IP/ };
+const ALERT = { time: /the owner gets an alert with the time/, event: /the owner gets an alert/, token: /and the identifier of your access/,
+  customer: /an alert with the time, the name of your access/, ip: /the two machines and the IP/,
+  ...Object.fromEntries(Object.entries(MACHINE).flatMap(([k, v]) => [['first.' + k, v], ['machine.' + k, /the two machines/]])) };
+const CHANNEL = { ...LOG_LINE, reason: /when it connects, drops or comes back, with the reason/, route: /a refused request/, status: /a refused request/,
+  code: /with the code, the type and how many/, type: /an unknown message, a file that arrived different or expired\), with the code, the type/,
+  transfer: /a file that arrived different/, count: /with the code, the type and how many/, kind: /In a call to the agent, the kind/, afterMs: /the time, whether it succeeded/,
+  bytes: /A file part that is slow to upload is kept with its size/, ms: /is kept with its size, the time/, via: /and the IP without its last number/ };
 // server.log: the events of http-server.mjs and agent-hub.mjs. null = about the server only (no field of the customer).
 const LOG = {
   'session-opened': SESSION, 'session-closed': SESSION,
-  'mcp-response-flushed': { ...LOG_LINE, session: /o número da sessão MCP/, tools: /as ferramentas \(só as da lista do servidor; outro nome vira `\?`\)/,
-    bytes: /o tamanho da resposta/, ms: /o tamanho da resposta e o tempo/ },
+  'mcp-response-flushed': { ...LOG_LINE, session: /the MCP session number/, tools: /the tools \(only those of the server's list; any other name becomes `\?`\)/,
+    bytes: /the size of the answer/, ms: /the size of the answer and the time/ },
   'agent-connected': AGENT_CONNECTED, 'agent-resumed': AGENT_CONNECTED, 'studio-version-unserved': UNSERVED,
-  'agent-machine-pinned': { ...LOG_LINE, ip: /o identificador, a hora e o IP/, ...Object.fromEntries(Object.entries(MACHINE).map(([k, v]) => ['machine.' + k, v])) },
+  'agent-machine-pinned': { ...LOG_LINE, ip: /the identifier, the time and the IP/, ...Object.fromEntries(Object.entries(MACHINE).map(([k, v]) => ['machine.' + k, v])) },
   'agent-machine-changed': ALERT,
-  'agent-call': { ...LOG_LINE, kind: /Numa chamada ao agente, o tipo/, command: /o comando \(só da lista do agente\)/, method: /o comando \(só da lista do agente\)/,
-    operation: /o comando \(só da lista do agente\)/, ms: /o comando \(só da lista do agente\), o tempo/, ok: /o tempo, se deu certo/, code: /e o código do resultado/ },
+  'agent-call': { ...LOG_LINE, kind: /In a call to the agent, the kind/, command: /the command \(only from the agent's list\)/, method: /the command \(only from the agent's list\)/,
+    operation: /the command \(only from the agent's list\)/, ms: /the command \(only from the agent's list\), the time/, ok: /the time, whether it succeeded/, code: /and the result code/ },
   'agent-call-unaccepted': CHANNEL, 'agent-channel-closed': CHANNEL, 'agent-dead': CHANNEL, 'agent-replaced': CHANNEL, 'agent-stream-opened': CHANNEL,
   'agent-route-refused': CHANNEL, 'agent-blob-mismatch': CHANNEL, 'agent-transfers-expired': CHANNEL, 'agent-unknown-id': CHANNEL,
   'agent-unknown-message': CHANNEL, 'agent-upload-slow': CHANNEL,
   listening: null, 'tokens-unreadable': null, 'request-failed': null, 'audit-failed': null,
 };
-const AUDIT = { time: /Em toda linha:\*\* a hora/, token: /Em toda linha:\*\* a hora, o identificador do seu acesso/, customer: /o nome que o dono deu a ele/,
-  tool: /A chamada:\*\* a ferramenta \(só da lista de ferramentas do servidor; outro nome vira `\?`\)/, ms: /a duração/, ok: /se deu certo/, error: /o código; o passo/ };
+const AUDIT = { time: /On every line:\*\* the time/, token: /On every line:\*\* the time, the identifier of your access/, customer: /the name the owner gave it/,
+  tool: /The call:\*\* the tool \(only from the server's tool list; any other name becomes `\?`\)/, ms: /the duration/, ok: /whether it succeeded/, error: /the code; the step/ };
 // The Hello fields kept only in memory (agent-hub.mjs state.hello), with their words.
-const HELLO_MEMORY = { 'agent.root': /a pasta onde ele está \(ela costuma ter o seu usuário do Windows\)/, 'agent.node': /a versão do Node/,
-  'agent.platform': /o sistema/, 'agent.startedAt': /a hora em que o agente abriu/, 'agent.kinds': /o que ele sabe fazer/, pack: /o pacote instalado/,
-  studios: /e a pasta de cada Studio instalado/ };
+const HELLO_MEMORY = { 'agent.root': /the folder it is in \(it usually contains your Windows user\)/, 'agent.node': /the Node version/,
+  'agent.platform': /the system/, 'agent.startedAt': /the time the agent started/, 'agent.kinds': /what it can do/, pack: /the installed pack/,
+  studios: /and the folder of each installed Studio/ };
 
 const flat = (value, prefix = '') => Object.entries(value ?? {}).flatMap(([k, v]) =>
   v && typeof v === 'object' && !Array.isArray(v) ? flat(v, prefix + k + '.') : [prefix + k]);
@@ -188,7 +188,7 @@ test('every field the hosted server records about the customer has its words in 
   assert.ok(r.alerts.length === 1);
   for (const alert of r.alerts) tie('access-alerts.jsonl', ALERT, flat(alert));
   for (const words of Object.values(HELLO_MEMORY)) assert.match(section, words);
-  assert.match(section, /O servidor usa esses dados só na memória, para conferir as versões e para o `ssam_doctor`\. Eles não vão para o log, para a auditoria nem para o registro de qualidade\./);
+  assert.match(section, /The server uses this data only in memory, to check the versions and for `ssam_doctor`\. It does not go to the log, the audit or the quality record\./);
 });
 
 test('every server.log event of http-server.mjs and agent-hub.mjs is classified by this test', () => {
@@ -202,9 +202,9 @@ test('every server.log event of http-server.mjs and agent-hub.mjs is classified 
 
 test('the retention words: the 56 days of the log need the weekly rotation; the first machine and the alerts have no deadline', { skip: !GUIDE && 'docs/AGENTE-CLIENTE.md is in the agent box' }, () => {
   const section = sectionOf(fs.readFileSync(GUIDE, 'utf8'));
-  assert.match(section, /Os 56 dias valem com a limpeza semanal do servidor ligada; sem ela, o log fica até o dono apagá-lo\./);
-  assert.match(section, /O registro da primeira máquina e os alertas de outra máquina não têm prazo: ficam até o dono apagá-los\./);
-  assert.doesNotMatch(section, /Nada além disso sobre a sua máquina é enviado: nenhum arquivo,/, 'the agent sends the files of its folder');
+  assert.match(section, /The 56 days hold with the server's weekly cleanup turned on; without it, the log stays until the owner deletes it\./);
+  assert.match(section, /The first-machine record and the other-machine alerts have no time limit: they stay until the owner deletes them\./);
+  assert.doesNotMatch(section, /Nothing else about your machine is sent: no file,/, 'the agent sends the files of its folder');
 });
 
 test('the agent and session events keep the shape the owner console parses (telemetry adds event names only)', async () => {
