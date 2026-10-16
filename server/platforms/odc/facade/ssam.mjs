@@ -400,7 +400,7 @@ export async function hostedDoctor(laneName, { context, session }, { network = f
     const refused = !connected ? agentNotConnected(info) : null;
     report.code = refused?.code === 'AGENT_RECONNECTING' ? 'AGENT_RECONNECTING' : 'DOCTOR_LANE_UNUSABLE';
     report.continuation = refused?.continuation ?? enabledLanes.find(l => l.ok !== true)?.continuation
-      ?? { tool: 'ssam_doctor', arguments: {}, why: 'this account has no lane enabled on this server; ask the server owner' };
+      ?? { tool: 'ssam_doctor', arguments: {}, why: 'This account has no lane enabled on this server; ask the server owner.' };
   }
   return report;
 }
@@ -410,8 +410,8 @@ function laneContinuation(name, entry) {
   const studio = name === 'odc' ? 'ODC Studio' : 'Service Studio';
   if (entry.compatible && entry.compatible.ok === false) return { tool: 'ssam_doctor', arguments: { lane: name },
     why: (entry.compatible.message ?? entry.compatible.code ?? 'different versions') + ' The doctor shows the versions of both sides.' };
-  if (!entry.studio?.open) return { tool: 'ssam_connect', arguments: { lane: name }, why: 'open ' + studio + ' normally (and sign in), then call ssam_connect; nothing is saved, published or restarted' };
-  return { tool: 'ssam_connect', arguments: { lane: name }, why: studio + ' is open: connect it; nothing is saved, published or restarted' };
+  if (!entry.studio?.open) return { tool: 'ssam_connect', arguments: { lane: name }, why: 'Open ' + studio + ' normally (and sign in), then call ssam_connect; nothing is saved, published or restarted.' };
+  return { tool: 'ssam_connect', arguments: { lane: name }, why: studio + ' is open: connect it; nothing is saved, published or restarted.' };
 }
 
 // The module reservations of a hosted customer (16th release, I8/A28): the kernel deliveries of this customer run with
