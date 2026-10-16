@@ -554,8 +554,8 @@ internal static partial class Bridge {
             var arquivada = outros.OfType<JsonObject>().FirstOrDefault(o => (string?)o["tenant"] == host);
             if (arquivada != null) outros.Remove(arquivada);
             root["tenant"] = host;
-            root["tenantFollowedSession"] = "root promoted from " + (raizAntiga ?? "(none)") + " to " + host
-                + " at " + listedAt + ": it was the only authenticated session";
+            root["tenantFollowedSession"] = "raiz promovida de " + (raizAntiga ?? "(nenhuma)") + " para " + host
+                + " em " + listedAt + ": era a unica sessao autenticada";
         }
 
         JsonObject section;
