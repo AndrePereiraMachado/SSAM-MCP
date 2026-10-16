@@ -26,9 +26,9 @@ Direção do dono, que vale para toda decisão deste pacote:
 
 Decisões tomadas neste contrato (para não abrir rodada; cada uma muda num ponto só):
 - **D1.** O delete O11 continua pela API SOAP do próprio Studio (verbo `sc_api` da bridge), não pelas páginas Factory do GitSSAM. Sem página, não há `LAYOUT_UNKNOWN`. O segredo do Studio (SSO incluído) substitui a senha que fez o SOAP do GitSSAM falhar.
-- **D2.** Delete por prefixo: o prefixo, como palavra inteira nas palavras do dono, nomeia todos os alvos que ele casa, até `maxDeletes` (padrão 25, máximo 100). App protegida (lista do GitSSAM) e consumidor externo só passam nomeados por inteiro. Constante única `PREFIX_WORDS_NAME_ALL = true` em `service-center/delete.mjs`.
+- **D2.** Delete por prefixo: o prefixo, como palavra inteira nas palavras do dono, nomeia todos os alvos que ele casa, até `maxDeletes` (padrão 25, máximo 100). App protegida (lista do GitSSAM) e consumidor externo só passam nomeados por inteiro. Constante única `PREFIX_WORDS_NAME_ALL = true` em `service-center/delete.mjs`. **Nota CX15 (15/10):** D2 vale só DEPOIS da prévia: a seleção por prefixo existe só na prévia, e o prefixo nas palavras do dono dadas depois dela nomeia os alvos congelados no token (nada é resolvido de novo), com a contagem exata de itens (decisão do dono, opção C). Motivo: em 14/10 a frase do pedido, dita antes de qualquer lista, nomeou o prefixo e apagou 7 aplicações (uma que a lista do chat nem mostrava).
 - **D3.** Alvo destrutivo nas palavras: palavra inteira, sem caixa e sem acento (`namesWhole`). Vale para todo destrutivo do Service Center, inclusive `db-connection-delete`. A checagem do ambiente corporativo fica como está.
-- **D4.** `module-delete`, `extension-delete` e `application-delete` viram aliases do motor de delete. Com palavras, executam na mesma chamada. `execute:false` explícito só planeja.
+- **D4.** `module-delete`, `extension-delete` e `application-delete` viram aliases do motor de delete. Com palavras, executam na mesma chamada. `execute:false` explícito só planeja. **Nota CX15 (15/10): "com palavras, executam na mesma chamada" CAIU em 14/10.** Todo delete é em duas chamadas: a prévia (sem `confirmationToken`: a lista exata, a contagem, o token, o `operationId`; nada enviado) e a execução (o token e as palavras do dono dadas depois da prévia, com a contagem). Motivo: o incidente de 14/10 (a mesma chamada resolveu o prefixo e apagou; a interrupção não parou o servidor; ninguém mostrou o que foi apagado). Os aliases continuam aliases do motor.
 - **D5.** XIF: o modelo sai do motor instalado do Integration Studio, sem login. Stubs e DLLs da plataforma vêm pela bridge O11 com a sessão do Studio. A compilação é Roslyn. A publicação usa a operação que já existe (`UploadAndPublishExtension`). Sem login do Integration Studio e sem arquivo de credencial.
 - **D6.** Biblioteca externa ODC: sem login usuário/senha (o Cognito do GitSSAM fica fora). Credencial: sessão do Studio, depois o cofre, depois o prompt privado. Nunca o chat.
 - **D7.** Não há gerador C# comum entre xif e extlib. Os alvos diferem (net472 no layout do Integration Studio × net10 com atributos `OSInterface`), os projetos diferem (`Anvil.Xif`, só O11, × `Anvil.Core.Odc`), e um símbolo comum quebraria o isolamento das lanes. O que se compartilha é a forma do spec (I9).
@@ -184,6 +184,8 @@ Problem = { code: UPPER_SNAKE, target?: string, path?: string, message: string, 
 ## 2. Lanes
 
 ### Lane scdelete: apagar no ambiente O11 numa chamada (apps, módulos, extensões)
+
+> Histórico. Desde a CX15 (15/10) o delete é em duas chamadas, prévia e confirmação (notas em D2 e D4 e `docs/OPERACOES-O11.md`, "Apagar no ambiente").
 
 Arquivos que escreve:
 - `platforms/odc/facade/service-center/`: `index.mjs`, `studio-api.mjs`, `auth.mjs`, `client.mjs`, `bridge.mjs`, `errors.mjs`, `util.mjs` e o NOVO `delete.mjs`.

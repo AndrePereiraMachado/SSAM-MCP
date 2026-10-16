@@ -20,6 +20,10 @@ public sealed class ScreenDocFacts
     /// <summary>"screen" or "block".</summary>
     public string Kind { get; init; } = "";
     public string Name { get; init; } = "";
+    /// <summary>CX16 r2 (A2): the op is the edit of a reading (ScreenHtmlEdit.IsEdit: the whole document with screen and
+    /// basedOn), not a new root: the rule of the apply, asked before the text is read as a document. The facts of its text are
+    /// the same in both forms.</summary>
+    public bool Edit { get; init; }
     public List<Data> Declared { get; } = [];
     public List<string> Actions { get; } = [];
     public List<string> DataActions { get; } = [];
@@ -45,7 +49,7 @@ public sealed class ScreenDocFacts
         var text = HtmlText.Parse(html);
         var root = text.Root.Children.FirstOrDefault(e => e.Tag is "screen" or "block");
         if (root == null || root.Get("name") is not { Length: > 0 } name) return null;
-        var facts = new ScreenDocFacts { Op = index, Text = text, Root = root, Kind = root.Tag, Name = name };
+        var facts = new ScreenDocFacts { Op = index, Text = text, Root = root, Kind = root.Tag, Name = name, Edit = Anvil.Reading.ScreenHtmlEdit.IsEdit(op) };
         foreach (var child in root.Children)
         {
             var kind = child.Tag.ToLowerInvariant();

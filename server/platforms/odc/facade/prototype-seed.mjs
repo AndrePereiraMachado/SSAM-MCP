@@ -15,6 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { hashedWords } from './destructive-operations.mjs';
 
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
@@ -120,7 +121,8 @@ export function o11DataWriter({ runAnvil, host, oml, work }) {
   return async ({ module, authorization, batch }) => {
     const requests = path.join(work, 'requests'); fs.mkdirSync(requests, { recursive: true });
     const file = path.join(requests, randomUUID() + '.json');
-    fs.writeFileSync(file, JSON.stringify({ authorization, batch: batch.map(op => (op.operation === 'insert' ? op : (({ operationId, ...rest }) => rest)(op))) }));
+    // CX15 r4 (W-2): the request file and the kernel's receipt keep sha256:<hex> of the owner's words, never the words.
+    fs.writeFileSync(file, JSON.stringify({ authorization: hashedWords(authorization), batch: batch.map(op => (op.operation === 'insert' ? op : (({ operationId, ...rest }) => rest)(op))) }));
     const r = await runAnvil(['data', '--studio', '--host', host, '--module', module, '--oml', path.resolve(oml), '--request', file, '--work', work]);
     const envelope = r?.envelope ?? null;
     const data = envelope?.data && typeof envelope.data === 'object' ? envelope.data : envelope;
@@ -138,7 +140,8 @@ export function odcDataWriter({ studio, pid, dir }) {
           fs.mkdirSync(dir, { recursive: true });
           const file = path.join(dir, 'seed-' + String(op.entity).replace(/[^\w.-]/g, '_') + '.json');
           fs.writeFileSync(file, JSON.stringify(op.records));
-          const value = await studio(['data-insert', module, op.entity, '--records-file', file, '--authorize', authorization], pid);
+          // CX15 r4 (W-2): the bridge gets sha256:<hex> of the owner's words (it only requires a nonempty --authorize).
+          const value = await studio(['data-insert', module, op.entity, '--records-file', file, '--authorize', hashedWords(authorization)], pid);
           results.push({ ok: value?.ok !== false, inserted: Array.isArray(value?.records) ? value.records.length : Number.isInteger(value?.inserted) ? value.inserted : op.records.length, ...(value?.ok === false ? { error: value.error } : {}) });
         } else {
           const value = await studio(['data', module, op.entity, '--limit', String(op.limit ?? 1)], pid);

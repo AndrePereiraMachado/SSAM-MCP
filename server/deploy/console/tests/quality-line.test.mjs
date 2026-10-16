@@ -16,7 +16,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = process.env.QUALITY_FIXTURES ?? path.join(HERE, 'fixtures', 'quality');
 const native = loadNativeIds(path.join(FIXTURES, 'catalog'), { readDir: fs.readdirSync, readFile: fs.readFileSync, join: path.join });
 const lines = text => text.split('\n').filter(Boolean);
-export const CONTRACT_SHA256 = '5168a3d45564b38edb54b9b6baff75981e2d6b3947e9aa4901ce04e6ea4f9d21';
+export const CONTRACT_SHA256 = '2e4458df28f3e10f94b3639c855dbaf3fe0f481a10cd743a3f8e3437fd8f5edd';
 const lfSha = file => createHash('sha256').update(fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
 
 test('parity (D9): the console copy of quality-line.mjs is the shared contract, byte for byte (CRLF read as LF)', () => {

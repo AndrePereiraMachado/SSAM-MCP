@@ -102,7 +102,7 @@ test('tools.json routes every live tool and verb of the ssam MCP server, and not
   // by its owner (F7b, 2026-10-06), so it is not in UNMARKED. The modes of the 2026-10-05 package
   // (contract section 5): deliver and publish in one call (o11_deliver/studio_deliver publish), the consumers of a published
   // producer (o11_publish consumers), the close with proof of an uncertain task (ssam_task close).
-  const UNMARKED = { o11_deliver: ['resume', 'publish'], odc_receipt: ['reconcile'], o11_publish: ['consumers'], ssam_task: ['close'], studio_deliver: ['publish'] };
+  const UNMARKED = { o11_deliver: ['resume', 'publish'], odc_receipt: ['reconcile'], o11_publish: ['consumers', 'refreshReferences'], ssam_task: ['close'], studio_deliver: ['publish'] };
   // ssam_doctor release (2026-10-06 package, F7b): the doctor reads without it and frees a reservation with it.
   const ABSENCE = { odc_receipt: ['reconcile'], o11_publish: ['consumers'], ssam_task: ['close'], ssam_doctor: ['release'] }; // without the field: the read (or plain publish) mode
   const nonVerbMode = (tool, f) => (data.nonVerbModes ?? []).some(n => n.tool === tool && n.field === f);

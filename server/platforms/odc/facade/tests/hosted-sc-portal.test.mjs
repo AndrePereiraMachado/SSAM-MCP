@@ -185,7 +185,11 @@ test('portal-private-*: the private Portal transport is refused before staging o
     await Promise.all([facade.connect(serverSide), client.connect(clientSide)]);
     try {
       const value = (await client.callTool({ name: 'studio_command', arguments: { command: 'portal-private-call', args: [request, randomUUID(), '--tenant', TENANT] } })).structuredContent;
-      assert.equal(value.code, 'HOSTED_STUDIO_SESSION_ONLY', JSON.stringify(value));
+      // marco-a6 (CX15): the facade's studio_command refuses this line itself before the executor does
+      // (DESTRUCTIVE_NEEDS_DEDICATED_TOOL); through the hosted server the gate refuses it before both (DESTRUCTIVE_HOSTED_OFF,
+      // hosted-destructive). Either way nothing is staged or sent.
+      assert.ok(['DESTRUCTIVE_NEEDS_DEDICATED_TOOL', 'HOSTED_STUDIO_SESSION_ONLY'].includes(value.code), JSON.stringify(value));
+      assert.equal(value.ok, false);
     } finally { await client.close(); await facade.close(); }
     // The handoff pipes of the private transport (Portal and Service Center) never open in hosted mode.
     const connect = () => assert.fail('no pipe is opened');

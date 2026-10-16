@@ -1,0 +1,1223 @@
+{
+ "about": "CX14 N7: real kernel receipts of the review scenarios (verify-3N7). The refresh of run0 stopped (MB2) and ended; the resume proved the idle, settled it and went on. A1: its merge stops; A2: the same with the dependencies dialog back; B: the refresh sent again stops again (B_delivered: the next resume delivers); C: the merge waits for the person. e77fd91b: the kernel reviewed in cx14-4; r5: the kernel of this round. Synthetic values only; paths and bulky fields dropped.",
+ "e77fd91b": {
+  "A1": {
+   "taskId": "7ba711ea5fcd4a7ab9c5548d82e346d2",
+   "module": "Probe",
+   "delivered": false,
+   "writeState": "unknown",
+   "stage": "reconcile",
+   "open": {
+    "opened": true,
+    "alreadyOpen": false
+   },
+   "moduleKey": "K979bfabc1a4040b7b658916a81e7ea14",
+   "environment": "synthetic-env",
+   "settledBridgeOperations": [
+    {
+     "method": "refresh_references",
+     "moduleKey": "K979bfabc1a4040b7b658916a81e7ea14",
+     "stall": {
+      "verdict": "dialog",
+      "method": "refresh_references",
+      "afterMs": 209,
+      "studio": {
+       "pid": 15712,
+       "startedUtc": "2026-10-15T00:00:00Z"
+      },
+      "blockedBy": {
+       "title": "Unexpected Error",
+       "type": "DialogWindow",
+       "kind": "UnexpectedError",
+       "seenMs": 93
+      }
+     },
+     "idleProof": {
+      "idle": true,
+      "reads": [
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       },
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       }
+      ],
+      "observedAt": "2026-10-15T13:19:43.2505238+00:00"
+     },
+     "settledAt": "2026-10-15T13:19:43.2527663+00:00",
+     "note": "The Studio's Refresh References of this task stopped and then ended (two idle reads proved it): it may have changed the module's references, and Ctrl+Z in the Studio undoes it. After that proof the call that settled it sent again, as the delivery's normal steps do: open_module 1x; merge_from_oml is sent at most once per task.",
+     "sentAgain": {
+      "ended": true,
+      "refresh_references": 0,
+      "open_module": 1,
+      "close_module": 0
+     }
+    }
+   ],
+   "sentAgainAfterIdle": {
+    "ended": true,
+    "refresh_references": 0,
+    "open_module": 1,
+    "close_module": 0
+   },
+   "apply": {
+    "isValid": true,
+    "accepted": true
+   },
+   "operationId": "1e1f13889c4f4e80ab2e4b1ac1e9b436",
+   "mergeError": "BridgeCallException: merge_from_oml: Studio call stopped (dialog): Unexpected Error; nothing was repeated",
+   "stalled": {
+    "verdict": "dialog",
+    "method": "merge_from_oml",
+    "afterMs": 212,
+    "studio": {
+     "pid": 15712,
+     "startedUtc": "2026-10-15T00:00:00Z"
+    },
+    "blockedBy": {
+     "title": "Unexpected Error",
+     "type": "DialogWindow",
+     "kind": "UnexpectedError",
+     "seenMs": 110
+    }
+   },
+   "pendingBridgeOperation": {
+    "method": "merge_from_oml",
+    "moduleKey": "K979bfabc1a4040b7b658916a81e7ea14",
+    "operationId": "1e1f13889c4f4e80ab2e4b1ac1e9b436",
+    "stall": {
+     "verdict": "dialog",
+     "method": "merge_from_oml",
+     "afterMs": 212,
+     "studio": {
+      "pid": 15712,
+      "startedUtc": "2026-10-15T00:00:00Z"
+     },
+     "blockedBy": {
+      "title": "Unexpected Error",
+      "type": "DialogWindow",
+      "kind": "UnexpectedError",
+      "seenMs": 110
+     }
+    }
+   },
+   "operationStatus": {
+    "state": "unknown"
+   },
+   "error": "The Studio stopped answering the merge: dialog (Unexpected Error) after 0.212 s; nothing was repeated. Resume reconciles it through merge_status."
+  },
+  "A2": {
+   "taskId": "1918967d4f4f4b5d9e22cc5adf51a765",
+   "module": "Probe",
+   "delivered": false,
+   "writeState": "unknown",
+   "stage": "reconcile",
+   "open": {
+    "opened": true,
+    "alreadyOpen": false,
+    "dependenciesDialog": {
+     "answered": [
+      {
+       "title": "Incompatible or missing dependencies found",
+       "answer": "Cancel"
+      }
+     ]
+    }
+   },
+   "moduleKey": "K781fe38a020a4438b27eb60df9178fc3",
+   "environment": "synthetic-env",
+   "settledBridgeOperations": [
+    {
+     "method": "refresh_references",
+     "moduleKey": "K781fe38a020a4438b27eb60df9178fc3",
+     "stall": {
+      "verdict": "dialog",
+      "method": "refresh_references",
+      "afterMs": 203,
+      "studio": {
+       "pid": 15712,
+       "startedUtc": "2026-10-15T00:00:00Z"
+      },
+      "blockedBy": {
+       "title": "Unexpected Error",
+       "type": "DialogWindow",
+       "kind": "UnexpectedError",
+       "seenMs": 92
+      }
+     },
+     "idleProof": {
+      "idle": true,
+      "reads": [
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       },
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       }
+      ],
+      "observedAt": "2026-10-15T13:19:43.8425297+00:00"
+     },
+     "settledAt": "2026-10-15T13:19:43.8425528+00:00",
+     "note": "The Studio's Refresh References of this task stopped and then ended (two idle reads proved it): it may have changed the module's references, and Ctrl+Z in the Studio undoes it. After that proof the call that settled it sent again, as the delivery's normal steps do: refresh_references 1x, open_module 1x; merge_from_oml is sent at most once per task.",
+     "sentAgain": {
+      "ended": true,
+      "refresh_references": 1,
+      "open_module": 1,
+      "close_module": 0
+     }
+    }
+   ],
+   "sentAgainAfterIdle": {
+    "ended": true,
+    "refresh_references": 1,
+    "open_module": 1,
+    "close_module": 0
+   },
+   "referencesRefreshed": [
+    {
+     "stage": "open",
+     "module": "Probe",
+     "moduleKey": "K781fe38a020a4438b27eb60df9178fc3",
+     "dialog": [
+      {
+       "title": "Incompatible or missing dependencies found",
+       "answer": "Cancel"
+      }
+     ],
+     "changed": true,
+     "refreshed": [
+      "SynthProducer"
+     ],
+     "upToDate": []
+    }
+   ],
+   "apply": {
+    "isValid": true,
+    "accepted": true
+   },
+   "operationId": "a41fa665656547fabf713202d0e79838",
+   "mergeError": "BridgeCallException: merge_from_oml: Studio call stopped (dialog): Unexpected Error; nothing was repeated",
+   "stalled": {
+    "verdict": "dialog",
+    "method": "merge_from_oml",
+    "afterMs": 216,
+    "studio": {
+     "pid": 15712,
+     "startedUtc": "2026-10-15T00:00:00Z"
+    },
+    "blockedBy": {
+     "title": "Unexpected Error",
+     "type": "DialogWindow",
+     "kind": "UnexpectedError",
+     "seenMs": 108
+    }
+   },
+   "pendingBridgeOperation": {
+    "method": "merge_from_oml",
+    "moduleKey": "K781fe38a020a4438b27eb60df9178fc3",
+    "operationId": "a41fa665656547fabf713202d0e79838",
+    "stall": {
+     "verdict": "dialog",
+     "method": "merge_from_oml",
+     "afterMs": 216,
+     "studio": {
+      "pid": 15712,
+      "startedUtc": "2026-10-15T00:00:00Z"
+     },
+     "blockedBy": {
+      "title": "Unexpected Error",
+      "type": "DialogWindow",
+      "kind": "UnexpectedError",
+      "seenMs": 108
+     }
+    }
+   },
+   "operationStatus": {
+    "state": "unknown"
+   },
+   "error": "The Studio stopped answering the merge: dialog (Unexpected Error) after 0.216 s; nothing was repeated. Resume reconciles it through merge_status."
+  },
+  "B": {
+   "taskId": "0e9d1b828dd4422885981cb8202ab464",
+   "module": "Probe",
+   "delivered": false,
+   "writeState": "not-sent",
+   "stage": "refresh-references",
+   "open": {
+    "opened": true,
+    "alreadyOpen": false,
+    "dependenciesDialog": {
+     "answered": [
+      {
+       "title": "Incompatible or missing dependencies found",
+       "answer": "Cancel"
+      }
+     ]
+    }
+   },
+   "moduleKey": "Kddd4d39750a749ae8da29afdbfb42bf2",
+   "environment": "synthetic-env",
+   "settledBridgeOperations": [
+    {
+     "method": "refresh_references",
+     "moduleKey": "Kddd4d39750a749ae8da29afdbfb42bf2",
+     "stall": {
+      "verdict": "dialog",
+      "method": "refresh_references",
+      "afterMs": 204,
+      "studio": {
+       "pid": 15712,
+       "startedUtc": "2026-10-15T00:00:00Z"
+      },
+      "blockedBy": {
+       "title": "Unexpected Error",
+       "type": "DialogWindow",
+       "kind": "UnexpectedError",
+       "seenMs": 93
+      }
+     },
+     "idleProof": {
+      "idle": true,
+      "reads": [
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       },
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       }
+      ],
+      "observedAt": "2026-10-15T13:19:44.4657114+00:00"
+     },
+     "settledAt": "2026-10-15T13:19:44.4657462+00:00",
+     "note": "The Studio's Refresh References of this task stopped and then ended (two idle reads proved it): it may have changed the module's references, and Ctrl+Z in the Studio undoes it. After that proof the call that settled it sent again, as the delivery's normal steps do: refresh_references 1x, open_module 1x; merge_from_oml is sent at most once per task. The merge of this task was never sent.",
+     "sentAgain": {
+      "ended": true,
+      "refresh_references": 1,
+      "open_module": 1,
+      "close_module": 0
+     }
+    }
+   ],
+   "sentAgainAfterIdle": {
+    "ended": true,
+    "refresh_references": 1,
+    "open_module": 1,
+    "close_module": 0
+   },
+   "stalled": {
+    "verdict": "dialog",
+    "method": "refresh_references",
+    "afterMs": 217,
+    "studio": {
+     "pid": 15712,
+     "startedUtc": "2026-10-15T00:00:00Z"
+    },
+    "blockedBy": {
+     "title": "Unexpected Error",
+     "type": "DialogWindow",
+     "kind": "UnexpectedError",
+     "seenMs": 112
+    }
+   },
+   "pendingBridgeOperation": {
+    "method": "refresh_references",
+    "moduleKey": "Kddd4d39750a749ae8da29afdbfb42bf2",
+    "stall": {
+     "verdict": "dialog",
+     "method": "refresh_references",
+     "afterMs": 217,
+     "studio": {
+      "pid": 15712,
+      "startedUtc": "2026-10-15T00:00:00Z"
+     },
+     "blockedBy": {
+      "title": "Unexpected Error",
+      "type": "DialogWindow",
+      "kind": "UnexpectedError",
+      "seenMs": 112
+     }
+    }
+   },
+   "error": "BridgeCallException: refresh_references: Studio call stopped (dialog): Unexpected Error; nothing was repeated"
+  },
+  "B_delivered": {
+   "taskId": "0e9d1b828dd4422885981cb8202ab464",
+   "module": "Probe",
+   "delivered": true,
+   "writeState": "applied",
+   "stage": "complete",
+   "open": {
+    "opened": true,
+    "alreadyOpen": false
+   },
+   "moduleKey": "Kddd4d39750a749ae8da29afdbfb42bf2",
+   "environment": "synthetic-env",
+   "settledBridgeOperations": [
+    {
+     "method": "refresh_references",
+     "moduleKey": "Kddd4d39750a749ae8da29afdbfb42bf2",
+     "stall": {
+      "verdict": "dialog",
+      "method": "refresh_references",
+      "afterMs": 204,
+      "studio": {
+       "pid": 15712,
+       "startedUtc": "2026-10-15T00:00:00Z"
+      },
+      "blockedBy": {
+       "title": "Unexpected Error",
+       "type": "DialogWindow",
+       "kind": "UnexpectedError",
+       "seenMs": 93
+      }
+     },
+     "idleProof": {
+      "idle": true,
+      "reads": [
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       },
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       }
+      ],
+      "observedAt": "2026-10-15T13:19:44.4657114+00:00"
+     },
+     "settledAt": "2026-10-15T13:19:44.4657462+00:00",
+     "note": "The Studio's Refresh References of this task stopped and then ended (two idle reads proved it): it may have changed the module's references, and Ctrl+Z in the Studio undoes it. After that proof the call that settled it sent again, as the delivery's normal steps do: refresh_references 1x, open_module 1x; merge_from_oml is sent at most once per task.",
+     "sentAgain": {
+      "ended": true,
+      "refresh_references": 1,
+      "open_module": 1,
+      "close_module": 0
+     }
+    },
+    {
+     "method": "refresh_references",
+     "moduleKey": "Kddd4d39750a749ae8da29afdbfb42bf2",
+     "stall": {
+      "verdict": "dialog",
+      "method": "refresh_references",
+      "afterMs": 217,
+      "studio": {
+       "pid": 15712,
+       "startedUtc": "2026-10-15T00:00:00Z"
+      },
+      "blockedBy": {
+       "title": "Unexpected Error",
+       "type": "DialogWindow",
+       "kind": "UnexpectedError",
+       "seenMs": 112
+      }
+     },
+     "idleProof": {
+      "idle": true,
+      "reads": [
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       },
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       }
+      ],
+      "observedAt": "2026-10-15T13:19:44.7630202+00:00"
+     },
+     "settledAt": "2026-10-15T13:19:44.7630610+00:00",
+     "note": "The Studio's Refresh References of this task stopped and then ended (two idle reads proved it): it may have changed the module's references, and Ctrl+Z in the Studio undoes it. After that proof the call that settled it sent again, as the delivery's normal steps do: open_module 1x, close_module 1x; merge_from_oml is sent at most once per task.",
+     "sentAgain": {
+      "ended": true,
+      "refresh_references": 0,
+      "open_module": 1,
+      "close_module": 1
+     }
+    }
+   ],
+   "sentAgainAfterIdle": {
+    "ended": true,
+    "refresh_references": 0,
+    "open_module": 1,
+    "close_module": 1
+   },
+   "apply": {
+    "isValid": true,
+    "accepted": true
+   },
+   "operationId": "8ebcafeba2c946baaedae0e72b9ef8af",
+   "merge": {
+    "merged": true
+   },
+   "hasAppliedWrites": true,
+   "unchanged": false,
+   "validation": {
+    "newErrors": 0,
+    "new": []
+   },
+   "newErrors": 0,
+   "contract": {
+    "unexpected": [],
+    "missingExpected": [],
+    "ambiguous": [],
+    "tolerated": [],
+    "allowlisted": [],
+    "nonBlocking": [],
+    "unusedExpectations": [],
+    "matched": [],
+    "verdicts": []
+   },
+   "checks": [],
+   "failures": [],
+   "everDelivered": true,
+   "closedTab": true
+  },
+  "C": {
+   "taskId": "e9efb4d8c263435db68be65480d09106",
+   "module": "Probe",
+   "delivered": false,
+   "writeState": "unknown",
+   "stage": "merge",
+   "open": {
+    "opened": true,
+    "alreadyOpen": false
+   },
+   "moduleKey": "K1efe8b8fefd34be0adb5c2d6acd6b16a",
+   "environment": "synthetic-env",
+   "settledBridgeOperations": [
+    {
+     "method": "refresh_references",
+     "moduleKey": "K1efe8b8fefd34be0adb5c2d6acd6b16a",
+     "stall": {
+      "verdict": "dialog",
+      "method": "refresh_references",
+      "afterMs": 209,
+      "studio": {
+       "pid": 15712,
+       "startedUtc": "2026-10-15T00:00:00Z"
+      },
+      "blockedBy": {
+       "title": "Unexpected Error",
+       "type": "DialogWindow",
+       "kind": "UnexpectedError",
+       "seenMs": 107
+      }
+     },
+     "idleProof": {
+      "idle": true,
+      "reads": [
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       },
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       }
+      ],
+      "observedAt": "2026-10-15T13:19:45.2365648+00:00"
+     },
+     "settledAt": "2026-10-15T13:19:45.2365907+00:00",
+     "note": "The Studio's Refresh References of this task stopped and then ended (two idle reads proved it): it may have changed the module's references, and Ctrl+Z in the Studio undoes it. After that proof the call that settled it sent again, as the delivery's normal steps do: open_module 1x; merge_from_oml is sent at most once per task.",
+     "sentAgain": {
+      "ended": true,
+      "refresh_references": 0,
+      "open_module": 1,
+      "close_module": 0
+     }
+    }
+   ],
+   "sentAgainAfterIdle": {
+    "ended": true,
+    "refresh_references": 0,
+    "open_module": 1,
+    "close_module": 0
+   },
+   "apply": {
+    "isValid": true,
+    "accepted": true
+   },
+   "operationId": "fd6d55ebec7d4f218c2449ecc236c80d",
+   "merge": {
+    "blocked": true,
+    "blockedBy": {
+     "title": "Synthetic question",
+     "question": "Synthetic choice?"
+    }
+   },
+   "unchanged": false,
+   "code": "STUDIO_DIALOG_PENDING",
+   "blockedBy": {
+    "title": "Synthetic question",
+    "question": "Synthetic choice?"
+   },
+   "question": "Synthetic choice?",
+   "error": "The Studio opened \"Synthetic question\" during the merge and only the person can answer it. Synthetic choice? Nothing was repeated; after the answer, resume this task (deliver --resume e9efb4d8c263435db68be65480d09106)."
+  }
+ },
+ "r5": {
+  "A1": {
+   "taskId": "75807a9c252744a282760efd2caa078c",
+   "module": "Probe",
+   "delivered": false,
+   "writeState": "unknown",
+   "stage": "reconcile",
+   "open": {
+    "opened": true,
+    "alreadyOpen": false
+   },
+   "moduleKey": "K91122b8b1e8b4137b6209774bab995fe",
+   "environment": "synthetic-env",
+   "settledBridgeOperations": [
+    {
+     "method": "refresh_references",
+     "moduleKey": "K91122b8b1e8b4137b6209774bab995fe",
+     "stall": {
+      "verdict": "dialog",
+      "method": "refresh_references",
+      "afterMs": 204,
+      "studio": {
+       "pid": 46088,
+       "startedUtc": "2026-10-15T00:00:00Z"
+      },
+      "blockedBy": {
+       "title": "Unexpected Error",
+       "type": "DialogWindow",
+       "kind": "UnexpectedError",
+       "seenMs": 94
+      }
+     },
+     "idleProof": {
+      "idle": true,
+      "reads": [
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       },
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       }
+      ],
+      "observedAt": "2026-10-15T15:01:49.5470730+00:00"
+     },
+     "settledAt": "2026-10-15T15:01:49.5490918+00:00",
+     "note": "The Studio's Refresh References of this task stopped and then ended (two idle reads proved it): it may have changed the module's references, and Ctrl+Z in the Studio undoes it. After that proof the call that settled it sent again, as the delivery's normal steps do: open_module 1x; merge_from_oml is sent at most once per task.",
+     "sentAgain": {
+      "ended": true,
+      "refresh_references": 0,
+      "open_module": 1,
+      "close_module": 0
+     }
+    }
+   ],
+   "sentAgainAfterIdle": {
+    "ended": true,
+    "refresh_references": 0,
+    "open_module": 1,
+    "close_module": 0
+   },
+   "apply": {
+    "isValid": true,
+    "accepted": true
+   },
+   "operationId": "81fa54483ac640399221230850f59a96",
+   "mergeError": "BridgeCallException: merge_from_oml: Studio call stopped (dialog): Unexpected Error; this call was not retried",
+   "stalled": {
+    "verdict": "dialog",
+    "method": "merge_from_oml",
+    "afterMs": 223,
+    "studio": {
+     "pid": 46088,
+     "startedUtc": "2026-10-15T00:00:00Z"
+    },
+    "blockedBy": {
+     "title": "Unexpected Error",
+     "type": "DialogWindow",
+     "kind": "UnexpectedError",
+     "seenMs": 105
+    }
+   },
+   "pendingBridgeOperation": {
+    "method": "merge_from_oml",
+    "moduleKey": "K91122b8b1e8b4137b6209774bab995fe",
+    "operationId": "81fa54483ac640399221230850f59a96",
+    "stall": {
+     "verdict": "dialog",
+     "method": "merge_from_oml",
+     "afterMs": 223,
+     "studio": {
+      "pid": 46088,
+      "startedUtc": "2026-10-15T00:00:00Z"
+     },
+     "blockedBy": {
+      "title": "Unexpected Error",
+      "type": "DialogWindow",
+      "kind": "UnexpectedError",
+      "seenMs": 105
+     }
+    }
+   },
+   "operationStatus": {
+    "state": "unknown"
+   },
+   "error": "The Studio stopped answering the merge: dialog (Unexpected Error) after 0.223 s; the merge was not repeated. Resume reconciles it through merge_status."
+  },
+  "A2": {
+   "taskId": "b2cfa1dfc38a410bab23b7dc531cadf1",
+   "module": "Probe",
+   "delivered": false,
+   "writeState": "unknown",
+   "stage": "reconcile",
+   "open": {
+    "opened": true,
+    "alreadyOpen": false,
+    "dependenciesDialog": {
+     "answered": [
+      {
+       "title": "Incompatible or missing dependencies found",
+       "answer": "Cancel"
+      }
+     ]
+    }
+   },
+   "moduleKey": "Kad11fdaf4e9940f9ab623bf2124fab7b",
+   "environment": "synthetic-env",
+   "settledBridgeOperations": [
+    {
+     "method": "refresh_references",
+     "moduleKey": "Kad11fdaf4e9940f9ab623bf2124fab7b",
+     "stall": {
+      "verdict": "dialog",
+      "method": "refresh_references",
+      "afterMs": 216,
+      "studio": {
+       "pid": 46088,
+       "startedUtc": "2026-10-15T00:00:00Z"
+      },
+      "blockedBy": {
+       "title": "Unexpected Error",
+       "type": "DialogWindow",
+       "kind": "UnexpectedError",
+       "seenMs": 89
+      }
+     },
+     "idleProof": {
+      "idle": true,
+      "reads": [
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       },
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       }
+      ],
+      "observedAt": "2026-10-15T15:01:50.3738559+00:00"
+     },
+     "settledAt": "2026-10-15T15:01:50.3739203+00:00",
+     "note": "The Studio's Refresh References of this task stopped and then ended (two idle reads proved it): it may have changed the module's references, and Ctrl+Z in the Studio undoes it. After that proof the call that settled it sent again, as the delivery's normal steps do: refresh_references 1x, open_module 1x; merge_from_oml is sent at most once per task.",
+     "sentAgain": {
+      "ended": true,
+      "refresh_references": 1,
+      "open_module": 1,
+      "close_module": 0
+     }
+    }
+   ],
+   "sentAgainAfterIdle": {
+    "ended": true,
+    "refresh_references": 1,
+    "open_module": 1,
+    "close_module": 0
+   },
+   "referencesRefreshed": [
+    {
+     "stage": "open",
+     "module": "Probe",
+     "moduleKey": "Kad11fdaf4e9940f9ab623bf2124fab7b",
+     "dialog": [
+      {
+       "title": "Incompatible or missing dependencies found",
+       "answer": "Cancel"
+      }
+     ],
+     "changed": true,
+     "refreshed": [
+      "SynthProducer"
+     ],
+     "upToDate": []
+    }
+   ],
+   "apply": {
+    "isValid": true,
+    "accepted": true
+   },
+   "operationId": "ece9b52cc8394efdbb82a016f4ccfc16",
+   "mergeError": "BridgeCallException: merge_from_oml: Studio call stopped (dialog): Unexpected Error; this call was not retried",
+   "stalled": {
+    "verdict": "dialog",
+    "method": "merge_from_oml",
+    "afterMs": 205,
+    "studio": {
+     "pid": 46088,
+     "startedUtc": "2026-10-15T00:00:00Z"
+    },
+    "blockedBy": {
+     "title": "Unexpected Error",
+     "type": "DialogWindow",
+     "kind": "UnexpectedError",
+     "seenMs": 72
+    }
+   },
+   "pendingBridgeOperation": {
+    "method": "merge_from_oml",
+    "moduleKey": "Kad11fdaf4e9940f9ab623bf2124fab7b",
+    "operationId": "ece9b52cc8394efdbb82a016f4ccfc16",
+    "stall": {
+     "verdict": "dialog",
+     "method": "merge_from_oml",
+     "afterMs": 205,
+     "studio": {
+      "pid": 46088,
+      "startedUtc": "2026-10-15T00:00:00Z"
+     },
+     "blockedBy": {
+      "title": "Unexpected Error",
+      "type": "DialogWindow",
+      "kind": "UnexpectedError",
+      "seenMs": 72
+     }
+    }
+   },
+   "operationStatus": {
+    "state": "unknown"
+   },
+   "error": "The Studio stopped answering the merge: dialog (Unexpected Error) after 0.205 s; the merge was not repeated. Resume reconciles it through merge_status."
+  },
+  "B": {
+   "taskId": "2ddfe84dd3154c918b054a8b15632225",
+   "module": "Probe",
+   "delivered": false,
+   "writeState": "not-sent",
+   "stage": "refresh-references",
+   "open": {
+    "opened": true,
+    "alreadyOpen": false,
+    "dependenciesDialog": {
+     "answered": [
+      {
+       "title": "Incompatible or missing dependencies found",
+       "answer": "Cancel"
+      }
+     ]
+    }
+   },
+   "moduleKey": "K02f169f5d61945489626143201df87cb",
+   "environment": "synthetic-env",
+   "settledBridgeOperations": [
+    {
+     "method": "refresh_references",
+     "moduleKey": "K02f169f5d61945489626143201df87cb",
+     "stall": {
+      "verdict": "dialog",
+      "method": "refresh_references",
+      "afterMs": 221,
+      "studio": {
+       "pid": 46088,
+       "startedUtc": "2026-10-15T00:00:00Z"
+      },
+      "blockedBy": {
+       "title": "Unexpected Error",
+       "type": "DialogWindow",
+       "kind": "UnexpectedError",
+       "seenMs": 92
+      }
+     },
+     "idleProof": {
+      "idle": true,
+      "reads": [
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       },
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       }
+      ],
+      "observedAt": "2026-10-15T15:01:51.1885312+00:00"
+     },
+     "settledAt": "2026-10-15T15:01:51.1885691+00:00",
+     "note": "The Studio's Refresh References of this task stopped and then ended (two idle reads proved it): it may have changed the module's references, and Ctrl+Z in the Studio undoes it. After that proof the call that settled it sent again, as the delivery's normal steps do: refresh_references 1x, open_module 1x; merge_from_oml is sent at most once per task. The merge of this task was never sent.",
+     "sentAgain": {
+      "ended": true,
+      "refresh_references": 1,
+      "open_module": 1,
+      "close_module": 0
+     }
+    }
+   ],
+   "sentAgainAfterIdle": {
+    "ended": true,
+    "refresh_references": 1,
+    "open_module": 1,
+    "close_module": 0
+   },
+   "stalled": {
+    "verdict": "dialog",
+    "method": "refresh_references",
+    "afterMs": 207,
+    "studio": {
+     "pid": 46088,
+     "startedUtc": "2026-10-15T00:00:00Z"
+    },
+    "blockedBy": {
+     "title": "Unexpected Error",
+     "type": "DialogWindow",
+     "kind": "UnexpectedError",
+     "seenMs": 80
+    }
+   },
+   "pendingBridgeOperation": {
+    "method": "refresh_references",
+    "moduleKey": "K02f169f5d61945489626143201df87cb",
+    "stall": {
+     "verdict": "dialog",
+     "method": "refresh_references",
+     "afterMs": 207,
+     "studio": {
+      "pid": 46088,
+      "startedUtc": "2026-10-15T00:00:00Z"
+     },
+     "blockedBy": {
+      "title": "Unexpected Error",
+      "type": "DialogWindow",
+      "kind": "UnexpectedError",
+      "seenMs": 80
+     }
+    }
+   },
+   "error": "BridgeCallException: refresh_references: Studio call stopped (dialog): Unexpected Error; this call was not retried"
+  },
+  "B_delivered": {
+   "taskId": "2ddfe84dd3154c918b054a8b15632225",
+   "module": "Probe",
+   "delivered": true,
+   "writeState": "applied",
+   "stage": "complete",
+   "open": {
+    "opened": true,
+    "alreadyOpen": false
+   },
+   "moduleKey": "K02f169f5d61945489626143201df87cb",
+   "environment": "synthetic-env",
+   "settledBridgeOperations": [
+    {
+     "method": "refresh_references",
+     "moduleKey": "K02f169f5d61945489626143201df87cb",
+     "stall": {
+      "verdict": "dialog",
+      "method": "refresh_references",
+      "afterMs": 221,
+      "studio": {
+       "pid": 46088,
+       "startedUtc": "2026-10-15T00:00:00Z"
+      },
+      "blockedBy": {
+       "title": "Unexpected Error",
+       "type": "DialogWindow",
+       "kind": "UnexpectedError",
+       "seenMs": 92
+      }
+     },
+     "idleProof": {
+      "idle": true,
+      "reads": [
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       },
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       }
+      ],
+      "observedAt": "2026-10-15T15:01:51.1885312+00:00"
+     },
+     "settledAt": "2026-10-15T15:01:51.1885691+00:00",
+     "note": "The Studio's Refresh References of this task stopped and then ended (two idle reads proved it): it may have changed the module's references, and Ctrl+Z in the Studio undoes it. After that proof the call that settled it sent again, as the delivery's normal steps do: refresh_references 1x, open_module 1x; merge_from_oml is sent at most once per task.",
+     "sentAgain": {
+      "ended": true,
+      "refresh_references": 1,
+      "open_module": 1,
+      "close_module": 0
+     }
+    },
+    {
+     "method": "refresh_references",
+     "moduleKey": "K02f169f5d61945489626143201df87cb",
+     "stall": {
+      "verdict": "dialog",
+      "method": "refresh_references",
+      "afterMs": 207,
+      "studio": {
+       "pid": 46088,
+       "startedUtc": "2026-10-15T00:00:00Z"
+      },
+      "blockedBy": {
+       "title": "Unexpected Error",
+       "type": "DialogWindow",
+       "kind": "UnexpectedError",
+       "seenMs": 80
+      }
+     },
+     "idleProof": {
+      "idle": true,
+      "reads": [
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       },
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       }
+      ],
+      "observedAt": "2026-10-15T15:01:51.5150759+00:00"
+     },
+     "settledAt": "2026-10-15T15:01:51.5151295+00:00",
+     "note": "The Studio's Refresh References of this task stopped and then ended (two idle reads proved it): it may have changed the module's references, and Ctrl+Z in the Studio undoes it. After that proof the call that settled it sent again, as the delivery's normal steps do: open_module 1x, close_module 1x; merge_from_oml is sent at most once per task.",
+     "sentAgain": {
+      "ended": true,
+      "refresh_references": 0,
+      "open_module": 1,
+      "close_module": 1
+     }
+    }
+   ],
+   "sentAgainAfterIdle": {
+    "ended": true,
+    "refresh_references": 0,
+    "open_module": 1,
+    "close_module": 1
+   },
+   "apply": {
+    "isValid": true,
+    "accepted": true
+   },
+   "operationId": "0737ecdb01f64274b637007a38cc1b3c",
+   "merge": {
+    "merged": true
+   },
+   "hasAppliedWrites": true,
+   "unchanged": false,
+   "validation": {
+    "newErrors": 0,
+    "new": []
+   },
+   "newErrors": 0,
+   "contract": {
+    "unexpected": [],
+    "missingExpected": [],
+    "ambiguous": [],
+    "tolerated": [],
+    "allowlisted": [],
+    "nonBlocking": [],
+    "unusedExpectations": [],
+    "matched": [],
+    "verdicts": []
+   },
+   "checks": [],
+   "failures": [],
+   "everDelivered": true,
+   "closedTab": true
+  },
+  "C": {
+   "taskId": "bfde78da2ffa4c62b4152b6850582b61",
+   "module": "Probe",
+   "delivered": false,
+   "writeState": "unknown",
+   "stage": "merge",
+   "open": {
+    "opened": true,
+    "alreadyOpen": false
+   },
+   "moduleKey": "K71c341e2940e42cda93529ea28e74cc1",
+   "environment": "synthetic-env",
+   "settledBridgeOperations": [
+    {
+     "method": "refresh_references",
+     "moduleKey": "K71c341e2940e42cda93529ea28e74cc1",
+     "stall": {
+      "verdict": "dialog",
+      "method": "refresh_references",
+      "afterMs": 202,
+      "studio": {
+       "pid": 46088,
+       "startedUtc": "2026-10-15T00:00:00Z"
+      },
+      "blockedBy": {
+       "title": "Unexpected Error",
+       "type": "DialogWindow",
+       "kind": "UnexpectedError",
+       "seenMs": 80
+      }
+     },
+     "idleProof": {
+      "idle": true,
+      "reads": [
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       },
+       {
+        "windowsRead": true,
+        "uiAlive": true,
+        "opening": 0,
+        "serverOperations": 0,
+        "blockedByPresent": false,
+        "errors": null
+       }
+      ],
+      "observedAt": "2026-10-15T15:01:52.1518588+00:00"
+     },
+     "settledAt": "2026-10-15T15:01:52.1518805+00:00",
+     "note": "The Studio's Refresh References of this task stopped and then ended (two idle reads proved it): it may have changed the module's references, and Ctrl+Z in the Studio undoes it. After that proof the call that settled it sent again, as the delivery's normal steps do: open_module 1x; merge_from_oml is sent at most once per task.",
+     "sentAgain": {
+      "ended": true,
+      "refresh_references": 0,
+      "open_module": 1,
+      "close_module": 0
+     }
+    }
+   ],
+   "sentAgainAfterIdle": {
+    "ended": true,
+    "refresh_references": 0,
+    "open_module": 1,
+    "close_module": 0
+   },
+   "apply": {
+    "isValid": true,
+    "accepted": true
+   },
+   "operationId": "e56e088587c94c52ba34fa5ed9c1db96",
+   "merge": {
+    "blocked": true,
+    "blockedBy": {
+     "title": "Synthetic question",
+     "question": "Synthetic choice?"
+    }
+   },
+   "unchanged": false,
+   "code": "STUDIO_DIALOG_PENDING",
+   "blockedBy": {
+    "title": "Synthetic question",
+    "question": "Synthetic choice?"
+   },
+   "question": "Synthetic choice?",
+   "error": "The Studio opened \"Synthetic question\" during the merge and only the person can answer it. Synthetic choice? The merge was not repeated; after the answer, resume this task (deliver --resume bfde78da2ffa4c62b4152b6850582b61)."
+  }
+ }
+}

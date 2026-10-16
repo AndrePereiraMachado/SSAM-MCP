@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {authorizationContext} from '../../facade/authorization-context.mjs';
 import {ASSET_CREATE} from './asset-creation-approval.mjs';
 import {fail} from './errors.mjs';
+import {ownedCleanupApproval} from './owned-cleanup-approval.mjs';
 const DELETE='asset-repository-api-v1:delete:/assets/{assetKey}';
 const hash=x=>createHash('sha256').update(x).digest('hex');
 export function consumerSetHash(consumers){
@@ -21,15 +22,21 @@ export function ownedConsumerDeletionApproval({file,words,host,assetKey,dependen
  if(!origins||Array.isArray(origins)||typeof origins!=='object'||Object.keys(origins).length!==keys.length
   ||keys.some(k=>!Object.hasOwn(origins,k)||typeof origins[k]!=='string')
   ||new Set(Object.values(origins)).size!==keys.length)bad();
- const approved=authorizationContext(file,words,{lane:'odc',host,operation:DELETE,
+ const scope={lane:'odc',host,operation:DELETE,
   targets:[dependents.name,...dependents.consumers.map(c=>c.name)],constraints:{
-   allowOwnedConsumerBreakage:true,producerAssetKey:assetKey,consumerSetSha256:consumerSetHash(dependents.consumers)}});
+   allowOwnedConsumerBreakage:true,producerAssetKey:assetKey,consumerSetSha256:consumerSetHash(dependents.consumers)}};
+ // CX15 r3 (N3): after the guard validated the owner's reply to the preview (the asset and every consumer named, with
+ // the count), a new approval of that reply (proposal = the preview) replaces the creation's words and message; every
+ // asset still needs its own successful creation receipt on this tenant.
+ const fresh=ownedCleanupApproval({file,words,...scope,origin:lookup(origins[assetKey]),key:assetKey,what:'The delete of own consumers'});
+ const approved=fresh??authorizationContext(file,words,scope);
  if(!approved)bad();
  for(const key of keys){
   const origin=lookup(origins[key]);
   if(!origin||!['accepted','confirmed'].includes(origin.state)||origin.status!==201
-   ||origin.identity?.tenant!==host||origin.identity.operationId!==ASSET_CREATE||origin.response?.assetKey!==key
-   ||origin.authorization?.wordsSha256!==approved.wordsSha256
+   ||origin.identity?.tenant!==host||origin.identity.operationId!==ASSET_CREATE||origin.response?.assetKey!==key)bad();
+  if(fresh)continue;
+  if(origin.authorization?.wordsSha256!==approved.wordsSha256
    ||origin.authorization.proposalSha256!==approved.proposalSha256
    ||origin.authorization.source?.threadId!==approved.source.threadId
    ||origin.authorization.source?.messageId!==approved.source.messageId)bad();

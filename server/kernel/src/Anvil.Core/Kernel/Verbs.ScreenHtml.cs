@@ -35,7 +35,15 @@ public sealed partial class ModelSession
         var target = data["screen"] is JsonValue s && s.TryGetValue<string>(out var screenName) && screenName.Length > 0 ? screenName : null;
         if (target == null) Shape("/screen", "html edit: 'screen' is required (the screen or block read: name, Kind:Name or @key)", "\"screen\": \"<the name ssam_map view html read>\"");
         List<string> edits; string pointer;
-        if (data["edit"] is JsonArray list) { edits = list.Select(e => e is JsonValue v && v.TryGetValue<string>(out var t) ? t : "").ToList(); pointer = "/edit"; }
+        // CX16: element edits of the reading (HtmlElementEdits): the whole document they make is the one edit of today's path.
+        var elementEdits = data["edits"] != null ? data["edits"] as JsonArray ?? new JsonArray() : null;
+        if (data["edits"] != null) {
+            edits = []; pointer = "/edits";
+            if (data["edit"] != null || data["html"] != null)
+                Shape("/edits", "html edit: 'edits' (element edits of the reading) goes alone, without 'edit' or 'html'", "keep edits, or send the changed elements whole in edit");
+            foreach (var p in HtmlElementEdits.Shape(data["edits"])) refusals.Add(Kernel(p));
+        }
+        else if (data["edit"] is JsonArray list) { edits = list.Select(e => e is JsonValue v && v.TryGetValue<string>(out var t) ? t : "").ToList(); pointer = "/edit"; }
         else if (data["html"] is JsonValue whole && whole.TryGetValue<string>(out var document)) { edits = [document]; pointer = "/html"; }
         else { edits = []; pointer = "/edit"; Shape("/edit", "html edit: 'edit' (the changed elements, each with its k) or 'html' (the whole document) is required", "\"edit\": [\"<div k=\\\"w7\\\" ...>...</div>\"]"); }
         var basedOn = data["basedOn"] as JsonObject;
@@ -46,6 +54,106 @@ public sealed partial class ModelSession
         var module = ScreenHtmlReading ?? ScreenHtml.Module((IObjectSignature)_espace, new KernelModelReader());
         var reading = module.Read(target!);
         var notes = new JsonArray();
+        JsonObject? elementNote = null;
+        Dictionary<string, int>? editOf = null;
+        Dictionary<string, string>? baseKeys = null;
+        if (elementEdits != null) {
+            // The base of the edits: the reading itself, the reading the store kept, or the job's capture before its first op.
+            string baseText;
+            if (reading.HtmlSha256 == baseHtml) { baseText = reading.Html; baseKeys = reading.Keys.GroupBy(k => k.Key).ToDictionary(g => g.Key, g => g.First().Value, StringComparer.Ordinal); }
+            else if (StoredReading(basedOn!) is { } stored && stored["html"] is JsonValue kept && kept.TryGetValue<string>(out var keptText)) {
+                baseText = keptText;
+                baseKeys = (stored["keys"] as JsonObject)?.Where(p => p.Value is JsonValue).ToDictionary(p => p.Key, p => p.Value!.ToString(), StringComparer.Ordinal);
+            }
+            else throw BaseChanged(reading, baseHtml!, StoredReading(basedOn!)?["keys"] as JsonObject, elementEdits);
+            var applied = HtmlElementEdits.Apply(baseText, elementEdits, baseKeys, out editOf);
+            if (applied.Problems.Count > 0)
+                throw new KernelRefusalException(applied.Problems.Select(p => p["code"]!.ToString()).Distinct().Count() == 1 ? applied.Problems[0]["code"]!.ToString() : "HTML_EDIT_REFUSED",
+                    "html edits of " + reading.Root + " refused: " + string.Join(" | ", applied.Problems.Take(6).Select(p => "[" + p["code"] + "] " + p["message"])),
+                    new JsonArray(applied.Problems.Select(p => (JsonNode)Kernel(p)).ToArray()));
+            edits = [applied.Document];
+            elementNote = new JsonObject { ["rule"] = "html-element-edits", ["at"] = "/edits", ["from"] = baseHtml![..Math.Min(12, baseHtml.Length)],
+                ["edits"] = elementEdits.Count, ["touched"] = new JsonArray(applied.Touched.Select(k => (JsonNode)k).ToArray()) };
+        }
+        try { return HtmlEditPlanned(module, reading, data, basedOn!, baseHtml!, edits, pointer, notes, elementNote); }
+        catch (KernelRefusalException refusal) when (elementEdits != null) { throw ForElementEdits(refusal, reading, editOf, baseKeys); }
+    }
+
+    // A problem of the element edits engine (pointers relative to op.data) as the kernel publishes it.
+    private static JsonObject Kernel(JsonObject p)
+    {
+        var problem = JobPreflight.Problem(null, p["pointer"]?.ToString(), p["code"]!.ToString(), "error", p["message"]!.ToString(), p["fix"]?.ToString());
+        foreach (var key in new[] { "element", "candidates", "lines", "occurrences" }) if (p[key] != null) problem[key] = p[key]!.DeepClone();
+        return JobPreflight.PublicProblem(problem);
+    }
+
+    // The reading kept for basedOn {capture, html} (its text and k -> ObjectKey table): the store's, else the job's capture
+    // before its first op (_htmlAtStart), else null. The same lookup the rebase does.
+    private JsonObject? StoredReading(JsonObject basedOn)
+    {
+        var capture = basedOn["capture"]?.ToString() ?? "";
+        var html = basedOn["html"]!.ToString();
+        var table = capture.Length > 0 ? ModuleIndexStore.Default()?.LoadHtmlKeys(capture, html, BaseSha256) : null;
+        if (table?["keys"] is not JsonObject && _htmlAtStart != null && _htmlAtStart.TryGetValue(html, out var atStart)
+            && string.Equals(capture, BaseSha256, StringComparison.OrdinalIgnoreCase))
+            table = new JsonObject {
+                ["keys"] = new JsonObject(atStart.Keys.GroupBy(k => k.Key).Select(g => KeyValuePair.Create(g.Key, (JsonNode?)g.First().Value))),
+                ["html"] = atStart.Html };
+        return table;
+    }
+
+    // Element edits whose reading is not kept here and whose screen changed since: HTML_BASE_CHANGED as for the edit form, with
+    // the current text of each element they address (by ObjectKey, when the key table of that reading is kept).
+    private static KernelRefusalException BaseChanged(ScreenHtmlDocument reading, string html, JsonObject? oldKeys, JsonArray edits)
+    {
+        var problem = JobPreflight.Problem(null, "/basedOn", ScreenHtmlEdit.BaseChanged, "error",
+            $"{reading.Root} is not the reading {html[..Math.Min(12, html.Length)]} the edits were written on (now {reading.HtmlSha256[..12]}), and that reading is not kept here",
+            "write the edits again on the current text (basedOn.html " + reading.HtmlSha256 + "); it is in data.current");
+        var current = new JsonObject { ["html"] = reading.HtmlSha256, ["text"] = reading.Html };
+        if (oldKeys != null) {
+            var byObject = reading.Keys.Where(k => k.Key.Length > 0 && !k.Key.Contains('~')).GroupBy(k => k.Value).ToDictionary(g => g.Key, g => g.First().Key, StringComparer.Ordinal);
+            var elements = new JsonArray();
+            foreach (var (j, address) in HtmlElementEdits.Addresses(edits)) {
+                var objectKey = address.StartsWith('@') ? address[1..] : oldKeys[address]?.ToString();
+                var k = objectKey != null && byObject.TryGetValue(objectKey, out var now) ? now : null;
+                elements.Add(new JsonObject { ["address"] = address, ["edit"] = j, ["k"] = k, ["text"] = k == null ? null : HtmlElementEdits.ElementText(reading.Html, k) });
+            }
+            current["elements"] = elements;
+        }
+        problem["current"] = current;
+        return new KernelRefusalException(ScreenHtmlEdit.BaseChanged, problem["message"]!.ToString(), new JsonArray(JobPreflight.PublicProblem(problem)));
+    }
+
+    // A refusal of the plan of the document the element edits made: a problem on a k an edit touched names that edit (edit: j,
+    // its pointer); the others point at the list. A patch of the plan (a corrected edit list of the edit form) becomes the edit
+    // form with that list.
+    private static KernelRefusalException ForElementEdits(KernelRefusalException refusal, ScreenHtmlDocument reading, Dictionary<string, int>? editOf, Dictionary<string, string>? baseKeys)
+    {
+        if (refusal.Problems is not { Count: > 0 } problems || editOf == null) return refusal;
+        // The plan names the k of the screen now: back to the k of the base through the ObjectKey (the same k when not rebased).
+        var baseOfObject = (baseKeys ?? []).Where(p => p.Key.Length > 0).GroupBy(p => p.Value).ToDictionary(g => g.Key, g => g.First().Key, StringComparer.Ordinal);
+        var currentKeys = reading.Keys.GroupBy(k => k.Key).ToDictionary(g => g.Key, g => g.First().Value, StringComparer.Ordinal);
+        var mapped = new JsonArray();
+        foreach (var node in problems) {
+            if (node is not JsonObject p) { mapped.Add(node?.DeepClone()); continue; }
+            var copy = p.DeepClone().AsObject();
+            if (copy["pointer"]?.ToString() is { } at && (at == "/edits" || at.StartsWith("/edits/", StringComparison.Ordinal))) {
+                var k = copy["k"]?.ToString();
+                var baseK = k != null && currentKeys.TryGetValue(k, out var objectKey) && baseOfObject.TryGetValue(objectKey, out var was) ? was : k;
+                if (baseK != null && editOf.TryGetValue(baseK, out var j)) { copy["edit"] = j; copy["pointer"] = "/edits/" + j; }
+                else copy["pointer"] = "/edits";
+            }
+            if (copy["patch"] is JsonArray patch && patch.Count == 1 && patch[0] is JsonObject replace && replace["op"]?.ToString() == "replace" && replace["value"] is JsonArray corrected)
+                copy["patch"] = new JsonArray(new JsonObject { ["op"] = "remove", ["path"] = "/edits" },
+                    new JsonObject { ["op"] = "add", ["path"] = "/edit", ["value"] = corrected.DeepClone() });
+            mapped.Add(copy);
+        }
+        return new KernelRefusalException(refusal.Code, refusal.Message, mapped);
+    }
+
+    private JsonNode HtmlEditPlanned(ScreenHtmlModule<IObjectSignature> module, ScreenHtmlDocument reading, JsonObject data, JsonObject basedOn, string baseHtml,
+        List<string> edits, string pointer, JsonArray notes, JsonObject? elementNote)
+    {
         if (reading.HtmlSha256 != baseHtml) {
             // The screen is not the one the edit was written on: rebased through the key table of that reading.
             var rebased = Rebase(reading, basedOn!, edits, pointer);
@@ -71,6 +179,7 @@ public sealed partial class ModelSession
         answer["screen"] = reading.Root;
         if (iconTheme != null) answer["iconTheme"] = iconTheme;
         if (notes.Count > 0) answer["rebased"] = notes;
+        if (elementNote != null) answer["normalizations"] = new JsonArray(elementNote);
         return answer;
     }
 
@@ -124,15 +233,8 @@ public sealed partial class ModelSession
     /// capture's index by ssam_map view html) to the k the current reading gives that object.</summary>
     private (List<string> Edits, List<JsonObject> Notes) Rebase(ScreenHtmlDocument reading, JsonObject basedOn, List<string> edits, string pointer)
     {
-        var capture = basedOn["capture"]?.ToString() ?? "";
         var html = basedOn["html"]!.ToString();
-        var store = ModuleIndexStore.Default();
-        var table = capture.Length > 0 ? store?.LoadHtmlKeys(capture, html) : null;
-        if (table?["keys"] is not JsonObject && _htmlAtStart != null && _htmlAtStart.TryGetValue(html, out var atStart)
-            && string.Equals(capture, BaseSha256, StringComparison.OrdinalIgnoreCase))
-            table = new JsonObject {
-                ["keys"] = new JsonObject(atStart.Keys.GroupBy(k => k.Key).Select(g => KeyValuePair.Create(g.Key, (JsonNode?)g.First().Value))),
-                ["html"] = atStart.Html };
+        var table = StoredReading(basedOn);
         if (table?["keys"] is not JsonObject old) {
             var problem = JobPreflight.Problem(null, "/basedOn", ScreenHtmlEdit.BaseChanged, "error",
                 $"{reading.Root} is not the reading {html[..Math.Min(12, html.Length)]} the edit was written on (now {reading.HtmlSha256[..12]}), and that reading's keys are not kept here",

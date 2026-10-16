@@ -559,3 +559,58 @@ export function relaxTool(name, config, handler, { prepare } = {}) {
     return { config, handler };
   }
 }
+// This is exported by tool-input so all schema libraries use the same listed continuation contract.
+export function continuationInput(config) {
+  config = continuationOutput(config);
+  const original = standardOf(config?.inputSchema);
+  let json;
+  try { json = original ? jsonSchemaOf(original) : { type: 'object', properties: {} }; } catch { return config; }
+  if (!json) return config;
+  const listed = { ...json, properties: { ...json.properties, continueTask: { type: 'string' } } };
+  return { ...config, inputSchema: { '~standard': { version: 1, vendor: 'ssam-continuation',
+    jsonSchema: { input: () => listed, output: () => listed },
+    validate: args => args && Object.hasOwn(args, 'continueTask') ? { value: args } : original ? original['~standard'].validate(args) : { value: args ?? {} } } } };
+}
+// Keep declared output validation while admitting the deadline envelope and its explicit delivery metadata.
+export function continuationOutput(config) {
+  const original = standardOf(config?.outputSchema);
+  if (!original || original['~standard'].vendor === 'ssam-continuation-output') return config;
+  const json = original['~standard'].jsonSchema?.output
+    ? original['~standard'].jsonSchema.output({ target:'draft-2020-12' })
+    : z.toJSONSchema(original, { target:'draft-2020-12', io:'output' });
+  if (!json) return config;
+  const extended = structuredClone(json), fields = new Set(), visited = new Set();
+  const resolve = ref => typeof ref === 'string' && ref.startsWith('#/')
+    ? ref.slice(2).split('/').map(k => k.replace(/~1/g, '/').replace(/~0/g, '~')).reduce((v,k) => v?.[k], extended) : null;
+  const walk = schema => {
+    if (!schema || typeof schema !== 'object' || visited.has(schema)) return;
+    visited.add(schema);
+    for (const key of Object.keys(schema.properties ?? {})) fields.add(key);
+    if (schema.$ref) walk(resolve(schema.$ref));
+    for (const key of ['allOf','anyOf','oneOf']) for (const part of schema[key] ?? []) walk(part);
+  };
+  walk(extended); visited.clear();
+  const metadata = Object.fromEntries(Object.entries({ joined: { type:'boolean' }, resumedFrom: { type:'string' } }).filter(([key]) => !fields.has(key)));
+  const augment = schema => {
+    if (!schema || typeof schema !== 'object' || visited.has(schema)) return;
+    visited.add(schema);
+    if (schema.type === 'object' || schema.properties || schema.required || schema.additionalProperties !== undefined)
+      schema.properties = { ...schema.properties, ...metadata };
+    if (schema.$ref) augment(resolve(schema.$ref));
+    for (const key of ['allOf','anyOf','oneOf']) for (const part of schema[key] ?? []) augment(part);
+  };
+  augment(extended);
+  const { $schema, $defs, definitions, ...body } = extended;
+  const running = { type:'object', properties:{ state:{const:'running'}, task:{type:'object'}, continuation:{type:'object'} }, required:['state','task','continuation'] };
+  const listed = { ...($schema ? {$schema} : {}), ...($defs ? {$defs} : {}), ...(definitions ? {definitions} : {}), anyOf:[body,running] };
+  const standard = original['~standard'];
+  return { ...config, outputSchema: { '~standard': { version:1, vendor:'ssam-continuation-output',
+    jsonSchema:{input:()=>listed,output:()=>listed},
+    validate: async value => {
+      if (value?.state === 'running' && typeof value?.continuation?.arguments?.continueTask === 'string') return {value};
+      const extra = isObject(value) ? Object.fromEntries(Object.keys(metadata).filter(k => Object.hasOwn(value,k)).map(k => [k,value[k]])) : {};
+      const raw = Object.keys(extra).length ? Object.fromEntries(Object.entries(value).filter(([k]) => !Object.hasOwn(extra,k))) : value;
+      const result = await standard.validate(raw);
+      return result?.issues?.length || !Object.keys(extra).length ? result : {...result,value:{...(result?.value ?? raw),...extra}};
+    } } } };
+}

@@ -164,8 +164,11 @@ public sealed partial class ModelSession
     /// Null: the store (ModuleIndexStore.Default), where ssam_map view flow keeps every action it serves.</summary>
     public Func<string, FlowReading?>? FlowReadings { get; set; }
 
+    // servidor/fase4-26 (M2): with ModuleIndexStore.OwnReadingsOnly (hosted) only the read kept beside this job's own capture.
     private FlowReading? FlowReadingOf(string textSha) =>
-        FlowReadings != null ? FlowReadings(textSha) : ModuleIndexStore.Default()?.LoadFlowReading(textSha);
+        FlowReadings != null ? FlowReadings(textSha)
+        : ModuleIndexStore.OwnReadingsOnly ? (BaseSha256 is { Length: > 0 } own ? ModuleIndexStore.Default()?.LoadFlowReading(textSha, own) : null)
+        : ModuleIndexStore.Default()?.LoadFlowReading(textSha);
 
     // The screen actions an html document of this job made as shells for a text of a logic op after it (DocumentShells),
     // by key, until the text fills them.

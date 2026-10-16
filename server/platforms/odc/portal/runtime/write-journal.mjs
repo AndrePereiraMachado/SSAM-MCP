@@ -48,7 +48,7 @@ export class WriteJournal {
     return receipt;
   }
 
-  reserve({ operationUuid, identity, wordsSha256, plan, reconciliation, requestSha256, once = false }) {
+  reserve({ operationUuid, identity, wordsSha256, plan, reconciliation, requestSha256, once = false, removes }) {
     fs.mkdirSync(this.dir, { recursive: true });
     const file = this.file(operationUuid), lock = this.lockFile(identity);
     let fd, claimed=false;
@@ -58,7 +58,9 @@ export class WriteJournal {
       authorization: { wordsSha256, planSha256: fingerprint(plan), ...(plan?.authorizationContext ? {
         contextSha256: plan.authorizationContext.sha256, proposalSha256: plan.authorizationContext.proposalSha256,
         source: plan.authorizationContext.source } : {}) }, state: 'sending', ok: false, createdAt: this.now(), receipt: file,
-      ...(reconciliation ? { reconciliation } : {}), ...(requestSha256 ? { requestSha256 } : {}) };
+      ...(reconciliation ? { reconciliation } : {}), ...(requestSha256 ? { requestSha256 } : {}),
+      // CX15 r3 (BYPASS-2): the keys a *ToRemove list removes ({field: keys}), kept in the receipt.
+      ...(removes ? { removes } : {}) };
     try {
       // A bounded fixture run is one submission forever, including a lost
       // response or rejection. A new UUID cannot bypass this durable claim.

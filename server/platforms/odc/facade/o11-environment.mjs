@@ -8,7 +8,8 @@
 // happened (update-app answers data.ok=false, create-module/set-user-provider a publish outcome), so ok is decided from
 // each verb's own data. A write whose answer is lost (CLI timeout, a bridge transport error after the request) is
 // `uncertain` and never repeated here: the continuation is a read (inventory). delete-app is not a CLI verb here: it is
-// the Service Center delete engine (one call, answered by state; its own receipts).
+// the Service Center delete engine (two calls since CX15: the preview, then the token and the owner's words; its own
+// receipts and operation record).
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -18,6 +19,7 @@ import { o11LaneOf } from './o11-lane.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
 import { assertSelectedO11 } from './studio-connect.mjs';
 import { producerCacheDir, recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
+import { DESTRUCTIVE_SUFFIX, tokenNames } from './destructive-operations.mjs';
 
 export const ENVIRONMENT_READS = ['inventory', 'download', 'download-app', 'templates', 'references', 'referenceable'];
 export const ENVIRONMENT_WRITES = ['create-app', 'add-modules', 'create-module', 'update-app', 'refresh-refs', 'set-user-provider', 'delete-app'];
@@ -40,7 +42,7 @@ const FIELDS = {
   'update-app': { required: ['name'], optional: ['color', 'description', 'host'] },
   'refresh-refs': { required: ['module'], optional: ['all', 'publish', 'host'] },
   'set-user-provider': { required: ['module'], optional: ['providerName', 'providerKey', 'host'] },
-  'delete-app': { required: ['app'], optional: ['host'] },
+  'delete-app': { required: ['app'], optional: ['host', 'confirmationToken', 'ownerRequest'] },
 };
 const LIST_CAP = 100;
 const TIMEOUTS = { read: 600000, 'download-app': 1800000, write: 1800000 };
@@ -89,7 +91,8 @@ export function validateEnvironmentInput(input) {
   if (unknown.length) return refusal('UNKNOWN_FIELD', `${action} does not take: ${unknown.join(', ')}`,
     { tool: 'o11_environment', arguments: withoutKeys(input, unknown), why: `fields of ${action}: ${[...allowed].filter(k => k !== 'action').join(', ') || '(none)'}` },
     unknown.includes('authorize') ? { note: 'reads take no authorization words' } : {});
-  const missing = spec.required.filter(k => input[k] === undefined || (Array.isArray(input[k]) && input[k].length === 0));
+  // delete-app with its confirmationToken: the application comes from the token (CX15).
+  const missing = spec.required.filter(k => !(action === 'delete-app' && k === 'app' && input.confirmationToken) && (input[k] === undefined || (Array.isArray(input[k]) && input[k].length === 0)));
   if (missing.length) return refusal('MISSING_FIELD', `${action} needs: ${missing.join(', ')}`,
     { tool: 'o11_environment', arguments: { ...input, ...Object.fromEntries(missing.map(k => [k, '<' + k + '>'])) }, why: 'fill the missing fields' });
   // The CLI reads options by position (Opt) and switches by presence (Array.IndexOf): a value equal to a flag such as
@@ -117,11 +120,13 @@ export function validateEnvironmentInput(input) {
       { tool: 'o11_environment', arguments: withoutKeys(input, ['blank']), why: 'omit blank: UI modules come from the application template' },
       { fix: 'omit blank', modules: ui.map(m => m.name) });
   }
-  if (isWrite(action)) {
+  // delete-app: without confirmationToken it previews (no words needed); with it the delete engine checks the words
+  // (after the preview, naming the app and every consumer, with the count) with every other problem at once. With the
+  // token and no words at all: WORDS_REQUIRED, with the warning (CX15 r2, T4).
+  if (isWrite(action) && (action !== 'delete-app' || input.confirmationToken)) {
     if (typeof input.authorize !== 'string' || !input.authorize.trim())
       return refusal('WORDS_REQUIRED', `${action} changes the environment and needs the user's own words (authorize)`,
         { tool: 'o11_environment', arguments: { ...input, authorize: "<the user's literal words>" }, why: 'ask the user; never write the words yourself' });
-    // delete-app: the words are checked by the Service Center delete engine, against the app and every consumer.
   }
   return null;
 }
@@ -458,7 +463,7 @@ export async function downloadModule({ module, host, version } = {},
   catch { return refusal('STUDIO_NOT_SELECTED', 'The selected Service Studio is not connected (or was restarted); nothing was sent', { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'see which Studio is open and connected on the O11 lane' }); }
   const folder = uniqueFolder(path.join(laneInfo.local, 'environment', 'download'), timeStamp((now ?? (() => new Date()))()));
   const run = await (runAnvil ?? createAnvilRunner({ lane, root, env }))(environmentArguments(input, { out: folder, cache: publishedCache(laneInfo.local) }),
-    { timeoutMs: TIMEOUTS.read, cwd: root });
+    { timeoutMs: TIMEOUTS.read, cwd: root, read: true });
   const value = interpret(input, run, { out: folder });
   return value.ok ? { ...value, folder } : value;
 }
@@ -473,7 +478,7 @@ export async function refreshInventory({ host } = {}, { root = anvilRoot, lane =
     if (!fs.existsSync(laneInfo.cli)) return refusal('CLI_NOT_BUILT', 'The O11 Anvil CLI is not built for this lane', { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'the doctor reports the CLI build of each lane' });
     await (assertSelected ?? assertSelectedO11)();
     const folder = uniqueFolder(path.join(laneInfo.local, 'environment', 'inventory'), timeStamp((now ?? (() => new Date()))()));
-    const run = await (runAnvil ?? createAnvilRunner({ lane, root, env }))(environmentArguments(input, { out: folder }), { timeoutMs: TIMEOUTS.read, cwd: root });
+    const run = await (runAnvil ?? createAnvilRunner({ lane, root, env }))(environmentArguments(input, { out: folder }), { timeoutMs: TIMEOUTS.read, cwd: root, read: true });
     return interpret(input, run, { out: folder });
   } catch (error) { return refusal('INVENTORY_FAILED', firstLine(error?.message), inventoryRead(host, 'read the environment')); }
 }
@@ -492,40 +497,57 @@ export function registerO11Environment(server, deps = {}) {
     fs.mkdirSync(path.dirname(journalFile()), { recursive: true });
     fs.appendFileSync(journalFile(), JSON.stringify({ at: now().toISOString(), tool: 'o11_environment', ...entry }) + '\n');
   };
-  // delete-app is a thin route to the Service Center delete engine (service-center/delete.mjs), the same call as
-  // o11_service_center_write delete: the server's simulation and the consumers first, the words naming the app and
-  // every consumer, one DeleteApplication and the wait until it is gone. deps.serviceCenter(argv) and deps.studioHosts()
-  // replace the engine and the Studio's signed-in hosts in tests.
-  const serviceCenter = deps.serviceCenter ?? (async argv => (await import('./service-center/index.mjs')).runServiceCenter(argv, deps.serviceCenterDeps ?? {}));
+  // delete-app is a thin route to the Service Center delete engine (service-center/delete.mjs), the same two calls as
+  // o11_service_center_write delete (CX15): without confirmationToken the preview (the server's simulation, the modules
+  // that go with the app and its consumers, the token); with it, the words of the owner given after the preview naming
+  // the app and every consumer with the count, one DeleteApplication and the wait until it is gone. The token is bound
+  // to o11_environment. deps.serviceCenter(argv, extra) and deps.studioHosts() replace the engine and the Studio's
+  // signed-in hosts in tests.
+  const serviceCenter = deps.serviceCenter ?? (async (argv, extra = {}) => (await import('./service-center/index.mjs')).runServiceCenter(argv, { ...(deps.serviceCenterDeps ?? {}), ...extra }));
   const studioHosts = deps.studioHosts ?? (async () => {
     const { locateStudioBridge } = await import('./service-center/bridge.mjs');
     const bridge = await locateStudioBridge({ root, env });
     return bridge && await bridge.supports() ? bridge.signedInHosts() : [];
   });
-  async function deleteApp(input) {
+  async function deleteApp(input, extra = {}) {
     let host = input.host;
     if (!host) {
       let hosts = [];
       try { hosts = await studioHosts(); } catch { hosts = []; }
       if (hosts.length !== 1)
         return refusal('HOST_REQUIRED', hosts.length ? `the Studio is logged in to ${hosts.length} environments; delete-app needs host` : 'delete-app needs host (no environment of the connected Studio was found)',
-          { tool: 'o11_environment', arguments: { action: 'delete-app', app: input.app, host: hosts.length ? '<one of signedInHosts>' : '<env-host>', authorize: "<the user's words naming the app>" }, why: 'say which environment' },
+          { tool: 'o11_environment', arguments: { action: 'delete-app', ...(input.confirmationToken ? { confirmationToken: input.confirmationToken, authorize: "<the owner's reply after the preview>" } : { app: input.app }), host: hosts.length ? '<one of signedInHosts>' : '<env-host>' }, why: 'say which environment' },
           hosts.length ? { signedInHosts: hosts } : {});
       host = hosts[0];
     }
-    const value = await serviceCenter(['delete', '--host=' + host, '--target=application:' + input.app, '--words=' + input.authorize]);
+    // With the token, the app may be named again only when the token lists it (the target comes from the token).
+    if (input.confirmationToken && input.app !== undefined && tokenNames(input.confirmationToken, input.app, { root: deps.destructiveRoot }) === false)
+      return refusal('PREVIEW_OTHER_TARGET', `The confirmationToken does not list the application ${input.app}; nothing was sent`,
+        { tool: 'o11_environment', arguments: { action: 'delete-app', app: input.app, host }, why: 'a new preview of this application' });
+    const argv = ['delete', '--host=' + host, ...(input.confirmationToken ? [] : ['--target=application:' + input.app]),
+      ...(input.confirmationToken ? ['--confirmation-token=' + input.confirmationToken] : []), ...(input.authorize ? ['--words=' + input.authorize] : []),
+      ...(input.ownerRequest ? ['--owner-request=' + input.ownerRequest] : [])];
+    const value = await serviceCenter(argv, { tool: 'o11_environment', ...extra });
     const { auth, ...answer } = value ?? {};
-    if (answer.ok) return { ...answer, result: 'feito' };
-    // The next call is this same tool: the engine's repeat names the words it needs (and the operationId of an uncertain one).
+    // The next call is this same tool: after a preview, its token and the owner's reply; after a refusal, what the
+    // engine's repeat names (the token and the words it needs).
     const repeat = answer.repeat;
-    return { ...answer, ok: false, ...(repeat ? { continuation: { tool: 'o11_environment', arguments: { action: 'delete-app', app: input.app, host,
-      authorize: repeat.words }, why: answer.state === 'uncertain' ? 'the same call reads the state and never sends blind' : 'fix every item of problems, then the same call' } } : {}) };
+    const next = repeat ? { continuation: { tool: 'o11_environment', arguments: { action: 'delete-app', host,
+      ...(repeat.confirmationToken ? { confirmationToken: repeat.confirmationToken } : { app: input.app }), authorize: repeat.words },
+    // CX15 r3 (CT-7): a preview with items deleted without a backup says so here too (next has the count and the reasons).
+    why: answer.state === 'previewed' ? `show the owner this exact list${/WITHOUT a backup/.test(answer.next ?? '') ? ' and what goes WITHOUT a backup (next)' : ''} and ask; the execution needs this token and the owner's reply, with the number of items`
+      : answer.state === 'uncertain' ? 'read ssam_task {id:<operationId>} and tell the owner what is uncertain; a new send needs the owner\'s new reply (the same words never send again)'
+        // CX15 r3 (CT-5): after an interrupted operation, its record first; this token is the new preview's.
+        : answer.operation?.orphaned ? `read ssam_task {id:"${answer.operation.operationId}"} and tell the owner what the interrupted operation did (this call sent nothing); then show the owner the new preview of what is left (preview) and confirm it with this new token and the owner's new reply`
+          : 'fix every item of problems, then the same call' } } : {};
+    if (answer.ok && answer.state !== 'previewed') return { ...answer, result: 'feito' };
+    return { ...answer, ...(answer.state === 'previewed' ? {} : { ok: false }), ...next };
   }
 
-  async function environment(input) {
+  async function environment(input, extra = {}) {
     const refused = validateEnvironmentInput(input);
     if (refused) return refused;
-    if (input.action === 'delete-app') return deleteApp(input);
+    if (input.action === 'delete-app') return deleteApp(input, extra);
     const cli = lane().cli;
     if (!fs.existsSync(cli)) return refusal('CLI_NOT_BUILT', 'The O11 Anvil CLI is not built for this lane', { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'the doctor reports the CLI build of each lane' });
     if (input.action !== 'references') {
@@ -548,7 +570,7 @@ export function registerO11Environment(server, deps = {}) {
     const argv = environmentArguments(input, context);
     const timeoutMs = deps.timeoutMs ?? (isWrite(input.action) ? TIMEOUTS.write : TIMEOUTS[input.action] ?? TIMEOUTS.read);
     if (!isWrite(input.action)) {
-      const run = await runAnvil(argv, { timeoutMs, cwd: root });
+      const run = await runAnvil(argv, { timeoutMs, cwd: root, read: true });
       const data = run?.envelope?.ok === true ? run.envelope.data : undefined;
       if (input.action === 'templates' && data && !Array.isArray(data)) writeTemplatesCache(local, get(data, 'host'), get(data, 'templates'), now());
       return interpret(input, run, context);
@@ -593,8 +615,9 @@ export function registerO11Environment(server, deps = {}) {
       + 'update-app {name, color?, description?}, refresh-refs {module, all?, publish?} (validation after the refresh; publish goes '
       + 'through the environment session, not the Studio tab: publication {version, at, operationId} is a Service Center module '
       + 'version, never in o11_studio publish-log), set-user-provider {module, providerName?, '
-      + 'providerKey?}, delete-app {app} (the Service Center delete in one call: the server\'s simulation and the consumers first; the '
-      + 'words name the application and every consumer outside it; DELETE_REFUSED lists every problem). host picks among the '
+      + 'providerKey?}, delete-app {app} (the Service Center delete: the preview reads the server\'s simulation and the consumers and '
+      + 'answers the list (the app, the modules that go with it, its consumers) with a confirmationToken. ' + DESTRUCTIVE_SUFFIX
+      + ' The execution, delete-app {confirmationToken, authorize}: the words name the application and every consumer outside it; DELETE_REFUSED lists every problem). host picks among the '
       + 'environments the Studio is logged in to. Files go to <lane>/environment/<action>/<time> unless out is given. An uncertain '
       + 'write is never repeated: read inventory first. ENVIRONMENT_UNREACHABLE: the Studio could not reach the environment (the network of '
       + 'the Studio PC); a read was already asked again once, a write is uncertain.',
@@ -624,10 +647,13 @@ export function registerO11Environment(server, deps = {}) {
       filter: text('inventory/referenceable: substring of the names to list').optional(),
       refresh: z.boolean().describe('templates: read the server even when the templates of host are cached').optional(),
       authorize: z.string().describe('Writes: the user\'s literal words; only their sha256 is kept').optional(),
+      confirmationToken: text('delete-app: the token of the preview the owner confirmed (without it the call only previews; with it, no app)').optional(),
+      ownerRequest: text('delete-app, preview call: the owner\'s request, verbatim (only its sha256 is kept; it never confirms)').optional(),
     }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
-  }, async input => {
-    try { return reply(await environment(input)); }
+  }, async (input, ctx) => {
+    // CX15: the client's cancellation reaches the delete engine of delete-app (it stops before its next item).
+    try { return reply(await environment(input, ctx?.mcpReq?.signal ? { signal: ctx.mcpReq.signal } : {})); }
     catch (error) { return reply({ ok: false, error: firstLine(error.message) }); }
   });
 }

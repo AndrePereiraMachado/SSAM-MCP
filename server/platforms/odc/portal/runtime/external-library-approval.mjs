@@ -1,5 +1,6 @@
 import {authorizationContext} from '../../facade/authorization-context.mjs';
 import {fail} from './errors.mjs';
+import {ownedCleanupApproval} from './owned-cleanup-approval.mjs';
 import {createHash} from 'node:crypto';
 
 export const EXTERNAL_LIBRARY_DEPLOY = 'external-library:deploy';
@@ -17,10 +18,14 @@ export async function externalLibraryDiscardApproval({file,words,host,operationI
     || c.targets?.length!==1 || c.targets[0]!==origin.identity.name
     || c.constraints?.packageSha256!==origin.identity.packageSha256
     || p.publish && !p.publish.done && p.publish.state!=='not-sent')bad();
-  const approval=authorizationContext(file,words,{lane:'odc',host,operation:EXTERNAL_LIBRARY_JOB_DELETE,targets:[origin.identity.name],
-    constraints:{originOperationUuid,jobKey:input.path.operationKey}});
-  if(!approval || approval.wordsSha256!==c.wordsSha256 || approval.source.threadId!==c.source?.threadId
-    || approval.source.messageId!==c.source?.messageId)bad();
+  const scope={lane:'odc',host,operation:EXTERNAL_LIBRARY_JOB_DELETE,targets:[origin.identity.name],
+    constraints:{originOperationUuid,jobKey:input.path.operationKey}};
+  // CX15 r3 (N3): after the guard validated the owner's reply to the preview, a new approval of that reply (proposal = the
+  // preview) bound to this deploy receipt replaces the creation's words and message.
+  const fresh=ownedCleanupApproval({file,words,...scope,origin,key:input.path.operationKey,what:'The discard of this own External Library job'});
+  const approval=fresh??authorizationContext(file,words,scope);
+  if(!approval || !fresh&&(approval.wordsSha256!==c.wordsSha256 || approval.source.threadId!==c.source?.threadId
+    || approval.source.messageId!==c.source?.messageId))bad();
   const job=await readJob(input.path.operationKey);
   if(!job.ok || job.data?.key!==input.path.operationKey || job.data?.libraryName!=null && job.data.libraryName!==origin.identity.name
     || typeof p.package?.fileName!=='string' || job.data?.filename!==p.package.fileName

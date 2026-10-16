@@ -82,7 +82,7 @@ export function launch(entry, args = process.argv.slice(2)) {
       toClient:chunk=>{if(!process.stdout.write(chunk)){clientOutputBlocked=true;relay.pauseOutput();requestFlow();}}});
     relay = createMcpRelay({
       spawnChild: extra => spawn(process.execPath, [entryFile, ...forwarded], { cwd: root, windowsHide: true, stdio: ['pipe','pipe','pipe'],
-        env: { ...environment(), ...(loaded.launcherSha256 ? { SSAM_LAUNCHER_SHA256: loaded.launcherSha256 } : {}), ...extra } }),
+        env: { ...environment(), SSAM_RELAY_CHILD: '1', ...(loaded.launcherSha256 ? { SSAM_LAUNCHER_SHA256: loaded.launcherSha256 } : {}), ...extra } }),
       identity: () => identity.read(), loaded,
       toObserver: chunk => observer.response.write(chunk),
       onInputBlocked: blocked => { serverInputBlocked = blocked; requestFlow(); },
@@ -133,23 +133,33 @@ export function createMcpRelay({ spawnChild, identity, loaded = identity(), toOb
   let child = null, current = loaded, failedFor = null, reloads = 0;
   let initialize = null, initialized = false, openInput = false, reloading = false, outputPaused = false, inputEnded = false;
   const clientPending = new Map(), serverPending = new Set(), held = [];
+  // Detached work has already answered its request: it is independent of clientPending and survives until it finishes.
+  const detachedTasks = new WeakMap();
   const write = (proc, line) => { if (proc && !proc.stdin.destroyed && !proc.stdin.write(line)) onInputBlocked(true); };
   // The lines a child writes: tracked, and passed on only while it is the current child.
   function attach(proc, { onLine } = {}) {
     const channel = lineChannel({ onRaw: line => { if (proc === child) toObserver(line); },
-      onMessage: message => (onLine?.(message) === true) || (proc === child ? track(message) : false) });
+      onMessage: message => message?.method === 'notifications/ssam/detached_tasks' ? track(message, proc)
+        : (onLine?.(message) === true) || (proc === child ? track(message, proc) : false) });
     proc.stdout.on('data', chunk => channel.write(chunk));
     proc.stdout.on('end', () => channel.end());
     if (stderr) proc.stderr?.pipe?.(stderr, { end: false });
     proc.stdin.on('drain', () => { if (proc === child) onInputBlocked(false); });
     proc.stdin.on('error', () => {}); // a child ending: recorded by its close; nothing is replayed
     proc.on('error', error => { if (proc === child) { stderr?.write?.(error.message + '\n'); } });
-    proc.on('close', (code, signal) => { if (proc === child) onExit(code, signal); });
+    proc.on('close', (code, signal) => { detachedTasks.delete(proc); if (proc === child) onExit(code, signal); });
     if (outputPaused) proc.stdout.pause();
   }
   // What a server line tells: a request of the server is pending until the client answers; an answer settles a client
   // request (and an input_required answer keeps the call open).
-  function track(message) {
+  function track(message, proc = child) {
+    // Launcher-private lifecycle notifications from every child, including a candidate during reload,
+    // are swallowed before the usual request tracking and never passed to the client.
+    if (message?.method === 'notifications/ssam/detached_tasks') {
+      const running = message.params?.running;
+      if (Number.isSafeInteger(running) && running >= 0) detachedTasks.set(proc, running);
+      return true;
+    }
     if (!message || typeof message !== 'object' || Array.isArray(message) || message.id === undefined) return false;
     if (message.method) { serverPending.add(key(message.id)); return false; }
     const method = clientPending.get(key(message.id));
@@ -163,7 +173,7 @@ export function createMcpRelay({ spawnChild, identity, loaded = identity(), toOb
     return parts;
   };
   function due() {
-    if (!initialize || !initialized || clientPending.size || serverPending.size || openInput) return null;
+    if (!initialize || !initialized || clientPending.size || serverPending.size || openInput || (detachedTasks.get(child) ?? 0) > 0) return null;
     let next; try { next = identity(); } catch { return null; }
     const parts = changed(next);
     if (!parts.length || (failedFor && failedFor.facadeSha256 === next.facadeSha256 && failedFor.catalogSha256 === next.catalogSha256)) return null;
@@ -233,7 +243,7 @@ export function createMcpRelay({ spawnChild, identity, loaded = identity(), toOb
     pauseOutput() { outputPaused = true; child?.stdout.pause(); },
     resumeOutput() { outputPaused = false; child?.stdout.resume(); },
     kill(signal) { try { child?.kill(signal); } catch { /* gone */ } },
-    get state() { return { reloads, current, pending: clientPending.size + serverPending.size, openInput, reloading, child }; },
+    get state() { return { reloads, current, pending: clientPending.size + serverPending.size, detachedTasks: detachedTasks.get(child) ?? 0, openInput, reloading, child }; },
   };
 }
 

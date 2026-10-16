@@ -611,7 +611,7 @@ export function registerSsamReference(server, deps = {}) {
   async function contractOf(lane, argv, limit = timeoutMs) {
     const id = JSON.stringify([lane, ...argv]);
     if (contracts.has(id)) return contracts.get(id);
-    const run = await runAnvil(argv, { timeoutMs: limit, cwd: root, ...(lane === 'odc' ? { cli: cliOf(lane) } : {}) });
+    const run = await runAnvil(argv, { timeoutMs: limit, cwd: root, read: true, ...(lane === 'odc' ? { cli: cliOf(lane) } : {}) });
     if (run.envelope?.ok === true) contracts.set(id, run);
     return run;
   }
@@ -694,7 +694,7 @@ export function registerSsamReference(server, deps = {}) {
   async function functionLookup(lane, name) {
     const id = JSON.stringify([lane, 'functions', '#name', name.toLowerCase()]);
     if (cache.has(id)) return cache.get(id);
-    const run = await runAnvil(['functions', '--name', name], { timeoutMs: otherReadMs, cwd: root });
+    const run = await runAnvil(['functions', '--name', name], { timeoutMs: otherReadMs, cwd: root, read: true });
     const envelope = run.envelope;
     const value = !envelope ? { error: run.timedOut ? `no answer within ${otherReadMs} ms` : firstLine((run.stderr ?? []).at(-1) ?? 'the CLI gave no answer') }
       : envelope.ok === false ? { error: firstLine(envelope.error) } : { data: envelope.data };
@@ -799,7 +799,7 @@ export function registerSsamReference(server, deps = {}) {
           ...refusalFields(verdict.problems ?? ran?.preflight?.problems, verdict.problems ? verdict : { verifyRan: true, phases: ['verify'] }),
           ...(!verdict.problems && Array.isArray(ran?.policyMessages) ? { policyMessages: ran.policyMessages.slice(0, 20) } : {}) }));
     }
-    const run = await runAnvil(built.argv, { timeoutMs, cwd: root, ...(lane === 'odc' ? { cli } : {}) });
+    const run = await runAnvil(built.argv, { timeoutMs, cwd: root, read: true, ...(lane === 'odc' ? { cli } : {}) });
     const envelope = run.envelope;
     if (!envelope) return refusal(run.timedOut ? 'TIMEOUT' : 'CLI_FAILED', firstLine((run.stderr ?? []).at(-1) ?? 'the CLI gave no answer'), doctor(lane, 'check the lane CLI'));
     if (envelope.ok === false && envelope.data === undefined)

@@ -31,6 +31,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as z from 'zod/v4';
 import { bridgeTarget, o11Bridge } from './o11-bridge.mjs';
+import { classifyWindow, isErrorReportTitle, withoutTypedText, cleanStall } from './bridge-stall.mjs';
+import { stallRecovery } from './studio-recovery.mjs';
+export { classifyWindow } from './bridge-stall.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { assertSelectedO11 } from './studio-connect.mjs';
 import { resolveOpenModule, systemModuleName } from './studio-module.mjs';
@@ -216,25 +219,12 @@ export function translateDialogHint(text, context = {}) {
 
 // ---- Dialog projection. Dialogs.BlockedBy (get_active_module.pendingDialogs, open_module.blockedBy) when a module is
 // active; otherwise the same rule over `windows` (DialogPolicy.ClassifyWindow ported: it is pure).
-const PROGRESS_WORDS = ['opening', 'loading', 'downloading', 'uploading', 'please wait', 'connecting', 'checking', 'publishing', 'preparing'];
-export function classifyWindow(title, texts = []) {
-  const all = [title ?? '', ...texts].join(' | '); const lower = all.toLowerCase();
-  const hasButton = all.includes('[Button]');
-  if (!hasButton && String(title ?? '').trim().toLowerCase() === 'progress') return 'Progress';
-  if (!hasButton && (PROGRESS_WORDS.some(w => lower.includes(w)) || all.includes('%'))) return 'Progress';
-  // fam-deps: the Studio's crash report (DialogPolicy.UnexpectedError); it asks nothing and close_dialog closes it by title.
-  if (String(title ?? '').trim().toLowerCase() === 'unexpected error') return 'UnexpectedError';
-  if (lower.includes('discard') && lower.includes('open')) return 'Recovery';
-  if (lower.includes('dependencies') || lower.includes('references') || lower.includes('[button] apply')) return 'ManageDependencies';
-  if (['[button] ok', '[button] cancel', '[button] yes'].some(b => lower.includes(b))) return 'MessageBox';
-  return 'Modal';
-}
 export function dialogsFromWindows(windows = []) {
   const found = [];
   for (const w of windows) {
     const web = String(w.type ?? '').includes('DialogWindow');
     if (!w.isVisible || !(w.isModal || web)) continue; // never the main window
-    const texts = (w.texts ?? []).filter(t => !String(t).startsWith('[TextBox]')).slice(0, 12);
+    const texts = withoutTypedText(w.texts).slice(0, 12);
     let kind = classifyWindow(w.title, texts);
     if (kind === 'Progress') continue; // opening/loading: transient
     if (web && kind === 'Modal') kind = 'WebDialog';
@@ -268,10 +258,19 @@ function uiBusy(error, module) {
     error: 'The Service Studio UI thread is busy or blocked: ' + String(error?.message ?? '').replace(/^[^:]+:\s*/, ''),
     continuation: STATUS('a interface do Studio não respondeu a tempo; leia o estado (uiResponsive) antes de qualquer nova escrita') };
 }
-function failure(error) {
+function failure(error, originalCall) {
   if (TRANSPORT.has(error?.code)) return notConnected();
   if (UNTRUSTED.test(error?.message ?? ''))
     return { ok: false, code: 'O11_NOT_AUTHORIZED', error: 'the bridge does not trust this controller key', continuation: { ...CONNECT, why: 'selecione o Studio de novo para renovar a chave da ponte' } };
+  if (error?.code === 'BRIDGE_STALLED' || error?.code === 'STUDIO_ERROR_DIALOG_OPEN') {
+    const stalled = cleanStall(error.stall ?? error.reply?.data?.stall);
+    const notSent = error.executed === false;
+    const next = notSent && originalCall ? { ...originalCall, why: 'repita a mesma chamada depois de fechar o relatório; nada foi enviado' }
+      : STATUS('reconcilie o estado da operação antes de qualquer nova escrita; nada foi repetido');
+    const recovery = stallRecovery(stalled, next);
+    return { ok: false, code: error.code, method: error.method, outcome: notSent ? 'not-sent' : 'unknown',
+      ...(notSent ? { executed: false } : {}), stalled, recovery, continuation: recovery[0], error: error.message };
+  }
   if (error?.code === 'BRIDGE_TIMEOUT')
     return { ok: false, code: 'BRIDGE_TIMEOUT', method: error.method, outcome: error.executed === false ? 'not-sent' : 'unknown',
       continuation: STATUS('o Studio pode estar ocupado; leia o estado antes de repetir') };
@@ -356,8 +355,15 @@ export const DEPENDENCIES_CAPABILITY = 'dialogs:dependencies_auto';
 export const MODULE_KEY_CAPABILITY = 'merge_from_oml:module_key';
 const manifests = new WeakMap();
 // Whether the bridge offers a capability; a bridge that cannot answer bridge_manifest offers none. One read per client.
+// CX14 follow-up: a client of o11-bridge.mjs shares ONE read per Studio (pid + start) with the pre-probe and status.
 export async function bridgeOffers(bridge, capability) {
   if (!bridge || typeof bridge !== 'object') return false;
+  if (typeof bridge.manifest === 'function') {
+    const read = await bridge.manifest({ timeoutMs: 5000 });
+    if (read?.ok) return read.capabilities.includes(capability);
+    if (abortsWait(read?.error)) throw read.error;
+    return false;
+  }
   if (!manifests.has(bridge)) manifests.set(bridge, Promise.resolve(bridge.ok('bridge_manifest', {}, { timeoutMs: 5000 }))
     .then(m => new Set(Array.isArray(m?.capabilities) ? m.capabilities : []), error => { if (abortsWait(error)) throw error; return new Set(); }));
   return (await manifests.get(bridge)).has(capability);
@@ -478,7 +484,10 @@ const CHECKS = {
 // otherwise the dialog is listed with its next call and the write that holds the Studio answers it (UI freeze of
 // 2026-10-08, pattern 4: a status refreshing references beside another agent's merge).
 async function status(bridge, args, ctx) {
-  const [ping, manifest, list, active, alive] = await Promise.allSettled([bridge.ok('ping'), bridge.ok('bridge_manifest'),
+  // CX14 follow-up: the manifest shared with the pre-probe and bridgeOffers (one read per Studio) when the client has it.
+  const manifestRead = typeof bridge?.manifest === 'function'
+    ? bridge.manifest({ timeoutMs: 5000 }).then(read => { if (read?.ok) return read.data; throw read?.error; }) : bridge.ok('bridge_manifest');
+  const [ping, manifest, list, active, alive] = await Promise.allSettled([bridge.ok('ping'), manifestRead,
     bridge.ok('list_open_modules'), bridge.ok('get_active_module'), bridge.ok('ui_alive', { timeout_ms: 1000 })]);
   if (ping.status === 'rejected') throw ping.reason;
   if (ping.value?.bridge !== 'anvil') return notConnected();
@@ -488,7 +497,7 @@ async function status(bridge, args, ctx) {
     return { ok: false, code: 'O11_STUDIO_CHANGED', pid, selectedPid: bridge.target.pid, continuation: { ...CONNECT, why: 'outro Studio responde na porta da faixa; conecte de novo' } };
   const a = active.status === 'fulfilled' ? active.value : null;
   const listed = list.status === 'fulfilled' ? list.value : null;
-  if (manifest.status === 'fulfilled' && bridge && typeof bridge === 'object' && !manifests.has(bridge))
+  if (manifest.status === 'fulfilled' && bridge && typeof bridge === 'object' && typeof bridge.manifest !== 'function' && !manifests.has(bridge))
     manifests.set(bridge, Promise.resolve(new Set(Array.isArray(manifest.value?.capabilities) ? manifest.value.capabilities : [])));
   const windowRead = a ? null : await windowDialogs(bridge);
   let dialogs = a ? { raw: allDialogs(a, listed) } : windowRead.raw ? { raw: allDialogs({ pendingDialogs: windowRead.raw }, listed) } : windowRead;
@@ -539,7 +548,7 @@ async function wait(bridge, args, ctx) {
 
 function openFailure(error, args) {
   const message = error?.message ?? '';
-  if (!error?.reply || TRANSPORT.has(error?.code)) return failure(error);
+  if (!error?.reply || TRANSPORT.has(error?.code)) return failure(error, call('open-module', args));
   const login = args.environment ? { ...call('login', { host: args.environment }), why: 'abre o login do próprio Studio; a pessoa entra lá (senha ou SSO)' }
     : STATUS('veja environments e chame login com o host do ambiente');
   if (/not logged in/i.test(message)) return { ok: false, code: 'STUDIO_NOT_SIGNED_IN', name: args.name, error: 'the Studio has no signed-in session for this environment', continuation: login };
@@ -548,7 +557,7 @@ function openFailure(error, args) {
   if (/did not become active/i.test(message))
     return { ok: false, code: 'OPEN_TIMEOUT', name: args.name, error: translateDialogHint(message.replace(/\s*\(check windows and ui_alive\)/, '')),
       continuation: STATUS('veja diálogos e se a UI do Studio responde') };
-  return failure(error);
+  return failure(error, call('open-module', args));
 }
 
 // ---- Module names (C41). Pure helpers first, then the resolution over the open modules and the inventory.
@@ -837,11 +846,12 @@ async function errors(bridge, args) {
 async function windows(bridge, args) {
   const data = await bridge.ok('windows', args.maxTexts === undefined ? {} : { max_texts: args.maxTexts });
   return { ok: true, count: data.count, windows: (data.windows ?? []).map(({ title, type, isVisible, isActive, isModal, contentKind, owner, texts }) =>
-    ({ title, type, isVisible, isActive, isModal, contentKind, ...(owner ? { owner } : {}), texts })) };
+    // CX14 R2: what the person typed in a dialog (a TextBox) is never returned (the rule of dialogsFromWindows).
+    ({ title, type, isVisible, isActive, isModal, contentKind, ...(owner ? { owner } : {}), texts: Array.isArray(texts) ? withoutTypedText(texts) : texts })) };
 }
 
 // close_dialog {title, type?} closes every visible OWNED window with that exact title (WindowsHandler.CloseDialog);
-// it never reaches a web DialogWindow without owner, so that case is refused before the call, as is a call without title.
+// An ownerless error report is closable only when the bridge advertises its title-based dialog watcher.
 async function dismissDialog(bridge, args) {
   const same = (a, b) => String(a ?? '').toLowerCase() === String(b ?? '').toLowerCase();
   const listing = await bridge.ok('windows', { max_texts: 0 });
@@ -851,9 +861,11 @@ async function dismissDialog(bridge, args) {
       open: (listing.windows ?? []).filter(w => w.isVisible && (w.isModal || String(w.type).includes('DialogWindow'))).map(w => ({ title: w.title, type: w.type })),
       continuation: STATUS('veja os diálogos pendentes e seus títulos') };
   if (!matches.some(w => w.isModal === true)) {
-    if (matches.some(w => w.contentKind === 'web' || String(w.type).includes('DialogWindow')))
-      return { ok: false, code: 'WEB_DIALOG', title: args.title, error: 'a web dialog without owner cannot be closed by the bridge', continuation: WAIT_NO_DIALOGS };
-    return { ok: false, code: 'NOT_A_DIALOG', title: args.title, error: 'that window has no owner (the main window); nothing was closed' };
+    const web=matches.some(w=>w.contentKind==='web'||String(w.type).includes('DialogWindow'));
+    if(web) {
+      if(!(isErrorReportTitle(args.title)&&await bridgeOffers(bridge,'merge_from_oml:dialog_watch')))
+        return {ok:false,code:'WEB_DIALOG',title:args.title,error:'a web dialog without owner cannot be closed by the bridge',continuation:WAIT_NO_DIALOGS};
+    } else return {ok:false,code:'NOT_A_DIALOG',title:args.title,error:'that window has no owner (the main window); nothing was closed'};
   }
   const data = await bridge.ok('close_dialog', { title: args.title, ...(args.type ? { type: args.type } : {}) });
   const closed = data?.closed ?? [];
@@ -1001,7 +1013,7 @@ export function o11Studio({ bridge, assertSelected = assertSelectedO11, lane = o
     }
     let target;
     try { target = client(); } catch { return notConnected(); }
-    try { return await HANDLERS[command](target, parsed.data, signal ? { ...ctx, signal } : ctx); } catch (error) { return failure(error); }
+    try { return await HANDLERS[command](target, parsed.data, signal ? { ...ctx, signal } : ctx); } catch (error) { return failure(error, call(command, parsed.data)); }
   };
 }
 

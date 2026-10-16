@@ -2023,7 +2023,9 @@ export class Client {
   }
 
   // ---- generic page writes: prepare reads, send posts inside the reservation, observe re-reads
-  async webWrite(action, args, { execute = false, words: userWords = null, operationId = null, journal = null, approve = null } = {}) {
+  // beforeSend(plan, receipt): the last look before the POST, inside the reservation (CX15 r3, CT-1: the client's
+  // cancellation of a page delete); a value stops it and nothing is sent (runWrite).
+  async webWrite(action, args, { execute = false, words: userWords = null, operationId = null, journal = null, approve = null, beforeSend = null } = {}) {
     const identity = { host: this.vault.host, action, ...Object.fromEntries(WEB_WRITES[action].map(k => [k, pyStr(args[k])])) };
     const [prepare, send] = WEB_HANDLERS[action];
     const run = async (plan, state, receipt) => {
@@ -2043,7 +2045,7 @@ export class Client {
         journal.supersedeTestForCleanup(identity, plan, operationId);
     };
     return runWrite(identity, () => prepare.call(this, args), run, { execute, words: userWords, operationId, journal,
-      authorizing: (id, sha, fn) => this.http.authorizing(id, sha, fn), approve: gate });
+      authorizing: (id, sha, fn) => this.http.authorizing(id, sha, fn), approve: gate, beforeSend });
   }
 
   async observe(action, identity, plan = null) {
@@ -2448,8 +2450,10 @@ export function bridgeFailure(error, tracker = {}, identity = null) {
 
 // Prepare by default. Execute: the user's words, an operationId UUID, the durable reservation before anything is sent,
 // and no replay: the same operationId returns its receipt; a failure after sending stays uncertain. approve(plan)
-// checks the words against the resolved target before the reservation.
-export async function runWrite(identity, prepare, send, { execute, words: userWords, operationId, journal, authorizing = null, lock = null, approve = null }) {
+// checks the words against the resolved target before the reservation. beforeSend(plan, receipt), inside the
+// reservation right before the send: a value it returns stops the write with nothing sent (the receipt closes 'refused'
+// with notSent and that value, so its target lock is released).
+export async function runWrite(identity, prepare, send, { execute, words: userWords, operationId, journal, authorizing = null, lock = null, approve = null, beforeSend = null }) {
   if (execute) {
     if (!userWords || !strip(userWords) || !operationId || !journal) throw new ProtocolError("Execution requires the user's words, operation-id and a durable journal");
     const existing = journal.lookup(operationId, identity);
@@ -2461,7 +2465,12 @@ export async function runWrite(identity, prepare, send, { execute, words: userWo
   return journal.reserve(operationId, identity, userWords, plan, lock ? lock(plan) : null, async receipt => {
     let tracker = {};
     try {
-      const body = async t => { tracker = t; Object.assign(receipt, await send(plan, state, receipt)); };
+      const body = async t => {
+        tracker = t;
+        const stop = beforeSend ? beforeSend(plan, receipt) : null;
+        if (stop) { Object.assign(receipt, { ...stop, state: 'refused', notSent: true }); return; }
+        Object.assign(receipt, await send(plan, state, receipt));
+      };
       if (authorizing) await authorizing(receipt.operationId, receipt.authorization.wordsSha256, body);
       else await body({});
       receipt.ok = ['accepted', 'confirmed'].includes(receipt.state);
@@ -2472,6 +2481,17 @@ export async function runWrite(identity, prepare, send, { execute, words: userWo
     receipt.updatedAt = utc();
     return receipt;
   });
+}
+
+// Windows refuses a rename over a file another process holds open for a moment (a scanner, a reader): EPERM, EBUSY and
+// EACCES are retried for about two seconds before the error is thrown (CX15 r2, C5: the rewrite of a parent receipt after
+// a child was sent must not fail on that).
+const pauseMs = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+export function renameRetrying(from, to, { attempts = 80, waitMs = 25 } = {}) {
+  for (let attempt = 1; ; attempt++) {
+    try { fs.renameSync(from, to); return; }
+    catch (error) { if (attempt >= attempts || !['EPERM', 'EBUSY', 'EACCES'].includes(error.code)) throw error; pauseMs(waitMs); }
+  }
 }
 
 // Exclusive durable operation IDs; a crash or lost response is never retried. The files are the Python adapter's
@@ -2564,8 +2584,9 @@ export class Journal {
     const file = this.path(receipt.operationId);
     const temporary = file.replace(/\.json$/, '.tmp');
     Journal.writeDurable(temporary, JSON.stringify(receipt, null, 2), 'w');
-    fs.renameSync(temporary, file);
+    Journal.rename(temporary, file);
   }
+  static rename(from, to) { renameRetrying(from, to); }
   // An uncertain write whose target the next call read as still there, unchanged: it is closed as superseded (its lock
   // released) so that exactly one new send replaces it. A 'sending' receipt may have a live sender: never superseded.
   supersede(receipt, byOperationId) {
@@ -2691,7 +2712,7 @@ export class Journal {
     const file = this.path(receipt.operationId);
     const temporary = file.replace(/\.json$/, '.tmp');
     Journal.writeDurable(temporary, JSON.stringify(receipt, null, 2), 'wx');
-    fs.renameSync(temporary, file);
+    Journal.rename(temporary, file);
     fs.unlinkSync(lock);
   }
 
@@ -2729,7 +2750,7 @@ export class Journal {
     finally {
       const temporary = file.replace(/\.json$/, '.tmp');
       Journal.writeDurable(temporary, JSON.stringify(receipt, null, 2), 'w');
-      fs.renameSync(temporary, file);
+      Journal.rename(temporary, file);
       if (RELEASED.includes(receipt.state)) fs.rmSync(lock, { force: true });
     }
   }

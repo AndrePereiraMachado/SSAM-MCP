@@ -170,6 +170,114 @@ CLI frio: `anvil html-edit --oml <captura> --data <op.json> [--out r.oml]` (uma 
 `anvil html-edit-battery --oml <captura> [--seed N] [--per-kind N] [--root Tela] [--out rel.json]` (a bateria). O mesmo em
 `anvil-odc`.
 
+## Editar por elemento e por texto (CX16)
+
+Mudar parte de uma tela ou bloco não reenvia o documento nem o elemento inteiro: a op `html` leva `edits`, uma lista de
+edições sobre a **leitura** (`basedOn {capture, html}` da `ssam_map view:"html"`), e o kernel escreve o documento inteiro a
+partir dela (`HtmlElementEdits.cs`); o documento segue o caminho de hoje (plano, merge de 3 vias quando a tela mudou,
+escrita, conferência). No `ssam_code`: `{action:"write", part:"html", element:"<tela>", basedOn:{capture, html}, edits:[...]}`.
+
+```json
+{"op":"html","data":{"screen":"AdminStations","basedOn":{"capture":"<sourceSha256>","html":"<htmlSha256>"},
+  "edits":[{"set":"w17","attributes":{"class":"toolbar admin-nav"}},
+           {"into":"w17","insert":"<a class=\"btn-ghost\" onclick=\"GoAdminRentals\">Aluguéis</a>"},
+           {"find":"Pontos de partida.","with":"Estações"}]}}
+```
+
+| Forma | Base | Efeito |
+|---|---|---|
+| `{find:"<texto exato>", with:"<texto>"}` | leitura e texto de job | troca a única ocorrência; `with:""` apaga o trecho; sobre a leitura, os `k` do `with` são os do trecho (na mesma ordem; em outra, só com cada elemento que muda de lugar levando o seu próprio texto) |
+| `{set:"w17", attributes:{"class":"a b","os-Width":null}}` | leitura | só a tag de abertura; `null` remove; nunca `k`; filhos intactos |
+| `{replace:"w17", with:"<div …>…</div>"}` | leitura | o elemento inteiro (um If com o seu `<div else>`); raiz sem `k` herda `w17` |
+| `{delete:"w17"}` | leitura | o elemento (e o seu else) |
+| `{after:"w17", insert:"…"}` / `{before:"w17", insert:"…"}` | leitura | elementos novos (sem `k`) como irmãos |
+| `{into:"w5"`, `"w5/Content"`, `"w23.true"`, `"w23.false"` ou `"/", insert:"…", at:"first"\|"last"}` | leitura | filhos novos (padrão `last`); um slot ou um else que a leitura não escreve é criado |
+| `{move:"w9", after\|before\|into:"…"}` | leitura | o mesmo elemento, `k` mantido |
+
+Endereço: o `k`, o slot `k/Nome`, o ramo `k.true`/`k.false`, a raiz `/` ou `@<ObjectKey>` (pela tabela de chaves). Todas as
+edições endereçam a base (uma `find` e um endereço sobre o mesmo texto se sobrepõem); o texto inserido ou trocado é escrito
+na forma canônica da sua profundidade e o resto da base fica byte a byte; `set` e `replace` mantêm o elemento; uma edição
+sem efeito devolve a base. Recusas, todas numa resposta, com `pointer` `/edits/<j>` e `element` (a linha da tag) ou
+`candidates`: `HTML_EDIT_TARGET_UNKNOWN` (endereço que a leitura não tem), `HTML_EDIT_TEXT_NOT_UNIQUE` (0 ou ≥ 2
+ocorrências, com as linhas), `HTML_EDIT_OVERLAP`, `HTML_KEY_TWICE`, `HTML_EDIT_INVALID` (forma; também uma `find` cujo
+`with` tira, troca ou acrescenta um `k` do trecho: o `k` é a identidade do elemento, e sem ele o elemento seria outro e o
+rebase perderia o que o Studio mudou nele; mude-o por `set`, `replace` ou `move`). Dois elementos trocados de lugar dentro
+de uma `find`, cada um com o seu `k` **e o seu próprio texto**, são o mesmo par recolocado (só `place`: nada criado, apagado
+ou movido para outro pai, nenhuma ObjectKey nova). **Identidade por `k` (3ª rodada, M5)**, em toda edição que escreve de
+novo `k` da leitura (`find`/`with`, `replace`/`with`, `replace "/"`): quando a ordem dos `k` muda, os elementos que mudam de
+lugar (os que ficam fora da maior sequência mantida em ordem) têm de levar o seu próprio texto, filhos incluídos, na forma
+canônica. Um `k` que muda de lugar **e** de texto ao mesmo tempo é recusado com `HTML_EDIT_INVALID`, `keys` com os `k` e
+`element` com a linha da tag: com os `k` de dois contêineres trocados e o conteúdo no lugar, o plano moveria os filhos de um
+para o outro com ObjectKeys novas (2 × 15 objetos no `Login`) para uma tela que se lê igual, e o rebase perderia o que o
+Studio mudou neles. A correção: mover cada elemento inteiro com o seu texto (ou `{move}`) e mudá-lo por `{set}`; um `set`
+e o `move` do mesmo elemento vão juntos na mesma lista (o `move` escreve o elemento com os atributos do `set`). Um `k` que
+muda de pai sem mudar a ordem dos `k` (sai do pai, por exemplo) continua sendo o `move` + `set` declarado de hoje. Com a leitura guardada na
+loja, o preflight (`check-job`) já diz tudo isso em ms, sem o modelo. Um problema do plano num `k` que uma edição tocou
+leva `edit: <j>`; a resposta lista `normalizations [{rule:"html-element-edits", from, edits, touched}]`. Sem a leitura
+guardada e com a tela mudada: `HTML_BASE_CHANGED` com o texto atual e, quando a tabela de chaves está guardada,
+`current.elements [{address, k, text}]` com o texto atual de cada elemento endereçado. A forma `edit` (elementos inteiros)
+e a forma documento continuam valendo como antes.
+
+**Correção de um job recusado ou checado:** `basedOn {job, sha256}` (o `nextBasedOn` da recusa, também na recusa do
+`ssam_code check`), `element` (o nome de um `<screen>`/`<block>` do job, a tela de uma op de edição, `Tela.Action` ou
+`Action` de um texto de lógica, ou `ddl`) e `edits:[{find, with}]`; outros elementos em `also:[{element, edits}]`. O
+`ssam_code` gera o JSON Patch dos textos (`html-edits.mjs`) e entrega pela rota de patch de hoje; nada do job viaja de novo.
+Problemas: `EDIT_ELEMENT_UNKNOWN` (com os elementos que o job tem), `EDIT_TEXT_NOT_UNIQUE` (com as linhas), `EDIT_OVERLAP`
+(duas edições no mesmo trecho, ou com o `patch` do modelo no mesmo caminho), `BASE_CHANGED`.
+
+## Checagem estática (CX16)
+
+**Desligada por padrão desde a 4ª rodada (plano B, acordado com o dono):** a pré-checagem de UI só roda com
+`SSAM_UI_PRECHECK=1` (ou `on`, `true`). Desligada, toda chamada segue como antes do CX16. A revisão cx16-3 (M3) mostrou que,
+com o worker residente (o padrão), o `check-job` entra na mesma fila do apply. O paralelo vira série, e com um apply de mais
+de ~12 s o `check-job` estoura na fila e a recusa sai sem os problemas estáticos. A edição por elemento (`data.edits`,
+acima) não depende da pré-checagem e continua ligada. O que segue descreve a pré-checagem ligada.
+
+Antes de qualquer etapa de Studio (`o11_deliver`, relay do `studio_deliver`) e antes do apply (`ssam_job`, `o11_job`,
+`ssam_code check`), um job de telas ou blocos passa pelo `check-job` da faixa com o índice do módulo
+(`ui-precheck.mjs`, `Preflight\StaticChecks.cs`): `check-job --job J [--module-index F] [--producer-index Nome=F]…
+[--ui-catalog F]… [--basis-fresh true|false]`. Sem as flags novas a saída é a de hoje; com elas ganha
+`phases:["preflight","static"]` e `static:{basis, checked, skipped, elapsedMs}`.
+
+| Classe | O que decide | Fonte |
+|---|---|---|
+| S1 | `<Block name>` existe (bloco do job, do módulo, importado ou do catálogo de UI) | job, índice (com as linhas de referência `*BlockSignature`), índices de produtor, `reference`, digest, catálogo |
+| S2 | contrato do bloco: `<slot name>`, `:Input` e os obrigatórios, `@Evento` | `<block>` do job; catálogo (aviso) |
+| S3 | destino de evento: screen action de `actions=` ou tela | documento, índice (com `*ScreenSignature`), índices de produtor |
+| S4 | `actions=`/`data-actions=` têm texto de lógica no job (ou já existem na tela) | job, índice |
+| S5 | raiz de toda expressão: dado do documento, do módulo, do job ou importado; um TIPO usado como valor (`value="Station.Id"` → `Opções.Lista.Current.Id`); `X.Lista.Current.Entidade.Attr` sobre `Entidade List` → `.Current.Attr`; tipo de produtor referenciado fora do `reference` (`REFERENCE_MISSING`, com o patch) | documento, job, `reference`, índices |
+| S6, S7 | `roles=`; tela ou bloco novo com nome que o módulo já tem (`HTML_ROOT_EXISTS`) | índice, `reference`, job |
+| L1-L3 | data action que atribui variável da tela; saída ou entrada de screen action com o nome de um dado da tela (`NAME_COLLISION`) | job |
+| WithModule, WithBase | as regras de hoje sobre o índice (agora também com `reference`) | índice + digest |
+| functions | `FUNCTION_UNKNOWN` da fase base: chamada a um nome que não é built-in da faixa, nem elemento do módulo ou das referências, nem nome que o job declara | built-ins (Studio ou catálogo O11), índice, job |
+
+A forma `{screen, basedOn, html:<documento>}` é a edição daquela tela (`ScreenHtmlEdit.IsEdit`, a mesma regra do apply):
+nunca uma raiz nova (sem `HTML_ROOT_EXISTS`). Um job com `expectValid:false` pede ao Verify o veredito: S1-S7, L1-L3,
+WithModule e WithBase não rodam e ficam em `static.skipped`, como no preflight e no `JobRunner`.
+
+Erro só com evidência positiva: um nome que falta num índice que não é provadamente o módulo vivo (`--basis-fresh false`)
+é aviso; nome que o job ou um gerador pode criar nunca é problema; o que precisa do Studio (built-ins da ODC, assinatura
+de callee) é pulado e listado em `static.skipped`. O `check-job` diz em `static.complete` se o caminho do apply (fase base,
+apply, Verify) ainda pode acrescentar algum problema, e em `static.rest` o que falta; `complete` só quando o job não se lê
+ou toda op é recusada inteira pela forma.
+
+Regra de parada (a regra do dono é UMA recusa com tudo). **3ª rodada (M3): o `check-job` roda junto com o caminho do
+apply, nunca antes dele** (`startUiPrecheck`): no `ssam_job`/`o11_job`/`ssam_code check` ele parte antes de
+`prepareIntegrationJob`/apply e só é esperado na junção; no `o11_deliver` parte depois da captura por chave (que a fase de
+build reaproveita) e roda junto com o apply do build; no relay do `studio_deliver` roda junto com o relay. A pré-checagem
+**nunca constrói índice**: usa o índice guardado (ou o de uma captura de mesmo conteúdo); sem ele, as classes que dependem
+do índice são puladas e `static.skipped` diz isso (`SSAM_UI_PRECHECK_INDEX_MS` deixou de existir). Os problemas vão para a
+recusa do caminho do apply (`joinPrecheck`: o mesmo problema uma vez, com o texto do apply; `phases` com `"static"`;
+`static {complete, rest, carried, joined}`). A pré-checagem só responde sozinha com `static.complete` (o job não se lê ou
+toda op é recusada inteira pela forma), e só onde ainda há passo a poupar: no `o11_deliver`, o passo do Studio espera o
+veredito (o build rodou enquanto isso) e para ali — `{code:"PREFLIGHT_REFUSED", stage:"static", stoppedBefore:"studio",
+problems, static, nextBasedOn, continuation}`; quando toda correção é certa (`edit:{element, find, with}` em cada problema),
+a continuação é UM `ssam_code` com `basedOn {job, sha256}` e as edições; senão, a leitura do primeiro elemento. Um job
+headless e o relay ODC são o próprio caminho do apply: mesmo com `complete`, juntam. Se o apply aceita, os erros estáticos
+não eram prova: só o diário `ui-precheck.jsonl` os guarda. Aviso nunca para. Sem `SSAM_UI_PRECHECK=1` (o padrão desde a 4ª rodada) não há pré-checagem;
+com ela, `SSAM_UI_PRECHECK_STOP=error` volta à regra da 1ª rodada (qualquer erro recusa antes do apply, em série; opcional, nunca o
+padrão).
+
 ## Garantias
 
 - **Ponto fixo:** `ScreenHtmlDocument.Compare(html)` decodifica o texto e compara com a forma canônica lida do modelo;

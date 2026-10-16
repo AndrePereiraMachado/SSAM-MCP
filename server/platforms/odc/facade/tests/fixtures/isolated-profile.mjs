@@ -16,4 +16,5 @@ Object.assign(process.env, {
   ANVIL_AUTHORITY_DIR: path.join(isolatedProfile, 'authority'), ANVIL_WORKER: '0', ANVIL_ODC_NO_WORKER: '1',
 });
 delete process.env.SSAM_SC_RECEIPTS;
+delete process.env.SSAM_DESTRUCTIVE_ROOT;
 process.on('exit', () => { try { fs.rmSync(isolatedProfile, { recursive: true, force: true }); } catch { /* best effort */ } });

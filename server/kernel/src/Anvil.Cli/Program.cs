@@ -208,7 +208,7 @@ public static class Program
                 "ui-gallery" => UiGalleryCmd(args),
                 "types" => TypesCmd(args),
                 "check-delivery" => Anvil.Core.Delivery.DeliveryReceipt.Check(Need(args, "--result")),
-                "check-job" => JobPreflight.Check(Need(args, "--job")),
+                "check-job" => Anvil.Core.Preflight.CheckJobCommand.Run(args),
                 "apply" => ApplyCmd(args),
                 "xif" => XifCommand.Run(args),
                 "deliver" => DeliverCmd(args),

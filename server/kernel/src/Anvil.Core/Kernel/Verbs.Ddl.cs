@@ -94,7 +94,8 @@ public sealed partial class ModelSession
 
     private string? DdlReadOf(string sourceSha256) =>
         DdlReadings != null ? DdlReadings(sourceSha256)
-        : sourceSha256.Length == 64 && sourceSha256.All(Uri.IsHexDigit) ? ModuleIndexStore.Default()?.LoadDdl(sourceSha256)?.Text : null;
+        // servidor/fase4-26 (M2): with ModuleIndexStore.OwnReadingsOnly (hosted) only a read of this job's own capture.
+        : sourceSha256.Length == 64 && sourceSha256.All(Uri.IsHexDigit) && ModuleIndexStore.KeptReadingAllowed(sourceSha256, BaseSha256) ? ModuleIndexStore.Default()?.LoadDdl(sourceSha256)?.Text : null;
 
     /// <summary>Called with every data text this session keeps as a read (its content key and its text) instead of the store: the
     /// merge battery keeps them in memory beside DdlReadings.</summary>

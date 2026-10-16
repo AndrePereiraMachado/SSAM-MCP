@@ -223,6 +223,17 @@ public sealed class ModuleIndex
 
     private int ParentOf(int at) => at >= 0 ? parents[at] : ancestors[-2 - at].Parent;
 
+    /// <summary>CX16: one element of the index as the static check reads it (pure): its row, key, kind, the kinds it answers,
+    /// name, role, parent row (-1 at the top or outside the listed rows) and data type (parameters, attributes, variables).</summary>
+    public sealed record Row(int Index, string Key, string Kind, IReadOnlySet<string> Kinds, string Name, string Role, int Parent, string? DataType);
+
+    /// <summary>Every element of the index, in its order.</summary>
+    public IEnumerable<Row> Rows()
+    {
+        for (var row = 0; row < keys.Length; row++)
+            yield return new Row(row, keys[row], types[typeOf[row]].Kind, types[typeOf[row]].Set, names[row], Roles[roleOf[row]], parents[row] >= 0 ? parents[row] : -1, dataTypes[row]);
+    }
+
     public JsonObject Counts()
     {
         var byRole = new JsonObject();
@@ -350,8 +361,10 @@ public sealed class ModuleIndexStore(string root, string lane, string adapter, l
     // SSAM_MODULE_INDEX_ROOT (absolute), else <workspace>\.local\module-index for the nearest .ssam-workspace.json above
     // this assembly: after StudioAssemblies.Bind, O11's AppContext.BaseDirectory is the Studio folder. Lane and adapter
     // follow the build this file is compiled into. Null when neither applies: reads then work as without an index.
+    // A store given by Use (a test, or a caller that owns its store) wins in its own flow of execution only.
     public static ModuleIndexStore? Default()
     {
+        if (scoped.Value is { } own) return own;
         var (lane, adapter) = typeof(ModuleIndexStore).Assembly.GetName().Name switch {
             "Anvil.Core" => ("o11", "kernel"), "Anvil.Core.Odc" => ("odc", "kernel"), "ODC3.Builder" => ("odc", "builder"), _ => ("", "") };
         if (lane == "") return null;
@@ -361,6 +374,25 @@ public sealed class ModuleIndexStore(string root, string lane, string adapter, l
             for (var directory = string.IsNullOrEmpty(start) ? null : Path.GetFullPath(start); directory != null; directory = Path.GetDirectoryName(directory))
                 if (File.Exists(Path.Combine(directory, ".ssam-workspace.json"))) return new(Path.Combine(directory, ".local", "module-index"), lane, adapter);
         return null;
+    }
+
+    // CX16 r2 (M4): the store of one flow of execution (AsyncLocal: the threads and tasks it starts see it, nothing else does),
+    // so a test owns its store (a temporary root) instead of the one SSAM_MODULE_INDEX_ROOT names for the whole process.
+    private static readonly AsyncLocal<ModuleIndexStore?> scoped = new();
+
+    /// <summary>Default() is <paramref name="store"/> in this flow of execution until the result is disposed (the store
+    /// before it comes back). Every reader of Default() (the preflight, the static check, the apply) sees it.</summary>
+    public static IDisposable Use(ModuleIndexStore store)
+    {
+        var previous = scoped.Value;
+        scoped.Value = store;
+        return new Restore(previous);
+    }
+
+    private sealed class Restore(ModuleIndexStore? previous) : IDisposable
+    {
+        private bool done;
+        public void Dispose() { if (done) return; done = true; scoped.Value = previous; }
     }
 
     public string PathOf(string sourceSha256) => Path.Combine(root, "v1", lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".json");
@@ -492,23 +524,53 @@ public sealed class ModuleIndexStore(string root, string lane, string adapter, l
     }
 
     // The read of that textSha in any capture of this lane (the same text has the same ids), or null when no file of this
-    // schema and extractor holds it.
-    public FlowReading? LoadFlowReading(string textSha)
+    // schema and extractor holds it. capture: only the read kept beside that capture (a hosted job: its own base).
+    public FlowReading? LoadFlowReading(string textSha, string? capture = null)
     {
         if (textSha.Length != 16 || !textSha.All(Uri.IsHexDigit)) return null;
+        if (capture != null && (capture.Length != 64 || !capture.All(Uri.IsHexDigit))) return null;
         var folder = Path.Combine(root, "v1", lane);
         try {
             if (!Directory.Exists(folder)) return null;
-            foreach (var file in new DirectoryInfo(folder).GetFiles("*." + adapter + ".flow-" + textSha.ToLowerInvariant() + ".json").OrderByDescending(f => f.LastWriteTimeUtc))
+            foreach (var file in new DirectoryInfo(folder).GetFiles((capture?.ToLowerInvariant() ?? "*") + "." + adapter + ".flow-" + textSha.ToLowerInvariant() + ".json").OrderByDescending(f => f.LastWriteTimeUtc))
                 try { if (FlowReading.Parse(File.ReadAllBytes(file.FullName), lane, adapter, textSha) is { } reading) return reading; }
                 catch (IOException) { } catch (UnauthorizedAccessException) { }
         } catch (IOException) { } catch (UnauthorizedAccessException) { }
         return null;
     }
 
-    // The key table of a reading, or null when absent or of another reading.
-    public System.Text.Json.Nodes.JsonObject? LoadHtmlKeys(string sourceSha256, string htmlSha256)
+    // servidor/fase4-26 (M2, hosted): this store is shared by every customer of a hosted server and addressed by hashes only.
+    // With ANVIL_KEPT_READINGS=own (the hosted server sets it for every kernel process it starts, and in its own environment
+    // for the processes it shares) a job reads a kept reading (html keys and text, a data text, an action's flow read) only
+    // of the capture it runs on (jobBase, ModelSession.BaseSha256): another capture's reading is not kept here (null), so an
+    // edit written on it is refused with the current text (HTML_BASE_CHANGED, DDL_BASE_UNKNOWN, FLOW_BASE_CHANGED) when the
+    // module changed since, and a check without a job (check-job, the static rules) skips it.
+    private static readonly AsyncLocal<bool?> ownReadingsScope = new();
+    /// <summary>The rule of ANVIL_KEPT_READINGS: "own" (any case) reads a kept reading only of the job's own base capture.</summary>
+    public static bool OwnReadingsRule(string? setting) => string.Equals(setting?.Trim(), "own", StringComparison.OrdinalIgnoreCase);
+    /// <summary>Whether this flow of execution reads kept readings only of the job's own base capture.</summary>
+    public static bool OwnReadingsOnly => ownReadingsScope.Value ?? OwnReadingsRule(Environment.GetEnvironmentVariable("ANVIL_KEPT_READINGS"));
+    /// <summary>Whether a job running on <paramref name="jobBase"/> may read a kept reading of <paramref name="capture"/>.</summary>
+    public static bool KeptReadingAllowed(string? capture, string? jobBase) =>
+        !OwnReadingsOnly || capture is { Length: > 0 } && string.Equals(capture, jobBase, StringComparison.OrdinalIgnoreCase);
+    /// <summary>OwnReadingsOnly is <paramref name="on"/> in this flow of execution until the result is disposed (tests).</summary>
+    public static IDisposable OwnReadings(bool on = true)
     {
+        var previous = ownReadingsScope.Value;
+        ownReadingsScope.Value = on;
+        return new RestoreOwnReadings(previous);
+    }
+    private sealed class RestoreOwnReadings(bool? previous) : IDisposable
+    {
+        private bool done;
+        public void Dispose() { if (done) return; done = true; ownReadingsScope.Value = previous; }
+    }
+
+    // The key table of a reading, or null when absent or of another reading. jobBase: the sha256 of the capture the job of the
+    // call runs on (null without a job); with OwnReadingsOnly, a reading of any other capture is null.
+    public System.Text.Json.Nodes.JsonObject? LoadHtmlKeys(string sourceSha256, string htmlSha256, string? jobBase = null)
+    {
+        if (!KeptReadingAllowed(sourceSha256, jobBase)) return null;
         var file = HtmlKeysPathOf(sourceSha256, htmlSha256);
         try {
             if (!File.Exists(file)) return null;

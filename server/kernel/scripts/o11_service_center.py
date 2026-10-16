@@ -24,6 +24,26 @@ API_READS = list(studio_api.READS)
 READS = ['capabilities', 'receipt', *WEB_READS, *API_READS]
 WRITES = [*ACTIONS, *WEB_WRITES, *studio_api.WRITES]
 DESTRUCTIVE = {'db-connection-delete', *studio_api.DESTRUCTIVE}
+# CX15 r2 (L): no delete runs here, in one call or with --execute. A delete takes two calls through the MCP tool
+# o11_service_center_write (the facade's engine: the exact list with its count and backup plan, then a token and the
+# owner's reply naming the targets with that count); this entry point refuses each one with the call of that tool and
+# sends nothing. The bridge is unchanged; verify of a delete receipt written before stays (it only reads).
+DELETES = ('application-delete', 'module-delete', 'extension-delete', 'db-connection-delete')
+DELETE_LISTS = {'application-delete': 'applications', 'module-delete': 'modules', 'extension-delete': 'extensions'}
+
+
+def delete_refusal(args):
+    host = host_name(args.host) if args.host else '<host>'
+    if args.action == 'db-connection-delete':
+        arguments = {'action': 'db-connection-delete', 'host': host, 'connection': args.connection or '<connection>'}
+    else:
+        target = next((v for v in (args.application, args.application_key, args.module, args.module_key, args.extension, args.extension_id) if v), None)
+        arguments = {'action': 'delete', 'host': host, DELETE_LISTS[args.action]: [target or '<name or key>']}
+    return {'ok': False, 'code': 'DESTRUCTIVE_NEEDS_DEDICATED_TOOL', 'action': args.action, 'sent': False, 'outcome': 'not-sent',
+            'error': f'{args.action} does not run in this script: a delete takes two calls through o11_service_center_write '
+                     '(the exact list with its count, then the token and the owner\'s reply); nothing was sent',
+            'continuation': {'tool': 'o11_service_center_write', 'arguments': arguments,
+                             'why': 'the preview: the exact list with its count and backup plan; nothing is sent; show it to the owner and ask'}}
 FLAGS = ('application', 'module', 'message', 'source', 'server', 'since', 'until', 'error-id', 'request-key', 'operation-id',
          'words', 'value-file', 'value-vault', 'application-key', 'module-key', 'element-key', 'solution', 'component',
          'description', 'osp-file', 'publish-id', 'last-message-id', 'apply-id', 'database-id', 'process', 'process-key',
@@ -89,8 +109,8 @@ def capabilities():
             'writes': {'pages': [*ACTIONS, *WEB_WRITES], 'studio-api': list(studio_api.WRITES), 'local': ['verify']},
             'default': 'prepare only; execute requires the user words, a UUID operation-id and the journal reservation; never replayed',
             'guards': ['corporate or unregistered hosts need confirmHost=<host> and words naming the environment on every write',
-                       'module-delete, extension-delete, application-delete and db-connection-delete need words that name the '
-                       'target (and the extensions using a connection); prepare simulates (application-delete: the server simulation)'],
+                       'module-delete, extension-delete, application-delete and db-connection-delete do not run here: '
+                       'DESTRUCTIVE_NEEDS_DEDICATED_TOOL with the call of o11_service_center_write (two calls: the list, then the owner\'s reply)'],
             'secrets': 'database logins and secret site property values travel only as vault target names (sc_web secretRefs); '
                        'the Studio reads them inside its own process; without a Studio, or with a bridge without sc_web:secretRefs, '
                        'those writes are refused',
@@ -180,6 +200,8 @@ def session(args, locate, present, opener, running):
 
 def main(argv=None, *, journal=None, locate=None, present=None, opener=None, running=None, exports=None):
     args = parser().parse_args(argv)
+    if args.action in DELETES:
+        return delete_refusal(args)
     locate = locate or StudioBridge.locate
     present = present or Vault.present
     opener = opener or open_prompt

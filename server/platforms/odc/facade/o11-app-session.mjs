@@ -269,7 +269,7 @@ export function registerO11AppSession(server, deps = {}) {
   const session = createAppSession({ acceptsForm: ctx => clientAcceptsForm(server, ctx), ...deps });
   if (!appSessionToolsServed({ surface: deps.surface ?? 'ssam_hybrid', env: deps.env ?? process.env })) return session;
   for (const { name, description, inputSchema, annotations } of SCHEMAS) {
-    server.registerTool(name, { description: (deps.descriptionPrefix ?? '') + description, inputSchema: fromJsonSchema(inputSchema), annotations },
+    server.registerTool(name, { description: (deps.descriptionPrefix ?? '') + description, inputSchema: fromJsonSchema(inputSchema), annotations, ...(name === 'propose' ? { _meta: { canRequestInput: true } } : {}) },
       async (args, ctx) => {
         try {
           const value = await session.call(name, args ?? {}, ctx);

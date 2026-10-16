@@ -102,7 +102,7 @@ public sealed partial class ModelSession
         var html = data["html"]!.GetValue<string>();
         var options = new DocumentOptions { Css = data["css"] is JsonValue css && css.TryGetValue<string>(out var cssText) ? cssText : null };
         if (data["basedOn"] is JsonObject basedOn && basedOn["capture"]?.ToString() is { Length: > 0 } capture && basedOn["html"]?.ToString() is { Length: > 0 } htmlSha
-            && ModuleIndexStore.Default()?.LoadHtmlKeys(capture, htmlSha)?["keys"] is JsonObject keys)
+            && ModuleIndexStore.Default()?.LoadHtmlKeys(capture, htmlSha, BaseSha256)?["keys"] is JsonObject keys)
             options.ReadKeys = keys.Where(k => k.Value is JsonValue).ToDictionary(k => k.Key, k => k.Value!.ToString(), StringComparer.Ordinal);
         var inJob = _applyOps != null && _applyIndex < _applyOps.Count && ReferenceEquals(_applyOps[_applyIndex], op);
         var job = inJob ? HtmlJob.From(_applyOps, _applyIndex) : null;
@@ -274,7 +274,7 @@ public sealed partial class ModelSession
                 _applyOps = ops; _applyIndex = op;
                 IReadOnlyDictionary<string, string>? readKeys = null;
                 if (data["basedOn"] is JsonObject basedOn && basedOn["capture"]?.ToString() is { Length: > 0 } capture && basedOn["html"]?.ToString() is { Length: > 0 } htmlSha
-                    && ModuleIndexStore.Default()?.LoadHtmlKeys(capture, htmlSha)?["keys"] is JsonObject keys)
+                    && ModuleIndexStore.Default()?.LoadHtmlKeys(capture, htmlSha, BaseSha256)?["keys"] is JsonObject keys)
                     readKeys = keys.Where(k => k.Value is JsonValue).ToDictionary(k => k.Key, k => k.Value!.ToString(), StringComparer.Ordinal);
                 string? name = null;
                 try { name = ScreenHtml.Parse(html).Children.FirstOrDefault(c => !c.IsText && c.Tag is "screen" or "block")?.Get("name"); } catch (FormatException) { }

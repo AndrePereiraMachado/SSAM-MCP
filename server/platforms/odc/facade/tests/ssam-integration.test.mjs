@@ -74,10 +74,12 @@ test('two writes on one Studio never overlap through the ssam server: the second
   const client = await connect(server);
   const words = 'pode entregar, Ana 0912';
   const job = { ops: [{ op: 'rename', from: 'A', to: 'B' }] };
+  // Identical calls join under CX12; separate jobs must still queue on the same Studio.
+  const secondJob = { ops: [{ op: 'rename', from: 'A', to: 'C' }] };
   try {
     const first = client.callTool({ name: 'o11_deliver', arguments: { module: 'Quotes_CS', job, authorize: words } });
     await reached;
-    const second = client.callTool({ name: 'o11_deliver', arguments: { module: 'Quotes_CS', job, authorize: words } });
+    const second = client.callTool({ name: 'o11_deliver', arguments: { module: 'Quotes_CS', job: secondJob, authorize: words } });
     // A closed module is read from its published OML: no tab is opened under the running delivery and no lock is taken,
     // so this read answers while the write runs.
     const inspect = await client.callTool({ name: 'o11_inspect', arguments: { module: 'Other_CS' } });
@@ -161,7 +163,7 @@ test('a busy Studio on a server of one lane names a continuation that server ser
   // A fake ODC server with studio_deliver only (no studio_status): no Studio, no bridge.
   const odcFacade = async () => {
     const fake = new McpServer({ name: 'fake-odc', version: '0.0.1' });
-    fake.registerTool('studio_deliver', { inputSchema: z.object({ feature: z.string(), until: z.string().optional() }).strict() }, async () => {
+    fake.registerTool('studio_deliver', { inputSchema: z.object({ feature: z.string(), changes: z.array(z.string()).optional(), until: z.string().optional() }).strict() }, async () => {
       entered(); await gate; const value = { ok: true, merged: true, strictlyEqual: true };
       return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value };
     });
@@ -172,9 +174,10 @@ test('a busy Studio on a server of one lane names a continuation that server ser
   try {
     const names = new Set((await client.listTools()).tools.map(t => t.name));
     assert.equal(names.has('ssam_task'), false, 'no O11 lane, no ssam_task');
-    const first = client.callTool({ name: 'studio_deliver', arguments: { feature: 'F' } });
+    // Distinct changes exercise queue refusal; identical calls join the first operation under CX12.
+    const first = client.callTool({ name: 'studio_deliver', arguments: { feature: 'F', changes: ['rename A to B'] } });
     await reached;
-    const busy = JSON.parse((await client.callTool({ name: 'studio_deliver', arguments: { feature: 'F' } })).content[0].text);
+    const busy = JSON.parse((await client.callTool({ name: 'studio_deliver', arguments: { feature: 'F', changes: ['rename A to C'] } })).content[0].text);
     assert.deepEqual([busy.code, busy.outcome, busy.holder?.tool, busy.position], ['STUDIO_WRITE_QUEUE_TIMEOUT', 'not-sent', 'studio_deliver', 1], JSON.stringify(busy));
     assert.ok(names.has(busy.continuation.tool), busy.continuation.tool + ' is served here');
     assert.deepEqual([busy.continuation.tool, busy.continuation.arguments], ['ssam_doctor', { lane: 'odc' }]);

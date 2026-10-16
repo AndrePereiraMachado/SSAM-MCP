@@ -1,0 +1,2759 @@
+{
+  "constants": {
+    "probeMs": 2000,
+    "probeTimeoutMs": 5000,
+    "errorReportProbes": 2,
+    "dialogProbes": 8,
+    "goneProbes": 2,
+    "maxTexts": 20
+  },
+  "watchedVerbs": [
+    "merge_from_oml",
+    "refresh_references",
+    "publish",
+    "open_module",
+    "close_module",
+    "snapshot_module",
+    "get_errors",
+    "integration_import"
+  ],
+  "preProbeVerbs": [
+    "merge_from_oml",
+    "refresh_references",
+    "publish",
+    "open_module",
+    "close_module"
+  ],
+  "errorReportAutoVerbs": [
+    "merge_from_oml",
+    "refresh_references",
+    "publish"
+  ],
+  "errorReportAutoCapability": "dialogs:error_report_auto",
+  "errorReportTitles": [
+    "Unexpected Error",
+    "Unexpected error",
+    "Erro inesperado"
+  ],
+  "cases": [
+    {
+      "name": "error report in two probes",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        }
+      ],
+      "expected": "dialog"
+    },
+    {
+      "name": "ownerless real DialogWindow error report",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": false,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": false,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        }
+      ],
+      "expected": "dialog"
+    },
+    {
+      "name": "flashing error report",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ]
+        },
+        {
+          "windows": []
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "publishing progress never blocks",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 4000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 6000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 8000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 10000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 12000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 14000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 16000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 18000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 20000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 22000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 24000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 26000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 28000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 30000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 32000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 34000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 36000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 38000
+        },
+        {
+          "windows": [
+            {
+              "title": "Publishing… 45%",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 40000
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "new question blocks on eighth probe",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 6000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 8000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 10000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 12000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 14000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 16000
+        }
+      ],
+      "expected": "dialog",
+      "expectedQuestion": "Save changes? | [Button] Yes | [Button] No"
+    },
+    {
+      "name": "new question does not block on seventh",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 6000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 8000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 10000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 12000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 14000
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "question present before never blocks",
+      "method": "merge_from_oml",
+      "before": [
+        {
+          "title": "Save changes?",
+          "type": "MessageBox",
+          "isVisible": true,
+          "isModal": true,
+          "texts": [
+            "[Button] Yes",
+            "[Button] No"
+          ]
+        }
+      ],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 6000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 8000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 10000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 12000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 14000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 16000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 18000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 20000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 22000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 24000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 26000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 28000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 30000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 32000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 34000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 36000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 38000
+        },
+        {
+          "windows": [
+            {
+              "title": "Save changes?",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Yes",
+                "[Button] No"
+              ]
+            }
+          ],
+          "afterMs": 40000
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "error report present before still blocks",
+      "method": "merge_from_oml",
+      "before": [
+        {
+          "title": "Unexpected Error",
+          "type": "DialogWindow",
+          "isVisible": true,
+          "isModal": true,
+          "texts": [
+            "[Button] Viewbox"
+          ]
+        }
+      ],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        }
+      ],
+      "expected": "dialog",
+      "capabilities": [
+        "dialogs:error_report_auto"
+      ]
+    },
+    {
+      "name": "dependencies that disappear",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Dependencies",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Dependencies",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 4000
+        },
+        {
+          "windows": [
+            {
+              "title": "Dependencies",
+              "type": "MessageBox",
+              "isVisible": true,
+              "isModal": true,
+              "texts": []
+            }
+          ],
+          "afterMs": 6000
+        },
+        {
+          "windows": []
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "bridge connection refused twice",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "connectionRefused": true,
+          "afterMs": 2000
+        },
+        {
+          "connectionRefused": true,
+          "afterMs": 4000
+        }
+      ],
+      "expected": "bridge-gone"
+    },
+    {
+      "name": "bridge connection returns",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "connectionRefused": true
+        },
+        {
+          "windows": []
+        },
+        {
+          "connectionRefused": true
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "bridge protocol refusals carry no evidence",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "success": false,
+          "code": "UI_BUSY",
+          "afterMs": 2000
+        },
+        {
+          "success": false,
+          "code": "UI_BUSY",
+          "afterMs": 4000
+        },
+        {
+          "success": false,
+          "code": "UI_BUSY",
+          "afterMs": 6000
+        },
+        {
+          "success": false,
+          "code": "UI_BUSY",
+          "afterMs": 8000
+        },
+        {
+          "success": false,
+          "code": "UI_BUSY",
+          "afterMs": 10000
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "ten probe timeouts carry no evidence",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "timeout": true,
+          "afterMs": 2000
+        },
+        {
+          "timeout": true,
+          "afterMs": 4000
+        },
+        {
+          "timeout": true,
+          "afterMs": 6000
+        },
+        {
+          "timeout": true,
+          "afterMs": 8000
+        },
+        {
+          "timeout": true,
+          "afterMs": 10000
+        },
+        {
+          "timeout": true,
+          "afterMs": 12000
+        },
+        {
+          "timeout": true,
+          "afterMs": 14000
+        },
+        {
+          "timeout": true,
+          "afterMs": 16000
+        },
+        {
+          "timeout": true,
+          "afterMs": 18000
+        },
+        {
+          "timeout": true,
+          "afterMs": 20000
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "dead studio twice",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "studioAlive": false,
+          "afterMs": 2000
+        },
+        {
+          "studioAlive": false,
+          "afterMs": 4000
+        }
+      ],
+      "expected": "studio-gone"
+    },
+    {
+      "name": "studio replacement twice",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "startedUtc": "new",
+          "afterMs": 2000
+        },
+        {
+          "startedUtc": "new",
+          "afterMs": 4000
+        }
+      ],
+      "expected": "studio-gone",
+      "startedUtc": "old"
+    },
+    {
+      "name": "main window never blocks",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 4000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 6000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 8000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 10000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 12000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 14000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 16000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 18000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 20000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 22000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 24000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 26000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 28000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 30000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 32000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 34000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 36000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 38000
+        },
+        {
+          "windows": [
+            {
+              "title": "Studio",
+              "type": "MainWindow",
+              "isVisible": true,
+              "isModal": false
+            }
+          ],
+          "afterMs": 40000
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "invisible error never blocks",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 6000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 8000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 10000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 12000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 14000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 16000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 18000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 20000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 22000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 24000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 26000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 28000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 30000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 32000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 34000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 36000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 38000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": false,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 40000
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "unwatched verb never blocks",
+      "method": "sc_read",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "merge preprobe error refuses",
+      "method": "merge_from_oml",
+      "before": [
+        {
+          "title": "Unexpected Error",
+          "type": "DialogWindow",
+          "isVisible": true,
+          "isModal": true,
+          "texts": [
+            "[Button] Viewbox"
+          ]
+        }
+      ],
+      "probes": [],
+      "expected": "dialog-before"
+    },
+    {
+      "name": "merge auto-capability allows sending",
+      "method": "merge_from_oml",
+      "before": [
+        {
+          "title": "Unexpected Error",
+          "type": "DialogWindow",
+          "isVisible": true,
+          "isModal": true,
+          "texts": [
+            "[Button] Viewbox"
+          ]
+        }
+      ],
+      "probes": [],
+      "expected": null,
+      "capabilities": [
+        "dialogs:error_report_auto"
+      ]
+    },
+    {
+      "name": "open preprobe error refuses despite capability",
+      "method": "open_module",
+      "before": [
+        {
+          "title": "Unexpected Error",
+          "type": "DialogWindow",
+          "isVisible": true,
+          "isModal": true,
+          "texts": [
+            "[Button] Viewbox"
+          ]
+        }
+      ],
+      "probes": [],
+      "expected": "dialog-before",
+      "capabilities": [
+        "dialogs:error_report_auto"
+      ]
+    },
+    {
+      "name": "snapshot never preprobes",
+      "method": "snapshot_module",
+      "before": [
+        {
+          "title": "Unexpected Error",
+          "type": "DialogWindow",
+          "isVisible": true,
+          "isModal": true,
+          "texts": [
+            "[Button] Viewbox"
+          ]
+        }
+      ],
+      "probes": [],
+      "expected": null
+    },
+    {
+      "name": "short deadline never probes",
+      "method": "open_module",
+      "before": [
+        {
+          "title": "Unexpected Error",
+          "type": "DialogWindow",
+          "isVisible": true,
+          "isModal": true,
+          "texts": [
+            "[Button] Viewbox"
+          ]
+        }
+      ],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        }
+      ],
+      "expected": null,
+      "timeoutMs": 2000
+    },
+    {
+      "name": "zero interval disables preprobe and watch",
+      "method": "merge_from_oml",
+      "before": [
+        {
+          "title": "Unexpected Error",
+          "type": "DialogWindow",
+          "isVisible": true,
+          "isModal": true,
+          "texts": [
+            "[Button] Viewbox"
+          ]
+        }
+      ],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        }
+      ],
+      "expected": null,
+      "probeMs": 0
+    },
+    {
+      "name": "unknown evidence preserves previous dialog probe",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ]
+        },
+        {
+          "timeout": true
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": "dialog"
+    },
+    {
+      "name": "malformed window response does not imply missing dialog",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ]
+        },
+        {
+          "windows": "not-an-array"
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": "dialog"
+    },
+    {
+      "name": "identity changes reset dialog evidence",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ]
+        },
+        {
+          "windows": [
+            {
+              "title": "Erro inesperado",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "portuguese report title is recognized",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": " Erro inesperado ",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": " Erro inesperado ",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        }
+      ],
+      "expected": "dialog"
+    },
+    {
+      "name": "visibility omitted follows bridge rule",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        }
+      ],
+      "expected": "dialog"
+    },
+    {
+      "name": "transport reset counts as refusal",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "connectionRefused": true,
+          "transport": "ECONNRESET",
+          "afterMs": 2000
+        },
+        {
+          "connectionRefused": true,
+          "transport": "ECONNRESET",
+          "afterMs": 4000
+        }
+      ],
+      "expected": "bridge-gone"
+    },
+    {
+      "name": "classify Progress",
+      "classify": {
+        "title": "Progress",
+        "texts": []
+      },
+      "kind": "Progress"
+    },
+    {
+      "name": "classify Publishing… 45%",
+      "classify": {
+        "title": "Publishing… 45%",
+        "texts": []
+      },
+      "kind": "Progress"
+    },
+    {
+      "name": "classify Unexpected Error",
+      "classify": {
+        "title": "Unexpected Error",
+        "texts": [
+          "[Button] Viewbox"
+        ]
+      },
+      "kind": "UnexpectedError"
+    },
+    {
+      "name": "classify Recover",
+      "classify": {
+        "title": "Recover",
+        "texts": [
+          "Open",
+          "Discard"
+        ]
+      },
+      "kind": "Recovery"
+    },
+    {
+      "name": "classify References",
+      "classify": {
+        "title": "References",
+        "texts": [
+          "[Button] Apply"
+        ]
+      },
+      "kind": "ManageDependencies"
+    },
+    {
+      "name": "classify Question",
+      "classify": {
+        "title": "Question",
+        "texts": [
+          "[Button] Yes"
+        ]
+      },
+      "kind": "MessageBox"
+    },
+    {
+      "name": "classify Something",
+      "classify": {
+        "title": "Something",
+        "texts": []
+      },
+      "kind": "Modal"
+    },
+    {
+      "name": "classify Loading?",
+      "classify": {
+        "title": "Loading?",
+        "texts": [
+          "[Button] Yes"
+        ]
+      },
+      "kind": "MessageBox"
+    },
+    {
+      "name": "malformed missing type is not evidence",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "malformed nonstring type is not evidence",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": 42,
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": 42,
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "malformed nonstring title is not evidence",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": 42,
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": 42,
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "malformed nonboolean visible is not evidence",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": "false",
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": "false",
+              "isModal": true,
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "malformed nonboolean modal is not evidence",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": "true",
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": "true",
+              "texts": [
+                "[Button] Viewbox"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "malformed malformed texts is not evidence",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": "[Button] Close"
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": "[Button] Close"
+            }
+          ],
+          "afterMs": 4000
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "null optional fields follow the same visibility rule",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": null,
+              "isModal": null,
+              "texts": null
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Unexpected Error",
+              "type": "DialogWindow",
+              "isVisible": null,
+              "isModal": null,
+              "texts": null
+            }
+          ],
+          "afterMs": 4000
+        }
+      ],
+      "expected": "dialog"
+    },
+    {
+      "name": "empty-start-is-no-evidence",
+      "method": "merge_from_oml",
+      "before": [],
+      "startedUtc": "known-stamp",
+      "probes": [
+        {
+          "startedUtc": "",
+          "afterMs": 2000
+        },
+        {
+          "startedUtc": "",
+          "afterMs": 4000
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "typed text never leaves the verdict",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Sign in",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "Sign in to synthetic.example",
+                "[TextBox] synthetic.user (Username)",
+                "[TextBox] SYNTH-SECRET-R2-0001 (Password)",
+                "[Button] Log In",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Sign in",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "Sign in to synthetic.example",
+                "[TextBox] synthetic.user (Username)",
+                "[TextBox] SYNTH-SECRET-R2-0001 (Password)",
+                "[Button] Log In",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        },
+        {
+          "windows": [
+            {
+              "title": "Sign in",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "Sign in to synthetic.example",
+                "[TextBox] synthetic.user (Username)",
+                "[TextBox] SYNTH-SECRET-R2-0001 (Password)",
+                "[Button] Log In",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 6000
+        },
+        {
+          "windows": [
+            {
+              "title": "Sign in",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "Sign in to synthetic.example",
+                "[TextBox] synthetic.user (Username)",
+                "[TextBox] SYNTH-SECRET-R2-0001 (Password)",
+                "[Button] Log In",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 8000
+        },
+        {
+          "windows": [
+            {
+              "title": "Sign in",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "Sign in to synthetic.example",
+                "[TextBox] synthetic.user (Username)",
+                "[TextBox] SYNTH-SECRET-R2-0001 (Password)",
+                "[Button] Log In",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 10000
+        },
+        {
+          "windows": [
+            {
+              "title": "Sign in",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "Sign in to synthetic.example",
+                "[TextBox] synthetic.user (Username)",
+                "[TextBox] SYNTH-SECRET-R2-0001 (Password)",
+                "[Button] Log In",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 12000
+        },
+        {
+          "windows": [
+            {
+              "title": "Sign in",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "Sign in to synthetic.example",
+                "[TextBox] synthetic.user (Username)",
+                "[TextBox] SYNTH-SECRET-R2-0001 (Password)",
+                "[Button] Log In",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 14000
+        },
+        {
+          "windows": [
+            {
+              "title": "Sign in",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "Sign in to synthetic.example",
+                "[TextBox] synthetic.user (Username)",
+                "[TextBox] SYNTH-SECRET-R2-0001 (Password)",
+                "[Button] Log In",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 16000
+        }
+      ],
+      "expected": "dialog",
+      "expectedQuestion": "Sign in | Sign in to synthetic.example | [Button] Log In | [Button] Cancel",
+      "absent": [
+        "SYNTH-SECRET-R2-0001",
+        "synthetic.user",
+        "[TextBox]"
+      ]
+    },
+    {
+      "name": "typed text never classifies a window as progress",
+      "method": "merge_from_oml",
+      "before": [],
+      "probes": [
+        {
+          "windows": [
+            {
+              "title": "Rename module",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "New name",
+                "[TextBox] Loading 45% SYNTH-TYPED-R2-0002",
+                "[Button] OK",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 2000
+        },
+        {
+          "windows": [
+            {
+              "title": "Rename module",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "New name",
+                "[TextBox] Loading 45% SYNTH-TYPED-R2-0002",
+                "[Button] OK",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 4000
+        },
+        {
+          "windows": [
+            {
+              "title": "Rename module",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "New name",
+                "[TextBox] Loading 45% SYNTH-TYPED-R2-0002",
+                "[Button] OK",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 6000
+        },
+        {
+          "windows": [
+            {
+              "title": "Rename module",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "New name",
+                "[TextBox] Loading 45% SYNTH-TYPED-R2-0002",
+                "[Button] OK",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 8000
+        },
+        {
+          "windows": [
+            {
+              "title": "Rename module",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "New name",
+                "[TextBox] Loading 45% SYNTH-TYPED-R2-0002",
+                "[Button] OK",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 10000
+        },
+        {
+          "windows": [
+            {
+              "title": "Rename module",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "New name",
+                "[TextBox] Loading 45% SYNTH-TYPED-R2-0002",
+                "[Button] OK",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 12000
+        },
+        {
+          "windows": [
+            {
+              "title": "Rename module",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "New name",
+                "[TextBox] Loading 45% SYNTH-TYPED-R2-0002",
+                "[Button] OK",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 14000
+        },
+        {
+          "windows": [
+            {
+              "title": "Rename module",
+              "type": "DialogWindow",
+              "isVisible": true,
+              "isModal": true,
+              "texts": [
+                "New name",
+                "[TextBox] Loading 45% SYNTH-TYPED-R2-0002",
+                "[Button] OK",
+                "[Button] Cancel"
+              ]
+            }
+          ],
+          "afterMs": 16000
+        }
+      ],
+      "expected": "dialog",
+      "expectedQuestion": "Rename module | New name | [Button] OK | [Button] Cancel",
+      "absent": [
+        "SYNTH-TYPED-R2-0002",
+        "Loading 45%",
+        "[TextBox]"
+      ]
+    }
+  ]
+}

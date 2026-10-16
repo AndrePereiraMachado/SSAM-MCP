@@ -11,6 +11,7 @@ import { appUrl, attach, builder, createAccess, deliver, doctor, inspect, portal
 import { parseDebugCli } from './debug.mjs';
 import { parseAppArguments } from './app-urls.mjs';
 import { readCatalog, resolveOpenTarget } from './studio-open.mjs';
+import { bridgeCommandRefusal } from './destructive-operations.mjs';
 
 const print = value => process.stdout.write(JSON.stringify(value, null, 2) + '\n');
 const fail = message => { process.stderr.write(JSON.stringify({ ok: false, error: message }) + '\n'); process.exitCode = 1; };
@@ -29,14 +30,19 @@ const PORTAL_USAGE = 'odc portal status|apis|search <text> [--api id] [--read-on
   + ' | write <operationId> [--path json] [--body json] --authorize "<user words>" --operation-uuid <uuid> [--confirm-tenant <host>]'
   + ' | receipt <operationUuid> | internal-read <id> [--input json] [--auth auto|studio|portal-credential]'
   + ' | internal-write <id> --input json --authorize "<user words>" --operation-uuid <uuid> | login [--action open|status|close]'
-  + ' | internal-routes <module> [--view <screen>] [--match <text>]   [--tenant <host>]';
+  + ' | internal-routes <module> [--view <screen>] [--match <text>]   [--tenant <host>]'
+  + '   (a destructive write or internal-write without --confirmation-token <token> only previews; [--owner-request "<request>"])';
+// The same guard as the MCP tools (portal\runtime\destructive-preview.mjs): a destructive write (DELETE, Undeploy, a
+// destructive internal route) takes two calls; reads and other writes are unchanged.
 async function accessCommand(sub, more, host) {
-  const access = await createAccess();
+  const { guardedAccess } = await import('../portal/runtime/destructive-preview.mjs');
+  const access = guardedAccess(await createAccess());
   let rest = more; const opt = name => { const o = option(rest, name); rest = o.rest; return o.value; };
   const json = name => { const v = opt(name); return v === undefined ? undefined : JSON.parse(v); };
   const auth = opt('--auth'), authorize = opt('--authorize'), operationUuid = opt('--operation-uuid'), confirmTenant = opt('--confirm-tenant');
+  const confirmationToken = opt('--confirmation-token'), ownerRequest = opt('--owner-request');
   const common = { ...(host ? { tenant: host } : {}), ...(auth ? { auth } : {}) };
-  const words = { authorize, operationUuid, ...(confirmTenant ? { confirmTenant } : {}) };
+  const words = { authorize, operationUuid, ...(confirmTenant ? { confirmTenant } : {}), ...(confirmationToken ? { confirmationToken } : {}), ...(ownerRequest ? { ownerRequest } : {}) };
   if (sub === 'auth-status') return access.authStatus(common);
   if (sub === 'login') return access.portalLogin({ ...common, action: opt('--action') ?? 'open' });
   if (sub === 'receipt') return access.receipt({ operationUuid: rest[0] });
@@ -82,6 +88,11 @@ try {
     case 'studio': {
       const { value: pid, rest } = option(args, '--pid');
       if (rest.length === 0) throw new Error('odc studio <bridge command...>');
+      // CX15: the bridge commands that delete records or call the Portal directly never run through this passthrough
+      // (DESTRUCTIVE_BRIDGE_COMMANDS): the refusal names the dedicated tool; nothing reaches the bridge. CX15 r2 (R-A1): the
+      // command is read from the whole line the pipe sends (one argument with spaces, "" or " " before it).
+      const refused = bridgeCommandRefusal(rest[0], rest.slice(1), { surface: '.\\odc studio' });
+      if (refused) { print(refused); process.exitCode = 1; break; }
       if (rest[0] === 'open' && rest[1]) {
         const open = resolveOpenTarget(rest[1], readCatalog());
         if (!open.ok) { print(open); process.exitCode = 1; break; }

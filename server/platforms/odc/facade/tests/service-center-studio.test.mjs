@@ -23,6 +23,8 @@ import { xlsxRows } from '../service-center/xlsx.mjs';
 import { sha256 } from '../service-center/util.mjs';
 import { FakeBridge, SC, fakeVault, files, fixture, temp, uuid, xlsx } from './fixtures/sc-fake-bridge.mjs';
 import { fakeBridge as loopbackBridge } from './fixtures/fake-o11-bridge.mjs';
+import { CONFIRM_MIN_AGE_MS } from '../destructive-operations.mjs';
+import { fakeClock, noBackup, previewThenConfirm } from './fixtures/destructive-flow.mjs';
 
 process.env.ANVIL_WORKER = '0'; process.env.ANVIL_ODC_NO_WORKER = '1';
 // A pending private prompt is not waited for here (its bounded wait: pa2-f8-sc.test.mjs): CREDENTIAL_PROMPT_PENDING at once.
@@ -488,24 +490,30 @@ function studioApi() {
   const s = { dir, journal: new Journal(dir), modules: [{ Key: 'k-orders', Name: 'Orders' }, { Key: 'k-billing', Name: 'Billing' }], associated: false };
   s.remove = args => { s.modules = s.modules.filter(m => m.Key !== args.moduleKey); return { success: true, message: null }; }; // the shape Anvil.Bridge ScApi projects for DeleteModule
   s.bridge = new FakeBridge({ api: { ListApplications: [], ListEspaces: () => [...s.modules], ListExtensions: [], GetConsumers: [{ Name: 'Billing' }], DeleteModule: a => s.remove(a) } });
+  s.clock = fakeClock(); s.root = temp();
   s.run = (...argv) => main([...argv, '--host', HOST], { journal: s.journal, locate: () => s.bridge, present: async () => false, running: async () => false,
-    opener: () => assert.fail('no prompt with a Studio connected'), exports: dir, registry: REGISTRY, sleep: async () => {} });
+    opener: () => assert.fail('no prompt with a Studio connected'), exports: dir, registry: REGISTRY, sleep: async () => {}, clock: s.clock, destructiveRoot: s.root, backup: noBackup });
+  // CX15: the preview, 5 s on the fake clock, then the token with the owner's words.
+  s.confirm = async (argv, words) => (await previewThenConfirm(s.run, argv, words, { clock: s.clock })).result;
   s.deletes = () => s.bridge.calls.filter(c => c[0] === 'api' && c[2] === 'DeleteModule');
   return s;
 }
 
-// module-delete is an alias of the delete engine (delete.mjs, D4): one call that plans without words and executes with them.
-test('module delete plans without words, refuses words that do not name the module and its consumer, then deletes in one call', async () => {
+// module-delete is an alias of the delete engine (delete.mjs): two calls since CX15, the preview without the token, the
+// execution with it and the owner's words given after the preview (with the count).
+test('module delete previews without the token, refuses words that do not name the module and its consumer, then deletes with the token', async () => {
   const s = studioApi();
   const plan = await s.run('module-delete', '--module', 'Orders');
-  assert.deepEqual([plan.state, plan.targets.map(t => t.key), plan.consumers, plan.auth.path], ['planned', ['k-orders'], { Orders: ['Billing'] }, 'studio']);
+  // CX15: the list of a preview is its items (each with its consumers).
+  assert.deepEqual([plan.state, plan.items.map(t => t.key), Object.fromEntries(plan.items.map(i => [i.name, i.consumers])), plan.auth.path], ['previewed', ['k-orders'], { Orders: ['Billing'] }, 'studio']);
   assert.deepEqual(s.deletes(), []);
-  const operation = uuid();
-  const refused = await s.run('module-delete', '--module', 'Orders', '--operation-id', operation, '--words', 'yes delete it on test', '--confirm-host', HOST);
+  const operation = plan.operationId;
+  s.clock.advance(CONFIRM_MIN_AGE_MS);
+  const refused = await s.run('module-delete', '--confirmation-token', plan.confirmationToken, '--words', 'yes delete it, the 1, on test', '--confirm-host', HOST);
   assert.deepEqual([refused.code, refused.problems.map(p => p.code).sort()], ['DELETE_REFUSED', ['CONSUMERS_WOULD_BREAK', 'WORDS_MUST_NAME']]);
   assert.deepEqual([s.deletes(), files(s.dir)], [[], []]);
-  const words = 'delete module Orders on test; Billing breaks and that is fine';
-  const receipt = await s.run('module-delete', '--module', 'Orders', '--execute', '--operation-id', operation, '--words', words, '--confirm-host', HOST);
+  const words = 'delete the 1 module Orders on test; Billing breaks and that is fine';
+  const receipt = await s.run('module-delete', '--confirmation-token', plan.confirmationToken, '--words', words, '--confirm-host', HOST);
   assert.deepEqual([receipt.state, receipt.operationId], ['confirmed', operation]);
   assert.equal(s.deletes().length, 1);
   const [, surface, , args, write, sentId, wordsHash] = s.deletes()[0];
@@ -513,7 +521,7 @@ test('module delete plans without words, refuses words that do not name the modu
   // The destructive call names its key as target, and a corporate host write carries the explicit instruction.
   assert.ok(s.bridge.targets.includes('k-orders'));
   assert.equal(s.bridge.corporate, true);
-  const again = await s.run('module-delete', '--module', 'Orders', '--execute', '--operation-id', operation, '--words', words, '--confirm-host', HOST);
+  const again = await s.run('module-delete', '--confirmation-token', plan.confirmationToken, '--words', words, '--confirm-host', HOST);
   assert.deepEqual([again.state, again.absent.map(a => a.key)], ['absent', ['k-orders']]);
   assert.equal(s.deletes().length, 1);
 });
@@ -521,21 +529,24 @@ test('module delete plans without words, refuses words that do not name the modu
 test('a lost API write stays uncertain and allows one new send only; a refused one releases the target', async () => {
   const s = studioApi();
   s.bridge.replies.DeleteModule = new BridgeError('UNCERTAIN', 'connection lost after send', { write: true });
-  const base = ['extension-delete', '--module-key', 'k-orders', '--execute', '--words', 'delete Orders and Billing test', '--confirm-host', HOST];
+  // CX15: every round is a new preview and the owner's new reply (words seen before a preview never confirm it).
+  const base = ['extension-delete', '--module-key', 'k-orders', '--confirm-host', HOST];
+  const round = words => s.confirm(base, words);
   s.bridge.replies.ListExtensions = () => [...s.modules];
-  assert.equal((await s.run(...base, '--operation-id', uuid())).state, 'uncertain');
+  assert.equal((await round('delete the 1, Orders and Billing test')).state, 'uncertain');
   // Read again as still there, unchanged: exactly one new send, never a third.
-  assert.equal((await s.run(...base, '--operation-id', uuid())).state, 'uncertain');
-  const third = await s.run(...base, '--operation-id', uuid());
+  assert.equal((await round('again: delete the 1, Orders and Billing test')).state, 'uncertain');
+  // The third round is refused by its preview already: the target's last delete was sent twice.
+  const third = await s.run(...base);
   assert.deepEqual([third.code, third.problems.map(p => p.code)], ['DELETE_REFUSED', ['DELETE_UNCONFIRMED']]);
   assert.equal(s.deletes().length, 2);
   s.journal = new Journal(path.join(s.dir, 'other'));
   s.bridge.replies.DeleteModule = new BridgeError('NOT_ALLOWED', 'outside the allowlist', { write: true });
-  const refused = await s.run(...base, '--operation-id', uuid());
+  const refused = await round('now: delete the 1, Orders and Billing test');
   assert.deepEqual([refused.state, refused.code], ['refused', 'NOT_ALLOWED']);
   assert.deepEqual(files(path.join(s.dir, 'other'), /\.lock$/), []);
   s.bridge.replies.DeleteModule = a => s.remove(a);
-  assert.equal((await s.run(...base, '--operation-id', uuid())).state, 'confirmed');
+  assert.equal((await round('finally: delete the 1, Orders and Billing test')).state, 'confirmed');
 });
 
 test('solution publish sends the prepared package once and returns its job', async () => {
@@ -625,7 +636,7 @@ test('API writes the server refused are rejected', async () => {
   const s = studioApi();
   Object.assign(s.bridge.replies, { DeleteModule: { success: false, message: 'Module has consumers' }, ListApplications: [{ Key: 'app-1', Name: 'Orders App' }],
     'apply-settings': { status: 200, body: { OperationId: 0, REST_Error: { ErrorMessage: 'Application is locked' } } } });
-  const deleted = await s.run('module-delete', '--module', 'Orders', '--execute', '--operation-id', uuid(), '--words', 'delete module Orders and Billing on test', '--confirm-host', HOST);
+  const deleted = await s.confirm(['module-delete', '--module', 'Orders', '--confirm-host', HOST], 'delete the 1 module Orders and Billing on test');
   assert.deepEqual([deleted.state, deleted.code, deleted.message], ['refused', 'DELETE_REJECTED', 'Module has consumers']);
   const settings = await s.run('apply-settings', '--application-key', 'app-1', '--execute', '--operation-id', uuid(), '--words', 'apply settings test', '--confirm-host', HOST);
   assert.deepEqual([settings.state, settings.message], ['rejected', 'Application is locked']);
@@ -635,8 +646,8 @@ test('API writes the server refused are rejected', async () => {
 test('verify reconciles an uncertain delete by reading only', async () => {
   const s = studioApi();
   s.bridge.replies.DeleteModule = a => { s.remove(a); return new BridgeError('UNCERTAIN', 'reply lost', { write: true }); };
-  const operation = uuid();
-  const receipt = await s.run('module-delete', '--module', 'Orders', '--execute', '--operation-id', operation, '--words', 'delete Orders and Billing on test', '--confirm-host', HOST);
+  const receipt = await s.confirm(['module-delete', '--module', 'Orders', '--confirm-host', HOST], 'delete the 1, Orders and Billing on test');
+  const operation = receipt.operationId;
   assert.equal(receipt.state, 'uncertain');
   const verified = await s.run('verify', '--operation-id', operation);
   assert.deepEqual([verified.observedDesiredState, verified.state, verified.replayed], [true, 'confirmed', false]);
@@ -692,24 +703,29 @@ function apiWrites() {
     AddModuleToApplication: args => relocate(args.moduleKey, args.appKey),
     ChangeCommitMessage: args => { for (const row of s.versions) if (row.Version_Id === args.eSpaceVersionId) row.CommitMessage = args.newCommitMessage; return { changed: true }; },
     UploadAndPublishExtension: () => { s.extensions.push({ key: 'x-new', name: 'SampleNewExt', versionId: 3300 }); return { messages: [], extensionId: 205, extensionVersionId: 3300 }; } } });
+  s.clock = fakeClock(); s.root = temp();
   s.run = (...argv) => main([...argv, '--host', HOST], { journal: s.journal, locate: () => s.bridge, present: async () => false, running: async () => false,
-    opener: () => assert.fail('no prompt with a Studio connected'), exports: dir, registry: REGISTRY });
+    opener: () => assert.fail('no prompt with a Studio connected'), exports: dir, registry: REGISTRY, clock: s.clock, destructiveRoot: s.root, backup: noBackup });
   s.execute = (words, ...argv) => s.run(...argv, '--execute', '--operation-id', uuid(), '--words', words, '--confirm-host', HOST);
+  // CX15: a delete executes with the preview's token and the owner's words given after it (5 s on the fake clock).
+  s.confirmToken = (token, words, ...argv) => { s.clock.advance(CONFIRM_MIN_AGE_MS); return s.run(...argv, '--confirmation-token', token, '--words', words, '--confirm-host', HOST); };
   s.apiCalls = operation => s.bridge.calls.filter(c => c[0] === 'api' && c[2] === operation);
   return s;
 }
 
-test('application delete reads the simulation, then deletes in one call with words naming it and its affected applications', async () => {
+test('application delete reads the simulation in the preview, then deletes with the token and words naming it and its affected applications', async () => {
   const s = apiWrites();
   const plan = await s.run('application-delete', '--application', 'Sample Shared');
-  assert.deepEqual([plan.state, plan.targets.map(t => t.key), plan.deletedModules, plan.wordsMustName], ['planned', ['app-2'], ['ZZSampleScratch'], ['Sample Shared', 'Sample Orders']]);
+  // CX15: the list of a preview is its items; cascade = the simulation's deletedModules plus the listing rows of the app
+  // (here its extension SampleUtilExt, which the simulation did not name).
+  assert.deepEqual([plan.state, plan.items.map(t => t.key), plan.items.flatMap(i => i.cascade), plan.wordsMustName], ['previewed', ['app-2'], ['ZZSampleScratch', 'SampleUtilExt'], ['Sample Shared', 'Sample Orders']]);
   assert.equal(s.apiCalls('DeleteApplication').length, 1);
   const [, surface, , args, write, operation] = s.apiCalls('DeleteApplication')[0];
   assert.deepEqual([surface, args, write, operation], ['soap', { appKey: 'app-2', simulate: true }, false, null]);
-  const refused = await s.execute('delete it on test', 'application-delete', '--application', 'Sample Shared');
+  const refused = await s.confirmToken(plan.confirmationToken, 'delete it, the 1, on test', 'application-delete');
   assert.deepEqual(refused.problems.map(p => p.code).sort(), ['CONSUMERS_WOULD_BREAK', 'WORDS_MUST_NAME']);
   assert.deepEqual(s.apiCalls('DeleteApplication').filter(c => c[4]), []);
-  const receipt = await s.execute('delete Sample Shared on test, Sample Orders is affected', 'application-delete', '--application-key', 'app-2');
+  const receipt = await s.confirmToken(plan.confirmationToken, 'delete the 1, Sample Shared on test, Sample Orders is affected', 'application-delete');
   assert.equal(receipt.state, 'confirmed');
   const writes = s.apiCalls('DeleteApplication').filter(c => c[4]);
   assert.equal(writes.length, 1);
@@ -879,9 +895,10 @@ test('the prompt script and the vault PowerShell never write the secret', () => 
 // ---- session tool and guards
 function sessions() {
   const dir = temp(); const prompts = [];
+  const clock = fakeClock(); const root = temp();
   const run = (argv, { bridge = null, vault = false, running = false } = {}) => main(argv, { journal: new Journal(dir), locate: () => bridge, present: async () => vault,
-    running: async () => running, opener: (host, kind) => { prompts.push([host, kind]); return { opened: true }; }, exports: dir, registry: REGISTRY });
-  return { dir, prompts, run };
+    running: async () => running, opener: (host, kind) => { prompts.push([host, kind]); return { opened: true }; }, exports: dir, registry: REGISTRY, clock, destructiveRoot: root });
+  return { dir, prompts, run, clock };
 }
 
 test('status reports the path each kind of call would use', async () => {
@@ -930,12 +947,14 @@ test('a connection delete needs words naming it and reads back its absence', asy
     [`GET ${SC}DatabaseConnections_List.aspx`]: () => (deleted.length ? '<table><tr><th>Name</th></tr></table><p>No connections found</p>' : fixture('db-connections.html')),
     [`GET ${SC}DatabaseConnection_Edit.aspx?DBConnectionId=3`]: fixture('db-connection-edit.html'),
     [`POST ${SC}DatabaseConnection_Edit.aspx?DBConnectionId=3`]: f => { deleted.push(f.__EVENTTARGET); return fixture('db-connections.html'); } } });
-  const base = ['db-connection-delete', '--host', HOST, '--connection', 'LegacyERP', '--confirm-host', HOST, '--execute'];
+  // CX15: the plan is the preview; the execution is its token with the owner's words (with the count) after it.
   const plan = await s.run(['db-connection-delete', '--host', HOST, '--connection', 'LegacyERP'], { bridge });
   assert.deepEqual([plan.destructive, plan.connectionId], [true, '3']);
-  await assert.rejects(s.run([...base, '--operation-id', uuid(), '--words', 'delete it on test'], { bridge }), isProtocol(/name its target/));
+  const base = ['db-connection-delete', '--host', HOST, '--connection', 'LegacyERP', '--confirm-host', HOST, '--confirmation-token', plan.confirmationToken];
+  s.clock.advance(CONFIRM_MIN_AGE_MS);
+  await assert.rejects(s.run([...base, '--words', 'delete it, the 1, on test'], { bridge }), isProtocol(/name its target/));
   assert.deepEqual(bridge.posts(), []);
-  const receipt = await s.run([...base, '--operation-id', uuid(), '--words', 'delete LegacyERP on test'], { bridge });
+  const receipt = await s.run([...base, '--words', 'delete the 1, LegacyERP on test'], { bridge });
   assert.deepEqual([receipt.state, deleted, receipt.auth.path], ['confirmed', ['wt5$wtDeleteLink'], 'studio-http']);
 });
 

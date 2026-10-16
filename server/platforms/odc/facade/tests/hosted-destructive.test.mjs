@@ -504,7 +504,8 @@ test('the hosted listing never promises a deletion: each tool with a refused par
       assert.doesNotMatch(mine, /Hosted: deleting is off/, name);
       assert.equal(tools.get(name).description.endsWith(mine), true, name + ': the hosted listing only adds its note in front');
     }
-    assert.match(local.tools.get('o11_service_center_write').description, /^delete \{applications\|modules\|extensions\|prefix, words\}: ONE call/);
+    // marco-a6 (CX15): the local description is the product's two-call delete; hosted, the note above comes first.
+    assert.match(local.tools.get('o11_service_center_write').description, /^delete \{applications\|modules\|extensions\|prefix\}: two calls/);
   } finally { await local.close(); }
 });
 

@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { normalize } from './catalog.mjs';
 import { ANSWER_BUDGETS } from './answer-size.mjs';
 import { namedGenerators, describeGenerator } from './generators.mjs';
+import { expandCatalogTexts, carriesGeneratedText } from './destructive-catalog-texts.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const TOOLS_FILE = path.join(here, 'catalog', 'tools.json');
@@ -127,8 +128,12 @@ export function loadToolRoutes(file = TOOLS_FILE) {
   return compiled;
 }
 
-export function compileToolRoutes(data) {
-  const problems = [];
+export function compileToolRoutes(source) {
+  // CX15 r3 (CT-8): the two-call texts of the destructive routes are generated here, from destructive-operations.mjs
+  // (destructive-catalog-texts.mjs): the JSON holds a marker, the routes and compiled.data hold the text.
+  const expanded = expandCatalogTexts(source);
+  const data = expanded.data;
+  const problems = [...expanded.problems];
   const lexer = makeLexer(data?.compounds ?? []);
   const tokensOf = text => lexer(text).toks.map(x => x.t);
   if (data?.schemaVersion !== TOOL_ROUTES_SCHEMA) problems.push(`schemaVersion must be ${TOOL_ROUTES_SCHEMA}`);
@@ -524,6 +529,12 @@ export function routeTools({ intent = '', lane = 'odc', unavailable = [] } = {},
     if (seen.has(c.r.id) || (!c.named && plain(c) < top - 11)) continue;
     seen.add(c.r.id); chosen.push(c);
   }
+  // A compound operation names the routes it performs itself; clause selection must not offer those steps again.
+  const coveredRoutes = new Set(chosen.flatMap(c => {
+    const tool = compiled.data.tools[c.r.tool];
+    return (c.r.verb ? tool?.verbs?.[c.r.verb] : tool)?.covers ?? [];
+  }));
+  for (let i = chosen.length - 1; i >= 0; i--) if (coveredRoutes.has(chosen[i].r.id)) chosen.splice(i, 1);
   chosen.sort((a, b) => b.score - a.score || a.laneRank - b.laneRank || a.r.order - b.r.order);
   // Coverage, for the hint only: every content token used by a matched trigger, a lane word, a filler or a filled slot.
   const used = new Set(lanePositions);
@@ -661,7 +672,10 @@ export function toolGroups(lane = 'odc', compiled = loadToolRoutes()) {
 
 // ---- answer composition and budget
 const bytes = value => Buffer.byteLength(JSON.stringify(value), 'utf8');
-const brief = (text, max) => { const t = String(text ?? '').replace(/\s+/g, ' ').trim(); return t.length > max ? t.slice(0, max - 3) + '...' : t; };
+// CX15 r3 (CT-8): a text that carries a generated two-call text (a destructive route) is never cut: the rule of the
+// owner's reply (number AND names), of the words and of the step after an interruption or a local failure is whole or
+// absent (the compact and names levels), never "then the same tool with c...".
+const brief = (text, max) => { const t = String(text ?? '').replace(/\s+/g, ' ').trim(); return t.length > max && !carriesGeneratedText(t) ? t.slice(0, max - 3) + '...' : t; };
 const callText = item => (item.gap ? `no tool (${item.gap}): ${brief(item.when, 140)}` : `${item.tool} ${brief(JSON.stringify(item.args ?? {}), 160)}`);
 
 function levelItems(tools, level) {

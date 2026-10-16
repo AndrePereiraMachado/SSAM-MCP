@@ -27,18 +27,42 @@ const MUTATION_JOBS = new Set([
 ]);
 export const DEPLOY = 'deployments-api-v1:post:/deployment-operations';
 
+// CX15 r3 (BYPASS-2): a body list named *ToRemove removes N members or roles in ONE call (userKeysToRemove of PATCH
+// /groups/{key}/users, applicationRoleKeysToRemove of PATCH /groups/{key}/application-roles; any other field the catalog
+// adds with that suffix is read the same way). Not empty, the write is destructive: a preview with the count and the keys
+// (and names) that leave, then the owner's reply. A value that is not an empty list (null and undefined aside) counts:
+// fail closed. *ToAdd alone stays a mutation.
+export const REMOVAL_FIELD = /ToRemove$/;
+export function removalsOf(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return [];
+  return Object.entries(body).filter(([field, value]) => REMOVAL_FIELD.test(field) && value !== null && value !== undefined && !(Array.isArray(value) && value.length === 0))
+    .map(([field, value]) => ({ field, keys: (Array.isArray(value) ? value : [value]).map(v => (typeof v === 'string' ? v : JSON.stringify(v))) }));
+}
+// The read that names each key that leaves (the preview lists the names when readable; the key otherwise).
+export const REMOVAL_NAMES = Object.freeze({
+  userKeysToRemove: { kind: 'group-member', read: 'user-access-management-api-v1:get:/users/{key}', fields: ['name', 'email'] },
+  applicationRoleKeysToRemove: { kind: 'group-application-role', read: 'user-access-management-api-v1:get:/application-roles', byQuery: true, fields: ['name'] },
+});
+
 // read | search-post | job | mutation-job | mutation | destructive. A deployment whose body says Undeploy removes an
-// app from a stage, so it is destructive like a DELETE.
+// app from a stage, so it is destructive like a DELETE; a non-empty *ToRemove list too (removalsOf).
 export function effectOf(operation, body) {
   if (SEARCH_POSTS.has(operation.id)) return 'search-post';
   if (operation.readOnly) return 'read';
   if (operation.method === 'DELETE') return 'destructive';
   if (operation.id === DEPLOY && body?.operation === 'Undeploy') return 'destructive';
+  if (removalsOf(body).length) return 'destructive';
   if (JOBS.has(operation.id)) return 'job';
   if (MUTATION_JOBS.has(operation.id)) return 'mutation-job';
   return 'mutation';
 }
 export const readable = operation => operation.readOnly || SEARCH_POSTS.has(operation.id);
+// CX15 r3 (BYPASS-2): the destructive(args) callback of destructivePhase for odc_write (and .\odc portal write): the effect
+// the guard reads (a DELETE, an Undeploy, a non-empty *ToRemove list). An unknown operation is not destructive here (the
+// write tool refuses it).
+export function writeIsDestructive(catalog, args = {}) {
+  try { return effectOf(catalog.get(args?.operationId).operation, args?.body) === 'destructive'; } catch { return false; }
+}
 
 // The read that follows each job to a terminal state. key: field of the POST answer that names the operation.
 export const OPERATION_STATUS = Object.freeze({
@@ -78,6 +102,9 @@ export const TARGET_NAMES = Object.freeze({
   'user-access-management-api-v1:delete:/organization-roles/{key}': { read: 'user-access-management-api-v1:get:/organization-roles/{key}', fields: ['name'] },
   'environment-configurations-api-v1:delete:/environments/{environmentKey}/domains/{domainKey}': { read: 'environment-configurations-api-v1:get:/environments/{environmentKey}/domains/{domainKey}', fields: ['name', 'hostname'] },
   'environment-configurations-api-v1:delete:/environments/{environmentKey}/ip-filter-groups/{ipFilterGroupKey}': { read: 'environment-configurations-api-v1:get:/environments/{environmentKey}/ip-filter-groups/{ipFilterGroupKey}', fields: ['name'] },
+  // CX15 r3 (BYPASS-2): the group whose members or roles a *ToRemove list removes.
+  'user-access-management-api-v1:patch:/groups/{key}/users': { read: 'user-access-management-api-v1:get:/groups/{key}', fields: ['name'] },
+  'user-access-management-api-v1:patch:/groups/{key}/application-roles': { read: 'user-access-management-api-v1:get:/groups/{key}', fields: ['name'] },
   // A pending External Library job (odc_external_library discard): the words name its library (or the uploaded file).
   'external-library-generation-api-v1:delete:/generation-operations/{operationKey}': { read: 'external-library-generation-api-v1:get:/generation-operations/{operationKey}', fields: ['libraryName', 'filename'] },
 });

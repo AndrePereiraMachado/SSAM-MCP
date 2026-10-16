@@ -684,7 +684,8 @@ test('A2A dispatcher persists ownership before sending, gates save and never rep
  const realReadBack=h.access.dbDeleteReadBack;
  h.access.dbDeleteReadBack=async(host,auth,scope,written)=>({...written,continuation:{}});
  const pending=await h.access.a2aConnectionDelete(deletion);
- assert.equal(pending.continuation.arguments.authorize,words);
+ // CX15 r4 (W-1, converted): the read-only reconciliation goes on WITHOUT the owner's words (before: authorize === words).
+ assert.equal(pending.continuation.arguments.authorize,undefined);assert.equal(JSON.stringify(pending).includes(words),false);
  assert.equal(pending.continuation.arguments.operationUuid,deleteId);
  assert.equal(sends.length,5);
  h.access.dbDeleteReadBack=realReadBack;

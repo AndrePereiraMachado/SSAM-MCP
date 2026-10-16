@@ -14,11 +14,12 @@ export function readOptions(stage = 'transport') {
   const state = scope.getStore();
   return state ? { signal: state.controller.signal, timeoutMs: Math.max(1, state.deadline - Date.now()) } : {};
 }
+export const canonicalArguments = key => typeof key === 'string' ? key : JSON.stringify(key, (_name, value) =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.fromEntries(Object.keys(value).sort().map(name => [name, value[name]])) : value);
 export async function boundedRead(key, work, { timeoutMs = 29000 } = {}) {
   if (scope.getStore()) { readCheckpoint(); return work(); }
-  const serialized = typeof key === 'string' ? key : JSON.stringify(key, (_name, value) =>
-    value && typeof value === 'object' && !Array.isArray(value)
-      ? Object.fromEntries(Object.keys(value).sort().map(name => [name, value[name]])) : value);
+  const serialized = canonicalArguments(key);
   const fingerprint = createHash('sha256').update(serialized).digest('hex');
   // Retain timed-out work to prevent another authentication/send while its outcome is still unobserved.
   for (const [k, entry] of pending) if (entry.settled && Date.now() - entry.finishedAt > 300000) pending.delete(k);

@@ -4,11 +4,15 @@
 // a full receipt (the kernel keeps those in its own task folder).
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import * as z from 'zod/v4';
 import { anvilRoot } from './workspace.mjs';
 import { usesWorkspace, workspacePath } from './executor.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
+import { listOperations, readOperation, readPreviewState, summarizeOperation } from './destructive-operations.mjs';
+import { callScope, stopTask, isLiveTask, stopOperation } from './call-deadline.mjs';
+import { WORDS_MARKER } from './next-steps.mjs';
+import { WORDS as ENGLISH_WORDS_MARKER } from './continuations.mjs';
 
 export const TASK_STATES = ['running', 'ok', 'failed', 'uncertain'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -17,10 +21,87 @@ const KERNEL_ID = /^[0-9a-f]{32}$/i; // a kernel delivery task id (work/deliver/
 export const tasksDir = (root = anvilRoot) => (usesWorkspace(root, anvilRoot) ? workspacePath('o11', 'tasks') : path.join(root, '.local', 'tasks'));
 
 // Words never reach a task file, whatever the caller put in the summary.
-const WORDS = new Set(['authorize', 'authorization', 'words']);
-const scrub = value => Array.isArray(value) ? value.map(scrub)
-  : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).filter(([k]) => !WORDS.has(k)).map(([k, v]) => [k, scrub(v)]))
+const WORDS = /^(authorize|authorization|words|password|passwd|secret|token|accessToken|refreshToken|apiKey|credentials|cookie|bridgeKey)$/i;
+export const scrub = value => Array.isArray(value) ? value.map(scrub)
+  : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).filter(([k]) => !WORDS.test(k)).map(([k, v]) => [k, scrub(v)]))
   : value;
+
+const indexFile = (dir, kind, key) => path.join(dir, '.index', kind, key + '.json');
+const callKey = (tool, hash) => createHash('sha256').update(tool + '\0' + hash).digest('hex');
+function atomicJson(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temporary = file + '.' + process.pid + '.' + randomUUID() + '.tmp';
+  fs.writeFileSync(temporary, JSON.stringify(value)); fs.renameSync(temporary, file);
+}
+const readIndex = file => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
+// The keys that carry the user's words. In a persisted answer copy (and its replay) they keep only a public marker: the
+// exact markers, a <...> template of a continuation, or a boolean (needs.words: true); any other value is dropped. Every
+// other key of WORDS (token, password, credentials, ...) is always dropped. The live answer never passes through here.
+const WORDS_KEYS = /^(authorize|authorization|words)$/i;
+const TEMPLATE = /^<[^<>]{1,200}>$/;
+const publicMarker = item => typeof item === 'boolean' || item === WORDS_MARKER || item === ENGLISH_WORDS_MARKER || typeof item === 'string' && TEMPLATE.test(item);
+export function sanitizeAnswer(answer) {
+  const cleanValue = value => Array.isArray(value) ? value.map(cleanValue)
+    : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value)
+      .filter(([key, item]) => !WORDS.test(key) || WORDS_KEYS.test(key) && publicMarker(item))
+      .map(([key, item]) => [key, cleanValue(item)])) : value;
+  const clean = cleanValue(answer);
+  if (!Array.isArray(clean?.content)) return clean;
+  return { ...clean, content: clean.content.map(block => {
+    if (block.type !== 'text') return block;
+    try { return { ...block, text: JSON.stringify(cleanValue(JSON.parse(block.text))) }; } catch { return block; }
+  }) };
+}
+// A final the identical call has not received yet: a cancelled write whose handler ran (never one cancelled before it was
+// sent: outcome "not-sent" means nothing ran, so the identical call is a new operation, R4-1), or the delivered
+// confirmation saved for the original call of a reconciled kernel delivery (confirmation, R4-7).
+export const awaitsReplay = task => !task?.closedAt && !task.deliveries && ['ok', 'failed'].includes(task.state)
+  && (task.confirmation === 'delivered' || task.cancelled === true && (task.callResult ?? task.result)?.outcome !== 'not-sent');
+// One predicate decides whether a record holds its call key: the index and the guard read the same rule (R4-5).
+export const reservesCall = task => !!task && !task.closedAt && task.isWrite !== false
+  && (task.state === 'running' || task.state === 'uncertain' || awaitsReplay(task));
+function updateIndexes(dir, task) {
+  if (task.tool && task.call?.argsSha256) {
+    const file = indexFile(dir, 'calls', callKey(task.tool, task.call.argsSha256));
+    if (reservesCall(task)) atomicJson(file, { id: task.id });
+    else if (readIndex(file)?.id === task.id) { try { fs.unlinkSync(file); } catch {} }
+  }
+  if (KERNEL_ID.test(String(task.result?.taskId))) {
+    const file = indexFile(dir, 'kernel', task.result.taskId.toLowerCase());
+    const ids = readIndex(file)?.ids ?? [];
+    if (!ids.includes(task.id)) atomicJson(file, { ids: [...ids, task.id] });
+  }
+}
+// Only startup migration enumerates legacy evidence. Every subsequent mutation looks up one key directly.
+export function ensureTaskIndexes(dir) {
+  const marker = path.join(dir, '.index', 'version.json');
+  if (readIndex(marker)?.format === 1) return;
+  let names = []; try { names = fs.readdirSync(dir); } catch (error) { if (error.code !== 'ENOENT') throw error; return; }
+  const records = names.filter(name => /\.json$/i.test(name) && UUID.test(name.slice(0, -5)))
+    .map(name => readTask(name.slice(0, -5), { dir })).filter(Boolean)
+    .sort((a, b) => String(a.startedAt).localeCompare(String(b.startedAt)));
+  for (const task of records) updateIndexes(dir, task);
+  atomicJson(marker, { format: 1 });
+}
+export function findCallTask(dir, tool, hash) {
+  const file = indexFile(dir, 'calls', callKey(tool, hash));
+  const indexed = readIndex(file);
+  const task = indexed?.id ? readTask(indexed.id, { dir }) : null;
+  if (task?.tool !== tool || task.call?.argsSha256 !== hash) return null;
+  if (reservesCall(task)) return task;
+  // A stale entry (an unlink that failed, or a stop between the record and its index) never refuses the call forever:
+  // the record it names was read and no longer holds the key, so the entry goes (R4-5). An unreadable record keeps it.
+  if (readIndex(file)?.id === task.id) { try { fs.unlinkSync(file); } catch {} }
+  return null;
+}
+export function findKernelFacadeTasks(kernelId, { dir = tasksDir() } = {}) {
+  if (!KERNEL_ID.test(String(kernelId))) return [];
+  return (readIndex(indexFile(dir, 'kernel', kernelId.toLowerCase()))?.ids ?? []).map(id => readTask(id, { dir })).filter(Boolean);
+}
+export function releaseKernelFacadeTasks(kernelId, { dir = tasksDir(), reason = 'Kernel reconciliation confirmed', outcome } = {}) {
+  return findKernelFacadeTasks(kernelId, { dir }).filter(task => !task.closedAt).map(task => mergeTask(dir, { id: task.id,
+    closedAt: new Date().toISOString(), closeReason: reason, ...(outcome ? { reconciledOutcome: outcome } : {}) }));
+}
 
 function write(dir, task) {
   fs.mkdirSync(dir, { recursive: true });
@@ -28,6 +109,17 @@ function write(dir, task) {
   const temporary = file + '.' + process.pid + '.' + randomUUID() + '.tmp';
   fs.writeFileSync(temporary, JSON.stringify(task, null, 2));
   fs.renameSync(temporary, file);
+}
+
+// A shared task record is updated atomically; nested trackers never discard the call's final answer.
+export function mergeTask(dir, fields) {
+  const existing = readTask(fields.id, { dir }) ?? {};
+  const task = scrub({ ...existing, ...fields });
+  for (const key of ['result', 'callResult']) if (task[key] != null) task[key] = briefResult(task[key]);
+  delete task.orphaned;
+  write(dir, task);
+  updateIndexes(dir, task);
+  return task;
 }
 
 const alive = pid => { try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; } };
@@ -40,32 +132,67 @@ export function readTask(id, { dir = tasksDir() } = {}) {
   catch { return null; }
 }
 
+// Explicit reconciliation closes only an uncertain facade record. Kernel delivery tasks keep their proof-based close.
+export function closeFacadeTask(id, reason, { dir = tasksDir() } = {}) {
+  if (typeof reason !== 'string' || !reason.trim() || reason.trim().length > 500)
+    return { ok: false, code: 'BAD_ARGS', error: 'close needs a reason of 1 to 500 characters' };
+  const task = readTask(id, { dir });
+  if (!task) return { ok: false, code: 'CLOSE_TASK_NOT_FOUND', error: 'No facade task ' + id + ' to close' };
+  if (isLiveTask(id, dir)) return { ok: false, code: 'CLOSE_TASK_RUNNING', error: 'The real handler is still running; wait for its final answer' };
+  if (typeof task.result?.taskId === 'string' && KERNEL_ID.test(task.result.taskId))
+    return { ok: false, code: 'CLOSE_KERNEL_REQUIRED', error: 'This delivery task requires the existing kernel close with proof',
+      continuation: closeContinuation(task.result.taskId) };
+  if (task.state === 'running' && !task.orphaned)
+    return { ok: false, code: 'CLOSE_TASK_RUNNING', error: 'The handler is still running; wait for its final answer' };
+  if (task.closedAt) return { ok: true, task };
+  if (task.state !== 'uncertain' && !task.orphaned)
+    return { ok: false, code: 'CLOSE_TASK_NOT_UNCERTAIN', error: 'Only an uncertain or orphaned facade task needs reconciliation close' };
+  return { ok: true, task: mergeTask(dir, { id: task.id, closedAt: new Date().toISOString(), closeReason: reason.trim() }) };
+}
+
 // Newest first by start time.
 export function listTasks({ dir = tasksDir(), limit = 20, tool } = {}) {
   let names;
   try { names = fs.readdirSync(dir).filter(n => /\.json$/i.test(n) && UUID.test(n.slice(0, -5))); } catch { return []; }
-  return names.map(n => readTask(n.slice(0, -5), { dir })).filter(t => t && (!tool || t.tool === tool))
-    .sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt))).slice(0, limit);
+  const found = names.map(n => readTask(n.slice(0, -5), { dir })).filter(t => t && (!tool || t.tool === tool))
+    .sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt))).slice(0, limit)
+    .map(({ callResult, ...task }) => ({ ...scrub(task), ...(task.result ? { result: briefResult(task.result) } : {}) }));
+  if (limit !== 20) return found;
+  // A listing is evidence, not a receipt. Legacy large records must not make the default response exceed its page.
+  const listed = []; let bytes = Buffer.byteLength('{"ok":true,"tasks":[]}');
+  for (const task of found) {
+    const size = Buffer.byteLength(JSON.stringify(task)) + 1;
+    if (bytes + size >= 40000) break;
+    listed.push(task); bytes += size;
+  }
+  return listed;
 }
 
 export const stateOf = value => value?.ok === true ? 'ok' : value?.outcome === 'uncertain' ? 'uncertain' : 'failed';
 const KEPT = ['result', 'valid', 'outcome', 'code', 'stage', 'taskId', 'writeState'];
+const contractSummary = value => typeof value?.contract === 'string' ? value.contract : value?.contract?.summary;
 // A refusal's record says what refused (VisitaCerta 2026-10-12: two VALIDATION_REFUSED records kept only "job rejected by
 // validation contract"): the contract's summary and the problems, short (code and pointer or element, at most 10).
-const brief = value => scrub({ ok: value?.ok === true, ...Object.fromEntries(KEPT.filter(k => value?.[k] != null).map(k => [k, value[k]])),
+export const briefResult = value => scrub({ ok: value?.ok === true, ...Object.fromEntries(KEPT.filter(k => value?.[k] != null && ['string', 'number', 'boolean'].includes(typeof value[k])).map(k => [k, typeof value[k] === 'string' ? value[k].slice(0, 300) : value[k]])),
   ...(value?.error ? { error: String(value.error).slice(0, 300) } : {}),
-  ...(value?.contract?.summary ? { contract: String(value.contract.summary).slice(0, 300) } : {}),
-  ...(Array.isArray(value?.problems) && value.problems.length ? { problemsTotal: value.problems.length,
-    problems: value.problems.slice(0, 10).map(p => [p?.code, p?.pointer ?? p?.element].filter(Boolean).join(' ').slice(0, 200)) } : {}) });
+  ...(contractSummary(value) ? { contract: String(contractSummary(value)).slice(0, 300) } : {}),
+  ...(Array.isArray(value?.problems) && value.problems.length ? { problemsTotal: value.problemsTotal ?? value.problems.length,
+    problems: value.problems.slice(0, 10).map(p => typeof p === 'string' ? p.slice(0, 200) : [p?.code, p?.pointer ?? p?.element].filter(Boolean).join(' ').slice(0, 200)) } : {}) });
 
 // Runs fn(task) and records it: `running` before, the state of its value after (ok:true -> ok, outcome 'uncertain' ->
 // uncertain, anything else -> failed). An exception becomes {ok:false, error}, as every tool answer does.
-export async function trackTask({ tool, summary = {}, dir = tasksDir(), now = () => new Date(), id = randomUUID() }, fn) {
-  const task = { id, tool, summary: scrub(summary), pid: process.pid, startedAt: now().toISOString(), state: 'running' };
-  write(dir, task);
+export async function trackTask({ tool, summary = {}, dir = tasksDir(), now = () => new Date(), id }, fn) {
+  const context = callScope.getStore();
+  const normalizeDir = value => process.platform === 'win32' ? path.resolve(value).toLowerCase() : path.resolve(value);
+  const inherited = context && !context.tracked && normalizeDir(dir) === normalizeDir(context.dir);
+  if (inherited) context.tracked = true;
+  id ??= inherited ? context.id : randomUUID();
+  const task = { id, tool: inherited ? context.tool : tool, summary: scrub(summary), ...(context ? { call: context.call } : {}), pid: process.pid, startedAt: now().toISOString(), state: 'running',
+    ...(context && !inherited ? { callTask: context.id } : {}) };
+  mergeTask(dir, task);
   let value;
   try { value = await fn(task); } catch (error) { value = { ok: false, error: error.message }; }
-  try { write(dir, { ...task, state: stateOf(value), endedAt: now().toISOString(), result: brief(value) }); }
+  try { mergeTask(dir, { ...task, ...(inherited ? { state: 'running' } : { state: stateOf(value), endedAt: now().toISOString() }), result: briefResult(value) }); }
   catch { /* the answer matters more than its record; the running record stays as evidence */ }
   return value;
 }
@@ -108,6 +235,15 @@ export async function kernelTaskAnswer(id, { root = anvilRoot, works, findTask, 
 export const CLOSE_WITH_PROOF_WHY = 'Fecha a entrega incerta só com a prova de que nada foi aplicado (o módulo vivo igual à base capturada); '
   + 'com o módulo diferente ela continua incerta e nada é repetido. reason: o motivo, em uma linha.';
 const closeContinuation = id => ({ tool: 'ssam_task', arguments: { id, close: { reason: '<motivo>' } }, why: CLOSE_WITH_PROOF_WHY });
+const facadeCloseContinuation = id => ({ tool: 'ssam_task', arguments: { id, close: { reason: '<motivo>' } },
+  why: 'Depois de reconciliar o resultado incerto, feche explicitamente esta tarefa de fachada com o motivo; só então uma nova escrita pode executar.' });
+
+// The CX15 record of a destructive operation by its operationId or previewId (with its items), or the state of a preview.
+function destructiveRecordOf(id, root) {
+  const operation = readOperation(id, { root });
+  if (operation) return { ...summarizeOperation(operation, { root }), items: operation.items };
+  return readPreviewState(id, { root }) ?? null;
+}
 
 // deps: tasksDir | root; close(kernelTaskId, reason, {signal}) -> answer (o11-cycle.mjs: `deliver --close` of the kernel,
 // DeliveryTask.CloseKnownFailure, the same close o11_deliver {close} runs). Without close, ssam_task only reads.
@@ -115,38 +251,77 @@ export function registerSsamTask(server, deps = {}) {
   const dir = deps.tasksDir ?? tasksDir(deps.root ?? anvilRoot);
   server.registerTool('ssam_task', {
     title: 'State of long facade tasks',
-    description: 'Long tasks of the facade (o11_deliver, o11_publish): id, tool, summary (never the user\'s words), state running | ok | failed | uncertain, '
+    description: 'Task evidence: id, tool, summary (never the user\'s words), state running | ok | failed | uncertain, '
       + 'startedAt/endedAt and a short result. id: the task id, or the kernel taskId of a delivery. Without id: the 20 most recent. '
       + 'orphaned:true means the server that ran it stopped before it ended. Reading never repeats anything. '
       + 'close {reason} with id closes that delivery task in the kernel and frees its module: a refused one, or an uncertain one only with '
-      + 'the proof that nothing was applied (the live module equals the base the task captured); never when the live module differs.',
+      + 'the proof that nothing was applied (the live module equals the base the task captured); never when the live module differs. Destructive operations (deletes, previewed then confirmed): without id, `destructive` lists the 10 most recent with their counts and names; id = the operationId or the previewId of a preview gives item by item what was deleted, uncertain or not started: read it before telling the owner anything after an interruption, CANCELLED or "rejected" (also after SC_LOCAL_FAILURE or any other local failure). '
+      + 'Cancelar a espera não para a obra. stop:true with a live facade id, or with the operationId/previewId of a destructive execution running in this server, aborts its handler before the next send. A facade UUID without a kernel taskId closes its finished uncertain or orphaned record after explicit reconciliation; a live running handler cannot close. A destructive record is never closed here: close with its operationId refuses and answers the record.',
     inputSchema: z.object({
-      id: z.string().regex(/^[0-9a-fA-F-]{32,36}$/).optional().describe('Task id (uuid) or a kernel delivery taskId (32 hex)'),
-      close: z.object({ reason: z.string().trim().min(1).max(500) }).strict().optional().describe('With id: close that delivery task (see the description)'),
+      id: z.string().regex(/^[0-9a-fA-F-]{32,36}$/).optional().describe('UUID or delivery taskId (32 hex)'),
+      stop: z.literal(true).optional(),
+      close: z.object({ reason: z.string().trim().min(1).max(500) }).strict().optional().describe('id: close delivery task'),
     }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, async ({ id, close } = {}, extra) => {
+  }, async ({ id, close, stop } = {}, extra) => {
     try {
+      if (stop) {
+        if (!id || close) return reply({ ok: false, code: 'BAD_ARGS', error: 'stop needs a live facade id and cannot combine close.' });
+        // Junction (M6 adjustment 4): the operationId or previewId of a destructive execution stops the live CX12 entry
+        // that runs its token; without one, the CX15 record answers (what was sent), never TASK_NOT_FOUND.
+        if (!isLiveTask(id, dir) && !KERNEL_ID.test(id)) {
+          const record = destructiveRecordOf(id, deps.destructiveRoot);
+          const stopped = stopOperation([id, record?.previewId, record?.operationId], { dir });
+          if (stopped) return stopped;
+          if (record) return reply({ ok: false, code: 'TASK_NOT_RUNNING', error: 'No execution of the destructive operation ' + id + ' is running in this server; its record says item by item what was sent.', destructiveOperation: record,
+              continuation: { tool: 'ssam_task', arguments: { id }, why: 'Read the record of the operation before telling the owner anything; never repeat it.' } });
+        }
+        return stopTask(id, { dir });
+      }
       if (close) {
+        if (id && isLiveTask(id, dir)) return reply({ ok: false, code: 'CLOSE_TASK_RUNNING', error: 'The real handler is still running; wait for its final answer' });
         if (!id) return reply({ ok: false, code: 'BAD_ARGS', error: 'close needs the id of the delivery task', continuation: { tool: 'ssam_task', arguments: {}, why: 'Lists the recent tasks and their ids.' } });
-        const kernelId = KERNEL_ID.test(id) ? id.toLowerCase() : readTask(id, { dir })?.result?.taskId ?? null;
-        if (!kernelId || !KERNEL_ID.test(kernelId)) return reply({ ok: false, code: 'CLOSE_TASK_NOT_FOUND', error: 'No delivery task ' + id + ' to close',
-          continuation: { tool: 'ssam_task', arguments: {}, why: 'Lists the recent tasks and their kernel taskId.' } });
+        const facadeTask=KERNEL_ID.test(id)?null:readTask(id,{dir});
+        if(facadeTask?.state==='running'&&!facadeTask.orphaned)return reply({ok:false,code:'TASK_STILL_RUNNING',task:{id:facadeTask.id,state:facadeTask.state,startedAt:facadeTask.startedAt},
+          continuation:{tool:'ssam_task',arguments:{id},why:'Read the running task; it has not finished and cannot be closed yet.'}});
+        const kernelId = KERNEL_ID.test(id) ? id.toLowerCase() : facadeTask?.result?.taskId ?? null;
+        if (kernelId && findKernelFacadeTasks(kernelId, { dir }).some(task => isLiveTask(task.id, dir))) return reply({ ok: false, code: 'CLOSE_TASK_RUNNING', error: 'The real handler is still running; wait for its final answer' });
+        if (!kernelId || !KERNEL_ID.test(kernelId)) {
+          // Junction (M6 adjustments 4 and 8): a CX15 record is never closed by ssam_task (its lease and items stay as they
+          // are); the refusal answers the record.
+          const record = facadeTask ? null : destructiveRecordOf(id, deps.destructiveRoot);
+          if (record) return reply({ ok: false, code: 'DESTRUCTIVE_RECORD_NOT_CLOSABLE', error: 'A destructive operation record is never closed by ssam_task; it says item by item what was deleted, uncertain or not started.',
+            destructiveOperation: record, continuation: { tool: 'ssam_task', arguments: { id }, why: 'Read the record of the operation before telling the owner anything; never repeat it.' } });
+          return reply(closeFacadeTask(id, close.reason, { dir }));
+        }
         if (typeof deps.close !== 'function') return reply({ ok: false, code: 'CLOSE_UNAVAILABLE', error: 'This server does not serve the O11 delivery close.',
           continuation: { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'Shows the O11 lane of this server.' } });
-        return reply(await deps.close(kernelId, close.reason, { signal: extra?.signal }));
+        const answer = await deps.close(kernelId, close.reason, { signal: extra?.signal });
+        if (answer?.ok === true) releaseKernelFacadeTasks(kernelId, { dir, reason: close.reason, outcome: 'not-applied' });
+        return reply(answer);
       }
-      if (!id) return reply({ ok: true, tasks: listTasks({ dir }) });
-      const task = KERNEL_ID.test(id) ? listTasks({ dir, limit: 500 }).find(t => t.result?.taskId?.toLowerCase() === id.toLowerCase()) : readTask(id, { dir });
+      if (!id) return reply({ ok: true, tasks: listTasks({ dir }), destructive: listOperations({ limit: 10, root: deps.destructiveRoot }) });
+      const task = KERNEL_ID.test(id) ? findKernelFacadeTasks(id, { dir }).at(-1) ?? listTasks({ dir, limit: 500 }).find(t => t.result?.taskId?.toLowerCase() === id.toLowerCase()) : readTask(id, { dir });
       if (!task && KERNEL_ID.test(id)) {
         const kernel = await kernelTaskAnswer(id.toLowerCase(), { root: deps.root ?? anvilRoot, works: deps.works, findTask: deps.findTask, closeStateOf: deps.closeState });
         if (kernel) return reply(kernel);
       }
+      // CX15: the record of a destructive operation, by its operationId or by the previewId of its preview.
+      const operation = task ? null : readOperation(id, { root: deps.destructiveRoot });
+      if (operation) return reply({ ok: true, destructiveOperation: { ...summarizeOperation(operation, { root: deps.destructiveRoot }), items: operation.items } });
+      // CX15 r2 (T5): a preview with no execution yet answers its state, never TASK_NOT_FOUND.
+      const previewed = task ? null : readPreviewState(id, { root: deps.destructiveRoot });
+      if (previewed) return reply({ ok: true, destructiveOperation: previewed });
       if (!task) return reply({ ok: false, code: 'TASK_NOT_FOUND', error: 'No task ' + id,
         continuation: { tool: 'ssam_task', arguments: {}, why: 'Lists the recent tasks and their ids.' } });
       const kernelId = task.result?.taskId;
-      return reply({ ok: true, task, ...(task.state === 'uncertain' && typeof kernelId === 'string' && KERNEL_ID.test(kernelId) && typeof deps.close === 'function'
-        ? { continuation: closeContinuation(kernelId) } : {}) });
+      const kernel = typeof kernelId === 'string' && KERNEL_ID.test(kernelId);
+      const continuation = !task.closedAt && (task.state === 'uncertain' || task.orphaned)
+        ? kernel ? (typeof deps.close === 'function' ? closeContinuation(kernelId) : null) : facadeCloseContinuation(task.id)
+        : null;
+      // M6 adjustment 6: the task of a destructive execution also answers the CX15 record of its operation(s).
+      const records = (task.call?.previewIds ?? []).map(previewId => destructiveRecordOf(previewId, deps.destructiveRoot)).filter(Boolean);
+      return reply({ ok: true, task, ...(records.length ? { destructiveOperation: records[0], ...(records.length > 1 ? { destructiveOperations: records } : {}) } : {}), ...(continuation ? { continuation } : {}) });
     } catch (error) { return reply({ ok: false, error: error.message }); }
   });
 }

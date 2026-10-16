@@ -1,6 +1,7 @@
 // Lane C, C10: the relay of the ssam server to the ODC lane server waits up to 30 min, every progress notification of
 // the lane restarts that wait and reaches the outer client, the outer cancellation reaches the lane, and a relay that ends
-// without an answer says TIMEOUT | CANCELLED (outcome "uncertain" for a write) with the status read as continuation.
+// without an answer says TIMEOUT | CANCELLED for reads. R3-1 writes stay alive until real facade completion;
+// the outer deadline supplies a same-tool continuation and explicit stop reaches the owned work signal.
 // A fake ODC server in process (no Studio, no bridge, no pipe); the relay wait is shortened through deps.relayTimeoutMs.
 import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
@@ -17,9 +18,11 @@ const { createSsamServer, relayOptions, relayFailure, RELAY_TIMEOUT_MS } = m_ssa
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const text = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value });
 
-async function harness(t, { relayTimeoutMs = 400, writeLock } = {}) {
+async function harness(t, { relayTimeoutMs = 400, callDeadlineMs, writeLock, detachedNotifications = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pacote-c-relay-'));
-  const seen = { waitProgress: 0, aborted: [] };
+  const seen = { waitProgress: 0, aborted: [], detached: [] };
+  const relayChild = process.env.SSAM_RELAY_CHILD;
+  if (detachedNotifications) process.env.SSAM_RELAY_CHILD = '1';
   const odcFacade = async () => {
     const fake = new McpServer({ name: 'fake-odc', version: '0.0.1' });
     // A long read that reports progress every 100 ms for 800 ms: twice the relay wait, answered because each
@@ -32,7 +35,7 @@ async function harness(t, { relayTimeoutMs = 400, writeLock } = {}) {
       }
       return text({ ok: true, condition: args.condition });
     });
-    // A write and a read that never answer by themselves: they end when the relay cancels them.
+    // The read ends on relay cancellation; the write ends only on its owned work signal (explicit stop).
     const hang = name => async (args, ctx) => {
       await new Promise(resolve => { if (ctx.mcpReq.signal.aborted) resolve(); else ctx.mcpReq.signal.addEventListener('abort', resolve, { once: true }); });
       seen.aborted.push(name);
@@ -42,12 +45,21 @@ async function harness(t, { relayTimeoutMs = 400, writeLock } = {}) {
     fake.registerTool('studio_status', { description: 'Fake status.', inputSchema: z.object({ pid: z.number().int().optional() }).strict() }, hang('studio_status'));
     return fake;
   };
-  const server = await createSsamServer({ o11: false, odc: true, deps: { odcFacade, odcRoot: root, relayTimeoutMs, ...(writeLock ? { writeLock } : {}),
+  const server = await createSsamServer({ o11: false, odc: true, deps: { odcFacade, odcRoot: root, relayTimeoutMs, ...(callDeadlineMs != null ? { callDeadlineMs } : {}), ...(writeLock ? { writeLock } : {}),
     lock: { o11Root: root, odcRoot: root, connection: () => null }, answersRoot: root } });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'pacote-c-relay', version: '1' });
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
-  t.after(async () => { await client.close(); await server.close(); fs.rmSync(root, { recursive: true, force: true }); });
+  const original = clientSide.onmessage;
+  clientSide.onmessage = (message, extra) => { if (message.method === 'notifications/ssam/detached_tasks') seen.detached.push(message.params.running); return original?.(message, extra); };
+  t.after(async () => {
+    if (seen.liveTask) {
+      await client.callTool({ name: 'ssam_doctor', arguments: { task: { id: seen.liveTask, stop: true } } }).catch(() => {});
+      await client.callTool({ name: 'studio_deliver', arguments: { continueTask: seen.liveTask } }).catch(() => {});
+    }
+    await client.close(); await server.close(); fs.rmSync(root, { recursive: true, force: true });
+    if (detachedNotifications) { if (relayChild == null) delete process.env.SSAM_RELAY_CHILD; else process.env.SSAM_RELAY_CHILD = relayChild; }
+  });
   return { client, seen };
 }
 const valueOf = reply => reply.structuredContent ?? JSON.parse(reply.content[0].text);
@@ -76,20 +88,26 @@ test('the relay asks the lane with a 30 min wait that progress restarts, and for
   assert.deepEqual(progress, [1, 2, 3, 4, 5, 6, 7, 8], 'every notification of the lane reached the outer client');
 });
 
-test('a relay with no answer in time is TIMEOUT, uncertain for a write, with the status read next; never a task id', async t => {
-  const { client, seen } = await harness(t);
+test('a write remains running past relay timeout until explicit stop; a pure read still answers TIMEOUT', async t => {
+  const { client, seen } = await harness(t, { callDeadlineMs: 700, detachedNotifications: true });
   const reply = await client.callTool({ name: 'studio_deliver', arguments: { feature: 'F', pid: 77 } });
-  assert.equal(reply.isError, true);
-  // The delivery shaper (responses.mjs, lane E) keeps ok, code, outcome and the continuation of a refusal.
   const value = valueOf(reply);
-  assert.deepEqual([value.ok, value.code, value.outcome], [false, 'TIMEOUT', 'uncertain'], JSON.stringify(value));
-  assert.deepEqual(value.continuation.tool, 'studio_status'); assert.deepEqual(value.continuation.arguments, { pid: 77 });
+  seen.liveTask = value.task?.id;
+  assert.notEqual(reply.isError, true);
+  assert.equal(value.state, 'running');
+  assert.equal(value.continuation.tool, 'studio_deliver');
+  assert.equal(value.continuation.arguments.continueTask, value.task.id);
+  assert.equal(seen.detached.at(-1), 1, 'launcher still counts the actual live facade write');
+  assert.deepEqual(seen.aborted, [], 'relay timeout cannot stop the real write or finish its record');
+  const stopped = valueOf(await client.callTool({ name: 'ssam_doctor', arguments: { lane: 'odc', task: { id: value.task.id, stop: true } } }));
+  assert.equal(stopped.ok, true);
+  assert.equal(valueOf(await client.callTool({ name: 'studio_deliver', arguments: value.continuation.arguments })).ok, true);
+  assert.equal(seen.detached.at(-1), 0, 'the counter ends only after actual facade completion');
   const helper = relayFailure(Object.assign(new Error('Request timed out'), { code: 'REQUEST_TIMEOUT' }), { tool: 'studio_deliver', args: { feature: 'F' }, timeoutMs: RELAY_TIMEOUT_MS });
   assert.deepEqual([helper.code, helper.stage, helper.outcome, helper.tool], ['TIMEOUT', 'relay', 'uncertain', 'studio_deliver']);
   assert.match(helper.error, /within 30 min.*never repeated/);
-  assert.doesNotMatch(JSON.stringify(value), /OPERATION_FAILED|taskId/);
   await sleep(50);
-  assert.deepEqual(seen.aborted, ['studio_deliver'], 'the lane was told to stop waiting');
+  assert.deepEqual(seen.aborted, ['studio_deliver'], 'explicit stop reached the actual facade work signal');
   // A read that times out is not "uncertain": nothing was written.
   const read = valueOf(await client.callTool({ name: 'studio_status', arguments: {} }));
   assert.equal(read.code, 'TIMEOUT'); assert.equal(read.outcome, undefined);

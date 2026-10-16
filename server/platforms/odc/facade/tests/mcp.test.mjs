@@ -27,10 +27,11 @@ test('facade serves studio_* and odc_* tools on one stdio server', async () => {
     const names = tools.map(t => t.name);
     for (const expected of ['studio_doctor', 'studio_status', 'studio_build', 'studio_merge', 'studio_publish', 'studio_authorize', 'studio_refresh_references', 'odc_status', 'odc_search_operations', 'odc_read', 'hybrid_tenants', 'ssam_map',
       'odc_auth_status', 'odc_write', 'odc_receipt', 'odc_portal_read', 'odc_portal_write', 'odc_portal_login', 'odc_operation_status', 'odc_deploy', 'odc_configurations', 'odc_asset_delete', 'odc_external_db_connection']) assert.ok(names.includes(expected), expected);
-    // Every write tool takes the user's words and a UUID; reads take the tenant per call.
+    // Every write tool takes the user's words and a UUID; reads take the tenant per call. CX15: a destructive call without
+    // confirmationToken only previews, so the words and the UUID are optional in the schema and checked at the execution.
     for (const write of ['odc_write', 'odc_portal_write', 'odc_deploy', 'odc_asset_delete']) {
       const schema = tools.find(t => t.name === write).inputSchema;
-      assert.ok(schema.required.includes('authorize') && schema.required.includes('operationUuid'), write);
+      assert.ok(['authorize', 'operationUuid', 'confirmationToken', 'ownerRequest'].every(k => schema.properties[k] && !(schema.required ?? []).includes(k)), write);
     }
     assert.ok(tools.find(t => t.name === 'odc_read').inputSchema.properties.tenant);
     // Lane extlib: odc_external_library is served with the schema the routes are written against (contract section 5).
@@ -38,7 +39,7 @@ test('facade serves studio_* and odc_* tools on one stdio server', async () => {
     assert.ok(library, 'odc_external_library is listed');
     assert.deepEqual(library.inputSchema.required, ['action']);
     assert.deepEqual(library.inputSchema.properties.action.enum, ['build', 'deploy', 'status', 'discard']);
-    assert.deepEqual(Object.keys(library.inputSchema.properties).sort(), ['action', 'auth', 'authorizationContext', 'authorize', 'confirmTenant', 'expectedRevision', 'jobKey', 'library', 'operationUuid', 'originOperationUuid', 'pid',
+    assert.deepEqual(Object.keys(library.inputSchema.properties).sort(), ['action', 'auth', 'authorizationContext', 'authorize', 'confirmTenant', 'confirmationToken', 'expectedRevision', 'jobKey', 'library', 'operationUuid', 'originOperationUuid', 'ownerRequest', 'pid',
       'releaseNotes', 'releaseTag', 'spec', 'specFile', 'tenant'].sort());
     assert.deepEqual(library.inputSchema.properties.auth.enum, ['auto', 'studio', 'api-client']);
     assert.deepEqual(library.annotations, { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });

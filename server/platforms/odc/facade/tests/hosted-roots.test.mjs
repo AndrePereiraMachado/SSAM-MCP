@@ -58,6 +58,7 @@ const { workerDisabled } = await import('../anvil-worker.mjs');
 const { studioWriteTarget, withStudioWriteLock } = await import('../studio-write-lock.mjs');
 const { o11LaneOf } = await import('../o11-lane.mjs');
 const { readLocalSettings } = await import('../local-settings.mjs');
+const { previewFile } = await import('../destructive-operations.mjs');
 const { evidenceRoots } = await import('../ssam-evidence.mjs');
 const { kernelReading } = await import('../kernel-reading.mjs');
 const { locateStudioBridge } = await import('../service-center/bridge.mjs');
@@ -144,7 +145,9 @@ function assertO11Spawn(call, context) {
   assert.equal(env.ANVIL_CSHARP_RUNTIME_REGISTRATION, undefined);
   // The kernel talks to the customer's thin bridge (docs/O11-BRIDGE-FINA.md §4.4-4.5).
   assert.equal(env.ANVIL_BRIDGE_FLAVOR, 'thin'); assert.equal(env.ANVIL_BRIDGE_TIMEOUT_SECONDS, '600');
-  const foreign = Object.keys(env).filter(k => /^(ANVIL|SSAM|ODC)_/.test(k) && !['ANVIL_BRIDGE_PORT', 'ANVIL_AUTHORITY_DIR', 'ANVIL_STUDIO_DIR', 'ANVIL_LANE', 'ANVIL_ODC_STUDIO_DIR', 'ANVIL_ODC_FEATURES_DIR', 'ANVIL_BRIDGE_FLAVOR', 'ANVIL_BRIDGE_TIMEOUT_SECONDS'].includes(k));
+  // servidor/fase4-26: the CX14 probes off (A1) and kept html readings only for the job's own base capture (M2).
+  assert.equal(env.ANVIL_BRIDGE_PROBE_MS, '0'); assert.equal(env.ANVIL_KEPT_READINGS, 'own');
+  const foreign = Object.keys(env).filter(k => /^(ANVIL|SSAM|ODC)_/.test(k) && !['ANVIL_BRIDGE_PORT', 'ANVIL_AUTHORITY_DIR', 'ANVIL_STUDIO_DIR', 'ANVIL_LANE', 'ANVIL_ODC_STUDIO_DIR', 'ANVIL_ODC_FEATURES_DIR', 'ANVIL_BRIDGE_FLAVOR', 'ANVIL_BRIDGE_TIMEOUT_SECONDS', 'ANVIL_BRIDGE_PROBE_MS', 'ANVIL_KEPT_READINGS'].includes(k));
   assert.deepEqual(foreign, []);
 }
 function assertOdcSpawn(call, context) {
@@ -155,6 +158,7 @@ function assertOdcSpawn(call, context) {
   assert.equal(env.TEMP, path.join(context.workspace, 'odc', 'tmp'));
   assert.equal(env.ANVIL_BRIDGE_PORT, undefined); assert.equal(env.ANVIL_CSHARP_RUNTIME_REGISTRATION, undefined); assert.equal(env.SSAM_HYBRID_ODC_TENANT, undefined);
   assert.equal(env.ANVIL_BRIDGE_FLAVOR, undefined); assert.equal(env.ANVIL_BRIDGE_TIMEOUT_SECONDS, undefined);
+  assert.equal(env.ANVIL_BRIDGE_PROBE_MS, undefined); assert.equal(env.ANVIL_KEPT_READINGS, 'own');
 }
 
 test('studio(["status"]) lists the Studio processes through the executor, then sends the command down its pipe', async () => {
@@ -467,6 +471,8 @@ test('every data path of the facade lands in the workspace; code locations stay'
       'SC receipts': [journalDefault().root, path.join(ws, 'o11', 'service-center', 'receipts')],
       'SC state': [stateDir(), path.join(ws, 'state', 'service-center')],
       'evidence roots': [evidenceRoots().join('|'), ['odc', 'o11', 'inbox'].map(f => path.join(ws, f)).join('|')],
+      // servidor/fase4-26 (A2): the CX15 destructive store (previews, operations, backups, seen words) of the customer.
+      'destructive store': [path.dirname(path.dirname(previewFile(randomUUID()))), path.join(ws, 'state', 'destructive')],
     };
     for (const [name, [actual, wanted]] of Object.entries(expected)) assert.equal(actual, wanted, name);
     // 24th release: requestFile is async (locally it asks the loaded bridge for its root); hosted it is a file of ws:odc.
@@ -486,7 +492,8 @@ test('every data path of the facade lands in the workspace; code locations stay'
     });
     // ssam_task registered on its own reads the customer's tasks; the O11 reads journal in the customer's o11/reading.
     const tasks = collector(); registerSsamTask(tasks);
-    assert.deepEqual(await result(tasks.tools, 'ssam_task', {}), { ok: true, tasks: [] });
+    // marco-a6: ssam_task also lists the customer's CX15 destructive operations (none here).
+    assert.deepEqual(await result(tasks.tools, 'ssam_task', {}), { ok: true, tasks: [], destructive: [] });
     await assert.rejects(kernelReading({ root: anvilRoot }, ['--bogus']), /Unknown reading argument/);
     assert.ok(fs.existsSync(path.join(ws, 'o11', 'reading', 'operations.jsonl')));
     // Code locations never move.

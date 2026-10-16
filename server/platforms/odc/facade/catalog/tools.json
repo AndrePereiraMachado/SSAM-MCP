@@ -3766,12 +3766,12 @@
      "field": "request.operation",
      "value": "delete",
      "selector": "enum",
-     "when": "Delete records by identifier.",
+     "when": "Delete records by identifier, in two calls: the preview reads the records by id (the backup); the execution is the op with only its confirmationToken.",
      "preconditions": [
       "Service Studio open and connected on the O11 lane (ssam_connect {lane:\"o11\"}), signed in to the environment",
-      "the user's own authorization words, verbatim (never a paraphrase)"
+      "execution: request.confirmationToken + authorization = the owner's reply after the preview, verbatim, naming the entity with the number of records"
      ],
-     "next": "read to confirm",
+     "next": "{{destructive.twoCalls}} Then read to confirm.",
      "args": {
       "host": "<env-host>",
       "module": "<Module>",
@@ -3781,9 +3781,7 @@
        "entity": "<Entity>",
        "ids": [
         "<id>"
-       ],
-       "operationId": "<uuid>",
-       "authorization": "<user's words>"
+       ]
       }
      },
      "triggers": [
@@ -9976,13 +9974,13 @@
    "group": "service-center",
    "kind": "operations",
    "title": "Prepare or execute an O11 Service Center change",
-   "when": "O11 Service Center changes: delete applications/modules/extensions in one call; prepare or execute timers, site properties, solutions, DB connections, log level, module move, commit message, extension publish, apply settings.",
+   "when": "O11 Service Center changes: delete applications/modules/extensions (preview, confirmation); prepare or execute timers, site properties, solutions, DB connections, log level, module move, commit message, extension publish, apply settings.",
    "preconditions": [
     "Use the authenticated O11 Studio or a compatible stored profile. No login window. Check o11_service_center_session first",
-    "delete: one call with words naming every target and every consumer outside the set; other writes prepare by default and execute:true needs words + a UUID operationId; corporate/unregistered host: confirmHost + words naming the environment",
+    "delete (and solution-delete, db-connection-delete): {{destructive.twoCalls}} The words name every target (or the preview's prefix) and every consumer outside the set. Other writes prepare by default and execute:true needs words + a UUID operationId; corporate/unregistered host: confirmHost + words naming the environment.",
     "secrets travel only as vault entry names filled inside the connected Studio"
    ],
-   "next": "delete: one call, never prepare first; other writes: first call without execute (prepare/simulate), then the same call with execute:true, words and operationId; uncertain: action verify",
+   "next": "delete: the preview, the owner's confirmation of that list, then confirmationToken + words; other writes: first call without execute (prepare/simulate), then the same call with execute:true, words and operationId; uncertain: action verify",
    "args": {
     "action": "<action>",
     "host": "<env-host>"
@@ -10011,19 +10009,18 @@
      "field": "action",
      "value": "delete",
      "selector": "enum",
-     "when": "Delete applications, modules or extensions (a list or a name prefix) in one call: the server's simulation and the consumers are read first.",
+     "when": "Delete applications, modules or extensions (a list or a name prefix) in two calls: the preview reads the server's simulation and the consumers and lists every target with its count; the execution takes the confirmationToken.",
      "preconditions": [
       "Studio connected on the O11 lane and signed in on host (SSO included)",
-      "words = the user's own words naming every target (or its prefix) and every consumer outside the set; corporate/unregistered host: confirmHost + words naming the environment"
+      "execution: confirmationToken + words = the owner's reply after the preview, with the exact number of items, naming every target (or the preview's prefix) and every consumer outside the set; corporate/unregistered host: confirmHost + words naming the environment"
      ],
-     "next": "one call; answers deleted/absent or DELETE_REFUSED with problems[] and the fix; never prepare first",
+     "next": "{{destructive.twoCalls}} The execution answers deleted/uncertain/notStarted by name or DELETE_REFUSED with problems[] and the fix.",
      "args": {
       "action": "delete",
       "host": "<env-host>",
       "applications": [
        "<App>"
-      ],
-      "words": "<user's words naming App and every consumer>"
+      ]
      },
      "triggers": [
       [
@@ -10067,7 +10064,7 @@
        "remover várias apps de uma vez pelo prefixo"
       ],
       "en": [
-       "delete every ZZ test application in one call",
+       "delete every ZZ test application",
        "remove all modules with the ZZ prefix",
        "bulk delete the apps whose names start with ZZ"
       ]
@@ -10432,16 +10429,15 @@
      "field": "action",
      "value": "solution-delete",
      "selector": "enum",
-     "when": "Delete an exact Service Center solution and verify its absence by name and ID.",
+     "when": "Delete an exact Service Center solution in two calls (preview, then confirmationToken); its absence is read back by name and ID.",
      "preconditions": [
-      "Prepare first; execute:true requires words, operationId and authorization naming the solution or an exact verified authorizationContext. Corporate hosts require confirmHost and explicit tenant authorization."
+      "execution: confirmationToken + words = the owner's reply after the preview, with the count, naming the solution (an exact verified authorizationContext, whose proposal is the preview file, covers the name, never the count); no execute or operationId (the token carries the preview's); corporate/unregistered host: confirmHost + words naming the environment"
      ],
-     "next": "prepare with execute:false; execute once with recorded authorization; inspect receipt and solutions list without replay",
+     "next": "{{destructive.twoCalls}} Then the receipt and the solutions list, never a replay.",
      "args": {
       "action": "solution-delete",
       "host": "<env-host>",
-      "solution": "<Solution>",
-      "execute": false
+      "solution": "<Solution>"
      },
      "triggers": [
       [
@@ -10703,16 +10699,15 @@
      "field": "action",
      "value": "db-connection-delete",
      "selector": "enum",
-     "when": "Delete a database connection (words name it and the extensions using it).",
+     "when": "Delete a database connection in two calls (preview, then confirmationToken): the words name it and the extensions using it.",
      "preconditions": [
-      "prepares/simulates by default; execute:true needs words + a UUID operationId; corporate/unregistered host: confirmHost + words naming the environment; destructive actions: words naming the target"
+      "execution: confirmationToken + words = the owner's reply after the preview, with the count, naming the connection and the extensions using it (an exact verified authorizationContext covers the names, never the count); no execute or operationId (the token carries the preview's); corporate/unregistered host: confirmHost + words naming the environment"
      ],
-     "next": "prepare first (execute:false); then the same call with execute:true, words:\"<user's own words>\", operationId:\"<new UUID>\"; db-connections read",
+     "next": "{{destructive.twoCalls}} Then the db-connections read confirms it.",
      "args": {
       "action": "db-connection-delete",
       "host": "<env-host>",
-      "connection": "<Name>",
-      "execute": false
+      "connection": "<Name>"
      },
      "triggers": [
       [
@@ -10868,16 +10863,15 @@
      "value": "module-delete",
      "selector": "enum",
      "effect": "write",
-     "when": "Delete a module from the environment in one call (the delete of action delete): its consumers are read first.",
+     "when": "Delete a module from the environment in two calls (preview, then confirmationToken) (the delete of action delete): its consumers are read first.",
      "preconditions": [
-      "words = the user's own words naming the module and every consumer outside it; corporate/unregistered host: confirmHost + words naming the environment"
+      "execution: confirmationToken + words = the owner's reply after the preview, with the count, naming the module and every consumer outside it; corporate/unregistered host: confirmHost + words naming the environment"
      ],
-     "next": "one call; answers deleted/absent or DELETE_REFUSED with problems[] and the fix; never prepare first",
+     "next": "{{destructive.twoCalls}} The execution answers deleted/uncertain/notStarted by name or DELETE_REFUSED with problems[] and the fix.",
      "args": {
       "action": "module-delete",
       "host": "<env-host>",
-      "module": "<Module>",
-      "words": "<user's words naming Module and every consumer>"
+      "module": "<Module>"
      },
      "triggers": [
       [
@@ -10913,16 +10907,15 @@
      "value": "extension-delete",
      "selector": "enum",
      "effect": "write",
-     "when": "Delete an extension in one call (the delete of action delete): its consumers are read first.",
+     "when": "Delete an extension in two calls (preview, then confirmationToken) (the delete of action delete): its consumers are read first.",
      "preconditions": [
-      "words = the user's own words naming the extension and every consumer; corporate/unregistered host: confirmHost + words naming the environment"
+      "execution: confirmationToken + words = the owner's reply after the preview, with the count, naming the extension and every consumer; corporate/unregistered host: confirmHost + words naming the environment"
      ],
-     "next": "one call; answers deleted/absent or DELETE_REFUSED with problems[] and the fix; never prepare first",
+     "next": "{{destructive.twoCalls}} The execution answers deleted/uncertain/notStarted by name or DELETE_REFUSED with problems[] and the fix.",
      "args": {
       "action": "extension-delete",
       "host": "<env-host>",
-      "extension": "<Extension>",
-      "words": "<user's words naming Extension and every consumer>"
+      "extension": "<Extension>"
      },
      "triggers": [
       [
@@ -11097,16 +11090,15 @@
      "value": "application-delete",
      "selector": "enum",
      "effect": "write",
-     "when": "Delete an application in one call (the delete of action delete): the server's simulation and the affected applications are read first.",
+     "when": "Delete an application in two calls (preview, then confirmationToken) (the delete of action delete): the server's simulation and the affected applications are read first.",
      "preconditions": [
-      "words = the user's own words naming the application and every affected application; corporate/unregistered host: confirmHost + words naming the environment"
+      "execution: confirmationToken + words = the owner's reply after the preview, with the count, naming the application and every affected application; corporate/unregistered host: confirmHost + words naming the environment"
      ],
-     "next": "one call; answers deleted/absent or DELETE_REFUSED with problems[] and the fix; never prepare first",
+     "next": "{{destructive.twoCalls}} The execution answers deleted/uncertain/notStarted by name or DELETE_REFUSED with problems[] and the fix.",
      "args": {
       "action": "application-delete",
       "host": "<env-host>",
-      "application": "<App>",
-      "words": "<user's words naming App and every affected application>"
+      "application": "<App>"
      },
      "triggers": [
       [
@@ -14141,7 +14133,7 @@
       "Service Studio open and connected on the O11 lane (ssam_connect {lane:\"o11\"}), signed in to the environment",
       "the user's own authorization words, verbatim (never a paraphrase)"
      ],
-     "next": "o11_publish if not published by the refresh; published -> publication {version, at, operationId} is a Service Center module version (o11_service_center_read versions), not an o11_studio publish-log tab",
+     "next": "With the module open in Studio, refresh and publish -> o11_publish {refreshReferences:true}; otherwise o11_publish if not published; published -> o11_service_center_read versions (not the Studio publish-log tab)",
      "args": {
       "action": "refresh-refs",
       "module": "<Module>",
@@ -14175,13 +14167,11 @@
      "intents": {
       "pt": [
        "atualizar as referências do módulo",
-       "refresh das dependências desatualizadas",
-       "atualizar referências e publicar"
+       "refresh das dependências desatualizadas"
       ],
       "en": [
        "refresh the module references",
-       "update outdated dependencies",
-       "refresh references and publish"
+       "update outdated dependencies"
       ]
      },
      "equivalent": {
@@ -14238,17 +14228,16 @@
      "value": "delete-app",
      "selector": "enum",
      "effect": "write",
-     "when": "Delete an application in one call (the Service Center delete): the server's simulation and the consumers first; the words name the app and every consumer.",
+     "when": "Delete an application in two calls (the Service Center delete): the preview reads the server's simulation and the consumers; the execution takes the confirmationToken and the words naming the app and every consumer.",
      "preconditions": [
       "Service Studio open and connected on the O11 lane (ssam_connect {lane:\"o11\"}), signed in to the environment",
-      "authorize = the user's own words naming the app and every application or module it would break; DELETE_REFUSED lists every problem before any change"
+      "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the app and every application or module it would break; DELETE_REFUSED lists every problem before any change"
      ],
-     "next": "none: deleted/absent, or DELETE_REFUSED with problems[] and the fix (the same call again)",
+     "next": "{{destructive.twoCalls}} Then deleted/absent, or DELETE_REFUSED with problems[] and the fix.",
      "args": {
       "action": "delete-app",
       "app": "<App>",
-      "host": "<env-host>",
-      "authorize": "<user's words naming the app and every consumer>"
+      "host": "<env-host>"
      },
      "triggers": [
       [
@@ -14289,7 +14278,7 @@
    "when": "Read, create or change (publish) and delete an O11 .NET extension (XIF) headless: built here from a spec and published through the Studio's session.",
    "preconditions": [
     "Service Studio connected on the O11 lane and signed in on host (SSO included); the installed Integration Studio's engine, never its login",
-    "publish/delete: words = the user's own words naming the extension; a delete or a contract break also names every consumer"
+    "publish: words = the user's own words naming the extension; a contract break also names every consumer; delete: {{destructive.twoCalls}}"
    ],
    "next": "read first to get the current spec; publish answers created/updated/already-running with the reference job as continuation",
    "args": {
@@ -14419,16 +14408,15 @@
      "field": "action",
      "value": "delete",
      "selector": "enum",
-     "when": "Delete a .NET extension (the Service Center delete): its consumers are read first.",
+     "when": "Delete a .NET extension (the Service Center delete) in two calls: the preview reads its consumers; the execution takes the confirmationToken.",
      "preconditions": [
-      "words = the user's own words naming the extension and every consumer"
+      "execution: confirmationToken + words = the owner's reply after the preview, with the count, naming the extension and every consumer"
      ],
-     "next": "none: deleted/absent, or DELETE_REFUSED with problems[] and the fix",
+     "next": "{{destructive.twoCalls}} Then deleted/absent, or DELETE_REFUSED with problems[] and the fix.",
      "args": {
       "action": "delete",
       "host": "<env-host>",
-      "extension": "<Extension>",
-      "words": "<user's words naming the extension and every consumer>"
+      "extension": "<Extension>"
      },
      "triggers": [
       [
@@ -14540,6 +14528,67 @@
        "tool": "studio_publish"
       }
      }
+    },
+    "refresh-publish": {
+     "field": "refreshReferences",
+     "value": "true",
+     "selector": "presence",
+     "when": "Refresh every reference in the open Studio tab, then publish in one operation.",
+     "next": "uncertain -> o11_studio status (never repeat)",
+     "args": {
+      "module": "<Module>",
+      "refreshReferences": true,
+      "authorize": "<user's words>"
+     },
+     "triggers": [
+      [
+       "@atualizar",
+       "@referencia",
+       "@publicar"
+      ],
+      [
+       "@atualizar",
+       "@dependencia",
+       "@publicar"
+      ]
+     ],
+     "without": [
+      "@oml",
+      "@acao_logica",
+      "@elemento",
+      "@importar",
+      "@registro",
+      "@dados",
+      "@versao",
+      "@revisao",
+      "@consumidor",
+      "@consultar",
+      "@existir",
+      "@evento",
+      "@wrapper",
+      "@incerto"
+     ],
+     "slots": {
+      "module": [
+       "@modulo"
+      ]
+     },
+     "intents": {
+      "pt": [
+       "refresh de todas as dependências e publique",
+       "atualize todas as referências do módulo InsuranceApp e publique",
+       "atualizar referências e publicar"
+      ],
+      "en": [
+       "refresh all dependencies and publish",
+       "refresh references and publish"
+      ]
+     },
+     "covers": [
+      "o11_environment.refresh-refs",
+      "o11_publish.publish",
+      "o11_studio.refresh-references"
+     ]
     },
     "consumers": {
      "field": "consumers",
@@ -16972,20 +17021,19 @@
    "group": "dados",
    "kind": "data",
    "title": "Delete records of an entity (development database)",
-   "when": "Delete records by identifier in the ODC development database.",
+   "when": "Delete records by identifier in the ODC development database, in two calls: the preview reads the records (the backup); the execution takes the confirmationToken.",
    "preconditions": [
     "ODC Studio open with the bridge attached (ssam_connect {lane:\"odc\"})",
     "the module is open in ODC Studio (studio_open)",
-    "the user's own authorization words, verbatim (never a paraphrase)"
+    "execution: confirmationToken + authorize = the owner's reply after the preview, verbatim, naming the entity with the number of records"
    ],
-   "next": "studio_data to confirm",
+   "next": "{{destructive.twoCalls}}",
    "args": {
     "module": "<Module>",
     "entity": "<Entity>",
     "ids": [
      "<id>"
-    ],
-    "authorize": "<user's words>"
+    ]
    },
    "triggers": [
     [
@@ -18361,7 +18409,7 @@
    "group": "sessao",
    "kind": "operations",
    "title": "Any other bridge command",
-   "when": "Passthrough for bridge commands without a dedicated tool (module-info, publish-status, publish-log, stop).",
+   "when": "Passthrough for bridge commands without a dedicated tool (module-info, publish-status, publish-log, stop); never data-delete, portal-call, portal-private-call or portal-api-client-fixture-cleanup (DESTRUCTIVE_NEEDS_DEDICATED_TOOL).",
    "preconditions": [
     "ODC Studio open with the bridge attached (ssam_connect {lane:\"odc\"})"
    ],
@@ -20147,7 +20195,7 @@
    "when": "Any catalogued public ODC mutation: publish, build, code analysis, configurations, assets, users/groups/roles, domains, IP filters, private gateway, native builds, external libraries.",
    "preconditions": [
     "tenant per call; auth order: ODC Studio session, then vault credential, then a private Windows prompt (never in chat); odc_auth_status shows the path",
-    "authorize = the user's own words + a NEW operationUuid; corporate tenant: confirmTenant + words naming the tenant; destructive: words naming the target"
+    "authorize = the user's own words + a NEW operationUuid; corporate tenant: confirmTenant + words naming the tenant; destructive (a DELETE, or a PATCH whose *ToRemove list is not empty: userKeysToRemove of /groups/{key}/users, applicationRoleKeysToRemove of /groups/{key}/application-roles): {{destructive.twoCalls.odc}} The words name the target (for a *ToRemove list: the group and every key that leaves)."
    ],
    "next": "odc_operation_status for started operations; uncertain -> odc_receipt (never resend)",
    "args": {
@@ -24755,7 +24803,7 @@
    "when": "Write through an allow-listed internal Portal route: connections relational/MCP test, save, import entities; agents datasets, evaluations, runs, guardrails.",
    "preconditions": [
     "tenant per call; auth order: ODC Studio session, then vault credential, then a private Windows prompt (never in chat); odc_auth_status shows the path",
-    "authorize = the user's own words + a NEW operationUuid; corporate tenant: confirmTenant + words naming the tenant; destructive: words naming the target",
+    "authorize = the user's own words + a NEW operationUuid; corporate tenant: confirmTenant + words naming the tenant; destructive (a destructive route): {{destructive.twoCalls.odc}} The words name the target.",
     "unmapped routes (connection delete, timer run/pause/resume) answer PORTAL_ROUTE_UNMAPPED -> odc_portal_routes"
    ],
    "next": "odc_portal_read to confirm; uncertain -> odc_receipt",
@@ -24792,14 +24840,12 @@
      "when": "Execute the guarded connections.delete operation through its authorized Portal workflow.",
      "preconditions": [
       "Use the dedicated timer or external-database tool to resolve the exact target and inspect its plan first.",
-      "Requires the user's literal authorization, a new operationUuid and corporate confirmTenant. Never repeat an uncertain write."
+      "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the connection (operationUuid = the preview's operationId); corporate confirmTenant. Never repeat an uncertain write."
      ],
-     "next": "Read the existing receipt and target state; never replay an uncertain write.",
+     "next": "Read the existing receipt and target state; never replay an uncertain write. Destructive: {{destructive.twoCalls.odc}}",
      "args": {
       "operationId": "connections.delete",
       "tenant": "<tenant host>",
-      "authorize": "<user's words>",
-      "operationUuid": "<new uuid>",
       "confirmTenant": "<tenant host>",
       "input": {
        "inputParameters": {
@@ -25420,6 +25466,11 @@
      "value": "agents.evaluationDelete",
      "selector": "documented",
      "when": "Delete an owned confirmed evaluation after exact current evaluation/dataset and native idle-state checks. Requires authorizationContext with originOperationUuid, evaluationId, portfolioKey, inputSha256 and expectedEvaluationSha256. Confirm absence by current detail; never replay an uncertain delete.",
+     "preconditions": [
+      "authorizationContext with originOperationUuid, evaluationId, portfolioKey, inputSha256 and expectedEvaluationSha256",
+      "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the evaluation (operationUuid = the preview's operationId); corporate tenant: confirmTenant + words naming the tenant"
+     ],
+     "next": "Confirm absence by current detail; never replay an uncertain delete. Destructive: {{destructive.twoCalls.odc}}",
      "args": {
       "tenant": "<tenant>",
       "operationId": "agents.evaluationDelete",
@@ -25428,9 +25479,7 @@
         "EvaluationId": "<owned evaluation UUID>"
        }
       },
-      "authorizationContext": "<private approved context JSON>",
-      "authorize": "<user words>",
-      "operationUuid": "<new UUID>"
+      "authorizationContext": "<private approved context JSON>"
      },
      "triggers": [
       [
@@ -25807,12 +25856,14 @@
      "value": "knowledgeBases.delete",
      "selector": "documented",
      "when": "knowledgeBases.delete: use its typed Portal capability contract for inputs.",
+     "preconditions": [
+      "authorizationContext binding originOperationUuid, knowledgeBaseId and expectedKnowledgeBaseSha256",
+      "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the knowledge base (operationUuid = the preview's operationId); corporate tenant: confirmTenant + words naming the tenant"
+     ],
      "args": {
       "operationId": "knowledgeBases.delete",
       "tenant": "<tenant host>",
-      "input": {},
-      "authorize": "<user authorization words>",
-      "operationUuid": "<new operation UUID>"
+      "input": {}
      },
      "triggers": [
       [
@@ -25821,7 +25872,7 @@
        "base"
       ]
      ],
-     "next": "odc_portal_capabilities describes the bounded native contract; provide its reviewed inputs.",
+     "next": "odc_portal_capabilities describes the bounded native contract; provide its reviewed inputs. Destructive: {{destructive.twoCalls.odc}}",
      "intents": {
       "en": [
        "delete knowledge base"
@@ -25913,12 +25964,14 @@
      "value": "agents.datasetDelete",
      "selector": "documented",
      "when": "agents.datasetDelete: use its typed Portal capability contract for inputs.",
+     "preconditions": [
+      "odc_portal_capabilities: the bounded native contract of its inputs and approval",
+      "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the dataset (operationUuid = the preview's operationId); corporate tenant: confirmTenant + words naming the tenant"
+     ],
      "args": {
       "operationId": "agents.datasetDelete",
       "tenant": "<tenant host>",
-      "input": {},
-      "authorize": "<user authorization words>",
-      "operationUuid": "<new operation UUID>"
+      "input": {}
      },
      "triggers": [
       [
@@ -25927,7 +25980,7 @@
        "dataset"
       ]
      ],
-     "next": "odc_portal_capabilities describes the bounded native contract; provide its reviewed inputs.",
+     "next": "odc_portal_capabilities describes the bounded native contract; provide its reviewed inputs. Destructive: {{destructive.twoCalls.odc}}",
      "intents": {
       "en": [
        "delete agent dataset"
@@ -25983,9 +26036,10 @@
      "selector": "documented",
      "when": "delete own trial AI model.",
      "preconditions": [
-      "Exact contextual approval, original human grant and corporate confirmTenant. Creation requires a complete empty portfolio inventory and unconfigured live trial. Deletion requires own creation receipt and unchanged header with detail-confirmed portfolio."
+      "Exact contextual approval, original human grant and corporate confirmTenant. Creation requires a complete empty portfolio inventory and unconfigured live trial. Deletion requires own creation receipt and unchanged header with detail-confirmed portfolio.",
+      "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the model (operationUuid = the preview's operationId)"
      ],
-     "next": "Read receipt and inventory; same UUID only reconciles and never sends again.",
+     "next": "Read receipt and inventory; same UUID only reconciles and never sends again. Destructive: {{destructive.twoCalls.odc}}",
      "args": {
       "tenant": "<tenant host>",
       "operationId": "aiModels.trialDelete",
@@ -25994,8 +26048,6 @@
         "AIModelId": "<own model id>"
        }
       },
-      "authorize": "<user's words>",
-      "operationUuid": "<new uuid>",
       "confirmTenant": "<tenant host>",
       "authorizationContext": "<absolute approval path>"
      },
@@ -26059,6 +26111,10 @@
      "value": "apiClients.delete",
      "selector": "documented",
      "when": "Delete an own API Client fixture by its exact key, with the words naming it.",
+     "preconditions": [
+      "odc_portal_capabilities: the bounded native contract of its inputs and approval",
+      "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the API Client (operationUuid = the preview's operationId); corporate tenant: confirmTenant + words naming the tenant An own fixture: authorizationContext is a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to the preview exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root), bound to the creation receipt of this target; the creation's words and message are not needed."
+     ],
      "triggers": [
       [
        "excluir",
@@ -26071,13 +26127,11 @@
        "client"
       ]
      ],
-     "next": "odc_portal_capabilities describes the bounded native contract; provide its reviewed inputs. An uncertain write is reconciled by reads only (odc_receipt), never sent again.",
+     "next": "odc_portal_capabilities describes the bounded native contract; provide its reviewed inputs. An uncertain write is reconciled by reads only (odc_receipt), never sent again. Destructive: {{destructive.twoCalls.odc}}",
      "args": {
       "operationId": "apiClients.delete",
       "tenant": "<tenant host>",
-      "input": {},
-      "authorize": "<user authorization words>",
-      "operationUuid": "<new operation UUID>"
+      "input": {}
      },
      "intents": {
       "pt": [
@@ -26962,7 +27016,7 @@
    "when": "Deploy, undeploy or apply configs of an ODC asset revision to a stage, then follow it to the end.",
    "preconditions": [
     "tenant per call; auth order: ODC Studio session, then vault credential, then a private Windows prompt (never in chat); odc_auth_status shows the path",
-    "authorize = the user's own words + a NEW operationUuid; corporate tenant: confirmTenant + words naming the tenant; destructive: words naming the target",
+    "authorize = the user's own words + a NEW operationUuid; corporate tenant: confirmTenant + words naming the tenant; destructive (Undeploy): {{destructive.twoCalls.odc}} The words name the target.",
     "assetKey from studio_assets/odc_read; environmentKey from the stages listing"
    ],
    "next": "ssam_app_url; uncertain -> odc_receipt",
@@ -27063,17 +27117,15 @@
      "field": "operation",
      "value": "Undeploy",
      "selector": "enum",
-     "when": "Undeploy an app from a stage (destructive: words name the app).",
+     "when": "Undeploy an app from a stage (destructive, in two calls: the preview, then confirmationToken and words naming the app).",
      "preconditions": [
-      "authorize = the user's own words + a NEW operationUuid; corporate tenant: confirmTenant + words naming the tenant; destructive: words naming the target"
+      "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the app (operationUuid = the preview's operationId); corporate tenant: confirmTenant + words naming the tenant"
      ],
-     "next": "odc_read deployments",
+     "next": "{{destructive.twoCalls.odc}} Then odc_read deployments.",
      "args": {
       "assetKey": "<assetKey>",
       "environmentKey": "<stageKey>",
-      "operation": "Undeploy",
-      "authorize": "<user's words naming the app>",
-      "operationUuid": "<new uuid>"
+      "operation": "Undeploy"
      },
      "triggers": [
       [
@@ -27396,17 +27448,15 @@
    "group": "publicacao",
    "kind": "portal",
    "title": "Delete an app or library",
-   "when": "Delete an ODC app or library (name read first; words must name it; a read confirms it is gone).",
+   "when": "Delete an ODC app or library in two calls (the preview reads its identity, consumers and backup plan; the execution takes the confirmationToken; words must name it; a read confirms it is gone).",
    "preconditions": [
     "tenant per call; auth order: ODC Studio session, then vault credential, then a private Windows prompt (never in chat); odc_auth_status shows the path",
-    "authorize = the user's own words + a NEW operationUuid; corporate tenant: confirmTenant + words naming the tenant",
-    "the words name the asset and every consumer: consumers are read first and a delete that would break one not named is refused (CONSUMERS_WOULD_BREAK)"
+    "execution: confirmationToken + authorize = the owner's reply after the preview, with the count (operationUuid = the preview's operationId); corporate tenant: confirmTenant + words naming the tenant",
+    "the words name the asset and every consumer: consumers are read first and a delete that would break one not named is refused (CONSUMERS_WOULD_BREAK) An own fixture: authorizationContext is a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to the preview exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root), bound to the creation receipt of this target; the creation's words and message are not needed."
    ],
-   "next": "studio_assets to confirm",
+   "next": "{{destructive.twoCalls.odc}} Then studio_assets to confirm.",
    "args": {
-    "assetKey": "<assetKey>",
-    "authorize": "<user's words naming the asset and every consumer>",
-    "operationUuid": "<new uuid>"
+    "assetKey": "<assetKey>"
    },
    "triggers": [
     [
@@ -27456,10 +27506,10 @@
    "group": "publicacao",
    "kind": "portal",
    "title": "ODC External Library: generate, build, upload, publish and tag",
-   "when": "An ODC External Library in one call (deploy: generate, build, upload, publish, tag), or build, status and discard; references go through the existing reference job.",
+   "when": "An ODC External Library: deploy in one call (generate, build, upload, publish, tag); build; status; discard in two calls (preview, then confirmationToken); references go through the existing reference job.",
    "preconditions": [
     "tenant per call; auth order: ODC Studio session, then vault credential, then a private Windows prompt (never in chat); the .NET 10 SDK and NuGet for the build",
-    "deploy/discard: authorize = the user's own words naming the library + a NEW operationUuid; a contract break also names every consumer"
+    "deploy: authorize = the user's own words naming the library + a NEW operationUuid; a contract break also names every consumer; discard: {{destructive.twoCalls.odc}}"
    ],
    "next": "deploy answers the library, revision, tag and the consumers to refresh; uncertain: the same call with the same operationUuid",
    "args": {
@@ -27619,18 +27669,16 @@
      "field": "action",
      "value": "discard",
      "selector": "enum",
-     "when": "Discard a pending generation job of the library (destructive).",
+     "when": "Discard a pending generation job of the library (destructive, in two calls: the preview, then confirmationToken).",
      "preconditions": [
-      "authorize = the user's own words naming the library + a NEW operationUuid"
+      "execution: confirmationToken + authorize = the owner's reply after the preview naming the library, with the count An own fixture: authorizationContext is a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to the preview exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root), bound to the creation receipt of this target; the creation's words and message are not needed."
      ],
-     "next": "odc_external_library {action:\"status\"}",
+     "next": "{{destructive.twoCalls.odc}} Then odc_external_library {action:\"status\"}.",
      "args": {
       "action": "discard",
       "library": "<Library>",
       "jobKey": "<jobKey>",
-      "tenant": "<tenant host>",
-      "authorize": "<user's words naming the library>",
-      "operationUuid": "<new uuid>"
+      "tenant": "<tenant host>"
      },
      "triggers": [
       [
@@ -27667,10 +27715,10 @@
    "group": "dados",
    "kind": "portal",
    "title": "External database connections (Portal)",
-   "when": "ODC Portal external database connections: providers, list, entities, test, create, import entities (delete unmapped).",
+   "when": "ODC Portal external database connections: providers, list, entities, test, create, import entities; delete and remove-entities in two calls.",
    "preconditions": [
     "tenant per call; auth order: ODC Studio session, then vault credential, then a private Windows prompt (never in chat); odc_auth_status shows the path",
-    "writes: authorize = the user's own words + a NEW operationUuid; corporate tenant: confirmTenant + words naming the tenant; destructive: words naming the target",
+    "writes: authorize = the user's own words + a NEW operationUuid; corporate tenant: confirmTenant + words naming the tenant; delete/remove-entities: {{destructive.twoCalls.odc}}",
     "database account only in vault entry SSAM/ODC3/<tenant>/DB/<credential> (private prompt when missing); test/create need the ODC Studio session"
    ],
    "next": "import-entities, then the model change that uses the external entities (ssam_discover)",
@@ -28069,14 +28117,18 @@
      "field": "action",
      "value": "delete",
      "selector": "enum",
-     "when": "No captured route yet: refused as PORTAL_ROUTE_UNMAPPED with the capture step.",
+     "when": "Delete the approved temporary SQL connection of its own test receipt, in two calls (preview, then confirmationToken); a read confirms its absence.",
      "preconditions": [
-      "refused today; the user deletes it in the Portal"
+      "only the temporary SQL Server connection of its own successful test receipt (originOperationUuid), unchanged endpoint/stage, no imported objects/actions, with its verified authorizationContext",
+      "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the connection (operationUuid = the preview's operationId); corporate tenant: confirmTenant + words naming the tenant"
      ],
-     "next": "odc_portal_routes {module:\"connections\", view:\"Connections.connection\", match:\"Delete\"}",
+     "next": "{{destructive.twoCalls.odc}} Then list confirms it.",
      "args": {
       "action": "delete",
-      "connectionId": "<id>"
+      "connectionId": "<id>",
+      "providerId": "<providerId>",
+      "originOperationUuid": "<test receipt UUID>",
+      "authorizationContext": "<absolute approval path>"
      },
      "triggers": [
       [
@@ -28186,9 +28238,20 @@
      "field": "action",
      "value": "remove-entities",
      "selector": "enum",
-     "when": "remove imported entity metadata",
+     "when": "remove imported entity metadata (destructive, in two calls: the preview, then confirmationToken)",
+     "preconditions": [
+      "the owned temporary SQL connection: its original connection receipt (originOperationUuid) and contextual approval (authorizationContext); objects = the entities to unselect",
+      "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the entities (operationUuid = the preview's operationId); corporate tenant: confirmTenant + words naming the tenant"
+     ],
+     "next": "{{destructive.twoCalls.odc}} Then entities confirms it.",
      "args": {
-      "action": "remove-entities"
+      "action": "remove-entities",
+      "connectionId": "<id>",
+      "objects": [
+       "<entity>"
+      ],
+      "originOperationUuid": "<connection receipt UUID>",
+      "authorizationContext": "<absolute approval path>"
      },
      "triggers": [
       [
@@ -29391,16 +29454,14 @@
    "group": "portal",
    "kind": "portal",
    "title": "Delete an owned unused A2A connection",
-   "when": "Delete an owned unused A2A connection. Use the typed MCP contract and returned continuation.",
+   "when": "Delete an owned unused A2A connection in two calls (preview, then confirmationToken). Use the typed MCP contract and returned continuation.",
    "preconditions": [
-    "Use the explicit tenant and authorized private profile; no browser or credential prompt. Writes require the user authorization and durable operation UUID."
+    "Use the explicit tenant and authorized private profile; no browser or credential prompt. execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the connection (operationUuid = the preview's operationId). An own fixture: authorizationContext is a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to the preview exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root), bound to the creation receipt of this target; the creation's words and message are not needed."
    ],
-   "next": "Follow the returned continuation; reconcile uncertain writes before another operation.",
+   "next": "{{destructive.twoCalls.odc}} Follow the returned continuation; reconcile uncertain writes before another operation.",
    "args": {
     "connectionId": "<connectionId>",
-    "originOperationUuid": "<originOperationUuid>",
-    "authorize": "<authorize>",
-    "operationUuid": "<operationUuid>"
+    "originOperationUuid": "<originOperationUuid>"
    },
    "triggers": [
     [

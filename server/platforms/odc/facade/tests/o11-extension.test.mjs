@@ -1,3 +1,5 @@
+// CX15: delete-app reaches the destructive module (previews, records, seen words under the profile): a temporary profile.
+import './fixtures/isolated-profile.mjs';
 // o11_extension against a fake bridge (the Studio side of sc_api), a fake kernel (anvil xif) and a fake Service Center engine
 // (runServiceCenter, contract I1). No Studio, no dotnet, no environment; every folder is temporary.
 import test from 'node:test';
@@ -268,9 +270,10 @@ test('a standing grant covers an additive edit without words, never a breaking o
   h.s.contractDiff = BREAKING; h.s.consumers = () => [];
   const breaking = await h.run({ action: 'publish', host: HOST, spec: SPEC });
   assert.equal(breaking.code, 'WORDS_REQUIRED'); assert.match(breaking.error, /never covers/);
-  const deleted = await h.run({ action: 'delete', host: HOST, extension: NAME });
-  assert.equal(deleted.code, 'WORDS_REQUIRED');
-  assert.equal(h.scCalls.length, 1, 'only the additive publication was sent');
+  // CX15: a delete without words is a preview (its words come after the list); the grant never adds words to it.
+  await h.run({ action: 'delete', host: HOST, extension: NAME });
+  assert.deepEqual(h.scCalls.at(-1), ['delete', '--host=' + HOST, '--target=extension:' + NAME]);
+  assert.equal(h.scCalls.length, 2, 'the additive publication and one delete preview (nothing to send)');
 });
 
 test('delete goes to the delete engine of the Service Center once, with the target and the words', async t => {
@@ -300,11 +303,13 @@ test('proposal context preserves broad human words for a new standalone fixture 
   record.scope[0].targets=[NAME];record.constraints.createOnly=false;save();assert.equal((await h.run(input)).code,'AUTHORIZATION_CONTEXT_INVALID');
   record.constraints.createOnly=true;save();
   assert.equal((await harness(t,{extensions:[CURRENT]}).run(input)).code,'AUTHORIZATION_CONTEXT_INVALID');
-  const removed=await h.run({action:'delete',host:HOST,extension:NAME,words,authorizationContext:file});
+  // CX15: the approval goes with the execution (the token of a preview); the engine also binds it to that preview.
+  const token='00000000-0000-4000-8000-000000000001.0123456789abcdef';
+  const removed=await h.run({action:'delete',host:HOST,extension:NAME,confirmationToken:token,words,authorizationContext:file});
   assert.equal(removed.ok,true);assert.equal(flag(h.scCalls.at(-1),'authorization-context'),file);
   assert.equal(flag(h.scCalls.at(-1),'words'),words);
   record.scope[1].operation='extension-publish';save();
-  assert.equal((await h.run({action:'delete',host:HOST,extension:NAME,words,authorizationContext:file})).code,'AUTHORIZATION_CONTEXT_INVALID');
+  assert.equal((await h.run({action:'delete',host:HOST,extension:NAME,confirmationToken:token,words,authorizationContext:file})).code,'AUTHORIZATION_CONTEXT_INVALID');
   assert.equal(h.scCalls.length,2,'one publication and one deletion; no invalid request sent');
 });
 
@@ -393,8 +398,8 @@ test('the tool is listed with the schema of the contract and destructive annotat
   t.after(async () => { await client.close(); await server.close(); });
   const tool = (await client.listTools()).tools.find(x => x.name === 'o11_extension');
   assert.ok(tool);
-  assert.deepEqual(Object.keys(tool.inputSchema.properties).sort(), ['action', 'application', 'applicationKey', 'authorizationContext', 'commitMessage', 'confirmHost', 'consumers',
-    'expectedVersionId', 'extension', 'host', 'operationId', 'referencesFrom', 'spec', 'specFile', 'words']);
+  assert.deepEqual(Object.keys(tool.inputSchema.properties).sort(), ['action', 'application', 'applicationKey', 'authorizationContext', 'commitMessage', 'confirmHost', 'confirmationToken', 'consumers',
+    'expectedVersionId', 'extension', 'host', 'operationId', 'ownerRequest', 'referencesFrom', 'spec', 'specFile', 'words']);
   assert.deepEqual(tool.inputSchema.required.sort(), ['action', 'host']);
   assert.deepEqual(tool.inputSchema.properties.action.enum, ['read', 'publish', 'delete']);
   assert.deepEqual(tool.annotations, { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });

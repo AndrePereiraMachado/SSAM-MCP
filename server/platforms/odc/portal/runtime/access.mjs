@@ -71,6 +71,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { authorizationContext as readAuthorizationContext } from '../../facade/authorization-context.mjs';
 import { boundedRead, readCheckpoint, readOptions } from '../../facade/read-budget.mjs';
+import { currentSignal } from '../../facade/destructive-operations.mjs';
 import { prepareRequest } from './request.mjs';
 import { assetFilterComparison } from './asset-filter-comparison.mjs';
 import { readCatalogPage } from './quality-pattern-pagination.mjs';
@@ -81,9 +82,9 @@ import { timerRunState } from './timer-run-state.mjs';
 import { executeMcpImport, observeMcpImport, planMcpImport } from './mcp-import.mjs';
 import { readPendingTimer } from './timer-pending-state.mjs';
 import { readTimerDeployment } from './timer-deployment-state.mjs';
-import { fail, publicError, redactValues } from './errors.mjs';
+import { OdcError, fail, publicError, redactValues } from './errors.mjs';
 import { projectForAgent, trustedProjection } from './agent-projection.mjs';
-import { DEPLOY, OPERATION_STATUS, TARGET_NAMES, effectOf, readable } from './effects.mjs';
+import { DEPLOY, OPERATION_STATUS, TARGET_NAMES, effectOf, readable, removalsOf } from './effects.mjs';
 import { isUuid, sha256, fingerprint } from './write-journal.mjs';
 import { withOperationLog } from './operation-log.mjs';
 import { PortalReadAdapter } from './portal-read.mjs';
@@ -113,8 +114,15 @@ const TYPED_PORTAL_READS = new Set(['monitoring.stages', 'monitoring.application
 const NOT_SENT = new Set(['BRIDGE_ROOT_UNAVAILABLE', 'REQUEST_FILE_UNAVAILABLE', 'STUDIO_BUSY', 'INPUT_INVALID', 'OPERATION_NOT_FOUND', 'WRITE_BLOCKED', 'AUTH_NOT_CONFIGURED', 'AUTH_FAILED', 'AUTH_DISCOVERY_FAILED',
   'AUTH_DISCOVERY_INVALID', 'AUTH_AUTHORITY_BLOCKED', 'AUTH_RESPONSE_INVALID', 'LOCAL_RATE_LIMIT', 'REQUEST_TOO_LARGE', 'CONTRACT_UNSUPPORTED',
   'CONTRACT_INVALID', 'CONFIGURATION_INVALID', 'STUDIO_NOT_SIGNED_IN', 'HEADLESS_AUTH_UNAVAILABLE', 'NOT_ALLOWED', 'BAD_REQUEST', 'HOST_MISMATCH', 'WEB_SIGN_IN_REQUIRED',
-  'PORTAL_ORIGIN_DENIED', 'PORTAL_OPERATION_NOT_FOUND', 'PORTAL_ROUTE_UNMAPPED', 'DB_CREDENTIAL_REQUIRED', 'SECRET_IN_ARGUMENTS', 'STUDIO_REQUIRED']);
-const PORTAL_NOT_SENT = new Set(['PORTAL_AUTH_REQUIRED', 'PORTAL_ACCESS_DENIED', 'PORTAL_CONTRACT_CHANGED']);
+  'PORTAL_ORIGIN_DENIED', 'PORTAL_OPERATION_NOT_FOUND', 'PORTAL_ROUTE_UNMAPPED', 'DB_CREDENTIAL_REQUIRED', 'SECRET_IN_ARGUMENTS', 'STUDIO_REQUIRED', 'CANCELLED']);
+const PORTAL_NOT_SENT = new Set(['PORTAL_AUTH_REQUIRED', 'PORTAL_ACCESS_DENIED', 'PORTAL_CONTRACT_CHANGED', 'CANCELLED']);
+// CX15 r3 (CT-3): the client's cancellation (withSignal of the tool layer; the odc_* guard runs its send inside it) read right
+// before a write leaves this process: before its receipt is reserved and again right before the transport. Aborted: nothing is
+// sent (CANCELLED, notSent; a reserved receipt settles not-sent). The reads in between (consumers, approvals, target names)
+// never let a cancelled write out.
+function writeCheckpoint(stage) {
+  if (currentSignal()?.aborted) throw new OdcError('CANCELLED', 'Cancelled by the client ' + stage + '; nothing was sent.', { notSent: true, sent: false });
+}
 const ASSET_GET = 'asset-repository-api-v1:get:/assets/{assetKey}';
 const ASSET_CONSUMERS = 'dependency-management-api-v1:get:/assets/{assetKey}/consumers';
 const MAX_WAIT_SECONDS = 600;
@@ -463,8 +471,8 @@ export class OdcAccess {
       if (policy && !policy.has(operationId)) fail('WRITE_BLOCKED', 'The tenant policy file does not list this operation.');
       if(preparedSourceRevision?.uploadFormat==='staged' && policy && !policy.has(ASSET_UPLOAD))
         fail('WRITE_BLOCKED','The tenant policy file does not allow the upload stage.');
-      const request = prepareRequest(this.catalog, operationId, input, this.config(host));
-      const refs = checkSecretRefs(host, secretRefs, input.body, { kind: 'Setting' }).map(({ pointer, target, field }) => ({ pointer, target, field }));
+      const { request, refs } = withWriteProblems(authorize, operationUuid, () => ({ request: prepareRequest(this.catalog, operationId, input, this.config(host)),
+        refs: checkSecretRefs(host, secretRefs, input.body, { kind: 'Setting' }).map(({ pointer, target, field }) => ({ pointer, target, field })) }));
       precheck(authorize, operationUuid);
       const identity = { kind: 'odc-public', tenant: host, operationId, target: { ...(input.path ?? {}), ...pick(input.body, ['assetKey', 'applicationKey', 'agentKey', 'environmentKey', 'key', 'name', 'email', 'isActive', 'addToBuiltInIdentityProvider']),...(operationId===NATIVE_MOBILE_BUILD?pick(input.body,['buildKey','revision','mobilePlatform','mobileVersionNumber','mobileVersionCode']):{}),...([STAGE_BATCH_RENAME,ENV_DEFAULTS_PATCH].includes(operationId)?{bodySha256:fingerprint(input.body)}:{}),...(operationId===USER_BULK_CREATE&&Array.isArray(input.body?.records)?{records:input.body.records.map(r=>pick(r,['name','email','isActive','addToBuiltInIdentityProvider']))}:{}),...(operationId==='build-operations-api-v1:post:/build-operations'?pick(input.body,['assetRevision','buildType']):{}),...([LIBRARY_PUBLISH,ASSET_DEPLOYMENT].includes(operationId)?pick(input.body,['revision','operation','buildKey']):{}),...(preparedSourceRevision?{assetKey:preparedSourceRevision.assetKey}:{}) } };
       // Asset creation names are nested in the native request. Preserve them in
@@ -603,6 +611,7 @@ export class OdcAccess {
       }
       if (authorizationContext || timerConfigurationContext || settingsConfigurationContext || mobileConfigurationContext || assetCreationContext || assetRevisionContext || preparedSourceRevision || assetBuildContext || ipFilterContext || groupContext || organizationRoleContext || portfolioRenameContext || organizationRenameContext || stageRenameContext || environmentDefaultsContext || inactiveUserContext || groupMembershipContext || emptyRoleAssignmentContext || applicationRoleAssignmentContext || groupRoleAssignmentContext || applicationRoleOverlapContext) guardTenant(info, authorize, confirmTenant, approval);
       const wordsSha256 = sha256(authorize);
+      writeCheckpoint('before the write was reserved');
       receipt = this.receipts.reserve({ operationUuid, identity, wordsSha256, requestSha256,
         ...(applicationRoleOverlapContext?{reconciliation:{applicationRoleOverlap:approval.applicationRoleOverlapExpectation}}:{}),
         ...(groupRoleAssignmentContext?{reconciliation:{groupRoleAssignment:approval.groupRoleExpectation}}:{}),
@@ -612,6 +621,7 @@ export class OdcAccess {
         ...(defaultsPrepared?{reconciliation:{environmentDefaults:{expected:defaultsPrepared.expected,before:defaultsPrepared.before}}}:{}),
         ...(portfolioPrepared?{reconciliation:{portfolioRename:{expected:portfolioPrepared.expected,before:portfolioPrepared.before}}}:{}),
         ...(organizationPrepared?{reconciliation:{organizationRename:{expected:organizationPrepared.expected,before:organizationPrepared.before}}}:{}),
+        ...(removalsOf(input.body).length ? { removes: Object.fromEntries(removalsOf(input.body).map(r => [r.field, r.keys])) } : {}),
         plan: { ...(approval ? { authorizationContext: approval } : {}), method: request.method, path: request.url.pathname, query: request.url.search, bodySha256: input.body === undefined ? null : sha256(JSON.stringify(input.body)),
           ...(refs.length ? { secretRefs: refs } : {}) } });
       let output;
@@ -632,7 +642,7 @@ export class OdcAccess {
         }
         if(!output)output = await this.send(host, resolved, operationId, input, { write: true, operationUuid: receipt.operationUuid, authorizeSha256: wordsSha256, confirmTenant: host, secretRefs: refs });
       }
-      catch (error) { output = { ok: false, operationId, error: publicError(error), thrown: true }; }
+      catch (error) { output = { ok: false, operationId, error: publicError(error), ...(error?.code === 'CANCELLED' && error.details?.notSent ? { sent: false } : { thrown: true }) }; }
       if (output.error) Object.assign(output, secretRefsHint(output.error, host));
       let state = outcomeOf(output);
       this.receipts.settle(receipt, { state, auth: resolved.path, status: output.status ?? null, errorCode: output.error?.code ?? null, response: pick(output.data, ['key', 'orgRoleKey', 'buildKey', 'analysisKey', 'operationKey', 'assetKey', 'status']) });
@@ -742,7 +752,9 @@ export class OdcAccess {
     readCheckpoint('transport');
     if (resolved.path === 'vault') {
       if (secretRefs.length) fail('STUDIO_REQUIRED', secretStudioRequired(host));
-      return (await this.vault.bridge(host)).execute(operationId, input, write ? 'write' : 'read');
+      const bridge = await this.vault.bridge(host);
+      if (write) writeCheckpoint('before the write was sent');
+      return bridge.execute(operationId, input, write ? 'write' : 'read');
     }
     const request = prepareRequest(this.catalog, operationId, input, this.config(host));
     let body, bodyBase64, contentType = request.headers['content-type'];
@@ -760,6 +772,7 @@ export class OdcAccess {
       if (!['BRIDGE_ROOT_UNAVAILABLE', 'REQUEST_FILE_UNAVAILABLE'].includes(error?.code)) throw error;
       return { ok: false, operationId, sent: false, error: publicError(error) };
     }
+    if (write) writeCheckpoint('before the write was sent');
     const answer = await this.studio.call(['portal-call', file, '--tenant', host]);
     return studioAnswer(answer, operationId, host);
   }
@@ -1266,15 +1279,21 @@ export class OdcAccess {
       routeOf(operationId, true);
       const effect = PORTAL_WRITES[operationId].effect;
       const activation = ['timers.pause','timers.resume'].includes(operationId);
-      let raw = operationId === 'timers.run' || activation ? timerWakeInput(rawInput(input)) : rawInput(input);
-      if(vaultFile!==undefined){
-        if(![MOBILE_FILE_UPLOAD,MOBILE_FILE_CONVERT].includes(operationId)||typeof vaultFile!=='string'||!/^[A-Za-z0-9_.-]{1,64}$/.test(vaultFile)||secretRefs.length)
-          fail('INPUT_INVALID','vaultFile names one Setting vault entry for the native mobile binary upload only.');
-        secretRefs=[{pointer:'/inputParameters/'+(operationId===MOBILE_FILE_CONVERT?'BinaryData':'FileContent'),target:'SSAM/ODC3/'+host+'/Setting/'+vaultFile,field:'password'}];
-      }
-      const refs = checkSecretRefs(host, secretRefs, raw,{kind:vaultFile!==undefined?'SettingFile':'DB'});
-      if([GUARDRAILS_SAVE,BASELINE_SAVE].includes(operationId)&&refs.length)fail('INPUT_INVALID','Guardrail policy writes do not accept secretRefs.');
-      precheck(authorize, operationUuid);
+      let raw, refs;
+      // CX15 r4 (W-1): the same operationUuid of a custom search deletion that has a receipt, WITHOUT authorize, is the
+      // read-only reconciliation of that receipt (its identity, below, must match: tenant, operation and input).
+      const reconciling = reconcilesWithoutWords(authorize, operationUuid, id => this.receipts.lookup(id), r => Boolean(r.reconciliation?.customSearchDeletion));
+      withWriteProblems(authorize, operationUuid, () => {
+        raw = operationId === 'timers.run' || activation ? timerWakeInput(rawInput(input)) : rawInput(input);
+        if(vaultFile!==undefined){
+          if(![MOBILE_FILE_UPLOAD,MOBILE_FILE_CONVERT].includes(operationId)||typeof vaultFile!=='string'||!/^[A-Za-z0-9_.-]{1,64}$/.test(vaultFile)||secretRefs.length)
+            fail('INPUT_INVALID','vaultFile names one Setting vault entry for the native mobile binary upload only.');
+          secretRefs=[{pointer:'/inputParameters/'+(operationId===MOBILE_FILE_CONVERT?'BinaryData':'FileContent'),target:'SSAM/ODC3/'+host+'/Setting/'+vaultFile,field:'password'}];
+        }
+        refs = checkSecretRefs(host, secretRefs, raw,{kind:vaultFile!==undefined?'SettingFile':'DB'});
+        if([GUARDRAILS_SAVE,BASELINE_SAVE].includes(operationId)&&refs.length)fail('INPUT_INVALID','Guardrail policy writes do not accept secretRefs.');
+      }, { reconciling });
+      precheck(authorize, operationUuid, { reconciling });
       const binarySaveTarget=operationId===MOBILE_FILE_SAVE?{applicationKey:raw.inputParameters?.ApplicationKey,environmentKey:raw.inputParameters?.EnvironmentKey,settingKey:raw.inputParameters?.ExtensibilitySettingInfo?.Setting?.Key}:null;
       if(binarySaveTarget&&(!Object.values(binarySaveTarget).every(isUuid)||refs.length))fail('INPUT_INVALID','Native binary save needs exact UUIDs and no secretRefs.');
       const timerTarget = operationId === 'timers.run' || activation ? { environmentKey: raw.inputParameters.StageKey,
@@ -1293,10 +1312,10 @@ export class OdcAccess {
             ...(!proof.readBack.verified?{error:{code:'API_CLIENT_DELETE_UNVERIFIED',message:'A complete unfiltered inventory did not prove absence. Reconcile the original receipt; never resend.'}}:{})};
         }
         if(existing.reconciliation?.customSearchDeletion&&['accepted','uncertain'].includes(existing.state)){
-          if(existing.authorization?.wordsSha256!==sha256(authorize))fail('AUTHORIZATION_CONTEXT_INVALID','Cleanup reconciliation requires original authorization.');
+          if(authorize!==undefined&&existing.authorization?.wordsSha256!==sha256(authorize))fail('AUTHORIZATION_CONTEXT_INVALID','Cleanup reconciliation takes no authorize (the receipt holds the approval); words given must be the original ones.');
           const result=await this.dbDeleteReadBack(host,auth,{...existing.reconciliation.customSearchDeletion,operationUuid},answerExisting(existing,operationId,host));
           if(result.receipt?.state==='confirmed'&&result.error){result.writeError=result.error;delete result.error;}
-          if(result.continuation)result.continuation={tool:'odc_portal_write',arguments:{tenant:host,auth,operationId,input,authorize,operationUuid,confirmTenant},why:'Read-only reconciliation of this deletion UUID; never resend.'};
+          if(result.continuation)result.continuation=readOnlyReconciliation('odc_portal_write',{tenant:host,auth,operationId,input,operationUuid,confirmTenant});
           return result;
         }
         if(existing.reconciliation?.mobileBinarySave&&['accepted','uncertain'].includes(existing.state)){
@@ -1350,6 +1369,7 @@ export class OdcAccess {
         }
         return answerExisting(existing, operationId, host);
       }
+      if(reconciling)fail('OPERATION_UUID_REUSED','This operationUuid already belongs to another target or operation; use a new UUID.');
       const discoveryPrepared=operationId===A2A_DISCOVER?await a2aDiscoveryApproval({file:authorizationContext,words:authorize,host,raw,
         read:(id,input)=>this.portalRead({tenant:host,auth,operationId:id,input})}):null;
       const a2aPrepared=[A2A_TEST,A2A_SAVE].includes(operationId)?await a2aConnectionApproval({file:authorizationContext,words:authorize,host,operationId,raw,
@@ -1432,6 +1452,7 @@ export class OdcAccess {
       if (activation) raw = timer.input;
       const wordsSha256 = sha256(authorize);
       const secrets = refs.length ? { count: refs.length, entries: [...new Set(refs.map(r => r.target))], resolvedBy: 'bridge, inside the ODC Studio' } : null;
+      writeCheckpoint('before the write was reserved');
       receipt = this.receipts.reserve({ operationUuid, identity, wordsSha256,
         ...(apiClientPrepared?{reconciliation:{apiClientFixture:apiClientPrepared.expected}}:{}),
         ...(mobileFilePrepared?{reconciliation:{mobileBinaryUpload:mobileFilePrepared.expected}}:{}),
@@ -1457,6 +1478,7 @@ export class OdcAccess {
       if (activation) this.receipts.settle(receipt, {state:'sending',timerActivation:{before:timer.before,target:timer.target,desiredActive:timer.desiredActive}});
       let output, state;
       try {
+        writeCheckpoint('before the write was sent');
         const body = await resolved.broker.callScreenservice({ operationId, write: true, input: raw, secretRefs: refs.map(({ pointer, target: entry, field }) => ({ pointer, target: entry, field })),
           operationUuid: receipt.operationUuid, authorizeSha256: wordsSha256, confirmTenant: host, privateSender: resolved.privateSender,
           ...(mobileSavePrepared?{mobileUploadOperationUuid:mobileSavePrepared.expected.uploadOperationUuid,mobileObjectUri:mobileSavePrepared.expected.objectUri}:{}),
@@ -1562,7 +1584,7 @@ export class OdcAccess {
         const result=await this.dbDeleteReadBack(host,auth,{...customSearchDeletion.expected,operationUuid},{...output,receipt:receiptOf(receipt)});
         receipt=this.receipts.lookup(operationUuid);state=receipt.state;output={...result};
         if(state==='confirmed'&&output.error){output.writeError=output.error;delete output.error;}
-        if(result.continuation)output.continuation={tool:'odc_portal_write',arguments:{tenant:host,auth,operationId,input,authorize,operationUuid,confirmTenant},why:'Read-only reconciliation of this deletion UUID; never resend.'};
+        if(result.continuation)output.continuation=readOnlyReconciliation('odc_portal_write',{tenant:host,auth,operationId,input,operationUuid,confirmTenant});
       }
       if(operationId===CUSTOM_SEARCH_SAVE&&customSearchPrepared&&['accepted','uncertain'].includes(state)){
         const proof=await this.reconcileCustomSearchConnection(receipt,auth);receipt=proof.receipt;state=receipt.state;
@@ -2074,17 +2096,22 @@ export class OdcAccess {
   async a2aConnectionDelete({tenant,auth='auto',connectionId,originOperationUuid,authorize,authorizationContext,operationUuid,confirmTenant}){
     let host;
     try{
-      host=await this.pickTenant(tenant);precheck(authorize,operationUuid);
+      host=await this.pickTenant(tenant);
+      // CX15 r4 (W-1): the same operationUuid of a deletion that has a receipt, WITHOUT authorize, only reconciles that receipt
+      // (its identity, below, must match: tenant, connections.delete, connectionId, connection name and origin).
+      const reconciling=reconcilesWithoutWords(authorize,operationUuid,id=>this.receipts.lookup(id),r=>r.identity?.operationId==='connections.delete');
+      precheck(authorize,operationUuid,{reconciling});
       if(!isUuid(originOperationUuid)||!isUuid(connectionId))fail('INPUT_INVALID','A2A cleanup needs its connection and originating test UUIDs.');
       const origin=this.receipts.lookup(originOperationUuid),connectionName=origin?.reconciliation?.a2aConnection?.name;
       const target={connectionId,connectionName,originOperationUuid};
       const existing=this.receipts.lookup(operationUuid,{kind:'odc-portal',tenant:host,operationId:'connections.delete',target});
       let written;
       if(existing){
-        if(existing.authorization?.wordsSha256!==sha256(authorize))fail('AUTHORIZATION_CONTEXT_INVALID','Cleanup reconciliation requires the original authorization.');
+        if(authorize!==undefined&&existing.authorization?.wordsSha256!==sha256(authorize))fail('AUTHORIZATION_CONTEXT_INVALID','Cleanup reconciliation takes no authorize (the receipt holds the approval); words given must be the original ones.');
         written=answerExisting(existing,'connections.delete',host);
         if(!['accepted','uncertain'].includes(existing.state))return written;
       }else{
+        if(reconciling)fail('OPERATION_UUID_REUSED','This operationUuid already belongs to another target or operation; use a new UUID.');
         const detail=await this.portalRead({tenant:host,auth,operationId:'connections.detail',input:{connectionId,providerId:'a2a'}});
         if(!detail.ok)return detail;
         const metadata=detail.data?.Connection?.externalMetadata?.selectedActionCount===1
@@ -2107,8 +2134,7 @@ export class OdcAccess {
       }
       const result=await this.dbDeleteReadBack(host,auth,{connectionId,providerId:'a2a',connectionName,operationUuid,originOperationUuid},written);
       if(result.receipt?.state==='confirmed'&&result.error){result.writeError=result.error;delete result.error;}
-      if(result.continuation)result.continuation={tool:'odc_a2a_connection_delete',arguments:{tenant:host,auth,connectionId,originOperationUuid,operationUuid,authorize},
-        why:'Read-only reconciliation of the same deletion UUID; quote the original authorization. Never resend deletion.'};
+      if(result.continuation)result.continuation=readOnlyReconciliation('odc_a2a_connection_delete',{tenant:host,auth,connectionId,originOperationUuid,operationUuid});
       return result;
     }catch(error){
       let saved;try{saved=isUuid(operationUuid)?this.receipts.lookup(operationUuid):null;}catch{}
@@ -2392,7 +2418,7 @@ const CONFIGURATIONS = {
     patch: 'asset-configurations-api-v1:patch:/environments/{environmentKey}/default-system-configurations' },
 };
 const NULL_HANDLING = { NullWriteBehavior: 'ConvertNull', Boolean: 'False', Date: '1900-01-01', Time: '00:00:00', DateTime: '1900-01-01 00:00:00', Integer: '0', LongInteger: '0', Decimal: '0.0', Text: '' };
-const elementVariables = connectionId => ({ ConnectionId: connectionId, _connectionIdInDataFetchStatus: 1, Source: '', _sourceInDataFetchStatus: 1,
+export const elementVariables = connectionId => ({ ConnectionId: connectionId, _connectionIdInDataFetchStatus: 1, Source: '', _sourceInDataFetchStatus: 1,
   ForceRefreshFail: false, _forceRefreshFailInDataFetchStatus: 1, ForceSupportBoth: false, _forceSupportBothInDataFetchStatus: 1 });
 const listOf = value => Array.isArray(value) ? value : Array.isArray(value?.List) ? value.List : [];
 
@@ -2440,9 +2466,44 @@ function hostedOnlyStudio(host, auth) {
     + 'of the user\'s own ODC Studio (auth "auto" or "studio").', { host });
 }
 function refusal(code, message, extra = {}) { return { ok: false, code, error: { code, message }, ...extra }; }
-function precheck(authorize, operationUuid) {
-  if (typeof authorize !== 'string' || authorize.trim().length < 8) fail('AUTHORIZATION_REQUIRED', 'Writes need the user\'s own authorization words (authorize), quoted verbatim; only their sha256 is kept.');
-  if (!isUuid(operationUuid)) fail('INPUT_INVALID', 'operationUuid must be a new UUID for this write; reuse it only to read the same receipt.');
+// The words and the UUID of a write are checked together (CX15 r2, M1: the schemas keep them optional for the preview of a
+// destructive call): both missing = ONE refusal naming both, never one refusal per field. One missing keeps the refusal of
+// that field as it was (code and message, no problems list).
+// CX15 r4 (W-1): {reconciling} = the read-only reconciliation of an existing receipt (reconcilesWithoutWords): no words.
+function writeProblems(authorize, operationUuid, { reconciling = false } = {}) {
+  return [
+    ...(!reconciling && (typeof authorize !== 'string' || authorize.trim().length < 8) ? [{ code: 'AUTHORIZATION_REQUIRED', path: '/authorize', message: 'Writes need the user\'s own authorization words (authorize), quoted verbatim; only their sha256 is kept.' }] : []),
+    ...(!isUuid(operationUuid) ? [{ code: 'INPUT_INVALID', path: '/operationUuid', message: 'operationUuid must be a new UUID for this write; reuse it only to read the same receipt.' }] : [])];
+}
+// CX15 r4 (W-1): a call WITHOUT authorize whose operationUuid already has a receipt of this kind is the read-only
+// reconciliation of that receipt. The identity lookup that follows still refuses another tenant, operation or target
+// (OPERATION_UUID_REUSED), and the reconciliation only reads: the write is never sent again.
+function reconcilesWithoutWords(authorize, operationUuid, lookup, kind) {
+  if (authorize !== undefined || !isUuid(operationUuid)) return false;
+  let receipt = null;
+  try { receipt = lookup(operationUuid); } catch { receipt = null; }
+  return Boolean(receipt && kind(receipt));
+}
+// The continuation of a read-only reconciliation: the same call and operationUuid, never the owner's words (they would come
+// back to the model in clear, and the fitter would keep them in .local\answers).
+function readOnlyReconciliation(tool, args) {
+  return { tool, arguments: Object.fromEntries(Object.entries(args).filter(([, v]) => v !== undefined)),
+    why: 'Read-only reconciliation of this same deletion UUID: repeat this call as it is, without authorize (the receipt holds the approval). The delete is never sent again.' };
+}
+function precheck(authorize, operationUuid, options) {
+  const problems = writeProblems(authorize, operationUuid, options);
+  if (problems.length === 1) fail(problems[0].code, problems[0].message);
+  if (problems.length) fail(problems[0].code, problems.map(p => p.message).join(' '), { problems });
+}
+// An input refusal found before the words of a write that also lacks them (or the UUID): the same single refusal names the
+// input problem first and the missing fields after it.
+function withWriteProblems(authorize, operationUuid, check, options) {
+  try { return check(); } catch (error) {
+    const missing = writeProblems(authorize, operationUuid, options);
+    if (!(error instanceof OdcError) || !missing.length) throw error;
+    throw new OdcError(error.code, [error.message, ...missing.map(p => p.message)].join(' '),
+      { ...error.details, problems: [{ code: error.code, message: error.message, ...error.details }, ...missing] });
+  }
 }
 // Tenant classes (tenants.json): personal = free for tests; corporate, client and unknown hosts need the user's
 // explicit instruction for each operation; readOnly tenants refuse every write. Destructive writes need words that

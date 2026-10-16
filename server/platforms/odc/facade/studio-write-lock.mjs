@@ -6,10 +6,26 @@
 // refuses: STUDIO_WRITE_QUEUE_TIMEOUT with the holder, the position and an MCP continuation (the status read of that
 // Studio); nothing of that write ran. The tool waits inside the call: the model never polls, sleeps or repeats it.
 //
+// CX14 recovery and pending operations. Normal writes keep FIFO. A stalled holder refuses a new write immediately
+// with STUDIO_WRITE_HOLDER_STALLED, the holder evidence and one continuation. Once its dialog disappears, the holder
+// is pending-in-studio and new writes wait until its bridge operation settles; abandoning a caller never permits replay.
+// CX14 R5: the watches of a pending operation (studio-pending-operation.mjs, the stalled flight of o11-bridge.mjs, which
+// samples while its flight lives) read `windows` again and again: a window that counts again (the same blocker after a
+// dismiss, or another one) marks blockedBy again, so writes are answered at once with the recovery instead of waiting
+// for the whole limit; a read that began before a dismiss cleared the blocker never marks it again. A dismiss of the
+// exact blocker that already waits in the queue passes the queue (as a bypass) as soon as the holder is marked with it.
+// holder adds heldMs/state and optional task ids, operation and blockedBy {title <= 80, kind}. A token-matched .holder
+// sidecar carries phase updates across processes; neither locks, queues nor sidecars contain arguments or user words.
+// Recovery close entries (~p) precede ordinary entries but remain exclusive. Closing the running task owner answers
+// TASK_STILL_RUNNING immediately; a pending bridge flight answers CLOSE_WAITS_FOR_PENDING_OPERATION. Dismissing an
+// error report or the exact stalled blocker bypasses the owner under a separate recovery lock (~r, at most 5 seconds),
+// serializing recoveries and excluding normal writes. Other dismissals keep normal FIFO. Old SSAM processes ignore
+// ~r/~p/.holder and must be upgraded together for these cross-process recovery guarantees.
+//
 // What a write is. A call that changes the model (merge, create, refresh references, records), the environment through
 // the Studio (publish, environment and access apply, Service Center execute) or the Studio state another write relies
 // on (the active module tab, a dialog, the sign-in window). WRITE_TOOLS holds one predicate per tool over its
-// arguments; a tool that is not listed is a read. Selecting a module tab is such a state: every kernel step after a
+// arguments; this is Studio serialization scope, not the mutation classification of cancellation and outcomes. Selecting a module tab is such a state: every kernel step after a
 // merge (get_errors, find_element, snapshot_module in Delivery.cs) is pinned to the module key it merged
 // (RequireTarget), so a tab switched mid-delivery fails a delivery whose merge is already applied. So every call that
 // opens a module of the O11 Studio is a write: o11_deliver (until=apply opens it to capture it) and o11_studio snapshot
@@ -73,6 +89,11 @@ import { anvilRoot, odcRoot, o11Lane, O11_LANES } from './workspace.mjs';
 import { readConnection } from './studio-session.mjs';
 import { usesWorkspace, workspacePath } from './executor.mjs';
 import { systemModuleName } from './studio-module.mjs';
+import { stallRecovery } from './studio-recovery.mjs';
+import { isErrorReportTitle } from './bridge-stall.mjs';
+import { isStudioWrite } from './tool-classification.mjs';
+const APP_TOOLS = new Set(['context', 'propose', 'continue', 'status']);
+const O11_STUDIO_BARRIER_WAITS = new Set(['idle', 'no-dialogs']);
 
 export const LOCK_SCHEMA = 'ssam-studio-write-lock/1';
 export const QUEUE_SCHEMA = 'ssam-studio-write-queue/1';
@@ -92,65 +113,8 @@ export function queueWaitMs(env = process.env) {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : DEFAULT_QUEUE_MS;
 }
 
-// ---- Which calls write. Kept equal to o11-environment.mjs ENVIRONMENT_WRITES (the test compares them).
-const ENVIRONMENT_WRITES = new Set(['create-app', 'add-modules', 'create-module', 'update-app', 'refresh-refs', 'set-user-provider', 'delete-app']);
-// o11_studio: open-module and wait{open} (open_module selects the tab), snapshot WITH module (open_module first),
-// dismiss-dialog (closes a window a running write may depend on), login (a modal sign-in over the Studio),
-// refresh-references (the native Refresh References changes the module). UI freeze of 2026-10-08 (pattern 4): wait
-// idle|no-dialogs are writes too. Both answer the dependencies dialog and run the Studio's Refresh References (MB2), and
-// idle waits for "no SSAM write": as a read it timed out behind a stream of other agents' writes. As a write it takes its
-// turn in the FIFO queue (for up to its own timeoutSeconds, QUEUE_LIMITS) and, holding the Studio, never counts itself.
-// status, errors, windows, wait signed-in and snapshot of the active module (pinned to its key) are reads; status answers
-// the dependencies dialog only when the Studio lock is free at that moment (o11-studio.mjs). A module named by its alias
-// (open-module {module}, snapshot {name}) is the same call; a system module is refused before the Studio (A29): a read.
-const O11_STUDIO_WRITES = new Set(['open-module', 'close-module', 'dismiss-dialog', 'login', 'refresh-references']);
-const O11_STUDIO_BARRIER_WAITS = new Set(['idle', 'no-dialogs']);
-const O11_STUDIO_OPENS = new Set(['open-module', 'snapshot', 'refresh-references']);
-const namedModule = a => a.args?.module ?? a.args?.name;
-const opensSystem = a => (O11_STUDIO_OPENS.has(a.command) || (a.command === 'wait' && a.args?.condition === 'open'))
-  && typeof namedModule(a) === 'string' && systemModuleName(namedModule(a)) != null;
-const O11_DATA_WRITES = new Set(['insert', 'update', 'delete']);          // o11_data through the Studio's Edit Data
-// o11_data request: one op, or {authorization?, batch:[op]} (contract I12): a batch with any write is a write.
-const o11DataWrites = request => O11_DATA_WRITES.has(request?.operation)
-  || (Array.isArray(request?.batch) && request.batch.some(op => O11_DATA_WRITES.has(op?.operation)));
-const SC_SESSION_WRITES = new Set(['sign-in', 'web-sign-in', 'close']);   // Studio login dialog / Service Center window
-// The Service Center delete and its aliases execute in one call when the words are given (execute:false only plans).
-const SC_DELETES = new Set(['delete', 'module-delete', 'extension-delete', 'application-delete']);
-const hasWords = a => String(a.words ?? '').trim() !== '';
-const ODC_DELIVER_READS = new Set(['snapshot', 'build', 'check-base', 'preview']);
-const APP_TOOLS = new Set(['context', 'propose', 'continue', 'status']);  // the O11 controlled app session (o11-app-session.mjs)
-const always = () => true;
-
-// o11_inspect {module}, ssam_map and ssam_discover with an O11 module name are reads (see the header): their capture takes
-// this lock itself only to select an open module.
-export const WRITE_TOOLS = Object.freeze({
-  o11_deliver: always, // merge, resume, close, closePrevious, and until=apply (open_module to capture the module)
-  o11_publish: always,
-  o11_access: a => a.action === 'apply',
-  o11_environment: a => ENVIRONMENT_WRITES.has(a.action),
-  o11_studio: a => !opensSystem(a) && (O11_STUDIO_WRITES.has(a.command) || (a.command === 'snapshot' && Boolean(namedModule(a)))
-    || (a.command === 'wait' && (a.args?.condition === 'open' || O11_STUDIO_BARRIER_WAITS.has(a.args?.condition)))),
-  o11_data: a => o11DataWrites(a.request),
-  // ssam_task reads tasks; with close it closes a delivery task in the kernel (snapshot of the module, reservation).
-  // ssam_grant writes only the grants file, never a Studio: not listed.
-  ssam_task: a => a.close != null,
-  o11_service_center_write: a => (SC_DELETES.has(a.action) ? a.execute !== false && hasWords(a) : a.execute === true && a.action !== 'verify'),
-  o11_service_center_session: a => SC_SESSION_WRITES.has(a.action),
-  // A .NET extension published or deleted through the Studio's session (o11_extension); read is a read.
-  o11_extension: a => a.action === 'publish' || (a.action === 'delete' && hasWords(a)),
-  // An ODC External Library uploaded and published, or a pending generation discarded; build and status are reads.
-  odc_external_library: a => a.action === 'deploy' || a.action === 'discard',
-  odc_mcp_import: always,
-  continue: always, // advances the accepted app task: snapshot, compilation, merge
-  studio_deliver: a => !ODC_DELIVER_READS.has(a.until ?? 'merge'),
-  studio_merge: always, studio_publish: always, studio_create: always, studio_close: always,
-  studio_create_app: a => (a.action ?? 'create') === 'create', // templates is a read
-  studio_refresh_references: always, studio_data_insert: always, studio_data_update: always, studio_data_delete: always,
-  studio_dismiss_dialog: always, studio_open: always,
-  // Passthrough of any bridge command (stop included): treated as a write, except publish-log, a read of the messages
-  // pane the bridge answers even while another command runs.
-  studio_command: a => a.command !== 'publish-log',
-});
+// Studio serialization is a narrower scope of the shared classification module.
+export { STUDIO_WRITE_TOOLS as WRITE_TOOLS, isMutation } from './tool-classification.mjs';
 
 // A write whose own wait is longer than the queue default waits its turn for up to that long (milliseconds): o11_studio
 // wait idle|no-dialogs {timeoutSeconds} is a wait for the Studio, so its turn in the queue is part of that wait.
@@ -164,10 +128,7 @@ export function queueLimitOf(name, args = {}) {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-export function isWrite(name, args = {}) {
-  if (!Object.hasOwn(WRITE_TOOLS, name)) return false;
-  return WRITE_TOOLS[name](args && typeof args === 'object' ? args : {}) === true;
-}
+export const isWrite = isStudioWrite;
 
 // 'o11' | 'odc' | null: the `lane` argument (o11, odc, or an O11 lane ss4|ss5), else the tool's name.
 export function laneOfTool(name, args = {}) {
@@ -251,7 +212,7 @@ function sameModule(a, b) {
 }
 // A lock (Studio or module) excludes a slot (a write: Studio key plus the module it names) of the same Studio; a module
 // lock only when the slot names the same module or none.
-const excludes = (lock, slot) => conflicting(lock, slot) && (lock.kind !== 'module' || sameModule(lock.module, slot.module));
+const excludes = (lock, slot) => conflicting(lock, slot) && (!slot.recovery || lock.kind === 'recovery') && (lock.kind !== 'module' || sameModule(lock.module, slot.module));
 // The lock files of a lane: {file, id, kind: 'studio' | 'module'}.
 function lockFilesOf(dir, lane) {
   let names = [];
@@ -266,6 +227,7 @@ function lockFilesOf(dir, lane) {
     // A bridge call still in flight in this Studio (registerBridgeFlight): it excludes every write of the Studio.
     const flight = rest.indexOf('~f-');
     if (flight >= 0) { files.push({ file, id: rest.slice(0, flight) || null, kind: 'studio' }); continue; }
+    if(rest.endsWith('~r')) { files.push({file,id:rest.slice(0,-2)||null,kind:'recovery'});continue; }
     const at = rest.indexOf('~m-');
     if (at < 0) { if (!rest.includes('~')) files.push({ file, id: rest, kind: 'studio' }); }
     else files.push({ file, id: rest.slice(0, at) || null, kind: 'module' });
@@ -285,11 +247,12 @@ export const busyContinuation = ({ lane = 'o11', pid } = {}, why = BUSY_WHY) => 
 export const busyRefusal = (holder, studio) => ({ ok: false, code: BUSY_CODE, holder: { tool: holder?.tool ?? null, startedAt: holder?.startedAt ?? null },
   continuation: busyContinuation(studio) });
 export const busyToolResult = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, isError: true });
-export function queueTimeoutRefusal({ holder = null, position = 1, waitedMs = 0, queueMs = DEFAULT_QUEUE_MS, studio } = {}) {
+export function queueTimeoutRefusal({ holder = null, position = 1, waitedMs = 0, queueMs = DEFAULT_QUEUE_MS, studio, ahead = [] } = {}) {
+  holder=holder?{...holder,heldMs:holder.heldMs??0,state:holder.state??'running'}:null;
   return { ok: false, code: QUEUE_TIMEOUT_CODE, outcome: 'not-sent',
     error: 'This write waited ' + Math.round(waitedMs / 1000) + ' s in the write queue of this Studio and its turn did not come; nothing of it ran.',
-    holder: holder ? { tool: holder.tool ?? null, pid: holder.pid ?? null, startedAt: holder.startedAt ?? null } : null, position, waitedMs, queueMs,
-    continuation: busyContinuation(studio, QUEUE_WHY) };
+    holder, position, waitedMs, queueMs, ahead: ahead.slice(0, 5).map(e => ({tool:e.tool,waitingMs:e.waitingMs??0})),
+    continuation: holder?.taskId ? {tool:'ssam_task',arguments:{id:holder.taskId},why:QUEUE_WHY} : busyContinuation(studio, QUEUE_WHY) };
 }
 
 // ---- Lock and queue files.
@@ -315,18 +278,79 @@ export function processAlive(pid) {
 }
 
 const fileOf = (dir, lane, id) => path.join(dir, id ? lane + '~' + id + '.lock' : lane + '.lock');
-const holderOf = lock => ({ tool: lock?.record?.tool ?? null, pid: Number.isSafeInteger(lock?.record?.pid) ? lock.record.pid : null, startedAt: lock?.record?.startedAt ?? null });
+const cleanBlockedBy = value => value && typeof value.title === 'string' ? { title: value.title.slice(0,80), kind: String(value.kind??'Modal').slice(0,80) } : null;
+function holderMetadata(file, token) {
+  try { const value=JSON.parse(fs.readFileSync(file+'.holder','utf8')); return value.schema==='ssam-studio-write-holder/1' && value.token===token ? value : {}; } catch { return {}; }
+}
+function noteHolderFile(file, token, fields) {
+  if (readLock(file)?.record?.token!==token) return;
+  const previous=holderMetadata(file,token);
+  const metadata={schema:'ssam-studio-write-holder/1',token,...previous,updatedAt:new Date().toISOString()};
+  for(const name of ['taskId','kernelTaskId']) if(typeof fields[name]==='string') metadata[name]=fields[name];
+  if(fields.operation) metadata.operation={method:String(fields.operation.method??'').slice(0,80),...(typeof fields.operation.operationId==='string'?{operationId:fields.operation.operationId}: {})};
+  // CX14 R5: a read that began before a dismiss cleared the blocker never marks it again; the next read decides.
+  const stale=fields.blockedBy&&Number.isFinite(fields.observedAt)&&Date.parse(previous.blockedByClearedAt??'')>fields.observedAt;
+  if(Object.hasOwn(fields,'blockedBy')&&!stale) {
+    metadata.blockedBy=cleanBlockedBy(fields.blockedBy);
+    if(!metadata.blockedBy)metadata.blockedByClearedAt=new Date().toISOString();
+    else delete metadata.blockedByClearedAt;
+  }
+  const temporary=file+'.holder.'+randomUUID()+'.tmp';
+  try { fs.writeFileSync(temporary,JSON.stringify(metadata)); if(readLock(file)?.record?.token===token)fs.renameSync(temporary,file+'.holder'); }
+  finally {try{fs.unlinkSync(temporary)}catch{}}
+  changed();
+}
+function holderOf(lock) {
+  const record=lock?.record??{};
+  const file=lock?.file??[...held].find(([,e])=>e.record?.token===record.token)?.[0];
+  const metadata=file?holderMetadata(file,record.token):{};
+  const blockedBy=metadata.blockedByClearedAt?null:cleanBlockedBy(metadata.blockedBy);
+  const startedAt=record.startedAt??null;
+  return {tool:record.tool??null,pid:Number.isSafeInteger(record.pid)?record.pid:null,startedAt,
+    heldMs:Math.max(0,Date.now()-(Date.parse(startedAt)||Date.now())),state:blockedBy?'stalled':record.kind==='flight'?'pending-in-studio':'running',
+    ...Object.fromEntries(['taskId','kernelTaskId','operation'].filter(k=>metadata[k]!=null).map(k=>[k,metadata[k]])),...(blockedBy?{blockedBy}:{})};
+}
+export function noteStudioHolder(fields={}) {
+  const entries=owned.getStore()??[];
+  const entry=[...entries].reverse().find(e=>!e.slot.lane.startsWith(DATA_LANE_PREFIX));
+  if(!entry)return false;
+  entry.holderFields={...entry.holderFields,...fields};entry.lock?.note?.(entry.holderFields);return true;
+}
+export function clearStudioBlockedBy({target,title}={}) {
+  const same=value=>String(value??'').trim().toLowerCase()===String(title??'').trim().toLowerCase();
+  for(const f of lockFilesOf(target.dir,target.lane)) {
+    if(!conflicting({...target,id:f.id},target))continue;
+    const lock=readLock(f.file);if(!lock)continue;
+    if(same(holderOf(lock).blockedBy?.title))noteHolderFile(f.file,lock.record.token,{blockedBy:null});
+  }
+}
+export function pendingOperationOf({taskId,kernelTaskId,deps={},lane,root,record}={}) {
+  const target=studioWriteTarget({tool:'ssam_task',lane,deps:{...deps,...(root?{o11Root:root}:{}),...(record?{connection:()=>record}:{})}});
+  const ctx={now:Date.now,alive:deps.alive??processAlive,staleMs:deps.staleMs??STALE_MS};
+  for(const f of lockFilesOf(target.dir,target.lane)) {
+    if(!conflicting({...target,id:f.id},target))continue;
+    const lock=readLock(f.file);if(!lock||lock.record?.kind!=='flight'||stale(lock,f.file,ctx))continue;
+    const holder=holderOf(lock);
+    if((taskId && holder.taskId===taskId)||(kernelTaskId && holder.kernelTaskId===kernelTaskId))return holder;
+  }
+  return null;
+}
+function stalledRefusal(holder,{position=1,waitedMs=0,studio}={}) {
+  const next=holder.taskId?{tool:'ssam_task',arguments:{id:holder.taskId},why:'Read the holder before another write.'}:busyContinuation(studio);
+  const recovery=stallRecovery({verdict:'dialog',blockedBy:holder.blockedBy},next);
+  return {ok:false,code:'STUDIO_WRITE_HOLDER_STALLED',outcome:'not-sent',holder,position,waitedMs,recovery,continuation:recovery[0],error:'The current Studio write is blocked by a persistent dialog; nothing of this call ran.'};
+}
 function readLock(file) {
   try {
     const raw = fs.readFileSync(file, 'utf8');
     const { mtimeMs } = fs.statSync(file);
     let record = null;
     try { record = JSON.parse(raw); } catch { /* a creation in flight, or a damaged file */ }
-    return { raw, record: record && typeof record === 'object' ? record : null, mtimeMs };
+    return { file, raw, record: record && typeof record === 'object' ? record : null, mtimeMs };
   } catch (error) { if (error?.code === 'ENOENT') return null; throw error; }
 }
 function unlinkIfMine(file, token) {
-  try { if (readLock(file)?.record?.token === token) fs.unlinkSync(file); } catch { /* best effort */ }
+  try { if (readLock(file)?.record?.token === token) { try {fs.unlinkSync(file+'.holder')}catch{} fs.unlinkSync(file); } } catch { /* best effort */ }
 }
 function create(file, record) {
   let fd;
@@ -360,6 +384,7 @@ function breakStale(file, raw) {
     let current;
     try { current = fs.readFileSync(file, 'utf8'); } catch (error) { if (error?.code === 'ENOENT') return true; throw error; }
     if (current !== raw) return false;
+    try {fs.unlinkSync(file+'.holder')}catch{}
     fs.unlinkSync(file);
     return true;
   } finally { try { fs.unlinkSync(breaker); } catch { /* best effort */ } }
@@ -374,7 +399,7 @@ function liveHolder(file, ctx) {
 // The lock files that exclude a slot: the other Studio locks of its Studio (both levels) and the module locks of its Studio
 // that name its module (or any, when it names none). A module lock that cannot be read yet excludes (a creation in flight).
 function excludingFiles(slot, own = null) {
-  return lockFilesOf(slot.dir, slot.lane).filter(f => f.file !== own && conflicting({ dir: slot.dir, lane: slot.lane, id: f.id }, slot)
+  return lockFilesOf(slot.dir, slot.lane).filter(f => (!slot.recovery || f.kind==='recovery') && f.file !== own && conflicting({ dir: slot.dir, lane: slot.lane, id: f.id }, slot)
     && (f.kind !== 'module' || (() => { let lock = null; try { lock = readLock(f.file); } catch { lock = null; } return sameModule(moduleOfRecord(lock?.record?.module), slot.module); })()));
 }
 function acquireFile(slot, file, record, ctx) {
@@ -397,14 +422,16 @@ function acquire(slot, tool, ctx) {
   const startedAt = new Date(ctx.now()).toISOString();
   const record = { schema: LOCK_SCHEMA, pid: process.pid, tool: String(tool), startedAt,
     lane: slot.lane, studio: slot.id ?? null, ...(slot.module ? { module: slot.module } : {}), token: randomUUID() };
-  const file = fileOf(slot.dir, slot.lane, slot.id);
-  held.set(file, { dir: slot.dir, lane: slot.lane, id: slot.id, kind: 'studio', module: slot.module, record });
+  const file = slot.recovery ? path.join(slot.dir,slot.lane+'~'+(slot.id??'')+'~r.lock') : fileOf(slot.dir, slot.lane, slot.id);
+  if(slot.recovery)record.kind='recovery';
+  held.set(file, { dir: slot.dir, lane: slot.lane, id: slot.id, kind: slot.recovery?'recovery':'studio', module: slot.module, record });
   hookExit();
   try {
     const holder = acquireFile(slot, file, record, ctx);
     if (holder) { held.delete(file); return { ok: false, holder }; }
   } catch { /* the lock folder cannot be written: the Map above still excludes this process's own writes */ }
   let released = false, studioHeld = true;
+  let holderFields={};
   const modules = new Map(); // module lock file -> its token
   // C07, contract I2: the Studio lock becomes a module lock (see the header). Idempotent per module; another module of the
   // same call adds its own lock; a module another write holds is not taken ({narrowed:false}) and the Studio lock stays.
@@ -428,13 +455,18 @@ function acquire(slot, tool, ctx) {
       if (!create(moduleFile, moduleRecord) && (liveHolder(moduleFile, ctx) || !create(moduleFile, moduleRecord))) { held.delete(moduleFile); return { narrowed: false, key: null }; }
     } catch { /* the lock folder cannot be written: the Map keeps this process's writes apart */ }
     modules.set(moduleFile, moduleRecord.token);
+    if(Object.keys(holderFields).length)noteHolderFile(moduleFile,moduleRecord.token,holderFields);
     if (studioHeld) { studioHeld = false; held.delete(file); unlinkIfMine(file, record.token); }
     changed();
     return { narrowed: true, key };
   };
   // The tokens of the files this write holds now (studioWriteHolder never counts the asking call itself).
   const tokens = () => [...(studioHeld && !released ? [record.token] : []), ...(released ? [] : modules.values())];
-  return { ok: true, narrow, tokens, release: () => {
+  return { ok: true, narrow, tokens, note: fields => {
+    holderFields={...holderFields,...fields};
+    if(studioHeld&&!released)noteHolderFile(file,record.token,holderFields);
+    for(const [f,t] of modules)if(!released)noteHolderFile(f,t,holderFields);
+  }, release: () => {
     if (released) return; released = true;
     if (studioHeld) { held.delete(file); unlinkIfMine(file, record.token); }
     for (const [moduleFile, token] of modules) { held.delete(moduleFile); unlinkIfMine(moduleFile, token); }
@@ -442,12 +474,12 @@ function acquire(slot, tool, ctx) {
   } };
 }
 // The live holder that excludes a slot (in this process first, then the lock files), or null.
-function holderFor(slot, ctx) {
-  for (const entry of held.values()) if (excludes(entry, slot)) return holderOf(entry);
+function holderFor(slot, ctx, accept=()=>true) {
+  for (const entry of held.values()) if (excludes(entry, slot)) {const holder=holderOf(entry);if(accept(holder))return holder;}
   for (const other of excludingFiles(slot)) {
     let holder = null;
     try { holder = liveHolder(other.file, ctx); } catch { holder = null; }
-    if (holder) return holder;
+    if (holder && accept(holder)) return holder;
   }
   return null;
 }
@@ -472,38 +504,39 @@ const passable = (earlier, later, locks) => {
 
 // The queue entries of a lane, oldest first, after dropping the stale ones: [{file, seq, record}].
 const QUEUE_EXT = '.queue';
-const queueFile = (dir, lane, seq) => path.join(dir, lane + '~q' + String(seq).padStart(12, '0') + QUEUE_EXT);
+const queueFile = (dir, lane, seq, priority=false) => path.join(dir, lane + (priority?'~p':'~q') + String(seq).padStart(12, '0') + QUEUE_EXT);
 function queueEntries(target, ctx) {
   let names = [];
   try { names = fs.readdirSync(target.dir); } catch { return []; }
-  const prefix = target.lane + '~q';
+  const prefix = target.lane + '~';
   const entries = [];
   for (const name of names) {
-    if (!name.startsWith(prefix) || !name.endsWith(QUEUE_EXT)) continue;
-    const seq = Number(name.slice(prefix.length, -QUEUE_EXT.length));
+    if (!name.startsWith(prefix) || !name.endsWith(QUEUE_EXT) || !/^[pq][0-9]+$/.test(name.slice(prefix.length,-QUEUE_EXT.length))) continue;
+    const priority=name[prefix.length]==='p';
+    const seq = Number(name.slice(prefix.length+1, -QUEUE_EXT.length));
     if (!Number.isSafeInteger(seq)) continue;
     const file = path.join(target.dir, name);
     let entry = null;
     try { entry = readLock(file); } catch { entry = null; }
     if (!entry) continue;
     if (staleEntry(entry, file, ctx)) { try { if (breakStale(file, entry.raw)) continue; } catch { /* left for the next reader */ } }
-    entries.push({ file, seq, record: entry.record });
+    entries.push({ file, seq, priority, record: entry.record });
   }
-  return entries.sort((a, b) => a.seq - b.seq);
+  return entries.sort((a, b) => Number(b.priority)-Number(a.priority) || a.seq - b.seq);
 }
 // A write of this process waiting its turn: its queue file (null when the folder cannot be written; then the order is
 // the in-process one) and its in-process arrival order.
 const local = new Set();
 let arrivals = 0;
-function enter(target, tool, ctx) {
-  const waiter = { target, tool: String(tool), token: randomUUID(), order: ++arrivals, file: null, seq: null };
+function enter(target, tool, ctx, priority=false) {
+  const waiter = { target, priority, tool: String(tool), token: randomUUID(), order: ++arrivals, file: null, seq: null };
   local.add(waiter);
   hookExit();
   try {
     fs.mkdirSync(target.dir, { recursive: true });
     let seq = queueEntries(target, ctx).reduce((max, e) => Math.max(max, e.seq), 0) + 1;
     for (let tries = 0; tries < 1000 && !waiter.file; tries++, seq++) {
-      const file = queueFile(target.dir, target.lane, seq);
+      const file = queueFile(target.dir, target.lane, seq, priority);
       const record = { schema: QUEUE_SCHEMA, pid: process.pid, tool: waiter.tool, enqueuedAt: new Date(ctx.now()).toISOString(), seq,
         lane: target.lane, studio: target.id ?? null, ...(target.module ? { module: target.module } : {}), token: waiter.token };
       waiting.set(file, waiter.token); // before the file exists: this process never reads its own entry as stale
@@ -524,13 +557,13 @@ function aheadOf(target, waiter, ctx) {
   // C07: an earlier write blocked by a module lock this one does not conflict with is passed (see the header).
   let locks = null;
   const ahead = other => conflicting(other, target) && !(other.module && target.module && passable(other, target, locks ??= moduleLocks(target, ctx)));
-  const earlier = o => o !== waiter && ahead(o.target) && (!waiter || o.order < waiter.order);
+  const earlier = o => o !== waiter && ahead(o.target) && (!waiter || (o.priority!==waiter.priority ? o.priority : o.order < waiter.order));
   if (waiter && !waiter.file) return [...local].filter(earlier).map(inProcess);
   return [...queueEntries(target, ctx)
-    .filter(e => (!waiter || (e.record?.token !== waiter.token && e.seq < waiter.seq))
+    .filter(e => (!waiter || (e.record?.token !== waiter.token && (e.priority!==waiter.priority ? e.priority : e.seq < waiter.seq)))
       && ahead({ dir: target.dir, lane: target.lane, id: typeof e.record?.studio === 'string' ? e.record.studio : null,
         module: moduleOfRecord(e.record?.module) }))
-    .map(e => ({ tool: e.record?.tool ?? null, pid: Number.isSafeInteger(e.record?.pid) ? e.record.pid : null, startedAt: null })),
+    .map(e => ({ tool: e.record?.tool ?? null, pid: Number.isSafeInteger(e.record?.pid) ? e.record.pid : null, startedAt: null, waitingMs: Math.max(0,ctx.now()-(Date.parse(e.record?.enqueuedAt)||ctx.now())) })),
   ...(waiter ? [] : [...local].filter(o => !o.file && earlier(o)).map(inProcess))];
 }
 // Resolves after ms, on an in-process change, or when the signal aborts (the caller then reads signal.aborted).
@@ -556,7 +589,7 @@ export function studioWriteHolder({ tool = 'o11_studio', args = {}, lane, studio
   const target = studioWriteTarget({ tool, args, lane, studioKey, deps });
   const mine = new Set((owned.getStore() ?? []).flatMap(e => (typeof e?.lock?.tokens === 'function' ? e.lock.tokens() : [])));
   for (const entry of held.values())
-    if (entry.dir === target.dir && entry.lane === target.lane && !mine.has(entry.record?.token)) return holderOf(entry);
+    if (conflicting(entry,target) && !mine.has(entry.record?.token)) return holderOf(entry);
   let files = [];
   try { files = fs.readdirSync(target.dir).filter(n => (n === target.lane + '.lock' || n.startsWith(target.lane + '~')) && n.endsWith('.lock')); }
   catch { return null; }
@@ -564,7 +597,7 @@ export function studioWriteHolder({ tool = 'o11_studio', args = {}, lane, studio
     const file = path.join(target.dir, name);
     let lock = null;
     try { lock = readLock(file); } catch { lock = null; }
-    if (lock && !mine.has(lock.record?.token) && !stale(lock, file, ctx)) return holderOf(lock);
+    if (lock && conflicting({dir:target.dir,lane:target.lane,id:lock.record?.studio??null},target) && !mine.has(lock.record?.token) && !stale(lock, file, ctx)) return holderOf(lock);
   }
   return null;
 }
@@ -577,7 +610,7 @@ export function studioWriteHolder({ tool = 'o11_studio', args = {}, lane, studio
 // excludes every write of that Studio, in this process and the others, until the bridge answers, the connection ends
 // (the Studio closed) or FLIGHT_CAP_MS passes. The stale rules of the locks apply (dead pid, older than staleMs).
 export const FLIGHT_CAP_MS = 30 * 60 * 1000;
-export function registerBridgeFlight({ lane, root, record, method, module, now } = {}) {
+export function registerBridgeFlight({ lane, root, record, method, module, now, taskId, kernelTaskId, operationId, blockedBy, stall } = {}) {
   const anvilLane = O11_LANES.includes(String(lane ?? '').toLowerCase()) ? String(lane).toLowerCase() : o11Lane.lane;
   if (!Number.isSafeInteger(record?.pid)) return () => {};
   const id = 'pid' + record.pid + (Number.isInteger(record.port) ? '-port' + record.port : '');
@@ -591,7 +624,10 @@ export function registerBridgeFlight({ lane, root, record, method, module, now }
   hookExit();
   try { fs.mkdirSync(dir, { recursive: true }); create(file, flightRecord); } catch { /* the Map still excludes this process's writes */ }
   let done = false;
-  return () => { if (done) return; done = true; held.delete(file); unlinkIfMine(file, token); changed(); };
+  const update=fields=>{if(!done)noteHolderFile(file,token,fields)};
+  update({taskId,kernelTaskId,operation:{method,operationId},...(blockedBy??stall?.blockedBy?{blockedBy:blockedBy??stall.blockedBy}:{})});
+  const release=() => { if (done) return; done = true; held.delete(file); unlinkIfMine(file, token); changed(); };
+  release.update=update;return release;
 }
 
 export const CANCELLED_CODE = 'CANCELLED';
@@ -629,7 +665,7 @@ export function narrowStudioWrite({ module, moduleKey } = {}) {
 // The turn of a write in the queue of its Studio (see the header): {ok:true, lock, queue} once the lock is taken (queue
 // null when nothing was waited for), or {ok:false, value} when the call was cancelled or the bounded wait ran out (value is
 // the refusal, not yet shaped by onBusy). Nothing of the write has run either way.
-async function takeTurn({ target, tool, ctx, limit, signal, studio }) {
+async function takeTurn({ target, tool, args = {}, ctx, limit, signal, studio, priority=false }) {
   const cancelled = extra => ({ ok: false, value: { ok: false, code: CANCELLED_CODE, outcome: 'not-sent', ...extra, continuation: busyContinuation(studio) } });
   if (signal?.aborted) return cancelled({ error: 'The call was cancelled before it started; nothing ran.' });
   // Nobody waits ahead and the Studio is free: run at once, without a queue entry.
@@ -638,7 +674,7 @@ async function takeTurn({ target, tool, ctx, limit, signal, studio }) {
     if (lock.ok) return { ok: true, lock, queue: null };
   }
   const started = Date.now();
-  const waiter = enter(target, tool, ctx);
+  const waiter = enter(target, tool, ctx, priority);
   let position = null, holder = null, step = NAP_FIRST;
   try {
     for (;;) {
@@ -657,8 +693,12 @@ async function takeTurn({ target, tool, ctx, limit, signal, studio }) {
       const now = ahead.length + (current ? 1 : 0) || 1;
       if (position == null) position = now;
       holder ??= current ?? ahead[0] ?? null;
+      // CX14 R5: the dismiss of the exact blocker that waited here (it came back before a watch marked it again) passes
+      // as soon as the holder is marked stalled by it, as if it had arrived then; any other write gets the recovery.
+      if(current?.state==='stalled'&&recoveryOf(tool,args,current)==='bypass')return {ok:false,bypass:true};
+      if(current?.state==='stalled')return {ok:false,value:stalledRefusal(current,{position:now,waitedMs:Date.now()-started,studio})};
       const left = started + limit - Date.now();
-      if (left <= 0) return { ok: false, value: queueTimeoutRefusal({ holder: current ?? ahead[0] ?? holder, position: now, waitedMs: Date.now() - started, queueMs: limit, studio }) };
+      if (left <= 0) return { ok: false, value: queueTimeoutRefusal({ holder: current ?? ahead[0] ?? holder, position: now, waitedMs: Date.now() - started, queueMs: limit, studio, ahead }) };
       await nap(Math.min(step, left), signal);
       step = Math.min(step * 2, NAP_MAX);
     }
@@ -679,6 +719,28 @@ async function takeTurn({ target, tool, ctx, limit, signal, studio }) {
 // phased: true splits a delivery (PHASED_TOOLS) into its build and apply phases (see "Build and apply phases" below): fn
 // starts without the Studio lock and takes it at its first Studio write. The ssam server passes isPhased(tool, args).
 // queue: accepted for the callers of the previous in-process queue; every write now waits in the shared queue.
+export const RECOVERY_TOOLS=Object.freeze({o11_studio:'bypass',ssam_task:'first'});
+export function recoveryOf(tool,args={},holder=null) {
+  if(tool==='ssam_task'&&args.close)return 'first';
+  if(tool!=='o11_studio'||args.command!=='dismiss-dialog')return null;
+  const title=typeof args.args==='object'&&!Array.isArray(args.args)?args.args?.title:null;
+  const same=(a,b)=>String(a??'').trim().toLowerCase()===String(b??'').trim().toLowerCase();
+  return isErrorReportTitle(title)||(title&&holder?.state==='stalled'&&same(title,holder.blockedBy?.title))?'bypass':null;
+}
+function resultValue(result) {
+ if(result?.structuredContent)return result.structuredContent;
+ try{return JSON.parse(result?.content?.find(c=>c.type==='text')?.text)}catch{return result}
+}
+async function bypassRecovery({target,tool,ctx,signal,studio},fn) {
+ const begin=Date.now(),slot={...target,recovery:true,module:null};let turn;
+ for(;;){
+  if(signal?.aborted)return {refusal:{ok:false,code:CANCELLED_CODE,outcome:'not-sent',continuation:busyContinuation(studio)}};
+  turn=acquire(slot,tool,ctx);if(turn.ok)break;
+  if(Date.now()-begin>=5000)return {refusal:queueTimeoutRefusal({holder:turn.holder,waitedMs:Date.now()-begin,queueMs:5000,studio})};
+  await nap(25,signal);
+ }
+ try{return {result:await owned.run([...(owned.getStore()??[]),{slot,lock:turn}],fn)}}finally{turn.release()}
+}
 export async function withStudioWriteLock({ tool, args = {}, lane, studioKey, deps = {}, onBusy, signal, write, phased, queue: _queue } = {}, fn) {
   if (!(write === true || isWrite(tool, args))) return fn();
   const ctx = { now: clock(deps.now), alive: deps.alive ?? processAlive, staleMs: deps.staleMs ?? STALE_MS };
@@ -687,6 +749,29 @@ export async function withStudioWriteLock({ tool, args = {}, lane, studioKey, de
   const target = { ...key, module: key.lane.startsWith(DATA_LANE_PREFIX) ? null : moduleOrNull(moduleOfWrite(tool, args)) };
   const studio = { lane: target.lane === 'odc' ? 'odc' : 'o11', pid: args?.pid };
   const refuse = value => (onBusy ? onBusy(value) : value);
+  const current=holderFor(target,ctx);
+  const title=typeof args.args==='object'&&!Array.isArray(args.args)?args.args?.title:null;
+  const matching=title?holderFor(target,ctx,h=>h.state==='stalled'&&String(h.blockedBy?.title??'').trim().toLowerCase()===String(title).trim().toLowerCase()):null;
+  const mode=recoveryOf(tool,args,matching??current);
+  const bypass=async()=>{
+    const execution=await bypassRecovery({target,tool,ctx,signal,studio},fn);
+    if(execution.refusal)return refuse(execution.refusal);
+    const result=execution.result;
+    const value=resultValue(result);
+    if((value?.ok===true&&Array.isArray(value.closed)&&value.closed.length)||value?.code==='DIALOG_NOT_FOUND')clearStudioBlockedBy({target,title:args.args.title});
+    return result;
+  };
+  if(mode==='bypass') return bypass();
+  if(mode==='first') {
+    const pending=pendingOperationOf({taskId:args.id,kernelTaskId:args.id,deps,lane});
+    const running=typeof args.id==='string'?holderFor(target,ctx,h=>!String(h.tool).startsWith('bridge:')&&[h.taskId,h.kernelTaskId].includes(args.id)):null;
+    const holder=running??pending;
+    if(running||pending) {
+      const next={tool:'ssam_task',arguments:{id:args.id},why:'Read the running task; it cannot be closed while its operation is pending.'};
+      const recovery=holder.state==='stalled'?stallRecovery({verdict:'dialog',blockedBy:holder.blockedBy},next):[next];
+      return refuse({ok:false,code:running?'TASK_STILL_RUNNING':'CLOSE_WAITS_FOR_PENDING_OPERATION',outcome:'not-sent',holder,recovery,continuation:recovery[0]});
+    }
+  }
   const own = queueLimitOf(tool, args);
   const limit = Number.isFinite(deps.queueMs) && deps.queueMs >= 0 ? deps.queueMs : Math.max(queueWaitMs(deps.env ?? process.env), own ?? 0);
   // A write inside a call that already holds this Studio runs at once (part of the holder). Inside a call still in its
@@ -702,7 +787,8 @@ export async function withStudioWriteLock({ tool, args = {}, lane, studioKey, de
   }
   if (phased === true && isPhased(tool, args) && !target.lane.startsWith(DATA_LANE_PREFIX))
     return runPhased({ target, tool, ctx, limit, signal, studio, refuse }, fn);
-  const turn = await takeTurn({ target, tool, ctx, limit, signal, studio });
+  const turn = await takeTurn({ target, tool, args, ctx, limit, signal, studio, priority:mode==='first' });
+  if (!turn.ok && turn.bypass) return bypass();
   if (!turn.ok) return refuse(turn.value);
   let value;
   try { value = await owned.run([...(owned.getStore() ?? []), { slot: target, lock: turn.lock }], fn); } finally { turn.lock.release(); }
@@ -862,7 +948,7 @@ async function runPhased({ target, tool, ctx, limit, signal, studio, refuse }, f
     phase.promoteAt = Date.now();
     const turn = await takeTurn({ target, tool, ctx, limit, signal, studio });
     if (!turn.ok) { phase.refusal = turn.value; return turn.value; }
-    entry.lock = turn.lock; phase.acquiredAt = Date.now(); phase.queue = turn.queue;
+    entry.lock = turn.lock; if(entry.holderFields)entry.lock.note(entry.holderFields); phase.acquiredAt = Date.now(); phase.queue = turn.queue;
     return { ok: true, phased: true, promoted: true };
   })();
   // A short Studio read of the build phase: the Studio lock for read() only (writes nested in it are part of it).

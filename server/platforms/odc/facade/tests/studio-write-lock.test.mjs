@@ -38,7 +38,8 @@ const WRITES = [
   ['o11_deliver', { module: 'M', job: [{ op: 'x' }], until: 'apply', authorize: WORDS }],
   ['o11_publish', { module: 'M', authorize: WORDS }],
   ['o11_access', { action: 'apply', manifestPath: 'C:\\m.json', words: WORDS }],
-  ...ENVIRONMENT_WRITES.map(action => ['o11_environment', { action }]),
+  // CX15: delete-app is a write only with its confirmationToken (without it, a preview: a read).
+  ...ENVIRONMENT_WRITES.map(action => ['o11_environment', action === 'delete-app' ? { action, confirmationToken: 'p.t' } : { action }]),
   ['o11_studio', { command: 'open-module', args: { name: 'M' } }], ['o11_studio', { command: 'snapshot', args: { module: 'M' } }],
   ['o11_studio', { command: 'wait', args: { condition: 'open', module: 'M' } }], ['o11_studio', { command: 'dismiss-dialog', args: { title: 'X' } }],
   ['o11_studio', { command: 'login', args: { host: 'h.test' } }],
@@ -51,24 +52,28 @@ const WRITES = [
   // UI freeze of 2026-10-08 (pattern 4): wait idle|no-dialogs answer the dependencies dialog and refresh references, and idle
   // must not count other writes forever: they take their turn in the queue (for up to their own timeoutSeconds).
   ...['idle', 'no-dialogs'].map(condition => ['o11_studio', { command: 'wait', args: { condition } }]),
-  ...['insert', 'update', 'delete'].map(operation => ['o11_data', { request: { operation, entity: 'E' } }]),
+  // Junction CX12 x CX15 (M6-2): an o11_data delete is a write only with its token (without it, a preview: a read).
+  ...['insert', 'update'].map(operation => ['o11_data', { request: { operation, entity: 'E' } }]),
+  ['o11_data', { request: { operation: 'delete', entity: 'E', confirmationToken: 'p.t' } }],
   // A batch with any write (contract I12) is a write.
   ['o11_data', { request: { batch: [{ operation: 'read', entity: 'E' }, { operation: 'insert', entity: 'E', records: [{}] }] } }],
   // ssam_task with close closes a delivery task in the kernel (snapshot of the module, reservation).
   ['ssam_task', { id: ID, close: { reason: 'r' } }],
   ['o11_service_center_write', { action: 'timer-run', execute: true }],
-  // The delete and its aliases execute with the words, in one call (contract I4).
-  ['o11_service_center_write', { action: 'delete', applications: ['ZZA'], words: 'apagar ZZA' }],
-  ['o11_service_center_write', { action: 'module-delete', module: 'M', words: 'apagar M', execute: true }],
-  ['o11_service_center_write', { action: 'application-delete', application: 'A', words: 'apagar A' }],
-  ['o11_extension', { action: 'publish', spec: { name: 'E' } }], ['o11_extension', { action: 'delete', extension: 'E', words: 'apagar E' }],
-  ['odc_external_library', { action: 'deploy', spec: { name: 'L' } }], ['odc_external_library', { action: 'discard', library: 'L' }],
+  // CX15: the delete and its aliases (and the page deletes) execute only with the token of their preview.
+  ['o11_service_center_write', { action: 'delete', confirmationToken: 'p.t', words: 'apagar os 2 ZZ' }],
+  ['o11_service_center_write', { action: 'module-delete', confirmationToken: 'p.t', words: 'apagar o 1, M' }],
+  ['o11_service_center_write', { action: 'application-delete', confirmationToken: 'p.t', words: 'apagar o 1, A' }],
+  ['o11_service_center_write', { action: 'solution-delete', solution: 'S', confirmationToken: 'p.t', words: 'apagar a 1, S' }],
+  ['o11_extension', { action: 'publish', spec: { name: 'E' } }], ['o11_extension', { action: 'delete', confirmationToken: 'p.t', words: 'apagar a 1, E' }],
+  ['odc_external_library', { action: 'deploy', spec: { name: 'L' } }], ['odc_external_library', { action: 'discard', library: 'L', confirmationToken: 'p.t' }],
   ['odc_mcp_import', {}],
   ...['sign-in', 'web-sign-in', 'close'].map(action => ['o11_service_center_session', { action }]),
   ['continue', { task_id: 't' }],
   ['studio_deliver', { feature: 'f' }], ['studio_deliver', { feature: 'f', until: 'merge' }],
   ...['studio_merge', 'studio_publish', 'studio_create', 'studio_close', 'studio_refresh_references', 'studio_data_insert', 'studio_data_update',
-    'studio_data_delete', 'studio_dismiss_dialog', 'studio_open', 'studio_command'].map(name => [name, {}]),
+    'studio_dismiss_dialog', 'studio_open', 'studio_command'].map(name => [name, {}]),
+  ['studio_data_delete', { module: 'M', entity: 'E', confirmationToken: 'p.t' }], // junction (M6-2): only the execution queues
   ['studio_create_app', {}], ['studio_create_app', { action: 'create', kind: 'library' }],
 ];
 // Reads, plus writes outside any Studio (odc_write goes to the Portal API; it has its own words and operationUuid).
@@ -115,7 +120,16 @@ test('classification: every write tool and argument case, and reads stay out', (
   for (const [name, args] of NOT_LOCKED) assert.equal(isWrite(name, args), false, name + ' ' + JSON.stringify(args));
   assert.deepEqual(Object.keys(WRITE_TOOLS).filter(name => !WRITES.some(([n]) => n === name)), [], 'every WRITE_TOOLS entry has a case');
   // Same lists as the tools themselves: a new environment action or o11_studio command needs a decision here.
-  assert.deepEqual(ENVIRONMENT_WRITES.filter(action => !isWrite('o11_environment', { action })), []);
+  assert.deepEqual(ENVIRONMENT_WRITES.filter(action => !isWrite('o11_environment', { action, ...(action === 'delete-app' ? { confirmationToken: 'p.t' } : {}) })), []);
+  // CX15: a destructive call without its token is a preview, a read: it never waits for the Studio lock.
+  for (const [name, args] of [['o11_environment', { action: 'delete-app', app: 'A', authorize: 'apagar A' }],
+    ['o11_service_center_write', { action: 'delete', applications: ['ZZA'], words: 'apagar ZZA' }],
+    ['o11_service_center_write', { action: 'module-delete', module: 'M', words: 'apagar M', execute: true }],
+    ['o11_service_center_write', { action: 'solution-delete', solution: 'S', words: 'apagar S', execute: true, operationId: 'u' }],
+    ['o11_extension', { action: 'delete', extension: 'E', words: 'apagar E' }],
+    // Junction CX12 x CX15 (M6-2): every preview leaves the queue (the cut queued these three).
+    ['o11_data', { request: { operation: 'delete', entity: 'E' } }], ['odc_external_library', { action: 'discard', library: 'L' }],
+    ['studio_data_delete', { module: 'M', entity: 'E', ids: [1] }]]) assert.equal(isWrite(name, args), false, name + ' ' + JSON.stringify(args));
   assert.deepEqual(COMMANDS.filter(command => isWrite('o11_studio', { command })).sort(), ['close-module', 'dismiss-dialog', 'login', 'open-module', 'refresh-references']);
   assert.deepEqual(COMMANDS.filter(c => !['status', 'wait', 'open-module', 'close-module', 'snapshot', 'errors', 'publish-log', 'windows', 'dismiss-dialog', 'login', 'refresh-references'].includes(c)), []);
   assert.equal(isWrite('o11_deliver'), true, 'no arguments: until defaults to merge');
@@ -249,7 +263,8 @@ test('two levels across processes: a pid file excludes the whole lane and a lane
   const foreign = { schema: 'ssam-studio-write-lock/1', pid: process.ppid, tool: 'studio_publish', startedAt: new Date().toISOString(), lane: 'odc', token: 't' };
   writeLock(path.join(dir, 'odc~pid101.lock'), { ...foreign, studio: 'pid101' });
   const refused = await withStudioWriteLock({ tool: 'studio_open', args: {}, lane: 'odc', deps }, () => 'x');
-  assert.deepEqual(refused.holder, { tool: 'studio_publish', pid: process.ppid, startedAt: foreign.startedAt });
+  assert.ok(Number.isFinite(refused.holder.heldMs) && refused.holder.heldMs >= 0);
+  assert.deepEqual(refused.holder, { tool: 'studio_publish', pid: process.ppid, startedAt: foreign.startedAt, heldMs: refused.holder.heldMs, state: 'running' });
   assert.deepEqual(lockFiles(dir), ['odc~pid101.lock'], 'the refused call removed its own file and left the holder\'s');
   assert.deepEqual(queueFiles(dir), [], 'and its queue entry');
   fs.unlinkSync(path.join(dir, 'odc~pid101.lock'));
@@ -287,7 +302,7 @@ test('stale locks: dead owner, too old, damaged and old, own pid not held here; 
   assert.equal(await run(), 'entregue');
   // damaged and fresh: a creation in flight, busy with an unknown holder; damaged and old: recovered
   writeLock(file, '');
-  assert.deepEqual((await run()).holder, { tool: null, pid: null, startedAt: null });
+  assert.deepEqual((await run()).holder, { tool: null, pid: null, startedAt: null, heldMs: 0, state: 'running' });
   const old = new Date(Date.now() - 120000); fs.utimesSync(file, old, old);
   assert.equal(await run(), 'entregue');
   // another process is breaking it right now (fresh breaker): busy, file untouched; an old breaker is cleared

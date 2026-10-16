@@ -70,14 +70,25 @@ export const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 // A bounded wait for a real state, inside the tool (the model never polls): about 30 s, pauses of 1 to 5 s. The time is
 // the sum of the pauses, so an injected sleep keeps a test instant and the number of reads bounded.
 export const WAIT = Object.freeze({ timeoutMs: 30000, pausesMs: [1000, 1000, 2000, 3000, 5000] });
-export async function waitFor(check, { timeoutMs = WAIT.timeoutMs, pausesMs = WAIT.pausesMs, sleep: pause = sleep } = {}) {
+// signal (CX15): the client's cancellation stops the wait at once (no pause after it, the pause in course raced against
+// it): {done:false, cancelled:true}. The check that runs is never cut.
+export async function waitFor(check, { timeoutMs = WAIT.timeoutMs, pausesMs = WAIT.pausesMs, sleep: pause = sleep, signal = undefined } = {}) {
   let waitedMs = 0;
   for (let attempts = 1; ; attempts++) {
     const value = await check();
     if (value) return { done: true, value, attempts, waitedMs };
     if (waitedMs >= timeoutMs) return { done: false, value, attempts, waitedMs };
+    if (signal?.aborted) return { done: false, value, attempts, waitedMs, cancelled: true };
     const ms = Math.max(1, Math.min(pausesMs[Math.min(attempts - 1, pausesMs.length - 1)], timeoutMs - waitedMs));
-    await pause(ms);
+    if (await pausedUntilAbort(pause(ms), signal)) return { done: false, value, attempts, waitedMs, cancelled: true };
     waitedMs += ms;
   }
+}
+// true when the signal aborted before the pause ended.
+async function pausedUntilAbort(paused, signal) {
+  if (!signal) { await paused; return false; }
+  let onAbort;
+  const aborted = new Promise(resolve => { onAbort = () => resolve(true); signal.addEventListener('abort', onAbort, { once: true }); });
+  try { return await Promise.race([Promise.resolve(paused).then(() => signal.aborted), aborted]); }
+  finally { signal.removeEventListener('abort', onAbort); }
 }

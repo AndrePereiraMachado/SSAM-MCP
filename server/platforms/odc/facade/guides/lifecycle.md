@@ -63,7 +63,7 @@ A refused call changes no data and no Studio. Bridges already attached refuse pe
 
 ## Long tasks and proofs
 
-`ssam_task {id}` reads a long task (update, reprove, prune, index rebuild); never repeat the call that started it. `ssam_reprove {lane, scope:"release-stampable"}` reruns the stampable proofs with the release's own tools, in the background. `ssam_friction` reads where a task got stuck (issues and the current task).
+A call still running at 25 s returns the same tool with `continueTask`: call it to wait for the final answer, never sleep or repeat; `ssam_task {id}` reads its evidence. `ssam_reprove {lane, scope:"release-stampable"}` reruns the stampable proofs with the release's own tools, in the background. `ssam_friction` reads where a task got stuck (issues and the current task).
 
 ## Done by the person, outside the MCP
 

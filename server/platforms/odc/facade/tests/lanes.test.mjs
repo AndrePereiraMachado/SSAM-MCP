@@ -160,7 +160,7 @@ test('the o11_access MCP tool is served without the lane servers and refuses bad
     assert.match(noWords.content[0].text, /authorization words/);
     const relative = await client.callTool({ name: 'o11_access', arguments: { action: 'plan', manifestPath: 'm.json' } });
     assert.equal(relative.isError, true);
-    assert.deepEqual(Object.keys(tool.inputSchema.properties).sort(), ['action', 'email', 'host', 'manifestPath', 'max', 'operationId', 'role', 'username', 'words']); // no execution argument: apply always executes
+    assert.deepEqual(Object.keys(tool.inputSchema.properties).sort(), ['action', 'continueTask', 'email', 'host', 'manifestPath', 'max', 'operationId', 'role', 'username', 'words']); // no execution argument: apply always executes
     // refused for the extra argument itself (by the schema or by accessArguments), before anything runs
     const execute = await client.callTool({ name: 'o11_access', arguments: { action: 'apply', manifestPath: 'm.json', words: 'ok', execute: true } })
       .catch(error => ({ isError: true, content: [{ text: error.message }] }));

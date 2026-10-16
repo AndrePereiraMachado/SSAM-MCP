@@ -482,42 +482,15 @@ class StudioApiTests(unittest.TestCase):
     def deletes(self):
         return [c for c in self.bridge.calls if c[0] == 'api' and c[2] == 'DeleteModule']
 
-    def test_module_delete_simulates_first_then_needs_words_naming_the_module(self):
-        plan = self.run_main('module-delete', '--module', 'Orders')
-        self.assertEqual(('k-orders', ['Billing'], False, 'studio'), (plan['moduleKey'], plan['consumers'], plan['execute'], plan['auth']['path']))
-        self.assertEqual([], self.deletes())
-        operation = str(uuid.uuid4())
-        with self.assertRaisesRegex(ProtocolError, 'name its target'):
-            self.run_main('module-delete', '--module', 'Orders', '--execute', '--operation-id', operation,
-                          '--words', 'yes delete it on test', '--confirm-host', HOST)
+    # CX15 r2 (L): module-delete and extension-delete do not run in this script (test_service_center_deletes.py); the
+    # two-call delete of o11_service_center_write replaced them. Before, these tests sent the delete in one call.
+    def test_module_and_extension_delete_do_not_run_here(self):
+        for argv in (('module-delete', '--module', 'Orders'), ('module-delete', '--module', 'Orders', '--execute', '--operation-id', str(uuid.uuid4()),
+                     '--words', 'delete module Orders on test', '--confirm-host', HOST),
+                     ('extension-delete', '--module-key', 'k-orders', '--execute', '--operation-id', str(uuid.uuid4()), '--words', 'delete Orders test', '--confirm-host', HOST)):
+            result = self.run_main(*argv)
+        self.assertEqual(('DESTRUCTIVE_NEEDS_DEDICATED_TOOL', 'o11_service_center_write'), (result['code'], result['continuation']['tool']))
         self.assertEqual(([], []), (self.deletes(), list(Path(self.temp.name).glob('*'))))
-        words = 'delete module Orders on test'
-        receipt = self.run_main('module-delete', '--module', 'Orders', '--execute', '--operation-id', operation, '--words', words, '--confirm-host', HOST)
-        self.assertEqual('confirmed', receipt['state'])
-        (_, surface, _, args, write, sent_id, words_hash), = self.deletes()
-        self.assertEqual(('soap', {'moduleKey': 'k-orders', 'moduleKind': 'eSpace'}, True, operation, hashlib.sha256(words.encode()).hexdigest()),
-                         (surface, args, write, sent_id, words_hash))
-        # The destructive call names its key as target, and a corporate host write carries the explicit instruction.
-        self.assertIn('k-orders', self.bridge.targets)
-        self.assertTrue(self.bridge.corporate)
-        again = self.run_main('module-delete', '--module', 'Orders', '--execute', '--operation-id', operation, '--words', words, '--confirm-host', HOST)
-        self.assertTrue(again['existingReceipt'])
-        self.assertEqual(1, len(self.deletes()))
-
-    def test_lost_api_write_stays_uncertain_and_a_refused_one_releases_the_target(self):
-        self.bridge.replies['DeleteModule'] = BridgeError('UNCERTAIN', 'connection lost after send', write=True)
-        base = ('extension-delete', '--module-key', 'k-orders', '--execute', '--words', 'delete Orders test', '--confirm-host', HOST)
-        self.bridge.replies['ListExtensions'] = lambda a: list(self.modules)
-        receipt = self.run_main(*base, '--operation-id', str(uuid.uuid4()))
-        self.assertEqual('uncertain', receipt['state'])
-        with self.assertRaisesRegex(ProtocolError, 'pending/uncertain'):
-            self.run_main(*base, '--operation-id', str(uuid.uuid4()))
-        self.assertEqual(1, len(self.deletes()))
-        self.journal = Journal(Path(self.temp.name) / 'other')
-        self.bridge.replies['DeleteModule'] = BridgeError('NOT_ALLOWED', 'outside the allowlist', write=True)
-        self.assertEqual('refused', self.run_main(*base, '--operation-id', str(uuid.uuid4()))['state'])
-        self.bridge.replies['DeleteModule'] = self.delete
-        self.assertEqual('confirmed', self.run_main(*base, '--operation-id', str(uuid.uuid4()))['state'])
 
     def test_solution_publish_sends_the_prepared_package_once_and_returns_its_job(self):
         osp = Path(self.temp.name) / 'Billing.osp'
@@ -555,23 +528,31 @@ class StudioApiTests(unittest.TestCase):
         self.bridge.replies.update({'DeleteModule': {'success': False, 'message': 'Module has consumers'},
                                     'ListApplications': [{'Key': 'app-1', 'Name': 'Orders App'}],
                                     'apply-settings': {'status': 200, 'body': {'OperationId': 0, 'REST_Error': {'ErrorMessage': 'Application is locked'}}}})
+        # CX15 r2 (L): module-delete does not run here any more (DESTRUCTIVE_NEEDS_DEDICATED_TOOL); apply-settings stays.
         deleted = self.run_main('module-delete', '--module', 'Orders', '--execute', '--operation-id', str(uuid.uuid4()),
                                 '--words', 'delete module Orders on test', '--confirm-host', HOST)
-        self.assertEqual(('rejected', 'Module has consumers'), (deleted['state'], deleted['message']))
+        self.assertEqual('DESTRUCTIVE_NEEDS_DEDICATED_TOOL', deleted['code'])
         settings = self.run_main('apply-settings', '--application-key', 'app-1', '--execute', '--operation-id', str(uuid.uuid4()),
                                  '--words', 'apply settings test', '--confirm-host', HOST)
         self.assertEqual(('rejected', 'Application is locked'), (settings['state'], settings['message']))
         self.assertFalse(list(Path(self.temp.name).glob('*.lock')))
 
     def test_verify_reconciles_an_uncertain_delete_by_reading_only(self):
+        # CX15 r2 (L): no delete is sent here any more; an uncertain delete receipt written before (by the journal, as the
+        # old one-call delete did) is still verified by reading only.
         def lost(args):
             self.delete(args)
             return BridgeError('UNCERTAIN', 'reply lost', write=True)
         self.bridge.replies['DeleteModule'] = lost
         operation = str(uuid.uuid4())
-        receipt = self.run_main('module-delete', '--module', 'Orders', '--execute', '--operation-id', operation,
-                                '--words', 'delete Orders on test', '--confirm-host', HOST)
-        self.assertEqual('uncertain', receipt['state'])
+        plan = {'action': 'module-delete', 'moduleKey': 'k-orders', 'name': 'Orders'}
+        with self.journal.reserve(operation, {'host': HOST, 'action': 'module-delete', 'target': 'Orders'}, 'delete Orders on test', plan) as receipt:
+            receipt['plan'] = plan
+            try:
+                self.bridge.api(HOST, 'soap', 'DeleteModule', {'moduleKey': 'k-orders', 'moduleKind': 'eSpace'}, write=True, operation_id=operation)
+            except BridgeError:
+                receipt.update(state='uncertain', ok=False)
+        self.assertEqual('uncertain', self.journal.lookup(operation)['state'])
         verified = self.run_main('verify', '--operation-id', operation)
         self.assertEqual((True, 'confirmed', False), (verified['observedDesiredState'], verified['state'], verified['replayed']))
         self.assertEqual(1, len(self.deletes()))
@@ -652,29 +633,14 @@ class StudioApiWriteTests(unittest.TestCase):
     def api_calls(self, operation):
         return [c for c in self.bridge.calls if c[0] == 'api' and c[2] == operation]
 
-    def test_application_delete_simulates_as_a_read_then_deletes_with_words_naming_it(self):
-        plan = self.run_main('application-delete', '--application', 'Sample Shared')
-        self.assertEqual(('app-2', ['ZZSampleScratch'], ['Sample Shared'], False),
-                         (plan['applicationKey'], plan['simulation']['deletedModules'], plan['namedTargets'], plan['execute']))
-        (_, surface, _, args, write, operation, _), = self.api_calls('DeleteApplication')
-        self.assertEqual(('soap', {'appKey': 'app-2', 'simulate': True}, False, None), (surface, args, write, operation))
-        with self.assertRaisesRegex(ProtocolError, 'name its target'):
-            self.execute('application-delete', '--application', 'Sample Shared', words='delete it on test')
-        self.assertEqual([], [c for c in self.api_calls('DeleteApplication') if c[4]])
-        receipt = self.execute('application-delete', '--application-key', 'app-2', words='delete Sample Shared on test')
-        self.assertEqual('confirmed', receipt['state'])
-        (_, _, _, args, write, operation, _), = [c for c in self.api_calls('DeleteApplication') if c[4]]
-        self.assertEqual(({'appKey': 'app-2', 'simulate': False}, True, receipt['operationId']), (args, write, operation))
-        # The destructive call names its key as target, so the bridge checks it against the arguments.
-        self.assertEqual(['app-2'], [t for t in self.bridge.targets if t])
-
-    def test_a_delete_the_servers_simulation_refuses_is_never_sent(self):
-        self.simulation = False
-        plan = self.run_main('application-delete', '--application', 'Sample Orders')
-        self.assertIn('refuses', plan['blocked'])
-        with self.assertRaisesRegex(ProtocolError, 'refuses'):
-            self.execute('application-delete', '--application', 'Sample Orders', words='delete Sample Orders on test')
-        self.assertEqual(([], False), ([c for c in self.api_calls('DeleteApplication') if c[4]], (Path(self.temp.name) / 'receipts').exists()))
+    # CX15 r2 (L): application-delete does not run in this script (test_service_center_deletes.py): not even its
+    # simulation; o11_service_center_write previews it (the server's simulation) and executes it with the owner's count.
+    def test_application_delete_does_not_run_here(self):
+        for argv in (('application-delete', '--application', 'Sample Shared'),
+                     ('application-delete', '--application-key', 'app-2', '--execute', '--operation-id', str(uuid.uuid4()), '--words', 'delete Sample Shared on test', '--confirm-host', HOST)):
+            result = self.run_main(*argv)
+        self.assertEqual(('DESTRUCTIVE_NEEDS_DEDICATED_TOOL', 'o11_service_center_write'), (result['code'], result['continuation']['tool']))
+        self.assertEqual(([], False), (self.api_calls('DeleteApplication'), (Path(self.temp.name) / 'receipts').exists()))
 
     def test_module_move_and_add_resolve_keys_and_read_the_listing_back(self):
         moved = self.execute('module-move', '--module', 'ZZSampleScratch', '--to-application', 'Sample Orders', words='move ZZSampleScratch on test')
@@ -878,20 +844,14 @@ class SessionAndGuardTests(unittest.TestCase):
         self.assertEqual('corporate', guard_write(HOST, 'run W on test', HOST))
         self.assertEqual('personal', guard_write(PERSONAL, 'run W'))
 
-    def test_connection_delete_needs_words_naming_it_and_reads_back_its_absence(self):
-        deleted = []
-        bridge = FakeBridge(pages={
-            ('GET', SC + 'DatabaseConnections_List.aspx'): lambda f, a: '<table><tr><th>Name</th></tr></table><p>No connections found</p>' if deleted else fixture('db-connections.html'),
-            ('GET', SC + 'DatabaseConnection_Edit.aspx?DBConnectionId=3'): fixture('db-connection-edit.html'),
-            ('POST', SC + 'DatabaseConnection_Edit.aspx?DBConnectionId=3'): lambda f, a: deleted.append(f['__EVENTTARGET']) or fixture('db-connections.html')})
-        base = ('db-connection-delete', '--host', HOST, '--connection', 'LegacyERP', '--confirm-host', HOST, '--execute')
-        plan = self.run_main('db-connection-delete', '--host', HOST, '--connection', 'LegacyERP', bridge=bridge)
-        self.assertEqual((True, '3'), (plan['destructive'], plan['connectionId']))
-        with self.assertRaisesRegex(ProtocolError, 'name its target'):
-            self.run_main(*base, '--operation-id', str(uuid.uuid4()), '--words', 'delete it on test', bridge=bridge)
-        self.assertEqual([], bridge.posts())
-        receipt = self.run_main(*base, '--operation-id', str(uuid.uuid4()), '--words', 'delete LegacyERP on test', bridge=bridge)
-        self.assertEqual(('confirmed', ['wt5$wtDeleteLink'], 'studio-web'), (receipt['state'], deleted, receipt['auth']['path']))
+    def test_connection_delete_does_not_run_here(self):
+        # CX15 r2 (L): db-connection-delete does not run in this script; o11_service_center_write previews and executes it.
+        bridge = FakeBridge()
+        for argv in (('db-connection-delete', '--host', HOST, '--connection', 'LegacyERP'),
+                     ('db-connection-delete', '--host', HOST, '--connection', 'LegacyERP', '--confirm-host', HOST, '--execute', '--operation-id', str(uuid.uuid4()), '--words', 'delete LegacyERP on test')):
+            result = self.run_main(*argv, bridge=bridge)
+        self.assertEqual(('DESTRUCTIVE_NEEDS_DEDICATED_TOOL', 'o11_service_center_write'), (result['code'], result['continuation']['tool']))
+        self.assertEqual([], bridge.calls)
 
     def test_new_connection_without_a_stored_login_opens_its_prompt_before_any_reservation(self):
         argv = ('db-connection-create', '--host', HOST, '--connection', 'NewDb', '--db-server', 'sql', '--execute',

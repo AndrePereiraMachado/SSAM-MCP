@@ -4,6 +4,7 @@
 // client but the answers it asked for (plus tools/list_changed for a catalog change). A change of the CLI alone reloads
 // nothing, and nothing is reloaded while a request is pending. A fake entry stands for the server: it says which child it
 // is and how many initialize requests it got. Child node processes only; no Studio.
+import '../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -25,6 +26,8 @@ process.stdin.on('data', chunk => {
     const m = JSON.parse(line);
     if (m.method === 'initialize') { initializes++; send({ jsonrpc: '2.0', id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { tools: { listChanged: true } }, serverInfo: { name: 'fake', version: process.env.FAKE_GEN } } }); }
     else if (m.method === 'tools/call') {
+      if (m.params.name === 'detached-one' || m.params.name === 'detached-zero')
+        send({ jsonrpc: '2.0', method: 'notifications/ssam/detached_tasks', params: { running: m.params.name === 'detached-one' ? 1 : 0 } });
       const value = { child: process.env.FAKE_GEN, initializes, name: m.params.name, reloadedAt: process.env.SSAM_RELOADED_AT ?? null, reloadedFrom: process.env.SSAM_RELOADED_FROM ?? null };
       const reply = () => send({ jsonrpc: '2.0', id: m.id, result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } });
       if (m.params.name === 'slow') setTimeout(reply, 300); else reply();
@@ -115,4 +118,36 @@ test('C11: a catalog change also says tools/list_changed; a new child that fails
   assert.equal((await h.call(4)).child, '2', 'the same identity is not tried again');
   h.set({ facadeSha256: 'facade-4' });
   assert.equal((await h.call(5)).child, '4');
+});
+
+test('CX12: detached work keeps the old child serving until zero, and its notifications stay private', async t => {
+  const h = harness(t);
+  h.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'c', version: '1' } } });
+  await h.answer(1); h.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+  await h.call(2, 'detached-one');
+  assert.equal(h.relay.state.detachedTasks, 1);
+  h.set({ facadeSha256: 'facade-2', catalogSha256: 'catalog-2' });
+  assert.equal((await h.call(3)).child, '1');
+  assert.equal(h.children.length, 1, 'a running detached task prevents a reload');
+  assert.equal((await h.call(4, 'detached-zero')).child, '1');
+  assert.equal(h.relay.state.detachedTasks, 0);
+  assert.equal(h.children.length, 1, 'zero itself does not reload the child');
+  assert.equal((await h.call(5)).child, '2', 'the next tools/call reloads');
+  assert.equal(h.outputs.some(message => message.method === 'notifications/ssam/detached_tasks'), false);
+  assert.equal(h.outputs.filter(message => message.method === 'notifications/tools/list_changed').length, 1);
+});
+
+test('CX12: a child that exits clears the detached count so the changed release can take over', async t => {
+  const h = harness(t);
+  h.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'c', version: '1' } } });
+  await h.answer(1); h.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+  await h.call(2, 'detached-one');
+  assert.equal(h.relay.state.detachedTasks, 1);
+  const old = h.children[0];
+  const ended = new Promise(resolve => old.once('close', resolve));
+  old.kill(); await ended;
+  assert.equal(h.relay.state.detachedTasks, 0);
+  h.set({ facadeSha256: 'facade-2' });
+  assert.equal((await h.call(3)).child, '2');
+  assert.equal(h.outputs.some(message => message.method === 'notifications/ssam/detached_tasks'), false);
 });

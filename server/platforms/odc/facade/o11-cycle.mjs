@@ -69,7 +69,10 @@ import { mergeNormalizations } from './normalizations.mjs';
 // Lane wp (atritos 3): the build phase of a phased delivery, outside the Studio lock (o11-build-phase.mjs).
 import { phaseGuards, buildBeforeApply, afterApply, validationContract, contractProblems } from './o11-build-phase.mjs';
 import { refusalFields, diagnosisOf, normalizationsOf } from './refusal-problems.mjs';
-import { PHASES_META } from './studio-write-lock.mjs';
+import { PHASES_META, noteStudioHolder, pendingOperationOf } from './studio-write-lock.mjs';
+import { watchPendingOperation } from './studio-pending-operation.mjs';
+import { stallRecovery } from './studio-recovery.mjs';
+import { cleanStall } from './bridge-stall.mjs';
 // F5: what a delivery reused of its producer signatures, in every answer (producer-signatures.mjs).
 import { producerSignaturesOf } from './producer-signatures.mjs';
 // The prototype importer (docs/PROTOTIPO-NATIVO.md, lane surface): the capture before anything, the rebuild of 1.4.1, the
@@ -635,7 +638,7 @@ const resultFileOf = (state, work) => path.join(typeof state?.work === 'string' 
 export const dataProofContinuation = (state, work) => ({ tool: 'ssam_evidence', arguments: { file: resultFileOf(state, work), pointer: '/dataProof/differences' },
   why: 'O merge ficou no Studio para revisão (Ctrl+Z desfaz) e nada foi publicado: todas as diferenças entre os dados entregues e a tarefa estão neste recibo; corrija o job e entregue com closePrevious.' });
 
-export function deliverOutcome(run, { trackId, work, job, taskId, since, input = {} }) {
+export function deliverOutcome(run, { trackId, work, job, taskId, since, input = {}, pendingContext }) {
   let state = run?.envelope?.data;
   // The CLI's own refusal of the job (Program.ErrorEnvelope with code and problems): nothing reached the Studio. The single
   // refusal (PREFLIGHT_REFUSED) or one of the apply alone with its own code and problems (primeira-certa A7).
@@ -654,25 +657,71 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
         ...(failedOp != null ? { failedOp } : {}) };
     }
   }
+  // CX14 R2: a stall in an answer never carries what the person typed in a dialog (receipts written before R2 may).
+  if (state.stalled) state = { ...state, stalled: cleanStall(state.stalled) };
+  // CX14 N7: the kernel's texts of a call that sent a UI call again after its proof never say "nothing was repeated" in
+  // the answer, whichever kernel wrote them (a receipt of the e77fd91b kernel does).
+  state = withoutFalseRepetition(state);
   const outcome = deliveryOutcome(state);
   // K1-g (I8): what the kernel did with the tab this delivery opened (--close-opened-tab): true, or {closed:false, reason}.
   const tab = state.closedTab !== undefined && state.closedTab !== null ? { closedTab: state.closedTab } : {};
   // F5 (producer-signatures.mjs): every answer of a delivery with producer signatures says what was reused and how each
   // producer was observed (ledger: no server call; server; capture), and whether the merge observed it first.
   const signatures = producerSignaturesOf(state);
-  if (outcome === 'delivered') { const fields = { ...deliveryFields(state), ...tab, ...signatures }; return Object.keys(fields).length ? { ...DELIVERED, ...fields } : DELIVERED; }
+  // CX14 N2: a Studio UI call of this task that stopped and then ended, when it may have changed the module (a Refresh
+  // References): named with Ctrl+Z in every answer, never "nothing reached the module".
+  const settledUi = settledUiOf(state);
+  if (outcome === 'delivered') { const fields = { ...deliveryFields(state), ...tab, ...signatures, ...settledUi }; return Object.keys(fields).length ? { ...DELIVERED, ...fields } : DELIVERED; }
   const base = { stage: state.stage ?? null, taskId: state.taskId ?? taskId ?? null };
-  if (state.code === 'PREFLIGHT_REFUSED') return { ...preflightRefusal(state, base, 'PREFLIGHT_REFUSED', job ?? state.request?.JobPath ?? state.request?.jobPath), ...signatures };
+  // CX14 N7: every answer of a task with a settled Refresh References names it with Ctrl+Z (settledUi), these included.
+  if (state.code === 'PREFLIGHT_REFUSED') return { ...preflightRefusal(state, base, 'PREFLIGHT_REFUSED', job ?? state.request?.JobPath ?? state.request?.jobPath), ...signatures, ...settledUi };
   // fam-deps (family D): the Studio opened a dialog during the merge that only the person answers (recovery, sign-in, a
   // question with choices). The bridge read it and answered in seconds; the merge waits for the person in the Studio. One
   // question with the exact text, never "outcome unknown"; after the answer the same task is resumed, nothing is repeated.
+  // CX14 N7: unless this call sent a UI call again after its proof: then only the merge is never repeated.
   if (state.code === 'STUDIO_DIALOG_PENDING') return { ok: false, outcome: 'blocked', code: 'STUDIO_DIALOG_PENDING', ...base, writeState: state.writeState,
     question: state.question ?? state.blockedBy?.question ?? null, dialog: dialogOf(state.blockedBy), error: clean(state.error ?? '', 600), ...dialogsOf(state),
-    continuation: base.taskId ? { ...resumeWith(base.taskId), why: 'Depois que a pessoa responder o diálogo no Studio: retoma a mesma entrega (nada é repetido).' }
-      : { tool: 'ssam_task', arguments: { id: trackId }, why: 'Reads what this delivery left recorded; never repeat it.' } };
-  if (outcome === 'uncertain') return { ok: false, outcome: 'uncertain', code: 'DELIVERY_UNCERTAIN', ...base, writeState: state.writeState,
-    error: clean(state.error ?? 'The merge outcome is not confirmed') + ' Nothing was repeated.', ...dialogsOf(state), ...studioErrorOf(state),
-    continuation: base.taskId ? resumeWith(base.taskId) : { tool: 'ssam_task', arguments: { id: trackId }, why: 'Reads what this delivery left recorded; never repeat it.' } };
+    continuation: base.taskId ? { ...resumeWith(base.taskId), why: 'Depois que a pessoa responder o diálogo no Studio: retoma a mesma entrega ('
+        + (resentAfterIdle(state) ? 'o merge não é repetido' : 'nada é repetido') + ').' }
+      : { tool: 'ssam_task', arguments: { id: trackId }, why: 'Reads what this delivery left recorded; never repeat it.' }, ...settledUi };
+  // CX14 R1: the pre-probe refused a call before sending it. That says nothing was sent only for a task whose write was
+  // never sent (the kernel's writeState not-sent): then the answer is that refusal. An unknown or applied write keeps its
+  // own answer below (uncertain, or the refusal with merged, failures, Ctrl+Z, contract) plus stalled and recovery. The
+  // close of the tab after the task ended is never the task's refusal (a receipt written before R1 may still say so).
+  if (state.code === 'STUDIO_ERROR_DIALOG_OPEN' && outcome === 'refused' && state.writeState === 'not-sent' && state.stalled?.method !== 'close_module') {
+    const recovery=stallRecovery(state.stalled,base.taskId?resumeWith(base.taskId):{tool:'ssam_task',arguments:{id:trackId},why:'Read the existing delivery.'});
+    return {ok:false,outcome:'refused',code:state.code,...base,writeState:state.writeState,
+      error:clean(state.error??(resentAfterIdle(state)?'A Studio error report is open; the call it stopped was not sent.':'A Studio error report is open; nothing was sent.'),400),
+      ...(state.stalled?{stalled:state.stalled}:{}),recovery,continuation:recovery[0],...settledUi};
+  }
+  if (outcome === 'uncertain') {
+    // CX14 N1: the pending operation ran in the Studio recorded with it. When the connected Studio is another one (a
+    // restart), that queue died with it: no fence on the new Studio, no dismiss of a dialog of the old one, and the next
+    // call is the close, which proves by hash that nothing was applied (DeliveryTask: another Studio).
+    const changed = studioChangedOf(state, pendingContext?.record);
+    // CX14 N5: a call of this task that stopped in the connected Studio (the resume's open_module behind its report) keeps
+    // its fence, its stalled and the dismiss; the close comes only once nothing of the task may run here (the kernel
+    // refuses it before the proven idle), so the next call is then the resume, which proves the idle and settles it.
+    const here = changed ? unsettledHere(state, pendingContext?.record) : [];
+    const shownStall = changed ? (stalledHere(state, pendingContext?.record) ? state.stalled : null) : state.stalled;
+    const next=changed && !here.length && TASK_ID.test(String(base.taskId ?? ''))
+      ? {tool:'ssam_task',arguments:{id:base.taskId,close:{reason:'The Studio that ran the merge is gone; close with the hash proof.'}},why:'O Studio que rodou o merge (pid '+changed.operation.pid+') não existe mais e a fila dele morreu com ele: o fechamento prova pelo hash que nada foi aplicado, sem repetir nada.'}
+      : state.pendingOperationRecovery?.idleProven
+      ? {tool:'ssam_task',arguments:{id:base.taskId,close:{reason:'Close the task using its recorded not-sent or hash proof after the pending UI operation ended.'}},why:'The UI operation ended; close with the recorded proof instead of repeating an uncertain UI write.'}
+      : base.taskId?resumeWith(base.taskId):{tool:'ssam_task',arguments:{id:trackId},why:'Reads what this delivery left recorded; never repeat it.'};
+    const recovery=stallRecovery(shownStall,next);
+    if(state.pendingBridgeOperation && !state.pendingOperationRecovery?.idleProven && state.stalled?.verdict!=='studio-gone' && pendingContext) {
+      if(!changed) watchPendingOperation({...pendingContext,...state.pendingBridgeOperation,taskId:trackId,kernelTaskId:base.taskId,blockedBy:state.stalled?.blockedBy});
+      else if(here.length) watchPendingOperation({...pendingContext,method:here[0].method,moduleKey:here[0].moduleKey??state.pendingBridgeOperation.moduleKey,
+        taskId:trackId,kernelTaskId:base.taskId,blockedBy:shownStall?.blockedBy??here[0].stall?.blockedBy});
+    }
+    const said=clean(state.error??'The merge outcome is not confirmed');
+    return {ok:false,outcome:'uncertain',code:'DELIVERY_UNCERTAIN',...base,writeState:state.writeState,
+      error:said+repeatedOf(state,said)+(!changed?'':here.length?' The merge ran in a Studio that is gone (pid '+changed.operation.pid+'), but this task\'s '+here[0].method+' stopped in the connected Studio and may still run there: it stays fenced until two reads prove the Studio idle; resume then, and the close proves by hash that the merge was not applied.'
+        :' The Studio that ran it is gone (pid '+changed.operation.pid+'); the connected Studio cannot be running it, so it is not fenced: close the task with the hash proof.'),...dialogsOf(state),...studioErrorOf(state),
+      ...(changed?{studioChanged:changed}:{}),...(shownStall?{stalled:shownStall}:{}),...(state.pendingBridgeOperation?{pendingBridgeOperation:pendingOperationOfAnswer(state.pendingBridgeOperation)}:{}),...settledUi,
+      ...(state.pendingUiProof?{pendingUiProof:state.pendingUiProof}:{}),...(state.pendingOperationRecovery?{pendingOperationRecovery:state.pendingOperationRecovery}:{}),recovery,continuation:recovery[0]};
+  }
   const { messages, omitted } = validationMessages(state);
   const failures = (state.failures ?? []).map(f => ({ stage: f?.stage ?? null, error: clean(f?.error, 300) }));
   const invalid = (state.apply && (state.apply.isValid !== true || state.apply.accepted !== true)) || (state.validation?.newErrors ?? 0) > 0 || state.contract?.accepted === false;
@@ -710,7 +759,7 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
   // with the next Service Studio opened, and the same task then resumes.
   if (state.code === 'BRIDGE_OUTDATED' && !merged) return { ok: false, outcome: 'refused', code: 'BRIDGE_OUTDATED', ...base, error,
     continuation: doctor('Shows the O11 bridge version; the current bridge loads with the next Service Studio opened. Then resume this task'
-      + (base.taskId ? ' (o11_deliver {resume:"' + base.taskId + '"})' : '') + '; nothing was merged.') };
+      + (base.taskId ? ' (o11_deliver {resume:"' + base.taskId + '"})' : '') + '; nothing was merged.'), ...settledUi };
   // A merge the Studio rolled back (C15, proven by the bridge or by the kernel's hash proof): nothing applied, the task is
   // closed and the module is free, so the corrected job is simply delivered again.
   // fam-deps R7/R8: the receipt names the producer signatures the merge had to select and the stage that failed. Review
@@ -724,7 +773,7 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
     ...(input.module && job ? { continuation: { tool: 'o11_deliver', arguments: { module: input.module, job, authorize: WORDS_MARKER },
       why: (sameJobAgain ? 'O módulo já tem as assinaturas que o merge precisava (o SSAM atualizou as referências agora). Entregue o mesmo job de novo, como nova entrega. '
         : signatureChanges.length ? 'O mesmo job falharia igual. Siga a correção do erro: entregue com esses produtores como OML (producers). '
-        : 'Nada foi aplicado e o módulo está livre: entregue o job corrigido como uma nova entrega. ') + 'authorize: as palavras do usuário no lugar do marcador.' } } : {}) };
+        : 'Nada foi aplicado e o módulo está livre: entregue o job corrigido como uma nova entrega. ') + 'authorize: as palavras do usuário no lugar do marcador.' } } : {}), ...settledUi };
   // prazos B: a read of the environment that the Service Studio's own client cut (ENVIRONMENT_CALL_CUT: its WCF
   // SendTimeout, a connection that never answered). Nothing was written; the answer says what was cut and when a new
   // delivery helps, never "repeat": the same delivery repeats the same environment calls.
@@ -733,10 +782,11 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
       repeated: /asked twice/.test(String(state.error ?? '')), cutBy: 'service-studio', writeState: 'not-sent' } : null);
     return { ok: false, outcome: 'refused', code: ENVIRONMENT_CALL_CUT, ...base,
       writeState: state.writeState ?? 'not-sent', error: cutError(cut, error), ...(cut ? { cut: cutOf(cut) } : {}), retry: 'after-network',
-      ...(input.module && job ? { continuation: cutContinuation(input, job, holds ? base.taskId : null, cut) } : {}) };
+      ...(input.module && job ? { continuation: cutContinuation(input, job, holds ? base.taskId : null, cut) } : {}), ...settledUi };
   }
   // The kernel's own code (VERIFY_UNAVAILABLE, SIGNATURE_PREVIEW_REFUSED, ...) names the refusal; otherwise the class of it.
-  const kernelCode = /^[A-Z][A-Z0-9_]{2,}$/.test(String(state.code ?? '')) ? state.code : null;
+  // CX14 R1: STUDIO_ERROR_DIALOG_OPEN on a task whose write was sent (a round-1 receipt) names a later call, never this refusal.
+  const kernelCode = /^[A-Z][A-Z0-9_]{2,}$/.test(String(state.code ?? '')) && state.code !== 'STUDIO_ERROR_DIALOG_OPEN' ? state.code : null;
   // A12: the differences of a failed data proof come in the answer; when they are the only failure (DATA_PROOF_DIFFERS) the
   // continuation reads all of them from the task's receipt.
   const dataProof = dataProofOf(state);
@@ -748,6 +798,8 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
   const changedNext = state.code === 'PRODUCER_CHANGED' && !merged && input.module && job ? { ...closeAndDeliver(input, job, holds ? base.taskId : null),
     why: 'Um produtor foi publicado de novo desde a captura; nada foi gravado. A mesma entrega de novo captura a versão nova. authorize: as palavras do usuário no lugar do marcador.' } : null;
   if (changedNext && !holds) delete changedNext.arguments.closePrevious;
+  // CX14 N2 (declared): the R3 close continuation ("nothing of this task reached the module") is gone: after idle the kernel
+  // goes on in the same resume, and a settled Refresh References is named with Ctrl+Z (settledUiOperations).
   const continuation = next ?? evidence ?? refreshNext ?? changedNext ?? repair;
   // (d) A refusal of the validation contract names the part that refused (the Verify, the expectations, the data contract)
   // and always carries its problems: the kernel's, or one per new Verify error and uncovered message.
@@ -768,7 +820,104 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
     // A03 (I9): a refusal with errors still names the warnings that block nothing, so one correction covers both.
     ...warningFields(taskWarnings(state)),
     // fam-deps review (finding 1): the dialogs the bridge closed and the Studio error the kernel proved, never only in the receipt.
-    ...dialogsOf(state), ...studioErrorOf(state), ...tab, ...signatures, ...(continuation ? { continuation } : {}) };
+    ...dialogsOf(state), ...studioErrorOf(state), ...tab, ...signatures, ...(continuation ? { continuation } : {}),
+    // CX14 R1: a call of this task that the Studio stopped adds what blocked it and how to recover; the refusal stays.
+    ...(state.stalled ? { stalled: state.stalled, recovery: stallRecovery(state.stalled, continuation ?? null) } : {}), ...settledUi };
+}
+
+// CX14 N2: the settled Studio UI calls of a task that may have changed the module (the kernel's note: a Refresh References,
+// Ctrl+Z undoes it), as {settledUiOperations: [{method, note, settledAt}]}; empty when none.
+// CX14 N6 (r4 guard): the projection says only what is true at this answer, whatever kernel wrote the note. What the call
+// that settled the refresh sent again after its proof comes from its counts (sentAgain, recorded when that call ended),
+// never from the text: a note without them (its call never ended, or a round-3 kernel) never says "nothing was repeated"
+// nor "not sent again"; it declares that the delivery's normal steps may send refresh_references, open_module and
+// close_module again, never the merge twice. "Never sent" only while the task's writeState is not-sent. The same
+// sentences as DeliveryTask.RefreshNoteFor.
+const UI_CALLS = ['refresh_references', 'open_module', 'close_module'];
+export const MAY_SEND_AGAIN = 'After that proof the delivery\'s normal steps may send refresh_references, open_module and close_module again; merge_from_oml is sent at most once per task.';
+const count = value => Number.isSafeInteger(value) && value > 0 ? value : 0;
+// "refresh_references 2x", ... of an ended call's counts; null when they are not an ended call's counts.
+export const sentAgainOf = sent => sent && typeof sent === 'object' && !Array.isArray(sent) && sent.ended === true
+  ? UI_CALLS.filter(m => count(sent[m])).map(m => m + ' ' + count(sent[m]) + 'x') : null;
+const againOf = sent => {
+  const names = sentAgainOf(sent);
+  return names === null ? MAY_SEND_AGAIN : names.length
+    ? 'After that proof the call that settled it sent again, as the delivery\'s normal steps do: ' + names.join(', ') + '; merge_from_oml is sent at most once per task.'
+    : 'After that proof the call that settled it sent none of refresh_references, open_module or close_module again.';
+};
+const noteOfAnswer = (entry, state) => {
+  const text = String(entry.note);
+  // The kernel's fact of the refresh (it may have changed the references, Ctrl+Z undoes it), without any later clause.
+  const fact = /^[\s\S]*?Ctrl\+Z in the Studio undoes it/.exec(text)?.[0]
+    ?? text.replace(/;?\s*nothing was repeated\.?/gi, '').replace(/\s*It was not sent again\./g, '').replace(/\s*After (?:it ended|that proof) [^.]*\./g, '')
+      .replace(/\s*The merge of this task was never sent\./g, '').replace(/[.;\s]+$/, '');
+  return fact + '. ' + againOf(entry.noteOpen ? null : entry.sentAgain) + (state?.writeState === 'not-sent' ? ' The merge of this task was never sent.' : '');
+};
+export function settledUiOf(state) {
+  const list = (Array.isArray(state?.settledBridgeOperations) ? state.settledBridgeOperations : [])
+    .filter(e => e && typeof e === 'object' && typeof e.note === 'string' && e.note)
+    .map(e => ({ method: e.method ?? null, note: clean(noteOfAnswer(e, state), 400), ...(e.settledAt ? { settledAt: e.settledAt } : {}) }));
+  return list.length ? { settledUiOperations: list.slice(-5) } : {};
+}
+// CX14 N6 (r4 guard): "Nothing was repeated" in an answer only when this call settled nothing, or ended having sent none of
+// refresh_references, open_module and close_module again after its proof; otherwise what it sent (the delivery's normal
+// steps after the proven idle) and that the merge was not repeated.
+// CX14 N7: said is the kernel's text this suffix follows; what it already says is not said twice.
+export function repeatedOf(state, said = '') {
+  const sent = state?.sentAgainAfterIdle;
+  const nothing = /\bnothing was repeated\b/i.test(said) ? '' : ' Nothing was repeated.';
+  if (!sent || typeof sent !== 'object') return nothing;
+  const names = sentAgainOf(sent);
+  const lead = /\bthe merge was not repeated\b/i.test(said) ? ' After' : ' The merge was not repeated; after';
+  if (names === null) return lead + ' the proven idle this call may have sent refresh_references, open_module or close_module again (the delivery\'s normal steps).';
+  return names.length ? lead + ' the proven idle this call sent again, as the delivery\'s normal steps do: ' + names.join(', ') + '.' : nothing;
+}
+// CX14 N7: whether the call of this answer sent refresh_references, open_module or close_module again after the proof of a
+// call it settled (sentAgainAfterIdle with a count), or may have (a call that never ended): then nothing in its answer may
+// say that nothing was repeated; only the merge is never repeated (at most once per task).
+export function resentAfterIdle(state) {
+  const sent = state?.sentAgainAfterIdle;
+  if (!sent || typeof sent !== 'object' || Array.isArray(sent)) return false;
+  const names = sentAgainOf(sent);
+  return names === null || names.length > 0;
+}
+// CX14 N7: the kernel's texts of such a call (error, failures, the tab close's reason), as the kernel of this round writes
+// them: "nothing was repeated" (any case) becomes "the merge was not repeated", "nada é/foi repetido" "o merge não é/foi
+// repetido". A receipt of an earlier kernel (e77fd91b) still has them. Every other text is kept as it is.
+const notRepeatedText = text => typeof text !== 'string' ? text
+  : text.replace(/\b(nothing) (was|is) repeated\b/gi, (_, word, verb) => (word[0] === 'N' ? 'The' : 'the') + ' merge ' + verb.toLowerCase() + ' not repeated')
+    .replace(/\b(nada) (é|foi) repetido\b/gi, (_, word, verb) => (word[0] === 'N' ? 'O' : 'o') + ' merge não ' + verb.toLowerCase() + ' repetido');
+export function withoutFalseRepetition(state) {
+  if (!resentAfterIdle(state)) return state;
+  return { ...state, error: notRepeatedText(state.error),
+    ...(Array.isArray(state.failures) ? { failures: state.failures.map(f => f && typeof f === 'object' ? { ...f, error: notRepeatedText(f.error) } : f) } : {}),
+    ...(state.closedTab && typeof state.closedTab === 'object' ? { closedTab: { ...state.closedTab, reason: notRepeatedText(state.closedTab.reason) } } : {}) };
+}
+// CX14 N1: the Studio recorded with the pending operation versus the connected one (the rule of DeliveryTask: another pid,
+// or the same pid with another start). {operation:{pid, startedUtc}, current:{pid, startedUtc}} when it is another Studio,
+// else null (the same Studio, or not enough evidence to tell: the fence stays).
+export function studioChangedOf(state, record) {
+  // The merge's own stop; a receipt without it (round 1) names it in stalled, unless a later call stopped beside it.
+  const pending = state?.pendingBridgeOperation;
+  return changedStudio(pending?.stall?.studio ?? (Array.isArray(pending?.after) && pending.after.length ? undefined : state?.stalled?.studio), record);
+}
+// CX14 N5: each unsettled call is judged by its own Studio. The UI calls the kernel recorded beside the pending merge
+// (pendingBridgeOperation.after) whose stop happened in the connected Studio (or whose Studio is not known): they may still
+// run there, so they keep a fence (UI only, released by the proven idle) even when the merge's own Studio is gone.
+export function unsettledHere(state, record) {
+  return (Array.isArray(state?.pendingBridgeOperation?.after) ? state.pendingBridgeOperation.after : [])
+    .filter(call => call && typeof call === 'object' && !changedStudio(call.stall?.studio, record));
+}
+// The latest stop (stalled) is shown, with the dismiss of its dialog, when it happened in the connected Studio.
+const stalledHere = (state, record) => Boolean(state?.stalled) && !changedStudio(state.stalled.studio, record);
+function changedStudio(known, record) {
+  const pid = value => Number.isSafeInteger(value) && value > 0 ? value : null;
+  const text = value => typeof value === 'string' && value.trim() ? value : null;
+  const knownPid = pid(known?.pid), currentPid = pid(record?.pid);
+  const knownStart = text(known?.startedUtc), currentStart = text(record?.startedUtc);
+  const another = (knownPid !== null && currentPid !== null && knownPid !== currentPid)
+    || (knownPid !== null && currentPid === knownPid && knownStart !== null && currentStart !== null && knownStart !== currentStart);
+  return another ? { operation: { pid: knownPid, ...(knownStart ? { startedUtc: knownStart } : {}) }, current: { pid: currentPid, ...(currentStart ? { startedUtc: currentStart } : {}) } } : null;
 }
 
 // The kernel's mergeOrder receipt (Delivery.cs), short: the lost elements as "Element = value", the repair job, the
@@ -899,12 +1048,47 @@ export function problemCodes(problems) {
   return [...counts].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([code, n]) => code + ' ' + n);
 }
 
+// Capture only pending-operation evidence outside the compact projection, including a successful merge whose tab close
+// is still queued. WeakMap storage never expands the persisted facade task with the kernel's full receipt/arguments.
+const pendingByTask=new WeakMap();
+// CX14 R4: the pending operation as answers show it: method, moduleKey and the journal id. Its own stop (stall: which
+// Studio ran it) stays in the kernel's receipt, where the close reads it.
+const pendingOperationOfAnswer=p=>p&&typeof p==='object'?{method:p.method??null,moduleKey:p.moduleKey??null,...(p.operationId?{operationId:p.operationId}:{})}:p;
+function pendingContextFor(ctx,task,state) {
+  if(state?.pendingBridgeOperation)pendingByTask.set(task,structuredClone({taskId:state.taskId,stalled:state.stalled,
+    pendingBridgeOperation:state.pendingBridgeOperation,pendingOperationRecovery:state.pendingOperationRecovery,pendingUiProof:state.pendingUiProof}));
+  else pendingByTask.delete(task);
+  return {lane:ctx.lane().name,root:ctx.root,record:ctx.connection(),bridge:ctx.bridge};
+}
 // One tracked task with its journal lines: `start` (with the sha256 of the words) before anything runs, `end` after.
 function tracked(ctx, lane, summary, words, fn) {
   const journal = entry => ctx.journal(lane.local, { tool: 'o11_deliver', ...entry });
   return trackTask({ tool: 'o11_deliver', summary, dir: ctx.tasks, now: ctx.now }, async task => {
+    noteStudioHolder({taskId:task.id});
     journal({ event: 'start', task: task.id, ...summary, wordsSha256: sha256(words) });
-    const value = await fn(task);
+    let value = await fn(task);
+    const pending=pendingByTask.get(task);pendingByTask.delete(task);
+    if(pending) {
+      const context={lane:ctx.lane().name,root:ctx.root,record:ctx.connection(),bridge:ctx.bridge};
+      // CX14 N1: never fence a Studio that is not the one recorded with the pending operation. N5: a call of this task that
+      // stopped in the connected Studio keeps its own fence there (UI only, released by the proven idle).
+      const changed=studioChangedOf(pending,context.record);
+      const here=changed?unsettledHere(pending,context.record):[];
+      const shownStall=changed?(stalledHere(pending,context.record)?pending.stalled:null):pending.stalled;
+      if(!pending.pendingOperationRecovery?.idleProven&&pending.stalled?.verdict!=='studio-gone'&&!pendingOperationOf({taskId:task.id,...context})) {
+        if(!changed) watchPendingOperation({...context,...pending.pendingBridgeOperation,taskId:task.id,kernelTaskId:pending.taskId,blockedBy:pending.stalled?.blockedBy});
+        else if(here.length) watchPendingOperation({...context,method:here[0].method,moduleKey:here[0].moduleKey??pending.pendingBridgeOperation?.moduleKey,
+          taskId:task.id,kernelTaskId:pending.taskId,blockedBy:shownStall?.blockedBy??here[0].stall?.blockedBy});
+      }
+      if(value?.outcome!=='uncertain') {
+        const next=value?.ok!==true&&pending.pendingOperationRecovery?.idleProven
+          ? {tool:'ssam_task',arguments:{id:pending.taskId,close:{reason:'Close using the recorded not-sent or hash proof after the pending UI operation ended.'}},why:'Close with proof; never repeat the uncertain UI write.'}
+          : {tool:'ssam_task',arguments:{id:task.id},why:'Read this delivery and its pending Studio operation.'};
+        const recovery=stallRecovery(shownStall,next);
+        value={...value,...(changed?{studioChanged:changed}:{}),...(shownStall?{stalled:cleanStall(shownStall)}:{}),pendingBridgeOperation:pendingOperationOfAnswer(pending.pendingBridgeOperation),
+          ...(pending.pendingUiProof?{pendingUiProof:pending.pendingUiProof}:{}),...(pending.pendingOperationRecovery?{pendingOperationRecovery:pending.pendingOperationRecovery}:{}),recovery,continuation:recovery[0]};
+      }
+    }
     // A failed end line never changes what happened; the task file still records the outcome.
     try {
       journal({ event: 'end', task: task.id, outcome: value === CLOSED ? 'closed' : value.ok ? (summary.until === 'apply' ? 'valid' : 'delivered') : value.outcome ?? 'refused',
@@ -1195,6 +1379,20 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
       if (named.ok === false) return withJob(named, resolved);
       input = { ...input, module: named.module };
     }
+    // CX16 (ui-precheck.mjs): a job of screens or blocks is judged on the module index before any Studio step (bridge reads only).
+    // CX16 r3 (M3): after the capture by key (which the build phase shares), check-job runs alongside the build; the Studio
+    // step waits for its verdict and static.complete stops it there (precheckGate); otherwise its problems join the answer
+    // of the delivery below (one refusal with everything). SSAM_UI_PRECHECK_STOP=error (r1) stops here, in series.
+    const started = input.resume || proto ? null : await (await import('./ui-precheck.mjs')).startUiPrecheck({ lane: 'o11', module: input.module, job: resolved.path, mode: 'deliver', input, signal }, ctx);
+    if (started?.stop) return withJob(started.stop, resolved);
+    const precheck = started?.pending ?? null;
+    let stoppedByPrecheck = false;
+    const precheckGate = async () => {
+      const pre = precheck ? await precheck : null;
+      if (!pre?.stop) return null;
+      stoppedByPrecheck = true;
+      return pre.stop;
+    };
     // C27: the producers the job references by name are captured read-only, as the ODC lane does. prazos B: one that is
     // open, unmodified, in this Studio is bound instead by a capture of its tab (o11-open-producer.mjs), so the delivery
     // reads nothing from the environment for it; it stays out of `input`, so a continuation never pins that capture.
@@ -1247,6 +1445,8 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
       } else built = await buildBeforeApply({ input: runInput, job, ctx, lane, task, signal });
       if (built?.answer) return built.answer;
       if (built?.refused) return deliverOutcome(built.refused, { trackId: task.id, work: lane.work, job: deliverJob, taskId: null, since, input });
+      // CX16 r3 (M3): the Studio step waits for the precheck that ran alongside the build; static.complete stops it here.
+      { const stop = await precheckGate(); if (stop) return stop; }
       const deliverOnce = async (file, previous) => {
         // The refused task of the first try still holds the module: closed first (never an uncertain one).
         const held = previous?.outcome?.taskId;
@@ -1259,7 +1459,7 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
         kernelState = run?.envelope?.data && typeof run.envelope.data === 'object' ? run.envelope.data : null;
         afterApply(run, built, lane);
         if (proto) proto.deliverMs = Date.now() - begin;
-        return { run, outcome: deliverOutcome(run, { trackId: task.id, work: lane.work, job: file, taskId: input.resume, since, input }) };
+        return { run, outcome: deliverOutcome(run, { trackId: task.id, work: lane.work, job: file, taskId: input.resume, since, input, pendingContext:pendingContextFor(ctx,task,kernelState??findKernelTask(lane.work,{taskId:input.resume,job:file,since})) }) };
       };
       // Without a build phase (the module not open in a tab) the delivery builds itself: its refusal on a generated item
       // closes the refused task and delivers the degraded job once.
@@ -1279,6 +1479,7 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
     if (value === CLOSED) return value;
     // prazos B: the producers bound from their Studio tab, named in the answer (their references came from there).
     if (fromStudio.length && value && typeof value === 'object') value = { ...value, producersFromStudio: fromStudio };
+    if (precheck && !stoppedByPrecheck) { const pre = await precheck; if (pre?.carry) value = (await import('./ui-precheck.mjs')).joinPrecheck(value, pre); }
     // data.bind (docs/PROTOTIPO-NATIVO.md 2.12): the proposals of PROTOTYPE_BINDING_REQUIRED as one strict patch and the corrected call
     if (proto && value?.code === 'PROTOTYPE_BINDING_REQUIRED') value = { ...value, ...bindingCorrection(value.problems, readJobDocument(named?.path)) };
     if (proto && value?.ok === true) value = await prototypeAnswer(value, proto, { kernelState, module: input.module ?? null });
@@ -1336,7 +1537,7 @@ async function closeWithProof(id, reason, ctx) {
   if (!closesWithoutStudio(state)) {
     try { await selected(ctx); } catch (error) { if (error instanceof Refusal) return refusal(error.code, error.message, error.continuation); throw error; }
   }
-  const value = closeOutcome(await ctx.runAnvil(closeArguments(id, reason, { work: lane.work, port: ctx.port() }), { timeoutMs: ctx.closeTimeoutMs }), id, lane.work);
+  const value = closeOutcome(await ctx.runAnvil(closeArguments(id, reason, { work: lane.work, port: ctx.port() }), { timeoutMs: ctx.closeTimeoutMs, recovery:true }), id, lane.work);
   if (value !== CLOSED) return kind === 'uncertain' ? { ...value, outcome: 'uncertain', code: 'CLOSE_PROOF_REFUSED',
     continuation: resumeWith(id) } : value;
   return { ...CLOSED, taskId: id, ...(kind === 'uncertain' ? { proof: 'the live module equals the task base: nothing was applied' } : {}) };

@@ -93,7 +93,7 @@ test('the three tools are exposed with the distribution schema', async t => {
   assert.equal(deliver.additionalProperties, false);
   assert.equal(tools.o11_deliver.annotations.readOnlyHint, false); assert.equal(tools.o11_deliver.annotations.destructiveHint, true);
   // ssam_task {id, close}: close is a write (C15), so the tool is not read-only.
-  assert.deepEqual(Object.keys(tools.ssam_task.inputSchema.properties), ['id', 'close']);
+  assert.deepEqual(Object.keys(tools.ssam_task.inputSchema.properties), ['id', 'stop', 'close']);
   assert.equal(tools.ssam_task.annotations.readOnlyHint, false);
   for (const tool of Object.values(tools)) assert.doesNotMatch(tool.description, SHELL);
 });
@@ -404,11 +404,12 @@ test('until=apply snapshots through the bridge, applies on that capture and neve
   const { call, close } = await serve(box.deps); t.after(close);
   const valid = await call('o11_deliver', { module: 'Orders', job: box.job, until: 'apply', expectedEnvironment: 'personal-x.outsystemscloud.com', authorize: WORDS });
   assert.deepEqual(valid.structuredContent, { ok: true, valid: true, nextBasedOn: { job: box.job, sha256: sha256(fs.readFileSync(box.job)) } });
-  assert.deepEqual(bridge.seen.map(r => r.method), ['open_module', 'get_active_module', 'snapshot_module']);
-  assert.deepEqual(bridge.seen[0].params, { name: 'Orders', environment: 'personal-x.outsystemscloud.com' });
-  const snapshot = bridge.seen[2].params.path;
+  assert.deepEqual(bridge.seen.slice(0, 3).map(r => r.method).sort(), ['bridge_manifest', 'ping', 'windows']);
+  assert.deepEqual(bridge.seen.slice(3).map(r => r.method), ['open_module', 'get_active_module', 'snapshot_module']);
+  assert.deepEqual(bridge.seen[3].params, { name: 'Orders', environment: 'personal-x.outsystemscloud.com' });
+  const snapshot = bridge.seen[5].params.path;
   assert.equal(path.dirname(snapshot), path.join(box.local, 'snapshots')); assert.match(path.basename(snapshot), /^Orders-\d{8}T\d{9}Z\.oml$/);
-  assert.equal(bridge.seen[2].params.module_key, 'k1'); assert.equal(bridge.seen[2].authorization, 'TESTKEY');
+  assert.equal(bridge.seen[5].params.module_key, 'k1'); assert.equal(bridge.seen[5].authorization, 'TESTKEY');
   const argv = box.runAnvil.calls[0].args;
   assert.equal(argv[0], 'apply');
   assert.equal(argv[argv.indexOf('--job') + 1], box.job); assert.equal(argv[argv.indexOf('--base') + 1], snapshot);
@@ -433,7 +434,8 @@ test('until=apply stops when the active module is another one, before any captur
   const { call, close } = await serve(box.deps); t.after(close);
   const result = (await call('o11_deliver', { module: 'Orders', job: box.job, until: 'apply', authorize: WORDS })).structuredContent;
   assert.equal(result.code, 'ACTIVE_MODULE_CHANGED');
-  assert.deepEqual(bridge.seen.map(r => r.method), ['open_module', 'get_active_module']);
+  assert.deepEqual(bridge.seen.slice(0, 3).map(r => r.method).sort(), ['bridge_manifest', 'ping', 'windows']);
+  assert.deepEqual(bridge.seen.slice(3).map(r => r.method), ['open_module', 'get_active_module']);
   assert.equal(box.runAnvil.calls.length, 0);
 });
 
@@ -506,7 +508,7 @@ test('the journal keeps only the sha256 of the words, and no task file holds the
   assert.deepEqual(lines.map(l => l.event), ['start', 'end']);
   assert.equal(lines[0].wordsSha256, sha256(WORDS)); assert.equal(lines[0].module, 'Orders'); assert.equal(lines[1].outcome, 'delivered');
   assert.ok(lines.every(l => !('authorize' in l)));
-  for (const name of fs.readdirSync(path.join(box.local, 'tasks'))) assert.ok(!fs.readFileSync(path.join(box.local, 'tasks', name), 'utf8').includes(WORDS));
+  for (const name of fs.readdirSync(path.join(box.local, 'tasks')).filter(name => name.endsWith('.json'))) assert.ok(!fs.readFileSync(path.join(box.local, 'tasks', name), 'utf8').includes(WORDS));
 });
 
 // ---- closing a refused task (kernel DeliveryTask.CloseKnownFailure through `deliver --close`)

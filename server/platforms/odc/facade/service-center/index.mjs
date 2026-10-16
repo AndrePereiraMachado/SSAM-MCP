@@ -3,7 +3,8 @@
 // JSON it printed. Authentication per call and host (auth.mjs): the connected Studio's native APIs and headless HTTP,
 // otherwise the stored credential profile of the host, and only with nothing stored the private Windows prompt. Writes prepare
 // by default; executing needs the user's words, an operationId UUID and the journal reservation, and is never repeated.
-// delete and its aliases (delete.mjs) are one call: with the words they execute, the operationId is minted when absent.
+// delete and its aliases (delete.mjs), solution-delete and db-connection-delete take two calls (CX15): without
+// --confirmation-token the preview (nothing sent), with it the execution of the token's targets.
 // deps (all optional, for tests): journal, locate, present, opener, running, exports, registry, env, root, send, origin,
 // powershell (a PowerShell runner), credential ({setup, read} vault fragments), sleep and wait (the bounded waits),
 // uuid (the minted operationId) and consumerNames (the GetConsumers reader), so nothing real is touched.
@@ -12,14 +13,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { anvilRoot } from '../workspace.mjs';
 import { SEAM_CODES, hostedContext, seamFields, usesWorkspace, workspacePath } from '../executor.mjs';
-import { AuthRequired, BridgeError, ProtocolError, connectStudio } from './errors.mjs';
+import { AuthRequired, BridgeError, ProtocolError, Refusal, connectStudio } from './errors.mjs';
 import { Auth, Resolver, credentialTarget, guardWrite, hostClass, hostedNoPrompt, hostedStudioOnly, hostsFile, openPrompt, promptAndWait, promptWaitMs, storedProfile,
   studioRunning } from './auth.mjs';
 import { locateStudioBridge, redact } from './bridge.mjs';
 import { ACTIONS, Client, Journal, LOG_PAGES, SCHEDULE, SECRET_WRITES, WEB_WRITES } from './client.mjs';
 import { StudioWebTransport, Transport, hostName } from './http.mjs';
 import { DESTRUCTIVE as API_DESTRUCTIVE, READS as API_READ_TABLE, StudioApi, WRITES as API_WRITE_TABLE } from './studio-api.mjs';
-import { DELETE_ACTIONS, DeleteEngine, deleteRequest } from './delete.mjs';
+import { DELETE_ACTIONS, DeleteEngine, TWO_CALLS, deleteRequest, noBackupNote, refusalError, withNoBackupNote } from './delete.mjs';
+import { OWNER_REPLY, OperationRunning, beginOperation, checkExecute, createPreview, currentSignal, endOperation, markItem, noteWords, parseToken, previewFile, readOperation, readPreview, storeBackup, summarizeOperation } from '../destructive-operations.mjs';
+import { namesWhole } from './auth.mjs';
 import { createPowerShellRunner, createVault, vaultPresent } from './vault.mjs';
 import { CredentialProfiles } from '../credential-profiles.mjs';
 import { boundedRead } from '../read-budget.mjs';
@@ -37,18 +40,20 @@ export const WEB_READS = ['lifetime-capabilities', 'lifetime-web-status', 'timer
   'bpt-instance', 'bpt-activity', 'integrations', 'integration-detail', 'db-connections', 'application-runtime-settings', 'solutions', 'solution-versions', 'solution-download', 'solution-download-status', 'async-operation-status', 'page-layout', 'module-references', 'module-dependencies', 'application-dependency-graph', 'application-relationships', 'application-owners'];
 const API_READS = Object.keys(API_READ_TABLE);
 export const READS = ['capabilities', 'receipt', ...WEB_READS, ...API_READS];
-// delete (service-center/delete.mjs): applications, modules and extensions in one call; module-delete, extension-delete and
-// application-delete are its aliases (D4).
+// delete (service-center/delete.mjs): applications, modules and extensions, previewed then confirmed (CX15); module-delete,
+// extension-delete and application-delete are its aliases.
 export const WRITES = [...Object.keys(ACTIONS), ...Object.keys(WEB_WRITES), ...Object.keys(API_WRITE_TABLE), 'delete'];
 // Exported for the hosted gate (hosted/destructive.mjs), which refuses these on a hosted server.
 export const DESTRUCTIVE = new Set(['solution-delete', 'db-connection-delete', ...API_DESTRUCTIVE]);
+// Page deletes (CX15): two calls like the delete engine; without confirmation-token the prepare is the preview.
+const PAGE_DELETES = new Set(['solution-delete', 'db-connection-delete']);
 const FLAGS = ['event-auth', 'application', 'module', 'message', 'source', 'server', 'since', 'until', 'error-id', 'request-key', 'operation-id', 'words',
   'application-offset', 'application-batch-size', 'expected-selection-sha256', 'owner-parallelism', 'module-offset', 'module-batch-size', 'expected-module-selection-sha256', 'module-selection-id',
   'expected-value', 'value', 'value-file', 'value-vault', 'application-key', 'extension-key', 'logical-database', 'module-key', 'element-key', 'solution', 'component', 'description', 'osp-file', 'publish-id',
   'last-message-id', 'async-operation-id', 'apply-id', 'database-id', 'process', 'process-key', 'process-id', 'activity-id', 'integration', 'integration-kind', 'level',
   'connection', 'dbms', 'db-server', 'db-database', 'extension', 'extension-id', 'confirm-host', 'stack-contains', 'log-type', 'log-action',
   'timer', 'path', 'to-application', 'to-application-key', 'from-application-key', 'module-kind', 'version', 'commit-message', 'xif-file',
-  'prefix', 'prefix-kind', 'max-deletes', 'expected-version-id', 'authorization-context', 'question',
+  'prefix', 'prefix-kind', 'max-deletes', 'expected-version-id', 'authorization-context', 'question', 'confirmation-token', 'owner-request',
   ...Object.keys(SCHEDULE).map(k => 'schedule-' + k)];
 // logs filter -> parsed attribute
 const LOG_FILTER_ARGS = { application: 'application', module: 'module', message: 'message', source: 'source', server: 'server', since: 'since',
@@ -131,11 +136,14 @@ export function capabilities() {
   session: SESSION, reads: { 'studio-api': API_READS, pages: WEB_READS, local: ['capabilities', 'receipt'] },
   writes: { pages: [...Object.keys(ACTIONS), ...Object.keys(WEB_WRITES)], 'studio-api': [...Object.keys(API_WRITE_TABLE), 'delete'], local: RECEIPT_ACTIONS },
   default: 'prepare only; execute requires the user words, a UUID operation-id and the journal reservation; never replayed. delete '
-    + '(and module-delete, extension-delete, application-delete) executes in one call when the words are given: the tool mints the operation-id',
+    + '(and module-delete, extension-delete, application-delete), solution-delete and db-connection-delete take two calls: without '
+    + 'confirmation-token the preview (the exact list, its count, the token, the operation-id; nothing sent), with it the execution',
   guards: ['corporate or unregistered hosts need confirmHost=<host> and words naming the environment on every write',
-    'delete reads first (the server simulation of each application, GetConsumers of each module and extension) and refuses before any '
-    + 'change, with every problem, unless the words name every target (or its prefix) and every consumer outside the set',
-    'db-connection-delete needs words that name the connection and the extensions using it'],
+    'delete reads first (the server simulation of each application, GetConsumers of each module and extension) and previews; the execution '
+    + 'reads again and refuses before any change, with every problem, unless the owner\'s words given after the preview state the exact count '
+    + 'and name every target (or the prefix of the preview) and every consumer outside the set',
+    'db-connection-delete needs words that name the connection and the extensions using it, after its preview',
+    'a delete backs each target up first (the published OML of each module) and stops before its next target when the client cancels'],
   secrets: 'database logins and secret site property values travel only as vault target names (sc_web secretRefs); '
     + 'the Studio reads them inside its own process; without a Studio, or with a bridge without sc_web:secretRefs, those writes are refused',
   limits: ['Service Center pages are internal English Web Forms; pages modeled only on synthetic fixtures (ASSUMED) '
@@ -287,6 +295,203 @@ function webArguments(args) {
     ...(args.expected_value !== undefined ? { expectedValue: args.expected_value } : {}) };
 }
 
+// The backup of a delete target (CX15): the published OML of each of its modules, the same download as o11_environment
+// {action:"download"} (the CLI through the Studio's session, one download per version, cached), copied under
+// backups\<operationId>\. Loaded only when a delete executes; a module not downloaded fails the item (nothing sent).
+const moduleBackup = root => async (item, { operationId, host, signal }) => {
+  const { downloadModule } = await import('../o11-environment.mjs');
+  const files = [];
+  for (const module of item.modules ?? []) {
+    if (signal?.aborted) return { files, cancelled: true };
+    const value = await downloadModule({ module, host });
+    if (!value?.ok || !value.file) throw new ProtocolError(`the published OML of ${module} was not downloaded (${value?.code ?? 'no file'})`, 'BACKUP_FAILED');
+    files.push({ ...storeBackup({ operationId, name: `${module}.oml`, source: value.file, root }), module, ...(value.versionId != null ? { versionId: value.versionId } : {}) });
+  }
+  // CX15 r2 (C1): an abort during the last download leaves the item not started too.
+  if (signal?.aborted) return { files, cancelled: true };
+  return { files };
+};
+// CX15 r2 (M5): the cheap prerequisites of that backup, read by the preview without contacting any Studio: the O11 CLI
+// of the lane is built, and the Studio selected with ssam_connect (when one was selected) is still a running process.
+// null when they hold, else {code, why}: the preview then shows the backup as not possible and why.
+const processAlive = pid => { try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; } };
+export async function moduleBackupReadiness({ env = process.env, root, lane, alive = processAlive } = {}) {
+  const { anvilRoot, o11Lane } = await import('../workspace.mjs');
+  const { o11LaneOf } = await import('../o11-lane.mjs');
+  const { readConnection } = await import('../studio-session.mjs');
+  const kernel = root ?? anvilRoot; const name = lane ?? o11Lane.lane;
+  let cli = null;
+  try { cli = o11LaneOf(name, { root: kernel, env }).cli; } catch { /* an unknown lane: no CLI */ }
+  if (!cli || !fs.existsSync(cli)) return { code: 'CLI_NOT_BUILT', why: 'the O11 Anvil CLI of this lane is not built, so the published OML cannot be downloaded' };
+  let record;
+  try { record = readConnection(kernel, name); } catch { return { code: 'STUDIO_NOT_SELECTED', why: 'the record of the Studio selected with ssam_connect is not valid, so the published OML cannot be downloaded' }; }
+  if (record && !alive(record.pid)) return { code: 'STUDIO_NOT_SELECTED', why: `the Studio selected with ssam_connect (process ${record.pid}) is not running, so the published OML cannot be downloaded` };
+  return null;
+}
+// solution-delete and db-connection-delete (CX15): the prepare is the preview (one item: the solution, or the connection
+// with the extensions that use it as consumers); with the token, the same prepare reads it again and checkExecute takes
+// every problem at once (the words name the target and those extensions, unless an approval record covers them, and
+// state the count) before the reservation; the operationId is the preview's. An approval of solution-delete binds the
+// preview file as its proposal.
+const pageItem = plan => (plan.action === 'solution-delete'
+  ? { kind: 'solution', key: String(plan.solutionId ?? plan.solution), name: plan.solution, application: null, cascade: [], consumers: [],
+    backup: { possible: false, why: 'its definition is not exported here (to confirm): the solution is a list of components; nothing of the modules is deleted' } }
+  : { kind: 'db-connection', key: String(plan.connectionId ?? plan.connection), name: plan.connection, application: null, cascade: [], consumers: plan.usedBy ?? [],
+    backup: { possible: true, how: 'the connection detail of the preview, without any secret' } });
+// CX15 r3 (CT-1): the client's cancellation of a page delete, thrown by its gate before 'sending' (never a failure).
+class PageDeleteCancelled extends Error { constructor(when) { super('cancelled ' + when); this.when = when; } }
+// Problems of the token alone that no read again can solve (the rule of the odc_* guard): the execution never opens or
+// resumes the record of the preview for them.
+const BLOCKING = new Set(['PREVIEW_UNKNOWN', 'OPERATION_CANCELLED', 'OPERATION_RUNNING', 'OPERATION_INTERRUPTED']);
+async function pageDeleteCall(args, client, data, approve, { host, registry, journal, clock, root, uuid, preview, asked, signal = null }) {
+  const tool = 'o11_service_center_write';
+  const target = args.action === 'solution-delete' ? { solution: args.solution } : { connection: args.connection };
+  if (!preview) {
+    const plan = await client.webWrite(args.action, data, { execute: false });
+    const item = pageItem(plan);
+    // CX15 r3 (CT-7): an item without a backup (a solution) is said in next, confirmWith and the error.
+    const noBackup = noBackupNote([item]);
+    const block = createPreview({ tool, lane: 'o11', host, operation: args.action, items: [item], ownerRequest: args.owner_request, words: args.words,
+      mustName: plan.namedTargets ?? [], now: clock(), root, ...(uuid ? { uuid } : {}), serverTexts: noBackup ? [noBackup] : [], notes: noBackup ? [noBackup] : [] });
+    const answer = { ...plan, ok: !asked, ...(asked ? { code: 'CONFIRMATION_REQUIRED', error: TWO_CALLS } : {}), ...block };
+    return { ...answer, ...withNoBackupNote(answer, noBackup),
+      continuation: { tool, arguments: { action: args.action, host, ...target, confirmationToken: block.confirmationToken,
+        words: OWNER_REPLY, ...(hostClass(host, registry) !== 'personal' ? { confirmHost: host } : {}) },
+      why: `the execution: the owner confirms this exact target, after this preview${noBackup ? '; ' + noBackup : ''}` } };
+  }
+  // CX15 r2 (T6): another operationId than the preview's is one more problem of the SAME refusal as every problem of
+  // checkExecute, never a refusal of its own first.
+  const otherId = args.operation_id && String(args.operation_id).toLowerCase() !== preview.operationId
+    ? [{ code: 'PREVIEW_OTHER_TARGET', path: '/operationId', message: `operationId ${args.operation_id} is not the preview's ${preview.operationId}`, fix: 'omit operationId: the token carries the preview\'s' }] : [];
+  const context = Boolean(args.authorization_context);
+  const words = String(args.words ?? '');
+  const at = () => ({ now: clock(), root });
+  let record = null; let item = null;
+  // CX15 r3 (CT-1): the token checked against what is stored BEFORE the record opens (a cancelled, running or interrupted
+  // operation, the words that already confirmed it): the record of this execution opens at its start, so the checks after
+  // the read again run with it as begun and keep these.
+  const head = checkExecute({ token: args.confirmation_token, tool, host, operation: args.action, words, target: args.solution ?? args.connection, now: clock(), root, ...(uuid ? { uuid } : {}) });
+  const carried = head.problems.filter(p => p.code === 'CONFIRMATION_ALREADY_USED');
+  // Every problem of the execution at once, on the target read again (plan): the operationId, the token, the count, the names.
+  const refuse = plan => {
+    const nameRule = () => {
+      const problems = [];
+      try { guardWrite(host, words, args.confirm_host, [], registry); }
+      catch (error) { if (!(error instanceof ProtocolError)) throw error; problems.push({ code: hostClass(host, registry) === 'read-only' ? 'HOST_READ_ONLY' : 'CONFIRM_HOST_REQUIRED', message: error.message, fix: `confirmHost:"${host}" and words that name ${host.split('.')[0]}` }); }
+      // An approval record covers the names (today's rule); otherwise the words name the target and what the plan says goes with it.
+      if (!context) for (const name of plan.namedTargets?.length ? plan.namedTargets : [plan.solution ?? plan.connection])
+        if (!namesWhole(words, name)) problems.push({ code: 'WORDS_MUST_NAME', target: name, message: `A destructive operation needs the user's words to name its target: ${name}`, fix: `words that name ${name}`, ssamRule: true });
+      return problems;
+    };
+    const check = checkExecute({ token: args.confirmation_token, tool, host, operation: args.action, words, target: plan.solution ?? plan.connection, current: [pageItem(plan)],
+      nameRule, now: clock(), root, ...(uuid ? { uuid } : {}), ...(record ? { begun: record, used: Boolean(head.used) } : {}) });
+    const problems = [...otherId, ...check.problems, ...(record ? carried : [])];
+    // CX15 r3 (CT-5): after an interrupted operation (its process died) the refusal says what that operation did (its
+    // record: operation), that this call sent nothing, and the next steps (ssam_task, then the new preview).
+    const interrupted = check.interrupted ? check.operation : null;
+    const rest = problems.filter(p => !(interrupted && p.code === 'OPERATION_INTERRUPTED'));
+    if (problems.length)
+      throw new Refusal('DELETE_REFUSED', `${refusalError(problems, interrupted)}${rest.length ? ': ' + rest.map(p => p.message).join('; ') : ''}`,
+        { action: args.action, host, state: 'refused', problems, ...(check.fresh ? { preview: check.fresh } : {}),
+          ...(interrupted ? { operationId: preview.operationId, operation: summarizeOperation(interrupted, { root }),
+            next: `read ssam_task {id:"${preview.operationId}"} and tell the owner what the interrupted operation did; this call sent nothing. Then show the owner the new preview (preview) `
+              + 'and confirm it with its own token and the owner\'s new reply; never this token again',
+            continuation: { tool: 'ssam_task', arguments: { id: preview.operationId }, why: 'the record of the interrupted operation, item by item, before telling the owner anything' } } : {}) });
+  };
+  // The durable record of the operation (ssam_task {id}): its one item, then how it ended. The lease of the operation
+  // (CX15 r2, I): another execution of this token running now sends nothing.
+  const begin = () => {
+    try { record = beginOperation({ preview, now: clock(), root, words }); }
+    catch (error) { if (error instanceof OperationRunning) throw new Refusal('OPERATION_RUNNING', error.message, { action: args.action, host, state: 'refused', operationId: preview.operationId, problems: [error.problem] }); throw error; }
+    item = record.items[0];
+  };
+  // CX15 r3 (CT-1): an abort of the client before the send: nothing was sent, the item is not-started and the operation
+  // cancelled (its token never sends again); before the record opened, nothing started and nothing is spent.
+  const cancelled = when => {
+    const cancelledAt = new Date(clock()).toISOString();
+    if (record && !record.endedAt) {
+      try { markItem(record, item, { state: 'not-started' }, at()); } catch { /* endOperation writes the item as it is now */ }
+      try { endOperation(record, 'cancelled', { ...at(), cancelledAt }); } catch { /* the lease is released; the record reads orphaned once this process ends */ }
+    }
+    const name = preview.items[0]?.name ?? args.solution ?? args.connection;
+    return { ok: false, action: args.action, host, state: 'cancelled', code: 'CANCELLED', operationId: preview.operationId, cancelledAt, sent: false, notStarted: [name],
+      error: `Cancelled by the client ${when}; nothing was sent for ${name}`,
+      ...(record ? { operation: summarizeOperation(readOperation(preview.operationId, { root }) ?? record, { root }) } : {}),
+      next: record ? `read ssam_task {id:"${preview.operationId}"} before telling the owner anything; this token never sends again: a new delete is a new preview and the owner's confirmation of it`
+        : `nothing started and nothing was sent: read ssam_task {id:"${preview.operationId}"} before telling the owner anything; never repeat this call by yourself`,
+      continuation: { tool: 'ssam_task', arguments: { id: preview.operationId }, why: 'read the record of this operation before telling the owner anything; never repeat this call by yourself' } };
+  };
+  const gate = async plan => {
+    refuse(plan);
+    if (approve) await approve(plan);
+    if (context && args.action === 'solution-delete' && plan.authorizationContext?.proposalSha256 !== sha256(fs.readFileSync(previewFile(preview.previewId, { root }))))
+      throw new ProtocolError(`The authorization context must approve the preview ${previewFile(preview.previewId, { root })} (its proposal file); nothing was sent`, 'AUTHORIZATION_CONTEXT_INVALID');
+    if (!record) begin();
+    // The client's cancellation, read after the read again and before 'sending' (CX15 r3, CT-1).
+    if (signal?.aborted) throw new PageDeleteCancelled('after the read again');
+    // The backup of a connection: its detail as the preview read it (endpoint, consumers; never a login or a password).
+    if (args.action === 'db-connection-delete') {
+      const detail = Object.fromEntries(['connection', 'connectionId', 'dbms', 'parameters', 'usedBy', 'target'].filter(k => plan[k] !== undefined).map(k => [k, plan[k]]));
+      const files = [storeBackup({ operationId: preview.operationId, name: `${plan.connection}-detail.json`, data: JSON.stringify(detail, null, 2), root })];
+      markItem(record, item, { state: 'backed-up', backup: { files } }, at());
+      if (signal?.aborted) throw new PageDeleteCancelled('after the backup of the connection detail');
+    }
+    markItem(record, item, { state: 'sending' }, at());
+  };
+  // The last look before the POST, inside the reservation: an abort there sends nothing (the receipt closes refused).
+  const beforeSend = () => (signal?.aborted ? { cancelled: true, error: 'Cancelled by the client right before the send; nothing was sent' } : null);
+  // A token that no read again can make good (cancelled, running, interrupted, another preview), or a call without words
+  // (the write runner would refuse that alone, before any read): one refusal with every problem (the count and the names
+  // among them), on the target read again, without opening the record.
+  if (!words.trim() || head.problems.some(p => BLOCKING.has(p.code) || (p.code === 'PREVIEW_OTHER_TARGET' && p.previewOf))) refuse(await client.webWrite(args.action, data, { execute: false }));
+  if (signal?.aborted) return cancelled('before the execution started');
+  // The record opens at the start of the execution, before the read again (ssam_task finds it 'running'); a token whose
+  // receipt exists only answers by it (runWrite never sends it again).
+  if (!journal.lookup(preview.operationId)) begin();
+  let receipt;
+  try {
+    receipt = await client.webWrite(args.action, data, { execute: true, words: args.words, operationId: preview.operationId, journal, approve: gate, beforeSend });
+  } catch (error) {
+    if (error instanceof PageDeleteCancelled) return cancelled(error.when);
+    // A refusal after the record began (the reservation, TARGET_PENDING): nothing was sent; the record says so and ends,
+    // so the token is never left "running" without a receipt (CX15 r2, A).
+    // CX15 r2 (C5): once its receipt is reserved the send may have gone out (a receipt that could not be written after the
+    // send fails here too): the item is uncertain and the answer names the operation to read, never "nothing was sent".
+    if (record && ['sending', 'backed-up'].includes(item.state)) {
+      let reserved = true;
+      try { reserved = journal.rawState(preview.operationId) !== null; } catch { /* unreadable: it may have been reserved */ }
+      if (reserved) {
+        try {
+          markItem(record, item, { state: 'uncertain', error: String(error?.code ?? 'LOCAL_FAILURE') }, at());
+          endOperation(record, 'uncertain', { ...at(), localFailure: String(error?.code ?? 'LOCAL_FAILURE') });
+        } catch { /* the lease is released; the record reads orphaned once this process ends */ }
+        return { ok: false, action: args.action, host, state: 'uncertain', code: error instanceof ProtocolError || error instanceof BridgeError ? error.code ?? 'SC_LOCAL_FAILURE' : 'SC_LOCAL_FAILURE',
+          operationId: preview.operationId, uncertain: [item.name], operation: summarizeOperation(record, { root }),
+          error: `The ${args.action} of ${item.name} stopped on a local failure after its receipt was reserved: it may have been sent; read ssam_task {id:"${preview.operationId}"} before telling the owner anything`,
+          next: `read ssam_task {id:"${preview.operationId}"} and o11_service_center_write {action:"verify", operationId:"${preview.operationId}"}; never repeat this call by yourself` };
+      }
+      markItem(record, item, { state: 'not-started', error: String(error?.code ?? 'REFUSED') }, at());
+      endOperation(record, 'refused', at());
+    }
+    // CX15 r2 (C5, the same family): a failure after the record began and before 'sending' (a refusal of the checks after
+    // the read again, the backup of the connection detail that could not be written) sent nothing: the record ends refused
+    // with notSent (the token stays usable), never running for ever in this process.
+    else if (record && !record.endedAt) {
+      try { markItem(record, item, { state: 'not-started', error: String(error?.code ?? 'LOCAL_FAILURE') }, at()); } catch { /* endOperation writes the item as it is now */ }
+      try { endOperation(record, 'refused', { ...at(), notSent: true }); } catch { /* the lease is released; the record reads orphaned once this process ends */ }
+    }
+    throw error;
+  }
+  if (record && receipt?.cancelled && receipt.notSent) return cancelled('right before the send');
+  if (record) {
+    const state = ['confirmed', 'accepted'].includes(receipt.state) ? 'deleted' : ['rejected', 'refused', 'not-sent'].includes(receipt.state) ? 'refused' : 'uncertain';
+    markItem(record, item, { state, receipt: receipt.receipt ?? null, receiptState: receipt.state }, at());
+    endOperation(record, state === 'deleted' ? 'completed' : state === 'refused' ? 'refused' : 'uncertain', at());
+    return { ...receipt, operation: summarizeOperation(record, { root }) };
+  }
+  return receipt;
+}
+
 // Hosted (../executor.mjs): the vault of the server is never read (present answers false) and no prompt opens; receipts
 // and exports are the customer's (<ws>/o11/service-center).
 export async function main(argv, deps = {}) {
@@ -340,7 +545,24 @@ export async function main(argv, deps = {}) {
   const scheduleEntries = Object.keys(SCHEDULE).filter(k => args['schedule_' + k] !== null).map(k => [k, args['schedule_' + k]]);
   const schedule = scheduleEntries.length ? Object.fromEntries(scheduleEntries) : null;
   if (schedule && args.action !== 'timer-schedule') throw new ProtocolError('--schedule-* applies to timer-schedule only');
-  if (write && args.execute && !deletes) {
+  const pageDelete = PAGE_DELETES.has(args.action);
+  if (!deletes && !pageDelete && (args.confirmation_token !== null || args.owner_request !== null))
+    throw new ProtocolError('--confirmation-token and --owner-request apply to deletes only (delete, its aliases, solution-delete, db-connection-delete)');
+  // CX15: a page delete notes its words first (they never confirm a preview made after them); without its token it is
+  // the preview, with it the execution under the preview's operationId.
+  // The client's cancellation: the tool's (ctx.mcpReq.signal as deps.signal), else the one of withSignal (CX15 r3, CT-1).
+  const destructive = { clock: deps.clock ?? Date.now, root: deps.destructiveRoot, uuid: deps.previewUuid, signal: deps.signal ?? currentSignal() };
+  if (pageDelete) {
+    for (const value of [args.words, args.owner_request]) noteWords({ host, tool: 'o11_service_center_write', words: value, now: destructive.clock(), root: destructive.root });
+    destructive.asked = !args.confirmation_token && Boolean(args.execute || args.words);
+    destructive.preview = args.confirmation_token ? readPreview(parseToken(args.confirmation_token)?.previewId, { root: destructive.root }) : null;
+    if (args.confirmation_token && !destructive.preview) {
+      const { problems } = checkExecute({ token: args.confirmation_token, tool: 'o11_service_center_write', host, operation: args.action, root: destructive.root });
+      return { ok: false, action: args.action, host, state: 'refused', code: problems[0].code, error: problems[0].message, problems };
+    }
+    args.execute = Boolean(destructive.preview);
+  }
+  if (write && args.execute && !deletes && !pageDelete) {
     required(args, 'words', 'operation_id');
     guardWrite(host, args.words, args.confirm_host, [], registry);
   }
@@ -440,7 +662,10 @@ export async function main(argv, deps = {}) {
     args.module_id = await native.numericModuleId(args);
   }
   const engine = client => new DeleteEngine(client, { journal, registry, ...(deps.uuid ? { uuid: deps.uuid } : {}), ...(deps.sleep ? { sleep: deps.sleep } : {}),
-    wait: deps.wait ?? {}, consumerNames: deps.consumerNames ?? null });
+    wait: deps.wait ?? {}, consumerNames: deps.consumerNames ?? null, ...(deps.tool ? { tool: deps.tool } : {}), clock: destructive.clock, root: destructive.root,
+    ...(destructive.uuid ? { previewUuid: destructive.uuid } : {}), ...(destructive.signal ? { signal: destructive.signal } : {}), backup: deps.backup ?? moduleBackup(destructive.root),
+    // An injected backup (tests) is ready unless the test injects backupReady too.
+    backupReady: deps.backupReady ?? (deps.backup ? null : () => moduleBackupReadiness({ env })) });
   const approveFor = () => args.execute && args.authorization_context && DB_APPROVAL_ACTIONS.includes(args.action)
     ? plan => { plan.authorizationContext = approveDatabasePlan(args.authorization_context, args.words, plan); }
     : args.execute && args.authorization_context && args.action === 'solution-delete'
@@ -451,8 +676,8 @@ export async function main(argv, deps = {}) {
         throw new ProtocolError('Context publication requires an exact new standalone extension and expected-version-id=none; nothing sent');
       plan.authorizationContext = authorizationContext(args.authorization_context,args.words,{lane:'o11',host,operation:'extension-publish',targets:[plan.extension],constraints:{createOnly:true}});
     }
-    : (DESTRUCTIVE.has(args.action) && args.execute
-    // The words name the resolved target and everything the plan says goes with it.
+    : (DESTRUCTIVE.has(args.action) && args.execute && !pageDelete
+    // The words name the resolved target and everything the plan says goes with it (page deletes: pageDeleteCall).
     ? plan => guardWrite(host, args.words, args.confirm_host, plan.namedTargets?.length ? plan.namedTargets : [plan.name || plan.connection], registry) : null);
   const options = () => ({ execute: args.execute, words: args.words, operationId: args.operation_id, journal });
 
@@ -532,6 +757,7 @@ export async function main(argv, deps = {}) {
       const [auth, client] = await pagesClient();
       if (SECRET_WRITES.includes(args.action) && args.execute && !journal.lookup(args.operation_id, { host, action: args.action, connection: args.connection }))
         await secretReady(client, present, opener, host, 'DatabaseConnection', args.connection, wait);
+      if (pageDelete) return answer(auth, await pageDeleteCall(args, client, data, approve, { host, registry, journal, ...destructive }));
       return answer(auth, await client.webWrite(args.action, data, { ...options(), approve }));
     }
     const [auth, client] = await api();
@@ -643,7 +869,7 @@ export function sameCall(argv) {
   for (const flag of [...new Set([...VALUED, ...FLAGS])].filter(f => !f.startsWith('schedule-'))) {
     const key = attribute(flag); const value = args[key];
     if (value === null || value === undefined || DEFAULT_VALUES[key] === value) continue;
-    out[camel(key)] = key === 'words' ? "<the user's own words>" : NUMBER_FLAGS.includes(key) ? Number(value) : value;
+    out[camel(key)] = key === 'words' ? "<the user's own words>" : key === 'owner_request' ? "<the owner's request, verbatim>" : NUMBER_FLAGS.includes(key) ? Number(value) : value;
   }
   for (const flag of SWITCHES) if (args[attribute(flag)] && flag !== 'plan-only') out[camel(attribute(flag))] = true;
   if (args.plan_only) out.execute = false;

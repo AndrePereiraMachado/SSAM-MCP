@@ -77,17 +77,42 @@ public static partial class Delivery
         var failures = new List<(string Stage, string Error)>();
         ModuleReservation? reservation = null;
         if (result["closed"]?.GetValue<bool>() == true) throw new InvalidOperationException("This failed delivery was closed for revision; it cannot be replayed");
-        result["delivered"] = false; result.Remove("error"); result.Remove("code"); result.Remove("warnings"); result.Remove("reselected"); result.Remove("normalizations");
+        result.Remove("error"); result.Remove("code"); result.Remove("warnings"); result.Remove("reselected"); result.Remove("normalizations");
+        // CX14 R4: the hint of an earlier close refusal ("close the dialog ...") belongs to that refusal, never to this run.
+        result.Remove("next");
         result.Remove("referencesRefreshed"); result.Remove("referencesRefreshFailed");
         // fam-deps: the reference closure belongs to this run; a dialog that blocked the merge (blockedBy, question) stays
         // until the merge settles (RecordMerge).
         result.Remove("referenceClosure"); result.Remove("referenceSignatureChanges");
+        // CX14 N6: what a call sent again after the proof of a call it settled belongs to that call's answer.
+        result.Remove("sentAgainAfterIdle");
         IReadOnlyDictionary<string, VerifyHint>? hints = null;
         var dataProofDiffers = false;
         // primeira-certa A3: the preflight of a job it refuses, kept for an answer without a capture (Fail).
         JsonObject? pure = null;
+        CountingBridge? sentAfterSettlement = null;
         try
         {
+            // CX14: an unjournaled UI write may have run after this client stopped waiting. While it may still run, the
+            // resume only observes (two bounded reads) and never repeats open/refresh/close.
+            // CX14 R3: once two reads prove the Studio idle, that call has ended. It is settled (its fence lifted) and never
+            // changes the merge's writeState, so the resume goes on as any resume of that writeState: an applied merge is
+            // re-verified, an unknown one is reconciled through its journal.
+            // CX14 N2 (declared): a task whose merge was never sent (not-sent) goes on too, in this same call (before it was
+            // told to close and deliver again); a settled Refresh References is named with Ctrl+Z in settledBridgeOperations.
+            // CX14 N3: the same for a UI call that stopped beside a pending merge (pendingBridgeOperation.after): no
+            // open/refresh/close is sent while it may still run.
+            if (DeliveryTask.UnsettledUiCall(result) is { } running)
+            {
+                if (!DeliveryTask.InspectPendingUi(result, bridge)["idle"]!.GetValue<bool>())
+                    return Fail("The prior Studio UI operation (" + running + ") is still pending or idle could not be proven; nothing was repeated. Resolve the current Studio blocker and inspect this task again.");
+                // CX14 N6: from here on, what this call sends again is counted for the calls it settled (their notes).
+                sentAfterSettlement = CountingBridge.Wrap(bridge);
+                sentAfterSettlement.Settled.AddRange(DeliveryTask.SettlePendingUi(result));
+                task.Save("pending-ui-settled");
+                bridge = sentAfterSettlement;
+            }
+            result["delivered"] = false;
             if (result["sources"] == null)
             {
                 // The job as this task checks it (path + SHA-256), recorded before anything can refuse it and kept on every
@@ -219,8 +244,9 @@ public static partial class Delivery
                     if (result["blockedBy"] is JsonObject waiting)
                     {
                         result["code"] = StudioDialogPending;
+                        // CX14 N7: what this call sent again after a proven idle is in its counts; the text says only what is true.
                         return Fail("The merge still waits in the Studio for the person to answer \"" + waiting["title"] + "\". " + waiting["question"]
-                            + " Nothing was repeated; resume this task again after the answer.");
+                            + " " + DeliveryTask.NotRepeated(sentAfterSettlement, sentence: true) + "; resume this task again after the answer.");
                     }
                     return Fail("Merge outcome remains unknown; no creation or merge was replayed. Reconcile the original operation.");
                 }
@@ -478,7 +504,9 @@ public static partial class Delivery
                     // The bridge itself answered that the merge failed after it started (its journal recorded the failure, so
                     // the operation is over): unknown, reconciled at once below, never repeated. A lost reply (transport) is
                     // left to the outer handler and to resume: the merge may still be running in the Studio.
-                    result["writeState"] = "unknown"; result["mergeError"] = Errors.Text(ex); task.Save("merge-unknown");
+                    result["writeState"] = "unknown"; result["mergeError"] = Errors.Text(ex);
+                    if (ex.Stall != null) { RecordStall(ex); task.Save("merge-stalled"); }
+                    else task.Save("merge-unknown");
                 }
                 // fam-deps (family D): the bridge answered in seconds that a dialog the Studio opened during the merge needs the
                 // person (OperationDialogLoop); the merge still waits for that answer in the Studio. One question with the exact
@@ -488,7 +516,7 @@ public static partial class Delivery
                     result["code"] = StudioDialogPending; result["blockedBy"] = dialog.DeepClone(); result["question"] = dialog["question"]?.DeepClone();
                     task.Save("merge-blocked");
                     return Fail("The Studio opened \"" + dialog["title"] + "\" during the merge and only the person can answer it. " + dialog["question"]
-                        + " Nothing was repeated; after the answer, resume this task (deliver --resume " + task.Id + ").");
+                        + " " + DeliveryTask.NotRepeated(sentAfterSettlement, sentence: true) + "; after the answer, resume this task (deliver --resume " + task.Id + ").");
                 }
                 // A native merge that failed after it started (verificationError) is unknown, never repeated: it is reconciled
                 // in this same call (merge_status, then the rollback proofs); what stays unknown is resumed later.
@@ -497,8 +525,19 @@ public static partial class Delivery
                     stage = "reconcile";
                     var failed = result["merge"]?["verificationError"]?.ToString() ?? result["mergeError"]?.ToString();
                     if (!Reconcile())
+                    {
+                        if (result["stalled"] is JsonObject stopped)
+                        {
+                            var seconds = double.TryParse(stopped["afterMs"]?.ToString(), System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture, out var elapsed) ? elapsed / 1000d : 0;
+                            return Fail("The Studio stopped answering the merge: " + stopped["verdict"]
+                                + (stopped["blockedBy"]?["title"] is { } title ? " (" + title + ")" : "")
+                                + " after " + seconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)
+                                + " s; " + DeliveryTask.NotRepeated(sentAfterSettlement) + ". Resume reconciles it through merge_status.");
+                        }
                         return Fail("Merge outcome is unknown" + (failed != null ? ": " + failed : "")
-                            + "; nothing was repeated. Resume reconciles it through merge_status.");
+                            + "; " + DeliveryTask.NotRepeated(sentAfterSettlement) + ". Resume reconciles it through merge_status.");
+                    }
                     stage = "merge";
                 }
                 // Review finding 1: a merge during which the Studio reported an error is proven against the base before its result counts.
@@ -578,7 +617,7 @@ public static partial class Delivery
                             + (result["merge"]?["undoSteps"]?.ToString() == "2" ? "Ctrl+Z twice in Studio undoes it (two native merges)" : "Ctrl+Z in Studio undoes it") + "; nothing was published"));
                 }
             }
-            catch (Exception ex) { failures.Add((stage, Errors.Text(ex))); }
+            catch (Exception ex) when (ex is not BridgeCallException { Stall: not null }) { failures.Add((stage, Errors.Text(ex))); }
             task.Save(stage);
             stage = "checks";
             var checks = new JsonArray(); result["checks"] = checks;
@@ -663,7 +702,7 @@ public static partial class Delivery
                         failures.Add((stage, KnownLossesText(lost, forced, others) + (deferred is { Count: > 0 } ? SecondMergeText(result["merge"]) : "")));
                     }
                 }
-                catch (Exception ex) { failures.Add((stage, Errors.Text(ex))); }
+                catch (Exception ex) when (ex is not BridgeCallException { Stall: not null }) { failures.Add((stage, Errors.Text(ex))); }
             }
             if (DeliveryReceipt.Changed(sources).Count > 0) failures.Add((stage, "Source changed after merge; this task does not cover the edited job"));
             result["failures"] = new JsonArray(failures.Select(f => (JsonNode)new JsonObject { ["stage"] = f.Stage, ["error"] = f.Error }).ToArray());
@@ -854,12 +893,15 @@ public static partial class Delivery
                     RecordMerge(receipt.DeepClone().AsObject());
                     return true;
                 }
+                // CX14: a stopped UI call can still be queued in Studio. Only its journal may settle it; taking another
+                // snapshot would wait behind the same modal and its base hash cannot prove that queued work is over.
+                if (result["pendingBridgeOperation"] != null && result["stalled"] != null) return false;
                 if (!RollbackProof.KernelProofApplies(status)) return false;
                 var baseSha = RollbackProof.BaseSha256(result);
                 var livePath = Path.Combine(attemptDirectory, "reconcile-" + Guid.NewGuid().ToString("N") + ".oml");
                 JsonObject live;
                 try { live = bridge.Call("snapshot_module", Target(new() { ["path"] = livePath })); }
-                catch (Exception ex) { result["reconcileError"] = Errors.Text(ex); return false; }
+                catch (Exception ex) when (ex is not BridgeCallException { Stall: not null }) { result["reconcileError"] = Errors.Text(ex); return false; }
                 if (live["key"]?.ToString() != key) return false;
                 var liveSha = live["sha256"]?.ToString() ?? (File.Exists(livePath) ? DeliveryReceipt.Hash(livePath) : null);
                 var proof = RollbackProof.KernelReceipt(result["operationId"]?.ToString(), liveSha, baseSha, status["error"]?.ToString());
@@ -956,7 +998,7 @@ public static partial class Delivery
                         report["reason"] = "the Studio's Refresh References did not bring " + string.Join(", ", each.OfType<JsonObject>().Where(e => e["aligned"]?.GetValue<bool>() != true)
                             .Select(e => e["producer"] + " (now " + (e["liveHash"]?.ToString() ?? "absent") + ", candidate " + e["candidateHash"] + ")")) + " to the candidate's signature";
                 }
-                catch (Exception ex) when (ex is not OutOfMemoryException) { report["reason"] = Errors.Text(ex); }
+                catch (Exception ex) when (ex is not OutOfMemoryException and not BridgeCallException { Stall: not null }) { report["reason"] = Errors.Text(ex); }
                 task.Save(stage);
                 return report;
             }
@@ -1006,13 +1048,13 @@ public static partial class Delivery
                     liveSha = live["sha256"]?.ToString() ?? (File.Exists(livePath) ? DeliveryReceipt.Hash(livePath) : null);
                     studioError["live"] = livePath;
                 }
-                catch (Exception ex) when (ex is not OutOfMemoryException) { studioError["proofError"] = Errors.Text(ex); }
+                catch (Exception ex) when (ex is not OutOfMemoryException and not BridgeCallException { Stall: not null }) { studioError["proofError"] = Errors.Text(ex); }
                 studioError["liveSha256"] = liveSha; studioError["baseSha256"] = baseSha;
                 if (string.IsNullOrWhiteSpace(liveSha) || string.IsNullOrWhiteSpace(baseSha))
                 {
                     result["writeState"] = "unknown"; task.Save(stage);
                     return Fail(said + ". Whether the module changed could not be proven (" + (studioError["proofError"]?.ToString() ?? "no hash of the base") + "): "
-                        + "the outcome is unknown and nothing was repeated; resume proves it against the base.");
+                        + "the outcome is unknown and " + DeliveryTask.NotRepeated(sentAfterSettlement) + "; resume proves it against the base.");
                 }
                 if (RollbackProof.SameSha256(liveSha, baseSha))
                 {
@@ -1034,6 +1076,7 @@ public static partial class Delivery
         catch (Exception ex)
         {
             if (result["writeState"]?.ToString() == "intent") result["writeState"] = ex is BridgeCallException { Executed: false } ? "not-sent" : "unknown";
+            if (ex is BridgeCallException { Stall: not null } stopped) RecordStall(stopped);
             // A coded kernel refusal raised inside the apply (the base check's PREFLIGHT_REFUSED with every problem, I2;
             // SIGNATURE_CHANGE_BREAKS_CONSUMERS, ...) keeps its code and problems in the task result, as the CLI envelope does.
             // prazos B: a read of the environment the Studio's own client cut (ENVIRONMENT_CALL_CUT) names what was cut in
@@ -1065,16 +1108,48 @@ public static partial class Delivery
             result["elapsedMs"] = clock.ElapsedMilliseconds;
             CloseOpenedTab();
             ReleaseCapture();
+            DeliveryTask.FinishSettledNotes(result, sentAfterSettlement);
             try
             {
                 task.Save(stage);
-                if (result["delivered"]?.GetValue<bool>() == true || result["writeState"]?.ToString() is "not-sent" or "not-applied") reservation?.Release();
+                if (result["delivered"]?.GetValue<bool>() == true || (result["pendingBridgeOperation"] == null && result["writeState"]?.ToString() is "not-sent" or "not-applied")) reservation?.Release();
             }
             finally { reservation?.Dispose(); }
         }
         // A03, I9: the warnings that block nothing, each {id, path, key?, detail, fix}: from the live verdicts when the live
         // contract ran (live), else from the apply's verdicts. The whole list stays in the task result (result.json); the
         // answers cap it.
+        void RecordStall(BridgeCallException stopped)
+        {
+            // CX14 R2: the receipt keeps no typed text, whichever client built the stall.
+            var stall = BridgeStallRule.Clean(stopped.Stall!);
+            result["stalled"] = stall.DeepClone();
+            if (stopped.Executed == false)
+            {
+                // CX14 R1: the pre-probe refused this call before sending it. That names the task's refusal only while the
+                // task's own write was never sent; an intent, unknown or applied write keeps its code and its outcome.
+                if (result["writeState"]?.ToString() == "not-sent") result["code"] ??= "STUDIO_ERROR_DIALOG_OPEN";
+                return;
+            }
+            var method = stall["method"]?.ToString();
+            // CX14 R4: the pending operation keeps its own evidence (pendingBridgeOperation.stall: which Studio ran it, what
+            // stopped it). `stalled` is the stop of the latest call, what blocks the Studio now. A later stop of another
+            // call (the resume's open_module) is recorded there and never replaces the pending operation or its journal.
+            if (method is "merge_from_oml" or "refresh_references" or "open_module" or "close_module" && result["pendingBridgeOperation"] == null)
+            {
+                var pending = new JsonObject { ["method"] = method, ["moduleKey"] = result["moduleKey"]?.DeepClone() };
+                if (method == "merge_from_oml") pending["operationId"] = result["operationId"]?.DeepClone();
+                pending["stall"] = stall.DeepClone();
+                result["pendingBridgeOperation"] = pending;
+            }
+            // CX14 N3: a UI write sent beside an operation already pending (the resume's open_module or its refresh, while
+            // the merge's journal is unknown) may still run too: it is fenced beside it (after), never replacing it.
+            else if (method is "refresh_references" or "open_module" or "close_module" && result["pendingBridgeOperation"] is JsonObject existing)
+            {
+                if (existing["after"] is not JsonArray after) existing["after"] = after = new JsonArray();
+                after.Add(new JsonObject { ["method"] = method, ["moduleKey"] = result["moduleKey"]?.DeepClone(), ["stall"] = stall.DeepClone() });
+            }
+        }
         void RecordWarnings(JsonArray? live)
         {
             var source = live ?? result["apply"]?["validation"]?["verdicts"] as JsonArray ?? new JsonArray();
@@ -1094,7 +1169,7 @@ public static partial class Delivery
         void CloseOpenedTab()
         {
             if (!request.CloseOpenedTab || result["open"] is not JsonObject open || open["alreadyOpen"]?.GetValue<bool>() != false) return;
-            if (result["writeState"]?.ToString() is not ("not-sent" or "not-applied" or "applied" or "unchanged"))
+            if (result["pendingBridgeOperation"] != null || result["writeState"]?.ToString() is not ("not-sent" or "not-applied" or "applied" or "unchanged"))
             {
                 result["closedTab"] = new JsonObject { ["closed"] = false, ["reason"] = "the merge outcome is not settled; the tab stays for the reconciliation" };
                 return;
@@ -1106,7 +1181,13 @@ public static partial class Delivery
                 result["closedTab"] = closed["closed"]?.GetValue<bool>() == true ? JsonValue.Create(true)
                     : new JsonObject { ["closed"] = false, ["reason"] = closed["error"]?.ToString() ?? closed["hint"]?.ToString() ?? "the Studio kept the tab" };
             }
-            catch (Exception ex) { result["closedTab"] = new JsonObject { ["closed"] = false, ["reason"] = Errors.Text(ex) }; }
+            catch (Exception ex)
+            {
+                // CX14 R1: a tab close the pre-probe refused was never sent: a fact of the tab only (closedTab), never the
+                // task's code or stall. A close that was sent and then stopped may still run in the Studio: it is fenced.
+                if (ex is BridgeCallException { Stall: not null, Executed: not false } stopped) RecordStall(stopped);
+                result["closedTab"] = new JsonObject { ["closed"] = false, ["reason"] = Errors.Text(ex) };
+            }
         }
         // A resident worker (hosted: one per customer) runs many deliveries in one process. What the bridge client keeps
         // loaded for this one (the thin bridge's capture of the checks, find_element) is released when it ends, after the
@@ -1125,7 +1206,19 @@ public static partial class Delivery
             result["writeState"] = merge["merged"]?.GetValue<bool>() == true ? "applied" : unchanged ? "unchanged"
                 : merge["merged"]?.GetValue<bool>() == false ? "not-applied" : "unknown";
             // fam-deps: a settled merge no longer waits for any dialog.
-            if (result["writeState"]!.ToString() != "unknown") { result.Remove("blockedBy"); result.Remove("question"); }
+            if (result["writeState"]!.ToString() != "unknown")
+            {
+                result.Remove("blockedBy"); result.Remove("question");
+                // CX14 N3: a UI call that stopped beside the merge is not settled by the merge's journal: it stays pending
+                // (without a journal) with its own stop, so resume and close still require idle for it.
+                if (result["pendingBridgeOperation"]?["after"] is JsonArray { Count: > 0 } after)
+                {
+                    var next = after[0]!.DeepClone().AsObject();
+                    if (after.Count > 1) next["after"] = new JsonArray(after.Skip(1).Select(a => a!.DeepClone()).ToArray());
+                    result["pendingBridgeOperation"] = next; result["stalled"] = next["stall"]?.DeepClone();
+                }
+                else { result.Remove("stalled"); result.Remove("pendingBridgeOperation"); }
+            }
             task.Save("merge-recorded");
         }
         JsonObject Fail(string message)
@@ -1838,4 +1931,26 @@ public static partial class Delivery
             + (missing.Count > 0 ? " Each element exists now, so a merge keeps a default set on it: deliver mergeOrder.repair as a new job " + RepairJob(lost).ToJsonString() + "." : "")
             + (forced.Count > 0 ? " Declare the rule in the job (mergeOrder.declare) so the next candidate equals the module " + DeclareJob(forced).ToJsonString() + "." : "");
     }
+}
+
+/// <summary>CX14 N6: counts the calls a delivery or a close sent to the bridge after it settled a stopped UI call (a refusal
+/// before sending, executed false, is not sent), and keeps the entries it settled. The bounded probe reads of the inner
+/// client stay bounded (CountingProbeBridge); they are reads and are not counted.</summary>
+internal class CountingBridge(IBridgeClient inner) : IBridgeClient
+{
+    private readonly Dictionary<string, int> sent = new(StringComparer.Ordinal);
+    public static CountingBridge Wrap(IBridgeClient inner) => inner is IBridgeProbeReader reader ? new CountingProbeBridge(inner, reader) : new CountingBridge(inner);
+    /// <summary>The settledBridgeOperations entries this call settled.</summary>
+    public List<JsonObject> Settled { get; } = new();
+    public int Count(string method) => sent.GetValueOrDefault(method);
+    public JsonObject Call(string method, JsonObject? parameters = null)
+    {
+        try { var reply = inner.Call(method, parameters); sent[method] = Count(method) + 1; return reply; }
+        catch (Exception ex) when (ex is not BridgeCallException { Executed: false }) { sent[method] = Count(method) + 1; throw; }
+    }
+}
+
+internal sealed class CountingProbeBridge(IBridgeClient inner, IBridgeProbeReader reader) : CountingBridge(inner), IBridgeProbeReader
+{
+    public Task<JsonObject?> ReadProbeAsync(string method, JsonObject? parameters = null, int timeoutMs = 250) => reader.ReadProbeAsync(method, parameters, timeoutMs);
 }

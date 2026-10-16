@@ -6,6 +6,8 @@
 // with the library, revision, tag, runtime, the consumers left outdated and the continuation of the reference job.
 // status (reads) and discard (deletes an open job; destructive). No username or password ever: the ODC Studio session
 // first, then the vault, then the private prompt. Every refusal comes before any change, with every problem at once.
+import { DESTRUCTIVE_SUFFIX, ODC_EXECUTION_UUID, withSignal } from './destructive-operations.mjs';
+import { OWNED_CLEANUP } from '../portal/runtime/owned-cleanup-approval.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as z from 'zod/v4';
@@ -22,7 +24,7 @@ const FIELDS = {
   build: ['spec', 'specFile'],
   deploy: ['spec', 'specFile', 'releaseTag', 'releaseNotes', 'tenant', 'auth', 'pid', 'authorize', 'operationUuid', 'confirmTenant', 'authorizationContext', 'originOperationUuid', 'expectedRevision'],
   status: ['library', 'spec', 'specFile', 'tenant', 'auth', 'pid'],
-  discard: ['library', 'jobKey', 'tenant', 'auth', 'pid', 'authorize', 'operationUuid', 'confirmTenant', 'authorizationContext', 'originOperationUuid'],
+  discard: ['library', 'jobKey', 'tenant', 'auth', 'pid', 'authorize', 'operationUuid', 'confirmTenant', 'authorizationContext', 'originOperationUuid', 'confirmationToken', 'ownerRequest'],
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const refusal = (code, error, extra = {}) => ({ ok: false, code, error, ...extra });
@@ -211,8 +213,11 @@ export function createExternalLibraryTool(deps = {}) {
   let access = deps.access ?? null;
   const accessOf = async () => access ??= await (await import('./lib.mjs')).createAccess();
 
+  // The deployer's own writes (upload, publish, the job DELETE of discard) go through the unguarded access: the guard of
+  // a destructive call is at the entry of this tool (discard below), never inside the internal steps (CX15).
   async function deployer() {
-    const a = await accessOf();
+    const { unguarded } = await portalModule('destructive-preview.mjs');
+    const a = unguarded(await accessOf());
     const { ExternalLibraryDeployer } = deps.portalRuntime?.deployer ?? await portalModule('external-library.mjs');
     const uploads = deps.portalRuntime?.uploads ?? await portalModule('external-library-upload.mjs');
     const uploaders = deps.uploaders ?? {
@@ -284,15 +289,17 @@ export function createExternalLibraryTool(deps = {}) {
       if (typeof library !== 'string' || !library) return refusal('LIBRARY_REQUIRED', 'status needs library (the library name) or its spec.');
       return (await deployer()).status({ tenant: input.tenant, auth: input.auth, library });
     }
+    // discard deletes an open job: two calls (CX15). Without confirmationToken it previews the job (identity read now,
+    // backup plan, token); with it, the token, the owner's reply after the preview (naming the library, with the count)
+    // and the operationId of the preview as operationUuid, then the deployer's discard as before.
     if (action === 'discard') {
-      const problems = [];
-      if (typeof input.authorize !== 'string' || input.authorize.trim().length < 8) problems.push({ code: 'WORDS_MUST_NAME_LIBRARY', path: '/authorize', message: 'Discarding a job deletes it: the user\'s words name the library.', fix: 'Repeat with authorize: the user\'s words naming the library.', ssamRule: true });
-      else if (!input.authorizationContext && input.library && !namesWhole(input.authorize, input.library)) problems.push({ code: 'WORDS_MUST_NAME_LIBRARY', path: '/authorize', message: 'The words do not name ' + input.library + '.', fix: 'Repeat with the user\'s words that name ' + input.library + '.', ssamRule: true });
-      if (!UUID.test(String(input.operationUuid ?? ''))) problems.push({ code: 'INPUT_INVALID', path: '/operationUuid', message: 'operationUuid must be a new UUID.', fix: 'Pass a new UUID.' });
-      if (!input.jobKey && !input.library) problems.push({ code: 'INPUT_INVALID', path: '/jobKey', message: 'discard needs jobKey or library.', fix: 'Pass the jobKey the refusal named.' });
-      if (problems.length) return refusal(problems[0].code, problems.map(p => p.message).join(' '), { problems });
-      return (await deployer()).discard({ tenant: input.tenant, auth: input.auth, jobKey: input.jobKey, library: input.library, authorize: input.authorize, operationUuid: input.operationUuid, confirmTenant: input.confirmTenant,
-        authorizationContext:input.authorizationContext,originOperationUuid:input.originOperationUuid });
+      if (!input.jobKey && !input.library && !input.confirmationToken)
+        return refusal('INPUT_INVALID', 'discard needs jobKey or library.', { problems: [{ code: 'INPUT_INVALID', path: '/jobKey', message: 'discard needs jobKey or library.', fix: 'Pass the jobKey the refusal named.' }] });
+      const { destructiveGuard, DESTRUCTIVE_GUARD, unguarded } = await portalModule('destructive-preview.mjs');
+      const a = await accessOf();
+      const guard = a?.[DESTRUCTIVE_GUARD] ?? destructiveGuard(unguarded(a), deps.destructive ?? {});
+      return guard.discard(input, async args => (await deployer()).discard({ tenant: args.tenant, auth: args.auth, jobKey: args.jobKey, library: args.library, authorize: args.authorize,
+        operationUuid: args.operationUuid, confirmTenant: args.confirmTenant, authorizationContext: args.authorizationContext, originOperationUuid: args.originOperationUuid }));
     }
 
     // build and deploy: the spec first, then (deploy) the words and the tenant guard, all before anything runs.
@@ -387,7 +394,7 @@ export function registerExternalLibrary(server, deps = {}) {
     .describe('{name, description?, namespace?, structures?:[{name, attributes:[{name, type, mandatory?, length?, decimals?, default?}]}], actions:[{name, inputs?:[{name, type}], outputs?:[{name, type}], body:"<C# statements using the declared names>"}], packages?:[{name, version (exact)}], usings?:[namespace]}. Types: Text, Integer, Long Integer, Decimal, Boolean, Date, Date Time, Time, Currency, Email, Phone Number, Binary Data, a structure, "<T> List".');
   server.registerTool('odc_external_library', {
     title: 'ODC External Library: build, deploy, status, discard',
-    description: 'An ODC External Library (C# actions and structures) from a spec, in one call per change. build (no tenant): the net10.0 project with the pinned OutSystems.ExternalLibraries.SDK, dotnet publish and the deterministic zip (the .NET 10 SDK and NuGet access are needed on this machine). deploy: the same build, then in the same call the upload, the generation followed to its end, the publish of the job, the release tag (next patch, or 1.0.0) and the readback of revision, tag and .NET 10 runtime; it refuses before any change with every problem at once (spec, words naming the library, tenant guard, sign-in of both the public API and the Portal planes, a job already open, consumers that would break, a tag already used). The answer lists the consumers left outdated (each must refresh its reference and be published) and the reference job continuation; references go through the existing reference job (studio_deliver). status: the library, its revisions and runtime, consumers and open jobs (reads). discard: deletes an open job (destructive: the words name the library). Credentials are never arguments: the ODC Studio session first, then the vault, then a private prompt. A lost answer is never resent: the same call with the same operationUuid reads the exact state and continues.',
+    description: 'An ODC External Library (C# actions and structures) from a spec, in one call per change. build (no tenant): the net10.0 project with the pinned OutSystems.ExternalLibraries.SDK, dotnet publish and the deterministic zip (the .NET 10 SDK and NuGet access are needed on this machine). deploy: the same build, then in the same call the upload, the generation followed to its end, the publish of the job, the release tag (next patch, or 1.0.0) and the readback of revision, tag and .NET 10 runtime; it refuses before any change with every problem at once (spec, words naming the library, tenant guard, sign-in of both the public API and the Portal planes, a job already open, consumers that would break, a tag already used). The answer lists the consumers left outdated (each must refresh its reference and be published) and the reference job continuation; references go through the existing reference job (studio_deliver). status: the library, its revisions and runtime, consumers and open jobs (reads). discard: deletes an open job, a delete (the words name the library). ' + DESTRUCTIVE_SUFFIX + ' ' + ODC_EXECUTION_UUID + ' ' + OWNED_CLEANUP + ' Credentials are never arguments: the ODC Studio session first, then the vault, then a private prompt. A lost answer is never resent: the same call with the same operationUuid reads the exact state and continues.',
     inputSchema: z.object({
       action: z.enum(EXTERNAL_LIBRARY_ACTIONS),
       spec: spec.optional(),
@@ -405,7 +412,9 @@ export function registerExternalLibrary(server, deps = {}) {
       authorize: z.string().min(8).optional().describe('deploy and discard: the user\'s own words naming the library (and each consumer a deploy would break), quoted verbatim; only their sha256 is kept. Without them a deploy uses a standing publish grant of the library.'),
       operationUuid: z.string().uuid().optional().describe('deploy and discard: a new UUID per change; repeating it never resends, it reads and continues.'),
       confirmTenant: z.string().optional().describe('Corporate or unknown tenants: the tenant host, as the user\'s explicit instruction.'),
+      confirmationToken: z.string().min(1).optional().describe('discard: the token of its preview; without it discard only previews.'),
+      ownerRequest: z.string().optional().describe('discard: the owner\'s request as said; only its sha256 is kept.'),
     }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
-  }, wrap(input => run(input)));
+  }, wrap((input, ctx) => withSignal(ctx?.mcpReq?.signal, () => run(input))));
 }

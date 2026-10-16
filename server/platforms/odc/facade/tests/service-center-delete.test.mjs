@@ -1,10 +1,12 @@
 // The code under test writes under the user's profile: this process's profile is a temporary folder.
 import './fixtures/isolated-profile.mjs';
 // The delete engine of the Service Center (service-center/delete.mjs, contract docs/INTEGRACOES-GITSSAM.md lane scdelete):
-// one call per delete through the Studio's own Service Center API, refusing before any change with every problem, the
+// two calls per delete since CX15 (the preview with its token, then the execution with the owner's words given after it,
+// with the exact count) through the Studio's own Service Center API, refusing before any change with every problem, the
 // server's simulation and the consumers read first, the words naming every target and every outside consumer, the wait
 // for the real state and the repetition by state. Offline: the fake bridge of sc-fake-bridge.mjs, no Studio, no
-// Service Center, nothing live.
+// Service Center, nothing live. CX15 converted the tests that deleted in one call (previewThenConfirm), keeping every
+// other assertion.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -15,8 +17,10 @@ import { Journal } from '../service-center/client.mjs';
 import { BridgeError } from '../service-center/errors.mjs';
 import { runServiceCenter } from '../service-center/index.mjs';
 import { DELETE_OPERATIONS, PREFIX_WORDS_NAME_ALL, derivedOperationId } from '../service-center/delete.mjs';
+import { CONFIRM_MIN_AGE_MS, OWNER_REPLY, previewFile } from '../destructive-operations.mjs';
 import { sha256 } from '../service-center/util.mjs';
 import { CATALOG, FakeBridge, files, temp } from './fixtures/sc-fake-bridge.mjs';
+import { fakeClock, noBackup, previewThenConfirm } from './fixtures/destructive-flow.mjs';
 
 const PERSONAL = 'personal-0000test.outsystemscloud.com';
 const CORPORATE = 'test.example.com';
@@ -27,22 +31,26 @@ test('a contextual human approval deletes only the scoped app; new consumers sti
   for (const hasConsumer of [false, true]) {
     const s=environment({apps:[{key:'proof',name:'Proof'}],
       simulations:{proof:{success:true,affectedApplications:hasConsumer?['NewConsumer']:[],deletedModules:[],messages:[]}}});
-    const proposal=path.join(s.dir,'proposal.md'),context=path.join(s.dir,'approval.json'),words='Pode sim, depois apague.';
-    fs.writeFileSync(proposal,'Delete the disposable Proof app after its approved test.');
+    // CX15: the approval's proposal is the preview file (the owner approved the list it shows); the words carry the count.
+    const preview=await s.run('delete','--target=application:Proof');
+    const proposal=previewFile(preview.previewId,{root:s.root}),context=path.join(s.dir,'approval.json'),words='Pode sim, depois apague o 1.';
     fs.writeFileSync(context,JSON.stringify({schema:'ssam-authorization-context/1',decision:'approved',words,
       source:{kind:'human-conversation',threadId:PARENT,messageId:PARENT,question:'May I execute this disposable fixture plan?'},
       proposal:{file:proposal,sha256:sha256(fs.readFileSync(proposal))},scope:[{lane:'o11',host:PERSONAL,operation:'delete',targets:['Proof']}]}));
-    const result=await s.run('delete','--target=application:Proof','--words='+words,'--authorization-context='+context);
+    s.clock.advance(CONFIRM_MIN_AGE_MS);
+    const result=await s.run('delete','--confirmation-token='+preview.confirmationToken,'--words='+words,'--authorization-context='+context);
     if(hasConsumer){assert.equal(result.code,'DELETE_REFUSED');assert.ok(result.problems.some(p=>p.code==='CONSUMERS_WOULD_BREAK'));assert.equal(s.writes().length,0);}
     else {assert.equal(result.state,'confirmed',JSON.stringify(result));assert.equal(s.sent('DeleteApplication').length,1);}
   }
 });
 
 // A synthetic environment: applications, eSpaces and extensions (each with its application key), GetConsumers answers
-// by producer key and DeleteApplication simulations by application key. Deletes change the listings.
+// by producer key and DeleteApplication simulations by application key. Deletes change the listings. CX15: its own fake
+// clock and destructive root; s.confirm(argv, words) is the preview, 5 s, then the token with the owner's words.
 function environment({ apps = [], espaces = [], extensions = [], consumers = {}, simulations = {}, catalog = CATALOG, host = PERSONAL, uuid = () => PARENT } = {}) {
-  const s = { apps: [...apps], espaces: [...espaces], extensions: [...extensions], consumers, simulations, dir: temp(), sleeps: [], linger: {} };
+  const s = { apps: [...apps], espaces: [...espaces], extensions: [...extensions], consumers, simulations, dir: temp(), sleeps: [], linger: {}, clock: fakeClock() };
   s.journal = new Journal(path.join(s.dir, 'receipts'));
+  s.root = path.join(s.dir, 'destructive');
   // linger[key] = n: the key stays listed n more reads after its delete (the server takes a moment).
   const listed = rows => rows.filter(r => !r.gone || (s.linger[r.key] ?? 0) > 0 && s.linger[r.key]--);
   const moduleRows = rows => listed(rows).map(m => ({ Key: m.key, Name: m.name, ApplicationKey: m.app ?? null }));
@@ -63,7 +71,9 @@ function environment({ apps = [], espaces = [], extensions = [], consumers = {},
     DeleteModule: args => (s.deleteModule ? s.deleteModule(args) : (s.removeModule(args.moduleKey), { success: true, message: null })),
   } });
   s.run = (...argv) => runServiceCenter([...argv, '--host=' + host], { journal: s.journal, locate: () => s.bridge, present: async () => false, running: async () => false,
-    opener: () => assert.fail('no prompt with a Studio connected'), exports: s.dir, registry: REGISTRY, sleep: async ms => { s.sleeps.push(ms); }, uuid });
+    opener: () => assert.fail('no prompt with a Studio connected'), exports: s.dir, registry: REGISTRY, sleep: async ms => { s.sleeps.push(ms); }, uuid,
+    clock: s.clock, destructiveRoot: s.root, backup: noBackup });
+  s.confirm = async (argv, words, extra = []) => (await previewThenConfirm(s.run, argv, words, { clock: s.clock, extra })).result;
   s.writes = () => s.bridge.writes();
   s.sent = operation => s.bridge.calls.filter(c => c[0] === 'api' && c[2] === operation && c[4]);
   s.reads = operation => s.bridge.calls.filter(c => c[0] === 'api' && c[2] === operation && !c[4]);
@@ -75,36 +85,39 @@ const ordersAndBilling = (extra = {}) => environment({ apps: [{ key: 'app-o', na
   espaces: [{ key: 'k-orders', name: 'Orders', app: 'app-o' }, { key: 'k-billing', name: 'Billing', app: 'app-b' }],
   consumers: { 'k-orders': [{ Name: 'Billing' }] }, ...extra });
 
-// ---- 1, 2, 7: consumers outside the set; the words that name them; one call
+// ---- 1, 2, 7: consumers outside the set; the words that name them; two calls
 test('a module with a consumer outside the set is refused with CONSUMERS_WOULD_BREAK; nothing reserved, locked or sent', async () => {
   const s = ordersAndBilling();
-  const refused = await s.run('delete', '--target=module:Orders', '--words=pode apagar o módulo Orders');
+  const { result: refused, token } = await previewThenConfirm(s.run, ['delete', '--target=module:Orders'], 'pode apagar o 1 módulo Orders', { clock: s.clock });
   assert.deepEqual([refused.ok, refused.code, refused.state], [false, 'DELETE_REFUSED', 'refused']);
   assert.deepEqual(refused.problems.map(p => [p.code, p.consumer, p.application, p.of, p.ssamRule]), [['CONSUMERS_WOULD_BREAK', 'Billing', 'Billing App', 'Orders', true]]);
   assert.match(refused.problems[0].fix, /Billing/);
   assert.deepEqual(refused.consumers, { Orders: ['Billing'] });
-  assert.deepEqual(refused.repeat, { action: 'delete', host: PERSONAL, modules: ['Orders'], words: "<the user's own words naming Orders, Billing>" });
+  // CX15: the next call is the same token with words naming Orders and Billing (and the count), no selection. CX15 r2 (T1):
+  // the template is the neutral marker (no number, no name, never a confirmation); what the words name is wordsMustName.
+  assert.deepEqual(refused.repeat, { action: 'delete', host: PERSONAL, confirmationToken: token, words: OWNER_REPLY });
+  assert.deepEqual(refused.wordsMustName, ['Orders', 'Billing']);
   assert.deepEqual([s.writes(), s.receipts(), s.locks()], [[], [], []]);
 });
 
-test('words naming the module and its consumer: exactly one DeleteModule with its key as target, confirmed in the same call', async () => {
+test('words naming the module and its consumer: exactly one DeleteModule with its key as target, confirmed after the preview', async () => {
   const s = ordersAndBilling();
-  const words = 'pode apagar o Orders, o Billing quebra e tudo bem';
-  const done = await s.run('delete', '--target=module:Orders', '--words=' + words);
-  assert.deepEqual([done.ok, done.state, done.operationId, done.auth.path], [true, 'confirmed', PARENT, 'studio']);
+  const words = 'pode apagar o 1, o Orders; o Billing quebra e tudo bem';
+  const { preview, result: done } = await previewThenConfirm(s.run, ['delete', '--target=module:Orders'], words, { clock: s.clock });
+  assert.deepEqual([done.ok, done.state, done.operationId, done.auth.path], [true, 'confirmed', preview.operationId, 'studio']);
   assert.deepEqual(done.deleted, [{ kind: 'module', name: 'Orders', key: 'k-orders', application: 'Orders App' }]);
   const sent = s.sent('DeleteModule');
   assert.equal(sent.length, 1);
   assert.deepEqual([sent[0][1], sent[0][3], sent[0][4], sent[0][6]], ['soap', { moduleKey: 'k-orders', moduleKind: 'eSpace' }, true, sha256(words)]);
-  // One call minted the parent and derived the child from the parent and the key.
-  const child = derivedOperationId(PARENT, 'module', 'k-orders', 1);
+  // The parent is the preview's operationId; the child derives from the parent and the key.
+  const child = derivedOperationId(preview.operationId, 'module', 'k-orders', 1);
   assert.equal(sent[0][5], child);
   assert.deepEqual(s.bridge.targets.filter(Boolean), ['k-orders']);
-  assert.deepEqual(s.receipts().sort(), [child + '.json', PARENT + '.json'].sort());
+  assert.deepEqual(s.receipts().sort(), [child + '.json', preview.operationId + '.json'].sort());
   assert.deepEqual(s.locks(), []);
-  const parent = s.journal.lookup(PARENT);
+  const parent = s.journal.lookup(preview.operationId);
   assert.deepEqual([parent.state, parent.plan.targets.map(t => t.key), parent.children.map(c => c.operationId)], ['confirmed', ['k-orders'], [child]]);
-  assert.ok(!fs.readFileSync(path.join(s.dir, 'receipts', PARENT + '.json'), 'utf8').includes(words), 'only the sha256 of the words is kept');
+  assert.ok(!fs.readFileSync(path.join(s.dir, 'receipts', preview.operationId + '.json'), 'utf8').includes(words), 'only the sha256 of the words is kept');
   // The dependency read came before the write.
   const order = s.bridge.calls.filter(c => c[0] === 'api').map(c => c[2]);
   assert.ok(order.indexOf('GetConsumers') < order.indexOf('DeleteModule'));
@@ -128,12 +141,13 @@ test('an extension is checked with its own key in GetConsumers and its consumers
   const make = () => environment({ apps: [{ key: 'app-u', name: 'Util' }, { key: 'app-o', name: 'Orders App' }], espaces: [{ key: 'k-orders', name: 'Orders', app: 'app-o' }],
     extensions: [{ key: 'x-util', name: 'UtilExt', app: 'app-u' }], consumers: { 'x-util': [{ Name: 'Orders' }] } });
   const s = make();
-  const refused = await s.run('delete', '--target=extension:UtilExt', '--words=apagar a extensão UtilExt');
+  const refused = await s.confirm(['delete', '--target=extension:UtilExt'], 'apagar a 1 extensão UtilExt');
   assert.deepEqual(refused.problems.map(p => [p.code, p.consumer]), [['CONSUMERS_WOULD_BREAK', 'Orders']]);
-  assert.deepEqual(s.reads('GetConsumers').map(c => c[3]), [{ producerESpaceKey: 'x-util', referenceableElementKey: '' }]);
+  // CX15: read by the preview and again by the execution.
+  assert.deepEqual(s.reads('GetConsumers').map(c => c[3]), [{ producerESpaceKey: 'x-util', referenceableElementKey: '' }, { producerESpaceKey: 'x-util', referenceableElementKey: '' }]);
   assert.deepEqual(s.writes(), []);
   const alias = make();
-  const done = await alias.run('extension-delete', '--extension=UtilExt', '--words=apagar a extensão UtilExt mesmo quebrando o Orders');
+  const done = await alias.confirm(['extension-delete', '--extension=UtilExt'], 'apagar a 1 extensão UtilExt mesmo quebrando o Orders');
   assert.deepEqual([done.state, done.deleted.map(d => d.kind)], ['confirmed', ['extension']]);
   assert.deepEqual(alias.sent('DeleteModule').map(c => c[3]), [{ moduleKey: 'x-util', moduleKind: 'Extension' }]);
 });
@@ -144,19 +158,20 @@ test('an application: the simulation first; affectedApplications must be named; 
     simulations: { 'app-z': simulation } });
   const sim = { success: true, simulated: true, messages: [{ Id: 'x', Message: 'would delete', Type: 'Info' }], affectedApplications: ['Sales'], deletedModules: ['ZZDemo_CS'] };
   const s = make(sim);
-  const refused = await s.run('delete', '--target=application:ZZDemo', '--words=apagar o ZZDemo');
+  const refused = await s.confirm(['delete', '--target=application:ZZDemo'], 'apagar o 1, o ZZDemo');
   assert.deepEqual(refused.problems.map(p => [p.code, p.consumer, p.of]), [['CONSUMERS_WOULD_BREAK', 'Sales', 'ZZDemo']]);
   assert.match(refused.problems[0].fix, /applications/);
   assert.deepEqual([refused.deletedModules, refused.affectedApplications], [['ZZDemo_CS'], ['Sales']]);
   assert.deepEqual(s.writes(), []);
   const ok = make(sim);
-  const done = await ok.run('application-delete', '--application=ZZDemo', '--words=apagar o ZZDemo, o Sales sabe');
+  const done = await ok.confirm(['application-delete', '--application=ZZDemo'], 'apagar o 1, o ZZDemo, o Sales sabe');
   assert.equal(done.state, 'confirmed');
   const calls = ok.bridge.calls.filter(c => c[0] === 'api' && c[2] === 'DeleteApplication');
-  assert.deepEqual(calls.map(c => [c[3], c[4]]), [[{ appKey: 'app-z', simulate: true }, false], [{ appKey: 'app-z', simulate: false }, true]]);
+  // CX15: the simulation is read by the preview and again by the execution, then the one send.
+  assert.deepEqual(calls.map(c => [c[3], c[4]]), [[{ appKey: 'app-z', simulate: true }, false], [{ appKey: 'app-z', simulate: true }, false], [{ appKey: 'app-z', simulate: false }, true]]);
   assert.deepEqual(ok.bridge.targets.filter(Boolean), ['app-z']);
   assert.deepEqual(done.deletedModules, ['ZZDemo_CS']);
-  // The platform's own refusal: SIMULATION_REFUSED with its messages, never sent, no ssamRule.
+  // The platform's own refusal: SIMULATION_REFUSED with its messages, never sent, no ssamRule (already in the preview).
   const blocked = make({ success: false, simulated: true, messages: [{ Message: 'Application has dependents', Type: 'Error' }], affectedApplications: [], deletedModules: [] });
   const no = await blocked.run('delete', '--target=application:ZZDemo', '--words=apagar o ZZDemo');
   assert.deepEqual(no.problems.map(p => [p.code, p.messages, p.ssamRule]), [['SIMULATION_REFUSED', ['Application has dependents'], undefined]]);
@@ -175,38 +190,41 @@ test('words name a target as a whole word, case- and accent-insensitive: ZZDemo2
   assert.equal(guardWrite(PERSONAL, 'apagar ORDERS!', null, ['Orders'], REGISTRY), 'personal');
   const make = () => environment({ apps: [{ key: 'app-z', name: 'ZZDemo' }, { key: 'app-2', name: 'ZZDemo2' }] });
   const s = make();
-  const refused = await s.run('delete', '--target=application:ZZDemo', '--words=apagar ZZDemo2');
+  const refused = await s.confirm(['delete', '--target=application:ZZDemo'], 'apagar o 1, ZZDemo2');
   assert.deepEqual(refused.problems.map(p => [p.code, p.target, p.ssamRule]), [['WORDS_MUST_NAME', 'ZZDemo', true]]);
   assert.deepEqual(s.writes(), []);
   const accent = environment({ apps: [{ key: 'app-a', name: 'Ação' }] });
-  assert.equal((await accent.run('delete', '--target=application:Ação', '--words=APAGAR A ACAO')).state, 'confirmed');
+  assert.equal((await accent.confirm(['delete', '--target=application:Ação'], 'APAGAR A 1, A ACAO')).state, 'confirmed');
 });
 
 // ---- 8: the bounded wait
 test('the call waits for the real state: listed for two more reads, then gone, is confirmed; never gone is DELETE_UNCONFIRMED keeping the lock', async () => {
   const s = environment({ apps: [{ key: 'app-o', name: 'Orders App' }], espaces: [{ key: 'k-orders', name: 'Orders', app: 'app-o' }] });
   s.deleteModule = args => { s.removeModule(args.moduleKey); s.linger[args.moduleKey] = 2; return { success: true, message: null }; };
-  const done = await s.run('delete', '--target=module:Orders', '--words=apagar Orders');
+  const done = await s.confirm(['delete', '--target=module:Orders'], 'apagar o 1, Orders');
   assert.deepEqual([done.ok, done.state], [true, 'confirmed']);
   assert.equal(s.sleeps.length, 2, 'two pauses between the three reads after the send');
   const stuck = environment({ apps: [{ key: 'app-o', name: 'Orders App' }], espaces: [{ key: 'k-orders', name: 'Orders', app: 'app-o' }] });
   stuck.deleteModule = () => ({ success: true, message: null });
-  const unconfirmed = await stuck.run('delete', '--target=module:Orders', '--words=apagar Orders');
+  const { result: unconfirmed, token } = await previewThenConfirm(stuck.run, ['delete', '--target=module:Orders'], 'apagar o 1, Orders', { clock: stuck.clock });
   assert.deepEqual([unconfirmed.ok, unconfirmed.code, unconfirmed.state], [false, 'DELETE_UNCONFIRMED', 'uncertain']);
   assert.equal(stuck.sleeps.reduce((a, b) => a + b, 0), 30000, 'about 30 s of pauses, then the answer');
   assert.ok(stuck.sleeps.every(ms => ms >= 1000 && ms <= 5000));
   assert.equal(stuck.locks().length, 1, 'the target stays locked');
-  assert.equal(unconfirmed.repeat.operationId, PARENT);
+  // CX15: the same call again is the same token (it carries the operationId).
+  assert.equal(unconfirmed.repeat.confirmationToken, token);
   assert.equal(stuck.sent('DeleteModule').length, 1);
 });
 
 // ---- 9: every problem at once
-test('a missing target, an ambiguous name and a module blocked by a consumer are three problems of one refusal, nothing written', async () => {
+test('a missing target, an ambiguous name and a module blocked by a consumer: the preview refuses with every problem it can see, nothing written', async () => {
   const s = environment({ apps: [{ key: 'app-o', name: 'Orders App' }, { key: 'app-b', name: 'Billing App' }],
     espaces: [{ key: 'k-orders', name: 'Orders', app: 'app-o' }, { key: 'k-billing', name: 'Billing', app: 'app-b' }, { key: 'k-twin', name: 'Twin', app: 'app-o' }],
     extensions: [{ key: 'x-twin', name: 'Twin', app: 'app-o' }], consumers: { 'k-orders': [{ Name: 'Billing' }] } });
   const refused = await s.run('delete', '--target=module:Ghost', '--target=module:Twin', '--target=module:Orders', '--words=apagar Orders, Ghost e Twin');
-  assert.deepEqual(refused.problems.map(p => p.code).sort(), ['CONSUMERS_WOULD_BREAK', 'TARGET_AMBIGUOUS', 'TARGET_NOT_FOUND']);
+  // CX15: the consumer outside the set is a rule of the owner's words (the execution); the preview shows it.
+  assert.deepEqual(refused.problems.map(p => p.code).sort(), ['TARGET_AMBIGUOUS', 'TARGET_NOT_FOUND']);
+  assert.deepEqual(refused.externalConsumers, [{ consumer: 'Billing', application: 'Billing App', of: 'Orders', kind: 'module' }]);
   const ambiguous = refused.problems.find(p => p.code === 'TARGET_AMBIGUOUS');
   assert.deepEqual(ambiguous.candidates.map(c => [c.kind, c.key]), [['module', 'k-twin'], ['extension', 'x-twin']]);
   assert.match(ambiguous.fix, /k-twin/); assert.match(ambiguous.fix, /extensions/);
@@ -222,7 +240,7 @@ test('prefix ZZ: a consumer inside the set is exempt and goes first; more than m
   const zz = () => environment({ apps: [{ key: 'app-b', name: 'ZZB' }, { key: 'app-a', name: 'ZZA' }, { key: 'app-o', name: 'Orders App' }],
     simulations: { 'app-b': { success: true, simulated: true, messages: [], affectedApplications: ['ZZA'], deletedModules: [] } } });
   const s = zz();
-  const done = await s.run('delete', '--prefix=ZZ', '--words=apagar todas as apps que começam com ZZ');
+  const done = await s.confirm(['delete', '--prefix=ZZ'], 'apagar as 2 apps que começam com ZZ');
   assert.deepEqual([done.ok, done.state], [true, 'confirmed']);
   assert.deepEqual(s.sent('DeleteApplication').map(c => c[3].appKey), ['app-a', 'app-b'], 'ZZA consumes ZZB: ZZA is deleted first');
   assert.deepEqual(done.deleted.map(d => d.name), ['ZZA', 'ZZB']);
@@ -232,15 +250,15 @@ test('prefix ZZ: a consumer inside the set is exempt and goes first; more than m
   assert.deepEqual(limited.writes(), []);
   const users = () => environment({ apps: [{ key: 'app-u', name: 'Users' }, { key: 'app-t', name: 'UtilApp' }] });
   const guarded = users();
-  const no = await guarded.run('delete', '--prefix=U', '--words=apagar tudo que começa com U');
+  const no = await guarded.confirm(['delete', '--prefix=U'], 'apagar as 2 que começam com U');
   assert.deepEqual(no.problems.map(p => [p.code, p.target, p.ssamRule]), [['PROTECTED_TARGET', 'Users', true]]);
   assert.deepEqual(guarded.writes(), []);
   const named = users();
-  const yes = await named.run('delete', '--prefix=U', '--words=apagar as apps U, inclusive Users');
+  const yes = await named.confirm(['delete', '--prefix=U'], 'apagar as 2 apps U, inclusive Users');
   assert.deepEqual([yes.state, named.sent('DeleteApplication').length], ['confirmed', 2]);
   // The prefix names its matches only as a whole word.
   const vague = zz();
-  const partial = await vague.run('delete', '--prefix=ZZ', '--words=apagar as ZZApps');
+  const partial = await vague.confirm(['delete', '--prefix=ZZ'], 'apagar as 2 ZZApps');
   assert.deepEqual(partial.problems.map(p => p.code), ['WORDS_MUST_NAME', 'WORDS_MUST_NAME']);
 });
 
@@ -248,9 +266,10 @@ test('prefix ZZ: a consumer inside the set is exempt and goes first; more than m
 test('a key renamed between the plan and the send is CONFLICT: nothing is sent for it and the rest stops', async () => {
   const s = environment({ apps: [{ key: 'app-o', name: 'Orders App' }], espaces: [{ key: 'k-orders', name: 'Orders', app: 'app-o' }, { key: 'k-other', name: 'Other', app: 'app-o' }] });
   let reads = 0;
-  s.espacesReply = () => (++reads === 1 ? [{ Key: 'k-orders', Name: 'Orders', ApplicationKey: 'app-o' }, { Key: 'k-other', Name: 'Other', ApplicationKey: 'app-o' }]
+  // CX15: the preview and the execution read the listing (reads 1 and 2); the rename comes before the send.
+  s.espacesReply = () => (++reads <= 2 ? [{ Key: 'k-orders', Name: 'Orders', ApplicationKey: 'app-o' }, { Key: 'k-other', Name: 'Other', ApplicationKey: 'app-o' }]
     : [{ Key: 'k-orders', Name: 'OrdersRenamed', ApplicationKey: 'app-o' }, { Key: 'k-other', Name: 'Other', ApplicationKey: 'app-o' }]);
-  const conflict = await s.run('delete', '--target=module:Orders', '--target=module:Other', '--words=apagar Orders e Other');
+  const conflict = await s.confirm(['delete', '--target=module:Orders', '--target=module:Other'], 'apagar os 2, Orders e Other');
   assert.deepEqual([conflict.ok, conflict.code, conflict.state, conflict.observed], [false, 'CONFLICT', 'refused', 'OrdersRenamed']);
   assert.deepEqual(s.sent('DeleteModule'), []);
   assert.deepEqual(conflict.notSent.map(n => n.name), ['Orders', 'Other']);
@@ -259,46 +278,48 @@ test('a key renamed between the plan and the send is CONFLICT: nothing is sent f
 // ---- 12: repetition by state
 test('repeating the call: a target already gone is absent with its receipt, nothing sent', async () => {
   const s = ordersAndBilling({ consumers: {} });
-  const words = 'apagar Orders';
-  assert.equal((await s.run('delete', '--target=module:Orders', '--words=' + words)).state, 'confirmed');
-  const again = await s.run('delete', '--target=module:Orders', '--words=' + words);
+  assert.equal((await s.confirm(['delete', '--target=module:Orders'], 'apagar o 1, Orders')).state, 'confirmed');
+  const again = await s.run('delete', '--target=module:Orders', '--words=apagar Orders');
   assert.deepEqual([again.ok, again.state, again.absent.map(a => [a.name, a.receiptState])], [true, 'absent', [['Orders', 'confirmed']]]);
   assert.ok(again.absent[0].receipt.endsWith('.json'));
   assert.equal(s.sent('DeleteModule').length, 1);
 });
 
 test('an uncertain child read as gone closes confirmed; read as still there it allows exactly one new send', async () => {
-  // The answer is lost but the delete took effect: the same call reads it gone and closes the receipt.
+  const words = 'apagar o 1, Orders';
+  // The answer is lost but the delete took effect: the same call (the same token) reads it gone and closes the receipt.
   const s = ordersAndBilling({ consumers: {} });
   s.deleteModule = args => { s.removeModule(args.moduleKey); throw new BridgeError('UNCERTAIN', 'connection lost after send', { write: true }); };
-  const lost = await s.run('delete', '--target=module:Orders', '--words=apagar Orders');
+  const { result: lost, token, preview } = await previewThenConfirm(s.run, ['delete', '--target=module:Orders'], words, { clock: s.clock });
   assert.deepEqual([lost.code, lost.state, s.locks().length], ['UNCERTAIN', 'uncertain', 1]);
-  const settled = await s.run('delete', '--target=module:Orders', '--words=apagar Orders', '--operation-id=' + lost.operationId);
+  const settled = await s.run('delete', '--confirmation-token=' + token, '--words=' + words);
   assert.deepEqual([settled.ok, settled.state, settled.deleted.map(d => [d.name, d.reconciled])], [true, 'confirmed', [['Orders', true]]]);
   assert.deepEqual([s.sent('DeleteModule').length, s.locks()], [1, []]);
-  assert.equal(s.journal.lookup(derivedOperationId(PARENT, 'module', 'k-orders', 1)).state, 'confirmed');
+  assert.equal(s.journal.lookup(derivedOperationId(preview.operationId, 'module', 'k-orders', 1)).state, 'confirmed');
 
   // The answer is lost and the module is still there, unchanged: one new send (attempt 2), then never a third.
   const t = ordersAndBilling({ consumers: {} });
   t.deleteModule = () => { throw new BridgeError('UNCERTAIN', 'connection lost after send', { write: true }); };
-  const first = await t.run('delete', '--target=module:Orders', '--words=apagar Orders');
-  assert.equal(first.state, 'uncertain');
-  const second = await t.run('delete', '--target=module:Orders', '--words=apagar Orders', '--operation-id=' + first.operationId);
+  const first = await previewThenConfirm(t.run, ['delete', '--target=module:Orders'], words, { clock: t.clock });
+  assert.equal(first.result.state, 'uncertain');
+  // CX15 r2 (B): the same words never send again; the new send needs the owner's new reply.
+  const same = await t.run('delete', '--confirmation-token=' + first.token, '--words=' + words);
+  assert.deepEqual([same.state, same.problems.map(p => p.code), t.sent('DeleteModule').length], ['refused', ['CONFIRMATION_ALREADY_USED'], 1]);
+  const second = await t.run('delete', '--confirmation-token=' + first.token, '--words=pode tentar de novo o 1, Orders');
   assert.equal(second.state, 'uncertain');
-  assert.deepEqual(t.sent('DeleteModule').map(c => c[5]), [derivedOperationId(PARENT, 'module', 'k-orders', 1), derivedOperationId(PARENT, 'module', 'k-orders', 2)]);
-  assert.equal(t.journal.lookup(derivedOperationId(PARENT, 'module', 'k-orders', 1)).state, 'superseded');
-  const third = await t.run('delete', '--target=module:Orders', '--words=apagar Orders', '--operation-id=' + first.operationId);
+  const op = first.preview.operationId;
+  assert.deepEqual(t.sent('DeleteModule').map(c => c[5]), [derivedOperationId(op, 'module', 'k-orders', 1), derivedOperationId(op, 'module', 'k-orders', 2)]);
+  assert.equal(t.journal.lookup(derivedOperationId(op, 'module', 'k-orders', 1)).state, 'superseded');
+  const third = await t.run('delete', '--confirmation-token=' + first.token, '--words=mais uma vez o 1, Orders');
   assert.deepEqual(third.problems.map(p => p.code), ['DELETE_UNCONFIRMED']);
   assert.equal(t.sent('DeleteModule').length, 2, 'never a third send');
 
-  // A new call without the operationId reads the same: the pending child of the target allows one new send, which works.
+  // A new preview (no token) reads the same: the pending child of the target allows one new send, which works.
   const u = ordersAndBilling({ consumers: {} });
   u.deleteModule = () => { throw new BridgeError('UNCERTAIN', 'lost', { write: true }); };
-  await u.run('delete', '--target=module:Orders', '--words=apagar Orders');
+  await u.confirm(['delete', '--target=module:Orders'], words);
   u.deleteModule = null;
-  let ids = 0;
-  const fresh = await runServiceCenter(['delete', '--target=module:Orders', '--words=apagar Orders', '--host=' + PERSONAL], { journal: u.journal, locate: () => u.bridge,
-    present: async () => false, running: async () => false, exports: u.dir, registry: REGISTRY, sleep: async () => {}, uuid: () => `22222222-2222-4222-8222-22222222222${ids++}` });
+  const fresh = await u.confirm(['delete', '--target=module:Orders'], 'confirmo o 1, Orders');
   assert.deepEqual([fresh.state, u.sent('DeleteModule').length, u.locks()], ['confirmed', 2, []]);
 });
 
@@ -313,14 +334,15 @@ test('a bridge whose serviceCenter catalog lacks an operation of the delete is S
   }
 });
 
-test('execute:false only plans: the same reads, nothing reserved; without words the plan says what the words must name', async () => {
+test('execute:false only previews: the same reads, nothing reserved; without words the preview says what the words must name', async () => {
   const s = ordersAndBilling();
   const plan = await s.run('delete', '--target=module:Orders', '--words=apagar Orders e Billing', '--plan-only');
-  assert.deepEqual([plan.ok, plan.state, plan.operationId], [true, 'planned', undefined]);
+  assert.deepEqual([plan.ok, plan.state, plan.operationId], [true, 'previewed', derivedOperationId(plan.previewId, 'execute')]);
   assert.deepEqual(plan.wordsMustName, ['Orders', 'Billing']);
   assert.deepEqual(plan.externalConsumers, [{ consumer: 'Billing', application: 'Billing App', of: 'Orders', kind: 'module' }]);
   const bare = await s.run('module-delete', '--module=Orders');
-  assert.deepEqual([bare.state, bare.targets.map(t => t.key)], ['planned', ['k-orders']]);
+  // CX15: the list of a preview is its items (the targets with what goes with them).
+  assert.deepEqual([bare.state, bare.items.map(t => t.key)], ['previewed', ['k-orders']]);
   assert.deepEqual([s.writes(), s.receipts()], [[], []]);
   assert.match((await s.run('delete', '--words=x')).error, /needs its targets/);
   assert.match((await s.run('timer-run', '--module-id=3', '--name=T', '--plan-only')).error, /apply to delete/);
@@ -328,13 +350,14 @@ test('execute:false only plans: the same reads, nothing reserved; without words 
 
 test('a corporate host needs confirmHost and words naming it; the problem joins the others in one refusal', async () => {
   const s = environment({ host: CORPORATE, apps: [{ key: 'app-z', name: 'ZZDemo' }] });
-  const refused = await s.run('delete', '--target=application:ZZDemo', '--words=apagar ZZDemo');
+  const { result: refused, token } = await previewThenConfirm(s.run, ['delete', '--target=application:ZZDemo'], 'apagar o 1, ZZDemo', { clock: s.clock });
   assert.deepEqual(refused.problems.map(p => p.code), ['CONFIRM_HOST_REQUIRED']);
   assert.equal(refused.repeat.confirmHost, CORPORATE);
-  const done = await s.run('delete', '--target=application:ZZDemo', '--words=apagar ZZDemo no test', '--confirm-host=' + CORPORATE);
+  const done = await s.run('delete', '--confirmation-token=' + token, '--words=apagar o 1, ZZDemo no test', '--confirm-host=' + CORPORATE);
   assert.equal(done.state, 'confirmed');
   assert.equal(s.bridge.corporate, true);
 });
+
 
 // ---- 14: extension-publish for the xif lane (contract I1)
 function publishEnvironment() {

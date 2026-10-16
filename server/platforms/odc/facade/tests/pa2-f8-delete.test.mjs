@@ -12,13 +12,14 @@ import { Journal } from '../service-center/client.mjs';
 import { runServiceCenter } from '../service-center/index.mjs';
 import { appSuffix, namesSuffix } from '../service-center/delete.mjs';
 import { FakeBridge, temp } from './fixtures/sc-fake-bridge.mjs';
+import { fakeClock, noBackup, previewThenConfirm } from './fixtures/destructive-flow.mjs';
 
 const PERSONAL = 'personal-0000test.outsystemscloud.com';
 const REGISTRY = path.join(import.meta.dirname, 'fixtures', 'sc-hosts.json');
 const PARENT = '11111111-2222-4333-8444-555555555555';
 
 function environment({ apps, espaces }) {
-  const s = { apps, espaces, dir: temp() };
+  const s = { apps, espaces, dir: temp(), clock: fakeClock() };
   s.journal = new Journal(path.join(s.dir, 'receipts'));
   const listed = rows => rows.filter(r => !r.gone);
   s.bridge = new FakeBridge({ api: {
@@ -30,7 +31,9 @@ function environment({ apps, espaces }) {
   } });
   s.run = (...argv) => runServiceCenter([...argv, '--host=' + PERSONAL], { journal: s.journal, locate: () => s.bridge, present: async () => false, running: async () => false,
     opener: () => assert.fail('no prompt with a Studio connected'), exports: s.dir, registry: REGISTRY, sleep: async () => {}, uuid: () => PARENT,
-    consumerNames: () => [] });
+    consumerNames: () => [], clock: s.clock, destructiveRoot: path.join(s.dir, 'destructive'), backup: noBackup });
+  // CX15: the preview, 5 s, then the token with the owner's words (they state the count).
+  s.confirm = async (argv, words) => (await previewThenConfirm(s.run, argv, words, { clock: s.clock })).result;
   s.sent = () => s.bridge.calls.filter(c => c[0] === 'api' && c[2] === 'DeleteModule' && c[4]).map(c => c[3].moduleKey);
   return s;
 }
@@ -40,31 +43,31 @@ const cardapio = () => environment({ apps: [{ key: 'app-c', name: 'Cardapio' }, 
 
 test('"o UI e o BackOffice" names Cardapio_UI and Cardapio_BackOffice inside the Cardapio app; the resolved targets come back', async () => {
   const s = cardapio();
-  const done = await s.run('delete', '--target=module:Cardapio_UI', '--target=module:Cardapio_BackOffice', '--words=pode apagar tanto o Back Office quanto o UI');
+  const done = await s.confirm(['delete', '--target=module:Cardapio_UI', '--target=module:Cardapio_BackOffice'], 'pode apagar os 2, tanto o Back Office quanto o UI');
   assert.deepEqual([done.ok, done.state], [true, 'confirmed']);
   assert.deepEqual(s.sent().sort(), ['k-bo', 'k-ui']);
   assert.deepEqual(done.named.map(n => [n.name, n.by, n.as]).sort(), [['Cardapio_BackOffice', 'suffix', 'BackOffice'], ['Cardapio_UI', 'suffix', 'UI']]);
   // The plan (execute:false never applies the words) and the exact phrase of the report.
   const again = cardapio();
-  const exact = await again.run('delete', '--target=module:Cardapio_UI', '--target=module:Cardapio_BackOffice', '--words=o UI e o BackOffice');
+  const exact = await again.confirm(['delete', '--target=module:Cardapio_UI', '--target=module:Cardapio_BackOffice'], 'os 2: o UI e o BackOffice');
   assert.equal(exact.state, 'confirmed');
 });
 
 test('an ambiguous suffix stays WORDS_MUST_NAME with the candidates; nothing is sent', async () => {
   const s = cardapio();
-  const refused = await s.run('delete', '--target=module:Cardapio_UI', '--target=module:Outro_UI', '--words=pode apagar o UI');
+  const refused = await s.confirm(['delete', '--target=module:Cardapio_UI', '--target=module:Outro_UI'], 'pode apagar os 2, o UI');
   assert.deepEqual([refused.ok, refused.code], [false, 'DELETE_REFUSED']);
   assert.deepEqual(refused.problems.map(p => [p.code, p.target, p.ssamRule]).sort(), [['WORDS_MUST_NAME', 'Cardapio_UI', true], ['WORDS_MUST_NAME', 'Outro_UI', true]]);
   for (const p of refused.problems) assert.deepEqual(p.candidates.map(c => c.name).sort(), ['Cardapio_UI', 'Outro_UI']);
   assert.deepEqual(s.sent(), []);
   // Whole names still decide (one by its name, the other by its now unique suffix in the words... both whole here).
   const named = cardapio();
-  assert.equal((await named.run('delete', '--target=module:Cardapio_UI', '--target=module:Outro_UI', '--words=apagar Cardapio_UI e Outro_UI')).state, 'confirmed');
+  assert.equal((await named.confirm(['delete', '--target=module:Cardapio_UI', '--target=module:Outro_UI'], 'apagar os 2, Cardapio_UI e Outro_UI')).state, 'confirmed');
 });
 
 test('a suffix not in the words is still refused, and the fix names it', async () => {
   const s = cardapio();
-  const refused = await s.run('delete', '--target=module:Cardapio_CS', '--words=pode apagar o UI');
+  const refused = await s.confirm(['delete', '--target=module:Cardapio_CS'], 'pode apagar o 1, o UI');
   assert.deepEqual(refused.problems.map(p => p.code), ['WORDS_MUST_NAME']);
   assert.match(refused.problems[0].fix, /CS, its name inside Cardapio/);
   assert.deepEqual(s.sent(), []);

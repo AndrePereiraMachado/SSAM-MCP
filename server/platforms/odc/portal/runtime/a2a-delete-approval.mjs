@@ -2,6 +2,7 @@ import {authorizationContext} from '../../facade/authorization-context.mjs';
 import {fingerprint,isUuid,sha256} from './write-journal.mjs';
 import {A2A_TEST} from './a2a-connection-approval.mjs';
 import {fail} from './errors.mjs';
+import {ownedCleanupApproval} from './owned-cleanup-approval.mjs';
 import {a2aDiscoveryOutcome} from './a2a-discovery.mjs';
 
 export function a2aDeleteApproval({file,words,host,origin,originOperationUuid,connectionId,detail,dependencies,metadata,failedTest,provisional}){
@@ -33,8 +34,13 @@ export function a2aDeleteApproval({file,words,host,origin,originOperationUuid,co
   ||!Array.isArray(dependencies.checkedEnvironments)||!dependencies.checkedEnvironments.includes(stage.stageKey)
   ||!Array.isArray(dependencies.consumers)||dependencies.consumers.length))
   fail('CONNECTION_DEPENDENCIES_UNVERIFIED','A2A cleanup requires a complete empty consumer inventory including its stage and publishing scope. Nothing was sent.');
- const approval=authorizationContext(file,words,{lane:'odc',host,operation:'connections.delete',environmentKey:stage.stageKey,targets:[connection.name],
-  constraints:{originOperationUuid,connectionId,expectedStateSha256:fingerprint(connection),planSha256:expected.planSha256}});
+ const scope={lane:'odc',host,operation:'connections.delete',environmentKey:stage.stageKey,targets:[connection.name],
+  constraints:{originOperationUuid,connectionId,expectedStateSha256:fingerprint(connection),planSha256:expected.planSha256}};
+ // CX15 r3 (N3): after the guard validated the owner's reply to the preview, a new approval of that reply (proposal = the
+ // preview) bound to this test receipt replaces the creation's words and message.
+ const fresh=ownedCleanupApproval({file,words,...scope,origin,key:connectionId,what:'The A2A cleanup'});
+ if(fresh)return fresh;
+ const approval=authorizationContext(file,words,scope);
  if(!approval||origin.authorization?.wordsSha256!==sha256(words)||origin.authorization.proposalSha256!==approval.proposalSha256
   ||origin.authorization.source?.threadId!==approval.source.threadId||origin.authorization.source?.messageId!==approval.source.messageId)reject();
  return approval;

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import {authorizationContext} from '../../facade/authorization-context.mjs';
 import {fail} from './errors.mjs';
 import {isUuid,sha256} from './write-journal.mjs';
+import {ownedCleanupApproval} from './owned-cleanup-approval.mjs';
 
 export const API_CLIENT_CREATE='apiClients.create',API_CLIENT_DELETE='apiClients.delete';
 const exact=(v,keys)=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).sort().join(',')===keys.split(',').sort().join(',');
@@ -44,10 +45,14 @@ export function apiClientFixtureApproval({file,words,host,operationId,operationU
   if(proof.key!==raw.inputParameters.Key)bad();
   name=proof.name;
  }
- const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,targets:[name],
-  constraints:{creationOperationUuid:constraints.creationOperationUuid,inputSha256:sha256(JSON.stringify(raw.inputParameters))}});
+ const scope={lane:'odc',host,operation:operationId,targets:[name],
+  constraints:{creationOperationUuid:constraints.creationOperationUuid,inputSha256:sha256(JSON.stringify(raw.inputParameters))}};
+ // CX15 r3 (N3): the delete after the guard validated the owner's reply to the preview: a new approval of that reply
+ // (proposal = the preview) bound to creationOperationUuid replaces the creation's words and message.
+ const fresh=origin?ownedCleanupApproval({file,words,...scope,origin,key:raw.inputParameters.Key,what:'The API Client cleanup'}):null;
+ const approval=fresh??authorizationContext(file,words,scope);
  if(!approval)bad();
- if(origin&&(approval.wordsSha256!==origin.authorization.wordsSha256||approval.source.threadId!==origin.authorization.source.threadId
+ if(origin&&!fresh&&(approval.wordsSha256!==origin.authorization.wordsSha256||approval.source.threadId!==origin.authorization.source.threadId
   ||approval.source.messageId!==origin.authorization.source.messageId))bad();
  return {approval,expected:{name,creationOperationUuid:constraints.creationOperationUuid,...(origin?{key:raw.inputParameters.Key}:{})}};
 }

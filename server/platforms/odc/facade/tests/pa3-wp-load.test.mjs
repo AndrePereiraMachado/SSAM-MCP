@@ -51,20 +51,21 @@ async function bench(t) {
   const client = new Client({ name: 'pa3-wp-load', version: '1' });
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
   t.after(async () => { await client.close(); await server.close(); });
-  const deliver = module => client.callTool({ name: 'o11_deliver', arguments: { module, job: { ops: [{ op: 'rename', from: 'A', to: 'B' }] }, authorize: 'pode entregar, Ana 0912' } });
+  const deliver = (module, ordinal) => client.callTool({ name: 'o11_deliver', arguments: { module, job: { ops: [{ op: 'rename', from: 'A' + ordinal, to: 'B' + ordinal }] }, authorize: 'pode entregar, Ana 0912' } });
   return { log, deliver };
 }
 
 test('wp load: 8 deliveries over 4 modules of one Studio, parallel against serial', { timeout: 60000 }, async t => {
+  // Distinct jobs preserve eight operations: identical concurrent calls intentionally join in CX12.
   const calls = [...MODULES, ...MODULES];
   const serial = await bench(t);
   let started = Date.now();
-  for (const module of calls) assert.equal(JSON.parse((await serial.deliver(module)).content[0].text).result, 'entregue');
+  for (const [ordinal, module] of calls.entries()) assert.equal(JSON.parse((await serial.deliver(module, ordinal)).content[0].text).result, 'entregue');
   const serialMs = Date.now() - started;
 
   const parallel = await bench(t);
   started = Date.now();
-  const answers = await Promise.all(calls.map(module => parallel.deliver(module)));
+  const answers = await Promise.all(calls.map((module, ordinal) => parallel.deliver(module, ordinal)));
   const parallelMs = Date.now() - started;
   for (const answer of answers) assert.equal(JSON.parse(answer.content[0].text).result, 'entregue', JSON.stringify(answer));
 

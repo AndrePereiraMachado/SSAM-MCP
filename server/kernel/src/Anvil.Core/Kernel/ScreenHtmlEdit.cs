@@ -37,7 +37,20 @@ public static class ScreenHtmlEdit
         if (data["basedOn"] is not JsonObject basedOn || basedOn["html"] is not JsonValue)
             Add("/basedOn", Invalid, "html edit: 'basedOn' {capture, html} is the reading the edit was written on (ssam_map view html answers it)", "\"basedOn\": {\"capture\": \"<sourceSha256>\", \"html\": \"<htmlSha256>\"}");
         var texts = new List<(string Pointer, string Text)>();
-        if (data["edit"] is JsonArray list) {
+        if (data["edits"] != null) {
+            // CX16: element edits of the reading. Their shape here; their addresses too when the store keeps the reading (ms, no
+            // module), then the document they make is judged as the whole document would be.
+            if (data["edit"] != null || data["html"] != null) Add("/edits", Invalid, "html edit: 'edits' (element edits of the reading) goes alone, without 'edit' or 'html'", "keep edits, or send the changed elements whole in edit");
+            var shape = HtmlElementEdits.Shape(data["edits"]);
+            foreach (var p in shape) problems.Add(p);
+            if (shape.Count == 0 && data["edits"] is JsonArray edits && data["basedOn"] is JsonObject on && on["capture"]?.ToString() is { Length: > 0 } capture && on["html"]?.ToString() is { Length: > 0 } read
+                && ModuleIndexStore.Default()?.LoadHtmlKeys(capture, read) is { } kept && kept["html"] is JsonValue keptHtml && keptHtml.TryGetValue<string>(out var baseText)) {
+                var keys = (kept["keys"] as JsonObject)?.Where(p => p.Value is JsonValue).ToDictionary(p => p.Key, p => p.Value!.ToString(), StringComparer.Ordinal);
+                var applied = HtmlElementEdits.Apply(baseText, edits, keys);
+                foreach (var p in applied.Problems) problems.Add(p);
+                if (applied.Problems.Count == 0) texts.Add(("/edits", applied.Document));
+            }
+        } else if (data["edit"] is JsonArray list) {
             for (var j = 0; j < list.Count; j++)
                 if (list[j] is JsonValue v && v.TryGetValue<string>(out var text)) texts.Add(("/edit/" + j, text));
                 else Add("/edit/" + j, Invalid, "each edit is a string: one element of the reading with its k", "\"<div k=\\\"w7\\\" ...>...</div>\"");

@@ -8,6 +8,8 @@ import { serviceCenterArguments, registerO11Operations } from '../o11-operations
 import { createSsamServer, o11DataArguments } from '../ssam.mjs';
 import { Journal } from '../service-center/client.mjs';
 import { FakeBridge, temp } from './fixtures/sc-fake-bridge.mjs';
+import { CONFIRM_MIN_AGE_MS } from '../destructive-operations.mjs';
+import { fakeClock, noBackup } from './fixtures/destructive-flow.mjs';
 
 process.env.ANVIL_WORKER = '0'; process.env.ANVIL_ODC_NO_WORKER = '1';
 const registered = (deps = {}) => {
@@ -34,15 +36,20 @@ test('Service Center tools answer in this process (no Python, no command line) a
   const modules = [{ Key: 'k-orders', Name: 'Orders' }];
   const bridge = new FakeBridge({ api: { ListApplications: [], ListEspaces: () => [...modules], ListExtensions: [], GetConsumers: [],
     DeleteModule: () => { modules.splice(0, 1); return { success: true, message: null }; } } });
+  const clock = fakeClock();
   const entries = registered({ serviceCenter: { journal: new Journal(dir), locate: () => bridge, present: async () => false, running: async () => false,
-    opener: () => assert.fail('no prompt'), exports: dir } });
+    opener: () => assert.fail('no prompt'), exports: dir, clock, backup: noBackup } });
   const capabilities = await entries.get('o11_service_center_read').handler({ action: 'capabilities' });
   assert.equal(capabilities.structuredContent.ok, true);
   assert.deepEqual(Object.keys(capabilities.structuredContent), ['ok', 'lane', 'verb', 'exitCode', 'result']);
   assert.equal(capabilities.structuredContent.result.session.length, 4);
-  const words = 'delete module Orders on test';
-  const deleted = await entries.get('o11_service_center_write').handler({ action: 'module-delete', host: 'test.example.com', module: 'Orders', execute: true, words,
-    operationId: '0b3a3c1e-2d1c-4f7a-9c55-0a6f3b1d2e44', confirmHost: 'test.example.com' });
+  // CX15: the preview, then the token with the owner's words (with the count) after it.
+  const preview = await entries.get('o11_service_center_write').handler({ action: 'module-delete', host: 'test.example.com', module: 'Orders' });
+  assert.equal(preview.structuredContent.result.state, 'previewed');
+  clock.advance(CONFIRM_MIN_AGE_MS);
+  const words = 'delete the 1 module Orders on test';
+  const deleted = await entries.get('o11_service_center_write').handler({ action: 'module-delete', host: 'test.example.com', words,
+    confirmationToken: preview.structuredContent.result.confirmationToken, confirmHost: 'test.example.com' });
   assert.equal(deleted.structuredContent.result.state, 'confirmed');
   assert.ok(!deleted.content[0].text.includes(words));
   assert.ok(!/python|\.py\b|\.ps1/i.test(deleted.content[0].text));
@@ -130,7 +137,9 @@ test('MCP schemas: session, read and write tools with their own arguments', () =
   assert.deepEqual(write.inputSchema.properties.prefixKind.enum, ['application', 'module', 'extension']);
   assert.deepEqual([write.inputSchema.properties.maxDeletes.minimum, write.inputSchema.properties.maxDeletes.maximum], [1, 100]);
   for (const key of ['applications', 'modules', 'extensions', 'prefix', 'prefixKind', 'maxDeletes']) assert.doesNotMatch(write.inputSchema.properties[key].description, /Alone:|Instead of job/, key);
-  assert.match(write.description, /delete \{applications\|modules\|extensions\|prefix, words\}: ONE call/);
+  // CX15: the delete takes two calls (the preview, then confirmationToken and the owner's words).
+  assert.match(write.description, /delete \{applications\|modules\|extensions\|prefix\}: two calls/);
+  assert.match(write.description, /read ssam_task \{id:<operationId from the preview>\}/);
   for (const action of ['applications', 'application-dependencies', 'consumers', 'commits', 'developer-operations', 'license', 'databases',
     'solution-components', 'bpt-processes', 'bpt-activity', 'integrations', 'db-connections', 'solutions', 'property-value', 'page-layout'])
     assert.ok(read.inputSchema.properties.action.enum.includes(action), action);
@@ -150,7 +159,8 @@ test('MCP schemas: session, read and write tools with their own arguments', () =
   assert.ok(!read.inputSchema.properties.action.enum.some(a => write.inputSchema.properties.action.enum.includes(a)), 'no action in both tools');
   for (const tool of [session, read, write]) {
     assert.equal(tool.inputSchema.additionalProperties, false);
-    assert.ok(!Object.keys(tool.inputSchema.properties).some(k => /password|secret|token|cookie/i.test(k)));
+    // CX15: confirmationToken is the token of a preview, never a credential.
+    assert.ok(!Object.keys(tool.inputSchema.properties).some(k => k !== 'confirmationToken' && /password|secret|token|cookie/i.test(k)));
     assert.match(tool.description, /Studio/);
   }
   assert.match(read.description, /SSO/);
@@ -192,7 +202,7 @@ test('delete: lists become repeated --target, execute:false is --plan-only, the 
   assert.ok(!serviceCenterArguments({ action: 'timer-run', execute: false }, 'write').includes('--plan-only'));
 });
 
-test('through the MCP schema an input without execute reaches the handler without the field, and a delete with words executes in that one call', async () => {
+test('through the MCP schema an input without execute reaches the handler without the field, and a delete executes with the token of its preview', async () => {
   const { McpServer, InMemoryTransport, fromJsonSchema } = await import('@modelcontextprotocol/server');
   const { Client } = await import('@modelcontextprotocol/client');
   const seen = [];
@@ -208,14 +218,17 @@ test('through the MCP schema an input without execute reaches the handler withou
       ['delete', '--host=h.test', '--words=apagar ZZA', '--target=application:ZZA', '--plan-only']]);
   } finally { await client.close(); await server.close(); }
 
-  // The real engine behind the same handler: one call, words naming the application, deleted and confirmed.
-  const dir = temp();
+  // The real engine behind the same handler (CX15: two calls): the preview, then the token and words naming the application.
+  const dir = temp(); const clock = fakeClock();
   const apps = [{ Key: 'app-z', Name: 'ZZA' }];
   const bridge = new FakeBridge({ api: { ListApplications: () => apps.map(a => ({ ...a })), ListEspaces: [], ListExtensions: [],
     DeleteApplication: args => (args.simulate ? { success: true, simulated: true, messages: [], affectedApplications: [], deletedModules: [] } : (apps.splice(0, 1), { success: true, simulated: false, messages: [] })) } });
   const entries = registered({ serviceCenter: { journal: new Journal(dir), locate: () => bridge, present: async () => false, running: async () => false, exports: dir,
-    registry: path.join(import.meta.dirname, 'fixtures', 'sc-hosts.json'), sleep: async () => {} } });
-  const deleted = await entries.get('o11_service_center_write').handler({ action: 'delete', host: 'personal-0000test.outsystemscloud.com', applications: ['ZZA'], words: 'pode apagar a ZZA' });
+    registry: path.join(import.meta.dirname, 'fixtures', 'sc-hosts.json'), sleep: async () => {}, clock, backup: noBackup } });
+  const preview = await entries.get('o11_service_center_write').handler({ action: 'delete', host: 'personal-0000test.outsystemscloud.com', applications: ['ZZA'] });
+  clock.advance(CONFIRM_MIN_AGE_MS);
+  const deleted = await entries.get('o11_service_center_write').handler({ action: 'delete', host: 'personal-0000test.outsystemscloud.com',
+    confirmationToken: preview.structuredContent.result.confirmationToken, words: 'pode apagar a 1, a ZZA' });
   assert.deepEqual([deleted.structuredContent.result.state, deleted.structuredContent.result.deleted.map(d => d.name)], ['confirmed', ['ZZA']]);
   assert.match(deleted.structuredContent.result.operationId, /^[0-9a-f-]{36}$/);
 });

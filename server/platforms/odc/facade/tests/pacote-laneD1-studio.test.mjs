@@ -47,9 +47,14 @@ test('the idle wait reads the write lock of the Studio: a write held in this pro
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pacote-d1-lock-'));
   const deps = { o11Root: root, odcRoot: path.join(root, 'odc'), o11Lane: 'ss4' };
   let release; const holding = new Promise(resolve => { release = resolve; });
-  const write = withStudioWriteLock({ tool: 'o11_publish', args: { module: 'M' }, lane: 'o11', deps }, () => holding);
-  // A08: the holder names its process too ({tool, pid, startedAt}), never its arguments.
-  assert.deepEqual(Object.keys(studioWriteHolder({ lane: 'ss4', deps }) ?? {}).sort(), ['pid', 'startedAt', 'tool']);
+  const write = withStudioWriteLock({ tool: 'o11_publish', args: { module: 'M-SYNTH-ARG-0001', authorize: 'SYNTH-WORDS-0001' }, lane: 'o11', deps }, () => holding);
+  // A08: the holder names its process too ({tool, pid, startedAt}), never its arguments. CX14 (declared): it also says how
+  // long it holds the Studio and in which state (heldMs, state: running | stalled | pending-in-studio); the CX14 fields
+  // that may follow come from a whitelist (task ids, operation, blockedBy {title, kind}), never arguments or user words.
+  assert.deepEqual(Object.keys(studioWriteHolder({ lane: 'ss4', deps }) ?? {}).sort(), ['heldMs', 'pid', 'startedAt', 'state', 'tool']);
+  assert.equal(studioWriteHolder({ lane: 'ss4', deps }).state, 'running');
+  assert.ok(!/SYNTH-(ARG|WORDS)/.test(JSON.stringify(studioWriteHolder({ lane: 'ss4', deps }))));
+  for (const file of fs.readdirSync(path.join(root, '.local', 'locks'))) assert.ok(!/SYNTH-(ARG|WORDS)/.test(fs.readFileSync(path.join(root, '.local', 'locks', file), 'utf8')), file);
   assert.equal(studioWriteHolder({ lane: 'ss4', deps }).pid, process.pid);
   assert.equal(studioWriteHolder({ lane: 'ss4', deps }).tool, 'o11_publish');
   release(); await write;

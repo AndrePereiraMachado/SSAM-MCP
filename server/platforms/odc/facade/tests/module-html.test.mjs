@@ -71,7 +71,7 @@ test('one screen fits one page: the text as the kernel wrote it, its keys file a
   assert.equal(answer.continuations.next, null);
   // C2: the delivery of an edit of this reading, pinned to it (the html op in its edit form).
   assert.deepEqual(answer.continuations.edit, { tool: 'o11_deliver', arguments: { module: 'Shop', job: { ops: [{ op: 'html', data: { screen: 'Orders',
-    basedOn: { capture: c.sha256, html: 'h'.repeat(64) }, edit: ['<the changed element, whole, with its k>'] } }] } } });
+    basedOn: { capture: c.sha256, html: 'h'.repeat(64) }, edits: [{ set: '<k>', attributes: { '<attribute>': '<value>' } }, { find: '<exact text>', with: '<new text>' }] } }] } } });
   assert.match(answer.note, /only the elements you changed, each whole with its k/);
   assert.equal(answer.timings.kernelReadMs, 3.2);
   assert.equal(answer.size.bytes, bytes(answer));

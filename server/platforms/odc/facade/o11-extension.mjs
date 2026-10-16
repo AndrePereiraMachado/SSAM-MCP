@@ -36,6 +36,7 @@ import { consumerNames } from './o11-publish.mjs';
 import { CAPABILITY, studioReads } from './service-center/integration-studio.mjs';
 import { hostClass as registeredHostClass } from './service-center/auth.mjs';
 import { recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
+import { DESTRUCTIVE_SUFFIX, tokenNames } from './destructive-operations.mjs';
 
 export const TOOL = 'o11_extension';
 export const ACTIONS = Object.freeze(['read', 'publish', 'delete']);
@@ -68,6 +69,8 @@ export const extensionSchema = z.object({
   authorizationContext: z.string().max(1024).optional().describe('Absolute proposal-bound human approval record: new fixture publication only, or exact-target deletion; never a standing grant or consumer cascade'),
   operationId: z.string().regex(UUID).optional().describe('publish/delete: a UUID; the same call repeated with it reconciles by reading and never sends again'),
   confirmHost: z.string().trim().toLowerCase().max(253).optional().describe('A corporate or unregistered environment: the same host again, and words that name it'),
+  confirmationToken: z.string().trim().min(1).max(200).optional().describe('delete: the token of the preview the owner confirmed; without it the delete only previews (nothing sent)'),
+  ownerRequest: z.string().max(4000).optional().describe('delete, preview call: the owner\'s request, verbatim (only its sha256 is kept; it never confirms)'),
 }).strict();
 
 // ---- the kernel (anvil xif ...): one JSON per command, the refusal shape of the kernel kept as it is.
@@ -447,24 +450,33 @@ async function read(input, ctx, connected = null, listed = null) {
     continuation: next(TOOL, { action: 'publish', host: input.host, spec: '<this spec, changed>', expectedVersionId: String(row.versionId ?? 'none'), words: '<the user\'s words naming ' + name + '>' }, 'edite o spec e publique numa chamada') };
 }
 
-async function remove(input, ctx) {
+// delete: the Service Center delete engine in two calls (CX15). Without confirmationToken: the preview of the extension
+// (its consumers, the token; nothing sent). With it: the owner's words given after the preview, naming the extension and
+// every consumer, with the count. The extension may be named again with the token only when the token lists it.
+async function remove(input, ctx, extra = {}) {
   const name = input.extension;
-  if (!name) return refusal('EXTENSION_REQUIRED', 'delete needs extension (its exact name).', [problem('EXTENSION_REQUIRED', 'extension is required.', 'Pass extension: "<Name>".', { path: 'extension' })]);
-  // A standing grant never covers a delete: only the user's own words.
+  const token = typeof input.confirmationToken === 'string' && input.confirmationToken.trim() ? input.confirmationToken.trim() : null;
+  if (!name && !token) return refusal('EXTENSION_REQUIRED', 'delete needs extension (its exact name).', [problem('EXTENSION_REQUIRED', 'extension is required.', 'Pass extension: "<Name>".', { path: 'extension' })]);
+  // A standing grant never covers a delete: only the user's own words, given after the preview.
   const words = typeof input.words === 'string' && !placeholder(input.words) ? input.words : '';
-  if (!words.trim())
-    return refusal('WORDS_REQUIRED', `Deleting ${name} needs the user's own words naming it (and every consumer). Nothing was sent.`,
-      [problem('WORDS_REQUIRED', 'No words authorize this delete.', `Ask the user; their words name ${name} and every module that consumes it.`)]);
-  if (input.authorizationContext) {
+  if (token && name && tokenNames(token, name, { root: ctx.destructiveRoot }) === false)
+    return refusal('PREVIEW_OTHER_TARGET', `The confirmationToken does not list the extension ${name}; nothing was sent.`,
+      [problem('PREVIEW_OTHER_TARGET', `The token's preview is of another target, not ${name}.`, `The token of a preview of ${name}, or a new preview.`)]);
+  if (token && name && input.authorizationContext) {
     try { authorizationContext(input.authorizationContext,words,{lane:'o11',host:input.host,operation:'delete',targets:[name]}); }
     catch (error) { return refusal(error.code,error.message); }
   }
-  const argv = ['delete', '--host=' + input.host, '--target=extension:' + name, '--words=' + words,
+  const argv = ['delete', '--host=' + input.host, ...(token ? ['--confirmation-token=' + token] : ['--target=extension:' + name]), ...(words ? ['--words=' + words] : []),
+    ...(input.ownerRequest ? ['--owner-request=' + input.ownerRequest] : []),
     ...(input.confirmHost ? ['--confirm-host=' + input.confirmHost] : []), ...(input.operationId ? ['--operation-id=' + input.operationId] : []),
-    ...(input.authorizationContext ? ['--authorization-context=' + input.authorizationContext] : [])];
+    ...(token && input.authorizationContext ? ['--authorization-context=' + input.authorizationContext] : [])];
   let result;
-  try { result = await ctx.serviceCenter(argv); } catch (error) { return refusal('DELETE_FAILED', String(error?.message ?? error).slice(0, 300)); }
-  return result && typeof result === 'object' ? result : refusal('DELETE_FAILED', 'The Service Center answered nothing.');
+  try { result = await ctx.serviceCenter(argv, { tool: TOOL, ...extra }); } catch (error) { return refusal('DELETE_FAILED', String(error?.message ?? error).slice(0, 300)); }
+  if (!result || typeof result !== 'object') return refusal('DELETE_FAILED', 'The Service Center answered nothing.');
+  return result.state === 'previewed' ? { ...result, continuation: next(TOOL, { action: 'delete', host: input.host, confirmationToken: result.confirmationToken,
+    words: result.repeat?.words ?? "<the owner's reply after seeing this list>", ...(input.confirmHost ? { confirmHost: input.confirmHost } : {}) },
+  // CX15 r3 (CT-7): an extension is deleted without a backup (.xif): next says it and so does this step.
+  `show the owner this exact list${/WITHOUT a backup/.test(result.next ?? '') ? ' and what goes WITHOUT a backup (next)' : ''} and ask; the execution needs this token and the owner's reply, with the number of items`) } : result;
 }
 
 // deps: root, env, now, runAnvil (the O11 CLI runner), serviceCenter (runServiceCenter of service-center/index.mjs),
@@ -472,7 +484,7 @@ async function remove(input, ctx) {
 export function createO11Extension(deps = {}) {
   const root = deps.root ?? anvilRoot;
   const ctx = {
-    root, env: deps.env ?? process.env, now: deps.now ?? (() => new Date()),
+    root, env: deps.env ?? process.env, now: deps.now ?? (() => new Date()), destructiveRoot: deps.destructiveRoot,
     runAnvil: deps.runAnvil ?? (async () => ({ ok: false, envelope: null, stderr: ['no O11 CLI runner'] })),
     serviceCenter: deps.serviceCenter ?? (async (argv, scDeps) => (await import('./service-center/index.mjs')).runServiceCenter(argv, scDeps ?? {})),
     reads: deps.reads ?? (host => studioReads(host, { locate: deps.locate, root, env: deps.env })),
@@ -481,12 +493,12 @@ export function createO11Extension(deps = {}) {
     publishConsumersOf: deps.publishConsumersOf ?? (async (request, publishDeps) => (await import('./o11-publish.mjs')).publishConsumersOf(request, publishDeps ?? {})),
     publishDeps: deps.publishDeps ?? {},
   };
-  return async input => {
+  return async (input, extra = {}) => {
     const parsed = extensionSchema.safeParse(input ?? {});
     if (!parsed.success) return refusal('BAD_REQUEST', 'o11_extension arguments: ' + parsed.error.issues.map(i => i.path.join('.') + ': ' + i.message).join('; '));
     const value = parsed.data;
     if (value.action === 'read') return read(value, ctx);
-    if (value.action === 'delete') return remove(value, ctx);
+    if (value.action === 'delete') return remove(value, ctx, extra);
     return publish(value, ctx);
   };
 }
@@ -508,11 +520,13 @@ export function registerO11Extension(server, deps = {}) {
       + 'or uncertain (never sent again: the same call with the same operationId reconciles by reading). An edit that breaks consumers '
       + 'needs words naming each of them (EXTENSION_BREAKS_CONSUMERS); a standing grant covers additive publishes only. consumers:true '
       + 'authorizationContext binds verbatim human approval to an exact proposal: a new standalone fixture publication, or an exact-target deletion. '
-      + 'then refreshes and publishes each consumer. delete {host, extension, words}: the words name the extension and every consumer. '
+      + 'then refreshes and publishes each consumer. delete {host, extension}: the preview (its consumers, a confirmationToken). ' + DESTRUCTIVE_SUFFIX
+      + ' The execution, delete {host, confirmationToken, words}: the words name the extension and every consumer. '
       + 'Then reference it from a module with ssam_job (continuation) and o11_deliver/o11_publish.',
     inputSchema: extensionSchema, annotations,
-  }, async input => {
-    try { return reply(await run(input ?? {})); }
+  }, async (input, ctx) => {
+    // CX15: the client's cancellation reaches the delete engine of delete (it stops before its next item).
+    try { return reply(await run(input ?? {}, ctx?.mcpReq?.signal ? { signal: ctx.mcpReq.signal } : {})); }
     catch (error) { return reply(refusal('EXTENSION_ERROR', String(error?.message ?? error).slice(0, 400))); }
   });
 }

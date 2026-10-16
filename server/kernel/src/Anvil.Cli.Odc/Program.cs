@@ -140,7 +140,7 @@ usage: anvil-odc <comando> [--flags]
     private static object CheckJob(string[] args)
     {
         try { StudioAssembliesOdc.Bind(null); } catch { /* no ODC Studio here: the rule stays a warning */ }
-        return JobPreflight.Check(Need(args, "--job"));
+        return Anvil.Core.Preflight.CheckJobCommand.Run(args);
     }
 
     private static object Apply(string[] args)

@@ -187,8 +187,13 @@ public sealed class DeliveryTests
                         using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
                         var request = JsonNode.Parse((await reader.ReadLineAsync(stop.Token))!)!;
                         var method = request["method"]!.ToString(); Calls.Enqueue(method);
-                        var data = respond(method, request["params"]?.AsObject());
-                        await writer.WriteLineAsync(new JsonObject { ["success"] = true, ["data"] = data }.ToJsonString());
+                        JsonObject reply;
+                        try { reply = new JsonObject { ["success"] = true, ["data"] = respond(method, request["params"]?.AsObject()) }; }
+                        // An older fake may not implement optional probes. Refuse them through the protocol without
+                        // terminating its accept loop; every original operation and assertion still uses respond above.
+                        catch (InvalidOperationException ex) when (method is "windows" or "ping" or "bridge_manifest")
+                        { reply = new JsonObject { ["success"] = false, ["executed"] = false, ["error"] = ex.Message }; }
+                        await writer.WriteLineAsync(reply.ToJsonString());
                     }
                 }
                 catch (OperationCanceledException) when (stop.IsCancellationRequested) { }

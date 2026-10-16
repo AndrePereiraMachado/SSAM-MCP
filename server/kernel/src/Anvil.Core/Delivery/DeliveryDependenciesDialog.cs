@@ -53,6 +53,7 @@ public static partial class Delivery
         if (environment != null) parameters["environment"] = environment;
         JsonObject refreshed;
         try { refreshed = bridge.Call("refresh_references", parameters); }
+        catch (BridgeCallException ex) when (ex.Stall != null) { throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             var text = Errors.Text(ex);

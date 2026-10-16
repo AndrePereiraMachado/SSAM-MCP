@@ -1,6 +1,6 @@
 // Contextual approval of a concrete proposal, recorded after the caller verified
 // the actual human message. This is evidence, not an independent source of consent.
-// Keep the literal words separate from the proposal and exact operation scope.
+// Keep the words (their sha256, CX15 r4) separate from the proposal and exact operation scope.
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -8,6 +8,16 @@ import { hostedContext } from './executor.mjs';
 const sha = value => createHash('sha256').update(value).digest('hex');
 const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
 const text = value => typeof value === 'string' && value.trim().length > 0;
+// CX15 r4 (W-3): the record binds the human words by wordsSha256 (the sha256, 64 hex of the UTF-8 bytes, of the words the
+// call carries in authorize: for an own-fixture cleanup, the owner's reply the guard validated), so the approval file never
+// keeps the words. words (the literal reply) is still accepted, PROVISIONALLY until the owner decides; a record with both
+// must match on both, and a record with neither binds no words (refused).
+function wordsMatch(record, words) {
+  const hashed = record.wordsSha256, literal = record.words;
+  if (hashed === undefined && literal === undefined) return false;
+  if (hashed !== undefined && (typeof hashed !== 'string' || hashed.toLowerCase() !== sha(words))) return false;
+  return literal === undefined || literal === words;
+}
 const bad = () => { throw Object.assign(new Error('The authorization context is missing, altered or does not cover this exact operation and target. Nothing was sent.'), { code: 'AUTHORIZATION_CONTEXT_INVALID' }); };
 // servidor/fase4-24 (R1/R3 of PLANO-24-PRODUCAO): hosted, both files (the context, which the gate already resolves through
 // hosted/tools.json, and the proposal it names) must be files of the customer's visible workspace (odc/, o11/, inbox/):
@@ -36,7 +46,7 @@ export function authorizationContext(file, words, { lane, host, operation, targe
     if (fs.statSync(file).size > 32768) bad();
     bytes = fs.readFileSync(file); record = JSON.parse(bytes);
     if (record.schema !== 'ssam-authorization-context/1' || record.decision !== 'approved'
-      || record.words !== words || record.source?.kind !== 'human-conversation'
+      || !wordsMatch(record, words) || record.source?.kind !== 'human-conversation'
       || !uuid(record.source.threadId) || !uuid(record.source.messageId)
       || !text(record.source.question) || !text(record.proposal?.file)
       || !inWorkspace(record.proposal.file) || !/^[a-f0-9]{64}$/.test(record.proposal.sha256 ?? '')

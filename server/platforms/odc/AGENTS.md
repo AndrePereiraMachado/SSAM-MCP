@@ -42,6 +42,11 @@ e plano: `docs\PLANO-ODC3-SEM-FRICCAO.md`. Lições do bridge: `studio\bridge\RE
    `odc_asset_delete`, `odc_external_db_connection`) levam também um `operationUuid` novo; o recibo é reservado antes
    do envio em `journal\portal\receipts` e guarda só o sha256 das palavras. Apagar ou desimplantar exige palavras que
    nomeiem o alvo; resultado incerto nunca se repete: lê-se o alvo e se reconcilia com `odc_receipt`.
+   Apagar (asset, rota destrutiva do Portal, `DELETE`/`Undeploy`, conexão, descarte de biblioteca, registros) é sempre em
+   duas chamadas (CX15): sem `confirmationToken` só a prévia com a lista exata e a contagem; o dono vê a lista e responde
+   com o número exato de itens; a execução leva o token e essas palavras. Interrompida, `CANCELLED` ou "rejected": ler
+   `ssam_task {id:"<operationId da prévia>"}` antes de dizer qualquer coisa. `studio_command`/`.\odc studio` nunca rodam
+   `data-delete`, `portal-call`, `portal-private-call` nem `portal-api-client-fixture-cleanup`.
 4. Nunca repetir um merge, publicação ou criação com resultado incerto. Ler `receipt.json`, `last-error.json`
    e o journal antes de qualquer nova tentativa. Nova tentativa é novo diretório em `lab\`.
 5. Uma DLL carregada no Studio nunca é substituída: correção do bridge é versão nova, compilada e anexada.
@@ -87,7 +92,7 @@ O bloco abaixo é a mesma sequência na CLI do desenvolvedor.
 .\odc inspect <captura.oml> "@<chave>" --depth 4 --expectedSourceSha256 <hash>   # subárvore, propriedades, usos de um elemento do mapa
 .\odc inspect <Módulo> "ServerAction:<Ação>"             # parâmetros e fluxo de uma ação por caminho; aceita também um .oml
 .\odc studio data <Módulo> <Entidade> [--limit N]        # registros no banco de desenvolvimento, pelo serviço de dados do Studio
-.\odc studio data-insert <Módulo> <Entidade> --records '<json>' --authorize "<palavras>"   # também data-update e data-delete --ids
+.\odc studio data-insert <Módulo> <Entidade> --records '<json>' --authorize "<palavras>"   # também data-update; apagar: MCP studio_data_delete (prévia + token)
 .\odc app <App>                                           # URL da app publicada para testar no browser (login é do usuário)
 .\odc studio open <Módulo>
 .\odc deliver <feature>                                   # snapshot, build, check-base, preview, merge num comando; --until preview ensaia sem tocar no Studio
@@ -103,6 +108,8 @@ Produtor publicado: em cada consumidor aberto, `refresh-references <Consumidor> 
 `snapshot` antes do builder. Módulo novo: `.\odc build new <feature> <dir>`, `authorize ... create`, `create`,
 `open`, `authorize ... publish`, `publish --wait`.
 
-Dados de negócio: não há API pública; `.\odc studio data` lê e `data-insert|update|delete` escrevem pelo serviço
-de dados do próprio Studio (o de "View data" / "Edit data"), no banco de desenvolvimento, com o módulo aberto.
+Dados de negócio: não há API pública; `.\odc studio data` lê e `data-insert|update` escrevem pelo serviço
+de dados do próprio Studio (o de "View data" / "Edit data"), no banco de desenvolvimento, com o módulo aberto. Apagar
+registros é `studio_data_delete` em duas chamadas (prévia com os registros lidos e o token; execução com o token e as
+palavras do dono com a contagem); `.\odc studio data-delete` é recusado (`DESTRUCTIVE_NEEDS_DEDICATED_TOOL`).
 Testar no browser: use `.\odc app <App> [Tela]` / MCP `ssam_app_url`; o domínio de runtime vem do ambiente explícito ou stage configurado. Sem tela, abre a home. Consulte `../../docs/URLS-APPS.md`.

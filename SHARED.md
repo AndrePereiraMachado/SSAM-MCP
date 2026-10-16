@@ -1,7 +1,8 @@
 # Arquivos compartilhados entre as caixas
 
 Estes 76 arquivos existem em `server/` e em `agent/`, no mesmo caminho relativo dentro de cada caixa.
-Hoje as duas cópias são iguais byte a byte. Vieram de `servidor/fase4` (`e7b2119b`) e estão na revisão de
+Hoje 75 têm as duas cópias iguais byte a byte. A exceção é `platforms/odc/facade/o11-bridge.mjs`, de propósito (seção
+"Diferença de propósito", no fim da seção da fachada). Vieram de `servidor/fase4` (`e7b2119b`) e estão na revisão de
 `fase4-24/combinada` (`41e538f0`): o 24º envio (`a415531d`) com `fase4-24/odc1728` (`f912cb7e`, ODC Studio 1.7.28 e bridge
 ODC v97), `fase4-24/o11-115592` (Service Studio 11.55.92) e `fase4-24/qualidade` (que não muda nenhum deles), mais a imagem
 interina. O 24º acrescentou 8:
@@ -129,8 +130,22 @@ Sem saída, está tudo igual.
 
 | Arquivo (relativo à caixa) | sha256 (conteúdo com fim de linha LF) |
 | --- | --- |
-| `platforms/odc/facade/o11-bridge.mjs` | `3dd01a43b602e8238d5f0570842ac948c30088b6a0f2b357b1499a99c3166346` |
 | `platforms/odc/facade/odc-pipe.mjs` | `7e1e43caeb992024f3b85e2d8c45a0633f46c0ccf54523a342dbe27090b8156c` |
+
+Diferença de propósito desde `server/r26-marco-a6` (decisão D5 do dono, 15/10/2026): `o11-bridge.mjs` não é igual nas
+duas caixas, e a checagem acima não o lista.
+
+- `server/`: o da linha `fase4-26/marco-a6` (`75c8940c`). A CX14 reescreveu o `bridgeRequest` (chamada vigiada com sondas,
+  só local) e, no hospedado, o manifesto da bridge vai pelo agente (`executor.call('o11.bridge')`).
+- `agent/`: o do pacote atual (`C:\t\pack-comb\ssam-agent.zip`, linha `b58be727`). É o arquivo que tem o bloco congelado de
+  `agent/lib/o11-wire.mjs`, e o `agent/tests/drift.test.mjs` desta caixa compara com ele. A linha guarda o mesmo arquivo em
+  `agent/tests/fixtures/o11-bridge.pack.mjs`, com o sha256 fixado no teste dela. O zip não muda.
+- Um pacote novo com a CX14 no agente volta a igualar as duas caixas e põe a linha de novo na tabela.
+
+| Caixa | Arquivo | sha256 (conteúdo com fim de linha LF) |
+| --- | --- | --- |
+| server | `platforms/odc/facade/o11-bridge.mjs` | `568e406edb4dc24e812a33bc06049a3d320008590a9f5ee9f399beb75eee88a9` |
+| agent | `platforms/odc/facade/o11-bridge.mjs` | `3dd01a43b602e8238d5f0570842ac948c30088b6a0f2b357b1499a99c3166346` |
 
 ## platforms/odc/studio/bridge/: bridge ODC e cliente de attach (dono: agent; o servidor compila e lê a versão)
 

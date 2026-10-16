@@ -21,6 +21,7 @@ import { LocalExecutor, bridgeClientPath, contextLost, currentExecutor, hostedCo
   workspacePath } from './executor.mjs';
 import { resolveOpenModule } from './studio-module.mjs';
 import { kernelStart } from './quality-meter.mjs';
+import { hashedWords, withoutWords } from './destructive-operations.mjs';
 export { headlessDebug } from './debug-runtime.mjs';
 
 const run = promisify(execFile);
@@ -262,18 +263,21 @@ export function recordsFile(records) {
   const file = path.join(dir, new Date().toISOString().replace(/[:.]/g, '-') + '-' + process.pid + '.json');
   fs.writeFileSync(file, JSON.stringify(records, null, 2)); return file;
 }
-export async function studioData({ op, module, entity, records, ids, fields, limit, offset, out, authorize, pid }) {
+// CX15 r4 (W-2): a write (insert, update, delete) sends the bridge 'sha256:<hex>' of the owner's words, never the words
+// (the bridge only requires a nonempty --authorize, DataCommands.cs, and keeps it in journal\data and in its report), and
+// the answer drops what the bridge repeats (authorization). deps.studio: the bridge call (tests pass a fake pipe).
+export async function studioData({ op, module, entity, records, ids, fields, limit, offset, out, authorize, pid }, { studio: call = studio } = {}) {
   const args = [op === 'read' ? 'data' : 'data-' + op, module, entity];
   if (op === 'read') {
     if (limit != null) args.push('--limit', String(limit)); if (offset != null) args.push('--offset', String(offset));
     if (fields?.length) args.push('--fields', fields.join(',')); if (out) args.push('--out', out);
-  } else {
-    if (op === 'delete') { if (!ids?.length) throw new Error('ids are required.'); args.push('--ids', ids.map(String).join(',')); }
-    else { if (!Array.isArray(records) || records.length === 0) throw new Error('records must be a non-empty array of objects.'); args.push('--records-file', recordsFile(records)); }
-    if (!authorize) throw new Error("authorize is required: the user's own words.");
-    args.push('--authorize', authorize);
+    return call(args, pid);
   }
-  return studio(args, pid);
+  if (op === 'delete') { if (!ids?.length) throw new Error('ids are required.'); args.push('--ids', ids.map(String).join(',')); }
+  else { if (!Array.isArray(records) || records.length === 0) throw new Error('records must be a non-empty array of objects.'); args.push('--records-file', recordsFile(records)); }
+  if (!authorize) throw new Error("authorize is required: the user's own words.");
+  args.push('--authorize', hashedWords(authorize));
+  return withoutWords(await call(args, pid));
 }
 // After the startup hook, readiness is the bridge's own answer, not a fixed 1.5 s sleep: the client waits for the
 // bridge pipe itself (NamedPipeClientStream.ConnectAsync, 10 s), so the first `status brief` normally answers as soon

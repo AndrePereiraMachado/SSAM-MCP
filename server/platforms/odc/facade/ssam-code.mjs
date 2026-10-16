@@ -270,6 +270,7 @@ const RULES = {
     'A popup (modal) is <popup show="Var"> ... </popup>, never a <div if> over the page: Var is a Boolean screen variable (' + CODE_FORMS_EXACT.html['popup variable'] + '), a screen action opens it (assign Var = True) and one closes it (assign Var = False). The Studio gives events inside a popup Transition Fade by default: write the event as read, ' + CODE_FORMS_EXACT.html['event in a popup'] + ', and os-onclick.Transition only for another transition. The example below has one.',
     'A new screen action: a logic text "action <Screen>.A" (no @key) in the same write (also: [{part:"logic", text}]); a data action: "data action <Screen>.D". ssam_code writes a new screen action BEFORE the change of an existing screen (the button names it) and AFTER a new <screen> document (the screen comes first). On a screen read, leave actions="..." as read: the logic text adds the action.',
     'Changing an existing screen: read it (part html, element the screen), then write only the changed elements, each whole with its k, with element the screen and basedOn {capture, html} of the read; a new element has no k; a removed one is left out of its parent. ODC: owners default to the screen (element), the screens of the screen actions and the elements the code names.',
+    'Change a few elements of a read screen: edits [{set:"w7",attributes:{...}}, {replace|after|before|into|delete|move:"w7",...}, {find:"exact text",with:"..."}] with element and basedOn {capture, html}; a refused or checked job: basedOn {job, sha256}, element (screen, block, action or ddl) and edits [{find, with}].',
     'Owner rules: a condition is <div if>, never os-Visible; no JavaScript or JSON in the screen; data by aggregate or data action; reuse the module\'s layout block and blocks first.',
   ],
 };
@@ -401,8 +402,8 @@ function normalizeOp(op) {
     // The document form (no parent) or the edit form beside data: into data.
     if (o.data == null && typeof o.html === 'string' && DOCUMENT_TEXT.test(o.html) && o.file == null) {
       const { html, ...rest } = o; o = { ...rest, data: { html } }; notes.push('html: a <screen>/<block> document beside data is data.html');
-    } else if (o.data == null && typeof o.screen === 'string' && o.edit != null) {
-      const { screen, edit, basedOn, ...rest } = o; o = { ...rest, data: { screen, edit, ...(basedOn != null ? { basedOn } : {}) } }; notes.push('html: screen, edit and basedOn beside data are data');
+    } else if (o.data == null && typeof o.screen === 'string' && (o.edit != null || o.edits != null)) {
+      const { screen, edit, edits, basedOn, ...rest } = o; o = { ...rest, data: { screen, ...(edit != null ? { edit } : {}), ...(edits != null ? { edits } : {}), ...(basedOn != null ? { basedOn } : {}) } }; notes.push(`html: screen, ${[edit != null && 'edit', edits != null && 'edits'].filter(Boolean).join(', ')} and basedOn beside data are data`);
     }
   }
   if (o.op === 'set') {
@@ -478,6 +479,7 @@ export function codeCall(call) {
       return { ...call, tool: CODE_TOOL, arguments: { lane, ...rest, action: 'write', part: 'logic', text: texts.length === 1 ? texts[0] : texts,
         ...(bases.some(Boolean) ? { basedOn: bases.length === 1 ? bases[0] : bases } : {}) } };
     }
+    if (op.data.edits != null) return { ...call, tool: CODE_TOOL, arguments: { lane, ...rest, action: 'write', part: 'html', element: op.data.screen, basedOn: op.data.basedOn, edits: op.data.edits } };
     if (op.data.edit != null) return { ...call, tool: CODE_TOOL, arguments: { lane, ...rest, action: 'write', part: 'html', element: op.data.screen, text: op.data.edit, basedOn: op.data.basedOn } };
     return { ...call, tool: CODE_TOOL, arguments: { lane, ...rest, action: 'write', part: 'html', text: op.data.html } };
   }
@@ -554,6 +556,8 @@ export async function codeRead(input, { map }) {
 }
 
 // ---- write: the op of the part, delivered by the lane's delivery tool
+// CX16: edits by exact text of the texts of a refused or checked job (basedOn {job, sha256}) become a JSON Patch over it.
+import { jobTextEdits } from './html-edits.mjs';
 const isJobBase = b => plain(b) && ((typeof b.job === 'string' && typeof b.sha256 === 'string') || typeof b.taskId === 'string');
 const lines = t => String(t ?? '');
 const textList = text => (Array.isArray(text) ? text : [text]).map(lines);
@@ -614,8 +618,14 @@ export function sqlHintsOf(text) {
 }
 
 /** The ops of one text part, or {error}. */
-export function opsOfPart({ part, text, basedOn, element, removes }) {
+export function opsOfPart({ part, text, basedOn, element, removes, edits, jobText }) {
+  // CX16: edits over basedOn {job, sha256} are a correction of that job (writeCall makes them a patch first); edits of a
+  // read screen or block are the kernel's html op as they are (flow-edits.mjs checked their shape).
+  if (jobText) return { error: 'edits over basedOn {job, sha256} correct that job: give that basedOn to the write itself, with element and edits [{find, with}]' };
   if (!CODE_PARTS.includes(part)) return { error: `part must be one of ${CODE_PARTS.join(', ')}` };
+  if (part === 'html' && edits != null && text == null) return !element ? { error: 'edits of a screen need element (the screen or block read)' }
+    : plain(basedOn) && typeof basedOn.capture === 'string' && typeof basedOn.html === 'string' ? { op: { op: 'html', data: { screen: element, basedOn, edits } } }
+      : { error: 'basedOn of html edits is {capture, html} as the read returned them' };
   if (text == null || (Array.isArray(text) ? !text.length : !String(text).trim())) return { error: `write needs text (the ${CODE_FORMS[part]} code)` };
   if (part === 'ddl') {
     if (Array.isArray(text)) return { error: 'part ddl takes one text with every statement' };
@@ -692,7 +702,7 @@ const O11_OPTIONS = ['checks', 'until', 'producers', 'captureProducers', 'expect
 const ODC_OPTIONS = ['feature', 'owners', 'changes', 'output', 'until', 'publish', 'authorize', 'producer', 'tenant', 'pid'];
 
 // An html edit of an existing screen in this write (by screen name), or null.
-const isHtmlEdit = p => p?.part === 'html' && (Array.isArray(p.text) || p.basedOn != null || !DOCUMENT_TEXT.test(lines(p.text)));
+const isHtmlEdit = p => p?.part === 'html' && (p.edits != null || Array.isArray(p.text) || p.basedOn != null || !DOCUMENT_TEXT.test(lines(p.text)));
 // A new screen or data action (a header without @key, "action <Screen>.X" / "data action <Screen>.X").
 const newScreenAction = t => { const h = headerOf(t); return !!h && h.owner != null && h.key == null; };
 
@@ -896,6 +906,10 @@ export function writeCall(input, { readJob = readJobFile, readReading = loadFlow
   if (lane === 'odc' && input.until === 'apply') return refuse('until on odc is snapshot, build, check-base, preview or merge');
   const options = {};
   for (const k of lane === 'o11' ? O11_OPTIONS : ODC_OPTIONS) if (input[k] !== undefined) options[k] = input[k];
+  // CX16 (html-edits.mjs): edits of the texts of the job of basedOn {job, sha256} are one refusal, or this write as a patch
+  // generated over that job (the patch route below), with what each edit changed in normalizations.
+  const textEdits = jobTextEdits(input);
+  if (textEdits) return textEdits.problems ? refuse(textEdits.error, { problems: textEdits.problems }) : (call => (call.refusal ? call : { ...call, normalizations: [...textEdits.notes, ...(call.normalizations ?? [])] }))(writeCall(textEdits.input, { readJob, readReading, origins: includeOrigins }));
   // A correction of a refused write: patch (and/or a partial job) over basedOn {job, sha256} of the refusal.
   const jobBase = isJobBase(input.basedOn) ? input.basedOn : null;
   const hasEdits = input.edits != null || Array.isArray(input.also) && input.also.some(p => p?.edits != null);
@@ -935,7 +949,7 @@ export function writeCall(input, { readJob = readJobFile, readReading = loadFlow
   }
   // No text at all, only ops (or only other parts in also): the ops (and those parts) are the delivery; a part named
   // without a text says nothing to deliver.
-  if (!hasText(given[0])) {
+  if (!hasText(given[0]) && given[0]?.edits == null) {
     if (ops.length || given.length > 1 || problems.length) {
       given.shift();
       if (!given.length && ops.length) note('write-ops-alone', '/ops', `no text: the ${ops.length} op(s) are the job` + (input.part != null ? ` (part ${input.part} names no text)` : ''));
@@ -1090,7 +1104,7 @@ export const CODE_DESCRIPTION = 'Read and write an OutSystems module AS CODE, bo
   + 'logic, each changed action WHOLE as read with the change (a line left out is DELETED; a text with a gap in its ids is '
   + 'refused unless removes:true); html, only the changed elements of a screen, each whole with its k. Without a key a statement, '
   + 'action or element is new; with its key it is changed in place. also [{part, text, basedOn?}] writes other parts in the same '
-  + 'delivery. logic: edits:[...] with element and basedOn changes only the lines named by their @id (the rest of the read is kept). A new screen action ("action <Screen>.X") goes before the change of its screen and after a new <screen> document '
+  + 'delivery. logic: edits:[...] with element and basedOn changes only the lines named by their @id (the rest of the read is kept). html: edits:[{set|replace|delete|after|before|into|move:k,...},{find,with}] with element and basedOn {capture, html} changes only those elements; a refused or checked job: basedOn {job, sha256}, element and edits [{find, with}]. A new screen action ("action <Screen>.X") goes before the change of its screen and after a new <screen> document '
   + '(ssam_code orders them); ops are raw job ops before the code (a role, an exception). A screen and a screen action need a '
   + 'module with a UI flow. With subagents, each writes its own UTF-8 file; ONE write with files:[absolute paths] sends all parts, never copying their text. A text or file may hold several actions: ssam_code splits them. An empty or _CS '
   + 'module takes data and server actions. The answer names what the write removed '
@@ -1167,7 +1181,7 @@ export function registerSsamCode(server, { fromJsonSchema, map, deliver, check, 
   // The lists of a write carry the person's code: no limit of this tool cuts them (the delivery takes any number of texts
   // and ops in one job); the bounds below only keep a runaway call out.
   const text = { anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: CODE_LIST_MAX }] };
-  const edits = { type: 'array', minItems: 1, maxItems: 500, items: { type: 'object' }, description: 'write logic: line edits of ONE read action (element + basedOn = its textSha) instead of its whole text: {replace:"@n4", with:"..."}, {after:"@n2"|before:"@n2", insert:"..."}, {delete:"@n3"}; the header by its @key, a line without id by its exact text, "@n10#2" the 2nd line with @n10' };
+  const edits = { type: 'array', minItems: 1, maxItems: 500, items: { type: 'object' }, description: 'write logic: line edits of ONE read action (element + basedOn = its textSha) instead of its whole text: {replace:"@n4", with:"..."}, {after:"@n2"|before:"@n2", insert:"..."}, {delete:"@n3"}; the header by its @key, a line without id by its exact text, "@n10#2" the 2nd line with @n10. html (basedOn {capture, html}): {set:k,attributes}, {replace|delete|after|before|into|move:k}, {find, with}; a job (basedOn {job, sha256}): {find, with}' };
   const schema = { type: 'object', additionalProperties: false, required: ['lane', 'action'], properties: {
     lane: { type: 'string', enum: lanes, description: 'o11 or odc.' },
     action: { type: 'string', enum: CODE_ACTIONS, description: 'grammar: syntax and a from-scratch example; read: the part as code; write: deliver the code; check: validate offline on the newest capture; plan: divide work into parallel batches with prompt files and checks.' },

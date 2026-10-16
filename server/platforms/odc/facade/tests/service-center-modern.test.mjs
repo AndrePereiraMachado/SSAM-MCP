@@ -15,6 +15,8 @@ import { BridgeError, LayoutError, ProtocolError } from '../service-center/error
 import { main } from '../service-center/index.mjs';
 import { sha256 } from '../service-center/util.mjs';
 import { FakeBridge, MODERN, SC, fakeVault, files, html, readText, request, temp, uuid , zip } from './fixtures/sc-fake-bridge.mjs';
+import { CONFIRM_MIN_AGE_MS } from '../destructive-operations.mjs';
+import { fakeClock } from './fixtures/destructive-flow.mjs';
 
 process.env.ANVIL_WORKER = '0'; process.env.ANVIL_ODC_NO_WORKER = '1';
 // A pending private prompt is not waited for here (its bounded wait: pa2-f8-sc.test.mjs).
@@ -435,14 +437,17 @@ test('delete needs words naming the connection and the extensions using it', asy
   const bridge = new FakeBridge({ pages: { [`GET ${SC}DatabaseConnections_List.aspx`]: () => listing(!deleted.length),
     [`GET ${SC}DatabaseConnection_Edit.aspx?DBConnectionId=7`]: html('dbconnections/dbconnection-edit.existing.html'),
     [`POST ${SC}DatabaseConnection_Edit.aspx`]: () => { deleted.push(1); return listing(false); } } });
-  const run = (...extra) => main(['db-connection-delete', '--host', HOST, '--connection', 'SampleWarehouse', ...extra], mainDeps(bridge, s));
+  const clock = fakeClock(); const destructiveRoot = temp();
+  const run = (...extra) => main(['db-connection-delete', '--host', HOST, '--connection', 'SampleWarehouse', ...extra], mainDeps(bridge, s, { clock, destructiveRoot }));
+  // CX15: the plan is the preview; the execution is its token and the owner's words (with the count) after it.
   const plan = await run();
   assert.deepEqual([plan.usedBy, plan.namedTargets], [['SampleWarehouseExt'], ['SampleWarehouse', 'SampleWarehouseExt']]);
   assert.ok(plan.confirm.includes('delete this database connection'));
-  const execute = ['--execute', '--confirm-host', HOST, '--operation-id'];
-  await assert.rejects(run(...execute, uuid(), '--words', 'delete SampleWarehouse on sc'), isProtocol(/SampleWarehouseExt/));
+  const execute = ['--confirm-host', HOST, '--confirmation-token', plan.confirmationToken];
+  clock.advance(CONFIRM_MIN_AGE_MS);
+  await assert.rejects(run(...execute, '--words', 'delete the 1, SampleWarehouse on sc'), isProtocol(/SampleWarehouseExt/));
   assert.deepEqual(bridge.posts(), []);
-  const receipt = await run(...execute, uuid(), '--words', 'delete SampleWarehouse, used by SampleWarehouseExt, on sc');
+  const receipt = await run(...execute, '--words', 'delete the 1, SampleWarehouse, used by SampleWarehouseExt, on sc');
   assert.equal(receipt.state, 'confirmed');
   const [, form, , write] = sent(bridge);
   const expected = request('dbconnections/dbconnection-delete.request.json').form;

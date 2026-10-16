@@ -352,27 +352,15 @@ class DatabaseConnectionTests(ModernTest):
                 # The server's text echoes the login; it never comes back.
                 self.assertNotIn('svc_reader', json.dumps(receipt))
 
-    def test_delete_needs_words_naming_the_connection_and_the_extensions_using_it(self):
-        deleted = []
-        bridge = FakeBridge(pages={('GET', SC + 'DatabaseConnections_List.aspx'): lambda f, a: self.listing(not deleted),
-                                   ('GET', SC + 'DatabaseConnection_Edit.aspx?DBConnectionId=7'): html('dbconnections/dbconnection-edit.existing.html'),
-                                   ('POST', SC + 'DatabaseConnection_Edit.aspx'): lambda f, a: deleted.append(1) or self.listing(False)})
+    def test_delete_does_not_run_here(self):
+        # CX15 r2 (L): db-connection-delete does not run in this script (test_service_center_deletes.py); the page form it
+        # posted is the facade's (service-center/client.mjs), previewed and confirmed by o11_service_center_write.
+        bridge = FakeBridge()
         run = lambda *extra: main(['db-connection-delete', '--host', HOST, '--connection', 'SampleWarehouse', *extra], journal=self.journal,
                                   locate=lambda: bridge, present=lambda t: False, running=lambda: False, opener=lambda *a: self.fail('no prompt'), exports=self.temp.name)
-        plan = run()
-        self.assertEqual((['SampleWarehouseExt'], ['SampleWarehouse', 'SampleWarehouseExt']), (plan['usedBy'], plan['namedTargets']))
-        self.assertIn('delete this database connection', plan['confirm'])
-        execute = ('--execute', '--confirm-host', HOST, '--operation-id')
-        with self.assertRaisesRegex(ProtocolError, 'SampleWarehouseExt'):
-            run(*execute, str(uuid.uuid4()), '--words', 'delete SampleWarehouse on sc')
+        for result in (run(), run('--execute', '--confirm-host', HOST, '--operation-id', str(uuid.uuid4()), '--words', 'delete SampleWarehouse, used by SampleWarehouseExt, on sc')):
+            self.assertEqual(('DESTRUCTIVE_NEEDS_DEDICATED_TOOL', 'o11_service_center_write'), (result['code'], result['continuation']['tool']))
         self.assertEqual([], bridge.posts())
-        receipt = run(*execute, str(uuid.uuid4()), '--words', 'delete SampleWarehouse, used by SampleWarehouseExt, on sc')
-        self.assertEqual('confirmed', receipt['state'])
-        _, form, _, write = self.sent(bridge)
-        expected = request('dbconnections/dbconnection-delete.request.json')['form']
-        self.assertEqual({k: expected[k] for k in ('__EVENTTARGET', '__EVENTARGUMENT', '__OSVSTATE', '__VIEWSTATEGENERATOR')},
-                         {k: form[k] for k in ('__EVENTTARGET', '__EVENTARGUMENT', '__OSVSTATE', '__VIEWSTATEGENERATOR')})
-        self.assertTrue(write)
 
     def test_extension_mapping_is_the_fixture_change_then_apply(self):
         mapped = []

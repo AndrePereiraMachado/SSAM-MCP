@@ -242,7 +242,11 @@ test('ssam_doctor {network:true} (hosted): the check in network; without it, slo
     call: async (kind, params) => { probes.push({ kind, params }); return { probes: [{ id: 'b'.repeat(32), bytes: 1024, ms: 60, ok: true, status: 200 }] }; },
     probes: ids => ids.map(id => ({ id, via: '177.26.82.x', received: 1024, complete: true, ms: 50 })),
     uploads: () => ({ parts: 7, slow: 2, recent: [{ bytes: 60631, ms: 26300, via: '177.26.87.x', at: new Date().toISOString() }, { bytes: 75221, ms: 36600, via: '177.26.87.x', at: new Date().toISOString() }] }) };
-  const context = { id: 'ctx-net', hosted: true, tokenId: 'tok_net', customer: 'Rede', lanes: [], workspace, agent: link, executor: { o11Connection: () => null }, close: async () => {} };
+  const context = { id: 'ctx-net', hosted: true, tokenId: 'tok_net', customer: 'Rede', lanes: [], workspace, agent: link,
+    // servidor/fase4-26 (C): the call deadline runs in the customer's real context (runWithExecutor), which needs an executor
+    // with call, as every hosted context has; this one runs no machine call.
+    executor: { o11Connection: () => null, call: async kind => { throw Object.assign(new Error('unexpected kind ' + kind), { code: 'KIND_NOT_ALLOWED', executed: false }); } },
+    close: async () => {} };
   const plain = await hostedDoctor(null, { context, session: { agent: link } });
   assert.equal(probes.length, 0, 'no check without network:true');
   assert.deepEqual(plain.agent.uploads.slow, 2);

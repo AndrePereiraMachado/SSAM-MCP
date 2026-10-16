@@ -274,10 +274,12 @@ test('access tools: one per capability, writes need words and a UUID, no credent
     const tools = (await client.listTools()).tools;
     assert.deepEqual(tools.map(t => t.name).sort(), [...ACCESS_TOOLS].sort());
     for (const tool of tools) {
-      assert.equal(Object.keys(tool.inputSchema.properties ?? {}).some(k => /password|secret|token|clientId|cookie/i.test(k)), false, tool.name);
+      // confirmationToken (CX15) is the token of a preview, not a credential.
+      assert.equal(Object.keys(tool.inputSchema.properties ?? {}).some(k => k !== 'confirmationToken' && /password|secret|token|clientId|cookie/i.test(k)), false, tool.name);
       if (['odc_write', 'odc_portal_write', 'odc_deploy', 'odc_asset_delete'].includes(tool.name)) {
         assert.equal(tool.annotations.destructiveHint, true, tool.name);
-        assert.ok(tool.inputSchema.required.includes('authorize') && tool.inputSchema.required.includes('operationUuid'), tool.name);
+        // CX15: a destructive call without confirmationToken previews; the words and the UUID serve the execution.
+        assert.ok(['authorize', 'operationUuid', 'confirmationToken', 'ownerRequest'].every(k => tool.inputSchema.properties[k] && !(tool.inputSchema.required ?? []).includes(k)), tool.name);
       }
     }
     assert.deepEqual(tools.find(t => t.name === 'odc_read').inputSchema.properties.auth.enum, ['auto', 'studio', 'api-client']);

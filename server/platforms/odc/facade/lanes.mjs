@@ -185,8 +185,9 @@ export function command(laneName, verb, args = []) {
 
 // Spawn the line `command()` built, in the lane's own root, and return its output as it came. A refusal is
 // returned, never thrown: the caller prints the same JSON shape either way. `job` runs in this process
-// (job-runner.mjs) and answers its JSON summary; jobDeps reaches runJob (tests inject a fake CLI and worker).
-export async function run(laneName, verb, args = [], { maxBuffer = 64 * 1024 * 1024, jobDeps = {} } = {}) {
+// (job-runner.mjs) and answers its JSON summary; jobDeps reaches runJob (tests inject a fake CLI and worker). dataDeps
+// reaches the gate of O11 data deletes (data-delete-gate.mjs: tests inject send, cwd, now, root, uuid).
+export async function run(laneName, verb, args = [], { maxBuffer = 64 * 1024 * 1024, jobDeps = {}, dataDeps = {}, dataGate = true } = {}) {
   // Hosted, `dependencies inspect` (an offline OML read) and `help` touch no Studio: they run without the customer's
   // O11 record, as the hosted gate classifies them (hosted/tools.json o11_dependencies).
   const offline = verb === 'dependencies' && ['inspect', 'help'].includes(String(args[0] ?? 'help')) && hostedContext() !== null;
@@ -215,7 +216,11 @@ export async function run(laneName, verb, args = [], { maxBuffer = 64 * 1024 * 1
   // `data --studio` reaches the Studio connected on the lane by the lane's bridge port. Hosted, every O11 verb gets the
   // closed environment of the customer's workspace (the relay port of its record, never this process's variables), and
   // an ODC verb is refused: its child process would run without the hosted context.
-  let spawn;
+  // CX15 (local only): a data request with a delete previews first, as o11_data does (data-delete-gate.mjs); its reads and
+  // the delete run through this same line (dataGate:false), with another request file. Hosted, deleting is refused at the
+  // gate (hosted/destructive.mjs) and no hosted tool reaches this verb; the gate would write its requests in built.root,
+  // the server's root, so it never runs there.
+  let spawn, local = false;
   try {
     if (usesWorkspace(built.root, built.lane === 'o11' ? anvilRoot : odcRoot)) {
       if (built.lane !== 'o11') return { ok: false, lane: built.lane, verb, line: built.line, code: 'HOSTED_UNAVAILABLE',
@@ -224,8 +229,12 @@ export async function run(laneName, verb, args = [], { maxBuffer = 64 * 1024 * 1
       if (verb === 'data' && !currentExecutor().o11Connection()) throw o11NotConnected();
       const hosted = hostedSpawnEnv('o11');
       spawn = { cwd: hosted.cwd, env: hosted.env };
-    } else spawn = { cwd: built.root, ...(built.lane === 'o11' && verb === 'data' ? { env: { ...process.env, ANVIL_LANE: anvilLane } } : {}) };
+    } else {
+      local = true;
+      spawn = { cwd: built.root, ...(built.lane === 'o11' && verb === 'data' ? { env: { ...process.env, ANVIL_LANE: anvilLane } } : {}) };
+    }
   } catch (error) { return { ok: false, lane: built.lane, verb, line: built.line, ...seamFields(error), error: error.message }; }
+  if (local && dataGate && built.lane === 'o11' && verb === 'data') { const gated = await (await import('./data-delete-gate.mjs')).cliDataDelete(args, { send: argv => run(laneName, verb, argv, { maxBuffer, jobDeps, dataGate: false }), cwd: built.root, ...dataDeps }); if (gated) return gated; }
   const result = await exec(built.exe, built.argv, { ...spawn, windowsHide: true, maxBuffer })
     .then(r => ({ ...r, exitCode: 0 }))
     .catch(error => ({ stdout: error.stdout ?? '', stderr: error.stderr ?? error.message ?? '', exitCode: error.code ?? 1 }));

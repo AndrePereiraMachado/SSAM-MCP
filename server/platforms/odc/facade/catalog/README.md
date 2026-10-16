@@ -244,6 +244,14 @@ lê e nada dele entra no índice de capacidades.
 - `byLane` (rota das duas faixas): `args`, `when`, `preconditions` e `next` de uma faixa quando diferem (o `run` O11 do
   depurador é só a entrada nativa restrita); a outra faixa fica com os da rota. O teste de modelos confere esses `args`
   contra o schema vivo como os da rota.
+- Textos de duas chamadas das rotas destrutivas (CX15 r3, CT-8): nunca escritos à mão. O arquivo guarda o marcador
+  `{{destructive.twoCalls}}` (O11 e `studio_data_delete`) ou `{{destructive.twoCalls.odc}}` (ODC: a execução leva o
+  `operationId` da prévia como `operationUuid`) e `compileToolRoutes` o troca, ao carregar, pelo texto de
+  `destructive-operations.mjs` (`DESTRUCTIVE_SUFFIX`: as duas chamadas, a resposta do dono com o número E os nomes,
+  `WORDS_RULE` e `AFTER_INTERRUPTION`, com SC_LOCAL_FAILURE; mais `ODC_EXECUTION_UUID`), por
+  `destructive-catalog-texts.mjs`. Marcador desconhecido é problema do catálogo. A resposta do `ssam_discover` nunca corta
+  um texto gerado (o nível `full` corta os outros em 160/120 caracteres). São 29 lugares (22 `next` + 7 pré-condições);
+  `destructive-r3-txt-catalog.test.mjs` os lista e confere o arquivo, o catálogo carregado e a resposta.
 - O nó de fluxo: `normalize()` tira o acento e "nó" viraria "no" (stopword). O lexer lê a palavra crua antes: "nó" é o
   token `node` (`@node`), e "nós" também depois de artigo, contração ou quantificador ("os nós da action"), nunca o
   pronome ("nós precisamos publicar").

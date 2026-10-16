@@ -27,6 +27,8 @@
 //     consulted with backoff (250 ms doubling to 1 s) until a deadline (25 s O11, 90 s ODC) or until the child exits;
 //   - a worker that loaded a kernel older than the CLI on disk is shut down and restarted when idle, served (with a
 //     warning) when busy; its age comes from the record of a successful ping (worker_process.remember, or ours);
+//   - reads/recovery can avoid a busy or queued worker using its existing ensure status (no extra ping); a race
+//     after that status is accepted, with the returned queuedMs exposed as workerQueuedMs by the runner;
 //   - ANVIL_WORKER=0 (both lanes) and ANVIL_ODC_NO_WORKER (ODC) always run cold.
 // Hosted (executor.mjs), the O11 lane's worker above is off; each customer may get a resident O11 worker of its own,
 // started in the background with that customer's hosted spawn environment plus the pool's memory profile
@@ -333,6 +335,8 @@ export async function runOnWorker(argv, target, deps = {}) {
   let state = await ensure();
   if (!state.status) return { used: false, note: state.note };
   for (let attempt = 1; ; attempt++) {
+    if (deps.avoidBusy === true && (state.status.busy || Number(state.status.queued) > 0))
+      return { used: false, note: `the resident worker was busy with ${state.status.currentCommand ?? 'an unknown command'} for ${state.status.runningMs ?? 0} ms; this read ran cold` };
     const r = await workerRequest({ port: target.port, authorization: target.key() ?? null, timeoutMs: target.timeoutMs }, argv);
     if (!r.sent) {
       if (!r.refused) return { used: false, note: `worker unreachable before the request was written (${r.error})` };
@@ -354,7 +358,7 @@ export async function runOnWorker(argv, target, deps = {}) {
 export function createWorkerClient(lane, options = {}, deps = {}) {
   const target = workerTarget(lane, options);
   return { target, ping: () => ping(target), ensure: () => ensureWorker(target, deps),
-    run: (argv, { timeoutMs } = {}) => runOnWorker(argv, timeoutMs ? { ...target, timeoutMs } : target, deps) };
+    run: (argv, { timeoutMs, avoidBusy } = {}) => runOnWorker(argv, timeoutMs ? { ...target, timeoutMs } : target, { ...deps, avoidBusy }) };
 }
 
 // B2 (C02, C25): one ODC CLI command (apply, check-job, create-app) on the lane's resident worker, which keeps the ODC Studio
@@ -408,7 +412,7 @@ export function createWorkerFirstRunner({ root = anvilRoot, env = process.env, o
     // Quality (docs/QUALIDADE.md): the worker request is a kernel leaf; a miss ran nothing and its cold run is the span.
     const end = kernelStart({ lane: 'o11', via: 'worker' });
     let w;
-    try { w = await usable.run(args.map(String), { timeoutMs: options.timeoutMs }); }
+    try { w = await usable.run(args.map(String), { timeoutMs: options.timeoutMs, ...((options.read === true || options.recovery === true) ? { avoidBusy: true } : {}) }); }
     finally { end({ ran: w?.used === true && !(!w.unknown && w.envelope?.ok === false && w.envelope?.executed === false), ok: w?.envelope?.ok === true }); }
     // A refusal the worker answers with executed:false (another controller's key) ran nothing: the same command runs cold.
     const refusedUnrun = w.used && !w.unknown && w.envelope?.ok === false && w.envelope?.executed === false;
@@ -421,7 +425,7 @@ export function createWorkerFirstRunner({ root = anvilRoot, env = process.env, o
       stderr: [w.error].filter(Boolean), wallMs: Date.now() - started, line, via: 'worker' };
     const envelope = w.envelope;
     return { ok: envelope?.ok === true, exitCode: envelope?.ok === true ? 0 : 1, envelope, stderr: w.warning ? [w.warning] : [],
-      wallMs: Date.now() - started, line, via: 'worker' };
+      wallMs: Date.now() - started, line, via: 'worker', ...(Number.isFinite(envelope?.queuedMs) ? { workerQueuedMs: envelope.queuedMs } : {}) };
   };
 }
 

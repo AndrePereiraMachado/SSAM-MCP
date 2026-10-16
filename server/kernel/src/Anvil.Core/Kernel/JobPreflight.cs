@@ -831,7 +831,7 @@ public static class JobPreflight
         return found;
     }
 
-    private static (HashSet<string> Words, HashSet<string> Whole) JobWords(JsonArray ops)
+    internal static (HashSet<string> Words, HashSet<string> Whole) JobWords(JsonArray ops)
     {
         var words = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var whole = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -871,7 +871,7 @@ public static class JobPreflight
     /// <summary>Whether the job may create the name itself: written anywhere in the job, every word of it written, or the
     /// name the platform derives from one the job writes (CreateX/UpdateX/DeleteX of entity X, "Not R" of role R, CheckRRole,
     /// XRequest/XResponse of method X, a name numbered by position).</summary>
-    private static bool PossiblyCreated(string name, HashSet<string> words, HashSet<string> whole)
+    internal static bool PossiblyCreated(string name, HashSet<string> words, HashSet<string> whole)
     {
         if (words.Contains(name) || whole.Contains(name)) return true;
         var parts = Word.Matches(name).Select(w => w.Value).ToArray();

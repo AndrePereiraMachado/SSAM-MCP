@@ -162,6 +162,24 @@ export async function codeCheck(input = {}, deps = {}) {
   }));
   const capture = newestCapture({ lane, module, base: input.base }, deps);
   if (!capture) problems.push({ code: input.base != null ? 'INPUT_INVALID' : 'CAPTURE_MISSING', at: 'base', message: input.base != null ? 'base must be an existing absolute .oml file' : `No capture of ${module ?? 'the module'} is available`, fix: 'the main agent reads the module once; that capture serves every check' });
+  // CX16: a write refusal's own problem codes (HTML_EDIT_INVALID, EDIT_*, BASE_CHANGED) are input problems of the check: the
+  // code stays as reason. Edits of the texts of the job of basedOn {job, sha256} came back as writeCall's generated patch
+  // (its patch route has no job; the model's own patch stays forbidden above): the corrected job is resolved here, before the
+  // reference ops are read from it (referenceOps) and before it is written as the job of this check.
+  if (call.refusal) for (const p of problems) if (p.code !== 'INPUT_INVALID' && p.code !== 'CAPTURE_MISSING') { p.reason = p.code; p.code = 'INPUT_INVALID'; }
+  if (!call.refusal && call.arguments?.patch != null && call.arguments.job == null) {
+    const { root: home, local: laneLocal } = locations(deps);
+    const { resolvePatchedJob } = await import('./job-patch.mjs');
+    const patched = resolvePatchedJob({ patch: call.arguments.patch, basedOn: call.arguments.basedOn }, { root: home,
+      inlineDir: path.join(lane === 'o11' ? laneLocal : path.join(home, '.local', 'lane-odc'), 'jobs', 'check'), ...(deps.uuid ? { uuid: deps.uuid } : {}) });
+    if (!patched.ok) problems.push({ code: 'INPUT_INVALID', at: 'basedOn', reason: patched.code, message: patched.error, ...(patched.candidates ? { candidates: patched.candidates } : {}) });
+    else { call.arguments.job = readJson(patched.path); fs.rmSync(patched.path, { force: true }); }
+  }
+  // CX16 (b): a refused check names the job it checked (job, jobSha256, nextBasedOn: the base of a correction by edits); the
+  // static refusal of the precheck (stage "static", stopped before the apply) passes stage, stoppedBefore, static and, at the
+  // refusal below, its continuation instead of the whole input again.
+  const refusalFields = (r, file) => ({ ...(({ job: j, jobSha256, nextBasedOn }) => ({ job: j, ...(jobSha256 ? { jobSha256 } : {}), ...(nextBasedOn ? { nextBasedOn } : {}) }))(r.jobSha256 ? r : withJobIdentity({ ok: false, job: r.job ?? file })),
+    ...(r.stage === 'static' ? { stage: r.stage, ...(r.stoppedBefore ? { stoppedBefore: r.stoppedBefore } : {}), ...(r.static ? { static: r.static } : {}) } : {}) });
   const ops = referenceOps(clean, call);
   const { bindings, receipts } = resolveProducers(clean, ops, deps, problems);
   // Prototype capture is a Studio operation in runJob; a check must never enter that path.
@@ -183,7 +201,7 @@ export async function codeCheck(input = {}, deps = {}) {
   try {
     result = await (deps.runJob ?? runJob)({ lane, job, base: capture.path, out: path.join(dir, 'candidate.oml'), work: path.join(dir, 'work'), producers: bindings, quiet: true },
       { ...deps, env, runAnvil });
-    if (!result.ok) {
+    if (!result.ok && result.stage !== 'static') { // CX16 (c): a static refusal carries its own correction; guidance measured ~0.2 s, ~2.9 KB
       if (deps.guidance) result = await deps.guidance(lane, result.job ?? job, result);
       else {
         // The normal guidance, with installation metadata only: laneSources otherwise reads the Studio connection.
@@ -205,7 +223,7 @@ export async function codeCheck(input = {}, deps = {}) {
   const normalizations = notes != null && (!Array.isArray(notes) || notes.length) ? { normalizations: notes } : {};
   if (result.ok) return { ok: true, ...common, valid: true, verifyRan: result.verifyRan ?? true, job: result.job ?? job, jobSha256: result.jobSha256 ?? hash(fs.readFileSync(job)),
     ...normalizations, next: 'answer only the file path; the main agent delivers ONE ssam_code write {module, files}' };
-  return { ok: false, code: 'CHECK_REFUSED', refusalCode: result.code, ...common, problems: (result.problems ?? []).map(p => withOrigin(p, call.origins)),
+  return { ok: false, code: 'CHECK_REFUSED', refusalCode: result.code, ...common, ...refusalFields(result, job), problems: (result.problems ?? []).map(p => withOrigin(p, call.origins)),
     verifyRan: result.verifyRan ?? false, ...(result.phases ? { phases: result.phases } : {}), ...(result.error ? { error: result.error } : {}), ...normalizations,
-    ...(result.discovery ? { discovery: result.discovery } : {}), continuation: { tool: 'ssam_code', arguments: { ...input, lane, action: 'check' } } };
+    ...(result.discovery ? { discovery: result.discovery } : {}), continuation: result.stage === 'static' && result.continuation ? result.continuation : { tool: 'ssam_code', arguments: { ...input, lane, action: 'check' } } };
 }

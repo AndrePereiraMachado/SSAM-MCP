@@ -81,6 +81,7 @@ export const publishSchema = z.object({
   timeoutSeconds: z.number().int().min(1).max(1800).default(600).describe('How long the Studio follows the server publication process (and waits for one already running)'),
   expectedEnvironment: z.string().trim().toLowerCase().max(253).regex(HOST, 'bare DNS name of the environment (no scheme, port or path)').optional()
     .describe('Bare host the selected Studio must be connected to'),
+  refreshReferences: z.boolean().optional().describe('Refresh all references in the open tab, then publish once'),
   consumers: z.boolean().optional().describe('true: after publishing, refresh and publish every module that consumes this one, with the same words or grant'),
 }).strict();
 
@@ -238,16 +239,16 @@ async function publish(input, ctx, options = {}) {
   const moduleName = opened.name && same(opened.name, input.module) ? input.module : opened.name ?? input.module;
   // C10: the open says the references are outdated (a producer was republished): the Studio's own Refresh References runs
   // first, in this call and under its write lock, so the publication never stops at the Manage Dependencies dialog; the
-  // answer lists what was refreshed. A refresh that fails stops here: nothing was published.
+  // answer lists what was refreshed. An explicit refreshReferences also refreshes up-to-date references. A failed refresh publishes nothing.
   let referencesRefreshed = null;
   // MB2: the open met the dependencies dialog, answered it (Cancel) and refreshed every producer already.
   const dependencies = [];
   if (opened.referencesRefreshed) { dependencies.push({ dependenciesDialog: opened.dependenciesDialog, referencesRefreshed: opened.referencesRefreshed }); referencesRefreshed = opened.referencesRefreshed; }
-  else if (opened.referencesOutdated === true) {
+  else if (input.refreshReferences === true || opened.referencesOutdated === true) {
     const refreshed = await o11Studio({ bridge: () => bridge, assertSelected: async () => {}, lane: ctx.laneName, root: ctx.root, env: ctx.env })({
       command: 'refresh-references', args: { module: moduleName } }, { signal });
     if (refreshed?.ok !== true) return { ...refreshed, ok: false, code: refreshed?.code ?? 'REFRESH_FAILED', module: moduleName,
-      error: 'The references of ' + moduleName + ' are outdated and their refresh did not complete; nothing was published. ' + (refreshed?.error ?? ''),
+      error: 'The references of ' + moduleName + (opened.referencesOutdated === true ? ' are outdated and their refresh did not complete; nothing was published. ' : ' could not be refreshed; nothing was published. ') + (refreshed?.error ?? ''),
       continuation: refreshed?.continuation ?? STATUS_BEFORE };
     referencesRefreshed = { refreshed: refreshed.refreshed ?? [], ...(refreshed.upToDate?.length ? { upToDate: refreshed.upToDate } : {}) };
   }
@@ -531,12 +532,12 @@ export function registerO11Publish(server, deps = {}) {
     title: 'Publish the module open in the O11 Service Studio',
     description: '[o11] Publishes (1-Click Publish) the module open in the Service Studio selected on the O11 lane, with the user\'s words '
       + 'in authorize or a standing grant of the module for publish (ssam_grant). It checks the active module (and expectedEnvironment), '
-      + 'waits for a server operation already running on it (STUDIO_BUSY_TIMEOUT), then reads TrueChange: with errors it returns them and '
+      + 'waits for a server operation already running on it (STUDIO_BUSY_TIMEOUT), reads TrueChange: with errors it returns them and '
       + 'publishes nothing. Published: "publicado" with lastPublication. PUBLISH_FAILED (server compilation or deployment) carries every '
       + 'message the Studio showed (type, stage, text, detail, element) and a continuation to the element to fix. '
       + 'consumers:true then refreshes and publishes every consumer of the module, one outcome per consumer. '
-      + 'outcome "uncertain" (timeout, lost reply, cancellation, unconfirmed end) is never repeated: check o11_studio status before any '
-      + 'new attempt. Blocks until the Studio reports the end; ssam_task reads the task meanwhile.',
+      + 'outcome "uncertain" (timeout, lost reply, cancellation, unconfirmed end) is never repeated: check o11_studio status before '
+      + 'retry. refreshReferences:true refreshes; continueTask waits.',
     inputSchema: publishSchema, annotations,
   }, async (input, extra) => {
     try { const value = await run(input ?? {}, { signal: extra?.signal }); return value === PUBLISHED ? reply(value, value.result) : reply(value); }

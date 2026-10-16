@@ -91,7 +91,15 @@ test('MB2: open-module answers the dependencies dialog that stopped the open, op
   assert.equal(value.referencesOutdated, undefined);
   const refresh = h.sent('refresh_references')[0];
   assert.equal(refresh.module_key, 'kc'); assert.equal(refresh.producers, undefined);   // every producer, by the tab's key
-  assert.deepEqual(h.methods(), ['open_module', 'bridge_manifest', 'answer_dependencies_dialog', 'open_module', 'list_open_modules', 'refresh_references']);
+  // CX14 (declared): the pre-probe of each watched write (open_module twice, refresh_references) reads `windows` first; the
+  // client has no Studio identity, so it pings once and keeps it; the one manifest read is the pre-probe's, shared with
+  // the answer of the dialog (bridgeOffers), so the read it did before CX14 (after the first open) is gone. 6 -> 10 calls.
+  const probes = new Set(['ping', 'windows']);
+  assert.deepEqual(h.methods().filter(m => !probes.has(m)), ['bridge_manifest', 'open_module', 'answer_dependencies_dialog', 'open_module', 'list_open_modules', 'refresh_references']);
+  assert.equal(h.methods().filter(m => m === 'windows').length, 3, 'one windows read before each watched write');
+  assert.equal(h.methods().filter(m => m === 'ping').length, 1, 'the Studio identity is read once per client');
+  assert.deepEqual(h.methods().slice(3), ['open_module', 'answer_dependencies_dialog', 'windows', 'open_module', 'list_open_modules', 'windows', 'refresh_references']);
+  assert.deepEqual([...h.methods().slice(0, 3)].sort(), ['bridge_manifest', 'ping', 'windows']);
 });
 
 test('MB2: an older bridge keeps the dialog for the person: DIALOG_BLOCKING as before, nothing answered', async t => {

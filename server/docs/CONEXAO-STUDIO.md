@@ -103,7 +103,7 @@ faixa livre com `ANVIL_LANE=ss5` antes do comando.
   conta como trabalho. Um pedido que chega nesse instante recebe "reciclando, não executado" e o cliente sobe outro.
 - `scripts/build.ps1` nunca inicia worker (sempre `--no-start`; `-NoStart` continua aceito) e termina com `ssam warm`,
   que constrói (ou acha no cache) o índice do discover de cada faixa. O primeiro `ssam_discover` da sessão não o
-  constrói. O servidor MCP também aquece em segundo plano, 5 s depois de subir (`SSAM_NO_WARM=1` desliga).
+  constrói. Com a lista gravada da mesma release, o MCP conecta antes da montagem completa e aquece índices, workers habilitados e fatos do doctor em segundo plano, 5 s depois de subir (`SSAM_NO_WARM=1` desliga).
 
 Uma tentativa de attach enviada é registrada antes da chamada em `.anvil/runtime-connect/` do usuário.
 Resposta perdida exige consultar os recibos da tentativa; o conector não envia outra automaticamente.

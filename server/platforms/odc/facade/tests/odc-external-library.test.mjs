@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs'; // CX15: discard previews and records through destructive-operations.mjs
 // odc_external_library (lane extlib): the whole tool over the real tenant-aware access (portal/runtime/access.mjs), the
 // real deployer and uploaders, with fakes at every boundary: the ODC Studio bridge (auth-status, portal-call,
 // portal-session, portal-upload), the vault (status and the API Client's OdcBridge), the private prompt, the ODC kernel
@@ -141,10 +142,13 @@ function harness({ tenant = tenantFake(), signedIn = true, capabilities = ['port
     return { ok: true, envelope: { ok: true, command: 'external-library', data: { ok: true, name: spec.name, package: { path: file, fileName: path.basename(file), sha256, bytes: bytes.length },
       contents, sdk: { package: 'OutSystems.ExternalLibraries.SDK', version: '1.5.0' }, targetFramework: 'net10.0', runtime: 'linux-x64' } } };
   };
-  const tool = createExternalLibraryTool({ access, kernel, grants, portalRoot: dir, evidenceRoot: path.join(dir, 'evidence'), signatureCache: path.join(dir, 'producer-cache'), sleep: async () => {}, waits: { pollMs: 1, readbackSeconds: 5 } });
+  // CX15: discard takes two calls; its preview, record and backup land in this test's folder, on a clock the test moves.
+  const clock = { t: Date.parse('2026-10-15T12:00:00.000Z') };
+  const tool = createExternalLibraryTool({ access, kernel, grants, portalRoot: dir, evidenceRoot: path.join(dir, 'evidence'), signatureCache: path.join(dir, 'producer-cache'), sleep: async () => {}, waits: { pollMs: 1, readbackSeconds: 5 },
+    destructive: { now: () => clock.t, root: path.join(dir, 'destructive') } });
   const sent = () => calls.filter(c => c[0] === 'portal-upload' || (c[0] === 'portal-call' && requests.get(c[1]).method !== 'GET') || (c[0] === 'portal-session' && c[1] === 'fetch' && requests.get(c[2]).write));
   const receipts = () => (fs.existsSync(path.join(dir, 'receipts')) ? fs.readdirSync(path.join(dir, 'receipts')) : []);
-  return { tool, access, tenant, calls, requests, kernelCalls, vaultFetches, sent, receipts, dir };
+  return { tool, access, tenant, calls, requests, kernelCalls, vaultFetches, sent, receipts, dir, clock };
 }
 const deploy = (h, extra = {}) => h.tool({ action: 'deploy', spec: SPEC, tenant: PERSONAL, authorize: WORDS, operationUuid: uuid(), ...extra });
 
@@ -182,12 +186,26 @@ test('proposal-bound corporate lifecycle creates, resumes without replay, and up
  const cleanupFile=path.join(h.dir,'cleanup.json'),cleanup=JSON.parse(fs.readFileSync(update.authorizationContext,'utf8'));
  cleanup.scope[0].operation='external-library-generation-api-v1:delete:/generation-operations/{operationKey}';
  cleanup.constraints={originOperationUuid:update.operationUuid,jobKey};fs.writeFileSync(cleanupFile,JSON.stringify(cleanup));
- const discard={action:'discard',tenant:CORP,confirmTenant:CORP,authorize:words,library:SPEC.name,jobKey,
-  operationUuid:uuid(),authorizationContext:cleanupFile,originOperationUuid:update.operationUuid};
- const refused=await h.tool({...discard,originOperationUuid:uuid()});assert.equal(refused.ok,false);assert.equal(h.sent().length,sentAfter);
- const deleted=await h.tool(discard);assert.equal(deleted.ok,true,JSON.stringify(deleted));assert.equal(deleted.readBack.gone,true);
- const cleanedSends=h.sent().length;
- const repeated=await h.tool(discard);assert.equal(repeated.readBack.gone,true);assert.equal(h.sent().length,cleanedSends);
+ // CX15: discard is a preview first (nothing sent); the execution carries its token and operationId. CX15 r2 (F, M4;
+ // provisional decision "strict", the owner may revert it): the guard no longer exempts an own fixture. This discard's
+ // approval must carry the deploy's consent (external-library-approval.mjs:22), said before the list and without a count,
+ // so the guard refuses it; with the owner's reply after the list the approval no longer matches the creation consent and
+ // the unguarded tool refuses it. Nothing is sent either way: this cleanup flow must be rewritten (RESULTADO-r2.md).
+ const discard={action:'discard',tenant:CORP,confirmTenant:CORP,authorize:words,library:SPEC.name,jobKey,authorizationContext:cleanupFile,originOperationUuid:update.operationUuid};
+ const preview=await h.tool(discard);assert.equal(preview.code,'CONFIRMATION_REQUIRED');assert.equal(h.sent().length,sentAfter);
+ h.clock.t+=6000;
+ const standing=await h.tool({...discard,confirmationToken:preview.confirmationToken,operationUuid:preview.operationId});
+ assert.deepEqual([standing.ok,(standing.problems??[]).map(p=>p.code).sort()],[false,['CONFIRMATION_COUNT_MISMATCH','WORDS_BEFORE_PREVIEW']]);assert.equal(h.sent().length,sentAfter);
+ const reply='sim, pode descartar o 1: '+SPEC.name;
+ fs.writeFileSync(cleanupFile,JSON.stringify({...cleanup,words:reply}));
+ const replied=await h.tool({...discard,authorize:reply,confirmationToken:preview.confirmationToken,operationUuid:preview.operationId});
+ assert.deepEqual([replied.ok,replied.error?.code,replied.ownFixture],[false,'AUTHORIZATION_CONTEXT_INVALID',true]);assert.equal(h.sent().length,sentAfter);
+ // A foreign origin: refused, nothing sent.
+ const foreignPreview=await h.tool(discard);h.clock.t+=6000;
+ const refused=await h.tool({...discard,authorize:'sim, o 1 com outra origem: '+SPEC.name,originOperationUuid:uuid(),confirmationToken:foreignPreview.confirmationToken,operationUuid:foreignPreview.operationId});assert.equal(refused.ok,false);assert.equal(h.sent().length,sentAfter);
+ // The spent token never sends again.
+ const repeated=await h.tool({...discard,authorize:'sim, de novo o 1: '+SPEC.name,confirmationToken:preview.confirmationToken,operationUuid:preview.operationId});
+ assert.equal(repeated.ok,false);assert.equal(h.sent().length,sentAfter);
 });
 
 test('1. a spec with bad identifiers, a duplicate action, an unknown type, an undeclared structure and a package without version: five problems, zero calls', async () => {
@@ -373,9 +391,14 @@ test('status reads the library, its revisions, runtime, consumers and open jobs;
   assert.equal(status.ok, true); assert.equal(status.exists, true); assert.equal(status.runtime, 'NET10');
   assert.deepEqual(status.consumers, ['OrdersApp']); assert.deepEqual(status.jobs.map(j => [j.jobKey, j.pending]), [['job-9', true]]);
   assert.deepEqual(h.sent(), []);
-  const refused = await h.tool({ action: 'discard', library: 'SSAMTextTools', jobKey: 'job-9', tenant: PERSONAL, authorize: 'yes, throw that job away', operationUuid: uuid() });
+  // CX15: the first call previews the job; the reply after the preview (naming the library, with the count) discards it.
+  const preview = await h.tool({ action: 'discard', library: 'SSAMTextTools', jobKey: 'job-9', tenant: PERSONAL });
+  assert.equal(preview.state, 'previewed'); assert.deepEqual(h.sent(), []);
+  h.clock.t += 6000;
+  const confirmWith = (authorize, extra = {}) => ({ action: 'discard', jobKey: 'job-9', tenant: PERSONAL, authorize, confirmationToken: preview.confirmationToken, operationUuid: preview.operationId, ...extra });
+  const refused = await h.tool(confirmWith('yes, throw those 1 jobs away', { library: 'SSAMTextTools' }));
   assert.equal(refused.code, 'WORDS_MUST_NAME_LIBRARY'); assert.deepEqual(h.sent(), []);
-  const done = await h.tool({ action: 'discard', jobKey: 'job-9', tenant: PERSONAL, authorize: 'yes, discard the SSAMTextTools job', operationUuid: uuid() });
+  const done = await h.tool(confirmWith('yes, discard the 1 SSAMTextTools job'));
   assert.equal(done.ok, true, JSON.stringify(done)); assert.equal(done.readBack.gone, true);
   assert.deepEqual(tenant.writes, ['DELETE /api/external-libraries/v1/generation-operations/job-9']);
 });

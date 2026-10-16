@@ -143,9 +143,13 @@ export const LOCAL_CALLS = Object.freeze({
   'odc.pipe': async ({ pid, version, args, connectMs }) => ({ line: version ? await pipeCall(pid, version, args, connectMs ? { connectMs } : {}) : await dotnetClient(pid, args) }),
   // dll: the newest built bridge of this checkout (lib.mjs attach); the client loads it through the startup hook.
   'odc.attach': async ({ pid, dll }) => parsed(await dotnetClient(pid, ['attach', dll])),
-  'o11.bridge': async ({ method, params, timeoutMs, signal, port, host, authorization, maxBytes, flight }) => {
+  // target, options (o11-bridge.mjs o11Bridge, servidor/fase4-26): the client's own target object and its watch options
+  // (CX14: probeMs, probeTimeoutMs, alive), passed through unchanged; a caller without them gets a target of these fields.
+  'o11.bridge': async ({ method, params, timeoutMs, signal, port, host, authorization, maxBytes, flight, target, options }) => {
     const { bridgeRequest } = await import('./o11-bridge.mjs');
-    return { reply: await bridgeRequest({ port, host, authorization, maxBytes, flight }, method, params, { ...(timeoutMs ? { timeoutMs } : {}), ...(signal ? { signal } : {}) }) };
+    const to = target && typeof target === 'object' ? target : { port, host, authorization, maxBytes, flight };
+    return { reply: await bridgeRequest(to, method, params, { ...(options && typeof options === 'object' ? options : {}),
+      ...(timeoutMs ? { timeoutMs } : {}), ...(signal ? { signal } : {}) }) };
   },
   'o11.connect': async ({ pid } = {}) => (await import('./studio-connect.mjs')).connectO11Local(pid === undefined ? {} : { pid }),
   'o11.selected': async () => (await import('./studio-connect.mjs')).selectedO11Local(),
@@ -254,7 +258,15 @@ export function hostedSpawnEnv(lane) {
     // inside its timeout.
     env.ANVIL_BRIDGE_FLAVOR = 'thin';
     env.ANVIL_BRIDGE_TIMEOUT_SECONDS = '600';
+    // servidor/fase4-26 (A1): the CX14 bridge stall probes of the kernel (BridgeClient) check the pid of the customer's Studio on
+    // this server, where it never runs (a false studio-gone abandons a merge or a publish with an uncertain outcome): off
+    // until an agent package carries CX14 and probes on the user's machine.
+    env.ANVIL_BRIDGE_PROBE_MS = '0';
   } else env.SSAM_HYBRID_ODC_ROOT = path.join(context.workspace, 'odc');
+  // servidor/fase4-26 (M2): the module index is shared by every customer of the server and addressed by hashes only: a job
+  // reads a kept reading (html keys and text, a data text, an action's flow read) only of the capture it runs on
+  // (ModuleIndexStore.OwnReadingsOnly).
+  env.ANVIL_KEPT_READINGS = 'own';
   return { env, cwd };
 }
 

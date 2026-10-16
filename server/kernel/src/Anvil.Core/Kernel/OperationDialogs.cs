@@ -53,7 +53,7 @@ public static class OperationDialogPolicy
     /// <summary>The bridge capability: merge_from_oml watches the dialogs its operation opens and answers them by this policy.</summary>
     public const string Capability = "merge_from_oml:dialog_watch";
 
-    private static readonly string[] ErrorTitles = ["Unexpected Error", "Unexpected error", "Erro inesperado"];
+    internal static readonly string[] ErrorTitles = ["Unexpected Error", "Unexpected error", "Erro inesperado"];
     private static readonly string[] SignInWords = ["sign in", "sign-in", "log in", "login", "password", "username", "single sign-on"];
     private static readonly string[] ConsentWords = ["accept", "agree", "terms", "consent", "license agreement"];
     private const string DependenciesText = "Incompatible or missing dependencies";

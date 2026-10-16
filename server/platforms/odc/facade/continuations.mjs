@@ -128,7 +128,11 @@ const TABLE = {
   RELEASE_IN_USE: c('ssam_update', { action: 'prune', dryRun: true }, 'um processo vivo ou um registro de conexão usa esse release; o dryRun mostra o que fica'),
   RELEASE_INTEGRITY: c('ssam_doctor', { checks: ['install', 'signatures'] }, 'arquivos do release mudaram ou faltam; reinstale ou atualize'),
   SMART_APP_CONTROL_BLOCKED: c('ssam_doctor', { checks: ['signatures'] }, 'o Windows bloqueou um binário sem assinatura; o doctor mostra o estado do Smart App Control'),
-  TASK_RUNNING: c('ssam_task', { id: '<taskId>' }, 'a tarefa longa segue em segundo plano; leia o estado dela, nunca a repita'),
+  TASK_RUNNING: c(SAME_TOOL, { continueTask: '<taskId>' }, 'a mesma ferramenta espera até 25 s pelo resultado; nunca repita a chamada original nem durma'),
+  TASK_NOT_FOUND: c('ssam_task', {}, 'lista os registros das tarefas desta raiz'),
+  TASK_TOOL_MISMATCH: c(SAME_TOOL, { continueTask: '<taskId>' }, 'continue pela ferramenta que iniciou esta tarefa'),
+  TASK_ORPHANED: c('ssam_doctor', { lane: '<lane>' }, 'reconcilie o estado da faixa; nunca repita uma escrita incerta'),
+  TASK_ANSWER_UNAVAILABLE: c('ssam_task', { id: '<taskId>' }, 'leia o registro e reconcilie o resultado guardado'),
 
   // ---- compat (the static check before every attach)
   INCOMPATIBLE_STUDIO: c('ssam_doctor', { lane: '<lane>', checks: ['compat'] }, 'checagem estática, sem tocar no Studio; nada foi enviado; a resposta lista membros e versões'),

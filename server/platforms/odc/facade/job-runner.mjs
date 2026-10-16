@@ -187,6 +187,18 @@ export function summarize({ lane, job, out, resultFile, saved, note, quiet = fal
 // is ["Name=path"] or {Name: path}; basedOn {taskId} (an O11 delivery task) only in lane o11. deps: {root, env,
 // o11Lane, workspace, runAnvil, worker, now, uuid}.
 export async function runJob(request = {}, deps = {}) {
+  // CX16 r3 (M3): the UI precheck runs alongside the apply path (started before prepareIntegrationJob and the apply, waited
+  // for only here): its problems join the answer of the apply path, one refusal with everything (ui-precheck.mjs
+  // joinPrecheck). A headless job has no step to spare, so even a complete verdict joins.
+  const carried = { pending: null };
+  const answer = await runJobOnce(request, deps, carried);
+  if (!carried.pending) return answer;
+  const pre = await carried.pending;
+  if (!pre?.carry) return answer;
+  return (await import('./ui-precheck.mjs')).joinPrecheck(answer, pre);
+}
+
+async function runJobOnce(request, deps, carried) {
   const lane = String(request.lane ?? 'o11').trim().toLowerCase();
   if (!JOB_LANES.includes(lane)) return refusal('unknown-lane', `Unknown lane ${request.lane}; lanes: ${JOB_LANES.join(', ')}`);
   const root = deps.root ?? anvilRoot; const env = deps.env ?? process.env; const now = deps.now ?? Date.now;
@@ -230,6 +242,10 @@ export async function runJob(request = {}, deps = {}) {
     const unwired = textFormRefusal(document, undefined, { readPart: partReader(job, fs, path) });
     if (unwired) return { ...unwired, lane, job };
   }
+  // CX16 (ui-precheck.mjs): a job of screens or blocks is judged on the module index of its base, alongside the apply (r3).
+  { const pre = await (await import('./ui-precheck.mjs')).startUiPrecheck({ lane, job, mode: 'job', base: request.base != null && String(request.base) !== '' ? abs(request.base) : null }, { ...deps, root, env, laneLocal, odcCli, o11Lane: o11.name });
+    if (pre?.stop) return withNormalizationsOf({ ...pre.stop, lane, job }, jobNotes);
+    if (pre?.pending) carried.pending = pre.pending; }
   // Integration ops (rest, rest-expose, soap): the documents they name are pinned once (integration-documents.mjs, I6).
   // A headless job writes nothing to a Studio, so the destructive-words rule of the deliveries does not apply here.
   const prepare = deps.prepareIntegrationJob ?? (await import('./integration-documents.mjs')).prepareIntegrationJob;

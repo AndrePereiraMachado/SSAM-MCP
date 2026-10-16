@@ -59,10 +59,10 @@ export const HTML_NOTE = 'ssam-html/1 (reading): the source of the screen or blo
   + 'the values of if, list, bind, value and :Input; class is a plain string literal or {{ expression }}. <div else> right after a <div if> '
   + 'is its False branch. on<event>="Destination(Param = expression)" is a native event, @<Event> a block event handler, :<Input> a block '
   + 'argument; os-<Property> is any property outside the table, with the Model API name. os-opaque (tables, Traditional widgets) is '
-  + 'untouchable. Screen actions are named in actions; their bodies are in the logic digest. To change the screen (C2): send only the '
-  + 'elements you changed, each whole with its k (an If with its <div else>, the <style> alone), in one html op {screen, basedOn, edit} of '
-  + 'the delivery (continuations.edit); a new element has no k, a removed one is left out of its parent, an element with its k under '
-  + 'another parent moves there. Everything else keeps its key; the answer brings the next basedOn.';
+  + 'untouchable. Screen actions are named in actions; their bodies are in the logic digest. To change the screen (C2): edits '
+  + '[{set:k,attributes},{replace|delete|after|before|into|move:k},{find,with}] in html op {screen, basedOn, edits} '
+  + '(continuations.edit); or edit: only the elements you changed, each whole with its k, new ones without k, removed ones left out. '
+  + 'Everything else keeps its key; the answer brings the next basedOn.';
 const RICH_VIEWS = ['search', 'uses'];
 // The most captures one search or uses call reads (the modules of one app).
 export const MAX_TARGETS = 16;
@@ -881,7 +881,7 @@ export function htmlPages(text, budget) {
 // studio_deliver of the ssam server needs feature, module, owners and changes with a job (only a prototype job takes them
 // from the prototype): the call carries them, the screen as its owner.
 export function editCall(lane, html, sha256) {
-  const op = { op: 'html', data: { screen: html.root, basedOn: { capture: sha256, html: html.htmlSha256 }, edit: ['<the changed element, whole, with its k>'] } };
+  const op = { op: 'html', data: { screen: html.root, basedOn: { capture: sha256, html: html.htmlSha256 }, edits: [{ set: '<k>', attributes: { '<attribute>': '<value>' } }, { find: '<exact text>', with: '<new text>' }] } };
   return lane === 'o11'
     ? { tool: 'o11_deliver', arguments: { module: html.model ?? '<module>', job: { ops: [op] } } }
     : { tool: 'studio_deliver', arguments: { feature: html.root + ' (change)', module: html.model ?? '<module>', job: { ops: [op] }, owners: [html.root], changes: ['<what changes in the screen>'] } };

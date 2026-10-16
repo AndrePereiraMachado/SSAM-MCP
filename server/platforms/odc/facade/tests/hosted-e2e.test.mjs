@@ -221,7 +221,10 @@ test('hosted end to end: agent, ws: paths, O11 relay, refusals, protocol violati
   t.after(() => otherClient.close().catch(() => {}));
   const mismatch = await waitFor(async () => { const r = (await otherClient.callTool({ name: 'studio_status', arguments: {} })).structuredContent; return r?.code === 'STUDIO_VERSION_MISMATCH' ? r : null; }, 15000);
   assert.ok(mismatch, 'version mismatch refused');
-  assert.match(mismatch.error, /kernel for ODC Studio 1\.7\.28; the agent reports ODC Studio 1\.7\.27\.10846/);
+  // A-M1 (the build identity, 01ac9596): one refusal by direction, both builds named; the older Studio is to be updated.
+  assert.equal(mismatch.cause, 'STUDIO_UPDATE_REQUIRED', JSON.stringify(mismatch).slice(0, 400));
+  assert.equal(mismatch.installed, '1.7.27.10846');
+  assert.match(mismatch.error, /serves ODC Studio 1\.7\.28[.\d]*; the user's machine has ODC Studio 1\.7\.27\.10846, which is older/);
 
   // A reply naming agent:..\..\x is a protocol violation and writes nothing.
   const evil = await call('studio_snapshot', { module: 'Evil' });

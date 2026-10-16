@@ -88,7 +88,8 @@ Kind sem o `I` inicial (`MobileScreen`, `ServerAction`, `ClientAction`, `Entity`
 .\odc studio data InsuranceApp QuestionDefault --fields ValueTypeId,NumberValue --offset 100 --limit 100
 .\odc studio data-insert InsuranceApp Carrier --records '[{"Name":"Lab","IsActive":true}]' --authorize "<palavras do usuário>"
 .\odc studio data-update InsuranceApp Carrier --records '[{"Id":"12","Name":"Lab 2"}]' --authorize "<palavras do usuário>"
-.\odc studio data-delete InsuranceApp Carrier --ids 12,13 --authorize "<palavras do usuário>"
+# apagar registros: só studio_data_delete (MCP), em duas chamadas: a prévia lista os registros; a execução leva o token e
+# a resposta do dono depois da lista, com a contagem. `.\odc studio data-delete` recusa (DESTRUCTIVE_NEEDS_DEDICATED_TOOL).
 ```
 
 É o serviço de dados do próprio Studio (`IDataService`: `GetRecords`, `InsertRecords`, `UpdateRecords`,

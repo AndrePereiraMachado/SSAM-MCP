@@ -3,6 +3,7 @@ import {authorizationContext} from '../../facade/authorization-context.mjs';
 import {CUSTOM_SEARCH_TEST} from './custom-search-connection-approval.mjs';
 import {isUuid,sha256,fingerprint} from './write-journal.mjs';
 import {fail} from './errors.mjs';
+import {ownedCleanupApproval} from './owned-cleanup-approval.mjs';
 export async function customSearchDeleteApproval({file,words,host,raw,lookup,read,readPublic,dependencies}){
  const bad=()=>fail('AUTHORIZATION_CONTEXT_INVALID','Custom search cleanup requires the originating test, unchanged own connection and complete empty consumer scope. Nothing was sent.');
  let constraints;try{if(!file||fs.statSync(file).size>32768)bad();constraints=JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{bad();}
@@ -19,10 +20,14 @@ export async function customSearchDeleteApproval({file,words,host,raw,lookup,rea
   ||c.name!==h.ConnectionName||c.description!==h.ConnectionDescription||c.portfolioKey!==h.PortfolioKey||c.stageConfigurations?.length!==1
   ||c.stageConfigurations[0].stageKey!==configs[0].TenantStage.Key||c.stageConfigurations[0].customSearch?.endpointSha256!==fingerprint(configs[0].EndpointURL)
   ||c.externalMetadata?.selectedObjectCount!==0||!Number.isSafeInteger(c.externalMetadata.selectedActionCount)||c.externalMetadata.selectedActionCount<0)bad();
- const approval=authorizationContext(file,words,{lane:'odc',host,operation:'connections.delete',environmentKey:e.stageKey,targets:[c.name],
-  constraints:{originOperationUuid,connectionId:p.ConnectionId,planSha256:e.planSha256,expectedStateSha256:fingerprint(c)}});
- if(!approval||origin.authorization?.wordsSha256!==sha256(words)||origin.authorization.proposalSha256!==approval.proposalSha256
-  ||origin.authorization.source?.threadId!==approval.source.threadId||origin.authorization.source?.messageId!==approval.source.messageId)bad();
+ const scope={lane:'odc',host,operation:'connections.delete',environmentKey:e.stageKey,targets:[c.name],
+  constraints:{originOperationUuid,connectionId:p.ConnectionId,planSha256:e.planSha256,expectedStateSha256:fingerprint(c)}};
+ // CX15 r3 (N3): after the guard validated the owner's reply to the preview, a new approval of that reply (proposal = the
+ // preview) bound to this test receipt replaces the creation's words and message.
+ const fresh=ownedCleanupApproval({file,words,...scope,origin,key:p.ConnectionId,what:'The custom search cleanup'});
+ const approval=fresh??authorizationContext(file,words,scope);
+ if(!approval||!fresh&&(origin.authorization?.wordsSha256!==sha256(words)||origin.authorization.proposalSha256!==approval.proposalSha256
+  ||origin.authorization.source?.threadId!==approval.source.threadId||origin.authorization.source?.messageId!==approval.source.messageId))bad();
  const consumers=await dependencies(p.ConnectionId);
  let provisional=false;
  // Native testing can leave a provisional header before any asset is generated.

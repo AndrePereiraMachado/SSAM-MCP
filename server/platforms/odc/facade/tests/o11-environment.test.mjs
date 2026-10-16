@@ -1,3 +1,5 @@
+// CX15: delete-app reaches the destructive module (previews, records, seen words under the profile): a temporary profile.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -8,6 +10,8 @@ import { Journal } from '../service-center/client.mjs';
 import { fakeAnvil } from './fixtures/fake-anvil.mjs';
 import { envelopes, failedPublish, tempKernel, linked } from './fixtures/o11env-kernel.mjs';
 import { FakeBridge, temp } from './fixtures/sc-fake-bridge.mjs';
+import { CONFIRM_MIN_AGE_MS, OWNER_REPLY } from '../destructive-operations.mjs';
+import { fakeClock, noBackup } from './fixtures/destructive-flow.mjs';
 
 // One server per test over a temporary kernel root; the CLI is always the fake, the Studio check a counter. extra: the
 // Service Center engine's fakes of delete-app (serviceCenterDeps, studioHosts).
@@ -116,8 +120,9 @@ test('writes run with the exact argv of Program.cs and never --credentials', asy
 });
 
 test('every write needs the user\'s words; a read refuses them; nothing runs before that', async t => {
+  // CX15: delete-app without its token is a preview (no words needed, nothing sent): its own test below.
   const h = await harness(t);
-  for (const input of [{ action: 'update-app', name: 'Demo', color: '#112233' }, { action: 'delete-app', app: 'ZZScratch' },
+  for (const input of [{ action: 'update-app', name: 'Demo', color: '#112233' },
     { action: 'create-app', name: 'X', modules: [{ name: 'X_CS', kind: 'Service' }], authorize: '   ' }]) {
     const value = await h.call('o11_environment', input);
     assert.equal(value.ok, false); assert.equal(value.code, 'WORDS_REQUIRED', input.action);
@@ -138,26 +143,36 @@ function serviceCenterFakes({ affected = [] } = {}) {
   const bridge = new FakeBridge({ api: { ListApplications: () => state.apps.map(a => ({ ...a })), ListEspaces: [], ListExtensions: [],
     DeleteApplication: args => (args.simulate ? { success: true, simulated: true, messages: [], affectedApplications: affected, deletedModules: ['ZZScratch_UI'] }
       : (state.apps = state.apps.filter(a => a.Key !== args.appKey), { success: true, simulated: false, messages: [], affectedApplications: [], deletedModules: ['ZZScratch_UI'] })) } });
+  const clock = fakeClock();
   const deps = { journal: new Journal(path.join(dir, 'receipts')), locate: () => bridge, present: async () => false, running: async () => false, exports: dir,
-    registry: path.join(import.meta.dirname, 'fixtures', 'sc-hosts.json'), sleep: async () => {} };
-  return { state, bridge, deps, simulations: () => bridge.calls.filter(c => c[2] === 'DeleteApplication' && !c[4]), deletes: () => bridge.calls.filter(c => c[2] === 'DeleteApplication' && c[4]) };
+    registry: path.join(import.meta.dirname, 'fixtures', 'sc-hosts.json'), sleep: async () => {}, clock, destructiveRoot: path.join(dir, 'destructive'), backup: noBackup };
+  return { state, bridge, deps, clock, simulations: () => bridge.calls.filter(c => c[2] === 'DeleteApplication' && !c[4]), deletes: () => bridge.calls.filter(c => c[2] === 'DeleteApplication' && c[4]) };
 }
 
 test('delete-app runs the Service Center delete engine (the server simulation first) and never the CLI with --confirm', async t => {
   const sc = serviceCenterFakes();
-  const h = await harness(t, { extra: { serviceCenterDeps: sc.deps } });
-  const vague = await h.call('o11_environment', { action: 'delete-app', app: 'ZZScratch', host: PERSONAL, authorize: 'sim, pode apagar' });
+  const h = await harness(t, { extra: { serviceCenterDeps: sc.deps, destructiveRoot: sc.deps.destructiveRoot } });
+  // CX15: the preview (no words needed), then the token with the owner's words given after it, with the count.
+  const preview = await h.call('o11_environment', { action: 'delete-app', app: 'ZZScratch', host: PERSONAL });
+  assert.deepEqual([preview.ok, preview.state, preview.count, preview.items.map(i => i.cascade)], [true, 'previewed', 1, [['ZZScratch_UI']]]);
+  sc.clock.advance(CONFIRM_MIN_AGE_MS);
+  const token = preview.confirmationToken;
+  const vague = await h.call('o11_environment', { action: 'delete-app', host: PERSONAL, confirmationToken: token, authorize: 'sim, pode apagar o 1' });
   assert.deepEqual([vague.ok, vague.code, vague.isError, vague.problems.map(p => p.code)], [false, 'DELETE_REFUSED', true, ['WORDS_MUST_NAME']]);
-  assert.deepEqual(vague.continuation.arguments, { action: 'delete-app', app: 'ZZScratch', host: PERSONAL, authorize: "<the user's own words naming ZZScratch>" });
-  const longer = await h.call('o11_environment', { action: 'delete-app', app: 'ZZScratch', host: PERSONAL, authorize: 'apague o ZZScratch2' });
+  // CX15 r2 (T1): the template is the neutral marker; what the words must name is wordsMustName.
+  assert.deepEqual(vague.continuation.arguments, { action: 'delete-app', host: PERSONAL, confirmationToken: token, authorize: OWNER_REPLY });
+  assert.deepEqual(vague.wordsMustName, ['ZZScratch']);
+  const longer = await h.call('o11_environment', { action: 'delete-app', host: PERSONAL, confirmationToken: token, authorize: 'apague o 1, o ZZScratch2' });
   assert.deepEqual(longer.problems.map(p => p.code), ['WORDS_MUST_NAME'], 'another application whose name starts the same is not this one');
   assert.deepEqual(sc.deletes(), []);
-  const named = await h.call('o11_environment', { action: 'delete-app', app: 'ZZScratch', host: PERSONAL, authorize: 'Pode apagar o zzscratch.' });
+  const named = await h.call('o11_environment', { action: 'delete-app', host: PERSONAL, confirmationToken: token, authorize: 'Pode apagar o 1, o zzscratch.' });
   assert.deepEqual([named.ok, named.result, named.state, named.deleted.map(d => d.name), named.deletedModules], [true, 'feito', 'confirmed', ['ZZScratch'], ['ZZScratch_UI']]);
   // Not only ZZ: any application the words name (the engine's rules decide, not the name).
-  const demo = await h.call('o11_environment', { action: 'delete-app', app: 'Demo', host: PERSONAL, authorize: 'apague o Demo' });
+  const demoPreview = await h.call('o11_environment', { action: 'delete-app', app: 'Demo', host: PERSONAL });
+  sc.clock.advance(CONFIRM_MIN_AGE_MS);
+  const demo = await h.call('o11_environment', { action: 'delete-app', app: 'Demo', host: PERSONAL, confirmationToken: demoPreview.confirmationToken, authorize: 'apague o 1, o Demo' });
   assert.equal(demo.state, 'confirmed');
-  assert.deepEqual(sc.simulations().map(c => c[3].appKey), ['app-z', 'app-z', 'app-z', 'app-d'], 'the simulation is read in every call, before any delete');
+  assert.deepEqual(sc.simulations().map(c => c[3].appKey), ['app-z', 'app-z', 'app-z', 'app-z', 'app-d', 'app-d'], 'the simulation is read in every call (preview and execution), before any delete');
   assert.deepEqual(sc.deletes().map(c => c[3]), [{ appKey: 'app-z', simulate: false }, { appKey: 'app-d', simulate: false }]);
   assert.equal(h.run.calls.length, 0, 'the CLI never ran, so no delete-app --confirm was ever sent');
   assert.equal(fs.existsSync(h.journal), false, 'the engine keeps its own receipts');
@@ -166,10 +181,14 @@ test('delete-app runs the Service Center delete engine (the server simulation fi
 test('delete-app: an affected application must be named too; without host the one environment of the Studio is used, else it is asked', async t => {
   const sc = serviceCenterFakes({ affected: ['Demo'] });
   let hosts = [PERSONAL];
-  const h = await harness(t, { extra: { serviceCenterDeps: sc.deps, studioHosts: async () => hosts } });
-  const refused = await h.call('o11_environment', { action: 'delete-app', app: 'ZZScratch', authorize: 'apague o ZZScratch' });
+  const h = await harness(t, { extra: { serviceCenterDeps: sc.deps, studioHosts: async () => hosts, destructiveRoot: sc.deps.destructiveRoot } });
+  const preview = await h.call('o11_environment', { action: 'delete-app', app: 'ZZScratch' });
+  assert.deepEqual([preview.state, preview.items[0].consumers], ['previewed', ['Demo']]);
+  sc.clock.advance(CONFIRM_MIN_AGE_MS);
+  const refused = await h.call('o11_environment', { action: 'delete-app', confirmationToken: preview.confirmationToken, authorize: 'apague o 1, o ZZScratch' });
   assert.deepEqual([refused.code, refused.host, refused.problems.map(p => [p.code, p.consumer])], ['DELETE_REFUSED', PERSONAL, [['CONSUMERS_WOULD_BREAK', 'Demo']]]);
-  assert.match(refused.continuation.arguments.authorize, /ZZScratch, Demo/);
+  assert.equal(refused.continuation.arguments.authorize, OWNER_REPLY);
+  assert.deepEqual(refused.wordsMustName, ['ZZScratch', 'Demo']);
   hosts = ['a.example.test', 'b.example.test'];
   const ask = await h.call('o11_environment', { action: 'delete-app', app: 'ZZScratch', authorize: 'apague o ZZScratch e o Demo' });
   assert.deepEqual([ask.code, ask.signedInHosts], ['HOST_REQUIRED', hosts]);

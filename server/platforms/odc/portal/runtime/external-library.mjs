@@ -201,9 +201,8 @@ export class ExternalLibraryDeployer {
     if (pending.length) {
       extra.jobKey = pending[0].key;
       problems.push(problem('GENERATION_PENDING', 'A job of ' + plan.name + ' is still open (' + pending[0].status + ', ' + pending[0].key + '): the tenant takes one at a time.',
-        'Discard it with odc_external_library {action:"discard", jobKey:"' + pending[0].key + '"} and the user\'s words naming ' + plan.name + ', then repeat.', { target: plan.name, jobKey: pending[0].key }));
-      extra.continuation = { tool: 'odc_external_library', arguments: { action: 'discard', tenant: host, jobKey: pending[0].key, authorize: '<the user\'s words naming ' + plan.name + '>', operationUuid: '<new uuid>' },
-        why: 'Deletes the open job of the library (destructive: the words name the library); then the same deploy again.' };
+        'Discard it in two calls: odc_external_library {action:"discard", jobKey:"' + pending[0].key + '"} previews the job (nothing is sent); after the owner\'s reply to that list (the number and ' + plan.name + '), the same call with its confirmationToken; then repeat.', { target: plan.name, jobKey: pending[0].key }));
+      extra.continuation = this.discardStep(host, plan.name, pending[0].key, 'then the same deploy again');
     }
     let consumers = [], tag = releaseTag ?? null;
     if (library) {
@@ -465,9 +464,11 @@ export class ExternalLibraryDeployer {
     return this.run(plan, receipt, ctx);
   }
 
-  discardStep(host, name, jobKey) {
-    return { tool: 'odc_external_library', arguments: { action: 'discard', tenant: host, jobKey, authorize: '<the user\'s words naming ' + name + '>', operationUuid: '<new uuid>' },
-      why: 'Deletes the ready job that was not published (destructive: the words name the library).' };
+  // CX15 r3 (N3): the discard is a delete in two calls; its continuation is the PREVIEW (no words, no operationUuid: the
+  // preview answers the operationId the execution uses), never a call with a placeholder for the owner's words.
+  discardStep(host, name, jobKey, after = '') {
+    return { tool: 'odc_external_library', arguments: { action: 'discard', tenant: host, jobKey },
+      why: 'A preview of the open job of ' + name + ' (nothing is sent): show it to the owner; after the owner\'s reply to that list (the number and ' + name + '), the same call with its confirmationToken, the preview\'s operationId as operationUuid and that reply' + (after ? '; ' + after : '') + '.' };
   }
   save(receipt) { this.access.receipts.settle(receipt, { state: 'sending' }); }
   close(receipt, state, answer) {

@@ -245,7 +245,7 @@ test('all deliveries delivered: only "entregue"; the journal and the task keep t
   assert.equal(lines[0].operationId, operationId); assert.equal(lines[1].operationId, operationId);
   assert.equal(lines[0].manifest, box.manifest); assert.equal(lines[0].port, PORT);
   assert.equal(lines[1].outcome, 'delivered');
-  const tasks = fs.readdirSync(path.join(box.local, 'tasks')).map(f => fs.readFileSync(path.join(box.local, 'tasks', f), 'utf8'));
+  const tasks = fs.readdirSync(path.join(box.local, 'tasks')).filter(f => f.endsWith('.json')).map(f => fs.readFileSync(path.join(box.local, 'tasks', f), 'utf8'));
   assert.equal(tasks.length, 1);
   assert.equal(JSON.parse(tasks[0]).state, 'ok');
   for (const text of [fs.readFileSync(path.join(box.local, 'journal', 'o11_access.jsonl'), 'utf8'), ...tasks])
@@ -312,7 +312,7 @@ test('an uncertain delivery is never repeated: uncertain outcome, resume of the 
   assert.deepEqual(value.continuation.arguments, { resume: '3c4d5e6f708192a3b4c5d6e7f8091a2b', authorize: WORDS_MARKER });
   assert.equal(value.continuation.tool, 'o11_deliver');
   assert.equal(box.runAnvil.calls.length, 1, 'the CLI ran once');
-  const task = JSON.parse(fs.readFileSync(path.join(box.local, 'tasks', fs.readdirSync(path.join(box.local, 'tasks'))[0]), 'utf8'));
+  const task = JSON.parse(fs.readFileSync(path.join(box.local, 'tasks', fs.readdirSync(path.join(box.local, 'tasks')).find(f => f.endsWith('.json'))), 'utf8'));
   assert.equal(task.state, 'uncertain'); assert.equal(task.result.taskId, '3c4d5e6f708192a3b4c5d6e7f8091a2b');
   const end = fs.readFileSync(path.join(box.local, 'journal', 'o11_access.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l)).at(-1);
   assert.equal(end.outcome, 'uncertain'); assert.equal(end.kernelTaskId, '3c4d5e6f708192a3b4c5d6e7f8091a2b');

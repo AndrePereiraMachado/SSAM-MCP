@@ -135,7 +135,7 @@ export function usersOutcome(run, input) {
 async function users(input, ctx) {
   try { await ctx.assertSelected(); }
   catch (error) { return refusal('STUDIO_NOT_SELECTED', clean(error.message) || 'The selected Studio is not confirmed.', connect('Selects the Service Studio open on the O11 lane again.')); }
-  const run = await ctx.runAnvil(usersArguments(input, { work: path.join(ctx.lane().local, 'users') }), { timeoutMs: ctx.planTimeoutMs });
+  const run = await ctx.runAnvil(usersArguments(input, { work: path.join(ctx.lane().local, 'users') }), { timeoutMs: ctx.planTimeoutMs, read: true });
   return usersOutcome(run, input);
 }
 
@@ -274,7 +274,7 @@ export function applyOutcome(run, info) {
 
 // ---- actions
 async function plan(argv, input, ctx) {
-  const run = await ctx.runAnvil(argv, { timeoutMs: ctx.planTimeoutMs });
+  const run = await ctx.runAnvil(argv, { timeoutMs: ctx.planTimeoutMs, read: true });
   const data = run?.envelope?.data;
   if (data && typeof data === 'object' && !Array.isArray(data))
     return data.ok === false ? { ...data, code: 'ACCESS_PLAN_REFUSED', continuation: { tool: 'o11_access', arguments: { action: 'plan', manifestPath: input.manifestPath },
@@ -284,7 +284,7 @@ async function plan(argv, input, ctx) {
 }
 
 async function verify(argv, ctx) {
-  const run = await ctx.runAnvil(argv, { timeoutMs: ctx.planTimeoutMs });
+  const run = await ctx.runAnvil(argv, { timeoutMs: ctx.planTimeoutMs, read: true });
   const data = run?.envelope?.data;
   if (data && typeof data === 'object' && data.implemented === false) return { ...data, ok: false, code: 'NOT_IMPLEMENTED' };
   if (data && typeof data === 'object') return data;

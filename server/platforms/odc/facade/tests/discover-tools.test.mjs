@@ -304,14 +304,16 @@ test('concept rules: vocabulary, ids, named elements, verb objects, readers, eve
 });
 
 // The Service Center delete of the 2026-10-05 integrations package (contract lane scdelete): a bulk or prefix delete is
-// the one-call delete, never a prepare first; one module or extension keeps its alias, the same call.
-test('Service Center deletes route to the one-call delete, without execute in the template', () => {
+// the delete in two calls (CX15: the preview, then confirmationToken and the owner's words); one module or extension
+// keeps its alias, the same two calls.
+test('Service Center deletes route to the two-call delete: the template is the preview (no words, no execute)', () => {
   const top = (lane, intent) => routeTools({ intent, lane }).tools[0];
   const bulk = top('o11', 'apagar todas as apps que começam com ZZ');
   assert.equal(label(bulk), 'o11_service_center_write.delete');
-  assert.deepEqual(Object.keys(bulk.args).sort(), ['action', 'applications', 'host', 'words']);
-  assert.equal('execute' in bulk.args, false, 'a delete is never prepared first');
-  assert.match(bulk.next, /one call/);
+  assert.deepEqual(Object.keys(bulk.args).sort(), ['action', 'applications', 'host']);
+  assert.equal('execute' in bulk.args, false, 'a delete previews without execute');
+  assert.match(bulk.next, /two calls/);
+  assert.match(bulk.next, /confirmationToken/);
   assert.equal(label(top('o11', 'excluir a extensão UtilExt')), 'o11_service_center_write.extension-delete');
   assert.equal(label(top('o11', 'apagar o módulo Antigo do ambiente')), 'o11_service_center_write.module-delete');
   for (const verb of ['module-delete', 'extension-delete', 'application-delete', 'delete'])

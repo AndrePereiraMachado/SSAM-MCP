@@ -41,7 +41,8 @@ public sealed class ThinBridgeTests : IDisposable
         Environment.SetEnvironmentVariable("ANVIL_BRIDGE_TIMEOUT_SECONDS", null);
         UseAuthority();
         using var bridge = new LineBridge();
-        var client = new BridgeClient(bridge.Port);
+        // marco-a6: with the CX14 stall probes off the line of every verb is today's (the probes have their own tests, BridgeStall*).
+        var client = new BridgeClient(bridge.Port, probeMs: 0);
         var found = client.Call("find_element", new JsonObject { ["name"] = "Probe", ["module_key"] = "K" });
         client.Call("login", new JsonObject { ["path"] = @"C:\missing\login.json" });
         client.Call("merge_from_oml", new JsonObject { ["base_path"] = @"C:\missing\base.oml", ["foreign_path"] = @"C:\missing\foreign.oml" });

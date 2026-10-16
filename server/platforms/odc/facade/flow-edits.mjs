@@ -8,7 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { workspaceRoot } from './workspace.mjs';
 import { FLOW_READING_SCHEMA, FLOW_EXTRACTOR, textSha } from './module-flow.mjs';
-import { headerOf } from './ssam-code.mjs';
+import { headerOf, canonicalPart } from './ssam-code.mjs';
+import { readingEditsShape, isReadingBase, isJobTextBase } from './html-edits.mjs';
 
 export function loadFlowReading(lane, sha, { env = process.env } = {}) {
   if (typeof sha !== 'string' || !/^[a-f\d]{16}$/i.test(sha)) return null;
@@ -127,8 +128,19 @@ export function applyFlowEdits(readText, edits) {
 export function expandEditPart(p, lane, { readReading = loadFlowReading } = {}) {
   const problems = [], notes = [], baseAt = p.at === 'text' || !p.at ? '' : p.at + '/';
   const add = (error, extra = {}) => problems.push({ at: baseAt + 'edits', error, lines: [], ...extra });
+  // CX16 (html-edits.mjs): over basedOn {job, sha256} the edits change texts of that job (jobTextEdits takes them first);
+  // edits of a screen or block read go whole to the kernel's html op, their shape checked here (the kernel addresses them).
+  if (isJobTextBase(p.basedOn)) return { part: { ...p, jobText: true }, problems, notes };
+  if (canonicalPart(p.part) === 'html' || (p.part == null && isReadingBase(p.basedOn))) {
+    if (p.part == null) notes.push({ rule: 'part-from-edits', at: '/' + baseAt + 'part', note: 'edits with basedOn {capture, html} change part html' });
+    if (p.text != null) add('text or edits, not both');
+    if (!isReadingBase(p.basedOn)) add('basedOn of html edits is {capture, html} as the read returned them');
+    if (typeof p.element !== 'string' || !p.element) add('element: the screen or block read (part html)');
+    problems.push(...readingEditsShape(p.edits).map(q => ({ ...q, at: baseAt + q.at })));
+    return { part: problems.length ? null : { part: 'html', element: p.element, basedOn: p.basedOn, edits: p.edits, at: p.at }, problems, notes };
+  }
   if (p.part == null) notes.push({ rule: 'part-from-edits', at: '/' + baseAt + 'part', note: 'edits change part logic' });
-  else if (p.part !== 'logic') add('edits change lines of an action: part logic; a screen changes by element + basedOn + text');
+  else if (p.part !== 'logic') add('edits change lines of an action (part logic) or elements of a screen or block (part html); ddl is sent as its statements');
   if (p.text != null) add('text or edits, not both');
   const sha = typeof p.basedOn === 'string' && /^[a-f\d]{16}$/i.test(p.basedOn) ? p.basedOn.toLowerCase() : null;
   if (!sha) add('basedOn must be the 16 hex textSha of one read action');

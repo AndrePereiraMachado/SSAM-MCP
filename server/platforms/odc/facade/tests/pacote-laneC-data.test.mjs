@@ -11,6 +11,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
 import * as m_ssam from '../ssam.mjs';
 const { createSsamServer, o11DataAnswer } = m_ssam; // a namespace: at the base each test fails on its own rule, not at import
+import { wordsSha256 } from '../destructive-operations.mjs';
 
 async function harness(t, reply) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pacote-c-data-'));
@@ -39,7 +40,9 @@ test('a batch with steps and $ref values is accepted and runs through the O11 ru
   const { args } = calls[0];
   assert.deepEqual(args.slice(0, 7), ['data', '--studio', '--host', 'dev.example.test', '--module', 'Orders_CS', '--oml']);
   assert.ok(args.includes('--request') && args.includes('--work'));
-  assert.deepEqual(calls[0].request, request, 'the request reaches the kernel as sent: steps and $ref intact');
+  // CX15 r4 (W-4, converted): steps and $ref intact; the authorization reaches the kernel as sha256:<hex> of the owner's
+  // words, never the words (before: the request as sent, words included).
+  assert.deepEqual(calls[0].request, { ...request, authorization: 'sha256:' + wordsSha256(request.authorization) }, 'the request reaches the kernel with steps and $ref intact, the words hashed');
   const value = valueOf(reply);
   assert.deepEqual([value.ok, value.lane, value.verb, value.via, value.wallMs], [true, 'o11', 'data', 'worker', 9]);
   assert.deepEqual(value.result, envelope);
