@@ -307,7 +307,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
     const seconds = Math.max(0, Math.round((nowMs() - Date.parse(state.lastSeenAt)) / 1000));
     return callError('AGENT_RECONNECTING', 'The SSAM agent of this account lost its connection ' + seconds + ' s ago and is reconnecting by itself; nothing ran.',
       { retryAfterSeconds: 15, lastSeenSecondsAgo: seconds, continuation: { tool: 'ssam_doctor', arguments: {},
-        why: 'o agente reconecta sozinho: repita a mesma chamada em 15 s; o doctor mostra quando ele voltou' } });
+        why: 'the agent reconnects by itself: repeat the same call in 15 s; the doctor shows when it is back' } });
   }
 
   // C33: one agent-call line per settled call {kind, ms, ok, code}: the relay's own timing, never arguments or values.

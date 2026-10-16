@@ -95,8 +95,8 @@ export function agentNotConnected(info, { now = Date.now(), tool = null, args = 
     const age = sinceSeen(info, now);
     const seconds = Math.round(age / 1000);
     const why = age < RESTART_AFTER_MS
-      ? 'o agente SSAM reconecta sozinho (perdeu a conexão há ' + seconds + ' s): repita a mesma chamada em ' + RETRY_AFTER_SECONDS + ' s; não peça ao usuário para reiniciar nada'
-      : 'o agente está sem contato há ' + seconds + ' s: repita em ' + RETRY_AFTER_SECONDS + ' s e, se continuar, peça ao usuário para conferir a janela do agente (agent\\ssam-agent.ps1 status) e iniciá-lo só se ele tiver parado';
+      ? 'the SSAM agent reconnects by itself (it lost the connection ' + seconds + ' s ago): repeat the same call in ' + RETRY_AFTER_SECONDS + ' s; do not ask the user to restart anything'
+      : 'the agent has been out of contact for ' + seconds + ' s: repeat in ' + RETRY_AFTER_SECONDS + ' s and, if it goes on, ask the user to check the agent window (agent\\ssam-agent.ps1 status) and to start it only if it has stopped';
     return { ok: false, code: 'AGENT_RECONNECTING', retryAfterSeconds: RETRY_AFTER_SECONDS, lastSeenSecondsAgo: seconds,
       error: 'The SSAM agent of this account lost its connection ' + seconds + ' s ago and is reconnecting by itself; nothing ran on the user\'s machine.',
       continuation: tool ? { tool, arguments: args ?? {}, why } : doctor(why) };
