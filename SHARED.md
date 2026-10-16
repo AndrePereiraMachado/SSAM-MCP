@@ -14,8 +14,9 @@ recusa também as ferramentas só do servidor e esvazia os caches dela). A branc
 `docs/FASE2-AGENTE.md` de novo (seção 7: identidade do Studio pelo build de 4 números, uma recusa por direção, avisos
 `studioBuildDiffers` e `studioNotServed`). A branch `server/english-agent` (regra do dono de 15/10/2026: todo texto que
 chega ao licenciado em inglês) mudou `docs/FASE2-AGENTE.md`: o pacote leva o guia do cliente (`docs\AGENTE-CLIENTE.md`),
-e o exemplo do teste de rede da 2.10 está em inglês. Ela não muda a bridge ODC: a frase de `tenantFollowedSession` do `StartupHook.cs` sai em inglês só com a bridge `v98`.
-O `odc-bridge-version.test.mjs` de cada caixa recusa uma mudança no código da bridge sem versão nova.
+e o exemplo do teste de rede da 2.10 está em inglês. Ela não muda a bridge ODC: a frase de `tenantFollowedSession` do
+`StartupHook.cs` sai em inglês só com a bridge `v98`. O `odc-bridge-version.test.mjs` de cada caixa recusa uma mudança
+no código da bridge sem versão nova.
 
 ## A regra
 
