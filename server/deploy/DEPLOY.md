@@ -903,6 +903,10 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
 | Build para em "has no pinned SHA256" | Falta `*_BUNDLE_SHA256` (ou `*_SHA256` do instalador) no `.env` (seção 4). |
 | `ODC Studio feature cache not found` ou `ODC feature provider could not load the local cache` | Falta o `Features.plain.xml` no volume, ou foi copiado o `Features.xml` cifrado do Windows (7.2). |
 | Primeiro `ssam_discover` demora mais de 1 min | Aquecimento depois de um container novo (7.3). |
+| `DESTRUCTIVE_HOSTED_OFF` (`HOSTED_UNAVAILABLE`) num apagar ou em `o11_access apply` | Esperado (marco-a5 e marco-a6): apagar fica desligado no hospedado, a prévia e a execução, com ou sem `confirmationToken`. O usuário apaga no Service Center ou no Portal. |
+| `VERIFIED_PATCH_LOCAL` num job | Esperado (marco-a5): `patch:"verified"` não roda no hospedado; mande o patch explícito. |
+| `state: "running"` com `continueTask` numa resposta | Esperado (marco-a6): a chamada passou de 25 s e segue no servidor. O cliente continua com `continueTask` ou lê com `ssam_task {id}`. A continuação só acha tarefa do próprio token (outro token: `TASK_NOT_FOUND`). |
+| `HTML_BASE_CHANGED`, `DDL_BASE_UNKNOWN` ou `FLOW_BASE_CHANGED` depois de uma leitura antiga | Esperado (marco-a6): no hospedado um job só usa a leitura guardada da captura em que roda (`ANVIL_KEPT_READINGS=own`). Leia de novo e mande a edição sobre a leitura nova. |
 
 ## 14. Limitações conhecidas
 
@@ -941,6 +945,13 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
     registros gerados das fontes; e `1b2ce8fe`, os códigos compostos pelo produto e os de `kernel/query-test` nesses
     registros), conferido do mesmo jeito: os quatro arquivos de
     Linux continuam iguais aos da linha.
+- **marco-a6** (`server/r26-marco-a6`, imagem `prod-20261015-bbdbdee`): a cópia saiu de `fase4-26/marco-a6` (`75c8940c`), que
+  já tem a trava destrutiva e o A-M1 com os bytes desta caixa. Conferido blob a blob: as 6704 entradas da caixa server que
+  vêm da linha são iguais às de `75c8940c`; ficam com os bytes de `42d473e` só os compartilhados `.gitignore` e
+  `docs/FASE2-AGENTE.md`, e a caixa agent não mudou (o pacote do agente é o mesmo). O `o11-bridge.mjs` difere entre as
+  caixas de propósito (`SHARED.md`). No hospedado ficam desligadas as sondas de travamento da CX14
+  (`ANVIL_BRIDGE_PROBE_MS=0`; a bridge fina nunca sonda) até um pacote do agente com a CX14, e a pré-checagem de tela da
+  CX16. A lista das mudanças de comportamento está em `C:\t\vps-a6\LINHA.md` §7.
 - O índice do `ssam_discover` e os outros caches de `/app` se perdem a cada container novo: 1 a 2 min de aquecimento
   (7.3). O índice de módulos e a cópia dos leitores ficam no volume `cache` e passam pela recriação.
 - O container não roda com o sistema de arquivos raiz só de leitura.

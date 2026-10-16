@@ -1,16 +1,16 @@
 {
   "schema": "ssam-release-record/1",
-  "note": "The kernel.json v1 of each image (multi-version design rev. 3, O.6.1 item 9, O.6.2). A deploy writes released.kernelV1 and a rollback writes the kernelV1 of the image it restores, always through kernel-pair-check.mjs print, then checks the pair inside that image (kernel-pair-check.mjs check) before up -d (DEPLOY.md 7.1 and 8). released.tag is the marco-a5 image built on 2026-10-15 from server/r25-marco-a5 5eba615 (fase4-25/marco-a5 b58be727 plus the hosted destructive stopgap aa39f65), on the same Studio pair and agent package as the interim prod-20261013-479e16a, which is now previous: its kernel.json does not change. prod-20261015-187f4e2 (402ca249) and prod-20261015-8c9c0db (e1bfb84c) were only rehearsals and never go to the VPS.",
+  "note": "The kernel.json v1 of each image (multi-version design rev. 3, O.6.1 item 9, O.6.2). A deploy writes released.kernelV1 and a rollback writes the kernelV1 of the image it restores, always through kernel-pair-check.mjs print, then checks the pair inside that image (kernel-pair-check.mjs check) before up -d (DEPLOY.md 7.1 and 8). released.tag is the marco-a6 image built on 2026-10-15 from server/r26-marco-a6 bbdbdee (fase4-26/marco-a6 75c8940c: the product marco-a5 of the night 8ca7c576 with its hosted fixes, the hosted destructive stopgap and the Studio build identity already in the line), on the same Studio pair and agent package as prod-20261015-5eba615, which is now previous: its kernel.json does not change. prod-20261015-187f4e2 (402ca249) and prod-20261015-8c9c0db (e1bfb84c) were only rehearsals and never go to the VPS.",
   "released": {
-    "tag": "prod-20261015-5eba615",
-    "what": "marco-a5 (integracao/marco-a5 40a8e835 on the server line fase4-25/marco-a5 b58be727) + hosted destructive stopgap (feat/hosted-destructive-off aa39f65): Service Studio 11.55.92 + ODC Studio 1.7.28, same agent package (pack-comb, bridge ODC v97)",
+    "tag": "prod-20261015-bbdbdee",
+    "what": "marco-a6 (integracao/marco-a5 8ca7c576 on the server line fase4-26/marco-a6 75c8940c, with the hosted destructive stopgap and the Studio build identity A-M1): Service Studio 11.55.92 + ODC Studio 1.7.28, same agent package (pack-comb, bridge ODC v97)",
     "o11": "11.55.92",
     "odc": "1.7.28",
     "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] }
   },
   "previous": {
-    "tag": "prod-20261013-479e16a",
-    "what": "interim: Service Studio 11.55.92 + ODC Studio 1.7.28 + quality record (fase4-24/combinada 41e538f0)",
+    "tag": "prod-20261015-5eba615",
+    "what": "marco-a5 (integracao/marco-a5 40a8e835 on the server line fase4-25/marco-a5 b58be727) + hosted destructive stopgap (feat/hosted-destructive-off aa39f65): Service Studio 11.55.92 + ODC Studio 1.7.28, same agent package (pack-comb, bridge ODC v97)",
     "o11": "11.55.92",
     "odc": "1.7.28",
     "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] }
@@ -22,6 +22,7 @@
     "prod-20261013-479e16a": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } },
     "prod-20261015-187f4e2": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } },
     "prod-20261015-8c9c0db": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } },
-    "prod-20261015-5eba615": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } }
+    "prod-20261015-5eba615": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } },
+    "prod-20261015-bbdbdee": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } }
   }
 }
