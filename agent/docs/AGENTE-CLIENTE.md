@@ -130,6 +130,10 @@ node C:\SSAM-Agent\agent\ssam-agent.mjs doctor
   `STUDIO_BRIDGE_OUTDATED` or `COMMAND_NOT_ALLOWED`: ask the owner for the new pack.
 - Agent 0.3.1 (the pack of the 24th release) joins the two and answers the network test of
   `ssam_doctor {network:true}` (throwaway sends on new connections; nothing of the machine is read or written).
+- Agent 0.3.2 (the pack of 2026-10-18): its Service Studio bridge runs the Studio's own Manage Dependencies by code,
+  without a click: `o11_studio refresh-references` with `add` or `published`, and a delivery that needs new elements of
+  a module, an extension or a system producer. With an older pack these calls answer
+  `MANAGE_DEPENDENCIES_HOSTED_PENDING` and nothing is sent: install the new pack and restart Service Studio.
 - In the foreground, to see errors on screen:
   `node --use-env-proxy --use-system-ca C:\SSAM-Agent\agent\ssam-agent.mjs run --root C:\SSAM-Agent`.
 - `doctor` checks the Node options, the folder, the integrity of the pack (`pack.json`), the configuration, the
@@ -274,13 +278,15 @@ discarded; nothing of your computer is read.
 When the owner sends a new pack (for example, the one with the ODC bridge `v97`, compiled against ODC Studio 1.7.28):
 
 1. `C:\SSAM-Agent\agent\ssam-agent.ps1 stop`.
-2. Close the ODC Studio (the old bridge stays loaded until it closes; the new one has another name and another pipe).
+2. Close the ODC Studio and Service Studio, after saving your work (each keeps the old bridge loaded until it closes;
+   Windows does not let the pack replace a bridge that a Studio has loaded).
 3. Extract the new pack OVER the same folder:
    `Expand-Archive .\ssam-agent.zip -DestinationPath C:\SSAM-Agent -Force`. `private\` (configuration, credential, key),
    `inbox\`, `odc\` and `o11\` stay as they were: the pack does not carry those files.
 4. `C:\SSAM-Agent\agent\ssam-agent.ps1 start` and `node C:\SSAM-Agent\agent\ssam-agent.mjs doctor`.
 5. Open the ODC Studio normally and, in your MCP client, call `ssam_doctor`: `agent.agentVersion` shows the version of
-   the new agent and the ODC lane is `ok`. Then `studio_attach` (or `ssam_connect {lane:"odc"}`) loads the new bridge.
+   the new agent and the ODC lane is `ok`. Then `studio_attach` (or `ssam_connect {lane:"odc"}`) loads the new bridge;
+   open Service Studio normally and `ssam_connect {lane:"o11"}` loads its new bridge.
 
 Do not run `setup` again: the credential and the server address stay the same. An old pack with the new server answers
 `AGENT_PACK_MISMATCH` (`ssam_doctor` shows both versions).
