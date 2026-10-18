@@ -138,6 +138,29 @@ test('o11.bridge passes exactly the 23 verbs of the thin bridge, in the order of
   } finally { await bridge.close(); removeRoot(root); }
 });
 
+// servidor/fase4-26 a8 (the next agent pack): the Studio's own Manage Dependencies by code is refresh_references with add and
+// published:true on the pack's thin bridge (capability refresh_references:add). No path in it: the agent passes the
+// parameters unchanged, as it passes those of the Refresh References, and the bridge's answer comes back unchanged.
+test('a8: refresh_references with add and published reaches the thin bridge unchanged and its Manage Dependencies answer comes back', async () => {
+  const root = makeRoot();
+  const committed = { module: 'ZZConsumer', moduleKey: 'k-zz', command: 'Manage Dependencies', committed: true, changed: true,
+    added: [{ producer: 'ZZExt', key: 'k-ext', element: 'ZZAction', type: 'ServerActionSignature', spec: 'IServerActionSignature:ZZAction' }], alreadyReferenced: [],
+    references: [{ producer: 'ZZExt', key: 'k-ext', kind: 'Extension', hashBefore: 'a', hashAfter: 'b', published: 'b', atPublished: true }], undo: 'Ctrl+Z' };
+  const bridge = await fakeBridge(request => ({ success: true, data: request.method === 'refresh_references' ? committed : {} }));
+  try {
+    fs.writeFileSync(path.join(root, 'private', 'o11-connection.json'), JSON.stringify({ ok: true, lane: 'o11', pid: 6000, startedUtc: 'x', port: bridge.port }));
+    fs.writeFileSync(path.join(root, 'private', 'authority', 'bridge.key'), 'local-agent-key');
+    const { kinds } = kindsFor(root);
+    const params = { module_key: 'k-zz', producers: ['ZZExt'], producer_keys: ['k-ext'], add: [{ producer: 'ZZExt', producer_key: 'k-ext', elements: ['IServerActionSignature:ZZAction', 'IStructureSignature:ZZRow'] }],
+      published: true, timeout: 600 };
+    const { reply } = await kinds.execute('o11.bridge', { method: 'refresh_references', params });
+    assert.deepEqual(reply.data, committed);
+    const seen = bridge.seen.find(r => r.method === 'refresh_references');
+    assert.deepEqual(seen.params, params);
+    assert.equal(seen.authorization, 'local-agent-key');
+  } finally { await bridge.close(); removeRoot(root); }
+});
+
 test('an absolute (or otherwise non-agent) value at a path position gives PATH_NOT_AGENT', async () => {
   const root = makeRoot();
   try {

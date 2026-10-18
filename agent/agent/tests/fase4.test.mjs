@@ -48,7 +48,7 @@ test('C03: a pong goes in a POST of its own while a batch POST is stuck; the Hel
     await hub.until(() => hub.streams === 1);
     const [hello] = hub.hellos;
     assert.equal(hello.agent.version, AGENT_VERSION);
-    assert.equal(AGENT_VERSION, '0.3.1'); // 24th release (bridge v96): sc_http, reference-producers; 0.2.1 transport; net.probe
+    assert.equal(AGENT_VERSION, '0.3.2'); // the English agent with the O11 bridge of a8 (Manage Dependencies by code); 0.3.1: sc_http, reference-producers, net.probe
     assert.equal(hello.agent.root, path.resolve(root));
     assert.deepEqual(hello.agent.kinds, [...KINDS]);
     assert.ok(KINDS.includes('file.sync'));
