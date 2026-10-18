@@ -59,3 +59,23 @@ Em 2026-10-12 (`server/r24-qualidade`): node 86/86 de novo (só um doc mudou nes
 
 Os arquivos que também existem em `server/` estão em `../SHARED.md`. Mantenha os dois lados iguais.
 `platforms/odc/facade/odc-pipe.mjs` e `o11-bridge.mjs` aqui são só espelho para o teste de deriva.
+
+## O próximo pacote (`server/agent-next`, 18/10/2026)
+
+Pedido do dono de 18/10: o cliente hospedado tem o Manage Dependencies por código e os componentes do ambiente no
+`ssam_discover`. Plano, resultado e prova ao vivo: `C:\t\agent-pack-next\PLANO.md`, `RESULTADO.md` e `PROVA-AO-VIVO.md`.
+
+- **Fina O11.** Os quatro arquivos de `kernel/src/Anvil.Bridge.Thin` vêm da linha `fase4-26/a8-agent` com os mesmos blobs:
+  - `Dispatch.cs` (a capacidade `refresh_references:add`);
+  - `ManageDependencies.cs` (novo, a cópia fina do Manage Dependencies do kernel, só com tipos do Studio);
+  - `QuietCommand.cs` (novo);
+  - `MergeHandler.cs` (o merge de assinaturas dentro do comando, sem `CompareAndMergeCommands.Merge`).
+- **Agente.** `0.3.2`: o agente em inglês de `server/english-agent`. As listas e o fio são os do `0.3.1`.
+- **Montagem.** `-NoBuild -Prebuilt`, com estes binários:
+  - a bridge ODC v97, o cliente ODC, o `Anvil.Connect`, o `Anvil.RuntimeHook.Agent`, o `node.exe` e a `LICENSE`, que
+    são os bytes do pacote de 13/10 (`pack-20261013-040746`, conferidos contra o `pack.json` dele);
+  - só a fina é compilada, contra o Service Studio 11.55.92.65269 de `C:\Program Files`.
+  O script é `C:\t\agent-pack-next\scripts\prep-pack.ps1`.
+- **Pacote.** `pack-20261018-203453`, 41 entradas: `odcBridge` v97, `o11BuiltFor` 11.55.92, `o11Hook` dev, a fina com sha256
+  `45977acf…26dc`. O ZIP tem sha256 `8e5a3239…e462`. A varredura de PI saiu sem achados e sem exceções.
+- **Compatibilidade.** O `kernel.json` não muda. O hub aceita o pacote novo e o de 13/10.
