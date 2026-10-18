@@ -83,4 +83,11 @@ Pedido do dono de 18/10: o cliente hospedado tem o Manage Dependencies por códi
   - O ZIP tem sha256 `50da9f1b…f73f`.
   - A varredura de PI saiu sem achados e sem exceções.
   - O `pack-20261018-203453` da rodada 1 está superado.
+- **Pacote (rodada 3, depois da re-revisão `C:\t\revisoes\agent-pack-next-2\REVISAO.md`).** `pack-20261018-230621`,
+  41 entradas.
+  - A fina (`30f8612`, a cópia de `45ba64d7` da linha) fecha só o relatório de erro do Studio, o diálogo de
+    dependências e a caixa só com OK. Qualquer outra janela fica, e a resposta é pendente com o título.
+  - A fina tem sha256 `2cb18ced…98a4`, 492 032 bytes, compilada com `DebugType=none`.
+  - O ZIP tem sha256 `50d390e4…e386`. A varredura de PI saiu sem achados e sem exceções.
+  - O `pack-20261018-221719` da rodada 2 está superado.
 - **Compatibilidade.** O `kernel.json` não muda. O hub aceita o pacote novo e o de 13/10.
