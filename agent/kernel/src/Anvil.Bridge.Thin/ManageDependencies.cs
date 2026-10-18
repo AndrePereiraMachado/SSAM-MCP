@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json.Nodes;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using OutSystems.ObjectKeys;
 using ServiceStudio.Common;
 using ServiceStudio.Merge;
@@ -87,9 +90,7 @@ internal static class ManageDependencies
             stage("initialize");
             using var manager = new ReferencesManager(aggregator, module, skipInitialization: true, CancellationToken.None, applicationInformation, service);
             if (manager.WasCancelled)
-                throw new Refused([Problem("catalog-unavailable", null, null, null,
-                    "The Studio could not read the referenceable producers of " + module.Name + " from its environment.",
-                    "check that the Studio is signed in to the module's environment (o11_studio status), then deliver the same job again")]);
+                throw new Refused([Problem("catalog-unavailable", null, null, null)]);
             manager.UncheckBehavior = UncheckBehavior.Uncheck;
             stage("resolve-producers");
             var catalog = manager.GetReferencesList().ToList();
@@ -102,8 +103,7 @@ internal static class ManageDependencies
                 var label = request.Producer ?? catalog.FirstOrDefault(i => key != null && i.Key == key)?.Name ?? request.ProducerKey ?? "?";
                 if (key == null)
                 {
-                    problems.Add(Problem("not-referenceable", label, request.ProducerKey, null, label + " is not a referenceable producer of the module's environment.",
-                        "check that " + label + " is published and referenceable in this environment (o11_environment referenceable), then deliver the same job again"));
+                    problems.Add(Problem("not-referenceable", label, request.ProducerKey, null, new JsonObject { ["where"] = "environment" }));
                     continue;
                 }
                 keyed.Add((request, key, label));
@@ -120,10 +120,7 @@ internal static class ManageDependencies
                 if (foreign == null || root == null || foreign.HasDeserializationErrors || ReferenceUtils.IsReferenceWithLoadErrors(root))
                 {
                     problems.Add(Problem(foreign == null ? "not-referenceable" : "signature-unavailable", label, key.ToString(), null,
-                        foreign == null ? "The Studio's catalog has no published signature of " + label + "."
-                            : "The published signature of " + label + " could not be loaded by the Studio.",
-                        foreign == null ? "check that " + label + " is published and referenceable in this environment (o11_environment referenceable), then deliver the same job again"
-                            : "publish " + label + " again (its published signature does not load), then deliver the same job again"));
+                        foreign == null ? new JsonObject { ["where"] = "catalog" } : null));
                     continue;
                 }
                 var name = foreign.Name;
@@ -133,10 +130,8 @@ internal static class ManageDependencies
                     var matches = Candidates(root, spec).ToList();
                     if (matches.Count == 1) { elements.Add((spec, matches[0])); continue; }
                     problems.Add(matches.Count == 0
-                        ? Problem("not-in-signature", name, key.ToString(), spec, ElementName(spec) + " is not in the published signature of " + name + ".",
-                            "publish " + name + " with " + ElementName(spec) + " public, then deliver the same job again (o11_dependencies list shows what " + name + " publishes)")
-                        : Problem("ambiguous", name, key.ToString(), spec, ElementName(spec) + " names " + matches.Count + " elements of " + name + ".",
-                            "name it by its original key, Type:@<key> (o11_dependencies list shows the keys of " + name + "), then deliver again"));
+                        ? Problem("not-in-signature", name, key.ToString(), spec)
+                        : Problem("ambiguous", name, key.ToString(), spec, new JsonObject { ["count"] = matches.Count }));
                 }
                 plan.Add((name, key, root, foreign, request, elements));
             }
@@ -161,8 +156,7 @@ internal static class ManageDependencies
             foreach (var entry in plan)
                 foreach (var (spec, element) in entry.Elements)
                     if (!ReferenceUtils.IsChecked(element))
-                        problems.Add(Problem("not-allowed", entry.Name, entry.Key.ToString(), spec, "The Studio does not let " + module.Name + " reference " + ElementName(spec) + " of " + entry.Name + " in this module kind.",
-                            "use " + ElementName(spec) + " through a form this module may reference (for a server entity in a UI module, a service or server action of " + entry.Name + "), then deliver again"));
+                        problems.Add(Problem("not-allowed", entry.Name, entry.Key.ToString(), spec));
             if (problems.Count > 0) throw new Refused(problems);
             var published = plan.ToDictionary(p => p.Key.ToString(), p => p.Foreign.ReferenceHash.ToString(), StringComparer.Ordinal);
             var kinds = plan.ToDictionary(p => p.Key.ToString(), p => p.Foreign.ReferenceKind.ToString(), StringComparer.Ordinal);
@@ -175,12 +169,10 @@ internal static class ManageDependencies
                 var keyText = entry.Key.ToString();
                 var lost = entry.Elements.Where(e => local == null || !Holds(local, identities[e.Element])).Select(e => e.Spec).ToList();
                 if (lost.Count > 0)
-                    problems.Add(Problem("not-retained", entry.Name, keyText, string.Join(", ", lost), "The Studio's Manage Dependencies did not keep " + string.Join(", ", lost.Select(ElementName)) + " of " + entry.Name + " in " + module.Name + ".",
-                        "an SSAM defect (reported); nothing was applied (the command rolled back): deliver the same job again once the bridge is updated"));
+                    problems.Add(Problem("not-retained", entry.Name, keyText, string.Join(", ", lost)));
                 var after = local?.ReferenceHash.ToString();
                 if (entry.Request.Published && local != null && !string.Equals(after, published[keyText], StringComparison.OrdinalIgnoreCase))
-                    problems.Add(Problem("not-at-published", entry.Name, keyText, null, "The Studio kept " + entry.Name + " at " + after + "; its published signature is " + published[keyText] + ".",
-                        "an SSAM defect (reported); nothing was applied (the command rolled back)"));
+                    problems.Add(Problem("not-at-published", entry.Name, keyText, null, new JsonObject { ["after"] = after, ["published"] = published[keyText] }));
                 references.Add(new JsonObject { ["producer"] = entry.Name, ["key"] = keyText, ["kind"] = kinds[keyText],
                     ["hashBefore"] = hashesBefore.TryGetValue(keyText, out var before) ? before : null, ["hashAfter"] = after,
                     ["published"] = published[keyText], ["atPublished"] = string.Equals(after, published[keyText], StringComparison.OrdinalIgnoreCase) });
@@ -258,17 +250,22 @@ internal static class ManageDependencies
         }
     }
 
-    private static string ElementName(string spec)
-    {
-        var colon = spec.IndexOf(':');
-        return colon > 0 ? spec[(colon + 1)..] : spec;
-    }
+    /// <summary>The neutral fix of every problem this bridge answers: the server writes the real one.</summary>
+    internal const string NeutralFix = "fix the cause, then repeat";
 
-    private static JsonObject Problem(string cause, string? producer, string? key, string? element, string message, string fix) => new()
+    /// <summary>a8 round 2 (review, IP option D): a problem as the bridge answers it: the cause and the facts the Studio showed
+    /// (producer, key, element; facts: where, count, after, published, kind), a neutral message ("cause: subject") and the
+    /// neutral fix. The explanation and the fix are written on the server from the cause (Anvil.Core ManageDependenciesText
+    /// in the kernel, manage-dependencies-text.mjs in the facade), so no product text of the Manage Dependencies is compiled
+    /// into the agent pack. A server that predates them shows the neutral texts, the causes and the facts.</summary>
+    internal static JsonObject Problem(string cause, string? producer, string? key, string? element, JsonObject? facts = null)
     {
-        ["code"] = Code, ["severity"] = "error", ["cause"] = cause, ["producer"] = producer, ["key"] = key, ["element"] = element,
-        ["message"] = message, ["fix"] = fix, ["patch"] = null,
-    };
+        var subject = element != null ? element + (producer != null ? " of " + producer : "") : producer ?? key;
+        var problem = new JsonObject { ["code"] = Code, ["severity"] = "error", ["cause"] = cause, ["producer"] = producer, ["key"] = key, ["element"] = element,
+            ["message"] = cause + (subject != null ? ": " + subject : ""), ["fix"] = NeutralFix, ["patch"] = null };
+        if (facts != null) problem["facts"] = facts;
+        return problem;
+    }
 
     private static string? Text(JsonNode? node) => node is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrWhiteSpace(s) ? s.Trim() : null;
     private static IEnumerable<string> Strings(JsonNode? node) => (node as JsonArray ?? []).Select(n => Text(n)).Where(s => s != null).Select(s => s!);
@@ -290,17 +287,23 @@ internal static class ManageDependencies
 /// Manage Dependencies (ManageDependencies.Apply) on the module of module_key, on its aggregator queue when the top level is
 /// idle, as the full bridge's RefreshReferencesHandler.Manage of the product. Refusals before anything ran come with
 /// executed:false: a bad request, no target, a dialog or merge editor pending (the same text as the Refresh References, which
-/// the server's facade answers by closing the dependencies dialog first, MB2). While the command runs the bridge only
-/// DETECTS dialogs (Dialogs.BlockedBy, never a close): one that opened during it answers blocked (outcome running, the
-/// dialog, the next step for the person) and the command ends by itself when the person answers it; one that was open
-/// before is the person's. The product's dialog loop, which also closes the Studio's error reports, is the kernel's and is
-/// not here: with QuietCommand no exception of SSAM opens one. A command that did not end within the timeout is unknown.
+/// the server's facade answers by closing the dependencies dialog first, MB2); a dialog open before the command is the
+/// person's and refuses it. a8 round 2 (review M1): a dialog the Studio opens DURING the command (a sign-in, a question, an
+/// error report) is the command's, and the command must not wait in the Studio for nobody: the bridge closes that window as
+/// the window's X does (Cancel), the Studio ends the command (it rolls back, or goes on with the answer Cancel), and the
+/// answer is what the command did, with the dialog first: committed false is one refusal whose first problem is
+/// studio-dialog (the window's title), committed true keeps its commit; dialogs lists every window closed. Only a dialog the
+/// bridge cannot close (a modal presenter, a window that stays open after three closes) answers blocked (outcome running,
+/// the dialog), which the server never answers as ok. The product's dialog loop (OperationDialogLoop, the kernel's) is not
+/// here. A command that did not end within the timeout is unknown.
 /// Answer: Apply's {committed, command, added[], alreadyReferenced[], references[], undo | code, problems[] | error, stage}
 /// plus {refreshed, upToDate, newErrors, elapsedMs, dependenciesDialog, dialogs, dialogsBefore}.
 /// </summary>
 internal static class ManageDependenciesHandler
 {
     private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(1500);
+    /// <summary>How many windows the bridge closes during one command before it answers blocked.</summary>
+    internal const int MaxClosed = 3;
 
     public static async Task<string> Handle(JsonObject? p)
     {
@@ -340,26 +343,31 @@ internal static class ManageDependenciesHandler
             TaskContinuationOptions.OnlyOnFaulted);
         UiGate.MarkDispatched();
         var deadline = sw.Elapsed + TimeSpan.FromSeconds(timeout);
+        var closed = new JsonArray();
         while (!done.Task.IsCompleted)
         {
             var left = deadline - sw.Elapsed;
             if (left <= TimeSpan.Zero)
-                return Server.Fail($"refresh_references: the Manage Dependencies of '{module.Name}' did not end within {timeout} s; its outcome is unknown. Check the module in the Studio (Ctrl+Z undoes it).");
+                return Server.Fail($"refresh_references: the Manage Dependencies of '{module.Name}' did not end within {timeout} s; its outcome is unknown. Check the module in the Studio (Ctrl+Z undoes it)."
+                    + (closed.Count > 0 ? " The bridge closed during it: " + string.Join("; ", closed.Select(d => d!["title"]?.ToString())) : ""));
             if (await Task.WhenAny(done.Task, Task.Delay(left < Poll ? left : Poll)) == done.Task) break;
-            // Detect, never close: a dialog that opened during the command waits for the person.
             JsonArray now;
             try { now = await Ui.Run(() => Dialogs.BlockedBy(aggregator), TimeSpan.FromSeconds(8), "refresh_references: the dialogs of the Manage Dependencies"); }
             catch (UiBusyException) { UiGate.Forget(); continue; }
             catch (Exception ex) when (ex is not OutOfMemoryException) { Server.Log("manage dependencies dialog read: " + Server.Unwrap(ex)); continue; }
-            if (NewBlocking(blockingBefore, now) is { } blocked)
-                return Server.Ok(new JsonObject { ["module"] = module.Name, ["moduleKey"] = module.Key.ToString(), ["command"] = ManageDependencies.CommandName, ["changed"] = null,
-                    ["blocked"] = true, ["outcome"] = "running", ["blockedBy"] = blocked.DeepClone(), ["dialogs"] = new JsonArray(), ["elapsedMs"] = sw.ElapsedMilliseconds,
-                    ["dialogsBefore"] = null, ["dependenciesDialog"] = dependencies?.DeepClone(),
-                    ["next"] = "the person answers the dialog in the Studio; the Manage Dependencies then ends by itself (Ctrl+Z undoes it)" });
+            if (NewBlocking(blockingBefore, now) is not { } blocked) continue;
+            // M1: the command's own dialog is closed (the window's X), so the command ends in the Studio.
+            if (CanClose(blocked, closed) && await Close(blocked)) { closed.Add(Closed(blocked)); continue; }
+            return Server.Ok(Blocked(module, blocked, closed, dependencies, sw.ElapsedMilliseconds));
         }
         JsonObject answer;
         try { answer = await done.Task; }
-        catch (Exception ex) { return Server.Fail("refresh_references: Manage Dependencies: " + Server.Unwrap(ex) + "; check the module in the Studio before any retry"); }
+        catch (Exception ex)
+        {
+            return Server.Fail("refresh_references: Manage Dependencies: " + Server.Unwrap(ex) + "; check the module in the Studio before any retry"
+                + (closed.Count > 0 ? ". The bridge closed during it: " + string.Join("; ", closed.Select(d => d!["title"]?.ToString())) : ""));
+        }
+        answer = WithClosedDialogs(answer, closed);
         return await Reads.OnUi(() =>
         {
             var refreshed = new JsonArray(); var upToDate = new JsonArray();
@@ -374,17 +382,76 @@ internal static class ManageDependenciesHandler
             answer["newErrors"] = Math.Max(0, Reads.ErrorCount(module) - errorsBefore);
             answer["elapsedMs"] = sw.ElapsedMilliseconds;
             answer["dependenciesDialog"] = dependencies?.DeepClone();
-            answer["dialogs"] = null;
+            answer["dialogs"] ??= null;
             answer["dialogsBefore"] = null;
             return Server.Ok(answer);
         }, UiGate.Model, "refresh_references: read the Manage Dependencies result");
     }
 
+    /// <summary>Whether the bridge closes this dialog: a window (never a modal presenter of the tab, an editor), up to
+    /// MaxClosed windows per command. Pure.</summary>
+    internal static bool CanClose(JsonObject dialog, JsonArray closed) => dialog["source"]?.ToString() == "window" && closed.Count < MaxClosed;
+
+    /// <summary>The entry of a window the bridge closed (dialogs of the answer, refreshDialogs of the delivery). Pure.</summary>
+    internal static JsonObject Closed(JsonObject dialog) => new() { ["kind"] = dialog["kind"]?.DeepClone(), ["title"] = dialog["title"]?.DeepClone(),
+        ["type"] = dialog["type"]?.DeepClone(), ["source"] = "window", ["answer"] = "close", ["closed"] = true };
+
+    /// <summary>The answer of a command a dialog holds that the bridge could not close: it waits in the Studio. Pure.</summary>
+    internal static JsonObject Blocked(ESpace? module, JsonObject dialog, JsonArray closed, JsonObject? dependencies, long elapsedMs) => new()
+    {
+        ["module"] = module?.Name, ["moduleKey"] = module?.Key.ToString(), ["command"] = ManageDependencies.CommandName, ["changed"] = null,
+        ["blocked"] = true, ["outcome"] = "running", ["blockedBy"] = dialog.DeepClone(), ["dialogs"] = closed.DeepClone(), ["elapsedMs"] = elapsedMs,
+        ["dialogsBefore"] = null, ["dependenciesDialog"] = dependencies?.DeepClone(),
+        ["next"] = "the person answers the dialog in the Studio; the Manage Dependencies then ends by itself (Ctrl+Z undoes it)",
+    };
+
+    /// <summary>What the command did, with the windows the bridge closed during it: committed true keeps its commit (and
+    /// dialogs); committed false is one refusal whose first problems are the closed dialogs (studio-dialog, the window's
+    /// title), then the Studio's own problems, so the server refuses it typed (REFERENCES_NOT_ADDED) and never retries blind.
+    /// Pure.</summary>
+    internal static JsonObject WithClosedDialogs(JsonObject answer, JsonArray closed)
+    {
+        if (closed.Count == 0) return answer;
+        answer["dialogs"] = closed.DeepClone();
+        if (answer["committed"]?.GetValue<bool>() == true) return answer;
+        var problems = new JsonArray(closed.OfType<JsonObject>().Select(d => (JsonNode)ManageDependencies.Problem("studio-dialog", null, null,
+            d["title"]?.ToString() is { Length: > 0 } title ? title : d["type"]?.ToString(), new JsonObject { ["kind"] = d["kind"]?.DeepClone() })).ToArray());
+        foreach (var problem in answer["problems"] as JsonArray ?? []) problems.Add(problem!.DeepClone());
+        answer["committed"] = false; answer["code"] = ManageDependencies.Code; answer["problems"] = problems;
+        return answer;
+    }
+
+    /// <summary>Closes the visible windows of this dialog (same type and title, an owner or a DialogWindow), as the window's X,
+    /// then reads the dialogs again: true when it is gone. UI thread, bounded.</summary>
+    private static async Task<bool> Close(JsonObject dialog)
+    {
+        var type = dialog["type"]?.ToString(); var title = dialog["title"]?.ToString();
+        try
+        {
+            var count = await Ui.Run(() =>
+            {
+                var lifetime = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
+                var targets = (lifetime?.Windows ?? new List<Window>()).Where(w => w.IsVisible && (w.Owner != null || w.GetType().Name.Contains("DialogWindow", StringComparison.Ordinal))
+                    && string.Equals(w.GetType().Name, type, StringComparison.Ordinal) && string.Equals(w.Title, title, StringComparison.Ordinal)).ToList();
+                foreach (var w in targets) w.Close();
+                return targets.Count;
+            }, TimeSpan.FromSeconds(8), "refresh_references: close the dialog of the Manage Dependencies");
+            if (count == 0) return false;
+            await Task.Delay(Poll);
+            var after = await Ui.Run(() => Dialogs.BlockedBy(null), TimeSpan.FromSeconds(8), "refresh_references: the dialogs after the close");
+            return !after.OfType<JsonObject>().Any(d => SameDialog(d, dialog));
+        }
+        catch (UiBusyException) { UiGate.Forget(); return false; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Server.Log("manage dependencies dialog close: " + Server.Unwrap(ex)); return false; }
+    }
+
+    private static bool SameDialog(JsonObject a, JsonObject b) => Id(a) == Id(b);
+    private static string Id(JsonNode? d) => d?["kind"] + "|" + d?["type"] + "|" + d?["title"] + "|" + d?["source"];
+
     /// <summary>The first blocking dialog of <paramref name="now"/> that was not open before the command (the same kind, type,
     /// title and source), or null. Pure.</summary>
     internal static JsonObject? NewBlocking(JsonArray before, JsonArray now)
     {
-        static string Id(JsonNode? d) => d?["kind"] + "|" + d?["type"] + "|" + d?["title"] + "|" + d?["source"];
         var seen = new HashSet<string>(before.Select(Id), StringComparer.Ordinal);
         return now.OfType<JsonObject>().FirstOrDefault(d => !seen.Contains(Id(d)));
     }

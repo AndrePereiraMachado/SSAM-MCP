@@ -247,30 +247,10 @@ internal static class MergeHandler
             // ReferenceHash is invisible to native diff. Merge the structural changes and
             // explicit reference selections through the same SDK command so undo/rollback
             // includes both. Each native tree is disposed before constructing the next.
-            ReferenceSelectionResult? applied = null;
-            // servidor/fase4-26 a8 (the next agent pack), as the product's full bridge (fam-deps R1 and fix-ext-refs 98785efd):
-            // no exception of SSAM leaves this Studio command (QuietCommand: the SDK rolls the command back itself, without the
-            // modal "Unexpected Error"), and each tree is merged here, inside this command and on its thread, with tree.Merge()
-            // and ClearCurrentMergeState(), the way the Studio's own automatic merge and Manage Dependencies do. Never
-            // CompareAndMergeCommands.Merge, the merge editor's apply helper for the UI thread of that dialog: from the tab's
-            // thread every signature merge of 2026-10-16 (PMAI_Report_CS with PMAI_Report_Ext) rolled back with "No command is
-            // open. The model cannot be changed outside the scope of a command!". BridgeCommandScopeTests scans this file.
-            var failure = QuietCommand.Execute(aggregator.GetPresenterContext(), "Anvil: merge module and producer signatures", stage =>
-            {
-                stage("signature-merge");
-                applied = ReferenceSelections.MergeInCurrentCommand(local, foreign, baseEs!, plan!, tree =>
-                {
-                    enteringNativeMerge();
-                    tree.Merge();
-                    tree.ClearCurrentMergeState();
-                }, matchByStructure: byStructure);
-            });
-            // The real cause and its stage first, raised outside the command (the journal records it; the rollback proof runs).
-            if (failure != null) throw new InvalidOperationException("merge_from_oml: stage " + failure.Text + " (the Studio rolled the command back)");
+            var applied = MergeSignatures(aggregator, local, foreign, baseEs!, plan!, byStructure, enteringNativeMerge);
             // The SDK can roll back during command cleanup after the delegate has returned.
             // Confirm retained model state before recording a successful merge.
             Ui.RunSync(() => ReferenceSelections.VerifyRetained(local, plan!), UiGate.Model, "merge_from_oml: verify the signatures");
-            if (applied == null) throw new InvalidOperationException("The native merge command did not complete its apply callback.");
             data["referenceSignaturesSelected"] = applied.SelectedReferences;
             data["nativeMergeCount"] = applied.NativeMergeCount;
             result = MergeOperationResult.Merge;
@@ -307,6 +287,36 @@ internal static class MergeHandler
         {
             if (!handedOff) { Safe(() => foreign.Close()); if (baseEs != null) Safe(() => baseEs.Close()); }
         }
+    }
+
+    /// <summary>
+    /// The signature merge of merge_from_oml (a plan with changes): the structural tree and the reference selections in ONE
+    /// Studio command of the module's aggregator, each tree merged on the command's own thread. servidor/fase4-26 a8 (the next
+    /// agent pack), as the product's full bridge (fam-deps R1 and fix-ext-refs 98785efd): no exception of SSAM leaves this
+    /// Studio command (QuietCommand: the SDK rolls the command back itself, without the modal "Unexpected Error"), and each tree
+    /// is merged with tree.Merge() and ClearCurrentMergeState(), the way the Studio's own automatic merge and Manage
+    /// Dependencies do. Never CompareAndMergeCommands.Merge, the merge editor's apply helper for the UI thread of that dialog:
+    /// from the tab's thread every signature merge of 2026-10-16 (PMAI_Report_CS with PMAI_Report_Ext) rolled back with "No
+    /// command is open. The model cannot be changed outside the scope of a command!". A failure is raised after the command,
+    /// with its stage (the journal records it; the rollback proof runs). BridgeCommandScopeTests scans this file;
+    /// ThinSignatureMergeTests runs this method on headless models (internal for that test).
+    /// </summary>
+    internal static ReferenceSelectionResult MergeSignatures(IAggregatorPresenter aggregator, ESpace local, ESpace foreign, ESpace basis, ReferencePlan plan,
+        bool byStructure, Action enteringNativeMerge)
+    {
+        ReferenceSelectionResult? applied = null;
+        var failure = QuietCommand.Execute(aggregator.GetPresenterContext(), "Anvil: merge module and producer signatures", stage =>
+        {
+            stage("signature-merge");
+            applied = ReferenceSelections.MergeInCurrentCommand(local, foreign, basis, plan, tree =>
+            {
+                enteringNativeMerge();
+                tree.Merge();
+                tree.ClearCurrentMergeState();
+            }, matchByStructure: byStructure);
+        });
+        if (failure != null) throw new InvalidOperationException("merge_from_oml: stage " + failure.Text + " (the Studio rolled the command back)");
+        return applied ?? throw new InvalidOperationException("The native merge command did not complete its apply callback.");
     }
 
     // Second merge of the merge order, as the full bridge: the candidate over the first-pass copy. The copy differs from
