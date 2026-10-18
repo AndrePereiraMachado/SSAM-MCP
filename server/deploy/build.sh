@@ -5,8 +5,9 @@
 #   sh deploy/build.sh [--tag <tag>] [--image <name>] [--push] [--no-cache] [-- <more buildx args>]
 #
 #   1. the guard platforms/odc/facade/tests/hosted-image-denylist.test.mjs, in the pinned node image of the Dockerfile,
-#      without network and with the tree read-only: it reads the context exactly as Docker sends it (.dockerignore) and
-#      fails on any client name of docker/ssam-server/client-denylist.json. A failure stops here;
+#      without network and with the tree read-only (only a small /tmp in memory, for the test's isolated profile): it
+#      reads the context exactly as Docker sends it (.dockerignore) and fails on any client name of
+#      docker/ssam-server/client-denylist.json. A failure stops here;
 #   2. docker buildx build for linux/amd64, with the Studio inputs of docker/installers (or STUDIO_INSTALLERS_DIR) and
 #      their pinned SHA256 (the Dockerfile refuses an unpinned Studio), the OCI labels (version = tag, revision = commit,
 #      created = now), loaded into the local Docker (default) or pushed to a PRIVATE registry (--push);
@@ -68,8 +69,12 @@ node_image=$(sed -n 's/^ARG NODE_IMAGE=//p' "$server/Dockerfile" | head -n 1)
 [ -n "$node_image" ] || { echo "build: no ARG NODE_IMAGE in $server/Dockerfile" >&2; exit 2; }
 echo "build: client-name guard (hosted-image-denylist.test.mjs, $node_image, no network, read-only)"
 # MSYS_NO_PATHCONV: Git Bash on Windows would rewrite the container paths (-w /src/...) into Windows paths; only for this
-# command, since git and the build need the usual conversion of host paths.
-MSYS_NO_PATHCONV=1 $DOCKER run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+# command, since git and the build need the usual conversion of host paths. The tmpfs /tmp: since marco-a7 the facade
+# tests (this one too) first move HOME and LOCALAPPDATA into a fresh folder of os.tmpdir()
+# (tests/fixtures/isolated-profile.mjs); with no writable /tmp the guard died with EROFS before reading anything. The tree
+# stays read-only.
+MSYS_NO_PATHCONV=1 $DOCKER run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m --cap-drop ALL \
+  --security-opt no-new-privileges:true \
   -v "$host_server:/src:ro" -w /src/platforms/odc/facade "$node_image" \
   node --test --test-reporter=dot tests/hosted-image-denylist.test.mjs \
   || { echo "build: the client-name guard FAILED: a client name would ship; nothing was built" >&2; exit 1; }
