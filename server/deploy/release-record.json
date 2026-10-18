@@ -1,9 +1,9 @@
 {
   "schema": "ssam-release-record/1",
-  "note": "The kernel.json v1 of each image (multi-version design rev. 3, O.6.1 item 9, O.6.2). A deploy writes released.kernelV1 and a rollback writes the kernelV1 of the image it restores, always through kernel-pair-check.mjs print, then checks the pair inside that image (kernel-pair-check.mjs check) before up -d (DEPLOY.md 7.1 and 8). released.tag is the marco-a7 image built on 2026-10-18 from server/r27-marco-a7 90c33b5 (box copy b971c12 of fase4-26/marco-a7 7b14280a: the product marco-a5 up to 98bf977d with no internals rounds 1 to 6c and CX17, and the hosted fixes of the line), on the same Studio pair and agent package as prod-20261015-5eba615, which stays previous (the image on the VPS since 2026-10-15): its kernel.json does not change. prod-20261015-bbdbdee (r26, marco-a6) was rehearsed but never went to the VPS. prod-20261015-187f4e2 (402ca249) and prod-20261015-8c9c0db (e1bfb84c) were only rehearsals.",
+  "note": "The kernel.json v1 of each image (multi-version design rev. 3, O.6.1 item 9, O.6.2). A deploy writes released.kernelV1 and a rollback writes the kernelV1 of the image it restores, always through kernel-pair-check.mjs print, then checks the pair inside that image (kernel-pair-check.mjs check) before up -d (DEPLOY.md 7.1 and 8). released.tag is the marco-a7 image built on 2026-10-18 from server/r27-marco-a7 ebb0e9a (box copies b971c12 and ebb0e9a of fase4-26/marco-a7 b606ee7b: the product marco-a5 up to 98bf977d with no internals rounds 1 to 6c and CX17, the hosted fixes of the line, and item 6 of review no-internals-7: a POSIX root is a server path only as a whole segment, a pointer an answer names is no path), on the same Studio pair and agent package as prod-20261015-5eba615, which stays previous (the image on the VPS since 2026-10-15): its kernel.json does not change. prod-20261018-90c33b5 (line 7b14280a) is DISCARDED: its licensee rule and gate presenter broke the error of INPUT_INVALID (/applicationKey -> <server>licationKey); it never goes to the VPS. prod-20261015-bbdbdee (r26, marco-a6) was rehearsed but never went to the VPS. prod-20261015-187f4e2 (402ca249) and prod-20261015-8c9c0db (e1bfb84c) were only rehearsals.",
   "released": {
-    "tag": "prod-20261018-90c33b5",
-    "what": "marco-a7 (integracao/marco-a5 98bf977d on the server line fase4-26/marco-a7 7b14280a: no internals for the licensee, CX11 context budget, CX15 r5..r7, CX16 r4, CX17, (System) references, with the hosted fixes of the line and the stopgap): Service Studio 11.55.92 + ODC Studio 1.7.28, same agent package (pack-comb, bridge ODC v97)",
+    "tag": "prod-20261018-ebb0e9a",
+    "what": "marco-a7 (integracao/marco-a5 e90d08b2 on the server line fase4-26/marco-a7 b606ee7b: no internals for the licensee, CX11 context budget, CX15 r5..r7, CX16 r4, CX17, (System) references, with the hosted fixes of the line and the stopgap): Service Studio 11.55.92 + ODC Studio 1.7.28, same agent package (pack-comb, bridge ODC v97)",
     "o11": "11.55.92",
     "odc": "1.7.28",
     "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] }
@@ -24,6 +24,7 @@
     "prod-20261015-8c9c0db": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } },
     "prod-20261015-5eba615": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } },
     "prod-20261015-bbdbdee": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } },
-    "prod-20261018-90c33b5": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } }
+    "prod-20261018-90c33b5": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } },
+    "prod-20261018-ebb0e9a": { "o11": "11.55.92", "odc": "1.7.28", "kernelV1": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v96", "v48", "v45"] } }
   }
 }

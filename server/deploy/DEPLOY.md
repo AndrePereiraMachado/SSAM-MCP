@@ -956,13 +956,15 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
   caixas de propósito (`SHARED.md`). No hospedado ficam desligadas as sondas de travamento da CX14
   (`ANVIL_BRIDGE_PROBE_MS=0`; a bridge fina nunca sonda) até um pacote do agente com a CX14, e a pré-checagem de tela da
   CX16. A lista das mudanças de comportamento está em `C:\t\vps-a6\LINHA.md` §7.
-- **marco-a7** (`server/r27-marco-a7`, imagem `prod-20261018-90c33b5`): a cópia saiu de `fase4-26/marco-a7` (`7b14280a`),
-  sobre a caixa da `r26` (linha `75c8940c`). Conferido blob a blob: as 6848 entradas da caixa server que vêm da linha são
-  iguais às de `7b14280a`; o `docs/FASE2-AGENTE.md` compartilhado foi para as duas caixas com os bytes da linha; a caixa
+- **marco-a7** (`server/r27-marco-a7`, imagem `prod-20261018-ebb0e9a`; a `prod-20261018-90c33b5` foi **descartada**: o `error` de
+  `INPUT_INVALID` do licenciado saía estragado, item 6 da revisão no-internals-7): a cópia saiu de `fase4-26/marco-a7` (`7b14280a`,
+  depois os 5 caminhos de `b606ee7b`),
+  sobre a caixa da `r26` (linha `75c8940c`). Conferido blob a blob: as 6850 entradas da caixa server que vêm da linha são
+  iguais às de `b606ee7b`; o `docs/FASE2-AGENTE.md` compartilhado foi para as duas caixas com os bytes da linha; a caixa
   agent só ganhou documentos e um teste (o pacote do agente é o mesmo, bridge ODC v97). O `debug.mcp.json` da linha (os
   caminhos do dono) fica fora da imagem. A guarda de nomes do `build.sh` roda com um `/tmp` em memória, porque os testes
   da fachada agora isolam o perfil em `os.tmpdir()`. As mudanças de comportamento estão em `C:\t\vps-a7\LINHA.md` §8,
-  `LINHA-2.md` §6 e `LINHA-3.md` §7.
+  `LINHA-2.md` §6, `LINHA-3.md` §7 e `LINHA-4.md` §3.
 - O índice do `ssam_discover` e os outros caches de `/app` se perdem a cada container novo: 1 a 2 min de aquecimento
   (7.3). O índice de módulos e a cópia dos leitores ficam no volume `cache` e passam pela recriação.
 - O container não roda com o sistema de arquivos raiz só de leitura.
