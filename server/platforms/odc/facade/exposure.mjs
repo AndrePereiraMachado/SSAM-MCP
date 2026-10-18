@@ -116,7 +116,9 @@ const UNC_PATH = /\\\\[\w.$-]+\\(?:[^\\"'`<>|*?\r\n]*\\)*[^\\\s"'`<>|*?,;)\]]*/g
 // servidor/fase4-26 a7 phase 3 (review vps-a7-2 B4): the layout of the Linux image too, its temp folder (/tmp, also HOME) and
 // its volumes (/data/server, /data/cache, /data/friction, /data/odc-features: docker/ssam-server/Dockerfile and the SSAM-MCP
 // image). Only the volumes of /data: a JSON pointer of SSAM's own prose (/data/results, /data/html) is no path.
-const POSIX_PATH = /(?<![\w.:/~-])\/(?:studio|opt|srv|var|home|root|usr|etc|mnt|app|workspace|customers|tmp|data\/(?:server|cache|friction|odc-features))(?:\/[^\s"'`<>|,;)\]]*)?/g;
+// (review no-internals-7, item 6: the name of a root ends its segment, so a JSON pointer such as /options/0, /applicationKey
+// or /apps is no server path; a path at the end of a sentence leaves its period, as WIN_PATH does)
+const POSIX_PATH = /(?<![\w.:/~-])\/(?:studio|opt|srv|var|home|root|usr|etc|mnt|app|workspace|customers|tmp|data\/(?:server|cache|friction|odc-features))(?=$|[\\/\s"'`<>|,;:)\]]|\.(?:\s|$))(?:\/[^\s"'`<>|,;)\]]*(?<!\.))?/g;
 const DOC_REPO_PATH = /(?<![\w./\\-])(?:kernel|platforms|facade|scripts|publisher|tools|docs|src|\.local)[\\/][\w.*\\/-]+(?::\d+(?:-\d+)?)?/g;
 const RUNTIME_REPO_PATH = /(?<![\w./\\-])(?:kernel|platforms|\.local)[\\/][\w.*\\/-]+(?::\d+(?:-\d+)?)?|(?<![\w./\\-])docs[\\/][\w.-]+\.md\b/g;
 const SOURCE_FILE = /\b[\w.*-]+\.(?:cs|mjs|py|ps1|csproj|sln)\b(?::line \d+|:\d+(?:-\d+)?|#L\d+|\(\d+(?:,\d+)?\))?/g;
@@ -173,21 +175,35 @@ const tidy = out => out.replace(/(?:<server>[\s,/\\:*]*){2,}/g, MARK + ' ').repl
   // (round 6: a space goes before a closing parenthesis, and before , . ; : only when they end a phrase: " .avsig" stays)
   .replace(/(?<=\S)[ \t]{2,}/g, ' ').replace(/ +([,.;:](?=\s|$)|\))/g, '$1').replace(/,\s*,/g, ',').replace(/\r?\n{3,}/g, '\n\n');
 const paths = out => out.replace(WIN_PATH, MARK).replace(UNC_PATH, MARK).replace(POSIX_PATH, MARK);
+// (review no-internals-7, item 6: a JSON pointer the answer itself names in violations[].path, even an exact root name such as
+// /app, is the name of an argument: it is held aside while the text is scrubbed, in every mode)
+const POINTER = /^\/[\w-]+(?:\/[\w-]+)*$/;
+// (servidor/fase4-26 a7 phase 4: exported, so the hosted presenter, hosted/policy.mjs, holds the same pointers by the same rule)
+export const pointersOf = value => (Array.isArray(value?.violations) ? value.violations.map(v => v?.path).filter(p => typeof p === 'string' && POINTER.test(p)) : []);
+const HELD = /\u0000(\d+)\u0000/g;
+export function holdPointers(text, pointers) {
+  if (!pointers?.length) return { text, restore: out => out };
+  const kept = [];
+  const named = new RegExp('(?<![\\w/])(?:' + [...new Set(pointers)].map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')(?=[\\s:;,)]|$)', 'g');
+  return { text: text.replace(named, m => '\u0000' + (kept.push(m) - 1) + '\u0000'), restore: out => out.replace(HELD, (m, i) => kept[Number(i)] ?? m) };
+}
 
 /** SSAM's runtime prose (an error, a message, a fix...): server paths, source files, stack frames and kernel classes only. */
-export function scrubRuntimeText(text, { isHandle = () => false } = {}) {
+export function scrubRuntimeText(text, { isHandle = () => false, pointers = [] } = {}) {
   if (typeof text !== 'string' || !text || isHandle(text.trim())) return text;
-  let out = withoutDocReferences(text.replace(STACK_FRAME, ''));
+  const held = holdPointers(text, pointers);
+  let out = withoutDocReferences(held.text.replace(STACK_FRAME, ''));
   // (round 6, LOW 4: the suite's paths too, as in the documentation)
-  out = paths(suitePaths(out)).replace(RUNTIME_REPO_PATH, MARK).replace(SOURCE_FILE, MARK).replace(ANVIL, MARK);
+  out = held.restore(paths(suitePaths(out)).replace(RUNTIME_REPO_PATH, MARK).replace(SOURCE_FILE, MARK).replace(ANVIL, MARK));
   if (out === text) return text;
   return tidy(out).trim();
 }
 /** SSAM's documentation prose (rules, descriptions, notes of the reference and the discover). */
-export function scrubText(text, { isHandle = () => false, suiteNames = null } = {}) {
+export function scrubText(text, { isHandle = () => false, suiteNames = null, pointers = [] } = {}) {
   if (typeof text !== 'string' || !text || isHandle(text.trim())) return text;
+  const held = holdPointers(text, pointers);
   // (round 6c: the internal names of the kernel and of the project, as in a tool definition)
-  let out = withoutInternalNames(withoutDocReferences(text.replace(STACK_FRAME, '')));
+  let out = withoutInternalNames(withoutDocReferences(held.text.replace(STACK_FRAME, '')));
   // a sentence part that only says how a proof was made (a blind test, a stamp, the author's report) is left out
   if (INTERNAL_SENTENCE.test(out)) {
     const parts = out.split(SENTENCES); let kept = '';
@@ -198,9 +214,9 @@ export function scrubText(text, { isHandle = () => false, suiteNames = null } = 
   out = suitePaths(out);
   // a parenthetical that only says where, when or by whom something was proven (a date literal #2026-01-31# is the language's)
   out = out.replace(/ ?\(([^()]{0,600})\)/g, (m, inner) => (INTERNAL_MARK.test(inner.replace(/#[^#\r\n]*#/g, '')) ? '' : m));
-  out = paths(out).replace(SUITE_COMMAND, MARK).replace(DOC_REPO_PATH, MARK).replace(SOURCE_FILE, MARK).replace(ANVIL, MARK)
+  out = held.restore(paths(out).replace(SUITE_COMMAND, MARK).replace(DOC_REPO_PATH, MARK).replace(SOURCE_FILE, MARK).replace(ANVIL, MARK)
     .replace(SUITE_CLASS, m => (!suiteNames || suiteNames.has(m.split('.')[0]) ? MARK : m)).replace(PROJECT_DOC, MARK).replace(ROUND, '').replace(OWNER, 'the rule')
-    .replace(/\blexical,\s*|,\s*lexical\b/g, ''); // the name of the matcher's section, in a recovery hint
+    .replace(/\blexical,\s*|,\s*lexical\b/g, '')); // the name of the matcher's section, in a recovery hint
   if (out === text) return text;
   return tidy(out).trim();
 }
@@ -235,8 +251,10 @@ function scrub(value, ctx, key = null, depth = 0) {
   }
   if (!isObject(value)) return value;
   const mode = typeof value.schemaVersion === 'string' && DOC_SCHEMA.test(value.schemaVersion) ? 'doc' : ctx.mode;
-  const here = mode === ctx.mode ? ctx : { ...ctx, mode };
-  const top = mode === 'doc' && (here !== ctx || depth === 0);
+  // (item 6: the pointers an answer names in violations[].path reach every text below it)
+  const pointers = pointersOf(value);
+  const here = mode === ctx.mode && !pointers.length ? ctx : { ...ctx, mode, ...(pointers.length ? { pointers: [...(ctx.pointers ?? []), ...pointers] } : {}) };
+  const top = mode === 'doc' && (mode !== ctx.mode || depth === 0);
   if (mode === 'doc' && key === 'evidence') {
     // an evidence object: its level as the seal, its guidance and limits as prose, its proofs out
     const level = value.level ?? value.evidence;

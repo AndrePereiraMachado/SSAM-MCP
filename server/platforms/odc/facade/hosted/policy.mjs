@@ -38,6 +38,7 @@ import { agentReadable, agentSegments, insideVisible } from './mirror.mjs';
 import { agentPath, outsideWorkspaceRefusal } from '../agent-paths.mjs';
 import { JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesGenerator, namesPrototype, namesVerifiedPatch, outside, parseJobTexts } from './job-paths.mjs';
 import { generatorApproval, offered } from '../generators.mjs';
+import { holdPointers, pointersOf } from '../exposure.mjs';
 import { causeOf, studioIdentity, studioRefusal, studioWarningOf } from '../studio-identity.mjs';
 import { destructiveUnavailable, hostedDestructive, hostedDestructiveFiles } from './destructive.mjs';
 import { withStudioScope } from './studio-scope.mjs';
@@ -357,8 +358,11 @@ const prefixSource = (dir, api = path) => {
   const parts = abs.split(/[\\/]+/).filter(Boolean).map(escapeRe);
   return /^[\\/]/.test(abs) ? PATH_START + SEP + parts.join(SEP) : parts.join(SEP);
 };
-const TAIL = `(?:${SEP}[^\\\\/\\s"'<>|*?]+)*`;
-const END = `(?=$|[\\\\/\\s"'<>|*?,;)\\]}])`;
+// a7 phase 4 (review no-internals-7, item 6, the same rule as exposure.mjs POSIX_PATH): a root ends its segment (END: a
+// separator, a quote, a closing mark, a colon, or a period that ends a sentence; never a letter, so /applicationKey or /apps
+// is no path under /app), and a path at the end of a sentence leaves its period (TAIL never ends with one).
+const TAIL = `(?:${SEP}[^\\\\/\\s"'<>|*?]+)*(?<!\\.)`;
+const END = `(?=$|[\\\\/\\s"'<>|*?,;:)\\]}]|\\.(?:\\s|$))`;
 
 // The server's own data roots that may live outside the checkout and the profile (servidor/fase4-22): the module index
 // store, where the 22nd release also keeps the module digest (ssam_map index.file and store.file), and the readers' copy.
@@ -393,17 +397,30 @@ export function presenter({ workspace, serverRoots: given = serverRoots(), pathA
   const wholeServer = rootSources.map(source => new RegExp(`^${source}${END}`, 'i'));
   const embeddedWs = new RegExp(`${wsSource}${END}(${TAIL})`, 'gi');
   const embeddedServer = rootSources.map(source => new RegExp(`${source}${END}${TAIL}`, 'gi'));
-  const string = text => {
-    const whole = wholeWs.exec(text);
-    if (whole) return asWs(whole[1]);
-    if (wholeServer.some(re => re.test(text))) return SERVER_MARK;
-    let out = text.replace(embeddedWs, (match, rest) => asWs(rest));
+  // a7 phase 4 (review no-internals-7, item 6): a JSON pointer the answer itself names in violations[].path is the name of
+  // an argument, even when it is exactly a root of this server (/app and /tmp in the Linux image): as a whole value it stays,
+  // and inside a text it is held aside while the paths are withheld (exposure.mjs holdPointers, the rule's own).
+  const string = (text, pointers = []) => {
+    if (!Array.isArray(pointers)) pointers = [];
+    if (pointers.includes(text)) return text;
+    const held = holdPointers(text, pointers);
+    const whole = wholeWs.exec(held.text);
+    if (whole) return held.restore(asWs(whole[1]));
+    if (wholeServer.some(re => re.test(held.text))) return SERVER_MARK;
+    let out = held.text.replace(embeddedWs, (match, rest) => asWs(rest));
     for (const re of embeddedServer) out = out.replace(re, SERVER_MARK);
-    return out;
+    return held.restore(out);
   };
-  const value = node => typeof node === 'string' ? string(node)
-    : Array.isArray(node) ? node.map(value)
-    : node && typeof node === 'object' ? Object.fromEntries(Object.entries(node).map(([k, v]) => [k, value(v)])) : node;
+  // The pointers an object names in violations[] reach every text below it (as in the rule, exposure.mjs scrub).
+  const value = (node, pointers = []) => {
+    if (!Array.isArray(pointers)) pointers = [];
+    if (typeof node === 'string') return string(node, pointers);
+    if (Array.isArray(node)) return node.map(item => value(item, pointers));
+    if (!node || typeof node !== 'object') return node;
+    const named = pointersOf(node);
+    const below = named.length ? [...pointers, ...named] : pointers;
+    return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, value(v, below)]));
+  };
   const result = answer => {
     if (!answer || typeof answer !== 'object') return answer;
     const out = { ...answer };
@@ -537,9 +554,11 @@ export const withStudioWarning = (answer, warning) => withStudioFields(answer, w
 // (HOSTED_DESTRUCTIVE by default; tests pass the other value).
 export function wrapHostedTool(name, config, handler, { context, link = context?.agent, lanes = context?.lanes ?? [], run = (ctx, fn) => fn(),
   tools = hostedTools(), serverRoots, waitMs = RECONNECT_WAIT_MS, argsOf = null, prototypeOp = HOSTED_PROTOTYPE_OP, generatorOps = HOSTED_GENERATOR_OPS,
-  kernelRefused = null, destructive = HOSTED_DESTRUCTIVE } = {}) {
+  kernelRefused = null, destructive = HOSTED_DESTRUCTIVE, presentation = null } = {}) {
   const entry = tools[name];
-  const present = presenter({ workspace: context.workspace, ...(serverRoots ? { serverRoots } : {}) });
+  // presentation (a7 phase 4, tests): {workspace, serverRoots, pathApi} of the presenter only (the Linux image's layout with
+  // path.posix on another machine); the call itself keeps the context's workspace.
+  const present = presenter({ workspace: context.workspace, ...(serverRoots ? { serverRoots } : {}), ...(presentation ?? {}) });
   const refusesPrototype = prototypeOp !== 'allow' && PROTOTYPE_TOOLS.includes(name);
   const refusesGenerators = generatorOps !== 'allow' && GENERATOR_TOOLS.includes(name);
   const refusesDestructive = destructive !== 'allow';

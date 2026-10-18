@@ -488,12 +488,15 @@ const servedGates = new WeakMap();
 // kernelRefused (startupKernel): the lanes this server image refused at start; the gate refuses every tool of such a
 // lane, the server-only ones included (KERNEL_UNAVAILABLE, cause KERNEL_VERSION_MISSING).
 // tools: the hosted classification (default hosted/tools.json); tests pass another one.
-async function hostedGate({ context, session, run, kernelRefused = null, tools }) {
+// presentation (a7 phase 4, tests): the presenter's view of the server layout ({workspace, serverRoots, pathApi}: the Linux
+// image's paths with path.posix on another machine); without it, this server's own roots and path flavor.
+async function hostedGate({ context, session, run, kernelRefused = null, tools, presentation = null }) {
   const { wrapHostedTool } = await import('./hosted/policy.mjs');
   const runner = run ?? (await import('./executor.mjs')).runWithExecutor;
   const link = session?.agent ?? context.agent;
   const lanes = session?.lanes ?? context.lanes ?? [];
-  return (name, config, handler, { argsOf = null } = {}) => wrapHostedTool(name, config, handler, { context, link, lanes, run: runner, argsOf, kernelRefused, ...(tools ? { tools } : {}) });
+  return (name, config, handler, { argsOf = null } = {}) => wrapHostedTool(name, config, handler, { context, link, lanes, run: runner, argsOf, kernelRefused,
+    ...(tools ? { tools } : {}), ...(presentation ? { presentation } : {}) });
 }
 // The lanes the hosted server warms at start: the served lanes, without a lane its image refused (its kernel never runs).
 export const hostedWarmLanes = (lanes = {}, refused = null) => ['odc', 'o11'].filter(l => lanes[l] !== false && !refused?.[l]);
@@ -1072,7 +1075,8 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
   // a task answer; an answer that came out of the gate in this very call (passedGate) passes untouched, so nothing is ruled
   // or presented twice (both are idempotent anyway: a read-back answer passed them when it was kept).
   const passedGate = new WeakSet();
-  const deadlinePresenter = hosted ? (await import('./hosted/policy.mjs')).presenter({ workspace: hosted.context.workspace }) : null;
+  // (a7 phase 4: the same view of the server layout as the gate's presenter, hosted.presentation in a test)
+  const deadlinePresenter = hosted ? (await import('./hosted/policy.mjs')).presenter({ workspace: hosted.context.workspace, ...(hosted.presentation ?? {}) }) : null;
   const deadlineAnswer = answer => (!answer || typeof answer !== 'object' || passedGate.has(answer) || answer.resultType === 'input_required' ? answer
     : deadlinePresenter.result(exposedResult(answer, { exposure, handleRoots, tool: 'ssam_task', args: {}, suiteNames })));
   server.registerTool = (name, config, handler) => {
