@@ -134,6 +134,9 @@ node C:\SSAM-Agent\agent\ssam-agent.mjs doctor
   without a click: `o11_studio refresh-references` with `add` or `published`, and a delivery that needs new elements of
   a module, an extension or a system producer. With an older pack these calls answer
   `MANAGE_DEPENDENCIES_HOSTED_PENDING` and nothing is sent: install the new pack and restart Service Studio.
+  During the Manage Dependencies the bridge closes only the Studio's error report, the dependencies dialog and a box
+  with only OK. Any other window (a sign-in, a question, a window you opened in another tab) stays as it is: the call
+  then answers `STUDIO_DIALOG_PENDING` with its title. Answer it in the Studio, then repeat the call.
 - In the foreground, to see errors on screen:
   `node --use-env-proxy --use-system-ca C:\SSAM-Agent\agent\ssam-agent.mjs run --root C:\SSAM-Agent`.
 - `doctor` checks the Node options, the folder, the integrity of the pack (`pack.json`), the configuration, the

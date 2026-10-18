@@ -288,22 +288,31 @@ internal static class ManageDependencies
 /// idle, as the full bridge's RefreshReferencesHandler.Manage of the product. Refusals before anything ran come with
 /// executed:false: a bad request, no target, a dialog or merge editor pending (the same text as the Refresh References, which
 /// the server's facade answers by closing the dependencies dialog first, MB2); a dialog open before the command is the
-/// person's and refuses it. a8 round 2 (review M1): a dialog the Studio opens DURING the command (a sign-in, a question, an
-/// error report) is the command's, and the command must not wait in the Studio for nobody: the bridge closes that window as
-/// the window's X does (Cancel), the Studio ends the command (it rolls back, or goes on with the answer Cancel), and the
-/// answer is what the command did, with the dialog first: committed false is one refusal whose first problem is
-/// studio-dialog (the window's title), committed true keeps its commit; dialogs lists every window closed. Only a dialog the
-/// bridge cannot close (a modal presenter, a window that stays open after three closes) answers blocked (outcome running,
-/// the dialog), which the server never answers as ok. The product's dialog loop (OperationDialogLoop, the kernel's) is not
-/// here. A command that did not end within the timeout is unknown.
+/// person's and refuses it. a8 round 3 (re-review C:\t\revisoes\agent-pack-next-2\REVISAO.md, N1): a window that opens
+/// DURING the command is decided by the product's rule (family D, OperationDialogPolicy.Decide), never more: the bridge
+/// closes only what that rule closes for certain (the Studio's error report "Unexpected Error", the dependencies dialog by
+/// its page text through DependenciesDialog, an OK-only native box), as the window's X does, and the answer is what the
+/// command did with those windows first (committed false: one refusal whose first problem is studio-dialog; committed true
+/// keeps its commit; dialogs lists them). Any other window (a sign-in, a recovery Open | Discard, a question, an editor with
+/// typed text, another tab's Manage Dependencies, a modal presenter) may be the person's: it is never closed. The command
+/// gets Grace to end by itself (an unrelated window of another tab), and its answer then names the window in dialogs (closed
+/// false); otherwise the bridge stops waiting and answers blocked (outcome running, the window), which the server answers
+/// STUDIO_DIALOG_PENDING with its title, never ok: the command may be waiting for that window in the Studio. A command that
+/// did not end within the timeout is unknown.
 /// Answer: Apply's {committed, command, added[], alreadyReferenced[], references[], undo | code, problems[] | error, stage}
 /// plus {refreshed, upToDate, newErrors, elapsedMs, dependenciesDialog, dialogs, dialogsBefore}.
 /// </summary>
 internal static class ManageDependenciesHandler
 {
     private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(1500);
-    /// <summary>How many windows the bridge closes during one command before it answers blocked.</summary>
+    /// <summary>How many certain windows the bridge closes during one command; past it, a window is left as a question.</summary>
     internal const int MaxClosed = 3;
+    /// <summary>How long a window the bridge must not close may stay open before the answer is pending (the command may still
+    /// end by itself: the window may be another tab's).</summary>
+    internal const long GraceMs = 3000;
+
+    /// <summary>The step of the bridge at one read of the dialogs: wait, close a certain window, or answer pending.</summary>
+    internal enum Step { Wait, Close, Pending }
 
     public static async Task<string> Handle(JsonObject? p)
     {
@@ -344,6 +353,8 @@ internal static class ManageDependenciesHandler
         UiGate.MarkDispatched();
         var deadline = sw.Elapsed + TimeSpan.FromSeconds(timeout);
         var closed = new JsonArray();
+        var tried = new HashSet<string>(StringComparer.Ordinal); var webChecked = new HashSet<string>(StringComparer.Ordinal);
+        long? questionSince = null; JsonObject? question = null;
         while (!done.Task.IsCompleted)
         {
             var left = deadline - sw.Elapsed;
@@ -355,10 +366,30 @@ internal static class ManageDependenciesHandler
             try { now = await Ui.Run(() => Dialogs.BlockedBy(aggregator), TimeSpan.FromSeconds(8), "refresh_references: the dialogs of the Manage Dependencies"); }
             catch (UiBusyException) { UiGate.Forget(); continue; }
             catch (Exception ex) when (ex is not OutOfMemoryException) { Server.Log("manage dependencies dialog read: " + Server.Unwrap(ex)); continue; }
-            if (NewBlocking(blockingBefore, now) is not { } blocked) continue;
-            // M1: the command's own dialog is closed (the window's X), so the command ends in the Studio.
-            if (CanClose(blocked, closed) && await Close(blocked)) { closed.Add(Closed(blocked)); continue; }
-            return Server.Ok(Blocked(module, blocked, closed, dependencies, sw.ElapsedMilliseconds));
+            // The dependencies dialog is certain by its page text (MB2): a web window not read yet is asked about once.
+            var fresh = Fresh(blockingBefore, now);
+            if (fresh.Any(d => d["contentKind"]?.ToString() == "web" && webChecked.Add(IdOf(d))))
+            {
+                var (dependencyDialogs, _) = await DependenciesDialog.Answer();
+                foreach (var entry in dependencyDialogs.OfType<JsonObject>())
+                    closed.Add(new JsonObject { ["kind"] = entry["kind"]?.DeepClone(), ["title"] = entry["title"]?.DeepClone(), ["type"] = "DialogWindow", ["source"] = "window",
+                        ["answer"] = "Cancel", ["closed"] = true });
+                if (dependencyDialogs.Count > 0) continue;
+            }
+            var (step, dialog) = Next(blockingBefore, now, closed.Count, tried, questionSince, sw.ElapsedMilliseconds);
+            switch (step)
+            {
+                case Step.Close:
+                    tried.Add(IdOf(dialog!));
+                    if (await Close(dialog!)) closed.Add(Closed(dialog!));
+                    continue;
+                case Step.Pending:
+                    return Server.Ok(Blocked(module, dialog!, closed, dependencies, sw.ElapsedMilliseconds));
+                default:
+                    if (dialog == null) { questionSince = null; question = null; }
+                    else { questionSince ??= sw.ElapsedMilliseconds; question = dialog; }
+                    continue;
+            }
         }
         JsonObject answer;
         try { answer = await done.Task; }
@@ -367,6 +398,8 @@ internal static class ManageDependenciesHandler
             return Server.Fail("refresh_references: Manage Dependencies: " + Server.Unwrap(ex) + "; check the module in the Studio before any retry"
                 + (closed.Count > 0 ? ". The bridge closed during it: " + string.Join("; ", closed.Select(d => d!["title"]?.ToString())) : ""));
         }
+        // A window the bridge left open while the command ended by itself is named (closed false), no problem of the answer.
+        if (question != null) closed.Add(Seen(question));
         answer = WithClosedDialogs(answer, closed);
         return await Reads.OnUi(() =>
         {
@@ -388,9 +421,58 @@ internal static class ManageDependenciesHandler
         }, UiGate.Model, "refresh_references: read the Manage Dependencies result");
     }
 
-    /// <summary>Whether the bridge closes this dialog: a window (never a modal presenter of the tab, an editor), up to
-    /// MaxClosed windows per command. Pure.</summary>
-    internal static bool CanClose(JsonObject dialog, JsonArray closed) => dialog["source"]?.ToString() == "window" && closed.Count < MaxClosed;
+    private static readonly string[] ErrorTitles = ["Unexpected Error", "Unexpected error", "Erro inesperado"];
+    private static readonly string[] SignInWords = ["sign in", "sign-in", "log in", "login", "password", "username", "single sign-on"];
+    private static readonly string[] ConsentWords = ["accept", "agree", "terms", "consent", "license agreement"];
+    private static readonly string[] Dismissive = ["OK", "Ok", "Close", "Fechar"];
+
+    /// <summary>What the product's rule (family D, OperationDialogPolicy.Decide) closes for certain, of a window that opened
+    /// during the command: "UnexpectedError" (the Studio's error report, by its title or its text: it asks nothing, the Studio
+    /// already rolled back the command that raised it) or "MessageBox" (a native box whose only buttons are OK or Close); null
+    /// for anything else, which is never closed: a modal presenter, a recovery Open | Discard, a sign-in, a consent, a web page
+    /// (the dependencies dialog is decided by its page text, DependenciesDialog), a question with choices. Pure.</summary>
+    internal static string? Certain(JsonObject dialog)
+    {
+        if (dialog["source"]?.ToString() != "window") return null;
+        var title = (dialog["title"]?.ToString() ?? "").Trim();
+        var texts = (dialog["texts"] as JsonArray ?? []).Select(t => t?.ToString() ?? "").ToList();
+        var buttons = texts.Where(t => t.StartsWith("[Button] ", StringComparison.Ordinal)).Select(t => t[9..].Trim())
+            .Where(b => b.Length > 0 && b != "Viewbox").Distinct(StringComparer.Ordinal).ToList();
+        var all = title + " " + string.Join(" ", texts.Where(t => !t.StartsWith("[Button]", StringComparison.Ordinal)));
+        if (ErrorTitles.Any(t => title.Equals(t, StringComparison.OrdinalIgnoreCase)) || IsErrorReport(all)) return "UnexpectedError";
+        if (all.Contains("Discard", StringComparison.OrdinalIgnoreCase) && all.Contains("Open", StringComparison.OrdinalIgnoreCase)) return null;
+        if (buttons.Contains("Discard", StringComparer.OrdinalIgnoreCase)) return null;
+        if (SignInWords.Any(w => all.Contains(w, StringComparison.OrdinalIgnoreCase)) || ConsentWords.Any(w => all.Contains(w, StringComparison.OrdinalIgnoreCase))) return null;
+        if (dialog["contentKind"]?.ToString() == "web") return null;
+        return buttons.Count > 0 && buttons.All(b => Dismissive.Contains(b, StringComparer.OrdinalIgnoreCase)) ? "MessageBox" : null;
+    }
+
+    private static bool IsErrorReport(string all) => all.Contains("unexpected error", StringComparison.OrdinalIgnoreCase)
+        || all.Contains("exception", StringComparison.OrdinalIgnoreCase) && (all.Contains("report", StringComparison.OrdinalIgnoreCase) || all.Contains("stack trace", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The step at one read of the dialogs: the first certain window not tried yet is closed (at most MaxClosed per
+    /// command); any other new window is left as it is, and after GraceMs open the answer is pending with it. The window of
+    /// a Wait is the one left open (null when none). Pure.</summary>
+    internal static (Step Step, JsonObject? Dialog) Next(JsonArray before, JsonArray now, int closedCount, IReadOnlySet<string> tried, long? questionSinceMs, long nowMs)
+    {
+        var fresh = Fresh(before, now);
+        var certain = fresh.FirstOrDefault(d => Certain(d) != null && !tried.Contains(IdOf(d)));
+        if (certain != null && closedCount < MaxClosed) return (Step.Close, certain);
+        var left = fresh.FirstOrDefault();
+        if (left == null) return (Step.Wait, null);
+        return questionSinceMs is { } since && nowMs - since >= GraceMs ? (Step.Pending, left) : (Step.Wait, left);
+    }
+
+    /// <summary>The blocking dialogs of <paramref name="now"/> that were not open before the command. Pure.</summary>
+    internal static List<JsonObject> Fresh(JsonArray before, JsonArray now)
+    {
+        var seen = new HashSet<string>(before.Select(IdOf), StringComparer.Ordinal);
+        return now.OfType<JsonObject>().Where(d => !seen.Contains(IdOf(d))).ToList();
+    }
+
+    /// <summary>The entry of a window the bridge left open while the command ended by itself (dialogs of the answer). Pure.</summary>
+    internal static JsonObject Seen(JsonObject dialog) => new() { ["kind"] = dialog["kind"]?.DeepClone(), ["title"] = dialog["title"]?.DeepClone(),
+        ["type"] = dialog["type"]?.DeepClone(), ["source"] = dialog["source"]?.DeepClone(), ["answer"] = null, ["closed"] = false };
 
     /// <summary>The entry of a window the bridge closed (dialogs of the answer, refreshDialogs of the delivery). Pure.</summary>
     internal static JsonObject Closed(JsonObject dialog) => new() { ["kind"] = dialog["kind"]?.DeepClone(), ["title"] = dialog["title"]?.DeepClone(),
@@ -414,7 +496,9 @@ internal static class ManageDependenciesHandler
         if (closed.Count == 0) return answer;
         answer["dialogs"] = closed.DeepClone();
         if (answer["committed"]?.GetValue<bool>() == true) return answer;
-        var problems = new JsonArray(closed.OfType<JsonObject>().Select(d => (JsonNode)ManageDependencies.Problem("studio-dialog", null, null,
+        var shut = closed.OfType<JsonObject>().Where(d => d["closed"]?.GetValue<bool>() == true).ToList();
+        if (shut.Count == 0) return answer;
+        var problems = new JsonArray(shut.Select(d => (JsonNode)ManageDependencies.Problem("studio-dialog", null, null,
             d["title"]?.ToString() is { Length: > 0 } title ? title : d["type"]?.ToString(), new JsonObject { ["kind"] = d["kind"]?.DeepClone() })).ToArray());
         foreach (var problem in answer["problems"] as JsonArray ?? []) problems.Add(problem!.DeepClone());
         answer["committed"] = false; answer["code"] = ManageDependencies.Code; answer["problems"] = problems;
@@ -445,16 +529,13 @@ internal static class ManageDependenciesHandler
         catch (Exception ex) when (ex is not OutOfMemoryException) { Server.Log("manage dependencies dialog close: " + Server.Unwrap(ex)); return false; }
     }
 
-    private static bool SameDialog(JsonObject a, JsonObject b) => Id(a) == Id(b);
-    private static string Id(JsonNode? d) => d?["kind"] + "|" + d?["type"] + "|" + d?["title"] + "|" + d?["source"];
+    private static bool SameDialog(JsonObject a, JsonObject b) => IdOf(a) == IdOf(b);
+    /// <summary>The identity of a dialog read (kind, type, title, source).</summary>
+    internal static string IdOf(JsonNode? d) => d?["kind"] + "|" + d?["type"] + "|" + d?["title"] + "|" + d?["source"];
 
     /// <summary>The first blocking dialog of <paramref name="now"/> that was not open before the command (the same kind, type,
     /// title and source), or null. Pure.</summary>
-    internal static JsonObject? NewBlocking(JsonArray before, JsonArray now)
-    {
-        var seen = new HashSet<string>(before.Select(Id), StringComparer.Ordinal);
-        return now.OfType<JsonObject>().FirstOrDefault(d => !seen.Contains(Id(d)));
-    }
+    internal static JsonObject? NewBlocking(JsonArray before, JsonArray now) => Fresh(before, now).FirstOrDefault();
 
     private static Dictionary<string, Guid> Hashes(ESpace module)
     {
