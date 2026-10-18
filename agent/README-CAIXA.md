@@ -76,6 +76,11 @@ Pedido do dono de 18/10: o cliente hospedado tem o Manage Dependencies por códi
     são os bytes do pacote de 13/10 (`pack-20261013-040746`, conferidos contra o `pack.json` dele);
   - só a fina é compilada, contra o Service Studio 11.55.92.65269 de `C:\Program Files`.
   O script é `C:\t\agent-pack-next\scripts\prep-pack.ps1`.
-- **Pacote.** `pack-20261018-203453`, 41 entradas: `odcBridge` v97, `o11BuiltFor` 11.55.92, `o11Hook` dev, a fina com sha256
-  `45977acf…26dc`. O ZIP tem sha256 `8e5a3239…e462`. A varredura de PI saiu sem achados e sem exceções.
+- **Pacote (rodada 2, depois da revisão `C:\t\revisoes\agent-pack-next\REVISAO.md`).** `pack-20261018-221719`, 41 entradas.
+  - `odcBridge` v97, `o11BuiltFor` 11.55.92, `o11Hook` dev.
+  - A fina tem sha256 `8a72236b…3b16`, compilada com `DebugType=none`: sem caminho de PDB e sem texto de produto do
+    Manage Dependencies.
+  - O ZIP tem sha256 `50da9f1b…f73f`.
+  - A varredura de PI saiu sem achados e sem exceções.
+  - O `pack-20261018-203453` da rodada 1 está superado.
 - **Compatibilidade.** O `kernel.json` não muda. O hub aceita o pacote novo e o de 13/10.
