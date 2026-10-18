@@ -1,5 +1,5 @@
 {
- "description": "ODC: op rest (REST consumido declarativo) sobre a fixture do InsuranceApp, com estrutura declarada e input na URL; espelha tests/jobs/rest-spec-consume.json.",
+ "description": "ODC: rest op (declarative consumed REST) over the InsuranceApp fixture, with a declared structure and an input in the URL; mirrors tests/jobs/rest-spec-consume.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

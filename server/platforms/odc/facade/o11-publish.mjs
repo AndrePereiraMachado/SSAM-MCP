@@ -25,6 +25,7 @@
 // second window is published by its key (list_open_modules, merge_from_oml:module_key) instead of MODULE_NOT_ACTIVE.
 // The ssam_grant tool (grant, revoke, list standing grants) is registered here too.
 // No sleep here: the bridge's publish follows the Studio's own server process and answers at its end.
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -38,6 +39,7 @@ import { o11Studio, ASK_PERSON, publishFixContinuation, readInventory, allDialog
   closeDependenciesDialog, refreshAfterDialog, answerDependenciesDialog, dependenciesFields } from './o11-studio.mjs';
 import * as writeLock from './studio-write-lock.mjs';
 import { clean, WORDS_MARKER } from './o11-cycle.mjs';
+import { RESULT } from './result-values.mjs';
 import * as standingGrants from './standing-grants.mjs';
 import { producerCacheDir, recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
 
@@ -53,7 +55,7 @@ function notePublicationEnded(handle) {
 }
 
 export const TOOL = 'o11_publish';
-export const PUBLISHED = Object.freeze({ ok: true, result: 'publicado' });
+export const PUBLISHED = Object.freeze({ ok: true, result: RESULT.published });
 // The bridge's own default comment says "publish de prova"; a product publication names its origin instead.
 export const DEFAULT_MESSAGE = 'SSAM Hybrid o11_publish';
 const annotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true };
@@ -64,14 +66,14 @@ const sha256 = text => createHash('sha256').update(text, 'utf8').digest('hex');
 const same = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
 const bare = message => clean(String(message ?? '').replace(/^\w+Exception:\s*/, ''), 300);
 const reply = (value, text = JSON.stringify(value)) => ({ content: [{ type: 'text', text }], structuredContent: value, ...(value?.ok === false ? { isError: true } : {}) });
-const placeholder = words => /^<[^>]*>$/.test(String(words ?? '').trim());
+const placeholder = words => !wordsGiven(words); // CX15 r7 (L-7): one predicate (a marker, a <template>, a sha256, no words)
 
 // ---- Continuations: always an MCP call, never a shell command.
 const studio = (command, args, why) => ({ tool: 'o11_studio', arguments: { command, ...(args ? { args } : {}) }, why });
 const connect = why => ({ tool: 'ssam_connect', arguments: { lane: 'o11' }, why });
-const STATUS_BEFORE = studio('status', null, 'Veja o Studio da faixa O11; nada foi publicado.');
-const STATUS_AFTER = studio('status', null, 'Confira no Studio se a publicação terminou antes de qualquer nova tentativa; nunca repita às cegas.');
-const ERRORS = studio('errors', null, 'Nada foi publicado. Corrija os erros do TrueChange no módulo e confira aqui; depois chame o11_publish de novo com as palavras do usuário.');
+const STATUS_BEFORE = studio('status', null, 'See the Studio of the O11 lane; nothing was published.');
+const STATUS_AFTER = studio('status', null, 'Check in the Studio whether the publication finished before any new attempt; never repeat blindly.');
+const ERRORS = studio('errors', null, 'Nothing was published. Fix the TrueChange errors in the module and check them here; then call o11_publish again with the user\'s words.');
 const refusal = (code, error, continuation, extra = {}) => ({ ok: false, code, error, ...extra, continuation });
 
 export const publishSchema = z.object({
@@ -86,8 +88,8 @@ export const publishSchema = z.object({
 }).strict();
 
 // ---- Failures of the reads before the publication: nothing was published.
-const notConnected = () => refusal('O11_NOT_CONNECTED', 'No O11 Studio bridge answers on this lane; nothing was published.', connect('Conecte o Service Studio aberto nesta faixa.'));
-const notAuthorized = () => refusal('O11_NOT_AUTHORIZED', 'The bridge does not trust this controller key; nothing was published.', connect('Selecione o Studio de novo para renovar a chave da ponte.'));
+const notConnected = () => refusal('O11_NOT_CONNECTED', 'No O11 Studio bridge answers on this lane; nothing was published.', connect('Connect the Service Studio open on this lane.'));
+const notAuthorized = () => refusal('O11_NOT_AUTHORIZED', 'The bridge does not trust this controller key; nothing was published.', connect('Select the Studio again to renew the bridge key.'));
 function readFailure(error) {
   if (TRANSPORT.has(error?.code)) return notConnected();
   if (UNTRUSTED.test(error?.message ?? '')) return notAuthorized();
@@ -101,15 +103,15 @@ function readFailure(error) {
 const BEFORE = [
   [/has TrueChange errors/i, 'TRUECHANGE_ERRORS', 'The Studio refused: the module has TrueChange errors; nothing was published.', () => ERRORS],
   [/did not end within/i, 'STUDIO_BUSY_TIMEOUT', 'A server operation of the module was still running when the wait for it expired; nothing was published.',
-    () => studio('wait', { condition: 'idle' }, 'Espere a operação em curso terminar no Studio; depois chame o11_publish de novo com as palavras do usuário.')],
+    () => studio('wait', { condition: 'idle' }, 'Wait for the running operation to finish in the Studio; then call o11_publish again with the user\'s words.')],
   [/already has a server operation running/i, 'STUDIO_BUSY', 'The module already has a server operation running in the Studio; nothing was published.',
-    () => studio('status', null, 'Espere a operação em curso terminar no Studio; nada foi publicado.')],
+    () => studio('status', null, 'Wait for the running operation to finish in the Studio; nothing was published.')],
   [/nothing was executed/i, 'TARGET_CHANGED', 'Another module or environment became active before the publication; nothing was published.',
-    name => studio('open-module', { name }, 'Selecione o módulo de novo; depois chame o11_publish com as palavras do usuário.')],
+    name => studio('open-module', { name }, 'Select the module again; then call o11_publish with the user\'s words.')],
   [/no module open in the Studio|no aggregator presenter|is not open in the Studio/i, 'MODULE_NOT_ACTIVE', 'No module is active in the Studio; nothing was published.',
-    name => studio('open-module', { name }, 'Abra ou selecione o módulo; depois chame o11_publish com as palavras do usuário.')],
+    name => studio('open-module', { name }, 'Open or select the module; then call o11_publish with the user\'s words.')],
   [/not found in this build|^Unknown method/i, 'PUBLISH_UNSUPPORTED', 'This Service Studio bridge does not expose the Publish command; nothing was published.',
-    () => ({ tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'Mostra a versão da ponte e do Studio da faixa O11.' })],
+    () => ({ tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'Shows the version of the bridge and of the Studio of the O11 lane.' })],
 ];
 const FAILED = /completed with failure/i;
 // The verb of the operation that kept the module busy, from the bridge sentence "... running (Publish) that did not end ...".
@@ -149,8 +151,8 @@ function blockedByDialog(data, name, operationId) {
     error: clean('The publication of ' + (name ?? 'the module') + ' is blocked by ' + (dialogs.map(d => d.kind + (d.module ? ' of ' + d.module : '')).join(', ') || 'a dialog')
       + (started ? '; it had started and may still finish: read the publish log before any new attempt.' : '; nothing was published.'), 400),
     continuation: references
-      ? studio('refresh-references', { module: references.module ?? name }, 'Atualiza as referências pelo Refresh References do próprio Studio (o diálogo Manage Dependencies); depois chame o11_publish de novo com as palavras do usuário.')
-      : studio('status', null, 'Veja o diálogo aberto no Studio; a pessoa responde; depois chame o11_publish de novo com as palavras do usuário.') };
+      ? studio('refresh-references', { module: references.module ?? name }, 'Refreshes the references through the Studio\'s own Refresh References (the Manage Dependencies dialog); then call o11_publish again with the user\'s words.')
+      : studio('status', null, 'See the dialog open in the Studio; the person answers it; then call o11_publish again with the user\'s words.') };
 }
 
 // Pure: the answer for what the bridge's publish returned (data) or threw (error, a BridgeError of o11-bridge.mjs).
@@ -179,7 +181,7 @@ export function publishOutcome({ data, error } = {}, { name } = {}, operationId 
       return refusal(code, why, next(name), verb ? { verb } : {});
     }
     if (FAILED.test(text)) return withPublishLog(refusal('PUBLISH_FAILED', 'The Studio reports that the publication of ' + (name ?? 'the module') + ' completed with failure (server compilation or deployment); it is not published.',
-      studio('status', null, 'Veja no Studio as mensagens da publicação antes de qualquer nova tentativa.'), { outcome: 'failed', ...(operationId ? { operationId } : {}) }),
+      studio('status', null, 'See the messages of the publication in the Studio before any new attempt.'), { outcome: 'failed', ...(operationId ? { operationId } : {}) }),
       error.reply?.data?.publishLog, name);
     return uncertain(bare(text));
   }
@@ -224,11 +226,11 @@ async function publish(input, ctx, options = {}) {
   const words = resolved.words;
   const authorization = options.authorization ?? resolved.authorization;
   // Blank words, or a placeholder such as the continuation marker, are not the user's words.
-  if (!words.trim() || placeholder(words)) return refusal('WORDS_REQUIRED', 'o11_publish needs the user\'s own words in authorize, verbatim (or a standing grant of this module for publish).',
-    { tool: TOOL, arguments: { module: input.module, authorize: WORDS_MARKER }, why: 'Peça ao usuário as palavras que autorizam esta publicação e passe-as literais em authorize.' });
+  if (!wordsGiven(words)) return refusal('WORDS_REQUIRED', 'o11_publish needs the user\'s own words in authorize, verbatim (or a standing grant of this module for publish).',
+    { tool: TOOL, arguments: { module: input.module, authorize: WORDS_MARKER }, why: 'Ask the user for the words that authorize this publication and pass them verbatim in authorize.' });
   if (signal?.aborted) return { ...publishOutcome({ error: { code: 'CANCELLED', executed: false } }, { name: input.module }) };
   try { await ctx.assertSelected(); }
-  catch (error) { return refusal('STUDIO_NOT_SELECTED', clean(error?.message) || 'The selected Studio is not confirmed.', connect('Selecione de novo o Service Studio aberto na faixa O11.')); }
+  catch (error) { return refusal('STUDIO_NOT_SELECTED', clean(error?.message) || 'The selected Studio is not confirmed.', connect('Select again the Service Studio open on the O11 lane.')); }
   let bridge;
   try { bridge = ctx.bridge(); } catch (error) { return readFailure(error); }
 
@@ -260,10 +262,10 @@ async function publish(input, ctx, options = {}) {
     const selected = await bridge.ok('get_active_module');
     if (same(selected?.name, moduleName)) return { active: selected };
     const found = await moduleTab(bridge, moduleName);
-    if (found.ambiguous) return { refused: { ...tabAmbiguous(moduleName, found.ambiguous, 'mostra as abas abertas; feche a duplicada no Studio e chame o11_publish de novo com as palavras do usuário'),
+    if (found.ambiguous) return { refused: { ...tabAmbiguous(moduleName, found.ambiguous, 'shows the open tabs; close the duplicate in the Studio and call o11_publish again with the user\'s words'),
       error: 'More than one Studio tab is named ' + moduleName + '; nothing was published.' } };
     if (!found.tab) return { refused: refusal('MODULE_NOT_ACTIVE', 'The active module is ' + (selected?.name ?? 'none') + ', not ' + moduleName + '; nothing was published.',
-      studio('open-module', { name: moduleName }, 'Selecione o módulo no Studio; depois chame o11_publish com as palavras do usuário.')) };
+      studio('open-module', { name: moduleName }, 'Select the module in the Studio; then call o11_publish with the user\'s words.')) };
     return { active: { name: found.tab.name, key: found.tab.key, environment: found.tab.environment ?? null, pendingDialogs: found.tab.pendingDialogs ?? [], byKey: true },
       listed: found.listed };
   };
@@ -273,7 +275,7 @@ async function publish(input, ctx, options = {}) {
     ({ active, listed = null } = target);
     if (input.expectedEnvironment && !same(active?.environment, input.expectedEnvironment))
       return refusal('ENVIRONMENT_MISMATCH', 'The selected Studio is connected to ' + (active?.environment ?? 'no environment') + ', not ' + input.expectedEnvironment + '; nothing was published.',
-        studio('status', null, 'Veja a que ambiente o Studio selecionado está ligado; nada foi publicado.'));
+        studio('status', null, 'See which environment the selected Studio is connected to; nothing was published.'));
     // C10: the one detector of o11_studio (this tab's dialogs and, with list_open_modules:dialogs, every other tab's and window's).
     let pending = allDialogs(active, listed);
     // MB2: the dependencies dialog among them is answered (Cancel) and the module's references refreshed; then read again.
@@ -307,7 +309,7 @@ async function publish(input, ctx, options = {}) {
       ...(authorization?.grantId ? { grantId: authorization.grantId } : {}) }); }
     catch (error) {
       return refusal('JOURNAL_FAILED', clean('The journal line could not be written, so nothing was published: ' + error.message, 300),
-        { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'Mostra as pastas da faixa O11.' });
+        { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'Shows the folders of the O11 lane.' });
     }
     const params = { message: input.message ?? DEFAULT_MESSAGE, timeout: input.timeoutSeconds ?? 600,
       ...(active.key ? { module_key: active.key } : {}), ...(active.environment ? { environment: active.environment } : {}) };
@@ -382,7 +384,7 @@ async function publishConsumers(value, { input, active, words, authorization, br
   try { names = consumerNames(await ctx.consumersOf({ module: active.name, moduleKey: active.key, host: active.environment ?? null }), active.name); }
   catch (error) {
     return { ...value, ok: false, code: 'CONSUMERS_UNKNOWN', error: 'The producer was published; its consumers could not be read: ' + bare(error?.message ?? error),
-      consumers: [], continuation: { tool: 'o11_service_center_read', arguments: { action: 'consumers', moduleKey: active.key }, why: 'leia os consumidores do produtor publicado' } };
+      consumers: [], continuation: { tool: 'o11_service_center_read', arguments: { action: 'consumers', moduleKey: active.key }, why: 'read the consumers of the published producer' } };
   }
   const results = await cascade(names, active.name, { words, authorization, message: input.message, timeoutSeconds: input.timeoutSeconds,
     expectedEnvironment: input.expectedEnvironment, bridge, ctx, signal });
@@ -390,7 +392,7 @@ async function publishConsumers(value, { input, active, words, authorization, br
   return complete ? { ...value, consumers: results }
     : { ...value, ok: false, code: results.some(r => r.outcome === 'uncertain') ? 'CONSUMERS_UNCERTAIN' : 'CONSUMERS_INCOMPLETE', consumers: results,
       error: 'The producer ' + active.name + ' was published; not every consumer was refreshed and published. Nothing was repeated.',
-      continuation: studio('status', null, 'Veja o estado do Studio; publique cada consumidor que faltou com o11_publish e as palavras do usuário.') };
+      continuation: studio('status', null, 'See the Studio state; publish each missing consumer with o11_publish and the user\'s words.') };
 }
 
 // One consumer after the other: select, refresh its references to the producer, publish with the same words or a grant
@@ -432,11 +434,11 @@ export async function publishConsumersOf({ producer, words, authorization = null
   try { names = consumerNames(await ctx.consumersOf({ module: producer.name, moduleKey: producer.key ?? null, host: producer.environment ?? null }), producer.name); }
   catch (error) {
     return { ok: false, code: 'CONSUMERS_UNKNOWN', error: 'The consumers of ' + producer.name + ' could not be read: ' + bare(error?.message ?? error), consumers: [],
-      continuation: { tool: 'o11_service_center_read', arguments: { action: 'consumers', moduleKey: producer.key ?? null }, why: 'leia os consumidores do produtor publicado' } };
+      continuation: { tool: 'o11_service_center_read', arguments: { action: 'consumers', moduleKey: producer.key ?? null }, why: 'read the consumers of the published producer' } };
   }
   if (!names.length) return { ok: true, consumers: [] };
   try { await ctx.assertSelected(); }
-  catch (error) { return { ...refusal('STUDIO_NOT_SELECTED', clean(error?.message) || 'The selected Studio is not confirmed.', connect('Selecione de novo o Service Studio aberto na faixa O11.')), consumers: [] }; }
+  catch (error) { return { ...refusal('STUDIO_NOT_SELECTED', clean(error?.message) || 'The selected Studio is not confirmed.', connect('Select again the Service Studio open on the O11 lane.')), consumers: [] }; }
   let bridge;
   try { bridge = ctx.bridge(); } catch (error) { return { ...readFailure(error), consumers: [] }; }
   const results = await cascade(names, producer.name, { words, authorization, message: message ?? DEFAULT_MESSAGE, timeoutSeconds: timeoutSeconds ?? 600,
@@ -445,7 +447,7 @@ export async function publishConsumersOf({ producer, words, authorization = null
   return complete ? { ok: true, consumers: results }
     : { ok: false, code: results.some(r => r.outcome === 'uncertain') ? 'CONSUMERS_UNCERTAIN' : 'CONSUMERS_INCOMPLETE', consumers: results,
       error: 'Not every consumer of ' + producer.name + ' was refreshed and published. Nothing was repeated.',
-      continuation: studio('status', null, 'Veja o estado do Studio; publique cada consumidor que faltou com o11_publish e as palavras do usuário.') };
+      continuation: studio('status', null, 'See the Studio state; publish each missing consumer with o11_publish and the user\'s words.') };
 }
 
 function appendJournal(now) {
@@ -519,7 +521,7 @@ export function registerSsamGrant(server, deps = {}) {
       if (action === 'grant') value = grants.addGrant(rest, { file, now });
       else if (action === 'revoke') value = grants.revokeGrant(rest.grantId ? { grantId: rest.grantId } : { lane: rest.lane, app: rest.app }, { file, now });
       else value = grants.listGrants({ lane: rest.lane }, { file });
-      if (value?.ok === false) value = { ...value, continuation: { tool: 'ssam_grant', arguments: { action: 'list' }, why: 'veja as concessões existentes' } };
+      if (value?.ok === false) value = { ...value, continuation: { tool: 'ssam_grant', arguments: { action: 'list' }, why: 'see the existing grants' } };
     } catch (error) { value = { ok: false, code: 'GRANT_FAILED', error: clean(error?.message ?? String(error)) }; }
     return reply(value);
   });
@@ -533,7 +535,7 @@ export function registerO11Publish(server, deps = {}) {
     description: '[o11] Publishes (1-Click Publish) the module open in the Service Studio selected on the O11 lane, with the user\'s words '
       + 'in authorize or a standing grant of the module for publish (ssam_grant). It checks the active module (and expectedEnvironment), '
       + 'waits for a server operation already running on it (STUDIO_BUSY_TIMEOUT), reads TrueChange: with errors it returns them and '
-      + 'publishes nothing. Published: "publicado" with lastPublication. PUBLISH_FAILED (server compilation or deployment) carries every '
+      + 'publishes nothing. Published: "published" with lastPublication. PUBLISH_FAILED (server compilation or deployment) carries every '
       + 'message the Studio showed (type, stage, text, detail, element) and a continuation to the element to fix. '
       + 'consumers:true then refreshes and publishes every consumer of the module, one outcome per consumer. '
       + 'outcome "uncertain" (timeout, lost reply, cancellation, unconfirmed end) is never repeated: check o11_studio status before '

@@ -1,5 +1,5 @@
 {
- "description": "Op rest (REST consumido declarativo): o cliente ViaCepApi com o metodo GET /ws/{CEP}/json/, a resposta tipada a partir de uma amostra JSON pelo proprio plugin REST (estruturas como o dialogo do Studio as cria) e uma server action que chama o metodo. Uma chamada, so verbos crus provados.",
+ "description": "Rest op (declarative consumed REST): the client ViaCepApi with the method GET /ws/{CEP}/json/, the response typed from a JSON sample by the REST plugin itself (structures as the Studio dialog creates them) and a server action that calls the method. One call, only proven raw verbs.",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "ops": [

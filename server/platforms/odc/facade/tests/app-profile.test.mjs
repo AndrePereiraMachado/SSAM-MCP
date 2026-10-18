@@ -2,6 +2,7 @@
 // synthetic SSAM checkout (layout, facade entry, O11 lane CLI) and a fake node; user folders in `env` are temp ones.
 // Parity: tests/fixtures/app-profile-python-*.{toml,json} are what the Python wrote once in a temp folder (paths as
 // placeholders, -EncodedCommand decoded); the JS output must equal them except the server and hook commands.
+import './fixtures/isolated-profile.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

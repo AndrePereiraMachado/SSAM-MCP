@@ -1,5 +1,5 @@
 {
- "description": "Indentacao do codigo escrito como texto (pedido do dono, 2026-10-09; kernel/src/Anvil.Core/Kernel/CodeFormat). CSS do tema, SQL de um no SQL (op logic com sql:true), JavaScript de um no JavaScript e de um Script chegam numa linha so e o modelo guarda-os em varias linhas, indentados; um SQL que o formatador mudaria fora dos espacos (o 'x'AND colado) e escrito como veio, com FORMAT_SKIPPED no recibo. Valores aferidos em Anvil.Tests.CodeFormatJobTests; a mesma prova na faixa ODC em tests/jobs-odc/code-format.json.",
+ "description": "Indentation of code written as text (owner's request, 2026-10-09; kernel/src/Anvil.Core/Kernel/CodeFormat). Theme CSS, SQL of a SQL node (logic op with sql:true), JavaScript of a JavaScript node and of a Script arrive on a single line and the model stores them on several lines, indented; an SQL that the formatter would change outside the whitespace (the glued 'x'AND) is written as it came, with FORMAT_SKIPPED in the receipt. Values checked in Anvil.Tests.CodeFormatJobTests; the same proof in the ODC lane in tests/jobs-odc/code-format.json.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "ops": [
@@ -49,10 +49,10 @@
   {"op": "set", "target": "$script", "prop": "JavaScript",
    "value": "window.CfHelpers = { badge: function (s) { return String(s || \"\").trim().toUpperCase(); }, slug: function (s) { return String(s || \"\").trim().toLowerCase(); } };"},
 
-  {"op": "get", "target": "IMobileTheme:Headless_UI", "_why": "o CSS do autor em varias linhas"},
-  {"op": "get", "target": "IServerAction:CfItems_Search/ReadCfItems", "_why": "o Statement em varias linhas"},
-  {"op": "get", "target": "IServerAction:CfItems_Coded/ReadCoded", "_why": "o Statement que a prova recusou: escrito como veio"},
-  {"op": "get", "target": "$js", "_why": "o JavaScript do no em varias linhas"},
-  {"op": "get", "target": "$script", "_why": "o JavaScript do Script em varias linhas"}
+  {"op": "get", "target": "IMobileTheme:Headless_UI", "_why": "the author's CSS on several lines"},
+  {"op": "get", "target": "IServerAction:CfItems_Search/ReadCfItems", "_why": "the Statement on several lines"},
+  {"op": "get", "target": "IServerAction:CfItems_Coded/ReadCoded", "_why": "the Statement that the proof refused: written as it came"},
+  {"op": "get", "target": "$js", "_why": "the node's JavaScript on several lines"},
+  {"op": "get", "target": "$script", "_why": "the Script's JavaScript on several lines"}
  ]
 }

@@ -1,5 +1,5 @@
 {
- "description": "Checkbox: um ICheckbox ligado a uma variavel Boolean da tela.",
+ "description": "Checkbox: an ICheckbox bound to a Boolean variable of the screen.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

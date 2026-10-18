@@ -1,5 +1,5 @@
 {
- "description": "Service action num modulo Service: Order_GetSummary(OrderId) devolve total e status; consumo remoto por outros modulos sem referencia forte a entidade",
+ "description": "Service action in a Service module: Order_GetSummary(OrderId) returns total and status; remote consumption by other modules without a strong reference to the entity",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "ops": [

@@ -76,6 +76,12 @@ public static partial class JobRunner
         // In the resident worker only: a spare instance of exactly this base, taken once and released below like a fresh load.
         var spare = BaseModelCache.Shared?.Take(basePath, baseBytes, reusable: !builtBase);
         var espace = spare?.Model ?? host.Load(baseBytes);
+        // The Studio's defaults of the screen reading, before any op runs: measured outside the job's command (once per Studio
+        // identity and context: the module and the theme of each of its UI flows, and of a new flow; in a copy of the base bytes)
+        // when this Studio was never measured here for such a context. A flow the job gives a theme of its own is measured when
+        // its first page is written.
+        StudioDefaults.Remember(espace, baseBytes);
+        StudioDefaults.Prepare(espace);
         var loadMs = sw.ElapsedMilliseconds;
         // A job keeps the reads its answers name (the basedOn of a next text or data edit, the edit a refusal hands back) in the store.
         var session = new ModelSession(espace) { BaseSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(baseBytes)).ToLowerInvariant(), KeepReadings = true };
@@ -505,19 +511,50 @@ public static partial class JobRunner
     }
 
     private static readonly Regex MissingElement = new(@"signature: (\S+)\s*$", RegexOptions.Compiled);
+    /// <summary>The start of the native importer's refusal of a reference at another signature (OdcReferenceImporter).</summary>
+    public const string OutdatedReference = "Reference version differs from the captured signature";
+    /// <summary>fix/unpublished-library round 2 (A1): NativeReferenceSnapshot.Select's refusals of a KIND the signature cannot
+    /// hold (an ODC published signature: server actions, client actions, structures, entities and blocks; an extension's:
+    /// server actions and entities). MissingElement names their element too, but publishing the producer never adds that kind.</summary>
+    private const string UnsupportedOdcKind = "Unsupported element kind for this frozen producer signature";
+    private const string UnsupportedExtensionKind = "Native extension references require a server action or entity signature";
 
     /// <summary>The problem of a reference op whose frozen producer signature lacks an element the op names (or that fails
     /// to import otherwise): its pointer is the element when the message names it.</summary>
-    private static JsonArray ReferenceProblems(Exception ex, JsonObject reference, int op, string? opsPointer)
+    internal static JsonArray ReferenceProblems(Exception ex, JsonObject reference, int op, string? opsPointer)
     {
         var message = Errors.Text(ex);
         var named = MissingElement.Match(message) is { Success: true } m ? m.Groups[1].Value : null;
         var elements = (reference["elements"] as JsonArray ?? new JsonArray()).Select(e => e?.ToString()).ToList();
         var k = named == null ? -1 : elements.FindIndex(e => string.Equals(e, named, StringComparison.OrdinalIgnoreCase));
         var pointer = opsPointer == null || op < 0 ? null : k >= 0 ? $"{opsPointer}/{op}/elements/{k}" : $"{opsPointer}/{op}";
-        var problem = JobPreflight.Problem(op < 0 ? null : op, pointer, named != null ? "REFERENCE_ELEMENT_MISSING" : "REFERENCE_IMPORT_FAILED", "error", message,
-            named != null ? $"the frozen signature of producer {reference["producer"]} has no {named}: fix its kind or name, capture the producer again if it was published since (o11_dependencies capture), or remove it from the reference op"
-                : "capture the producer again (o11_dependencies capture) and deliver with it", null, "reference");
+        // fix/system-reference: the capture of each lane (the ODC delivery captures from the consumer session by itself).
+        var capture = MessageExpectations.Lane == "odc" ? "studio_deliver captures it from the consumer session; studio_reference_snapshot outside a delivery" : "o11_dependencies capture";
+        // Round 2 (M3): the consumer already references the producer at another signature than the capture. A capture of the
+        // same published producer gives the same signature again (a loop): the way out is the Studio's refresh of that
+        // reference in the consumer module, then the same delivery.
+        var outdated = named == null && message.Contains(OutdatedReference, StringComparison.Ordinal);
+        // The producer as the consumer's reference names it: the importer ends its text with it (the op's producer is a path by now).
+        var listed = outdated && message.LastIndexOf(": ", StringComparison.Ordinal) is var at and >= 0 ? message[(at + 2)..].Trim() : null;
+        var refresh = MessageExpectations.Lane == "odc"
+            ? $"studio_refresh_references {{module: the consumer module, producer: \"{listed}\"}}"
+            : "o11_studio refresh-references {module: the consumer module}";
+        // fix/unpublished-library (family OF): an element the job references may exist only in the producer's open model,
+        // added or made Public after its last publication. The fix never invites changing what the job means ("remove it"):
+        // publish the producer first (a write: the person's own words), then the same job; else write an element it has.
+        var producer = reference["producer"]?.ToString() is { } p && JobSources.IsPathSpec(p) && !p.StartsWith("job:", StringComparison.Ordinal) ? Path.GetFileNameWithoutExtension(p) : reference["producer"]?.ToString();
+        var publish = MessageExpectations.Lane == "odc" ? "studio_publish, with the person's own words" : "o11_publish, with the person's own words";
+        var lists = MessageExpectations.Lane == "odc" ? "studio_reference_snapshot lists what it publishes" : "o11_dependencies list shows what it publishes";
+        // Round 2 (A1): a kind the signature cannot hold keeps REFERENCE_ELEMENT_MISSING on its element, and its fix says so.
+        var extensionKind = named != null && message.Contains(UnsupportedExtensionKind, StringComparison.Ordinal);
+        var unsupportedKind = extensionKind || (named != null && message.Contains(UnsupportedOdcKind, StringComparison.Ordinal));
+        var holds = extensionKind ? "an extension signature holds server actions and entities"
+            : "an ODC published signature holds server actions, client actions, structures, entities and blocks (an External Library: server actions and structures)";
+        var problem = JobPreflight.Problem(op < 0 ? null : op, pointer, named != null ? "REFERENCE_ELEMENT_MISSING" : outdated ? "REFERENCE_OUTDATED" : "REFERENCE_IMPORT_FAILED", "error", message,
+            unsupportedKind ? $"the kind of {named} cannot be referenced through the signature of producer {producer}: {holds}; publishing {producer} does not change this: reference an element of one of those kinds, or add this reference in the Studio (Manage Dependencies)"
+            : named != null ? $"the published signature of producer {producer} has no {named}: if {producer} has it in a model not published yet (added or made Public after its last publication), publish {producer} first ({publish}), then deliver the same job again; if it was published after this capture, capture it again ({capture}); else write the kind and name of an element {producer} publishes ({lists})"
+                : outdated ? $"the consumer module references {listed} at another version than its published signature: refresh that reference in the Studio ({refresh}; it writes to the module, so the person confirms it first), then deliver the same job again"
+                : $"capture the producer again ({capture}) and deliver with it", null, "reference");
         problem["phase"] = "apply";
         return new JsonArray(JobPreflight.PublicProblem(problem));
     }
@@ -675,8 +712,8 @@ public static partial class JobRunner
     {
         if (job is JsonArray a) return Prepare(a);
         var obj = job.AsObject();
-        if (obj["jobs"] is not JsonArray parts) return Prepare(obj["ops"]?.AsArray() ?? throw new InvalidOperationException("job sem 'ops' nem 'jobs'"));
-        if (obj["ops"] is JsonArray own && own.Count > 0) throw new InvalidOperationException("job composto: use 'jobs' OU 'ops', nao os dois");
+        if (obj["jobs"] is not JsonArray parts) return Prepare(obj["ops"]?.AsArray() ?? throw new InvalidOperationException("job without 'ops' or 'jobs'"));
+        if (obj["ops"] is JsonArray own && own.Count > 0) throw new InvalidOperationException("composite job: use 'jobs' OR 'ops', not both");
         var ops = new JsonArray();
         foreach (var part in parts)
         {
@@ -738,7 +775,7 @@ public static partial class JobRunner
             candidates.Add(Path.IsPathRooted(spec) ? spec : Path.Combine(jobDir, spec));
             if (!Path.IsPathRooted(spec)) foreach (var root in JobRoots(jobDir)) candidates.Add(Path.Combine(root, spec));
         }
-        return candidates.FirstOrDefault(File.Exists) ?? throw new FileNotFoundException($"jobs: parte nao encontrada: {spec} (procurado em {string.Join(", ", candidates)})");
+        return candidates.FirstOrDefault(File.Exists) ?? throw new FileNotFoundException($"jobs: part not found: {spec} (looked in {string.Join(", ", candidates)})");
     }
 
     internal static string? RepoRoot(string dir)

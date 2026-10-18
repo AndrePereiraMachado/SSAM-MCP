@@ -1,5 +1,5 @@
 {
- "description": "Mobile local storage: client entity (Draft) com atributos e client action que grava com CreateOrUpdateDraft e le com aggregate local",
+ "description": "Mobile local storage: client entity (Draft) with attributes and client action that saves with CreateOrUpdateDraft and reads with a local aggregate",
  "base": "tests/fixtures/mobile-ui.oml",
  "expectValid": true,
  "ops": [

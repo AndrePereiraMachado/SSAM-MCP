@@ -182,6 +182,200 @@ export const hashedWords = words => (HASHED_WORDS.test(text(words).trim()) ? tex
 export const WORD_KEYS = Object.freeze(new Set(['authorization', 'authorize', 'words', 'ownerRequest']));
 export const withoutWords = value => (Array.isArray(value) ? value.map(withoutWords)
   : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).filter(([k]) => !WORD_KEYS.has(k)).map(([k, v]) => [k, withoutWords(v)])) : value);
+// CX15 r5 (N-1): an echo of the input (a refusal's corrected, any {tool, arguments} step) never carries the owner's words:
+// every string under a WORD_KEYS key, at any depth, becomes the marker the answers already use for them (tool-input.mjs
+// WORDS_MARKER). A placeholder (an <angle-bracket> text such as OWNER_REPLY) and a sha256:<hex> are kept: they are no words.
+// English since 16/10/2026 (owner rule of 15/10: every SSAM text in English): the one marker of tool-input.mjs,
+// next-steps.mjs and continuations.mjs (no import: tool-input.mjs imports this module).
+export const WORDS_ECHO = "<the user's own words>";
+// Input alias: the marker the releases before 16/10 wrote ('<palavras do usuário>'). A continuation an older release (or
+// an older hosted hub) masked and that is replayed as it is still holds it: it is never the owner's words, alone or
+// inside a text. Recognized only; no answer writes it.
+export const WORDS_ECHO_ALIASES = Object.freeze(['<palavras do usuário>']);
+const placeholderOrHash = value => /^<[^<>]+>$/s.test(value.trim()) || HASHED_WORDS.test(value.trim());
+// CX15 r6 (M-1): the words the owner typed. A nonempty normalized text that is no <placeholder> (WORDS_ECHO, OWNER_REPLY or
+// any <...> template the server writes), holds no marker the server writes (WORDS_ECHO, its aliases, OWNER_REPLY) and is no
+// sha256:<hex> (a server value). Every gate that takes authorization words refuses anything else (WORDS_REQUIRED, nothing
+// sent): a continuation the hub masked and replayed as it is never runs.
+export const isServerWordsText = value => {
+  const t = text(value).trim();
+  return /^<[^<>]*>$/s.test(t) || HASHED_WORDS.test(t) || t.includes(WORDS_ECHO) || WORDS_ECHO_ALIASES.some(m => t.includes(m))
+    || t.includes(OWNER_REPLY);
+};
+export const wordsGiven = value => typeof value === 'string' && normalizeWords(value) !== '' && !isServerWordsText(value);
+// CX15 r7 (L-8): every SSAM text in English (owner rule of 15/10).
+export const ASK_OWNER = "the owner's own words in place of the marker";
+export const ASK_OWNER_SAY = 'ask the owner for his own words, verbatim; the server never repeats them';
+// One refusal for every field whose words are missing or a server text: [{path, value}] -> the WORDS_REQUIRED answer.
+export function wordsRequired(fields, { tool } = {}) {
+  const problems = fields.map(({ path: at, value }) => problem('WORDS_REQUIRED',
+    `${at}: ${value === undefined || (typeof value === 'string' && !value.trim()) ? 'the owner\'s words are missing' : 'this is a text of the server (a marker, a <template> or a sha256), never the owner\'s words'}`,
+    'the owner\'s own words, typed by the owner'));
+  return { ok: false, code: 'WORDS_REQUIRED', outcome: 'not-sent', ...(tool ? { tool } : {}),
+    error: `${tool ?? 'this write'} needs the owner's own words (${fields.map(f => f.path).join(', ')}): ask the owner and pass his literal words; a marker or template of the server is never words. Nothing was sent.`,
+    problems, askOwner: { fields: fields.map(f => f.path), say: ASK_OWNER_SAY } };
+}
+// CX15 r7 (M-1, M-3, the family): the words fields of a call, at any depth — every string under WORD_KEYS, the text of
+// studio_authorize and the words of a studio_command line — that are present, not blank and not the owner's words
+// (wordsGiven). The hub refuses such a call before any handler runs (one WORDS_REQUIRED with every field); a blank or
+// absent field is each tool's own rule (a standing grant, a preview). -> [{path, value}]
+export function callWordsProblems(tool, args) {
+  const fields = [];
+  const bad = value => typeof value === 'string' && value.trim() !== '' && !wordsGiven(value);
+  const walk = (v, at) => {
+    if (Array.isArray(v)) { v.forEach((x, i) => walk(x, at + '/' + i)); return; }
+    if (!v || typeof v !== 'object') return;
+    for (const [k, x] of Object.entries(v)) {
+      if (WORD_KEYS.has(k) && typeof x === 'string') { if (bad(x)) fields.push({ path: (at + '/' + k).replace(/^\//, ''), value: x }); }
+      else walk(x, at + '/' + k);
+    }
+  };
+  walk(args, '');
+  if (tool === 'studio_authorize' && bad(args?.text)) fields.push({ path: 'text', value: args.text });
+  if (tool === 'studio_command' && args && typeof args === 'object') {
+    const tokens = [...String(args.command ?? '').split(' '), ...(Array.isArray(args.args) ? args.args : typeof args.args === 'string' ? [args.args] : [])];
+    const found = bridgeLineWords(tokens).find(bad);
+    if (found !== undefined) fields.push({ path: 'command/args', value: found });
+  }
+  return fields;
+}
+// maskWords(value, at, seen): the masked value; seen collects the paths it masked.
+export const maskWords = (value, at = '', seen = null) => (Array.isArray(value) ? value.map((v, i) => maskWords(v, at + '/' + i, seen))
+  : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([k, v]) => {
+    if (WORD_KEYS.has(k) && typeof v === 'string' && !placeholderOrHash(v)) { seen?.push((at + '/' + k).replace(/^\//, '')); return [k, WORDS_ECHO]; }
+    return [k, maskWords(v, at + '/' + k, seen)];
+  })) : value);
+// CX15 r6 (M-2): the arguments of studio_command ({command, args}) hold words where the bridge reads them: the text of
+// "authorize <manifest> <kind> <text...>", the tokens after --authorize up to the next --option and --authorize=<words>
+// (the rule of argsWithoutWords / bridgeArgsWithoutWords). In an echo each run of those tokens becomes one WORDS_ECHO; the
+// shape (a command text, args as an array or as a text, a number among them) is kept.
+export function bridgeEchoWithoutWords(args, seen = null) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return args;
+  let position = 0, authorizeCommand = false, wordsRun = false, emitted = false, masked = false;
+  const word = () => { masked = true; if (emitted) return null; emitted = true; return WORDS_ECHO; };
+  // One token: the token, its masked form, or null (a later token of a run whose marker is already there).
+  const step = token => {
+    const t = String(token);
+    if (t === '') return token;
+    const at = position++;
+    if (at === 0) authorizeCommand = t === 'authorize';
+    if (authorizeCommand && at >= 3) return word();
+    if (/^--authorize=/i.test(t)) { masked = true; wordsRun = true; emitted = true; return '--authorize=' + WORDS_ECHO; }
+    if (t.startsWith('--')) { wordsRun = t.toLowerCase() === '--authorize'; emitted = false; return token; }
+    return wordsRun ? word() : token;
+  };
+  const line = value => value.split(' ').map(step).filter(t => t !== null).join(' ');
+  const out = { ...args };
+  if (typeof args.command === 'string') out.command = line(args.command);
+  if (typeof args.args === 'string') out.args = line(args.args);
+  else if (Array.isArray(args.args)) out.args = args.args.map(a => (typeof a === 'string' && /^--authorize=/i.test(a) ? (step('--authorize='), '--authorize=' + WORDS_ECHO)
+    : typeof a === 'string' && a.includes(' ') ? line(a) : step(a))).filter(a => a !== null);
+  if (masked) seen?.push('command/args');
+  return masked ? out : args;
+}// The same over a whole answer: every `corrected`, and the arguments of every step {tool, arguments} (continuation,
+// continuations, next steps), at any depth. The rest of the answer is unchanged. CX15 r6 (M-1): a step whose arguments
+// were masked says so: its why ends with "; <fields>: the owner's own words in place of the marker" and it carries askOwner
+// (the fields the owner must fill) — replaying it as it is gives WORDS_REQUIRED. tool: the tool whose answer this is (its
+// corrected is masked by the rules of that tool: studio_command, M-2).
+export function withoutWordEchoes(value, { tool } = {}) {
+  if (Array.isArray(value)) return value.map(v => withoutWordEchoes(v, { tool }));
+  if (!value || typeof value !== 'object') return value;
+  const out = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (k !== 'corrected') { out[k] = withoutWordEchoes(v, { tool }); continue; }
+    const masked = maskWords(v);
+    out[k] = tool === 'studio_command' ? bridgeEchoWithoutWords(masked) : masked;
+  }
+  if (typeof out.tool === 'string' && out.arguments && typeof out.arguments === 'object') {
+    const seen = [];
+    let args = maskWords(out.arguments, '', seen);
+    if (out.tool === 'studio_command') args = bridgeEchoWithoutWords(args, seen);
+    out.arguments = args;
+    if (seen.length) {
+      const fields = [...new Set(seen)];
+      out.why = (typeof out.why === 'string' && out.why ? out.why.replace(/[\s.;]*$/, '') + '; ' : '') + fields.join(', ') + ': ' + ASK_OWNER;
+      out.askOwner = { fields, say: ASK_OWNER_SAY };
+    }
+  }
+  return out;
+}
+// The same over an MCP result ({content:[{type:'text', text: JSON}], structuredContent}): both views, only when they change.
+// CX15 r6 (L-5 on the way): an answer with no key the mask touches (WORD_KEYS, corrected) is returned as it is, found by a
+// scan of the text (no parse) and of the structured value (no copy); only answers that have one are parsed and masked.
+const ECHO_KEY = /"(authorize|authorization|words|ownerRequest|corrected)"\s*:|"studio_command"/;
+function hasEchoKeys(value) {
+  const stack = [value];
+  while (stack.length) {
+    const v = stack.pop();
+    if (Array.isArray(v)) { for (const x of v) if (x && typeof x === 'object') stack.push(x); continue; }
+    if (!v || typeof v !== 'object') continue;
+    if (v.tool === 'studio_command') return true;
+    for (const k of Object.keys(v)) { if (k === 'corrected' || WORD_KEYS.has(k)) return true; const x = v[k]; if (x && typeof x === 'object') stack.push(x); }
+  }
+  return false;
+}
+export function resultWithoutWordEchoes(result, options) {
+  if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+  if (options?.tool !== 'studio_command' && !result.content.some(c => typeof c?.text === 'string' && ECHO_KEY.test(c.text))
+    && (result.structuredContent === undefined || !hasEchoKeys(result.structuredContent))) return result;
+  let changed = false;
+  const content = result.content.map(c => {
+    if (c?.type !== 'text' || typeof c.text !== 'string' || !/^\s*[{[]/.test(c.text)) return c;
+    let parsed; try { parsed = JSON.parse(c.text); } catch { return c; }
+    const masked = withoutWordEchoes(parsed, options);
+    if (JSON.stringify(masked) === JSON.stringify(parsed)) return c;
+    changed = true; return { ...c, text: JSON.stringify(masked) };
+  });
+  const structured = result.structuredContent === undefined ? undefined : withoutWordEchoes(result.structuredContent, options);
+  if (structured !== undefined && JSON.stringify(structured) !== JSON.stringify(result.structuredContent)) changed = true;
+  return changed ? { ...result, content, ...(structured === undefined ? {} : { structuredContent: structured }) } : result;
+}
+// CX15 r4 (W-2) / r5 (N-2): the words of a bridge command line. --authorize <words> (every token up to the next --option, as
+// DataCommands.cs reads them) and --authorize=<words> go as one 'sha256:<hex>' token; the authorize command (authorize
+// <manifest> publish|create <text...>, StartupHook.cs Authorize: Split(' ', 3), only a nonempty text required) gets its
+// text as one 'sha256:<hex>' token. Idempotent.
+export function argsWithoutWords(args = []) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = String(args[i]);
+    if (/^--authorize=/i.test(a)) {
+      // CX15 r6: the tokens after --authorize=<first word> up to the next --option are words too (bridgeLineWords).
+      const run = [a.slice('--authorize='.length)];
+      while (i + 1 < args.length && !String(args[i + 1]).startsWith('--')) run.push(String(args[++i]));
+      out.push('--authorize=' + hashedWords(run.join(' '))); continue;
+    }
+    out.push(a);
+    if (a.toLowerCase() !== '--authorize') continue;
+    const words = [];
+    while (i + 1 < args.length && !String(args[i + 1]).startsWith('--')) words.push(String(args[++i]));
+    if (words.length) out.push(hashedWords(words.join(' ')));
+  }
+  return out;
+}
+// CX15 r6 (M-1): the words a bridge line carries, by the same rule ([] when it carries none): the text of the authorize
+// command, the tokens after --authorize up to the next --option, the value of --authorize=.
+export function bridgeLineWords(tokens = []) {
+  const list = tokens.flatMap(t => String(t).split(' ')).filter(t => t !== '');
+  if (list[0] === 'authorize') return list.length > 3 ? [list.slice(3).join(' ')] : [''];
+  const words = [];
+  for (let i = 0; i < list.length; i++) {
+    if (/^--authorize=/i.test(list[i])) { const run = [list[i].slice('--authorize='.length)]; while (i + 1 < list.length && !list[i + 1].startsWith('--')) run.push(list[++i]); words.push(run.join(' ').trim()); continue; }
+    if (list[i].toLowerCase() !== '--authorize') continue;
+    const run = []; while (i + 1 < list.length && !list[i + 1].startsWith('--')) run.push(list[++i]);
+    words.push(run.join(' '));
+  }
+  return words;
+}
+// CX15 r6 (the sweep of the review: L-1x on the way): the pipe joins the arguments with spaces, so an argument that holds
+// several tokens ("<manifest> publish <words>", "M E --authorize <words>") is read token by token too: when the line
+// carries words, they are found and hashed on the tokens the bridge will read.
+export function bridgeArgsWithoutWords(args = []) {
+  if (!Array.isArray(args) || !args.length) return args;
+  const tokens = args.flatMap(a => String(a).split(' ')).filter(t => t !== '');
+  if (tokens[0] === 'authorize') return tokens.length >= 4 ? [tokens[0], tokens[1], tokens[2], hashedWords(tokens.slice(3).join(' '))] : args;
+  if (!tokens.some(t => /^--authorize(=|$)/i.test(t))) return args;
+  return argsWithoutWords(args.some(a => String(a).includes(' ') && /(^|\s)--authorize(=|\s|$)/i.test(String(a))) ? tokens : args);
+}
 // The words seen on a host, one file per UTC day (seen-words\<host>\<YYYY-MM-DD>.jsonl, CX15 r2, provisional decision
 // "24 h with pruning"): appends never rewrite a file, and noting words deletes the days older than the window (and the
 // single file of before, seen-words\<host>.jsonl, once all of it is older), so the folder never grows past two days.

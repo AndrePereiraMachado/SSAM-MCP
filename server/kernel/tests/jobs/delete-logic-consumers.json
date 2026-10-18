@@ -1,12 +1,12 @@
 {
- "description": "Apagar LOGICA com consumidores reais: a server action Contact_Save e chamada por outra server action (Contact_Import) e pela screen action Save da tela ContactDetail. Em vez de quebrar os dois, o verbo replace reponta-os para a action nova Contact_Store; so entao o delete passa sem force. A recusa esta em tests/jobs-negative/delete-action-in-use.json.",
+ "description": "Delete LOGIC with real consumers: the server action Contact_Save is called by another server action (Contact_Import) and by the screen action Save of the screen ContactDetail. Instead of breaking both, the verb replace repoints them to the new action Contact_Store; only then does the delete pass without force. The refusal is in tests/jobs-negative/delete-action-in-use.json.",
  "base": "job:screen-form-reactive",
  "expectValid": true,
  "ops": [
-  {"op": "set", "target": "IServerEntity:Contact", "prop": "Public", "value": true, "_why": "(0) Contact_Import e publica e recebe um record Contact: o Verify exige a entidade publica tambem (InvalidPublic_ActionParameterNotPublic)"},
+  {"op": "set", "target": "IServerEntity:Contact", "prop": "Public", "value": true, "_why": "(0) Contact_Import is public and receives a Contact record: the Verify requires the entity to be public as well (InvalidPublic_ActionParameterNotPublic)"},
 
-  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "Contact_Import", "as": "$imp", "_why": "(1) o SEGUNDO consumidor: uma action que chama Contact_Save (o primeiro ja e a screen action Save)"},
-  {"op": "set", "target": "$imp", "prop": "Public", "value": true, "_why": "(1) publica = ponto de entrada de outro modulo; e o que a impede de ser uma action solta com UnusedUserAction"},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "Contact_Import", "as": "$imp", "_why": "(1) the SECOND consumer: an action that calls Contact_Save (the first is already the screen action Save)"},
+  {"op": "set", "target": "$imp", "prop": "Public", "value": true, "_why": "(1) public = entry point from another module; it is what keeps it from being a loose action with UnusedUserAction"},
   {"op": "create", "parent": "$imp", "type": "IInputParameter", "name": "Contact", "as": "$impIn"},
   {"op": "set", "target": "$impIn", "prop": "DataType", "value": "Contact"},
   {"op": "create", "parent": "$imp", "type": "IStartNode", "as": "$i0"},
@@ -20,7 +20,7 @@
 
   {"op": "usages", "target": "IServerAction:Contact_Save", "_why": "(2) dois consumidores reais: o no da screen action Save e o no SaveOne de Contact_Import"},
 
-  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "Contact_Store", "as": "$new", "_why": "(3) a substituta, com a MESMA assinatura (e o que torna o replace seguro)"},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "Contact_Store", "as": "$new", "_why": "(3) the replacement, with the SAME signature (which is what makes the replace safe)"},
   {"op": "set", "target": "$new", "prop": "Description", "value": "Substitui Contact_Save: mesma assinatura, gravacao com o Id devolvido"},
   {"op": "create", "parent": "$new", "type": "IInputParameter", "name": "Contact", "as": "$newIn"},
   {"op": "set", "target": "$newIn", "prop": "DataType", "value": "Contact"},
@@ -41,15 +41,15 @@
   {"op": "link", "from": "$nAs", "to": "$n9"},
   {"op": "layout", "target": "$new"},
 
-  {"op": "replace", "from": "IServerAction:Contact_Save", "to": "$new", "_why": "(4) os DOIS consumidores passam a apontar para Contact_Store, mantendo a mesma chave"},
+  {"op": "replace", "from": "IServerAction:Contact_Save", "to": "$new", "_why": "(4) the TWO consumers now point to Contact_Store, keeping the same key"},
 
-  {"op": "usages", "target": "IServerAction:Contact_Save", "_why": "(5) tem de ficar em zero"},
-  {"op": "usages", "target": "$new", "_why": "(5) os dois consumidores estao aqui agora"},
+  {"op": "usages", "target": "IServerAction:Contact_Save", "_why": "(5) it has to be at zero"},
+  {"op": "usages", "target": "$new", "_why": "(5) the two consumers are here now"},
 
-  {"op": "delete", "target": "IServerAction:Contact_Save", "_why": "(6) sem consumidores, o delete passa sem force: brokenConsumers=0"},
+  {"op": "delete", "target": "IServerAction:Contact_Save", "_why": "(6) with no consumers, the delete passes without force: brokenConsumers=0"},
 
-  {"op": "find", "name": "Contact_Save", "_why": "(7) so o no da screen action guarda o nome antigo; a action nao existe mais"},
-  {"op": "get", "target": "IScreenAction:Save/#IExecuteServerActionNode[1]", "_why": "(7) o no da tela chama Contact_Store"},
+  {"op": "find", "name": "Contact_Save", "_why": "(7) only the node of the screen action keeps the old name; the action no longer exists"},
+  {"op": "get", "target": "IScreenAction:Save/#IExecuteServerActionNode[1]", "_why": "(7) the node of the screen calls Contact_Store"},
   {"op": "get", "target": "IServerAction:Contact_Import/SaveOne"}
  ]
 }

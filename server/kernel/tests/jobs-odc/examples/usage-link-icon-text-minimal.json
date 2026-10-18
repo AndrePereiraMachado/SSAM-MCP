@@ -1,5 +1,5 @@
 {
- "description": "Link com icone e texto visivel: o texto padrao do Link sai e entram um Icon e uma Expression dentro dele; o clique navega para outra tela.",
+ "description": "A Link with an icon and a visible text: the default text of the Link goes out and an Icon and an Expression go in it; the click navigates to another screen.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -8,13 +8,13 @@
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
 
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ILink", "name": "ProfileLink", "as": "$lnk"},
-  {"op": "delete", "target": "$lnk/#ITextWidget", "_why": "o Link nasce com o texto 'Link'; para ter icone + texto, o texto padrao sai e os filhos entram no Link"},
+  {"op": "delete", "target": "$lnk/#ITextWidget", "_why": "the Link is born with the text 'Link'; to have icon + text, the default text goes out and the children go into the Link"},
   {"op": "create", "parent": "$lnk", "type": "IIcon", "name": "ProfileIcon", "as": "$ico"},
   {"op": "set", "target": "$ico", "prop": "Icon", "value": "user"},
-  {"op": "set", "target": "$ico", "prop": "Weight", "value": "regular", "_why": "no ODC o nome do icone (Phosphor) so resolve junto com o Weight"},
+  {"op": "set", "target": "$ico", "prop": "Weight", "value": "regular", "_why": "on ODC the icon name (Phosphor) resolves only together with the Weight"},
   {"op": "create", "parent": "$lnk", "type": "IExpression", "as": "$text"},
   {"op": "set", "target": "$text", "prop": "Value", "value": "\" My profile\""},
-  {"op": "set", "target": "$lnk/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile", "_why": "UserProfile e uma tela que o app ja tem"},
+  {"op": "set", "target": "$lnk/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile", "_why": "UserProfile is a screen the app already has"},
 
   {"op": "dump", "target": "$lnk", "depth": 3}
  ]

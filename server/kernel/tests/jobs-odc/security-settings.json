@@ -1,5 +1,5 @@
 ﻿{
- "description": "ODC (cobertura T): ROLE, EXCECAO DE USUARIO, SETTING e VARIAVEL DE CLIENTE, quatro tipos que nunca tinham passado pela faixa ODC. Espelha tests/jobs/security-config-reactive.json. ATENCAO AO NOME: o que o SS11 chama Site Property o produto ODC chama SETTING; a API publica manteve o nome antigo (OutSystems.Model.Data.ISiteProperty, IESpace.CreateSiteProperty), por isso o job cria ISiteProperty mas o vocabulario e Setting. Aqui as duas Settings sao LIDAS por uma server action (no ODC uma Setting so se le: gravar dentro de uma action e erro, ver o relatorio da frente T), uma delas e secreta, a variavel de cliente e lida e gravada pela tela, e a tela e restrita ao role.",
+ "description": "ODC (coverage T): ROLE, USER EXCEPTION, SETTING and CLIENT VARIABLE, four types that had never passed through the ODC lane. It mirrors tests/jobs/security-config-reactive.json. MIND THE NAME: what SS11 calls Site Property the ODC product calls SETTING; the public API kept the old name (OutSystems.Model.Data.ISiteProperty, IESpace.CreateSiteProperty), so the job creates ISiteProperty but the vocabulary is Setting. Here the two Settings are READ by a server action (in ODC a Setting can only be read: writing inside an action is an error, see the report of front T), one of them is secret, the client variable is read and written by the screen, and the screen is restricted to the role.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -14,7 +14,7 @@
 
   {"op": "create", "parent": "@espace", "type": "ISiteProperty", "name": "WfCovAuditToken", "as": "$secret"},
   {"op": "set", "target": "$secret", "prop": "DataType", "value": "Text"},
-  {"op": "set", "target": "$secret", "prop": "IsSecret", "value": true, "_why": "Setting secreta: o valor nao viaja no OML nem aparece no Studio; e o ModelFeature_SitePropertiesSupportsSecrets do ODC"},
+  {"op": "set", "target": "$secret", "prop": "IsSecret", "value": true, "_why": "secret Setting: the value does not travel in the OML nor appear in the Studio; it is the ModelFeature_SitePropertiesSupportsSecrets of ODC"},
   {"op": "set", "target": "$secret", "prop": "Description", "value": "Cobertura T: Setting secreta"},
 
   {"op": "create", "parent": "@espace", "type": "IClientVariable", "name": "WfCovLastFilter", "as": "$clientvar"},
@@ -48,7 +48,7 @@
 
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfCovAuditScreen", "as": "$scr"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
-  {"op": "link", "from": "$scr", "connector": "Roles", "to": "$role", "_why": "e assim que a tela fica restrita ao role, igual ao job do SS11"},
+  {"op": "link", "from": "$scr", "connector": "Roles", "to": "$role", "_why": "this is how the screen is restricted to the role, same as the SS11 job"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "\"Audit\""},
 
@@ -57,7 +57,7 @@
 
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "AuditBox", "as": "$box"},
   {"op": "create", "parent": "$box", "type": "IExpression", "as": "$last"},
-  {"op": "set", "target": "$last", "prop": "Value", "value": "\"Last filter: \" + Client.WfCovLastFilter", "_why": "le a variavel de cliente numa expressao da tela"},
+  {"op": "set", "target": "$last", "prop": "Value", "value": "\"Last filter: \" + Client.WfCovLastFilter", "_why": "reads the client variable in a screen expression"},
   {"op": "create", "parent": "$box", "type": "IInput", "name": "FilterInput", "as": "$input"},
   {"op": "set", "target": "$input", "prop": "Variable", "value": "Filter"},
   {"op": "create", "parent": "$box", "type": "IButton", "name": "ApplyButton", "as": "$btn"},
@@ -68,7 +68,7 @@
   {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$remember"},
   {"op": "set", "target": "$remember", "prop": "Label", "value": "RememberFilter"},
   {"op": "create", "parent": "$remember", "type": "IAssignment", "as": "$assign1"},
-  {"op": "set", "target": "$assign1", "prop": "Variable", "value": "Client.WfCovLastFilter", "_why": "grava a variavel de cliente: e isto que uma Setting NAO deixa fazer no ODC"},
+  {"op": "set", "target": "$assign1", "prop": "Variable", "value": "Client.WfCovLastFilter", "_why": "writes the client variable: this is what a Setting does NOT allow in ODC"},
   {"op": "set", "target": "$assign1", "prop": "Value", "value": "Filter"},
   {"op": "create", "parent": "$act", "type": "IExecuteServerActionNode", "name": "CheckAudit", "as": "$call"},
   {"op": "set", "target": "$call", "prop": "Action", "value": "IServerAction:WfCovAudit_Check"},
@@ -82,10 +82,10 @@
   {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$act"},
 
   {"op": "get", "target": "$setting", "_why": "prova DataType e DefaultValue da Setting"},
-  {"op": "get", "target": "$secret", "_why": "prova IsSecret na Setting secreta"},
-  {"op": "get", "target": "$scr", "_why": "prova que a tela ficou com Roles preenchido"},
-  {"op": "usages", "target": "$exception", "_why": "prova que a excecao de usuario e levantada nos dois ramos"},
-  {"op": "usages", "target": "$clientvar", "_why": "prova a variavel de cliente lida na expressao e gravada no Assign"}
+  {"op": "get", "target": "$secret", "_why": "proves IsSecret on the secret Setting"},
+  {"op": "get", "target": "$scr", "_why": "proves the screen ended up with Roles filled in"},
+  {"op": "usages", "target": "$exception", "_why": "proves the user exception is raised in both branches"},
+  {"op": "usages", "target": "$clientvar", "_why": "proves the client variable read in the expression and written in the Assign"}
  ]
 }
 

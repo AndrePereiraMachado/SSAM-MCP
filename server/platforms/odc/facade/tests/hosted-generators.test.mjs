@@ -4,6 +4,7 @@
 // tools that take a job (o11_deliver, studio_deliver, ssam_job, o11_job), before the agent, the lane checks and any
 // capture: HOSTED_UNAVAILABLE, cause GENERATOR_PENDING, policy HOSTED_GENERATOR_OPS. One switch ('refuse'); a generator the
 // owner approves is let through like any op. A fake link, context and executor; no hub, agent or Studio.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -12,6 +13,7 @@ import path from 'node:path';
 import { wrapHostedTool, namesGenerator, HOSTED_GENERATOR_OPS, GENERATOR_TOOLS } from '../hosted/policy.mjs';
 import { withGeneratorStates } from '../generators.mjs';
 import { fakeAgentLink, hostedDirs, cleanupHostedDirs } from './fixtures/fake-agent-link.mjs';
+import { portuguese } from './fixtures/portuguese.mjs';
 
 test.after(cleanupHostedDirs);
 const TOOLS = ['o11_deliver', 'studio_deliver', 'ssam_job', 'o11_job'];
@@ -47,8 +49,10 @@ const refusedAsGenerator = (result, name, generator) => {
   assert.equal(value.policy, 'HOSTED_GENERATOR_OPS', name + ': the answer names the switch');
   if (generator) assert.equal(value.generator, generator, name);
   assert.equal(value.outcome, 'not-sent');
-  assert.match(value.error, /blind test/, name + ': English');
-  assert.match(value.error, /teste cego/, name + ': pt-BR');
+  // a7 (no-internals list item 16): the refusal says the op is not offered here, never an internal reason (a blind test).
+  assert.match(value.error, /not offered on a hosted SSAM server yet/, name + ': English');
+  assert.doesNotMatch(value.error, /blind/i, name + ': no internal reason');
+  assert.deepEqual(portuguese(value.error), [], name + ': English only, no pt-BR half (owner rule of 2026-10-15)');
   assert.equal(value.continuation.tool, 'ssam_discover');
 };
 

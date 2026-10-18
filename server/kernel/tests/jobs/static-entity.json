@@ -1,5 +1,5 @@
 {
- "description": "Static entity com atributos Id, Label e Order e records nomeados.",
+ "description": "Static entity with attributes Id, Label and Order and named records.",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "ops": [

@@ -1,6 +1,7 @@
 // The seed phase of the prototype importer (docs/PROTOTIPO-NATIVO.md 3.4, 7.6 test 6): the store rows go only into the
 // regular entities the import created and marked, only when they are empty, with the prototype keys, parents first, and
 // never without publish:true (a clean publication) and the words of the call. The writer is a fake.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -60,7 +61,7 @@ test('the seed writes only the empty entities, in one read batch and one insert 
 
 test('never without publish:true and a clean publication, with seed:false, or without the words of the call', async () => {
   for (const [args, why] of [[{ published: false }, /publish:true/], [{ published: true, seed: false }, /seed is false/], [{ published: true, authorize: '' }, /authorization words/],
-    [{ published: true, authorize: '<palavras do usuário>' }, /authorization words/]]) {
+    [{ published: true, authorize: "<the user's own words>" }, /authorization words/]]) {
     const write = writer();
     const seed = await seedPrototypeData({ lane: 'o11', module: 'Haiku_UI', receipt: receipt(), bundle: farmaIr(FARMA), authorize: WORDS, write, ...args });
     assert.equal(seed.ran, false); assert.match(seed.reason, why); assert.equal(write.requests.length, 0, 'nothing is written');

@@ -1,5 +1,5 @@
 {
- "description": "REST consumido POST com body JSON, Basic Auth, header de cliente e de metodo, output em header (job da investigacao REST de 2026-09-04)",
+ "description": "Consumed REST POST with JSON body, Basic Auth, client and method header, output in header (job of the REST investigation of 2026-09-04)",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "ops": [

@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA de `duplicate` no mesmo pai de um tipo que o pai guarda uma vez so (faixa O11): a Preparation de um bloco. A colagem nativa falhava a meio ('Object should be null: Preparation'); o kernel recusa antes e manda passar `parent` com outro bloco sem Preparation (o caminho valido esta em tests/jobs/duplicate-into-parent-traditional.json).",
+ "description": "THE REFUSAL of `duplicate` in the same parent of a type that the parent holds only once (O11 lane): the Preparation of a block. The native paste failed halfway ('Object should be null: Preparation'); the kernel refuses first and tells you to pass `parent` with another block without a Preparation (the valid path is in tests/jobs/duplicate-into-parent-traditional.json).",
  "base": "tests/fixtures/traditional-ui.oml",
  "expectValid": true,
  "expectError": [

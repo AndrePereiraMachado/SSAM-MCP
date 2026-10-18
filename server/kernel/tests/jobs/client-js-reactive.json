@@ -1,5 +1,5 @@
 {
- "description": "Client action com no JavaScript (inputs/outputs do no, argumentos), Script do modulo exigido pela tela (RequiredScripts) e screen action que chama a client action e usa o output",
+ "description": "Client action with a JavaScript node (node inputs/outputs, arguments), module Script required by the screen (RequiredScripts) and a screen action that calls the client action and uses the output",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "ops": [

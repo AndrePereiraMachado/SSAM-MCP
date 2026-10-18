@@ -1,5 +1,6 @@
 // The summary of what a delivered (or proven) job created or changed (job-summary.mjs, 2026-10-12): a delivery answers it so
-// the model does not map the module again after "entregue". Pure: jobs written inline, plus the suite's single-job example.
+// the model does not map the module again after "delivered". Pure: jobs written inline, plus the suite's single-job example.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

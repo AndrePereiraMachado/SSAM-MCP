@@ -1,5 +1,5 @@
 {
- "description": "O11: a RECUSA do rename num conector. Conectores nao tem nome: o ICommentConnector publica um Label gravavel (continua escrito por `set Label`), mas o rename nao o trata como nome e recusa com uma frase curta, em vez do antigo \"Cannot find handler for object  of type Connector\" que vinha do NameClashHandler da plataforma. O caminho positivo do rename (Label de If/Assign/ForEach/Switch/Message e da condicao de Switch, Identifier de registo, Property/Event) esta em tests/jobs/rename-name-property.json.",
+ "description": "O11: the REFUSAL of rename on a connector. Connectors have no name: the ICommentConnector publishes a writable Label (still written by `set Label`), but rename does not treat it as a name and refuses with a short sentence, instead of the old \"Cannot find handler for object  of type Connector\" that came from the NameClashHandler of the platform. The positive path of rename (Label of If/Assign/ForEach/Switch/Message and of the Switch condition, Identifier of record, Property/Event) is in tests/jobs/rename-name-property.json.",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "expectError": [
@@ -18,6 +18,6 @@
   {"op": "create", "parent": "$fp", "type": "ICommentNode", "as": "$note"},
   {"op": "set", "target": "$note", "prop": "Text", "value": "why this assign exists"},
   {"op": "create", "parent": "$note", "type": "OutSystems.Model.Logic.Nodes.ICommentConnector", "args": {"target": "$as"}, "as": "$line"},
-  {"op": "rename", "target": "$line", "name": "RnNote", "_why": "recusado: o conector de comentario e uma linha, nao tem nome"}
+  {"op": "rename", "target": "$line", "name": "RnNote", "_why": "refused: the comment connector is a line, it has no name"}
  ]
 }

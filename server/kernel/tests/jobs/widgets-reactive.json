@@ -1,5 +1,5 @@
 {
- "description": "Widgets Reactive menos comuns numa tela com variaveis locais: Container, Checkbox, Switch, TextArea, Dropdown ligado a aggregate, Icon, Label com TargetWidget, RadioGroup, ButtonGroup com itens",
+ "description": "Less common Reactive widgets on a screen with local variables: Container, Checkbox, Switch, TextArea, Dropdown bound to an aggregate, Icon, Label with TargetWidget, RadioGroup, ButtonGroup with items",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "ops": [

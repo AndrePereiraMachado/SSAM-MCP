@@ -1,10 +1,10 @@
 {
- "description": "Frente B (catalogo abrangente): widgets nativos do Reactive que nenhum job ODC criava, sobre job:screen-form (entidade WfCovTask e tela WfCovTaskDetail com o input TaskId). Equivalente ODC da parte correspondente de tests/jobs/gallery-native-reactive.json, com as diferencas da faixa: a legenda de botao, link e label vive no Content do widget (enderecada por #ITextWidget), e os filhos do popup vao no Content dele (Model API ODC do plugin NRWidgets). Cobre: TextArea, Switch, Dropdown ligado ao aggregate, Link que navega para a tela de detalhe com argumento, Image externa, If com os dois ramos, Popup aberto e fechado por uma screen action; e o ciclo usages -> delete de um Input que um Label aponta (o Label sai primeiro). Radio, tabela e upload estao em cat-b-choice-table.json.",
+ "description": "Front B (broad catalog): native Reactive widgets that no ODC job created, over job:screen-form (entity WfCovTask and screen WfCovTaskDetail with the input TaskId). ODC equivalent of the corresponding part of tests/jobs/gallery-native-reactive.json, with the lane differences: the caption of a button, link and label lives in the Content of the widget (addressed by #ITextWidget), and the popup children go in its Content (ODC Model API of the NRWidgets plugin). It covers: TextArea, Switch, Dropdown bound to the aggregate, Link that navigates to the detail screen with an argument, external Image, If with both branches, Popup opened and closed by a screen action; and the usages -> delete cycle of an Input that a Label points to (the Label goes first). Radio, table and upload are in cat-b-choice-table.json.",
  "base": "job:screen-form",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CatBWidgetGallery", "as": "$scr", "_why": "1. a tela, as variaveis que os widgets ligam e o aggregate que alimenta o dropdown"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CatBWidgetGallery", "as": "$scr", "_why": "1. the screen, the variables the widgets bind and the aggregate that feeds the dropdown"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "\"Widget gallery\""},
@@ -19,7 +19,7 @@
   {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetTasks", "as": "$agg"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:WfCovTask"}},
 
-  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "TogglePopup", "as": "$toggle", "_why": "2. a screen action que abre e fecha o popup"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "TogglePopup", "as": "$toggle", "_why": "2. the screen action that opens and closes the popup"},
   {"op": "create", "parent": "$toggle", "type": "IStartNode", "as": "$t0"},
   {"op": "create", "parent": "$toggle", "type": "IAssignNode", "as": "$tAssign"},
   {"op": "set", "target": "$tAssign", "prop": "Label", "value": "FlipPopup"},
@@ -31,7 +31,7 @@
   {"op": "link", "from": "$tAssign", "to": "$t9"},
   {"op": "layout", "target": "$toggle"},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "Inputs", "as": "$c1", "_why": "3. widgets de valor"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "Inputs", "as": "$c1", "_why": "3. value widgets"},
   {"op": "set", "target": "$c1", "prop": "Style", "value": "\"padding-m\""},
   {"op": "create", "parent": "$c1", "type": "ILabel", "name": "Scratch_Label", "as": "$lbl"},
   {"op": "set", "target": "$lbl/#ITextWidget", "prop": "Text", "value": "Scratch"},
@@ -63,7 +63,7 @@
   {"op": "set", "target": "$img", "prop": "Type", "value": "External"},
   {"op": "set", "target": "$img", "prop": "Url", "value": "\"https://picsum.photos/200/120\""},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "State", "as": "$c3", "_why": "5. If com os dois ramos e o popup"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "State", "as": "$c3", "_why": "5. If with both branches and the popup"},
   {"op": "set", "target": "$c3", "prop": "Style", "value": "\"padding-m\""},
   {"op": "create", "parent": "$c3", "type": "IIfWidget", "name": "Done_If", "as": "$if"},
   {"op": "set", "target": "$if", "prop": "Condition", "value": "DoneVar"},
@@ -87,10 +87,10 @@
   {"op": "get", "target": "$sw"},
   {"op": "get", "target": "$ta"},
 
-  {"op": "usages", "target": "$in", "_why": "7. o Input tem 1 consumidor: o TargetWidget do Label"},
-  {"op": "delete", "target": "$lbl", "_why": "o consumidor sai primeiro"},
-  {"op": "delete", "target": "$in", "_why": "agora o Input sai sem force"},
-  {"op": "usages", "target": "$toggle", "_why": "a action tem os dois OnClick como consumidores"},
+  {"op": "usages", "target": "$in", "_why": "7. the Input has 1 consumer: the TargetWidget of the Label"},
+  {"op": "delete", "target": "$lbl", "_why": "the consumer goes first"},
+  {"op": "delete", "target": "$in", "_why": "now the Input goes without force"},
+  {"op": "usages", "target": "$toggle", "_why": "the action has the two OnClick as consumers"},
   {"op": "dump", "target": "$scr", "depth": 8}
  ]
 }

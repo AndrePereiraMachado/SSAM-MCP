@@ -1,5 +1,5 @@
 {
- "description": "Radio Group: o grupo liga a variavel, os tres RadioButton de exemplo saem e dois radios com Value e texto entram no Content do grupo.",
+ "description": "Radio Group: the group binds the variable, the three sample RadioButton go out and two radios with a Value and a text go into the Content of the group.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -10,7 +10,7 @@
   {"op": "set", "target": "$ship", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IRadioGroup", "name": "ShippingRadioGroup", "as": "$rg"},
   {"op": "set", "target": "$rg", "prop": "Variable", "value": "Shipping"},
-  {"op": "delete", "target": "$rg/Content/RadioButton1", "_why": "o grupo nasce com RadioButton1..3 sem Value (erro no Verify)"},
+  {"op": "delete", "target": "$rg/Content/RadioButton1", "_why": "the group is born with RadioButton1..3 without a Value (an error in the Verify)"},
   {"op": "delete", "target": "$rg/Content/RadioButton2"},
   {"op": "delete", "target": "$rg/Content/RadioButton3"},
   {"op": "create", "parent": "$rg/Content", "type": "IRadioButton", "name": "StandardRadio", "as": "$r1"},

@@ -1,5 +1,5 @@
 {
- "description": "DropdownServerSide do OSUI: a instancia com empty (o exemplo traz List sem Source, Input sem variavel e expressoes de um GetData que o app nao tem).",
+ "description": "DropdownServerSide of OSUI: the instance with empty (the sample brings a List without a Source, an Input without a variable and expressions of a GetData the app does not have).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

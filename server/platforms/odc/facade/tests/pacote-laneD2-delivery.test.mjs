@@ -4,6 +4,7 @@
 // C16.1: a structure made public in an app is refused before the build; a library takes it.
 // C16.4: an uncertain merge answers one line per divergence and no .NET stack trace.
 // Section 3: leftovers and screenRoles come from the kernel result. Fakes only: no Studio, no bridge, no kernel CLI.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -12,6 +13,7 @@ import path from 'node:path';
 import { deliverKernel, deliveryCache, divergencesOf, jobDigest, publicStructureProblems, collectJobOps, publishOutcomeOf,
   requiredFlowLayoutEngine, withoutStack, leftoversOf, screenRolesOf, studioSteps } from '../kernel-delivery.mjs';
 import { deliver } from '../lib.mjs';
+import { hashedWords } from '../destructive-operations.mjs';
 
 const kernelResult = (extra = {}) => ({ ok: true, data: { accepted: true, isValid: true, flowLayoutEngine: requiredFlowLayoutEngine, ...extra } });
 
@@ -52,7 +54,7 @@ test('C17: until=merge calls the merge directly, never check-base or preview; a 
   assert.deepEqual(studioSteps('merge'), ['merge']);
   const f = fixture(t);
   const result = await deliverKernel(f.input, f.deps);
-  assert.equal(result.ok, true); assert.equal(result.merged, true); assert.equal(result.result, 'entregue');
+  assert.equal(result.ok, true); assert.equal(result.merged, true); assert.equal(result.result, 'delivered');
   assert.ok(!f.calls.includes('check-base')); assert.ok(!f.calls.includes('preview'));
   assert.deepEqual(f.calls.filter(c => c !== 'status'), ['snapshot', 'manifest', 'merge']);
   const review = fixture(t);
@@ -105,13 +107,14 @@ test('C08: publish:true publishes after a clean merge with the words of the requ
   const seen = [];
   const studio = async args => { seen.push(args); return f.deps.studio(args); };
   const result = await deliverKernel({ ...f.input, publish: true, authorize: 'pode publicar o Fixture' }, { ...f.deps, studio });
-  assert.equal(result.ok, true); assert.equal(result.result, 'entregue e publicado');
+  assert.equal(result.ok, true); assert.equal(result.result, 'delivered and published');
   assert.deepEqual(result.publish, { requested: true, outcome: 'published', version: 7, at: '2026-10-05T12:00:00Z' });
   assert.deepEqual(result.authorization, { source: 'words' });
   assert.equal(result.lastPublication.status, 'succeeded'); assert.equal(result.lastPublication.by, 'ssam'); assert.equal(result.lastPublication.source, 'publish-result');
   const order = seen.map(a => a[0]);
   assert.ok(order.indexOf('authorize') > order.indexOf('merge') && order.indexOf('publish') > order.indexOf('authorize'));
-  assert.deepEqual(seen.find(a => a[0] === 'authorize').slice(2), ['publish', 'pode publicar o Fixture']);
+  // CX15 r5 (N-2, converted): the authorize line carries sha256:<hex> of the words (before: the words).
+  assert.deepEqual(seen.find(a => a[0] === 'authorize').slice(2), ['publish', hashedWords('pode publicar o Fixture')]);
   assert.deepEqual(seen.find(a => a[0] === 'publish').slice(2), ['--wait', '10']);
 });
 
@@ -121,10 +124,10 @@ test('C08: without words a standing grant of the app authorizes; without either 
   const grants = { findGrant: async query => { asked.push(query); return query.app === 'Fixture' ? { grantId: 'g-1', words: 'publique o Fixture sempre', verbs: ['publish'] } : null; } };
   const seen = [];
   const result = await deliverKernel({ ...f.input, publish: true }, { ...f.deps, grants, studio: async args => { seen.push(args); return f.deps.studio(args); } });
-  assert.equal(result.result, 'entregue e publicado');
+  assert.equal(result.result, 'delivered and published');
   assert.deepEqual(result.authorization, { source: 'standing-grant', grantId: 'g-1' });
   assert.deepEqual(asked[0], { lane: 'odc', app: 'Fixture', module: 'Fixture', verb: 'publish' });
-  assert.deepEqual(seen.find(a => a[0] === 'authorize').slice(3), ['publique o Fixture sempre']);
+  assert.deepEqual(seen.find(a => a[0] === 'authorize').slice(3), [hashedWords('publique o Fixture sempre')]); // CX15 r5 (N-2, converted)
   const none = fixture(t);
   const refused = await deliverKernel({ ...none.input, publish: true }, none.deps);
   assert.equal(refused.ok, false); assert.equal(refused.code, 'PUBLISH_AUTHORIZATION_REQUIRED'); assert.equal(refused.failed, 'preflight');
@@ -142,7 +145,7 @@ test('C08: a merge that is not clean skips the publication; a failed publication
   const failing = fixture(t, { publish: { ok: false, outcome: 'native_error', gate: 'none', error: 'Publication of Fixture ended in state CompletedWithFailure with 1 error(s) and 0 warning(s).',
     publishLog: { ok: true, module: 'Fixture', found: true, lastPublish: { state: 'CompletedWithFailure', failed: true, messages: [{ type: 'Warning', text: 'w' }, { type: 'Error', text: 'Build failed', element: { name: 'Board' }, stage: 'compilation' }] } } } });
   const failed = await deliverKernel({ ...failing.input, publish: true, authorize: 'pode publicar o Fixture' }, failing.deps);
-  assert.equal(failed.ok, false); assert.equal(failed.result, 'entregue'); assert.equal(failed.merged, true);
+  assert.equal(failed.ok, false); assert.equal(failed.result, 'delivered'); assert.equal(failed.merged, true);
   assert.equal(failed.code, 'PUBLISH_FAILED'); assert.equal(failed.failed, 'publish');
   assert.equal(failed.publish.outcome, 'failed'); assert.equal(failed.publish.messages[0].type, 'Error');
   assert.equal(failed.continuation.tool, 'studio_publish'); assert.match(failed.continuation.why, /Never repeat the delivery/);
@@ -230,7 +233,7 @@ test('C17 and C08 on the C# feature path too: straight to the merge, then the pu
     return { ok: true }; };
   const builder = async () => ({ ok: true, output: [] });
   const result = await deliver({ feature: 'lab-action', module: 'Fixture', publish: true, authorize: 'pode publicar o Fixture' }, { studio, builder, grants: null });
-  assert.equal(result.ok, true); assert.equal(result.result, 'entregue e publicado'); assert.equal(result.publish.version, 3);
+  assert.equal(result.ok, true); assert.equal(result.result, 'delivered and published'); assert.equal(result.publish.version, 3);
   assert.deepEqual(calls, ['snapshot', 'merge', 'authorize', 'publish']);
   const none = await deliver({ feature: 'lab-action', module: 'Fixture', publish: true }, { studio, builder, grants: null });
   assert.equal(none.code, 'PUBLISH_AUTHORIZATION_REQUIRED');

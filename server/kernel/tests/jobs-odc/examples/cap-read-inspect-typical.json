@@ -1,12 +1,12 @@
 {
- "description": "Leitura dirigida de um elemento existente: find por nome, get das propriedades da tela, usages de quem a usa e dump da arvore em duas camadas.",
+ "description": "A targeted read of an existing element: find by name, get of the properties of the screen, usages of who uses it and a dump of the tree in two layers.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "find", "name": "UserProfile", "_why": "o nome pode existir em mais de um tipo: o find devolve tipo, nome e chave de cada um"},
-  {"op": "get", "target": "IMobileScreen:UserProfile", "_why": "propriedades da tela (Title, Roles, inputs...)"},
-  {"op": "usages", "target": "IMobileScreen:UserProfile", "_why": "quem navega para a tela: count, real e o caminho de cada consumidor"},
-  {"op": "dump", "target": "IMobileScreen:UserProfile/#IMobileBlockInstanceWidget", "depth": 2, "_why": "a arvore do layout da tela: os placeholders onde um widget novo entra"}
+  {"op": "find", "name": "UserProfile", "_why": "the name may exist in more than one type: find returns the type, name and key of each"},
+  {"op": "get", "target": "IMobileScreen:UserProfile", "_why": "properties of the screen (Title, Roles, inputs...)"},
+  {"op": "usages", "target": "IMobileScreen:UserProfile", "_why": "who navigates to the screen: count, real and the path of each consumer"},
+  {"op": "dump", "target": "IMobileScreen:UserProfile/#IMobileBlockInstanceWidget", "depth": 2, "_why": "the layout tree of the screen: the placeholders where a new widget goes"}
  ]
 }

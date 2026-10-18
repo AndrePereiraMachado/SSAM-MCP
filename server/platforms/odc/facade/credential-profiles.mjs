@@ -3,6 +3,7 @@
 // machine that runs SSAM. Hosted (the SSAM server answering a customer) no profile is ever listed, selected, remembered
 // or prompted: every method answers HOSTED_STUDIO_SESSION_ONLY and the native helpers never start (lib.mjs and
 // service-center/index.mjs pass profiles null there; this is the second lock).
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -100,7 +101,7 @@ export class CredentialProfiles {
   async select(input, { target, principal, authorize } = {}) {
     if (hostedContext()) return { ...HOSTED_REFUSAL };
     const context=profileContext(input), chosen=principalName(principal);
-    const words=typeof authorize==='string'?authorize.trim():'';
+    const words=wordsGiven(authorize)?authorize.trim():''; // CX15 r7: one predicate (a server text names nothing)
     if (!chosen || !words.toLowerCase().includes(context.host) || !words.toLowerCase().includes(chosen))
       return {ok:false,code:'CREDENTIAL_SELECTION_AUTHORIZATION_REQUIRED',reason:'Explicit words must identify the tenant and existing profile principal. No profile was selected.'};
     let available;

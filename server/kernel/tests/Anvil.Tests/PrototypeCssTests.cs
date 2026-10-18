@@ -111,7 +111,8 @@ public class PrototypeCssTests
     [Fact]
     public void TheRuntimeTableHoldsTheProvenRowsAndRoundTripsTheStage0Schema()
     {
-        var proven = new[] { "ILink", "IAdvancedHtml", "IContainer", "ITextWidget", "ICheckbox", "IMobileBlockInstanceWidget" };
+        // CX17: IInput, IDropdown, ILabel and IList read on the published DemoLATAM_UI (2026-10-14): evidence now.
+        var proven = new[] { "ILink", "IAdvancedHtml", "IContainer", "ITextWidget", "ICheckbox", "IMobileBlockInstanceWidget", "IInput", "IDropdown", "ILabel", "IList" };
         foreach (var row in RuntimeDomTable.Rows("o11"))
             Assert.Equal(proven.Contains(row.Widget) ? RuntimeStatus.Evidence : RuntimeStatus.Inferred, row.Status);
         Assert.All(RuntimeDomTable.Rows("odc"), row => Assert.Equal(RuntimeStatus.Inferred, row.Status));   // no ODC page read yet
@@ -120,7 +121,11 @@ public class PrototypeCssTests
         Assert.Empty(checkbox.Wrappers[0].Attributes);
         Assert.Equal("div.OSBlockWidget[data-block]", RuntimeDomTable.ElementSelector(RuntimeDomTable.Row("o11", "IMobileBlockInstanceWidget")!));
         Assert.Equal(("div.popup-backdrop", "div.popup-dialog[data-popup]"), RuntimeDomTable.Popup("o11"));
-        Assert.Equal([":has(> [data-checkbox])", "[data-expression]"], RuntimeDomTable.RuntimeSpans("o11"));
+        // CX17: the input's span.input-<type> is a runtime span too (DemoLATAM_UI, 2026-10-14).
+        Assert.Equal([":has(> [data-checkbox])", ":has(> [data-input])", "[data-expression]"], RuntimeDomTable.RuntimeSpans("o11"));
+        Assert.Equal("span", Assert.Single(RuntimeDomTable.Row("o11", "IInput")!.Wrappers).Tag);
+        Assert.Equal("div.dropdown-container[data-dropdown]", Assert.Single(RuntimeDomTable.Row("o11", "IDropdown")!.Wrappers).Selector);
+        Assert.Equal("select.dropdown-display", RuntimeDomTable.ElementSelector(RuntimeDomTable.Row("o11", "IDropdown")!));
         var back = RuntimeDomTable.FromEvidence(RuntimeDomTable.ToJson("o11"));
         Assert.Equal(RuntimeDomTable.Rows("o11").Select(r => (r.Widget, r.Element, r.Status, r.Transparent, r.Wrappers.Count, r.Classes.Count)),
             back.Select(r => (r.Widget, r.Element, r.Status, r.Transparent, r.Wrappers.Count, r.Classes.Count)));
@@ -221,9 +226,9 @@ public class PrototypeCssTests
     [InlineData("#modal .modal-head h2", ":is(#modal, .ssam-id-modal) .modal-head h2", 1, 1, 1)]
     [InlineData("svg.icon", ":is(svg, :where(.ssam-icon)).icon", 0, 1, 1)]
     [InlineData("button[type=submit]", "button:is([type=submit], :where(.ssam-submit))", 0, 1, 1)]
-    [InlineData(".brand span:last-child", ".brand span:not(:where(.ssam-icon, :has(> [data-checkbox]), [data-expression])):last-child", 0, 2, 1)]
-    [InlineData(".header-link span:not(.cart-number)", ".header-link span:not(:where(.ssam-icon, :has(> [data-checkbox]), [data-expression])):not(.cart-number)", 0, 2, 1)]
-    [InlineData(".field>span", ".field>span:not(:where(.ssam-icon, :has(> [data-checkbox]), [data-expression]))", 0, 1, 1)]
+    [InlineData(".brand span:last-child", ".brand span:not(:where(.ssam-icon, :has(> [data-checkbox]), :has(> [data-input]), [data-expression])):last-child", 0, 2, 1)]
+    [InlineData(".header-link span:not(.cart-number)", ".header-link span:not(:where(.ssam-icon, :has(> [data-checkbox]), :has(> [data-input]), [data-expression])):not(.cart-number)", 0, 2, 1)]
+    [InlineData(".field>span", ".field>span:not(:where(.ssam-icon, :has(> [data-checkbox]), :has(> [data-input]), [data-expression]))", 0, 1, 1)]
     [InlineData(":not(dialog) > p", ":not(:is(dialog, :where(.ssam-tag-dialog))) > p", 0, 0, 2)]
     public void EachRewriteKeepsTheOriginalSpecificity(string selector, string expected, int a, int b, int c)
     {

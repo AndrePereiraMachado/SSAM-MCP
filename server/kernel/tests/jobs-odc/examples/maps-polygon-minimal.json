@@ -1,5 +1,5 @@
 {
- "description": "Polygon do OutSystemsMaps: Locations (obrigatorio, Text List) com os vertices, no AddOns_Placeholder de um LeafletMap.",
+ "description": "Polygon of OutSystemsMaps: Locations (required, Text List) with the vertices, in the AddOns_Placeholder of a LeafletMap.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

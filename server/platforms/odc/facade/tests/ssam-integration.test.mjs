@@ -22,7 +22,7 @@ async function connect(server) {
 }
 const temp = prefix => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 
-test('one server answers an O11 delivery with "entregue" and the job it used (nextBasedOn), through the shared response shaper', async () => {
+test('one server answers an O11 delivery with "delivered" and the job it used (nextBasedOn), through the shared response shaper', async () => {
   const root = temp('ssam-int-root-');
   const runAnvil = fakeAnvil({ deliver: () => ({ ok: true, command: 'deliver', data: { delivered: true, taskId: 't1', writeState: 'applied' } }) });
   const server = await createSsamServer({ odc: false, deps: { cycle: { root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {}, tasksDir: path.join(root, 'tasks') },
@@ -31,17 +31,17 @@ test('one server answers an O11 delivery with "entregue" and the job it used (ne
   try {
     const reply = await client.callTool({ name: 'o11_deliver', arguments: { module: 'Quotes_CS', job: { ops: [{ op: 'rename', target: 'A', name: 'B' }] }, authorize: 'pode entregar' } });
     assert.notEqual(reply.isError, true, JSON.stringify(reply));
-    assert.equal(JSON.parse(reply.content[0].text).result, 'entregue');
+    assert.equal(JSON.parse(reply.content[0].text).result, 'delivered');
     assert.equal(runAnvil.calls[0].args[0], 'deliver');
     // The inline job became a file the CLI read; the words never reached the CLI.
     const job = runAnvil.calls[0].args[runAnvil.calls[0].args.indexOf('--job') + 1];
     // The job in the kernel form (rename {target, name}) is summarized too (job-summary.mjs, 24-1).
-    assert.deepEqual(JSON.parse(reply.content[0].text), { ok: true, result: 'entregue', nextBasedOn: { job, sha256: sha256(fs.readFileSync(job)) }, summary: { edited: { count: 1, targets: ['A'] }, ops: 1 } });
+    assert.deepEqual(JSON.parse(reply.content[0].text), { ok: true, result: 'delivered', nextBasedOn: { job, sha256: sha256(fs.readFileSync(job)) }, summary: { edited: { count: 1, targets: ['A'] }, ops: 1 } });
     assert.ok(fs.existsSync(job)); assert.doesNotMatch(runAnvil.calls[0].args.join(' '), /pode entregar/);
     // A shape with one meaning (rename {from, to}, ops beside the job) is delivered in the kernel form and listed.
     const shaped = await client.callTool({ name: 'o11_deliver', arguments: { module: 'Quotes_CS', ops: [{ op: 'rename', from: 'A', to: 'B' }], authorize: 'pode entregar' } });
     const value = JSON.parse(shaped.content[0].text);
-    assert.equal(value.result, 'entregue', JSON.stringify(value));
+    assert.equal(value.result, 'delivered', JSON.stringify(value));
     assert.deepEqual(value.normalizations.map(n => n.rule), ['job-ops', 'job-op']);
     const delivered = runAnvil.calls.filter(c => c.args[0] === 'deliver').at(-1).args;
     const second = delivered[delivered.indexOf('--job') + 1];
@@ -92,16 +92,16 @@ test('two writes on one Studio never overlap through the ssam server: the second
     assert.match(read.content[0].text, /merge/);
     assert.equal(runAnvil.calls.filter(c => c.args[0] === 'deliver').length, 1, 'the second write waits in the queue');
     release();
-    assert.equal(JSON.parse((await first).content[0].text).result, 'entregue');
+    assert.equal(JSON.parse((await first).content[0].text).result, 'delivered');
     const waited = await second;
     assert.notEqual(waited.isError, true, JSON.stringify(waited));
-    assert.equal(JSON.parse(waited.content[0].text).result, 'entregue');
+    assert.equal(JSON.parse(waited.content[0].text).result, 'delivered');
     const queue = waited.structuredContent?.queue ?? waited.content.map(c => { try { return JSON.parse(c.text).queue; } catch { return undefined; } }).find(Boolean);
     assert.deepEqual([queue?.position, queue?.holder?.tool], [1, 'o11_deliver'], JSON.stringify(waited));
     assert.doesNotMatch(JSON.stringify(waited), /Ana 0912/);
     assert.equal(runAnvil.calls.filter(c => c.args[0] === 'deliver').length, 2);
     // Released: the next write runs, and no lock file is left behind.
-    assert.equal(JSON.parse((await client.callTool({ name: 'o11_deliver', arguments: { module: 'Quotes_CS', job, authorize: words } })).content[0].text).result, 'entregue');
+    assert.equal(JSON.parse((await client.callTool({ name: 'o11_deliver', arguments: { module: 'Quotes_CS', job, authorize: words } })).content[0].text).result, 'delivered');
     assert.deepEqual(fs.readdirSync(path.join(root, '.local', 'locks')), []);
   } finally { release(); await client.close(); await server.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });
@@ -142,7 +142,7 @@ test('studio_deliver through ssam: a refusal names its job; patch + basedOn corr
     const before = fs.readFileSync(refused.value.job);
     const fixed = await call({ ...common, patch: [{ op: 'replace', path: '/ops/1/value', value: 200 }], basedOn: { job: refused.value.job, sha256: refused.value.jobSha256 } });
     assert.notEqual(fixed.r.isError, true, JSON.stringify(fixed.value));
-    assert.equal(fixed.value.result, 'entregue');
+    assert.equal(fixed.value.result, 'delivered');
     assert.deepEqual(Object.keys(seen[1].args).sort(), ['changes', 'feature', 'job', 'module', 'owners']);
     assert.notEqual(seen[1].args.job, refused.value.job);
     assert.equal(seen[1].job.ops[1].value, 200);
@@ -182,7 +182,7 @@ test('a busy Studio on a server of one lane names a continuation that server ser
     assert.ok(names.has(busy.continuation.tool), busy.continuation.tool + ' is served here');
     assert.deepEqual([busy.continuation.tool, busy.continuation.arguments], ['ssam_doctor', { lane: 'odc' }]);
     release();
-    assert.equal((await first).content[0].text, JSON.stringify({ ok: true, result: 'entregue' }));
+    assert.equal((await first).content[0].text, JSON.stringify({ ok: true, result: 'delivered' }));
   } finally { release(); await client.close(); await server.close(); fs.rmSync(odcRoot, { recursive: true, force: true }); }
 });
 

@@ -8,6 +8,7 @@
 // unavailable element with its negative job; intents of other fronts that share words with the theme (expression
 // widget, client action, local variable, form field, settings, REST) do not select these capabilities; every answer of
 // the theme fits the 12000-byte budget. Needs the lane CLIs built (the index is built from them); skips otherwise.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';

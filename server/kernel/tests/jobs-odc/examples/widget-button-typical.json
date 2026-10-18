@@ -1,5 +1,5 @@
 {
- "description": "Button com logica: classe btn-primary, Enabled ligado a uma variavel e OnClick numa screen action que chama a server action com o texto digitado e mostra uma mensagem.",
+ "description": "A Button with logic: the class btn-primary, Enabled bound to a variable and the OnClick in a screen action that calls the server action with the typed text and shows a message.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -26,7 +26,7 @@
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IButton", "name": "SendButton", "as": "$btn"},
   {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Send"},
   {"op": "set", "target": "$btn", "prop": "Style", "value": "\"btn btn-primary\""},
-  {"op": "set", "target": "$btn", "prop": "Enabled", "value": "Trim(Comment) <> \"\"", "_why": "Enabled e expressao: o botao so liga com texto"},
+  {"op": "set", "target": "$btn", "prop": "Enabled", "value": "Trim(Comment) <> \"\"", "_why": "Enabled is an expression: the button turns on only with a text"},
   {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "IMobileScreen:FeedbackForm/SendFeedback"},
   {"op": "get", "target": "$btn"}
  ]

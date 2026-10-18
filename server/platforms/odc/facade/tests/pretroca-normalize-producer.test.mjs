@@ -2,6 +2,7 @@
 // keys of a raw verb out of data, so {op:"reference", data:{producer}} becomes {op:"reference", producer}. The gate
 // (hosted/job-paths.mjs pathFields/opFields) reads op.producer only, never data.producer, so it lets the job through and the
 // handler then runs a producer outside the customer's workspace. Inline job, job file of the workspace, and basedOn+patch.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

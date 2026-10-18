@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA do delete de um role cuja excecao gerada esta em uso: a plataforma cria 'Not DelExcRole' com o role e apaga-a com ele, por isso sozinha ela nao recusa (tests/jobs/delete-generated-companions.json); aqui um Exception Handler da action DelExcGuard trata essa excecao, e a recusa nomeia o HANDLER, que ficaria sem excecao. Cobertura testada, fase 2.",
+ "description": "THE REFUSAL of the delete of a role whose generated exception is in use: the platform creates 'Not DelExcRole' with the role and deletes it with it, so on its own it does not refuse (tests/jobs/delete-generated-companions.json); here an Exception Handler of the action DelExcGuard handles that exception, and the refusal names the HANDLER, which would be left without an exception. Tested coverage, phase 2.",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "expectError": [
@@ -17,7 +17,7 @@
   {"op": "set", "target": "$handler", "prop": "Exception", "value": "IRoleException:Not DelExcRole"},
   {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$he"},
   {"op": "link", "from": "$handler", "to": "$he"},
-  {"op": "usages", "target": "$role", "_why": "a IRoleException 'Not DelExcRole' aparece com derived false: o handler usa-a"},
+  {"op": "usages", "target": "$role", "_why": "the IRoleException 'Not DelExcRole' appears with derived false: the handler uses it"},
   {"op": "delete", "target": "$role"}
  ]
 }

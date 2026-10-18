@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';
 import {apiClientCreateInput,apiClientFixtureApproval,apiClientPrivateProof,API_CLIENT_CREATE,API_CLIENT_DELETE} from '../runtime/api-client-fixture.mjs';

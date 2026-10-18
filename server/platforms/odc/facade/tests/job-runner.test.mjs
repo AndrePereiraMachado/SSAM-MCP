@@ -253,7 +253,15 @@ test('through a fake TCP worker: the request carries the key, and a connection l
 test('jobTool: the MCP inputs are checked as ssam.mjs checks them, and only a failure gets the guidance', async t => {
   const s = sandbox(t);
   assert.equal(jobToolRequest({ job: 'x.json', producers: { Core: 'relative.oml' } }).code, 'invalid-producers');
-  assert.equal(jobToolRequest({ job: 'x.json', producers: { '(System)': path.join(s.root, 'a.oml') } }).code, 'invalid-producers');
+  // fix/system-reference round 2 (H1): a name with a space is a producer name (bound by its letters and digits, "Sys tem"
+  // is System); only a name with / or \, or no letter or digit, is no binding name.
+  assert.equal(jobToolRequest({ job: 'x.json', producers: { 'Sys tem': path.join(s.root, 'a.oml') } }).ok, true);
+  // Round 3 (H1-R): a name with / or \ takes the slot of its letters (the kernel binds it only to a capture naming it
+  // exactly); a name with no letter or digit is no binding name.
+  assert.equal(jobToolRequest({ job: 'x.json', producers: { 'a\\b': path.join(s.root, 'a.oml') } }).ok, true);
+  assert.equal(jobToolRequest({ job: 'x.json', producers: { '-': path.join(s.root, 'a.oml') } }).code, 'invalid-producers');
+  // fix/system-reference: the Studio form (System) is the binding System, never an invalid name.
+  assert.equal(jobToolRequest({ job: 'x.json', producers: { '(System)': path.join(s.root, 'a.oml') } }).ok, true);
   assert.equal(jobToolRequest({ job: 'x.json', lane: 'odc', captureProducers: ['System'] }).code, 'capture-o11-only');
   assert.equal(jobToolRequest({ job: 'x.json', captureProducers: ['System='] }).code, 'invalid-capture');
   assert.equal(jobToolRequest({ job: 'x.json', producers: { Core: path.join(s.root, 'a.oml') }, captureProducers: ['Core'] }).code, 'invalid-capture');

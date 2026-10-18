@@ -23,7 +23,7 @@ for(const receipt of [false,true])for(const idle of [false,true])test((receipt?'
  try{
   const response=await client.callTool({name:'o11_deliver',arguments:{module:'Orders',job,authorize:'fake delivery only'}});
   const value=response.structuredContent??JSON.parse(response.content[0].text);
-  assert.equal(value.ok,true);assert.equal(value.result,'entregue');assert.equal(value.pendingBridgeOperation.method,'close_module');if(idle){assert.equal(value.continuation.tool,'ssam_task');assert.equal(value.continuation.arguments.close,undefined);assert.equal(value.pendingUiProof.idle,true)}else assert.equal(value.recovery[0].arguments.command,'dismiss-dialog');
+  assert.equal(value.ok,true);assert.equal(value.result,'delivered');assert.equal(value.pendingBridgeOperation.method,'close_module');if(idle){assert.equal(value.continuation.tool,'ssam_task');assert.equal(value.continuation.arguments.close,undefined);assert.equal(value.pendingUiProof.idle,true)}else assert.equal(value.recovery[0].arguments.command,'dismiss-dialog');
   const holder=studioWriteHolder({deps:{o11Root:root,o11Lane:'ss4'}});if(idle)assert.equal(holder,null);else{assert.equal(holder.tool,'bridge:close_module');assert.equal(holder.state,'stalled');}
   const tasks=path.join(root,'.local','tasks');for(const name of fs.readdirSync(tasks)){const text=fs.readFileSync(path.join(tasks,name),'utf8');assert.ok(!text.includes('fake delivery only'));assert.ok(!text.includes('pendingBridgeState'))}
  }finally{await client.close();await server.close()}

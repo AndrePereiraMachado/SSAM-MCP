@@ -1,5 +1,5 @@
 {
- "description": "Cold G (Traditional): entidade Subscriber (Email obrigatorio, Name, Active default True) + static DigestKind (Daily, Weekly) via spec; email DigestEmail no flow Emails com input SubscriberName; server action publica Digest_SendAll sem inputs: aggregate dos Subscriber ativos -> ForEach -> Send Email (To = email do subscriber, argumento = nome); timer DigestTimer que executa Digest_SendAll (escrito por uma LLM sem contexto na sessao fria G, rodada 2, 2026-09-04)",
+ "description": "Cold G (Traditional): entity Subscriber (Email mandatory, Name, Active default True) + static DigestKind (Daily, Weekly) via spec; email DigestEmail in the flow Emails with input SubscriberName; public server action Digest_SendAll with no inputs: aggregate of active Subscribers -> ForEach -> Send Email (To = subscriber's email, argument = name); timer DigestTimer that runs Digest_SendAll (written by an LLM with no context in cold session G, round 2, 2026-09-04)",
  "base": "tests/fixtures/traditional-ui.oml",
  "expectValid": true,
  "ops": [

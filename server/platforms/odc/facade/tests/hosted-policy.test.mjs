@@ -3,6 +3,7 @@
 // {lane:"odc"}, the scrub of third-party evidence and the presentation of the answers; and the wiring in ssam.mjs
 // (createSsamServer with hosted, registerServedTool for ssam_friction, the hosted doctor). A fake link, context, executor
 // and run: no hub, no agent, no Studio.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -10,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { InMemoryTransport, fromJsonSchema } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
-import { wrapHostedTool, agentNeed, presenter, looksLikePath, NEUTRAL_ODC_BASE } from '../hosted/policy.mjs';
+import { wrapHostedTool, agentNeed, agentNotConnected, presenter, looksLikePath, NEUTRAL_ODC_BASE } from '../hosted/policy.mjs';
 import { createSsamServer, registerServedTool, HOSTED_INSTRUCTIONS, HOSTED_RULES } from '../ssam.mjs';
 import { anvilRoot, workspaceRoot } from '../workspace.mjs';
 import { frictionTool } from '../../../../facade/friction-boundary.mjs';
@@ -125,16 +126,19 @@ const studioInfo = (odc, o11 = '11.55.92.6000', kernel = BUILT) => {
   return { kernel, studios, compatible: compatibility(hello, kernel, ['odc', 'o11']) };
 };
 const textOf = result => JSON.parse(result.content.find(item => item.type === 'text').text);
+// B3 (round 3, owner rule of 2026-10-15): every text SSAM emits is English; what a pt-BR text of these answers looks like.
+const PT_BR = /[ãõçáéíóúâêôà]|\b(não|deste|computador|Atualize|Aviso|Nada rodou|servidor|dono|ferramentas|continuam|rodou|repita|peça|abra|conecte|versões|faixa)\b/i;
 
-test('A-M1 gate: one refusal per direction with both builds, pt-BR for the user and English for the model, what still works and nothing ran', async () => {
+test('A-M1 gate: one refusal per direction with both builds, in English for the user and for the model (B3: no pt-BR), what still works and nothing ran', async () => {
   const newer = harness({ info: studioInfo('1.7.29.10900') });
   const r = await newer.gate('studio_snapshot')({ module: 'M' });
   assert.equal(r.isError, true);
   const v = r.structuredContent;
   assert.deepEqual({ code: v.code, cause: v.cause, lane: v.lane, installed: v.installed, served: v.served, outcome: v.outcome, serverKernel: v.serverKernel, agentStudio: v.agentStudio },
     { code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_VERSION_NOT_SERVED_YET', lane: 'odc', installed: '1.7.29.10900', served: ['1.7.28.5000'], outcome: 'not-sent', serverKernel: '1.7.28', agentStudio: '1.7.29.10900' });
-  assert.match(v.userMessage, /é mais novo que o ODC Studio que o servidor SSAM atende hoje \(1\.7\.28\.5000\)\. O servidor ainda não tem esta versão; o dono do SSAM já foi avisado/);
-  assert.match(v.userMessage, /Não volte o ODC Studio/); assert.match(v.userMessage, /Nada rodou no seu Studio\./);
+  assert.match(v.userMessage, /is newer than the ODC Studio the SSAM server serves today \(1\.7\.28\.5000\)\. The server does not have this version yet; the SSAM owner was already notified/);
+  assert.match(v.userMessage, /Do not roll ODC Studio back/); assert.match(v.userMessage, /Nothing ran on your Studio\./);
+  assert.doesNotMatch(JSON.stringify(v), PT_BR, 'B3: no pt-BR text');
   assert.match(v.error, /does not serve this version yet; the owner was notified/); assert.match(v.error, /Nothing ran on the user's Studio\./);
   // what still works: the server-only tools of this lane in the hosted catalog, never a tool that touches the Studio
   for (const name of ['ssam_discover', 'ssam_reference', 'ssam_job', 'studio_build', 'odc_search_operations']) assert.ok(v.stillWorks.includes(name), name);
@@ -145,7 +149,7 @@ test('A-M1 gate: one refusal per direction with both builds, pt-BR for the user 
   assert.deepEqual(newer.calls, [], 'nothing ran');
   const older = (await harness({ info: studioInfo('1.7.27.10846') }).gate('studio_deliver')({ module: 'M', job: { ops: [] } })).structuredContent;
   assert.equal(older.cause, 'STUDIO_UPDATE_REQUIRED');
-  assert.match(older.userMessage, /Atualize o ODC Studio para 1\.7\.28\.5000/);
+  assert.match(older.userMessage, /Update ODC Studio to 1\.7\.28\.5000/);
   assert.match(older.continuation.why, /update/);
   // the O11 lane: its own builds and its own server-only tools
   const o11 = (await harness({ info: studioInfo('1.7.28.5000', '11.55.93.7000') }).gate('o11_studio')({ command: 'status' })).structuredContent;
@@ -160,7 +164,7 @@ test('A-M1 gate: one refusal per direction with both builds, pt-BR for the user 
   const refusedBuild = (await strict.gate('studio_status')({})).structuredContent;
   assert.deepEqual({ code: refusedBuild.code, cause: refusedBuild.cause, relation: refusedBuild.relation, policy: refusedBuild.policy },
     { code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_VERSION_NOT_SERVED_YET', relation: 'build-differs', policy: 'refuse' });
-  assert.match(refusedBuild.userMessage, /build 1\.7\.28\.5023; o servidor SSAM atende o build 1\.7\.28\.5000/);
+  assert.match(refusedBuild.userMessage, /build 1\.7\.28\.5023; the SSAM server serves build 1\.7\.28\.5000/);
   assert.deepEqual(strict.calls, []);
 });
 
@@ -173,13 +177,19 @@ test('E2: a server-only tool answers with studioNotServed while the Studio is no
     const w = r.structuredContent.studioWarning;
     assert.deepEqual({ code: w?.code, lane: w?.lane, cause: w?.cause, installed: w?.installed, served: w?.served },
       { code: 'studioNotServed', lane: 'odc', cause: 'STUDIO_VERSION_NOT_SERVED_YET', installed: '1.7.29.10900', served: '1.7.28.5000' }, name);
-    assert.match(w.userMessage, /^Aviso: esta ferramenta rodou só no servidor, com o kernel do ODC Studio 1\.7\.28\.5000/);
+    assert.match(w.userMessage, /^Warning: this tool ran on the server only, with the kernel of ODC Studio 1\.7\.28\.5000/);
+    assert.doesNotMatch(JSON.stringify(w), PT_BR, name + ': B3, no pt-BR text');
     assert.deepEqual(textOf(r).studioWarning, w, name + ': the text carries it too');
   }
   assert.deepEqual(notServed.calls.map(c => c.name), ['ssam_discover', 'odc_search_operations', 'ssam_map', 'studio_build', 'studio_doctor']);
-  // the other lane and a tool without a lane say nothing about the ODC Studio
-  for (const [name, args] of [['ssam_discover', { intent: 'x', lane: 'o11' }], ['o11_inspect', { oml: 'ws:o11/M.oml' }], ['ssam_doctor', {}], ['ssam_evidence', { file: 'ws:odc/x.json' }]])
+  // the other lane says nothing about the ODC Studio
+  for (const [name, args] of [['ssam_discover', { intent: 'x', lane: 'o11' }], ['o11_inspect', { oml: 'ws:o11/M.oml' }]])
     assert.equal((await notServed.gate(name)(args)).structuredContent.studioWarning, undefined, name);
+  // A2 of the review (round 2), changed on purpose: a tool without a lane carries the warnings of the lanes it may touch
+  // (here every lane of the token; ssam_task only o11). Until c812dc4 it said nothing.
+  for (const [name, args] of [['ssam_doctor', {}], ['ssam_evidence', { file: 'ws:odc/x.json' }]])
+    assert.equal((await notServed.gate(name)(args)).structuredContent.studioWarning?.code, 'studioNotServed', name);
+  assert.equal((await notServed.gate('ssam_task')({ id: 'tarefa-1' })).structuredContent.studioWarning, undefined, 'ssam_task touches only o11');
   // another build served with the warning (default policy): every answer of the lane, the Studio tools included
   const differs = harness({ info: studioInfo('1.7.28.5023') });
   for (const [name, args] of [['studio_status', {}], ['studio_deliver', { module: 'M', job: { ops: [] } }], ['ssam_discover', { intent: 'x', lane: 'odc' }], ['odc_search_operations', { query: 'x' }]]) {
@@ -201,6 +211,112 @@ test('E2: a server-only tool answers with studioNotServed while the Studio is no
   assert.equal((await never.gate('ssam_discover')({ intent: 'x', lane: 'odc' })).structuredContent.studioWarning, undefined);
 });
 
+// A2 of the review (round 2, C:\t\revisoes\studio-build-id\REVISAO.md): the tools the catalog puts in the lane "none"
+// touch a Studio too. ssam_task {id, close} runs the O11 kernel close against the Service Studio (it counts as o11);
+// ssam_connect without lane attaches every lane of the token. The gate applies the identity of each lane they touch.
+const twoLanes = (odc, o11, kernel = BUILT) => {
+  const studios = { odc: { installed: { version: odc } }, o11: { installed: { version: o11 } } };
+  const hello = { pack: { lanes: ['odc', 'o11'], odcBridge: 'v97', o11BuiltFor: '11.55.92.6000' }, studios };
+  return { kernel, studios, compatible: compatibility(hello, kernel, ['odc', 'o11']) };
+};
+const REFUSE = { ...BUILT, studioBuildPolicy: 'refuse' };
+test('A2 refuse: ssam_task {id, close} is judged as o11 and never runs the close; ssam_connect {} skips the lane not served (said, with both builds) or refuses when no lane is served', async () => {
+  // the Service Studio is another build (the hub knows): the close of an uncertain delivery task would compare its module
+  const o11Off = harness({ info: twoLanes('1.7.28.5000', '11.55.92.6011', REFUSE) });
+  const close = (await o11Off.gate('ssam_task')({ id: 'tarefa-1', close: { reason: 'r' } })).structuredContent;
+  assert.deepEqual({ code: close.code, cause: close.cause, lane: close.lane, installed: close.installed, served: close.served, outcome: close.outcome },
+    { code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_VERSION_NOT_SERVED_YET', lane: 'o11', installed: '11.55.92.6011', served: ['11.55.92.6000'], outcome: 'not-sent' });
+  assert.match(close.userMessage, /Service Studio/);
+  assert.deepEqual(o11Off.calls, [], 'the close never ran');
+  // the read of the task needs no Studio: it runs, with the warning
+  const read = (await o11Off.gate('ssam_task')({ id: 'tarefa-1' })).structuredContent;
+  assert.equal(read.ok, true); assert.equal(read.studioWarning?.code, 'studioNotServed');
+  // ssam_connect {}: the ODC lane is served and runs alone; the O11 lane is skipped and the answer says so
+  o11Off.calls.length = 0;
+  const connect = (await o11Off.gate('ssam_connect')({})).structuredContent;
+  assert.equal(connect.ok, true);
+  assert.deepEqual(o11Off.calls.map(c => c.args), [{ lane: 'odc' }], 'only the served lane is connected');
+  assert.deepEqual(connect.studioSkipped?.map(s => ({ code: s.code, lane: s.lane, cause: s.cause, installed: s.installed, served: s.served })),
+    [{ code: 'STUDIO_VERSION_MISMATCH', lane: 'o11', cause: 'STUDIO_VERSION_NOT_SERVED_YET', installed: '11.55.92.6011', served: ['11.55.92.6000'] }]);
+  // no lane served: one refusal, every lane in it
+  const none = harness({ info: twoLanes('1.7.29.100', '11.55.91.65258', REFUSE) });
+  const refused = (await none.gate('ssam_connect')({})).structuredContent;
+  assert.equal(refused.code, 'STUDIO_VERSION_MISMATCH');
+  assert.deepEqual(refused.lanes?.map(r => [r.lane, r.cause]), [['odc', 'STUDIO_VERSION_NOT_SERVED_YET'], ['o11', 'STUDIO_UPDATE_REQUIRED']]);
+  assert.deepEqual(none.calls, []);
+  // the token's lanes decide: an O11-only token is the O11 refusal itself
+  const o11Only = harness({ lanes: ['o11'], info: twoLanes('1.7.29.100', '11.55.91.65258', REFUSE) });
+  const single = (await o11Only.gate('ssam_connect')({})).structuredContent;
+  assert.deepEqual({ code: single.code, lane: single.lane, cause: single.cause, lanes: single.lanes }, { code: 'STUDIO_VERSION_MISMATCH', lane: 'o11', cause: 'STUDIO_UPDATE_REQUIRED', lanes: undefined });
+  // the connected Service Studio record is judged too (A1): another build in the process, the close is refused
+  const process = harness({ record: { pid: 6001, studioVersion: '11.55.92.6011' }, info: twoLanes('1.7.28.5000', '11.55.92.6000', REFUSE) });
+  assert.equal((await process.gate('ssam_task')({ id: 'tarefa-1', close: { reason: 'r' } })).structuredContent.cause, 'STUDIO_VERSION_NOT_SERVED_YET');
+  assert.deepEqual(process.calls, []);
+});
+
+test('A2 warn: ssam_connect {}, ssam_task {id, close} and ssam_task {id} carry studioBuildDiffers; the same build changes nothing', async () => {
+  const differs = harness({ info: twoLanes('1.7.28.5023', '11.55.92.6011') });
+  const connect = (await differs.gate('ssam_connect')({})).structuredContent;
+  assert.equal(connect.ok, true);
+  assert.deepEqual(differs.calls.at(-1).args, {}, 'both lanes are connected, as asked');
+  assert.deepEqual(connect.studioWarnings?.map(w => [w.code, w.lane]), [['studioBuildDiffers', 'odc'], ['studioBuildDiffers', 'o11']]);
+  assert.equal(connect.studioWarning?.code, 'studioBuildDiffers');
+  for (const args of [{ id: 'tarefa-1', close: { reason: 'r' } }, { id: 'tarefa-1' }]) {
+    const answer = (await differs.gate('ssam_task')(args)).structuredContent;
+    assert.equal(answer.ok, true, JSON.stringify(args));
+    assert.deepEqual({ code: answer.studioWarning?.code, lane: answer.studioWarning?.lane }, { code: 'studioBuildDiffers', lane: 'o11' }, JSON.stringify(args));
+    assert.equal(answer.studioWarnings, undefined, 'one lane, one warning');
+  }
+  // counterproof: the same build in both lanes
+  const same = harness({ info: twoLanes('1.7.28.5000', '11.55.92.6000', REFUSE) });
+  for (const [name, args] of [['ssam_connect', {}], ['ssam_task', { id: 'tarefa-1', close: { reason: 'r' } }], ['ssam_task', { id: 'tarefa-1' }], ['ssam_doctor', {}]]) {
+    const answer = (await same.gate(name)(args)).structuredContent;
+    assert.equal(answer.ok, true, name);
+    assert.equal(answer.studioWarning, undefined, name);
+    assert.equal(answer.studioSkipped, undefined, name);
+  }
+  assert.deepEqual(same.calls.map(c => c.name), ['ssam_connect', 'ssam_task', 'ssam_task', 'ssam_doctor']);
+  assert.deepEqual(same.calls[0].args, {}, 'nothing rewritten');
+});
+
+// B1 (round 3, C:\t\revisoes\studio-build-id-2\REVISAO.md): after the handler of ssam_connect the connection record is the
+// new one, and it is judged like the record of any other O11 call (before the handler the old one is not).
+test('B1: after ssam_connect the new Service Studio record is judged: studioBuildDiffers (warn) or the refusal (refuse); the old record never refuses the connect', async () => {
+  const newRecord = { pid: 6011, startedUtc: '2026-10-16T09:00:00.000Z', studioVersion: '11.55.92.6011' };
+  const lenient = harness({ record: newRecord, info: twoLanes('1.7.28.5000', '11.55.92.6000') });
+  const warned = (await lenient.gate('ssam_connect')({ lane: 'o11' })).structuredContent;
+  assert.equal(warned.ok, true);
+  assert.deepEqual({ code: warned.studioWarning?.code, lane: warned.studioWarning?.lane, installed: warned.studioWarning?.installed },
+    { code: 'studioBuildDiffers', lane: 'o11', installed: '11.55.92.6011' });
+  assert.deepEqual(lenient.calls.map(c => c.name), ['ssam_connect'], 'the connect ran');
+  const strict = harness({ record: newRecord, info: twoLanes('1.7.28.5000', '11.55.92.6000', REFUSE) });
+  const refused = (await strict.gate('ssam_connect')({ lane: 'o11' })).structuredContent;
+  assert.deepEqual({ code: refused.code, cause: refused.cause, lane: refused.lane, installed: refused.installed },
+    { code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_VERSION_NOT_SERVED_YET', lane: 'o11', installed: '11.55.92.6011' });
+  assert.doesNotMatch(JSON.stringify(refused), PT_BR);
+  // an old record of another build (the Studio that closed) does not refuse the connect that replaces it: the gate passes
+  const stale = harness({ record: { pid: 6000, studioVersion: '11.55.92.6011' }, info: twoLanes('1.7.28.5000', '11.55.92.6000', REFUSE) });
+  stale.executor.o11Connection = () => (stale.calls.length ? { pid: 6001, studioVersion: '11.55.92.6000' } : { pid: 6000, studioVersion: '11.55.92.6011' });
+  const replaced = (await stale.gate('ssam_connect')({ lane: 'o11' })).structuredContent;
+  assert.equal(replaced.ok, true, JSON.stringify(replaced));
+  assert.equal(replaced.studioWarning, undefined);
+  assert.deepEqual(stale.calls.map(c => c.name), ['ssam_connect']);
+});
+
+// B3 (round 3): the continuations of the gate and of the hosted doctor are English too.
+test('B3: the reconnect and not-connected continuations are English, with no pt-BR line', async () => {
+  const ago = ms => new Date(Date.now() - ms).toISOString();
+  for (const seen of [10000, 200000]) {
+    const answer = agentNotConnected({ instance: 'i', lastSeenAt: ago(seen) }, { tool: 'studio_status', args: {} });
+    assert.equal(answer.code, 'AGENT_RECONNECTING', String(seen));
+    assert.doesNotMatch(JSON.stringify(answer), PT_BR, String(seen));
+  }
+  for (const info of [{}, { credential: false }]) {
+    assert.equal(agentNotConnected(info).code, 'AGENT_NOT_CONNECTED');
+    assert.doesNotMatch(JSON.stringify((await harness({ connected: false, info }).gate('studio_status')({})).structuredContent), PT_BR);
+  }
+});
+
 test('ssam_job {lane:"odc"} without base runs on the neutral fixture; with base and on o11 nothing changes; over the quota a tool with an output is WORKSPACE_FULL', async () => {
   const h = harness();
   assert.equal(NEUTRAL_ODC_BASE, path.join(anvilRoot, 'tests', 'fixtures', 'odc', 'blank-crossdevice.oml'));
@@ -217,7 +333,7 @@ test('ssam_job {lane:"odc"} without base runs on the neutral fixture; with base 
     assert.deepEqual(h.calls.at(-1).args, args, 'lane o11 is unchanged');
   }
   const echoed = await h.gate('ssam_job', async args => reply({ ok: true, base: args.base }))({ lane: 'odc', job: { ops: [] } });
-  assert.equal(echoed.structuredContent.base, '<servidor>', 'the server path of the fixture is not shown');
+  assert.equal(echoed.structuredContent.base, '<server>', 'the server path of the fixture is not shown');
   const full = harness({ full: true });
   assert.equal(codeOf(await full.gate('studio_build')({ feature: 'f', base: 'ws:odc/snapshots/M.oml', output: 'x' })), 'WORKSPACE_FULL');
   assert.equal(codeOf(await full.gate('studio_status')({})), 'WORKSPACE_FULL');
@@ -320,44 +436,45 @@ test('agent:inbox/<file> is brought through the executor; agent:odc|o11 only whe
   assert.equal(h.pulls.length, 2);
 });
 
-test('answers show ws: in the object and in the JSON text; other server paths become <servidor>', async () => {
+test('answers show ws: in the object and in the JSON text; other server paths become <server>', async () => {
   const h = harness();
   const file = path.join(h.workspace, 'odc', 'lab', '01-x', 'result.json');
   const inState = path.join(h.workspace, 'state', 'relay-authority', 'bridge.key');
   const server = path.join(workspaceRoot, 'kernel', '.local', 'cli', 'anvil.dll');
   const value = { ok: true, file, files: [path.join(h.workspace, 'o11', 'a.oml')], note: 'wrote ' + path.join(h.workspace, 'inbox', 'b.json') + ' and ' + server + ' (done)',
-    authorityDir: inState, cli: server, home: path.join(os.homedir(), 'AppData', 'Local', 'x.json'), customer: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODCStudio.exe' };
+    authorityDir: inState, cli: server, home: path.join(os.homedir(), 'AppData', 'Local', 'x.json'),
+    customer: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODCStudio.exe' }; // a7: on its own line (profile-read-paths reads a line with both as a read)
   const result = await h.gate('ssam_evidence', async () => reply(value))({ file: 'ws:odc/lab/01-x/result.json' });
   const shown = result.structuredContent;
-  assert.deepEqual(shown, { ok: true, file: 'ws:odc/lab/01-x/result.json', files: ['ws:o11/a.oml'], note: 'wrote ws:inbox/b.json and <servidor> (done)',
-    authorityDir: '<servidor>', cli: '<servidor>', home: '<servidor>', customer: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODCStudio.exe' });
+  assert.deepEqual(shown, { ok: true, file: 'ws:odc/lab/01-x/result.json', files: ['ws:o11/a.oml'], note: 'wrote ws:inbox/b.json and <server> (done)',
+    authorityDir: '<server>', cli: '<server>', home: '<server>', customer: 'C:\\Program Files\\OutSystems\\ODC Studio\\ODCStudio.exe' });
   assert.equal(result.content[0].text, JSON.stringify(shown));
   assert.ok(!result.content[0].text.includes(h.workspace.split(path.sep).join('\\\\')));
   // A text that is not the JSON of structuredContent: both forms (raw and JSON-escaped) are replaced.
   const plain = presenter({ workspace: h.workspace, serverRoots: [path.dirname(h.workspace)] });
   assert.equal(plain.string('see ' + file), 'see ws:odc/lab/01-x/result.json');
   assert.equal(plain.string(JSON.stringify({ a: file }).slice(1, -1)), '"a":"ws:odc/lab/01-x/result.json"');
-  assert.equal(plain.string(h.workspace + '-other\\x'), '<servidor>', 'a sibling folder is not the workspace');
+  assert.equal(plain.string(h.workspace + '-other\\x'), '<server>', 'a sibling folder is not the workspace');
   const pretty = plain.result({ content: [{ type: 'text', text: JSON.stringify({ file }, null, 2) }] });
   assert.equal(pretty.content[0].text, JSON.stringify({ file: 'ws:odc/lab/01-x/result.json' }));
 });
 
 test('Linux paths (server/Dockerfile): the workspace is ws:<rel> without a leading "/", and a short root like HOME=/tmp hides only real /tmp paths', () => {
   const linux = presenter({ workspace: '/data/server/customers/tok_x/ws', serverRoots: ['/app', '/tmp', '/data/server'], pathApi: path.posix });
-  // Seen in the Docker Desktop rehearsal before the fix: "/ws:odc/snapshots/..." and "/<servidor>".
+  // Seen in the Docker Desktop rehearsal before the fix: "/ws:odc/snapshots/..." and "/<server>".
   assert.equal(linux.string('/data/server/customers/tok_x/ws/odc/snapshots/Orders-AB.oml'), 'ws:odc/snapshots/Orders-AB.oml');
   assert.equal(linux.string('/data/server/customers/tok_x/ws/o11/tmp/thin-bridge/1.oml'), 'ws:o11/tmp/thin-bridge/1.oml', 'the workspace tmp is not the server /tmp');
-  assert.equal(linux.string('wrote /data/server/customers/tok_x/ws/inbox/b.json and /app/kernel/.local/cli/anvil.dll (done)'), 'wrote ws:inbox/b.json and <servidor> (done)');
-  assert.equal(linux.string('Path outside the workspace of this account: "/tmp/thin-bridge/2.oml"'), 'Path outside the workspace of this account: "<servidor>"');
-  assert.equal(linux.string('/tmp'), '<servidor>');
-  assert.equal(linux.string('/data/server/tokens.json'), '<servidor>');
-  assert.equal(linux.string('/data/server/customers/tok_x/ws-other/x'), '<servidor>', 'a sibling folder is not the workspace');
+  assert.equal(linux.string('wrote /data/server/customers/tok_x/ws/inbox/b.json and /app/kernel/.local/cli/anvil.dll (done)'), 'wrote ws:inbox/b.json and <server> (done)');
+  assert.equal(linux.string('Path outside the workspace of this account: "/tmp/thin-bridge/2.oml"'), 'Path outside the workspace of this account: "<server>"');
+  assert.equal(linux.string('/tmp'), '<server>');
+  assert.equal(linux.string('/data/server/tokens.json'), '<server>');
+  assert.equal(linux.string('/data/server/customers/tok_x/ws-other/x'), '<server>', 'a sibling folder is not the workspace');
   // A path that only contains a root's name further in is not that root.
   assert.equal(linux.string('C:\\SSAM-Agent\\tmp\\x.json'), 'C:\\SSAM-Agent\\tmp\\x.json');
   assert.equal(linux.string('ws:o11/tmp/a.oml'), 'ws:o11/tmp/a.oml');
   assert.equal(linux.string('/home/user/apps/x'), '/home/user/apps/x', '/app is not /apps');
-  assert.equal(linux.string(JSON.stringify({ a: '/data/server/customers/tok_x/ws/odc/lab/r.json', b: '/tmp/z' }).slice(1, -1)), '"a":"ws:odc/lab/r.json","b":"<servidor>"');
-  assert.deepEqual(linux.value({ path: '/data/server/customers/tok_x/ws/o11/snapshots/H.oml', home: '/tmp/.dotnet' }), { path: 'ws:o11/snapshots/H.oml', home: '<servidor>' });
+  assert.equal(linux.string(JSON.stringify({ a: '/data/server/customers/tok_x/ws/odc/lab/r.json', b: '/tmp/z' }).slice(1, -1)), '"a":"ws:odc/lab/r.json","b":"<server>"');
+  assert.deepEqual(linux.value({ path: '/data/server/customers/tok_x/ws/o11/snapshots/H.oml', home: '/tmp/.dotnet' }), { path: 'ws:o11/snapshots/H.oml', home: '<server>' });
 });
 
 test('the module index store and the readers\' copy are server paths wherever their roots are (ssam_map index.file, the 22nd digest store.file)', () => {
@@ -370,7 +487,7 @@ test('the module index store and the readers\' copy are server paths wherever th
     const shown = presenter({ workspace: h.workspace }).value({
       store: { file: path.join(outside, 'module-index', 'v1', 'odc', 'ab'.repeat(32) + '.kernel.digest.json') },
       reader: path.join(outside, 'readers', 'odc', 'gen', 'reader.log'), file: path.join(h.workspace, 'odc', 'snapshots', 'A.oml') });
-    assert.deepEqual(shown, { store: { file: '<servidor>' }, reader: '<servidor>', file: 'ws:odc/snapshots/A.oml' });
+    assert.deepEqual(shown, { store: { file: '<server>' }, reader: '<server>', file: 'ws:odc/snapshots/A.oml' });
   } finally {
     for (const [name, value] of [['SSAM_MODULE_INDEX_ROOT', saved.index], ['SSAM_READER_CACHE_ROOT', saved.readers]])
       if (value === undefined) delete process.env[name]; else process.env[name] = value;
@@ -400,8 +517,8 @@ test('only an ssam_discover answer (the owner\'s catalogs) loses client names; o
   const h = harness();
   const value = { ok: true, limits: [{ text: 'A real FloodQuotes DEV login; medido no WrightFlood' }], module: 'FloodQuotes_CS' };
   const discovered = (await h.gate('ssam_discover', async () => reply(value))({ intent: 'x', lane: 'odc' })).structuredContent;
-  assert.equal(discovered.limits[0].text, 'A real <cliente omitido> DEV login; medido no <cliente omitido>');
-  assert.equal(discovered.module, '<cliente omitido>_CS');
+  assert.equal(discovered.limits[0].text, 'A real <customer omitted> DEV login; medido no <customer omitted>');
+  assert.equal(discovered.module, '<customer omitted>_CS');
   for (const name of ['ssam_map', 'ssam_evidence', 'ssam_job']) {
     const shown = (await h.gate(name, async () => reply(value))({ lane: 'odc', job: { ops: [] } })).structuredContent;
     assert.deepEqual(shown, value, name);
@@ -425,15 +542,15 @@ test('23rd release: the work packet of ssam_discover keeps the customer\'s own m
   assert.deepEqual(value.module, { ...packet.module, file: wsCapture }, 'the customer\'s own module, presented');
   assert.equal(value.next.deliver.arguments.module, 'FloodQuotes', 'the next delivery names the customer\'s module');
   assert.equal(value.cuts[0].recover.arguments.target, wsCapture, 'the cut that reads the module again');
-  assert.equal(value.capabilities.items[0].summary, 'proven on the <cliente omitido> capture', 'the owner\'s catalogs still lose client names');
-  assert.equal(value.example.note, 'medido no <cliente omitido>');
-  assert.equal(value.rules.items[0].rule, '<cliente omitido> DEV only');
-  assert.equal(value.cuts[1].recover.arguments.query, '<cliente omitido>');
+  assert.equal(value.capabilities.items[0].summary, 'proven on the <customer omitted> capture', 'the owner\'s catalogs still lose client names');
+  assert.equal(value.example.note, 'medido no <customer omitted>');
+  assert.equal(value.rules.items[0].rule, '<customer omitted> DEV only');
+  assert.equal(value.cuts[1].recover.arguments.query, '<customer omitted>');
   assert.equal(shown.content[0].text, JSON.stringify(value), 'the JSON text is the shown value');
   const context = { ok: true, matches: [{ id: 'logic.action', title: 'WrightFlood action' }], context: { ok: true, target: capture, reads: [{ name: 'FloodQuotes.GetQuote' }] } };
   const withApp = (await h.gate('ssam_discover', async () => reply(context))({ intent: 'x', lane: 'odc', app: wsCapture })).structuredContent;
   assert.deepEqual(withApp.context, { ok: true, target: wsCapture, reads: [{ name: 'FloodQuotes.GetQuote' }] });
-  assert.equal(withApp.matches[0].title, '<cliente omitido> action');
+  assert.equal(withApp.matches[0].title, '<customer omitted> action');
 });
 
 test('createSsamServer({hosted}): every tool and ssam_friction go through the gate inside run(context); the doctor shows the agent', async t => {

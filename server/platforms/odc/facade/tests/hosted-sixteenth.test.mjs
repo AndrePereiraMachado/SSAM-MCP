@@ -1,6 +1,7 @@
 // The 16th release on the hosted line: the module reservations of the O11 deliveries (I8/A28) of a hosted customer live in
 // <ws>/state/relay-authority (the authority of the customer's kernel runs), and ssam_doctor lists and releases only those,
 // by file name. The owner's authority (ANVIL_AUTHORITY_DIR of this process) is never listed nor changed. Fakes only.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -51,6 +52,6 @@ test('hosted reservations: only the customer\'s relay authority, named by file n
 });
 
 test('RELEASE_CHANGED names the server owner in hosted mode, the client restart locally', () => {
-  assert.match(HOSTED_RESTART_NEXT, /dono do servidor/);
+  assert.match(HOSTED_RESTART_NEXT, /restart by the server owner/);
   assert.notEqual(HOSTED_RESTART_NEXT, RESTART_NEXT);
 });

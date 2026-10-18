@@ -9,6 +9,7 @@
 // is called unchanged: an intent without a tool route returns the very object discover() returned. tools.json and this
 // module are not part of the index identity, so editing them never rebuilds the capability index.
 import fs from 'node:fs';
+import { PACKET_DEFAULT_BYTES, EXPANSION_DEFAULT_BYTES } from './context-budget.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalize } from './catalog.mjs';
@@ -757,7 +758,7 @@ function measureInto(out, budgetBytes, reducedLevel) {
 //   answer keeps only the envelope and the tools. A model change gets no tools at all (the router is silent), so its answer is
 //   discover()'s own.
 export async function attachTools(answer, routed, { budgetBytes, lane, rerun = null } = {}) {
-  const B = budgetBytes ?? answer.size?.budgetBytes ?? 40960;
+  const B = budgetBytes ?? answer.size?.budgetBytes ?? EXPANSION_DEFAULT_BYTES;
   // With model-change matches the tools' words do not explain (mixed, or model words left over) the model part is
   // discover()'s own at the caller's budget: never asked again with a smaller budget nor cut; only the tools shrink or are
   // left out.
@@ -837,7 +838,7 @@ export function intentRequired(lane, input = {}) {
 // components, each with its actions and signatures, cached per environment) right after `intent`, the rest of the answer in
 // the budget it leaves. input.components replaces the reader (tests).
 export async function discoverAll(input = {}, options = {}) {
-  input = { ...input, budgetBytes: input.budgetBytes ?? (hasExpansion(input) || input.packet === true || input.catalog === true ? 40960 : ANSWER_BUDGETS.discoverFirst) };
+  input = { ...input, budgetBytes: input.budgetBytes ?? (input.packet === true ? PACKET_DEFAULT_BYTES : hasExpansion(input) || input.catalog === true ? EXPANSION_DEFAULT_BYTES : ANSWER_BUDGETS.discoverFirst) };
   // A generator asked about BY NAME ("entity-actions", "rest-consume", "gen-screen"; generators.mjs namedGenerators): the
   // answer describes it with its state (approved or blind-test-pending), reason, report, contract and explicit call, right
   // after `intent`, in the room it takes from the budget. Nothing else names a generator that is not approved.
@@ -862,7 +863,7 @@ async function discoverWithEnvironment(input, options) {
   const { anvilRoot } = await import('./workspace.mjs');
   const read = input.components ?? (x => laneComponents(x, { root: anvilRoot }));
   const found = await read({ lane, intent: input.intent, needs: componentNeeds(input.intent) });
-  const budget = input.budgetBytes ?? 40960;
+  const budget = input.budgetBytes ?? EXPANSION_DEFAULT_BYTES;
   const environment = found?.ok === false ? found : fitComponents(found, Math.min(12288, Math.floor(budget / 2))) ?? { ok: true, schema: found.schema, needs: found.needs, note: 'reduced by budget' };
   const answer = await discoverAllCore({ ...input, budgetBytes: Math.max(4096, budget - bytes({ environment }) - 64) }, options);
   if (!answer || typeof answer !== 'object') return answer;
@@ -908,7 +909,7 @@ async function discoverAllCore(input = {}, { discover = null, file = TOOLS_FILE 
   catch (error) {
     if (!routed.tools.length) throw error;
     const fallback = { ok: true, schemaVersion: 'ssam-discovery/4', lane, intent, indexError: error.message };
-    return attachTools(fallback, routed, { budgetBytes: input.budgetBytes ?? 40960, lane });
+    return attachTools(fallback, routed, { budgetBytes: input.budgetBytes ?? EXPANSION_DEFAULT_BYTES, lane });
   }
   if (!compiled) return toolsError ? { ...answer, toolsError } : answer;
   if (answer.ok === false) return answer;
@@ -937,7 +938,7 @@ async function discoverAllCore(input = {}, { discover = null, file = TOOLS_FILE 
   // ("abrir a página do Portal") gets none.
   // The same for the proven example, the step grammar and the values (C07 of the 2026-10-05 package): they come back
   // last, in the room the tools and the section leave.
-  let B = input.budgetBytes ?? answer.size?.budgetBytes ?? 40960;
+  let B = input.budgetBytes ?? answer.size?.budgetBytes ?? EXPANSION_DEFAULT_BYTES;
   // A model part raised to its minimal (atEntry) keeps the tools beside it: the budget is the raised one plus the room of
   // the tools, under the ceiling, and the adjustment says so. An operation (the tools are the answer) keeps the caller's
   // budget: its model part is asked again below it (rerun, hard budget) as before.

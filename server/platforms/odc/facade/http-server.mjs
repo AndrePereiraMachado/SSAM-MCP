@@ -32,10 +32,10 @@ export const DEFAULTS = Object.freeze({ host: '127.0.0.1', port: 7300, ratePerMi
   maxBodyBytes: 16 * 1024 * 1024, idleMs: 60 * 60 * 1000, sweepMs: 500, keepaliveMs: 25000 });
 
 export const isLoopback = host => host === 'localhost' || host === '::1' || host === '[::1]' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
-export const REMOTE_REFUSAL = 'O servidor escuta só em loopback: o token viaja sem TLS. Use --host 127.0.0.1 (padrão) e exponha por um túnel '
-  + 'ou proxy TLS nesta máquina com --public-host <nome> (docs/SERVIDOR-HTTPS.md). --allow-remote só no servidor hospedado, atrás de um proxy TLS que você controla.';
-export const OWNER_ONLY_REFUSAL = 'o modo --local-studios dirige os Studios do PRÓPRIO dono e serve só esta máquina, em loopback. '
-  + 'Para atender de fora use o servidor hospedado (ssam serve sem --local-studios; docs/SERVIDOR-HTTPS.md).';
+export const REMOTE_REFUSAL = 'The server listens on loopback only: the token travels without TLS. Use --host 127.0.0.1 (the default) and expose it through a tunnel '
+  + 'or a TLS proxy on this machine with --public-host <name> (docs/SERVIDOR-HTTPS.md). --allow-remote only on the hosted server, behind a TLS proxy you control.';
+export const OWNER_ONLY_REFUSAL = 'the --local-studios mode drives the Studios of the owner HIMSELF and serves this machine only, on loopback. '
+  + 'To serve from outside, use the hosted server (ssam serve without --local-studios; docs/SERVIDOR-HTTPS.md).';
 // Headers a proxy or tunnel adds. In the owner-only mode their presence refuses the request (a safety net, not a guarantee).
 export const FORWARDED_HEADERS = Object.freeze(['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'cf-connecting-ip', 'cf-ray']);
 
@@ -80,9 +80,9 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
   const toolName = name => toolNameOf(name, toolSet);
   if (!dir) throw new Error('dir is required');
   const hosts = [...new Set((publicHosts ?? []).map(h => String(h).toLowerCase()))];
-  if (!agents && allowRemote) throw new Error('Recusado: --allow-remote. ' + OWNER_ONLY_REFUSAL);
-  if (!agents && hosts.length) throw new Error('Recusado: --public-host. ' + OWNER_ONLY_REFUSAL);
-  if (!isLoopback(host) && !allowRemote) throw new Error('Recusado: --host ' + host + '. ' + REMOTE_REFUSAL);
+  if (!agents && allowRemote) throw new Error('Refused: --allow-remote. ' + OWNER_ONLY_REFUSAL);
+  if (!agents && hosts.length) throw new Error('Refused: --public-host. ' + OWNER_ONLY_REFUSAL);
+  if (!isLoopback(host) && !allowRemote) throw new Error('Refused: --host ' + host + '. ' + REMOTE_REFUSAL);
   if (!Number.isInteger(ratePerMinute) || ratePerMinute < 1) throw new Error('ratePerMinute must be a positive integer');
   const { WebStandardStreamableHTTPServerTransport } = await import('@modelcontextprotocol/server');
   fs.mkdirSync(dir, { recursive: true });
@@ -332,7 +332,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
   };
 }
 
-const USAGE = 'Usage: ssam serve [--port 7300] [--host 127.0.0.1] [--public-host <nome>]... [--log-file <arquivo>] [--local-studios] [--allow-remote] [--rate-per-minute N] [--max-sessions N]';
+const USAGE = 'Usage: ssam serve [--port 7300] [--host 127.0.0.1] [--public-host <name>]... [--log-file <file>] [--local-studios] [--allow-remote] [--rate-per-minute N] [--max-sessions N]';
 const HOST_NAME = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
 
 // `ssam serve` arguments. --public-host (repeatable) adds a host name a tunnel or proxy on this machine answers for;
@@ -362,6 +362,6 @@ export function parseServeArguments(args, env = process.env) {
   for (const [k, v] of Object.entries({ port: out.port, ratePerMinute: out.ratePerMinute, maxSessionsPerToken: out.maxSessionsPerToken }))
     if (!Number.isInteger(v) || v < (k === 'port' ? 0 : 1) || (k === 'port' && v > 65535)) throw new Error('Invalid ' + k + ': ' + v);
   if (out.localStudios && (out.publicHosts.length || out.allowRemote))
-    throw new Error('Recusado: --local-studios com ' + (out.publicHosts.length ? '--public-host' : '--allow-remote') + '. ' + OWNER_ONLY_REFUSAL);
+    throw new Error('Refused: --local-studios with ' + (out.publicHosts.length ? '--public-host' : '--allow-remote') + '. ' + OWNER_ONLY_REFUSAL);
   return out;
 }

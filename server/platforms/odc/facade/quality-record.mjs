@@ -22,7 +22,7 @@ export const MAX_TEXT_PARSE = 262144;
 // Kept here as values so this module stays pure; quality-record.test.mjs checks them against tools/list and the constants.
 export const VERB_FIELDS = Object.freeze({
   ssam_map: Object.freeze({ field: 'view', default: 'map', values: Object.freeze(['map', 'digest', 'ddl', 'flow', 'search', 'uses', 'html', 'logic']) }),
-  ssam_reference: Object.freeze({ field: 'kind', default: null, values: Object.freeze(['api', 'functions', 'ui-block', 'types', 'where-can', 'recipe', 'check-job', 'check-delivery', 'verify-message', 'example', 'rules']) }),
+  ssam_reference: Object.freeze({ field: 'kind', default: null, values: Object.freeze(['api', 'functions', 'ui-block', 'types', 'where-can', 'recipe', 'check-job', 'check-delivery', 'verify-message', 'example', 'rules', 'tool']) }),
   o11_environment: Object.freeze({ field: 'action', default: null, values: Object.freeze(['inventory', 'download', 'download-app', 'templates', 'references', 'referenceable',
     'create-app', 'add-modules', 'create-module', 'update-app', 'refresh-refs', 'set-user-provider', 'delete-app']) }),
   o11_studio: Object.freeze({ field: 'command', default: null, values: Object.freeze(['status', 'wait', 'open-module', 'close-module', 'snapshot', 'errors', 'publish-log', 'windows', 'dismiss-dialog', 'login', 'refresh-references']) }),
@@ -111,7 +111,10 @@ export function clientFamily(name) {
 export const closeReason = reason => (typeof reason === 'string' && REASONS.includes(reason) ? reason : 'other');
 
 // ---- answer side
-const RESULTS = { entregue: 'entregue', 'entregue e publicado': 'entregue-publicado' };
+// The delivery result of an answer -> the deliv of the record. servidor/fase4-26 (a7, English review): since 15/10 the answers
+// say "delivered" and "delivered and published" (result-values.mjs); the Portuguese values of the releases before (a task record
+// read back, an older agent's answer) still count. The record's own codes do not change (quality-line.mjs DELIV).
+const RESULTS = { entregue: 'entregue', 'entregue e publicado': 'entregue-publicado', delivered: 'entregue', 'delivered and published': 'entregue-publicado' };
 // The outcomes the class reads (2.4); any other is not kept.
 const OUTCOMES = ['refused', 'not-sent', 'uncertain', 'incomplete'];
 // The one object an answer is read from: its structuredContent, else its first text when that is a JSON object of at most

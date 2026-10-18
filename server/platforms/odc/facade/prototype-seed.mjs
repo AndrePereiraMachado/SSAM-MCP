@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { hashedWords } from './destructive-operations.mjs';
+import { hashedWords, wordsGiven } from './destructive-operations.mjs';
 
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
@@ -82,7 +82,8 @@ export async function seedPrototypeData({ lane, module, receipt, bundle, authori
   const skipped = reason => ({ ran: false, reason, entities: 0, rows: 0, seeded: [], skippedNotEmpty: [], seedMs: now() - started });
   if (published !== true) return skipped('publish:true was not asked or the publication did not end clean: nothing is seeded');
   if (seed === false) return skipped('data.seed is false');
-  if (typeof authorize !== 'string' || !authorize.trim() || /^<[^>]*>$/.test(authorize.trim())) return skipped('the call carries no authorization words (a standing grant does not cover demo data)');
+  if (!wordsGiven(authorize)) return skipped( // CX15 r7 (L-7): one predicate
+    'the call carries no authorization words (a standing grant does not cover demo data)');
   if (typeof write !== 'function') return skipped('no data writer on lane ' + lane);
   const capture = captureOf(bundle);
   if (!capture) return skipped('the capture bundle could not be read');

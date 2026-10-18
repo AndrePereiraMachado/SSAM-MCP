@@ -1,5 +1,5 @@
 {
- "description": "ODC: op rest com openapi, headless: so as operacoes escolhidas (getOrder e POST /orders) de um documento sintetico viram metodos do cliente WfOrdersApi, pelo importador do proprio plugin REST, sem nenhuma chamada de rede (o icone pedido ao host da API e respondido 404 localmente).",
+ "description": "ODC: rest op with openapi, headless: only the chosen operations (getOrder and POST /orders) of a synthetic document become methods of the WfOrdersApi client, through the REST plugin's own importer, with no network call (the icon requested from the API host is answered 404 locally).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

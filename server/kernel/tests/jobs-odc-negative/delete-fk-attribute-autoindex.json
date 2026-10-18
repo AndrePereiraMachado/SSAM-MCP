@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA do delete de uma FK cujo AutoIndex ainda existe: cada FK nasce com um indice automatico que conta como consumidor; sem o apagar primeiro, o delete do atributo e recusado a nomea-lo. O caminho limpo (apagar o AutoIndex e depois a FK) esta em tests/jobs-odc/entity-refactor.json e em delete-entity-whole.json.",
+ "description": "ODC: the REFUSAL of the delete of an FK whose AutoIndex still exists: each FK is born with an automatic index that counts as a consumer; without deleting it first, the delete of the attribute is refused, naming it. The clean path (delete the AutoIndex and then the FK) is in tests/jobs-odc/entity-refactor.json and in delete-entity-whole.json.",
  "base": "job:data-full-model",
  "expectValid": true,
  "expectError": [

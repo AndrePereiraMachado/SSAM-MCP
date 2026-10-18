@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA do rename de um atributo de structure para um nome que ja existe na mesma structure (Postcode -> Zone). O Studio sufixaria em silencio; o kernel recusa com o nome que o Studio usaria. O caminho limpo esta em tests/jobs-odc/structure-lifecycle.json.",
+ "description": "ODC: the REFUSAL of renaming a structure attribute to a name that already exists in the same structure (Postcode -> Zone). The Studio would add a suffix silently; the kernel refuses with the name the Studio would use. The clean path is in tests/jobs-odc/structure-lifecycle.json.",
  "base": "job:structure-nested",
  "expectValid": true,
  "expectError": [

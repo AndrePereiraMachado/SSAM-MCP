@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import {createO11SessionGroup} from '../debug-o11-session-group.mjs';
 test('connected startup without an allocated native identity remains uncertain',async()=>{
  const calls=[];const group=createO11SessionGroup(async args=>{calls.push(args);return {ok:true,state:'connected'};});

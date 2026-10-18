@@ -2,6 +2,7 @@
 // checkout and in a release. The release answers come from opts {release: true, env}, as in release-layout.mjs, so no
 // bundle is needed. Every case uses its own env object with temporary USERPROFILE, HOME, APPDATA, LOCALAPPDATA and
 // ANVIL_AUTHORITY_DIR (never process.env), under SSAM_TEST_TMP when set; no case reads a bridge.key.
+import '../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

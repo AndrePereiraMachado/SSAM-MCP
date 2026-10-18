@@ -21,13 +21,15 @@ import { LocalExecutor, bridgeClientPath, contextLost, currentExecutor, hostedCo
   workspacePath } from './executor.mjs';
 import { resolveOpenModule } from './studio-module.mjs';
 import { kernelStart } from './quality-meter.mjs';
-import { hashedWords, withoutWords } from './destructive-operations.mjs';
+import { bridgeArgsWithoutWords, hashedWords, withoutWords } from './destructive-operations.mjs';
+import { RESULT } from './result-values.mjs';
 export { headlessDebug } from './debug-runtime.mjs';
 
 const run = promisify(execFile);
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-// The ODC data root: this folder, or hosted the customer's <ws>/odc.
-const dataPath = (...segments) => (usesWorkspace(root, root) ? workspacePath('odc', ...segments) : path.join(root, ...segments));
+// The ODC data root: this folder, or hosted the customer's <ws>/odc. a7 (review M1/B2): exported for the handlers of mcp.mjs
+// that take a data root (studio_reference_snapshot, studio_publish), read at call time inside the call's context.
+export const dataPath = (...segments) => (usesWorkspace(root, root) ? workspacePath('odc', ...segments) : path.join(root, ...segments));
 export const paths = {
   client: bridgeClientPath(),
   builder: path.join(root, 'studio', 'builder', 'bin', 'Release', 'net10.0', 'ODC3.Builder.dll'),
@@ -118,11 +120,15 @@ export function newestBridgeDll() {
 // pipe {connectMs} (studio_status, C10): a short connect window; it travels as the connectMs of odc.pipe.
 // query-test always takes the versioned pipe: its test values can be private, so they never go on a child-process command
 // line (the .NET client); without a versioned bridge nothing is sent.
+// CX15 r5 (N-2): the one point every bridge command crosses: the owner's words of a line (the authorize command's text,
+// --authorize <words>) go as one sha256:<hex> token (the bridge only requires a nonempty value: StartupHook.cs Authorize,
+// :402, :1410; AppCreationCommands.cs:121; DataCommands.cs:79). version: the bridge protocol (tests; else the runtime's).
 export const bridgeVersion = () => signedRuntime(root)?.version ?? newestBridgeDll()?.version ?? null;
-export async function client(pid, args, { env = process.env, call, pipe } = {}) {
+export async function client(pid, args, { env = process.env, call, pipe, version: pinned } = {}) {
+  args = bridgeArgsWithoutWords(args);
   const executor = currentExecutor();
   if (args[0] === 'attach') return executor.call('odc.attach', executor.hosted ? { pid } : { pid, dll: args[1] });
-  const version = executor.hosted || env.SSAM_ODC_PIPE !== '0' || args[0] === 'query-test' ? bridgeVersion() : null;
+  const version = executor.hosted || env.SSAM_ODC_PIPE !== '0' || args[0] === 'query-test' ? (pinned ?? bridgeVersion()) : null;
   if (args[0] === 'query-test' && !version) throw Object.assign(new Error('Query testing requires the versioned ODC bridge pipe; no command was sent.'), { code: 'QUERY_TEST_NATIVE_UNAVAILABLE', sent: false });
   const connectMs = Number.isInteger(pipe?.connectMs) && pipe.connectMs > 0 ? pipe.connectMs : null;
   const text = String(call && version ? await (pipe ? call(pid, version, args, pipe) : call(pid, version, args))
@@ -167,6 +173,8 @@ export function flightRegistry(executor = currentExecutor()) {
 }
 const UNTRACKED = new Set(['status', 'publish-log', 'auth-status', 'dismiss-dialog']);
 export async function studio(args, pid, { prefetch = true, connectMs } = {}) {
+  // CX15 r5 (N-2): hashed before anything keeps the line (inFlight, which studio_status shows while the bridge is busy).
+  args = bridgeArgsWithoutWords(args);
   let targetPid = await studioPid(pid);
   let value, refused = null, requested = null;
   const flights = flightRegistry();
@@ -346,8 +354,8 @@ export async function ensureBuilder({ needsBuild = builderNeedsBuild } = {}) {
   if (needsBuild()) {
     const build = await run('dotnet', ['build', path.join(root, 'studio', 'builder', 'Builder.csproj'), '-c', 'Release', '-v', 'q', '--nologo'],
       { windowsHide: true, maxBuffer: 16 * 1024 * 1024 }).then(() => ({ ok: true })).catch(e => ({ ok: false, saida: (e.stdout ?? '') + (e.stderr ?? e.message) }));
-    if (!build.ok) return { ok: false, output: [], error: 'o builder esta desactualizado e a recompilacao FALHOU -- corrija antes de continuar, porque correr assim usaria codigo velho:\n' + String(build.saida).split(/\r?\n/).filter(l => /error/i.test(l)).slice(0, 8).join('\n') };
-    if (!avisadoDeCompilacao) { avisadoDeCompilacao = true; process.stderr.write('[ssam] fontes do builder ou leitor compartilhado exigem recompilacao: build executado antes de correr.\n'); }
+    if (!build.ok) return { ok: false, output: [], error: 'the builder is out of date and its rebuild FAILED -- fix it before going on, because running like this would use old code:\n' + String(build.saida).split(/\r?\n/).filter(l => /error/i.test(l)).slice(0, 8).join('\n') };
+    if (!avisadoDeCompilacao) { avisadoDeCompilacao = true; process.stderr.write('[ssam] the sources of the builder or of the shared reader need a rebuild: build run before running.\n'); }
   }
   if (!fs.existsSync(paths.builder)) throw new Error(notBuilt('The builder', paths.builder));
   return {ok:true};
@@ -505,17 +513,20 @@ export async function guardDeliveryStep(step, fn) {
 }
 // publish (C08): after a clean merge (merged and strictlyEqual) the same call records the words (authorize, or a standing
 // grant of the app when absent) and publishes with --wait; any other merge outcome skips it. deps: tests pass fakes.
-export async function deliver({ feature, module, until = 'merge', pid, producer, tenant, job, owners, changes, output: jobOutput, publish = false, authorize }, deps = {}) {
+export async function deliver({ feature, module, until = 'merge', pid, producer, producers, tenant, job, owners, changes, output: jobOutput, publish = false, authorize }, deps = {}) {
   const { studio: studioCall = studio, builder: builderCall = builder, grants, onStage } = deps;
   if (job) {
     if (producer || tenant) throw new Error('Kernel delivery takes identity from the snapshot; producer/tenant overrides are not supported.');
     // Hosted, the kernel delivery's data root is the customer's <ws>/odc (dataPath), never the code root.
-    const report = await deliverKernel({ feature, module, until, pid, job, owners, changes, output: jobOutput, publish, authorize },
-      { root: dataPath(), studio: studioCall, prepareManifest, nextLabDir, journal, ...(grants !== undefined ? { grants } : {}), ...(onStage ? { onStage } : {}), ...(deps.kernel ?? {}) });
+    // fix/unpublished-library round 2 (A2): the ODC Studio processes, so a producer open in another Studio than the one the
+    // call names (pid) is found there (its publication goes to that pid); only read when the call names a pid. Hosted,
+    // studioPids asks the customer's agent (the executor), never the processes of this server.
+    const report = await deliverKernel({ feature, module, until, pid, job, owners, changes, output: jobOutput, publish, authorize, ...(producers !== undefined ? { producers } : {}) },
+      { root: dataPath(), studio: studioCall, prepareManifest, nextLabDir, journal, otherPids: () => studioPids(), ...(grants !== undefined ? { grants } : {}), ...(onStage ? { onStage } : {}), ...(deps.kernel ?? {}) });
     warmSoon();
     return (deps.fragmentPreview ?? withFragmentPreview)(report);
   }
-  if (jobOutput || owners || changes) throw new Error('output, owners and changes require a job; C# features declare their own metadata.');
+  if (jobOutput || owners || changes || producers) throw new Error('output, owners, changes and producers require a job; C# features declare their own metadata.');
   if (!feature) throw new Error('feature is required.');
   if (!DELIVER_STEPS.includes(until)) throw new Error('until must be one of ' + DELIVER_STEPS.join(', '));
   if (publish === true && until !== 'merge') throw new Error('publish requires until "merge": the publication follows a clean merge in the same call.');
@@ -542,6 +553,7 @@ export async function deliver({ feature, module, until = 'merge', pid, producer,
   let authorization = null;
   if (publish === true) {
     authorization = await publishAuthorization({ authorize, module, requested: requestedModule }, grants !== undefined ? grants : await import('./standing-grants.mjs').catch(() => null));
+    if (authorization?.refused) return done(false, { failed: 'preflight', ...authorization.refused, publish: { requested: true, outcome: 'skipped' } }); // CX15 r6 (M-1)
     if (!authorization) return done(false, { failed: 'preflight', code: 'PUBLISH_AUTHORIZATION_REQUIRED', publish: { requested: true, outcome: 'skipped' },
       error: 'publish:true needs the user\'s own words in authorize, or a standing grant for ' + module + '; nothing was built or merged.' });
   }
@@ -563,12 +575,12 @@ export async function deliver({ feature, module, until = 'merge', pid, producer,
     if (step !== 'merge') { if (step === until) return done(true, { manifest, checks, receipt, evidence: output, [step.replace('-', '')]: r }); continue; }
     const answer = { manifest, checks, receipt, evidence: output, merge: r };
     const clean = r.merged === true && r.strictlyEqual === true;
-    if (clean) answer.result = 'entregue';
+    if (clean) answer.result = RESULT.delivered;
     if (publish !== true) return done(true, answer);
     if (!clean) return done(true, { ...answer, publish: { requested: true, outcome: 'skipped' } });
     const published = await publishDelivered({ manifest, module, words: authorization.words, pid }, { studio: studioCall });
     Object.assign(answer, { authorization: authorization.authorization, ...published });
-    if (published.publish.outcome === 'published') return done(true, { ...answer, result: 'entregue e publicado' });
+    if (published.publish.outcome === 'published') return done(true, { ...answer, result: RESULT.deliveredAndPublished });
     return done(false, { ...answer, failed: 'publish', code: published.publish.outcome === 'uncertain' ? 'PUBLISH_UNCERTAIN' : 'PUBLISH_FAILED',
       ...(published.publish.outcome === 'uncertain' ? { outcome: 'uncertain' } : {}), error: published.publish.error ?? 'The publication did not succeed.',
       continuation: { tool: 'studio_publish', arguments: { manifest, ...(Number.isInteger(pid) ? { pid } : {}) }, why: 'Merged; publish this manifest again after the fix the publication names. Never repeat the delivery.' } });

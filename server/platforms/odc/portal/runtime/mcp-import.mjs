@@ -1,3 +1,4 @@
+import { wordsGiven } from '../../facade/destructive-operations.mjs';
 import { fail } from './errors.mjs';
 import { readMcpConnectionReadiness } from './mcp-connection-readiness.mjs';
 import { buildMcpImportPlan, mcpSelectionHash } from './mcp-import-plan.mjs';
@@ -26,7 +27,8 @@ const importEvidence = receipt => receipt.reconciliation?.mcpImport ?? receipt.m
 // including when the first process died after reservation and before its reply.
 export async function executeMcpImport(input, { read, write, receipts }) {
   const { tenant, connectionId, operationUuid, expectedPlanSha256, toolNames } = input;
-  if (!isUuid(operationUuid) || typeof input.authorize !== 'string' || !input.authorize.trim()
+  if (!isUuid(operationUuid) || !wordsGiven(input.authorize) // CX15 r7: one predicate
+   
     || !/^[a-f0-9]{64}$/.test(expectedPlanSha256 ?? '') || !Array.isArray(toolNames) || !toolNames.length
     || toolNames.some(n => typeof n !== 'string' || !n.trim()) || new Set(toolNames).size !== toolNames.length)
     fail('INPUT_INVALID', 'Execution requires explicit distinct toolNames, authorization, operationUuid and expectedPlanSha256.');

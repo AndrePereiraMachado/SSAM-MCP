@@ -1,3 +1,4 @@
+import '../../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {workspaceName} from './measure/request-metrics.mjs';import {privacyIssues} from './privacy.mjs';import {main,ledgerRow,updateLedger} from './speed-ledger.mjs';import {enrichRequest} from './measure/request-metrics.mjs';
 const person='synthetic-person',home=path.win32.join('C:','Users',person),options={home};

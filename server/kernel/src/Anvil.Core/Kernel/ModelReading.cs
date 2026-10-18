@@ -93,6 +93,10 @@ public abstract class ModelReader<T> where T : class
     // a new widget). Null when the adapter cannot tell.
     protected virtual char? NullFactType(T node, string name) => null;
     internal char? NullFactTypeOf(T node, string name) => NullFactType(node, name);
+    // The defaults of the screen reading (ScreenHtml) for the pages of a UI flow of the module (null: a new UI flow): the Studio's,
+    // measured by the adapter that has one (KernelModelReader); null for a reader without a Studio (every property is then at
+    // its default only when empty).
+    protected internal virtual ScreenDefaults? DefaultsOf(T module, T? flow) => null;
     // ModuleRichIndex reads the native graph (who refers to a node) and the parent chain of a consumer that is no row.
     internal IEnumerable<T> ReferrersOf(T node) => Referrers(node);
     internal T? ParentOf(T node) => Parent(node);

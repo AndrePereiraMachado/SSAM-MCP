@@ -1,12 +1,12 @@
 {
- "description": "SQL por verbos: ISQLNode com Statement ({Entidade} e @Parametro), ISQLInputParameter com DataType, ISQLOutput em structure PUBLICA (args.entityOrStructure; action Public exige structure Public), argumento ligado ao input da action ($sql/arg:Nome), output da action `<Structure> List` preenchido com SearchProducts.List. O unico aviso e SQL_Enumeration (sugestao: enumerar todas as colunas equivale a {Product}.*)",
+ "description": "SQL by verbs: ISQLNode with Statement ({Entity} and @Parameter), ISQLInputParameter with DataType, ISQLOutput into a PUBLIC structure (args.entityOrStructure; a Public action requires a Public structure), argument linked to the input of the action ($sql/arg:Name), output of the action `<Structure> List` filled with SearchProducts.List. The only warning is SQL_Enumeration (suggestion: enumerating all the columns is equivalent to {Product}.*)",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "SQL_Enumeration",
    "element": "Product_Search (ServerAction) / SearchProducts (SQLNode)",
-   "why": "Enumeracao explicita intencional para demonstrar o mapeamento dos atributos SQL para a structure de saida."
+   "why": "Intentional explicit enumeration to demonstrate the mapping of the SQL attributes to the output structure."
   }
  ],
  "ops": [

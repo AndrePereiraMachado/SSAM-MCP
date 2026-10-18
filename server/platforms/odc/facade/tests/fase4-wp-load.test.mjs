@@ -107,9 +107,9 @@ async function bench(parallel) {
 
 test('wp hosted: 3 customers x 3 deliveries through their agents build at the same time, fairly, and each Studio merges one at a time', { timeout: 120000 }, async t => {
   const serial = await bench(false);
-  for (const answer of serial.answers) assert.equal(answer.result, 'entregue', JSON.stringify(answer).slice(0, 800));
+  for (const answer of serial.answers) assert.equal(answer.result, 'delivered', JSON.stringify(answer).slice(0, 800)); // English since 15/10
   const parallel = await bench(true);
-  for (const answer of parallel.answers) assert.equal(answer.result, 'entregue', JSON.stringify(answer).slice(0, 800));
+  for (const answer of parallel.answers) assert.equal(answer.result, 'delivered', JSON.stringify(answer).slice(0, 800));
 
   // Each delivery has its own lab folder, inside its own customer's workspace.
   const evidence = parallel.answers.map(a => a.evidence);

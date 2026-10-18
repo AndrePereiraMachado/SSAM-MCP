@@ -50,7 +50,9 @@ public static partial class JobRunner
     // B3: the edit form of an html op that the preflight refused only for the owner's rules on what is new (a <script>, a
     // javascript: event, a foreign iteration, a Visible): its plan says them again with the reading (what the element already
     // had is kept, never refused) beside everything else that is wrong with it, each with its patch: one refusal, not one per wave.
-    private static readonly HashSet<string> RuleCodes = new(StringComparer.Ordinal) { "HTML_SCRIPT", "HTML_FOREACH", "HTML_VISIBLE", "HTML_JSON" };
+    // CX17 review 2, M4: a marker of the engine on a new element is one of them (the plan says it again with the markers of the
+    // elements with k, and the patch).
+    private static readonly HashSet<string> RuleCodes = new(StringComparer.Ordinal) { "HTML_SCRIPT", "HTML_FOREACH", "HTML_VISIBLE", "HTML_JSON", ScreenVisual.ReservedMarker };
     private static bool RulesOnly(JsonObject? preflight, int op)
         => (preflight?["problems"] as JsonArray ?? new JsonArray()).OfType<JsonObject>()
             .Where(p => p["op"] is JsonValue v && v.TryGetValue<int>(out var at) && at == op).All(p => RuleCodes.Contains(p["code"]?.ToString() ?? ""));
@@ -317,6 +319,10 @@ public static partial class JobRunner
 
     private static bool Html(JsonObject problem) => problem["code"]?.ToString()?.StartsWith("HTML_", StringComparison.Ordinal) == true;
 
+    // A pointer at the edit of a reading (C2: data.edit or data.html; the CX16 element edits: data.edits) or inside it.
+    private static bool EditPointer(string pointer) =>
+        pointer.Contains("/data/edit", StringComparison.Ordinal) || pointer.EndsWith("/data/html", StringComparison.Ordinal);
+
     private static bool SamePlace(JsonObject q, JsonObject p, string? opsPointer)
     {
         // The Verify says each fault of each element once: two of its messages are two faults (UI-Mockup, FarmaVirtual call 96:
@@ -343,9 +349,12 @@ public static partial class JobRunner
             return q["code"]?.ToString() == p["code"]?.ToString() && q["id"]!.ToJsonString() == p["id"]!.ToJsonString() && q["pointer"]?.ToString() == p["pointer"]?.ToString();
         // Problems of the edit of a reading (C2) all point at their edit string: one place there is the same rule on the same
         // element (its k; a new element or a <script>, which have none, by the message), never every problem of the same edit,
-        // nor an html rule and another check of the same string (an unknown function of the base beside the L6 rule).
-        if (!(q["line"] is JsonValue && p["line"] is JsonValue) && (Html(q) || Html(p)) && q["pointer"]?.ToString() is { } edit && edit == p["pointer"]?.ToString()
-            && (edit.Contains("/data/edit", StringComparison.Ordinal) || edit.EndsWith("/data/html", StringComparison.Ordinal)))
+        // nor an html rule and another check of the same string (an unknown function of the base beside the L6 rule). CX17 review 3,
+        // M8: the op's edit list and each of its strings are one family (/data/edit, /data/edits and /data/edit[s]/<j>): the
+        // preflight says the new elements at the list, the plan the elements with k at their string; a pointer inside the other
+        // with the same code is never the same place there, only the same k or the same message.
+        if (!(q["line"] is JsonValue && p["line"] is JsonValue) && (Html(q) || Html(p)) && q["pointer"]?.ToString() is { } edit && p["pointer"]?.ToString() is { } other
+            && EditPointer(edit) && EditPointer(other) && (edit == other || edit.StartsWith(other + "/", StringComparison.Ordinal) || other.StartsWith(edit + "/", StringComparison.Ordinal)))
             return q["code"]?.ToString() == p["code"]?.ToString()
                 && (q["k"] is JsonValue && q["k"]!.ToString() == p["k"]?.ToString() || q["message"]?.ToString() == p["message"]?.ToString());
         // Problems of one text (the html document of an op) carry their line and column: two of them are one place only when

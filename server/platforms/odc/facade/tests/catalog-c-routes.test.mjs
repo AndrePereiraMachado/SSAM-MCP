@@ -5,6 +5,7 @@
 // Index part (lane CLI, no Studio, no reader, no worker; a private cache directory): the answers an LLM receives for
 // the front-C intents select the right capability per lane, state evidence per lane without inheriting the other
 // lane, surface the declared refusals and stay within the byte budget.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';

@@ -77,7 +77,9 @@ test('hosted end to end: agent, ws: paths, O11 relay, refusals, protocol violati
   const { createAgent } = await import(pathToFileURL(path.join(repo, 'agent', 'ssam-agent.mjs')).href);
 
   // The stdio tool list, before the served process default becomes the DenyExecutor.
-  const stdio = await ssam.createSsamServer(ssam.servedLanes());
+  // servidor/fase4-26 a7: a hosted session serves the profile all (CX11; D6 of the a6 plan): its listing is the stdio listing
+// of that profile (the stdio default, app, leaves out the six ssam_debug* tools).
+const stdio = await ssam.createSsamServer({ ...ssam.servedLanes(), profile: 'all' });
   const [a, b] = InMemoryTransport.createLinkedPair();
   const local = new Client({ name: 'e2e-stdio', version: '1' });
   await Promise.all([stdio.connect(a), local.connect(b)]);

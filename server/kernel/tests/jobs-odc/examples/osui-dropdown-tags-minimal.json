@@ -1,5 +1,5 @@
 {
- "description": "DropdownTags do OSUI: OptionsList com lista literal e o evento obrigatorio OnChanged guardando quantas tags foram escolhidas.",
+ "description": "DropdownTags of OSUI: OptionsList with a literal list and the required event OnChanged keeping how many tags were chosen.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

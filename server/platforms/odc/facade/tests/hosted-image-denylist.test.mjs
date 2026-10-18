@@ -9,6 +9,7 @@
 //
 //   node --test tests/hosted-image-denylist.test.mjs            (in platforms/odc/facade)
 //   node tests/hosted-image-denylist.test.mjs --list            prints the shipped files that name a client
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -135,6 +136,15 @@ test('every job the image ships finds its base and producers in the image (a pro
   assert.deepEqual(missing, []);
 });
 
+// servidor/fase4-26 a7 (English review, HANDOFF 4.2): the search-only aliases of the Portuguese prose of the suite jobs, proven
+// examples and recipes (kernel/tests/jobs-search-aliases.json, read from the kernel root by search-aliases.mjs and
+// CommandSurface.cs) and of the rules (rules-search-aliases.json) ship with the image, so a Portuguese request finds on the
+// hosted server what it finds locally.
+test('the search aliases of the English junction ship with the image', () => {
+  const shipped = new Set(contextFiles(ROOT, readIgnore()));
+  for (const file of ['kernel/tests/jobs-search-aliases.json', 'platforms/odc/facade/rules-search-aliases.json', 'platforms/odc/facade/search-aliases.mjs'])
+    assert.ok(shipped.has(file), file + ' is in the build context');
+});
 test('no file the image ships names a client', () => {
   const hits = clientNames();
   assert.deepEqual(hits.map(h => `${h.file} [${h.term}] ${h.at}`).slice(0, 60), [], `${hits.length} shipped files name a client`);

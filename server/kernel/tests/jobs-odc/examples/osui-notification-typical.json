@@ -1,5 +1,5 @@
 {
- "description": "Notification do OSUI: abre de inicio por variavel, fica no rodape, e o OnToggle guarda se esta aberta; o texto vem de uma variavel.",
+ "description": "Notification of OSUI: opens from the start by a variable, stays at the bottom, and OnToggle keeps whether it is open; the text comes from a variable.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

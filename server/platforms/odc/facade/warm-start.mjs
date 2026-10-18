@@ -11,7 +11,7 @@ const sorted = tools => [...tools].sort((a, b) => a.name.localeCompare(b.name));
 // Keep the cached transport alive so doctor and every other listed tool can explain a failed build.
 function assemblyRefusal(error) {
   const value = { ok: false, code: 'MCP_ASSEMBLY_FAILED', cause: String(error?.message ?? error),
-    next: 'reinicie este servidor MCP (Claude Code: /mcp e reconnect; Codex: reinicie a sess\u00e3o)' };
+    next: 'restart this MCP server (Claude Code: /mcp and reconnect; Codex: restart the session)' };
   return { isError: true, structuredContent: value, content: [{ type: 'text', text: JSON.stringify(value) }] };
 }
 

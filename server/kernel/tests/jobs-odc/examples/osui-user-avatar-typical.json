@@ -1,5 +1,5 @@
 {
- "description": "UserAvatar do OSUI por linha: nome do registro, tamanho pequeno, forma redonda e cor por expressao.",
+ "description": "UserAvatar of OSUI per row: the name of the record, a small size, a round shape and the color by an expression.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

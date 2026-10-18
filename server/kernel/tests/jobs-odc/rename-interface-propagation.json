@@ -1,10 +1,10 @@
 {
- "description": "ODC: renomear INTERFACE e ler de volta o CSS e as URLs que ficaram para tras, o espelho de tests/jobs/rename-interface-propagation.json. Tela, bloco, parametro de bloco e variavel de tela sao renomeados; o job le o StyleSheet da propria tela e do proprio bloco, a classe CSS na propriedade Style, a legenda do botao e uma variavel com um deep link escrito a mao. Serve tambem para comparar com a faixa O11 o que a plataforma reescreve sozinha.",
+ "description": "ODC: rename INTERFACE and read back the CSS and the URLs that were left behind, the mirror of tests/jobs/rename-interface-propagation.json. Screen, block, block parameter and screen variable are renamed; the job reads the StyleSheet of the screen itself and of the block itself, the CSS class in the Style property, the button caption and a variable with a deep link written by hand. It also serves to compare with the O11 lane what the platform rewrites by itself.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfRenCard", "as": "$blk", "_why": "1. o bloco: CSS proprio com o nome do bloco na classe, e um input citado por uma expressao"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfRenCard", "as": "$blk", "_why": "1. the block: own CSS with the name of the block in the class, and an input cited by an expression"},
   {"op": "set", "target": "$blk", "prop": "StyleSheet", "value": ".wfren-card { border: 1px solid #ddd; }\n.wfren-card__title { font-weight: 700; }"},
   {"op": "set", "target": "$blk", "prop": "Description", "value": "Cartao do WfRenCard, estilizado pela classe wfren-card"},
   {"op": "create", "parent": "$blk", "type": "IInputParameter", "name": "Caption", "as": "$blkIn"},
@@ -21,7 +21,7 @@
   {"op": "create", "parent": "$det/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$detTitle"},
   {"op": "set", "target": "$detTitle", "prop": "Value", "value": "\"WfRenDetail \" + IntegerToText(NoticeId)"},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfRenList", "as": "$scr", "_why": "3. a tela consumidora: CSS proprio, classe no container, instancia do bloco, deep link a mao e botao que navega"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfRenList", "as": "$scr", "_why": "3. the consuming screen: own CSS, class in the container, block instance, hand-written deep link and a button that navigates"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "set", "target": "$scr", "prop": "StyleSheet", "value": ".wfren-list { padding: 16px; }\n.wfren-list .wfren-card { margin-bottom: 8px; }"},
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "DetailUrl", "as": "$url"},
@@ -44,24 +44,24 @@
   {"op": "usages", "target": "$blk"},
 
   {"op": "rename", "target": "$det", "name": "WfRenNoticeDetail", "_why": "5. renomear a TELA de destino"},
-  {"op": "get", "target": "$btn/OnClick", "_why": "LER DE VOLTA: o Destination seguiu por chave"},
-  {"op": "get", "target": "$url", "_why": "o deep link escrito a mao continua a apontar para /InsuranceApp/WfRenDetail"},
-  {"op": "get", "target": "$btn/#ITextWidget", "_why": "e a legenda do botao continua a dizer WfRenDetail"},
+  {"op": "get", "target": "$btn/OnClick", "_why": "READ BACK: the Destination followed by key"},
+  {"op": "get", "target": "$url", "_why": "the deep link written by hand still points to /InsuranceApp/WfRenDetail"},
+  {"op": "get", "target": "$btn/#ITextWidget", "_why": "and the caption of the button still says WfRenDetail"},
 
   {"op": "rename", "target": "$blk", "name": "WfRenNoticeCard", "_why": "6. renomear o BLOCO"},
-  {"op": "get", "target": "$inst", "_why": "LER DE VOLTA: o nome da instancia e o SourceBlock"},
-  {"op": "get", "target": "$blk", "_why": "o StyleSheet do bloco continua a definir .wfren-card e a Description nao mudou"},
-  {"op": "get", "target": "$cardBody", "_why": "a classe CSS na propriedade Style e um literal: nao mudou"},
+  {"op": "get", "target": "$inst", "_why": "READ BACK: the name of the instance and the SourceBlock"},
+  {"op": "get", "target": "$blk", "_why": "the StyleSheet of the block still defines .wfren-card and the Description did not change"},
+  {"op": "get", "target": "$cardBody", "_why": "the CSS class in the Style property is a literal: it did not change"},
 
   {"op": "rename", "target": "$blkIn", "name": "Heading", "_why": "7. renomear o PARAMETRO do bloco"},
   {"op": "get", "target": "$inst/Heading"},
   {"op": "get", "target": "$cardText"},
 
-  {"op": "rename", "target": "$url", "name": "NoticeDetailUrl", "_why": "8. renomear a VARIAVEL da tela"},
+  {"op": "rename", "target": "$url", "name": "NoticeDetailUrl", "_why": "8. rename the screen VARIABLE"},
   {"op": "get", "target": "$urlText"},
 
-  {"op": "rename", "target": "$scr", "name": "WfRenNoticeList", "_why": "9. renomear a propria TELA consumidora"},
-  {"op": "get", "target": "$scr", "_why": "LER DE VOLTA: o StyleSheet da tela continua a falar de .wfren-list e .wfren-card"},
+  {"op": "rename", "target": "$scr", "name": "WfRenNoticeList", "_why": "9. rename the consuming SCREEN itself"},
+  {"op": "get", "target": "$scr", "_why": "READ BACK: the StyleSheet of the screen still talks about .wfren-list and .wfren-card"},
   {"op": "get", "target": "$listBody"},
 
   {"op": "dump", "target": "$scr", "depth": 7},

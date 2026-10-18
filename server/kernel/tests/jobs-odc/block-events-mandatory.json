@@ -1,13 +1,13 @@
 {
- "description": "ODC: a resposta a 'evento obrigatorio sem handler e recusa ou aviso?' na faixa ODC, e a resposta e a MESMA do O11 - nem recusa nem aviso: o kernel aplica tudo sem dizer nada (ok=True) e o Verify da ERRO EventHandlerRequiredAction, deixando o modulo invalido. O bloco WfPingPanel declara OnPing com IsMandatory true e duas instancias nascem na tela WfPingDemo sem handler: saem DOIS erros, um por instancia, cada um no caminho do seu IEventHandler - a obrigatoriedade cobra-se por INSTANCIA, nao por bloco. Vale ainda o mesmo detalhe do O11: o IEventHandler nasce com a instancia mesmo vazio, por isso as duas instancias sem handler ja contam como consumidoras no `usages`. Paridade confirmada com tests/jobs/block-events-mandatory-reactive.json; o caminho valido (mesmo IsMandatory true, um handler por instancia) esta em tests/jobs-odc/block-events-two-instances.json.",
+ "description": "ODC: the answer to 'mandatory event without a handler: refusal or warning?' in the ODC lane, and the answer is the SAME as in O11 - neither refusal nor warning: the kernel applies everything without saying anything (ok=True) and Verify gives ERROR EventHandlerRequiredAction, leaving the module invalid. The block WfPingPanel declares OnPing with IsMandatory true and two instances are born on the screen WfPingDemo without a handler: TWO errors come out, one per instance, each on the path of its IEventHandler - the requirement is charged per INSTANCE, not per block. The same O11 detail also holds: the IEventHandler is born with the instance even when empty, so the two instances without a handler already count as consumers in the `usages`. Parity confirmed with tests/jobs/block-events-mandatory-reactive.json; the valid path (the same IsMandatory true, one handler per instance) is in tests/jobs-odc/block-events-two-instances.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": false,
  "expectedMessages": [
-  {"id": "EventHandlerRequiredAction", "element": "WfPingPanel1 (MobileBlockInstanceWidget) / EventHandler", "why": "E ESTE o resultado que o job existe para provar na faixa ODC: com IsMandatory true, a instancia sem handler produz um erro (nao um aviso) no seu proprio IEventHandler. Calar isto seria apagar a prova."},
-  {"id": "EventHandlerRequiredAction", "element": "WfPingPanel2 (MobileBlockInstanceWidget) / EventHandler", "why": "A segunda mensagem prova que a cobranca e por INSTANCIA e nao por bloco nem por evento: duas instancias sem handler dao dois erros, com caminhos diferentes."}
+  {"id": "EventHandlerRequiredAction", "element": "WfPingPanel1 (MobileBlockInstanceWidget) / EventHandler", "why": "THIS is the result that the job exists to prove in the ODC lane: with IsMandatory true, the instance without a handler produces an error (not a warning) on its own IEventHandler. Silencing this would be erasing the proof."},
+  {"id": "EventHandlerRequiredAction", "element": "WfPingPanel2 (MobileBlockInstanceWidget) / EventHandler", "why": "The second message proves that the charge is per INSTANCE and not per block or per event: two instances without a handler give two errors, with different paths."}
  ],
  "ops": [
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfPingPanel", "as": "$blk", "_why": "1. o bloco com o evento obrigatorio"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfPingPanel", "as": "$blk", "_why": "1. the block with the mandatory event"},
   {"op": "create", "parent": "$blk", "type": "IInputParameter", "name": "Caption", "as": "$blkIn"},
   {"op": "set", "target": "$blkIn", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$blk", "type": "IBlockEvent", "name": "OnPing", "as": "$ev"},
@@ -29,18 +29,18 @@
   {"op": "layout", "target": "$act"},
   {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$act"},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfPingDemo", "as": "$scr", "_why": "2. a tela com DUAS instancias, nenhuma com handler"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfPingDemo", "as": "$scr", "_why": "2. the screen with TWO instances, neither with a handler"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "\"Ping\""},
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "WfPingPanel1", "as": "$i1", "source": "IMobileBlock:WfPingPanel", "_why": "o kernel aceita a instancia sem handler sem dizer nada"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "WfPingPanel1", "as": "$i1", "source": "IMobileBlock:WfPingPanel", "_why": "the kernel accepts the instance without a handler without saying anything"},
   {"op": "set", "target": "$i1/Caption", "prop": "Value", "value": "\"Primeira, sem handler\""},
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "WfPingPanel2", "as": "$i2", "source": "IMobileBlock:WfPingPanel", "_why": "a segunda so serve para provar que sao dois erros, nao um"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "WfPingPanel2", "as": "$i2", "source": "IMobileBlock:WfPingPanel", "_why": "the second one only serves to prove that there are two errors, not one"},
   {"op": "set", "target": "$i2/Caption", "prop": "Value", "value": "\"Segunda, tambem sem handler\""},
 
   {"op": "get", "target": "$ev", "_why": "IsMandatory True"},
-  {"op": "get", "target": "$i1", "_why": "EventHandlers 1 mesmo sem handler ligado: o IEventHandler nasce com a instancia"},
-  {"op": "get", "target": "$i1/#IEventHandler", "_why": "tem Event, nao tem Handler nem Arguments: a assinatura de 'instancia registada, handler em falta'"},
+  {"op": "get", "target": "$i1", "_why": "EventHandlers 1 even without a linked handler: the IEventHandler is born with the instance"},
+  {"op": "get", "target": "$i1/#IEventHandler", "_why": "it has Event, it has no Handler or Arguments: the signature of 'instance registered, handler missing'"},
   {"op": "usages", "target": "$ev", "_why": "3 consumidores: as duas instancias vazias contam tanto quanto o ITriggerNode"},
   {"op": "dump", "target": "$scr", "depth": 6}
  ]

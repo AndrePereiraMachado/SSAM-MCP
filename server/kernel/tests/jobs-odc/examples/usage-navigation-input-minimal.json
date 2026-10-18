@@ -1,5 +1,5 @@
 {
- "description": "Navegacao com parametro de entrada: a tela de destino declara o input Code e o botao da outra tela navega para ela passando o valor.",
+ "description": "Navigation with an input parameter: the target screen declares the input Code and the button of the other screen navigates to it passing the value.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -8,7 +8,7 @@
   {"op": "set", "target": "$target/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$target", "type": "IInputParameter", "name": "Code", "as": "$code"},
   {"op": "set", "target": "$code", "prop": "DataType", "value": "Text"},
-  {"op": "create", "parent": "$target/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$show", "_why": "o input precisa ser lido por alguem, senao nasce o aviso UnusedElement"},
+  {"op": "create", "parent": "$target/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$show", "_why": "the input has to be read by someone, otherwise the UnusedElement warning is born"},
   {"op": "set", "target": "$show", "prop": "Value", "value": "\"Order \" + Code"},
 
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "OrderLookup", "as": "$scr"},
@@ -16,6 +16,6 @@
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IButton", "name": "OpenButton", "as": "$btn"},
   {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Open order A-100"},
   {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "IMobileScreen:OrderStatus"},
-  {"op": "set", "target": "$btn/OnClick/Code", "prop": "Value", "value": "\"A-100\"", "_why": "o argumento e enderecado pelo nome do input da tela de destino"}
+  {"op": "set", "target": "$btn/OnClick/Code", "prop": "Value", "value": "\"A-100\"", "_why": "the argument is addressed by the name of the input of the target screen"}
  ]
 }

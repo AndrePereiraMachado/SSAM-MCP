@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA de `duplicate` num destino incompativel (faixa ODC): uma tela colada num diagrama de entidades (a area de dados). A colagem nativa diria so 'The clipboard objects cannot be pasted into this target'; o kernel recusa antes, diz que o diagrama nao aceita o tipo e que pai serve (outro UI flow).",
+ "description": "THE REFUSAL of `duplicate` into an incompatible target (ODC lane): a screen pasted onto an entity diagram (the data area). The native paste would only say 'The clipboard objects cannot be pasted into this target'; the kernel refuses earlier, says the diagram does not accept the type and which parent works (another UI flow).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectError": [

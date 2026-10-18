@@ -1,5 +1,5 @@
 {
- "description": "ODC: a indentacao do codigo escrito como texto (pedido do dono, 2026-10-09), espelho de tests/jobs/code-format-reactive.json. CSS do autor do tema InsuranceApp (tema com CSS do Theme Editor: o texto formatado cai na metade do autor), SQL de um no SQL (op logic com sql:true), JavaScript de um no JavaScript e de um Script chegam numa linha so e ficam em varias linhas; o SQL com 'x'AND colado e escrito como veio, com FORMAT_SKIPPED. Valores aferidos em Anvil.Tests.Odc.CodeFormatOdcTests.",
+ "description": "ODC: the indentation of code written as text (owner's request, 2026-10-09), mirror of tests/jobs/code-format-reactive.json. Author CSS of the InsuranceApp theme (theme with Theme Editor CSS: the formatted text lands in the author's half), SQL of a SQL node (op logic with sql:true), JavaScript of a JavaScript node and of a Script arrive on a single line and end up on several lines; the SQL with 'x'AND stuck together is written as it came, with FORMAT_SKIPPED. Values checked in Anvil.Tests.Odc.CodeFormatOdcTests.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -48,10 +48,10 @@
   {"op": "set", "target": "$script", "prop": "JavaScript",
    "value": "window.CfHelpers = { badge: function (s) { return String(s || \"\").trim().toUpperCase(); }, slug: function (s) { return String(s || \"\").trim().toLowerCase(); } };"},
 
-  {"op": "get", "target": "IMobileTheme:InsuranceApp", "_why": "o CSS do autor (UserStyleSheet) em varias linhas"},
-  {"op": "get", "target": "IServerAction:CfItems_Search/ReadCfItems", "_why": "o Statement em varias linhas"},
-  {"op": "get", "target": "IServerAction:CfItems_Coded/ReadCoded", "_why": "o Statement que a prova recusou: escrito como veio"},
-  {"op": "get", "target": "$js", "_why": "o JavaScript do no em varias linhas"},
-  {"op": "get", "target": "$script", "_why": "o JavaScript do Script em varias linhas"}
+  {"op": "get", "target": "IMobileTheme:InsuranceApp", "_why": "the author CSS (UserStyleSheet) on several lines"},
+  {"op": "get", "target": "IServerAction:CfItems_Search/ReadCfItems", "_why": "the Statement on several lines"},
+  {"op": "get", "target": "IServerAction:CfItems_Coded/ReadCoded", "_why": "the Statement that the proof refused: written as it came"},
+  {"op": "get", "target": "$js", "_why": "the JavaScript of the node on several lines"},
+  {"op": "get", "target": "$script", "_why": "the JavaScript of the Script on several lines"}
  ]
 }

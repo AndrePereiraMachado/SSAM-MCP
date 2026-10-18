@@ -1,5 +1,5 @@
 {
- "description": "Marker do OutSystemsMaps: um marcador com Position (endereco ou \"lat, lng\") no AddOns_Placeholder de um LeafletMap.",
+ "description": "Marker of OutSystemsMaps: a marker with a Position (an address or \"lat, lng\") in the AddOns_Placeholder of a LeafletMap.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

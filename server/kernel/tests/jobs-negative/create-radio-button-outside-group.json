@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA do create de um Radio Button fora de um Radio Group. O O11 aceitava e o Verify nativo caia fora de qualquer op; o ODC recusa no create ('A Radio Button must be placed inside a Radio Group widget.'). O kernel recusa nas duas faixas com esse texto e diz como fazer. Dentro do grupo o create funciona: tests/jobs/gallery-native-reactive.json. Cobertura testada, fase 2.",
+ "description": "The REFUSAL of creating a Radio Button outside a Radio Group. O11 accepted it and the native Verify fell outside any op; ODC refuses at create ('A Radio Button must be placed inside a Radio Group widget.'). The kernel refuses in both lanes with that text and says how to do it. Inside the group the create works: tests/jobs/gallery-native-reactive.json. Tested coverage, phase 2.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectError": [

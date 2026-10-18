@@ -3,6 +3,7 @@
 // exception. ssam_reference {kind:"rules"} serves the document (whole, by section, or the 35 rules of OutSystems padrões),
 // on both lanes, without the CLI; ssam://guide/rules carries the same text; tools.json routes the kind; AGENTS.md names
 // the call, never the file.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -38,7 +39,7 @@ test('A1: ssam_reference kind rules returns the team rules document, on both lan
     assert.equal(whole.text, team, 'the document as the team reads it');
     assert.equal(whole.source, 'docs/CONHECIMENTO-DO-TIME.md');
     assert.deepEqual(whole.sections.map(s => s.id), ['1', '2', '3']);
-    assert.equal(whole.sections[0].title, 'Como trabalhar');
+    assert.equal(whole.sections[0].title, 'How to work');
   }
   assert.equal(h.run.calls.length, 0, 'no CLI');
 });
@@ -47,16 +48,20 @@ test('A1: a section by number or heading words, a lesson by its heading, and the
   const h = await harness(t);
   const lessons = await h.ask('odc', 'rules', '3');
   assert.equal(lessons.ok, true);
-  assert.deepEqual(lessons.section, [{ id: '3', title: 'Lições da plataforma' }]);
-  assert.ok(lessons.text.startsWith('## 3. Lições da plataforma'));
+  assert.deepEqual(lessons.section, [{ id: '3', title: 'Platform lessons' }]);
+  assert.ok(lessons.text.startsWith('## 3. Platform lessons'));
   assert.ok(team.includes(lessons.text.trim()));
-  const byWords = await h.ask('o11', 'rules', { section: 'como trabalhar' });
+  const byWords = await h.ask('o11', 'rules', { section: 'how to work' });
   assert.deepEqual(byWords.section.map(s => s.id), ['1']);
   const lesson = await h.ask('o11', 'rules', 'Changed Attributes');
   assert.equal(lesson.ok, true, JSON.stringify(lesson));
-  assert.match(lesson.text, /^### O11: entidade com "Changed Attributes"/);
-  const rules = await h.ask('odc', 'rules', 'padroes');
-  assert.equal(rules.ok, true); assert.equal(rules.doc, 'padroes'); assert.equal(rules.text, padroes);
+  assert.match(lesson.text, /^### O11: an entity with "Changed Attributes"/);
+  const rules = await h.ask('odc', 'rules', 'standards');
+  assert.equal(rules.ok, true); assert.equal(rules.doc, 'standards'); assert.equal(rules.text, padroes);
+  // English-only (15/10/2026): the Portuguese doc names stay accepted as aliases and answer the English doc.
+  const alias = await h.ask('odc', 'rules', 'padroes');
+  assert.equal(alias.ok, true); assert.equal(alias.doc, 'standards'); assert.equal(alias.text, padroes);
+  assert.equal((await h.ask('odc', 'rules', { doc: 'time' })).doc, 'team');
   assert.equal(rules.source, 'kernel/scripts/outsystems_padroes/RULES.md');
   const missing = await h.ask('odc', 'rules', 'nada disso existe');
   assert.equal(missing.ok, false); assert.equal(missing.code, 'RULES_SECTION_NOT_FOUND');
@@ -69,10 +74,11 @@ test('A1: a section by number or heading words, a lesson by its heading, and the
   assert.equal(rulesAnswer('o11', 'all', { read: topic => '# ' + topic + '\n\n## 1. Um\n\ntexto\n' }).sections[0].title, 'Um');
 });
 
-test('A1: the ssam://guide/rules and ssam://guide/padroes resources carry the same text', () => {
+test('A1: the ssam://guide/rules and ssam://guide/standards resources carry the same text', () => {
   assert.equal(GUIDE_FILES.rules, 'docs/CONHECIMENTO-DO-TIME.md');
-  assert.equal(GUIDE_FILES.padroes, 'kernel/scripts/outsystems_padroes/RULES.md');
-  for (const [topic, text] of [['rules', team], ['padroes', padroes]]) {
+  assert.equal(GUIDE_FILES.standards, 'kernel/scripts/outsystems_padroes/RULES.md');
+  assert.equal(guideText('padroes'), padroes, 'the Portuguese topic of older releases is an alias');
+  for (const [topic, text] of [['rules', team], ['standards', padroes]]) {
     const entry = GUIDES.find(g => g.topic === topic);
     assert.ok(entry, topic);
     assert.equal(entry.uri, 'ssam://guide/' + topic);
@@ -110,5 +116,5 @@ test('A1: the served rules send an app session to MCP tools only, never to a CLI
     assert.doesNotMatch(text, /\.ps1\b|\.py\b|\bpython\b/, name);
     assert.doesNotMatch(text, /`ssam (?:job|deliver|inspect|map)`/, name);
   }
-  assert.match(team, /ssam_reference \{lane:"<lane>", kind:"rules", query:"padroes"\}/, 'the 35 rules by the MCP call');
+  assert.match(team, /ssam_reference \{lane:"<lane>", kind:"rules", query:"standards"\}/, 'the 35 rules by the MCP call');
 });

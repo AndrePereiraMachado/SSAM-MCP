@@ -81,7 +81,7 @@ public sealed record ExpectationResult(
     [JsonIgnore] public bool Accepted => Unexpected.Count == 0 && MissingExpected.Count == 0 && Ambiguous.Count == 0;
     public IEnumerable<string> Diagnostics()
     {
-        foreach (var m in Unexpected) yield return $"Unexpected {m.Id} @ {m.Path}: corrija ou declare em expectedMessages com why "
+        foreach (var m in Unexpected) yield return $"Unexpected {m.Id} @ {m.Path}: fix it or declare it in expectedMessages with why "
             + $"({{\"id\":\"{m.Id}\",\"element\":\"{Suffix(m.Path)}\",\"why\":\"...\"}}; \"count\":n or \"all\":true covers several).";
         foreach (var e in MissingExpected) yield return $"Missing expected message {e.Id} @ {e.Element}: remove the stale expectation or restore the intended scenario ({e.Why}).";
         foreach (var e in Ambiguous) yield return $"Ambiguous expected message {e.Expected.Id} @ {e.Expected.Element}: {e.Candidates.Count} messages match; use a longer unique suffix, "
@@ -379,7 +379,7 @@ public static class MessageExpectations
         var notes = new List<JsonObject>();
         if (job is not JsonObject obj) return new([], problems, notes, null);
         if (obj.ContainsKey("maxNewMessages"))
-            problems.Add(new("/maxNewMessages", $"{jobPath}: campo removido: use expectedMessages [{{id, element, why}}] instead of maxNewMessages",
+            problems.Add(new("/maxNewMessages", $"{jobPath}: field removed: use expectedMessages [{{id, element, why}}] instead of maxNewMessages",
                 "remove maxNewMessages; declare each expected Verify message in expectedMessages [{id, element, why}]"));
         if (obj.ContainsKey("expectValid") && (obj["expectValid"] is not JsonValue value || !value.TryGetValue<bool>(out _)))
             problems.Add(new("/expectValid", $"{jobPath}: expectValid must be a boolean", "\"expectValid\": true (the default) or false"));

@@ -1,5 +1,5 @@
 {
- "description": "Icon tipico: icone dentro de um botao, ao lado do texto (o ITextWidget de nascenca continua); o botao refaz o aggregate de tarefas.",
+ "description": "Typical Icon: an icon inside a button, beside the text (the ITextWidget it is born with stays); the button runs the tasks aggregate again.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

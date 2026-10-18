@@ -1,9 +1,9 @@
 {
- "description": "duplicate com `parent` (faixa O11, reactive). (1) Um IContainer guarda os filhos no placeholder `content`, nao em si: com `parent` = outro IContainer a copia vai para o `content` dele (o contentor nativo dentro do pai que aceita o tipo). (2) O OnException e o UNICO de um UI flow: a copia vai para outro UI flow com `parent`. Cada `get` so resolve se a copia ficou no destino.",
+ "description": "duplicate with `parent` (O11 lane, reactive). (1) An IContainer keeps its children in the placeholder `content`, not in itself: with `parent` = another IContainer the copy goes into its `content` (the native container inside the parent that accepts the type). (2) The OnException is the ONLY one of a UI flow: the copy goes to another UI flow with `parent`. Each `get` only resolves if the copy ended up at the destination.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [
-  {"id": "AllExceptionsInNonGlobalFlow", "element": "Headless_UI (ESpace) / MainFlow (MobileFlow)", "why": "o OnException original trata All Exceptions no MainFlow (o aviso e do original, nao da copia); e o handler mais simples que o Verify aceita"}
+  {"id": "AllExceptionsInNonGlobalFlow", "element": "Headless_UI (ESpace) / MainFlow (MobileFlow)", "why": "the original OnException handles All Exceptions in the MainFlow (the warning is from the original, not from the copy); it is the simplest handler that the Verify accepts"}
  ],
  "ops": [
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DupParentScreen", "as": "$scr"},
@@ -11,8 +11,8 @@
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "DupBoxFrom", "as": "$boxFrom"},
   {"op": "create", "parent": "$boxFrom", "type": "IContainer", "name": "DupInner", "as": "$inner"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "DupBoxInto", "as": "$boxInto"},
-  {"op": "duplicate", "target": "$inner", "parent": "$boxInto", "as": "$innerCopy", "_why": "parent e o IContainer; a colagem vai para o placeholder content dele"},
-  {"op": "get", "target": "$boxInto/**IContainer", "_why": "prova o destino: o unico IContainer dentro de DupBoxInto e a copia"},
+  {"op": "duplicate", "target": "$inner", "parent": "$boxInto", "as": "$innerCopy", "_why": "parent is the IContainer; the paste goes to its content placeholder"},
+  {"op": "get", "target": "$boxInto/**IContainer", "_why": "proves the destination: the only IContainer inside DupBoxInto is the copy"},
 
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IOnExceptionAction", "name": "DupOnException", "as": "$oe"},
   {"op": "create", "parent": "$oe", "type": "IExceptionHandlerNode", "as": "$handler"},
@@ -20,7 +20,7 @@
   {"op": "create", "parent": "$oe", "type": "IEndNode", "as": "$oeEnd"},
   {"op": "link", "from": "$handler", "to": "$oeEnd"},
   {"op": "create", "parent": "@espace", "type": "IMobileFlow", "name": "DupOtherFlow", "as": "$otherFlow"},
-  {"op": "duplicate", "target": "$oe", "parent": "$otherFlow", "as": "$oeCopy", "_why": "o MainFlow ja tem o seu OnException; o outro flow ainda nao"},
+  {"op": "duplicate", "target": "$oe", "parent": "$otherFlow", "as": "$oeCopy", "_why": "the MainFlow already has its OnException; the other flow does not yet"},
   {"op": "get", "target": "$otherFlow/#IOnExceptionAction", "_why": "prova o destino"}
  ]
 }

@@ -1,5 +1,5 @@
 {
- "description": "DatePickerRange do OSUI: o Input de exemplo ligado a uma variavel e o evento obrigatorio OnSelected guardando o inicio e o fim.",
+ "description": "DatePickerRange of OSUI: the sample Input bound to a variable and the required event OnSelected keeping the start and the end.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

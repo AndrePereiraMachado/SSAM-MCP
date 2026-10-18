@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import vm from 'node:vm';import fs from 'node:fs';import path from 'node:path';import {createHash} from 'node:crypto';
 import {EventEmitter} from 'node:events';import {PassThrough} from 'node:stream';

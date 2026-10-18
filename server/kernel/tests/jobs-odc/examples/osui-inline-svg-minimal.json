@@ -1,5 +1,5 @@
 {
- "description": "InlineSVG do OSUI: a instancia com o codigo SVG em SVGCode.",
+ "description": "InlineSVG of OSUI: the instance with the SVG code in SVGCode.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

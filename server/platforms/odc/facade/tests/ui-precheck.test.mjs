@@ -24,6 +24,7 @@ import { BUILD_VERBS } from '../o11-build-phase.mjs';
 import { uiPrecheck, isUiJob, continuationOf, producerFresh, referencedLibraries, moduleOfCapture, joinPrecheck } from '../ui-precheck.mjs';
 import { fakeAnvil } from './fixtures/fake-anvil.mjs';
 import { fakeBridge } from './fixtures/fake-o11-bridge.mjs';
+import { fakeO11Worker } from './fixtures/fake-o11-worker.mjs';
 import { moduleIndex } from './fixtures/module-index.mjs';
 import envelopes from './fixtures/o11-cycle-envelopes.json' with { type: 'json' };
 
@@ -33,7 +34,7 @@ const WORDS = 'sim, pode entregar a tela Stations no Shop_UI';
 // The relay of the ssam server reads the module index store of the process (module-map.mjs indexRoot).
 const processStore = fs.mkdtempSync(path.join(isolatedProfile, 'precheck-store-'));
 process.env.SSAM_MODULE_INDEX_ROOT = processStore;
-// CX16 r4 (plan B): the UI precheck is OFF by default; every test of this file but the one of the default turns it on.
+// CX16 r4: every test of this file but the one of the default turns the UI precheck on explicitly.
 process.env.SSAM_UI_PRECHECK = '1';
 
 // ---- the job and the kernel's answer (CLI contract of check-job with the static flags)
@@ -236,7 +237,7 @@ test('a job without html or screen ops pays nothing: no bridge call, no CLI run,
   // Through o11_deliver: the delivery runs as before, its CLI and bridge calls unchanged.
   const live = await o11Harness(t, { handlers: { deliver: () => envelopes.delivered } });
   const { result } = await live.deliver({ module: 'Shop_UI', job: { ops: [{ op: 'set', target: 'ServerAction:SaveOrder', prop: 'Description', value: 'Saves' }] }, authorize: WORDS });
-  assert.equal(result.structuredContent.result, 'entregue', JSON.stringify(result.structuredContent).slice(0, 400));
+  assert.equal(result.structuredContent.result, 'delivered', JSON.stringify(result.structuredContent).slice(0, 400));
   assert.deepEqual(live.runAnvil.calls.map(c => c.args[0]), ['deliver']);
   assert.deepEqual(live.bridge.seen, []);
   assert.ok(!fs.existsSync(path.join(live.local, 'journal', 'ui-precheck.jsonl')));
@@ -250,7 +251,7 @@ test('a base that is not fresh only warns: the delivery goes on, its answer unch
   storeIndex(box.store, 'o11', 'OML Shop_UI of an earlier read');
   const { result } = await box.deliver({ module: 'Shop_UI', job: { ops: [{ op: 'html', data: { html: SCREEN } }] }, authorize: WORDS });
   const v = result.structuredContent;
-  assert.equal(v.result, 'entregue', JSON.stringify(v).slice(0, 400));
+  assert.equal(v.result, 'delivered', JSON.stringify(v).slice(0, 400));
   for (const k of ['stage', 'static', 'stoppedBefore', 'warnings']) assert.equal(Object.hasOwn(v, k), false, k + ' is not in a delivery that went on');
   assert.deepEqual(box.runAnvil.calls.map(c => c.args[0]), ['check-job', 'deliver']);
   assert.equal(argOf(box.runAnvil.calls[0].args, '--basis-fresh'), 'false');
@@ -264,13 +265,13 @@ test('whatever the precheck cannot decide lets the delivery go on as before (a C
   const box = await o11Harness(t, { handlers: { deliver: () => envelopes.delivered } });
   storeIndex(box.store, 'o11', CAPTURE_TEXT);
   const { result } = await box.deliver({ module: 'Shop_UI', job: { ops: [{ op: 'html', data: { html: SCREEN } }] }, authorize: WORDS });
-  assert.equal(result.structuredContent.result, 'entregue', JSON.stringify(result.structuredContent).slice(0, 400));
+  assert.equal(result.structuredContent.result, 'delivered', JSON.stringify(result.structuredContent).slice(0, 400));
   assert.deepEqual(box.runAnvil.calls.map(c => c.args[0]), ['check-job', 'deliver']);
   assert.equal(JSON.parse(fs.readFileSync(path.join(box.local, 'journal', 'ui-precheck.jsonl'), 'utf8').trim()).outcome, 'undecided');
   // No tab and no capture of the module: nothing to judge against, no CLI run.
   const none = await o11Harness(t, { tabs: [], handlers: { deliver: () => envelopes.delivered } });
   const second = await none.deliver({ module: 'Shop_UI', job: { ops: [{ op: 'html', data: { html: SCREEN } }] }, authorize: WORDS });
-  assert.equal(second.result.structuredContent.result, 'entregue');
+  assert.equal(second.result.structuredContent.result, 'delivered');
   assert.deepEqual(none.runAnvil.calls.map(c => c.args[0]), ['deliver']);
   // Never on resume, a prototype op or a composite job.
   const refuse = () => { throw new Error('ran'); };
@@ -380,7 +381,7 @@ async function relayHarness(t, { runAnvil: runner = null, reply = null } = {}) {
       owners: z.array(z.string()).optional(), changes: z.array(z.string()).optional(), until: z.string().optional(), publish: z.boolean().optional(), authorize: z.string().optional() }).strict() },
     async args => {
       seen.push(args);
-      const value = reply ? await reply(args) : { ok: true, result: 'entregue' };
+      const value = reply ? await reply(args) : { ok: true, result: 'delivered' };
       return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value.ok === false ? { isError: true } : {}) };
     });
     return fake;
@@ -455,9 +456,11 @@ test('a phased o11_deliver answers the static refusal while another write holds 
   } };
   // CX16 r3 (M3): check-job runs alongside the build phase (its apply in the build pool, never the Studio); the Studio step
   // waits for the verdict, and static.complete stops it there.
+  // CX16 r4 (M3): the Studio step waits for the verdict only without an accepted candidate of the build: a complete verdict
+  // means the kernel refuses every op whole by its shape, which an accepted candidate disproves. Here the build gives none
+  // (the delivery would build inside the Studio, as before), so the complete verdict stops it before the Studio.
   const runAnvil = fakeAnvil({ 'check-job': checkJob([UNKNOWN_BLOCK, TYPE_AS_VALUE]), deliver: () => envelopes.delivered,
-    apply: args => { const out = argOf(args, '--out'); fs.mkdirSync(path.dirname(out), { recursive: true }); fs.writeFileSync(out, 'candidate');
-      fs.writeFileSync(out.replace(/\.oml$/, '.result.json'), JSON.stringify({ isValid: true, accepted: true })); return { ok: true, command: 'apply', data: { isValid: true, accepted: true } }; } });
+    apply: () => ({ ok: false, command: 'apply', error: 'no candidate (synthetic): the delivery builds inside the Studio' }) });
   const lockDeps = { o11Root: box.root, odcRoot: box.root, o11Lane: 'ss4', connection: () => null };
   const { createBuildPool } = await import('../build-pool.mjs');
   const server = await createSsamServer({ odc: false, deps: { cycle: { root: box.root, env: box.env, runAnvil, assertSelected: async () => {}, tasksDir: path.join(box.base, 'tasks'),
@@ -553,7 +556,8 @@ test('M3: a carried static problem the apply accepts is no proof: the answer is 
   const v = await runJob({ lane: 'o11', job, base }, { root: box.root, env: box.env, runAnvil, worker: null });
   assert.equal(v.ok, true, JSON.stringify(v).slice(0, 400));
   for (const k of ['static', 'stage', 'stoppedBefore']) assert.equal(Object.hasOwn(v, k), false, k);
-  const lines = fs.readFileSync(path.join(box.root, '.local', 'journal', 'ui-precheck.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  // CX16 r4: an accepted answer never waits for check-job; its journal line comes when check-job ends.
+  const lines = await journalOf(box.local, l => l.some(x => x.outcome === 'carried-accepted'));
   assert.deepEqual(lines.map(l => l.outcome), ['carried', 'carried-accepted']);
   assert.deepEqual(lines[1].codes, ['HTML_NAME_UNKNOWN 1']);
 });
@@ -597,7 +601,7 @@ test('M3: joinPrecheck keeps the apply\'s wording of a problem it also says, add
   assert.deepEqual(bare.static.problems, [UNKNOWN_BLOCK, BLOCK_TEXT]);
   const uncertain = { ok: false, outcome: 'uncertain', problems: [] };
   assert.equal(joinPrecheck(uncertain, carried), uncertain);
-  const accepted = { ok: true, result: 'entregue' };
+  const accepted = { ok: true, result: 'delivered' };
   assert.equal(joinPrecheck(accepted, carried), accepted);
   assert.equal(joinPrecheck(accepted, null), accepted);
   fs.rmSync(local, { recursive: true, force: true });
@@ -688,7 +692,12 @@ test('M3 r3: a phased o11_deliver runs check-job alongside the build apply; stat
     return { ok: true, command: 'apply', data: { isValid: true, accepted: true } };
   };
   const at = {};
-  const stops = fakeAnvil({ 'check-job': slowCheck(at, [UNKNOWN_BLOCK], { complete: true }), apply: build(at), deliver: () => { throw new Error('the Studio step ran'); } });
+  // CX16 r4 (M3): the Studio step waits for the verdict only without an accepted candidate of the build: a complete verdict
+  // means the kernel refuses every op whole by its shape, which an accepted candidate disproves. Here the build gives none
+  // (the delivery would build inside the Studio, as before), so the complete verdict stops it before the Studio.
+  const stops = fakeAnvil({ 'check-job': slowCheck(at, [UNKNOWN_BLOCK], { complete: true }),
+    apply: () => { at.buildStart = performance.now(); return { ok: false, command: 'apply', error: 'no candidate (synthetic): the delivery builds inside the Studio' }; },
+    deliver: () => { throw new Error('the Studio step ran'); } });
   const v = await serve(stops);
   assert.ok(at.buildStart < at.checkEnd, 'the build apply started before check-job ended');
   assert.equal(v.code, 'PREFLIGHT_REFUSED', JSON.stringify(v).slice(0, 500)); assert.equal(v.stoppedBefore, 'studio');
@@ -715,9 +724,174 @@ test('M3 r3: the studio_deliver relay starts before a slow check-job ends, and a
   assert.deepEqual(v.problems.map(p => p.code), ['HTML_TAG_NOT_ALLOWED', 'HTML_NAME_UNKNOWN'], JSON.stringify(v).slice(0, 600));
 });
 
-// CX16 r4 (plan B, agreed with the owner): the precheck is OFF by default until check-job never shares the apply's worker
-// (review cx16-3, M3); SSAM_UI_PRECHECK=1 (or on, true) turns it on. The element edits never depend on it.
-test('CX16 r4: the UI precheck is off by default (no check-job, the apply as before); SSAM_UI_PRECHECK=1 turns it on', async t => {
+// ---- CX16 r4 M3 (review cx16-3): with the resident worker on (the default; .mcp.json sets no ANVIL_WORKER=0) the lane
+// worker runs one request at a time. Alongside the apply path check-job never enters its queue (a process of its own;
+// ctx/deps.checkRunner stands for that process here), an accepted or uncertain answer never waits for check-job, and a
+// timeout says so. The production wiring: runJob without deps.runAnvil nor deps.worker (the apply goes to the worker on
+// ANVIL_WORKER_PORT); o11_deliver with the cycle's worker-first runner and the build on slot 0 (the same worker).
+const workerEnv = (box, port) => {
+  const studio = path.join(box.base, 'fake-studio'); fs.mkdirSync(studio, { recursive: true });
+  const env = { ...box.env, ANVIL_WORKER_PORT: String(port), ANVIL_STUDIO_DIR: studio };
+  delete env.ANVIL_WORKER;
+  return { env, studio };
+};
+async function journalOf(local, done, ms = 5000) {
+  const file = path.join(local, 'journal', 'ui-precheck.jsonl');
+  for (const end = Date.now() + ms; ;) {
+    let lines = [];
+    try { lines = fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)); } catch { /* not yet */ }
+    if (done(lines) || Date.now() > end) return lines;
+    await sleep(25);
+  }
+}
+const spanOf = (events, verb) => events.find(e => e.verb === verb);
+async function uiWorkerCase(t, { applyMs, checkMs, apply = refusedApply([APPLY_SAME]) }) {
+  const box = sandbox(t);
+  const base = capture(box.local, 'Shop_UI-20261015090000-c4c4c4c4.oml', CAPTURE_TEXT);
+  storeIndex(box.store, 'o11', CAPTURE_TEXT);
+  const job = path.join(box.base, 'job.json'); fs.writeFileSync(job, JSON.stringify(uiJob()));
+  const statics = [UNKNOWN_BLOCK, BLOCK_TEXT];
+  const studio = path.join(box.base, 'fake-studio'); fs.mkdirSync(studio, { recursive: true });
+  // The worker serves check-job too: the facade of 45c920de sends it there (the red); the fix never does.
+  const worker = await fakeO11Worker({ studio, handlers: { apply: async args => { await sleep(applyMs); return apply(args); },
+    'check-job': async args => { await sleep(checkMs); return checkJob(statics, [], { complete: false })(args); } } });
+  t.after(() => worker.close());
+  const { env } = workerEnv(box, worker.port);
+  const at = {};
+  const checkRunner = fakeAnvil({ 'check-job': slowCheck(at, statics, { complete: false }, checkMs) });
+  return { box, base, job, worker, env, at, checkRunner };
+}
+
+test('M3 r4 (a): with the resident worker, runJob runs check-job outside the worker queue, overlapping the apply', async t => {
+  const c = await uiWorkerCase(t, { applyMs: 1500, checkMs: 300 });
+  const v = await runJob({ lane: 'o11', job: c.job, base: c.base }, { root: c.box.root, env: c.env, checkRunner: c.checkRunner });
+  const apply = spanOf(c.worker.events, 'apply');
+  assert.ok(apply, 'the apply ran on the worker: ' + JSON.stringify(c.worker.events.map(e => e.verb)));
+  const queued = spanOf(c.worker.events, 'check-job');
+  const check = queued ?? { start: c.at.checkStart, end: c.at.checkEnd };
+  assert.ok(check.start < apply.end && apply.start < check.end, 'apply ' + Math.round(apply.start) + '-' + Math.round(apply.end) + ', check-job ' + Math.round(check.start) + '-' + Math.round(check.end) + ': they overlap');
+  assert.equal(queued, undefined, 'check-job never entered the worker queue');
+  assert.equal(v.ok, false);
+  assert.ok(v.problems.some(p => p.phase === 'static' && /Title/.test(p.message)), JSON.stringify(v.problems).slice(0, 500));
+  assert.equal(v.static.carried, 2); assert.equal(v.static.joined, 1);
+});
+
+test('M3 r4 (b): with the resident worker, an apply of 14 s and a check-job of 0.3 s: the refusal brings the static problem', async t => {
+  const c = await uiWorkerCase(t, { applyMs: 14000, checkMs: 300 });
+  const v = await runJob({ lane: 'o11', job: c.job, base: c.base }, { root: c.box.root, env: c.env, checkRunner: c.checkRunner });
+  assert.equal(v.ok, false);
+  assert.ok(v.problems.some(p => p.phase === 'static' && /Title/.test(p.message)), 'the static problem is in the refusal: ' + JSON.stringify(v.problems.map(p => p.code)));
+  assert.equal(v.static?.carried, 2);
+  assert.equal(spanOf(c.worker.events, 'check-job'), undefined, 'check-job never entered the worker queue');
+});
+
+test('M3 r4 (c): with the resident worker, an accepted apply answers without waiting for check-job; the journal is written when it ends', async t => {
+  const c = await uiWorkerCase(t, { applyMs: 200, checkMs: 2000, apply: () => ({ ok: true, command: 'apply', data: { accepted: true, isValid: true } }) });
+  const begin = performance.now();
+  const v = await runJob({ lane: 'o11', job: c.job, base: c.base }, { root: c.box.root, env: c.env, checkRunner: c.checkRunner });
+  const ms = performance.now() - begin;
+  assert.equal(v.ok, true, JSON.stringify(v).slice(0, 400));
+  assert.ok(ms < 1500, 'answered in ' + Math.round(ms) + ' ms, check-job takes 2000 ms');
+  for (const k of ['static', 'stage', 'stoppedBefore']) assert.equal(Object.hasOwn(v, k), false, k);
+  const lines = await journalOf(c.box.local, l => l.some(x => x.outcome === 'carried-accepted'));
+  assert.deepEqual(lines.map(l => l.outcome), ['carried', 'carried-accepted']);
+  assert.equal(lines[0].timings.checkVia, 'injected');
+});
+
+test('M3 r4 (d): o11_deliver with the build on slot 0 of the resident worker: check-job outside its queue; a refusal joins, an accepted delivery never waits', async t => {
+  const box = sandbox(t);
+  storeIndex(box.store, 'o11', CAPTURE_TEXT);
+  const bridge = { ok: async (method, params = {}) => {
+    if (method === 'list_open_modules') return { modules: [{ name: 'Shop_UI', key: 'K-UI', hasESpace: true }] };
+    if (method === 'snapshot_module' && params.module_key) { fs.mkdirSync(path.dirname(params.path), { recursive: true }); fs.writeFileSync(params.path, CAPTURE_TEXT); return { key: params.module_key, path: params.path }; }
+    throw Object.assign(new Error('not in this test: ' + method), { code: 'BRIDGE_NOT_LISTENING' });
+  } };
+  const { createBuildPool } = await import('../build-pool.mjs');
+  const { createWorkerFirstRunner } = await import('../anvil-worker.mjs');
+  const deliverOn = async ({ buildMs, checkMs, delivery }) => {
+    const studio = path.join(box.base, 'fake-studio'); fs.mkdirSync(studio, { recursive: true });
+    const worker = await fakeO11Worker({ studio, handlers: {
+      apply: async args => { await sleep(buildMs); const out = argOf(args, '--out'); fs.mkdirSync(path.dirname(out), { recursive: true });
+        fs.writeFileSync(out, 'candidate'); fs.writeFileSync(out.replace(/\.oml$/, '.result.json'), JSON.stringify({ isValid: true, accepted: true }));
+        return { ok: true, command: 'apply', data: { isValid: true, accepted: true } }; },
+      'check-job': async args => { await sleep(checkMs); return checkJob([UNKNOWN_BLOCK], [], { complete: false })(args); },
+      deliver: async () => JSON.parse(JSON.stringify(delivery)) } });
+    t.after(() => worker.close());
+    const { env } = workerEnv(box, worker.port);
+    const at = {};
+    const checkRunner = fakeAnvil({ 'check-job': slowCheck(at, [UNKNOWN_BLOCK], { complete: false }, checkMs) });
+    const runAnvil = createWorkerFirstRunner({ root: box.root, env });
+    const lockDeps = { o11Root: box.root, odcRoot: box.root, o11Lane: 'ss4', connection: () => null };
+    const server = await createSsamServer({ odc: false, deps: { cycle: { root: box.root, env, runAnvil, checkRunner, assertSelected: async () => {}, tasksDir: path.join(box.base, 'tasks-' + worker.port),
+      bridge, lastPublication: async () => null, lock: { connection: () => null }, buildPool: createBuildPool({ dir: path.join(box.base, 'pool-' + worker.port), size: 2, queueMs: 10000 }),
+      // slot 0 is the lane's own worker (build-pool.mjs slotWorkerPort): the same worker as the cycle's runner
+      buildRunner: slot => createWorkerFirstRunner({ root: box.root, env: { ...env, ANVIL_WORKER_PORT: String(slot.index ? worker.port + 1000 : worker.port) } }) }, lock: lockDeps } });
+    const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'ui-precheck-r4', version: '1' });
+    await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
+    t.after(async () => { await client.close(); await server.close(); });
+    const begin = performance.now();
+    const answer = await client.callTool({ name: 'o11_deliver', arguments: { module: 'Shop_UI', job: { ops: [{ op: 'html', data: { html: SCREEN } }] }, authorize: WORDS } });
+    return { v: answer.structuredContent ?? JSON.parse(answer.content[0].text), ms: performance.now() - begin, worker, at };
+  };
+  // A refused delivery: the build apply (slot 0) and check-job overlap, check-job never queues on the worker, the static problem joins.
+  const refused = await deliverOn({ buildMs: 1500, checkMs: 300, delivery: envelopes.refusedBeforeMerge });
+  const build = spanOf(refused.worker.events, 'apply');
+  assert.ok(build, 'the build ran on slot 0 (the worker): ' + JSON.stringify(refused.worker.events.map(e => e.verb)));
+  const queued = spanOf(refused.worker.events, 'check-job');
+  const check = queued ?? { start: refused.at.checkStart, end: refused.at.checkEnd };
+  assert.ok(check.start < build.end && build.start < check.end, 'the build apply and check-job overlap');
+  assert.equal(queued, undefined, 'check-job never entered the worker queue');
+  assert.equal(refused.v.ok, false, JSON.stringify(refused.v).slice(0, 400));
+  assert.ok(refused.v.problems.some(p => p.phase === 'static' && /StationCardd/.test(p.message)), JSON.stringify(refused.v).slice(0, 600));
+  // An accepted build and delivery: neither the Studio step nor the answer waits for a check-job of 2 s.
+  const delivered = await deliverOn({ buildMs: 200, checkMs: 2000, delivery: envelopes.delivered });
+  assert.equal(delivered.v.ok, true, JSON.stringify(delivered.v).slice(0, 400));
+  assert.equal(spanOf(delivered.worker.events, 'check-job'), undefined, 'check-job never entered the worker queue');
+  assert.ok(delivered.ms < 1800, 'delivered in ' + Math.round(delivered.ms) + ' ms, check-job takes 2000 ms');
+});
+
+test('M3 r4: without an injected runner, with the worker on, the parallel check-job runs in a process of its own (never the worker)', async t => {
+  const c = await uiWorkerCase(t, { applyMs: 300, checkMs: 300 });
+  const v = await runJob({ lane: 'o11', job: c.job, base: c.base }, { root: c.box.root, env: c.env });
+  assert.equal(v.ok, false);
+  await c.worker.idle();
+  assert.equal(spanOf(c.worker.events, 'check-job'), undefined, 'check-job never entered the worker queue: ' + JSON.stringify(c.worker.events.map(e => e.verb)));
+  // The sandbox has no CLI: the process of its own fails, and the precheck says so in words (never a bare "exit 1").
+  const lines = await journalOf(c.box.local, l => l.length > 0, 10000);
+  assert.equal(lines[0]?.timings?.checkVia, 'own-process', JSON.stringify(lines));
+  assert.equal(lines[0].outcome, 'undecided');
+  assert.doesNotMatch(lines[0].reason, /^exit \d+$/);
+});
+
+test('M3 r4: a check-job that times out is undecided with the timeout in words (on the lane worker: one request at a time), never "exit 1"', async t => {
+  const box = sandbox(t);
+  const base = capture(box.local, 'Shop_UI-20261015090000-d4d4d4d4.oml', CAPTURE_TEXT);
+  storeIndex(box.store, 'o11', CAPTURE_TEXT);
+  const job = path.join(box.base, 'job.json'); fs.writeFileSync(job, JSON.stringify(uiJob()));
+  // What createWorkerFirstRunner answers when the worker gave no reply within the time (anvil-worker.mjs).
+  const lost = async () => ({ ok: false, exitCode: 1, envelope: null, timedOut: true, unknown: true, code: 'WORKER_OUTCOME_UNKNOWN', stderr: ['worker connection failed after submission'], wallMs: 3000, line: 'worker check-job', via: 'worker' });
+  assert.equal(await uiPrecheck({ lane: 'o11', job, mode: 'job', base }, { runAnvil: lost, root: box.root, local: box.local, env: box.env }), null);
+  const line = (await journalOf(box.local, l => l.length > 0)).at(-1);
+  assert.equal(line.outcome, 'undecided'); assert.equal(line.timedOut, true);
+  assert.match(line.reason, /no answer within \d+ ms on the lane worker, which runs one request at a time/);
+  assert.match(line.reason, /WORKER_OUTCOME_UNKNOWN/);
+});
+
+test('M3 r4: an accepted studio_deliver relay answers without waiting for a slow check-job; the journal is written when it ends', async t => {
+  const at = {};
+  const box = await relayHarness(t, { runAnvil: fakeAnvil({ 'check-job': slowCheck(at, [CENTER, { ...UNKNOWN_BLOCK, op: 0, pointer: '/ops/0/data/html' }], { complete: false }, 1500) }),
+    reply: () => ({ ok: true, result: 'delivered' }) }); // what the relay answers since 16/10
+  const { result, value: v, ms } = await box.deliver({ ...RELAY_ARGS, job: relayJob() });
+  assert.notEqual(result.isError, true); assert.equal(v.ok, true, JSON.stringify(v).slice(0, 300));
+  assert.ok(ms < 1200, 'answered in ' + Math.round(ms) + ' ms, check-job takes 1500 ms');
+  const lines = await journalOf(path.join(box.odcRoot, '.local'), l => l.some(x => x.outcome === 'carried-accepted'));
+  assert.ok(lines.some(x => x.outcome === 'carried-accepted'), JSON.stringify(lines.map(x => x.outcome)));
+});
+
+// CX16 r4 (last commit, declared): with check-job outside the worker queue (b6e8c45c) the precheck is ON by default again;
+// SSAM_UI_PRECHECK=0 (or off, false) turns it off and every call runs as before CX16. The element edits never depend on it.
+test('CX16 r4: the UI precheck is on by default again (check-job outside the worker queue); SSAM_UI_PRECHECK=0 (or off, false) turns it off', async t => {
   const saved = process.env.SSAM_UI_PRECHECK; delete process.env.SSAM_UI_PRECHECK;
   t.after(() => { if (saved === undefined) delete process.env.SSAM_UI_PRECHECK; else process.env.SSAM_UI_PRECHECK = saved; });
   const box = sandbox(t);
@@ -725,21 +899,21 @@ test('CX16 r4: the UI precheck is off by default (no check-job, the apply as bef
   storeIndex(box.store, 'o11', CAPTURE_TEXT);
   const job = path.join(box.base, 'job.json'); fs.writeFileSync(job, JSON.stringify(uiJob()));
   const env = { ...box.env }; delete env.SSAM_UI_PRECHECK;
-  const off = fakeAnvil({ 'check-job': () => { throw new Error('check-job ran'); }, apply: refusedApply([APPLY_SAME]) });
-  const v = await runJob({ lane: 'o11', job, base }, { root: box.root, env, runAnvil: off, worker: null });
-  assert.deepEqual(off.calls.map(c => c.args[0]), ['apply'], 'only the apply: no precheck by default');
-  assert.equal(v.ok, false); assert.equal(Object.hasOwn(v, 'static'), false, 'the refusal of the apply as before CX16');
-  for (const value of [undefined, '', '0', 'off']) {
+  // Unset, '' and the on values: check-job runs alongside the apply and joins.
+  for (const value of [undefined, '', '1', 'on', 'true']) {
     const e = { ...env }; if (value !== undefined) e.SSAM_UI_PRECHECK = value;
-    assert.equal(await uiPrecheck({ lane: 'o11', job, mode: 'job', base }, { runAnvil: off, root: box.root, local: box.local, env: e }), null, String(value));
-  }
-  assert.equal(off.calls.filter(c => c.args[0] === 'check-job').length, 0);
-  // SSAM_UI_PRECHECK=1 (or on, true) turns it on: check-job runs alongside the apply and joins.
-  for (const value of ['1', 'on', 'true']) {
     const on = fakeAnvil({ 'check-job': checkJob([UNKNOWN_BLOCK, BLOCK_TEXT], [], { complete: false }), apply: refusedApply([APPLY_SAME]) });
-    const w = await runJob({ lane: 'o11', job, base }, { root: box.root, env: { ...env, SSAM_UI_PRECHECK: value }, runAnvil: on, worker: null });
-    assert.deepEqual(on.calls.map(c => c.args[0]).sort(), ['apply', 'check-job'], value);
-    assert.equal(w.static?.carried, 2, value);
+    const w = await runJob({ lane: 'o11', job, base }, { root: box.root, env: e, runAnvil: on, worker: null });
+    assert.deepEqual(on.calls.map(c => c.args[0]).sort(), ['apply', 'check-job'], String(value));
+    assert.equal(w.static?.carried, 2, String(value));
+  }
+  // '0', 'off' and 'false': no check-job, the refusal of the apply as before CX16.
+  for (const value of ['0', 'off', 'false', 'OFF']) {
+    const off = fakeAnvil({ 'check-job': () => { throw new Error('check-job ran'); }, apply: refusedApply([APPLY_SAME]) });
+    const v = await runJob({ lane: 'o11', job, base }, { root: box.root, env: { ...env, SSAM_UI_PRECHECK: value }, runAnvil: off, worker: null });
+    assert.deepEqual(off.calls.map(c => c.args[0]), ['apply'], value);
+    assert.equal(v.ok, false); assert.equal(Object.hasOwn(v, 'static'), false, value);
+    assert.equal(await uiPrecheck({ lane: 'o11', job, mode: 'job', base }, { runAnvil: off, root: box.root, local: box.local, env: { ...env, SSAM_UI_PRECHECK: value } }), null, value);
   }
 });
 

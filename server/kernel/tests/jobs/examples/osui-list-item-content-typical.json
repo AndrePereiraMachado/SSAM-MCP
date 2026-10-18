@@ -1,5 +1,5 @@
 {
- "description": "ListItemContent (OutSystemsUI, Content) tipico; placeholders Left, Right, Title, Content com dados do aggregate de tarefas.",
+ "description": "Typical ListItemContent (OutSystemsUI, Content); placeholders Left, Right, Title, Content with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

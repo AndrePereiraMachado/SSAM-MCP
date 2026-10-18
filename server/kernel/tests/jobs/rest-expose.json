@@ -1,5 +1,5 @@
 {
- "description": "REST exposto: IRestService com IRestServiceAction GET (nasce com Start/End), input na URL, output Body structure, Assign (job da investigacao REST de 2026-09-04)",
+ "description": "Exposed REST: IRestService with IRestServiceAction GET (born with Start/End), input in the URL, output Body structure, Assign (job from the REST investigation of 2026-09-04)",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "ops": [

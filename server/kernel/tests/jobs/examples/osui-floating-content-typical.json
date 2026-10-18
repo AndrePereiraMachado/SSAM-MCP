@@ -1,5 +1,5 @@
 {
- "description": "FloatingContent (OutSystemsUI, Content) tipico; inputs obrigatorios Position ligados a variaveis da tela; placeholders Content com dados do aggregate de tarefas.",
+ "description": "Typical FloatingContent (OutSystemsUI, Content); required inputs Position bound to screen variables; placeholders Content with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

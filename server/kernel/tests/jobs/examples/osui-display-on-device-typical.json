@@ -1,5 +1,5 @@
 {
- "description": "DisplayOnDevice (OutSystemsUI, Adaptive) tipico; placeholders OnDesktop, OnTablet, OnPhone com dados do aggregate de tarefas.",
+ "description": "Typical DisplayOnDevice (OutSystemsUI, Adaptive); placeholders OnDesktop, OnTablet, OnPhone with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

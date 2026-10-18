@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';
 import {settingsConfigurationApproval,settingsBodyHash as hash,settingsConfigurationHash as stateHash,SETTINGS_APPLY,AGENT_SETTINGS_PATCH,AGENT_SETTINGS_CONFIGURATION} from '../runtime/settings-configuration-approval.mjs';
 import {TIMER_PATCH} from '../runtime/timer-configuration-approval.mjs';

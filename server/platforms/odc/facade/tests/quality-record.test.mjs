@@ -126,10 +126,11 @@ test('compactDelivery: an ODC refusal with validation errors, grouped problems a
   assert.deepEqual(line.warn, { n: 3, high: 1 });
   assert.deepEqual(line.args, { job: 'inline', basedOn: true, partial: true, patch: 2, until: 'merge' });
 
-  const delivered = compactDelivery('studio_deliver', { module: S.module }, { ok: true, merged: true, strictlyEqual: true, result: 'entregue', module: S.module, manifest: S.path,
+  // servidor/fase4-26 (a7, English review): the answer says "delivered" (result-values.mjs); the record keeps its deliv codes.
+  const delivered = compactDelivery('studio_deliver', { module: S.module }, { ok: true, merged: true, strictlyEqual: true, result: 'delivered', module: S.module, manifest: S.path,
     normalizations: { total: 4, byRule: { SORT_KEYS_SPLIT: 3, PROPERTY_SET_DROPPED: 1 }, items: [{ rule: 'PROPERTY_SET_DROPPED', path: S.path, from: S.expr, to: S.url }] },
     summary: { actions: [{ name: S.action, inputs: [S.attr] }] }, phases: { buildMs: 1000, queuedMs: 2500, applyMs: 3000 } });
-  assert.equal(delivered.result, 'entregue');
+  assert.equal(delivered.result, 'delivered');
   const ok = lineOf('studio_deliver', { module: S.module, job: S.job }, result(mcp(delivered)),
     { times: timesFromSpans([], { ms: 9000, queue: 2500 }), ms: 9000 });
   assert.equal(ok.class, 'delivered'); assert.equal(ok.deliv, 'entregue'); assert.equal(ok.ok, true); assert.equal(ok.code, null);
@@ -142,6 +143,13 @@ test('compactDelivery: an ODC refusal with validation errors, grouped problems a
   assert.deepEqual([published.ok, published.code, published.deliv, published.class], [false, 'PUBLISH_FAILED', 'entregue', 'delivered']);
   const both = lineOf('o11_deliver', { module: S.module }, result(mcp({ ok: true, result: 'entregue e publicado' })), { catalogLane: 'o11' });
   assert.equal(both.deliv, 'entregue-publicado');
+  // The English results of 15/10 count the same as the Portuguese ones of the releases before (an older answer read back).
+  for (const [said, deliv] of [['delivered', 'entregue'], ['delivered and published', 'entregue-publicado'], ['entregue', 'entregue']]) {
+    const line = lineOf('o11_deliver', { module: S.module }, result(mcp({ ok: true, result: said })), { catalogLane: 'o11' });
+    assert.deepEqual([line.deliv, line.class], [deliv, 'delivered'], said);
+  }
+  const publishedEn = lineOf('studio_deliver', { module: S.module, publish: true }, result(mcp({ ok: false, code: 'PUBLISH_FAILED', result: 'delivered', error: S.msg, publish: { outcome: 'failed' } })));
+  assert.deepEqual([publishedEn.ok, publishedEn.code, publishedEn.deliv, publishedEn.class], [false, 'PUBLISH_FAILED', 'entregue', 'delivered']);
 });
 
 test('interpretKernelResult: a kernel refusal with data problems and an accepted candidate with normalizations', () => {
@@ -348,7 +356,8 @@ test('VERB_FIELDS are the enums of tools/list and the module constants', { timeo
   process.env.SSAM_APP_HOOK_TOOLS = '1';
   const { createSsamServer } = await import('../ssam.mjs');
   const { frictionTool } = await import('../../../../facade/friction-boundary.mjs');
-  const server = await createSsamServer();
+  // servidor/fase4-26 (a7): the hosted server serves the profile all (CX11); the record reads the tools it serves.
+  const server = await createSsamServer({ profile: 'all' });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'quality-record-test', version: '1.0.0' });
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);

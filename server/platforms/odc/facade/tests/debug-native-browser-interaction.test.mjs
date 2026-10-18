@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createNativeBrowserInteraction,isNativeInteractionAuthorization,nativeInteractionRequests} from '../debug-native-browser-interaction.mjs';
 const url='https://fixture.example/App/',DOC=1,BUTTON=7,LABEL=8;

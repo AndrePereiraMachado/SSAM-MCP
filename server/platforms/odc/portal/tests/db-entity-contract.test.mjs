@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {entityUpdate} from '../runtime/db-entity-contract.mjs';
 const entity={EntityId:'e',OriginalName:'Cargo',Name:'Cargo'};

@@ -1,8 +1,8 @@
 {
- "description": "ODC: um no Semantic Search completo (cobertura testada, fase 2). SearchAttributes e uma colecao so de leitura que a plataforma muda por AddSearchableAttributes/RemoveSearchableAttributes; sem caminho pelos verbos o no ficava sempre com o erro SemanticSearch_RequiredSearchAttributes. O `set SearchAttributes` recebe a lista inteira, como Roles: cada item e o `AsSearchable` de um atributo marcado IsSearchable. O segundo set troca a lista (Remove + Add) e o get final le de volta.",
+ "description": "ODC: a complete Semantic Search node (tested coverage, phase 2). SearchAttributes is a read-only collection that the platform changes through AddSearchableAttributes/RemoveSearchableAttributes; without a path through the verbs the node always stayed with the error SemanticSearch_RequiredSearchAttributes. The `set SearchAttributes` takes the whole list, like Roles: each item is the `AsSearchable` of an attribute marked IsSearchable. The second set swaps the list (Remove + Add) and the final get reads it back.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / SemDoc_Find (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / SemDoc_Find (ServerAction)", "why": "ODC: an app (CrossDevice) does not expose a public server action (the live Studio gives an error); the action stays private and without a consumer in this proof job"}],
  "ops": [
   {"op": "spec", "data": {"entities": [{"name": "SemDoc", "attributes": [{"name": "Title", "type": "Text", "length": 50}, {"name": "Body", "type": "Text", "length": 500}]}]}},
   {"op": "set", "target": "$SemDoc.Title/AsSearchable", "prop": "IsSearchable", "value": true},
@@ -14,7 +14,7 @@
   {"op": "set", "target": "$find", "prop": "Source", "value": "$SemDoc"},
   {"op": "set", "target": "$find", "prop": "SearchQuery", "value": "\"flood insurance\""},
   {"op": "set", "target": "$find", "prop": "SearchAttributes", "value": ["$SemDoc.Title/AsSearchable", "$SemDoc.Body/AsSearchable"]},
-  {"op": "set", "target": "$find", "prop": "SearchAttributes", "value": ["$SemDoc.Body/AsSearchable"], "_why": "troca a lista: Title sai (RemoveSearchableAttributes), Body fica"},
+  {"op": "set", "target": "$find", "prop": "SearchAttributes", "value": ["$SemDoc.Body/AsSearchable"], "_why": "swaps the list: Title leaves (RemoveSearchableAttributes), Body stays"},
   {"op": "link", "from": "$s", "to": "$find"},
   {"op": "link", "from": "$find", "connector": "Target", "to": "$e"},
   {"op": "get", "target": "$find", "_why": "SearchAttributes: 1"}

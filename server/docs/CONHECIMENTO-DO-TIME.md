@@ -1,83 +1,84 @@
-# Conhecimento do time
+# Team knowledge
 
-Regras de trabalho e lições da plataforma aprendidas no uso real do SSAM Hybrid. Valem para qualquer agente (Claude,
-Codex ou outro) e para qualquer pessoa do time. Leia antes de gerar ou alterar módulos O11 ou ODC.
+Working rules and platform lessons learned in the real use of SSAM Hybrid. They apply to any agent (Claude, Codex or
+another) and to anyone on the team. Read them before generating or changing O11 or ODC modules.
 
-## 1. Como trabalhar
+## 1. How to work
 
-- **Validação só quando pedirem.** Testes de comportamento, revisões e conferências no navegador rodam só quando a
-  pessoa pede. Não acrescente rodadas de validação por conta própria.
-- **Erro volta para o modelo.** Quando uma ferramenta de entrega devolve erros do verificador (TrueChange), ela não
-  entrega nada. O modelo corrige o pedido e chama de novo.
-- **Sem erro, a resposta é "entregue".** Não descreva o que mudou nem onde: a pessoa confere na plataforma e, se
-  precisar, usa o Compare do Studio.
-- **Construa sobre a última versão publicada.** Outras pessoas também publicam. Antes de montar uma mudança, baixe a
-  versão publicada atual do módulo e use-a como base.
-- **Em tarefa de uso, não mexa no produto.** Para criar um app ou library ODC, use `studio_create_app {kind, name,
-  authorize}` (clona o template do tenant como o Studio e publica). Para alterar um app, use `ssam_discover`,
-  `o11_deliver`/`studio_deliver`, `studio_merge`... Não escreva features C# no builder, não edite o kernel
-  nem os arquivos versionados de configuração. Antes de dizer que algo não é possível, pergunte ao `ssam_discover`: ele
-  devolve a operação exata. Se a capacidade faltar de verdade, pare e diga o que falta, para virar trabalho do produto.
-- **Todo pedido começa no `ssam_discover`.** Ele responde qualquer pedido do SSAM. Para operação (abrir módulo,
-  publicar, criar app, dados, Service Center, Portal, debug), devolve em `tools` a ferramenta, o verbo e os argumentos.
-  Para mudança de modelo, devolve contrato e exemplo. Não há bloqueio: as outras ferramentas continuam livres.
-- **Configuração pessoal fica local.** Tenant, host e autor de cada pessoa vão no `.ssam-local.json` (fora do git),
-  gravado pelo setup de desenvolvimento. Nunca faça commit dos seus valores no `tenants.json`.
-- **Sem execuções longas.** Nada de fluxos de horas ou de suítes completas repetidas sem necessidade. Prefira o menor
-  teste que responde a pergunta e diga antes quanto tempo ele leva.
+- **Validation only when asked.** Behavior tests, reviews and checks in the browser run only when the person asks for
+  them. Do not add validation rounds on your own.
+- **An error goes back to the model.** When a delivery tool returns verifier errors (TrueChange), it delivers nothing.
+  The model fixes the request and calls again.
+- **Without errors, the answer is "delivered".** Do not describe what changed or where: the person checks it on the
+  platform and, if needed, uses the Studio's Compare.
+- **Build on the latest published version.** Other people publish too. Before building a change, download the current
+  published version of the module and use it as the base.
+- **In a usage task, do not touch the product.** To create an ODC app or library, use `studio_create_app {kind, name,
+  authorize}` (it clones the tenant's template like the Studio and publishes). To change an app, use `ssam_discover`,
+  `o11_deliver`/`studio_deliver`, `studio_merge`... Do not write C# features in the builder, do not edit the kernel nor
+  the versioned configuration files. Before saying something is not possible, ask `ssam_discover`: it returns the exact
+  operation. If the capability is really missing, stop and say what is missing, so it becomes product work.
+- **Every request starts at `ssam_discover`.** It answers any SSAM request. For an operation (open a module, publish,
+  create an app, data, Service Center, Portal, debug), it returns the tool, the verb and the arguments in `tools`. For a
+  model change, it returns the contract and an example. Nothing is blocked: the other tools stay free.
+- **Personal configuration stays local.** Each person's tenant, host and author go in `.ssam-local.json` (outside git),
+  written by the development setup. Never commit your values in `tenants.json`.
+- **No long runs.** No hours-long flows nor full suites repeated without need. Prefer the smallest test that answers the
+  question and say beforehand how long it takes.
 
-### Jobs em arquivo (local) e inline (hospedado)
+### Jobs in a file (local) and inline (hosted)
 
-- Local: um job grande vai num arquivo gravado com a ferramenta Write, em UTF-8, e a chamada passa o caminho absoluto.
-- Hospedado: o próprio job vai inline no argumento `job`, em JSON compacto (sem indentação), mesmo grande. A chamada vai
-  direto ao servidor (até 16 MiB). Um job no inbox custa mais uma subida pelo agente: 26,9 s para 60 KB no teste de
-  produção de 2026-10-11, e 57% dos bytes eram espaços da indentação. Correção: `patch` + `basedOn` (o `nextBasedOn`).
-- O inbox do agente (`<pasta do agente>\inbox\<nome>`, passado como `agent:inbox/<nome>`) fica para arquivos do usuário:
-  OML, imagens, assets. Um job que já está lá (`agent:inbox/<nome>.json`) ainda funciona.
-- Nunca gere o JSON com heredoc, `echo` ou script: o encoding e as aspas quebram.
+- Local: a large job goes in a file written with the Write tool, in UTF-8, and the call passes the absolute path.
+- Hosted: the job itself goes inline in the `job` argument, as compact JSON (no indentation), even when large. The call
+  goes straight to the server (up to 16 MiB). A job in the inbox costs one more upload through the agent: 26.9 s for 60 KB
+  in the production test of 2026-10-11, and 57% of the bytes were indentation spaces. Correction: `patch` + `basedOn`
+  (the `nextBasedOn`).
+- The agent inbox (`<agent folder>\inbox\<name>`, passed as `agent:inbox/<name>`) is for the user's files: OML, images,
+  assets. A job that is already there (`agent:inbox/<name>.json`) still works.
+- Never generate the JSON with a heredoc, `echo` or a script: the encoding and the quotes break.
 
-### Subagentes: carregar as ferramentas SSAM primeiro
+### Subagents: discovery before the task
 
-O prompt de um subagente começa carregando as ferramentas SSAM por ToolSearch, numa busca só, antes do primeiro uso
-(`select:mcp__<servidor>__ssam_discover,mcp__<servidor>__ssam_map,...`). Sem isso o subagente não vê as ferramentas e
-cai para shell ou script. A primeira chamada dele é `ssam_discover {intent, lane, app, packet:true}`: o pacote traz os
-elementos do módulo, o contrato, um exemplo provado, as regras que valem e o próximo passo. Ele trabalha a partir do
-pacote, sem reler docs nem o módulo.
+Only clients that defer schemas (such as Claude Code) use ToolSearch in one search before the first use
+(`select:mcp__<server>__ssam_discover,mcp__<server>__ssam_map,...`). The first call of the subagent is `ssam_discover {intent, lane, app, packet:true}`: the packet brings the
+elements of the module, the contract, a proven example, the rules that apply and the next step. It works from the
+packet, without rereading docs or the module.
 
-Cada subagente grava sua parte num arquivo UTF-8 próprio e responde só o caminho: `.flow` pode conter várias actions, cada uma com sua descrição `///` e cabeçalho na coluna 0, separadas por linha em branco; dados em `.ddl`, telas em `.html` e ops JSON em `.json`. O agente principal envia todos os caminhos numa única chamada `ssam_code {lane, action:"write", module, files:["C:\\...\\parte-1.flow", ...]}`, sem copiar ou redigitar os textos. O SSAM parte as actions; uma recusa aponta todos os problemas por arquivo (`files/<i>`).
+Each subagent writes its part to its own UTF-8 file and answers only the path: a `.flow` may hold several actions, each with its `///` description and its header at column 0, separated by a blank line; data in `.ddl`, screens in `.html` and JSON ops in `.json`. The main agent sends all the paths in one single call `ssam_code {lane, action:"write", module, files:["C:\\...\\part-1.flow", ...]}`, without copying or retyping the texts. SSAM splits the actions; a refusal points out every problem by file (`files/<i>`).
 
-### Mudança de fachada: quando reconectar o MCP
+### Facade change: when to reconnect the MCP
 
-O servidor MCP recarrega sozinho quando a fachada ou o catálogo mudam: a próxima chamada já usa o código novo, e o
-`ssam_doctor` mostra `server.reloadedAt`. Só uma mudança em `facade/launch.mjs` ou `facade/friction-*.mjs` pede reconectar
-o MCP (Claude Code: `/mcp` e reconnect). Mudança só de kernel, CLI ou motor XIF não pede nada.
+The MCP server reloads by itself when the facade or the catalog change: the next call already uses the new code, and
+`ssam_doctor` shows `server.reloadedAt`. Only a change in `facade/launch.mjs` or `facade/friction-*.mjs` needs the MCP
+reconnected (Claude Code: `/mcp` and reconnect). A change of the kernel, the CLI or the XIF engine alone needs nothing.
 
-### Vários agentes no mesmo Studio: um módulo por agente
+### Several agents in the same Studio: one module per agent
 
-Dê a cada agente um módulo seu. O build de cada entrega roda junto, fora da trava; o merge espera a vez no Studio.
-Ninguém espera nem repete à mão: o SSAM faz a fila. Detalhes em `docs/AGENTES-EM-PARALELO.md`.
+Give each agent a module of its own. The build of each delivery runs at the same time, outside the lock; the merge waits
+for its turn in the Studio. Nobody waits or repeats by hand: SSAM keeps the queue. Details in
+`docs/AGENTES-EM-PARALELO.md`.
 
-### expectedMessages: só o que uma recusa pediu
+### expectedMessages: only what a refusal asked for
 
-Declare em `expectedMessages` só as mensagens que uma recusa pediu, com o id e o elemento que ela nomeou. Nunca liste
-mensagens por precaução: uma expectativa que ninguém pediu esconde um erro novo.
+Declare in `expectedMessages` only the messages a refusal asked for, with the id and the element it named. Never list
+messages as a precaution: an expectation nobody asked for hides a new error.
 
-## 2. Padrões de implementação OutSystems
+## 2. OutSystems implementation standards
 
-- Todo código gerado segue as 35 regras do OutSystems padrões (lógica, listas, dados, servidor, UI, nomes, estado e
-  arquitetura): `ssam_reference {lane:"<lane>", kind:"rules", query:"padroes"}` (arquivo
-  `kernel/scripts/outsystems_padroes/RULES.md`). Todas valem para O11 e ODC, menos a AR1 (Architecture Canvas), que é
-  só do O11.
-- A conferência automática dessas regras é opcional e roda só quando alguém pedir.
-- Regra de escopo: implemente todos os critérios de aceite. Quando dois requisitos se contradizem diretamente, não
-  implemente nenhum dos dois, registre o conflito como pendência e implemente o resto.
+- All generated code follows the 35 rules of the OutSystems standards (logic, lists, data, server, UI, names, state and
+  architecture): `ssam_reference {lane:"<lane>", kind:"rules", query:"standards"}` (file
+  `kernel/scripts/outsystems_padroes/RULES.md`). All of them apply to O11 and ODC, except AR1 (Architecture Canvas),
+  which is O11 only.
+- The automatic check of these rules is optional and runs only when someone asks for it.
+- Scope rule: implement every acceptance criterion. When two requirements contradict each other directly, implement
+  neither of them, record the conflict as pending and implement the rest.
 
-## 3. Lições da plataforma
+## 3. Platform lessons
 
-### Acesso a dados: uma consulta com join, nunca consulta dentro de laço
+### Data access: one query with a join, never a query inside a loop
 
-Decisão do dono (2026-10-09), regra do kernel nas duas faixas. Busque os dados relacionados de uma vez, antes do laço, e
-procure a linha por chave dentro dele:
+The owner's decision (2026-10-09), a kernel rule on both lanes. Fetch the related data at once, before the loop, and
+look the row up by key inside it:
 
 ```json
 {"get":"Order","as":"GetOrdersWithLines","sources":["OrderLine"],
@@ -85,135 +86,137 @@ procure a linha por chave dentro dele:
  "where":"Order.CustomerId = CustomerId"}
 ```
 
-Quando o aggregate não expressa a consulta, um SQL só, com IN ou JOIN pela chave da lista:
+When the aggregate cannot express the query, one single SQL, with IN or JOIN on the key of the list:
 
 ```sql
-SELECT {OrderLine}.* FROM {OrderLine} WHERE {OrderLine}.[OrderId] IN (@OrderIds)   -- @OrderIds com Expand Inline
+SELECT {OrderLine}.* FROM {OrderLine} WHERE {OrderLine}.[OrderId] IN (@OrderIds)   -- @OrderIds with Expand Inline
 ```
 
-Dentro do laço, `ListFilter(GetOrdersWithLines.List, OrderLine.OrderId = GetOrders.List.Current.Order.Id)` (ou
-`ListIndexOf`) no lugar de outro aggregate.
+Inside the loop, `ListFilter(GetOrdersWithLines.List, OrderLine.OrderId = GetOrders.List.Current.Order.Id)` (or
+`ListIndexOf`) instead of another aggregate.
 
-- **QUERY_IN_LOOP (recusa)**: um Aggregate ou Execute SQL no corpo de um ForEach, ou num ciclo de If/Assign que volta a
-  um nó anterior, que o job criou ou mudou, é recusado no apply, junto com as outras falhas (uma recusa só). A resposta
-  traz o op, o laço, a consulta, a correção e, quando dá para derivar (ForEach sobre outro aggregate do fluxo com FK entre
-  as entidades), o trecho de ops pronto em `suggestion`. Laço e consulta antigos, num fluxo que o job tocou sem mexer
-  neles, viram aviso HIGH (`legacy: true`), nunca recusa.
-- Escape explícito, só quando a consulta precisa mesmo rodar por item: `"allowQueryInLoop": {"why": "<15+ caracteres>"}`
-  no op que cria a consulta. É aceito e fica no recibo (`QUERY_IN_LOOP_ALLOWED` em `highWarnings`), nunca em silêncio.
-- **Sort de aggregate (recusa, `AGGREGATE_SORT_NOT_ATTRIBUTE`)**: o sort é UM atributo de uma fonte (`Fonte.Atributo`) ou
-  uma coluna do aggregate; a ordem decrescente é `desc` (no texto) ou `SortDirection` Descending. Nunca expressão: o
-  Verify aceita e a publicação quebra no compilador (VisitaCerta_CS, 2026-10-12). `X DESC`, `-X`,
-  `IdentifierToLongInteger(X)` e `If(C, 0, 1)` são escritos como o atributo com a direção e listados no recibo; ordem
-  calculada (If sobre variável, conta) vira coluna `CALC SortKey=<expressão>` com `SORT SortKey`, ou sort dinâmico.
-  Aggregate agrupado (GROUP BY ou AGG) só ordena por atributo que o GROUP BY lê. GROUP BY e AGG sobre expressão são recusados:
-  `CALC NomeRow=<expressão>` e a coluna pelo nome (`AGG Total=Sum(TotalRow)`). Join é Inner, Left ou Full (Right de duas
-  fontes vira Left trocado, listado); fonte sem join é recusada. Cliente SOAP só nasce da importação nativa do WSDL (op soap
-  pelo o11_deliver): criado por verbos, é recusado com a chamada pronta. A checagem de compilação recusa tudo isso antes de
-  entregar, inclusive o que a base já tinha (`preexisting`, com os ops que corrigem quando é certo): nenhuma entrega sobre
-  uma base que não compila compila.
-- **AGGREGATES_MERGEABLE (aviso HIGH)**: dois ou mais aggregates no mesmo fluxo ou na mesma tela, sobre a mesma entidade
-  ou entidades ligadas por atributo de referência, usados juntos. O aviso nomeia os aggregates, a relação
-  (`Entidade.Atributo -> Entidade`) e sugere o aggregate único (fontes + join + filtros). A03: não bloqueia, mas vem
-  primeiro em `warnings` e também em `highWarnings`, na resposta compacta de `studio_deliver`, `o11_deliver`,
-  `ssam_job` e `o11_job`. Em telas diferentes não conta.
+- **QUERY_IN_LOOP (refusal)**: an Aggregate or Execute SQL in the body of a ForEach, or in an If/Assign cycle that goes
+  back to an earlier node, that the job created or changed, is refused at apply, together with the other failures (one
+  single refusal). The answer brings the op, the loop, the query, the fix and, when it can be derived (a ForEach over
+  another aggregate of the flow with an FK between the entities), the ready ops in `suggestion`. An old loop and query,
+  in a flow the job touched without changing them, become a HIGH warning (`legacy: true`), never a refusal.
+- An explicit escape, only when the query really has to run per item: `"allowQueryInLoop": {"why": "<15+ characters>"}`
+  on the op that creates the query. It is accepted and stays in the receipt (`QUERY_IN_LOOP_ALLOWED` in `highWarnings`),
+  never silently.
+- **Aggregate sort (refusal, `AGGREGATE_SORT_NOT_ATTRIBUTE`)**: the sort is ONE attribute of a source (`Source.Attribute`)
+  or a column of the aggregate; descending order is `desc` (in the text) or `SortDirection` Descending. Never an
+  expression: the Verify accepts it and the publication breaks in the compiler (VisitaCerta_CS, 2026-10-12). `X DESC`,
+  `-X`, `IdentifierToLongInteger(X)` and `If(C, 0, 1)` are written as the attribute with the direction and listed in the
+  receipt; a computed order (an If over a variable, a calculation) becomes a column `CALC SortKey=<expression>` with
+  `SORT SortKey`, or a dynamic sort. A grouped aggregate (GROUP BY or AGG) only sorts by an attribute the GROUP BY reads.
+  GROUP BY and AGG over an expression are refused: `CALC NameRow=<expression>` and the column by its name
+  (`AGG Total=Sum(TotalRow)`). A join is Inner, Left or Full (a Right of two sources becomes a swapped Left, listed); a
+  source without a join is refused. A SOAP client is only born from the native import of the WSDL (op soap through
+  o11_deliver): created by verbs, it is refused with the ready call. The compile check refuses all of this before
+  delivering, including what the base already had (`preexisting`, with the ops that fix it when that is certain): no
+  delivery over a base that does not compile compiles.
+- **AGGREGATES_MERGEABLE (HIGH warning)**: two or more aggregates in the same flow or on the same screen, over the same
+  entity or entities linked by a reference attribute, used together. The warning names the aggregates, the relation
+  (`Entity.Attribute -> Entity`) and suggests the single aggregate (sources + join + filters). A03: it does not block,
+  but it comes first in `warnings` and also in `highWarnings`, in the compact answer of `studio_deliver`, `o11_deliver`,
+  `ssam_job` and `o11_job`. On different screens it does not count.
 
-### Protótipo aprovado: portar 1:1
+### Approved prototype: port it 1:1
 
-Quando a pessoa aprovou um protótipo (HTML e CSS), ele é portado 1:1: a op `html` com a marcação do protótipo e o
-`<style>` dele no tema do módulo. Não troque o protótipo por padrões do OutSystems UI. Nada está pronto sem o link do app
-(`ssam_app_url`).
+When the person approved a prototype (HTML and CSS), it is ported 1:1: the op `html` with the markup of the prototype and
+its `<style>` in the theme of the module. Do not replace the prototype with OutSystems UI patterns. Nothing is done
+without the link of the app (`ssam_app_url`).
 
-### CSS: reset escopado com :where()
+### CSS: a reset scoped with :where()
 
-O reset de CSS de um protótipo vai escopado com `:where(.<classe da tela>)`, que tem especificidade zero. Nunca escreva
-seletor de elemento (`button`, `a`, `input`) por cima das classes do OutSystems UI: ele vence o tema e quebra os widgets.
+The CSS reset of a prototype is scoped with `:where(.<screen class>)`, which has zero specificity. Never write an element
+selector (`button`, `a`, `input`) over the OutSystems UI classes: it beats the theme and breaks the widgets.
 
-### Lista: refresh parcial sem recarregar a tela
+### List: partial refresh without reloading the screen
 
-Para mudar uma linha da lista sem recarregar a tela inteira:
-- a server action grava e devolve, nas saídas, a linha nova e o resumo (totais, contagens);
-- a client action faz `Assign` em `<Lista>[<índice>]` com a linha devolvida e copia o resumo das saídas para as variáveis
-  da tela;
-- não chame o refresh do aggregate nem da Data Action da lista inteira.
-O contrato dos passos `call` e `assign` é o da capability `logic.flow`:
-`ssam_discover {intent:"atribuição de variável no fluxo de lógica", lane}`.
+To change one row of the list without reloading the whole screen:
+- the server action writes and returns, in its outputs, the new row and the summary (totals, counts);
+- the client action does an `Assign` on `<List>[<index>]` with the returned row and copies the summary from the outputs
+  to the screen variables;
+- do not call the refresh of the aggregate nor of the Data Action of the whole list.
+The contract of the `call` and `assign` steps is the one of the capability `logic.flow`:
+`ssam_discover {intent:"variable assignment in a logic flow", lane}`.
 
-### O11: republicar os consumidores depois do produtor
+### O11: republish the consumers after the producer
 
-Um módulo consumidor continua rodando o código do produtor contra o qual foi publicado, mesmo sem mudança de
-assinatura. Depois de publicar um produtor, republique cada consumidor na ordem de dependência e só então teste.
-Sem isso, a lógica nova parece "quebrada" na tela.
+A consumer module keeps running the code of the producer it was published against, even without a signature change.
+After publishing a producer, republish each consumer in dependency order and only then test. Without that, the new
+logic looks "broken" on the screen.
 
-Timers com Schedule "When Published" podem não rodar logo depois da publicação. Para cargas iniciais (seed), prefira
-rodar sob demanda.
+Timers with the Schedule "When Published" may not run right after the publication. For initial loads (seed), prefer
+running them on demand.
 
-### ODC: o que o Studio recusa e o preflight já recusa antes da entrega
+### ODC: what the Studio refuses and the preflight already refuses before the delivery
 
-O preflight do kernel (regra `OdcPlatformRules`, 05/10/2026) recusa no job, com a correção exata, o que o ODC Studio
-recusou na sessão do QuizLive (04/10):
-- **Service Action do próprio app** chamada por um fluxo do app (`ODC_SERVICE_ACTION_SAME_APP`): a lógica vai numa Server
-  Action, e a Service Action fica só como a API que outros apps chamam. Não gere Service Actions nem actions `Core_`
-  que a pessoa não pediu.
-- **`GenerateGuid()` e o operador `mod`** não existem no ODC (`ODC_FUNCTION_UNAVAILABLE`): derive o código de dados (o
-  último Id) e escreva `x mod n` como `x - DecimalToInteger(x / n) * n`.
-- **`Count` de aggregate é Long Integer** (`ODC_COUNT_IS_LONG`): atribuído a Integer, use
-  `LongIntegerToInteger(GetX.Count)` (o problema traz o patch) ou declare a variável como Long Integer.
+The kernel preflight (rule `OdcPlatformRules`, 05/10/2026) refuses in the job, with the exact fix, what the ODC Studio
+refused in the QuizLive session (04/10):
+- **A Service Action of the app itself** called by a flow of the app (`ODC_SERVICE_ACTION_SAME_APP`): the logic goes in a
+  Server Action, and the Service Action stays only as the API other apps call. Do not generate Service Actions nor
+  `Core_` actions the person did not ask for.
+- **`GenerateGuid()` and the `mod` operator** do not exist in ODC (`ODC_FUNCTION_UNAVAILABLE`): derive the data code (the
+  last Id) and write `x mod n` as `x - DecimalToInteger(x / n) * n`.
+- **The `Count` of an aggregate is a Long Integer** (`ODC_COUNT_IS_LONG`): assigned to an Integer, use
+  `LongIntegerToInteger(GetX.Count)` (the problem brings the patch) or declare the variable as Long Integer.
 
-### O11: agenda de timer em texto
+### O11: timer schedule as text
 
-O `Schedule` do timer O11 usa horários nativos: `03:00` significa todos os dias às 03:00;
-`00:05 Mon` significa segunda-feira às 00:05. Para todos os dias a cada cinco minutos,
-use `{ "everyMinutes": 5 }` no setter, que gera os 288 horários de `00:00` a `23:55`.
-Em ssam-ddl/1, escreva essa lista de horários no `schedule`. Frases como `Every 60 minutes`
-ou `Every day at 00:00` são inválidas, mesmo que o setter permissivo do Studio as aceite.
-O compilador DDL e o setter recusam essas frases com `TIMER_SCHEDULE_INVALID`.
-O ODC usa `CronSchedule` de cinco campos.
+The `Schedule` of an O11 timer uses native times: `03:00` means every day at 03:00;
+`00:05 Mon` means Monday at 00:05. For every day every five minutes,
+use `{ "everyMinutes": 5 }` in the setter, which generates the 288 times from `00:00` to `23:55`.
+In ssam-ddl/1, write that list of times in `schedule`. Phrases such as `Every 60 minutes`
+or `Every day at 00:00` are invalid, even if the permissive setter of the Studio accepts them.
+The DDL compiler and the setter refuse these phrases with `TIMER_SCHEDULE_INVALID`.
+ODC uses a five-field `CronSchedule`.
 
-### ODC (client) e O11 (server): lambda de list action só com atributo direto
+### ODC (client) and O11 (server): list action lambda only with a direct attribute
 
-Nos argumentos de lambda de list actions, escreva os atributos do elemento diretamente: `Condition` de ListFilter,
-ListIndexOf, ListAny e ListAll, e `By` de ListSort. Exemplos: `IsActive`, `Amount`, `Code = "X"`.
+In the lambda arguments of list actions, write the attributes of the element directly: the `Condition` of ListFilter,
+ListIndexOf, ListAny and ListAll, and the `By` of ListSort. Examples: `IsActive`, `Amount`, `Code = "X"`.
 
-- **ODC, client actions:** `<Lista>.Current.Atributo` passa no build, mas o runtime nunca avança o Current. O ListSort
-  não ordena, e o ListFilter compara todas as linhas com a mesma linha.
-- **O11, server ListSort:** o mesmo defeito. Todos os elementos ficam com a mesma chave, e a ordenação instável
-  embaralha a lista. Use os atributos do item da lambda; se precisar de desempate, monte uma chave de texto única e de
-  largura fixa.
-- No server, ListFilter, ListIndexOf e ListAny com `.Current` funcionam, nos dois.
-- O ODC não tem ListSort de servidor, só o de client.
-- `CurrentRowNumber` dentro da condição de um ListFilter de client não é confiável.
+- **ODC, client actions:** `<List>.Current.Attribute` passes the build, but the runtime never moves the Current. The
+  ListSort does not sort, and the ListFilter compares every row with the same row.
+- **O11, server ListSort:** the same defect. Every element gets the same key, and the unstable sort scrambles the list.
+  Use the attributes of the item of the lambda; if you need a tie-breaker, build a unique fixed-width text key.
+- On the server, ListFilter, ListIndexOf and ListAny with `.Current` work, on both.
+- ODC has no server ListSort, only the client one.
+- `CurrentRowNumber` inside the condition of a client ListFilter is not reliable.
 
-O kernel e o verificador do Studio aceitam as duas formas. Só um teste em execução pega o erro.
+The kernel and the Studio verifier accept both forms. Only a running test catches the error.
 
-### O11: entidade com "Changed Attributes" não grava cópia velha
+### O11: an entity with "Changed Attributes" does not write a stale copy
 
-Com Update Behavior = Changed Attributes, o Update grava só os atributos atribuídos depois da leitura. Se você lê um
-registro, chama algo que muda essa linha no banco e depois faz Update da cópia lida para "restaurar", nada é gravado.
+With Update Behavior = Changed Attributes, the Update writes only the attributes assigned after the read. If you read a
+record, call something that changes that row in the database and then Update the copy you read to "restore" it, nothing
+is written.
 
-Para restaurar: guarde o valor numa local, leia a linha DE NOVO depois do efeito colateral, atribua o valor guardado e
-então faça o Update.
+To restore: keep the value in a local, read the row AGAIN after the side effect, assign the kept value and then do the
+Update.
 
-### O11: nunca redeclare uma action pública existente
+### O11: never redeclare an existing public action
 
-Redeclarar uma action pública que já existe (mesmo nome e assinatura) dentro de uma op `logic` gera uma chave nova
-para ela. Os consumidores se ligam por chave, então a publicação do consumidor trava, e o Studio mostra
+Redeclaring a public action that already exists (same name and signature) inside a `logic` op generates a new key for
+it. The consumers bind by key, so the publication of the consumer gets stuck, and the Studio shows
 "Incompatible or missing dependencies found".
 
-- **Detectar:** compare as chaves dos elementos públicos entre a versão publicada e a OML nova
-  (`ssam_map {lane:"o11", target:"<OML>", kind:"ServiceAction"}` nas duas), ou rode
-  `o11_environment {action:"refresh-refs", module:"<consumidor>"}` sem publicar e veja os erros (`validation`).
-- **Religar o consumidor:** `reference` dos elementos com chave nova; `set @<chamada> Action
-  "IServiceAction:@<chave do módulo produtor>/<chave nova>"` (remapeia argumentos por nome); `delete` das assinaturas
-  velhas; `set Name` de volta ao nome do produtor. Confira com `o11_deliver {until:"apply"}` (valida sem merge) e
-  `o11_inspect {path:"@<chave>"}`.
+- **Detect:** compare the keys of the public elements between the published version and the new OML
+  (`ssam_map {lane:"o11", target:"<OML>", kind:"ServiceAction"}` on both), or run
+  `o11_environment {action:"refresh-refs", module:"<consumer>"}` without publishing and see the errors (`validation`).
+- **Rebind the consumer:** `reference` of the elements with a new key; `set @<call> Action
+  "IServiceAction:@<key of the producer module>/<new key>"` (remaps the arguments by name); `delete` of the old
+  signatures; `set Name` back to the name of the producer. Check with `o11_deliver {until:"apply"}` (validates without a
+  merge) and `o11_inspect {path:"@<key>"}`.
 
-### Merge direto de OML pela ponte
+### Direct OML merge through the bridge
 
-Quando as OMLs já estão prontas e a pessoa só quer colocá-las nos módulos abertos, use a ponte direto, módulo por
-módulo: `open_module`, depois `snapshot_module` (registra a base) e depois `merge_from_oml` com `mode=auto`, a
-snapshot como base e a chave do módulo. Leva de 2 a 11 segundos por módulo.
+When the OMLs are already ready and the person only wants them in the open modules, use the bridge directly, module by
+module: `open_module`, then `snapshot_module` (records the base) and then `merge_from_oml` with `mode=auto`, the
+snapshot as the base and the key of the module. It takes 2 to 11 seconds per module.
 
-Use o `deliver` completo, que refaz o job e valida antes do merge, só quando a pessoa quer a integração com
-conferência. Antes de um merge direto, confirme que o módulo aberto ainda é a base da OML: com base velha, o merge
-desfaz mudanças mais novas.
+Use the full `deliver`, which rebuilds the job and validates before the merge, only when the person wants the integration
+with checks. Before a direct merge, confirm that the open module is still the base of the OML: with an old base, the merge
+undoes newer changes.

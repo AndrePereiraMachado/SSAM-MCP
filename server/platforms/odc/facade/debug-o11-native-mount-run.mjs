@@ -12,6 +12,7 @@
 // mount. It is NOT a static proof of effects: staticEffectsQualified:false. No
 // evaluator, no forced flag, no handler called by hand and no synthetic event:
 // the original router mounts the default screen and the native debugger observes it.
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
@@ -45,7 +46,7 @@ function renderVerifiedFrom(render){
 export async function runO11NativeMount(input,prepared,readers,services={}){
   // Refusals that need no live state come before the lock and any download.
   if(services.requireClientInspection!==true)fail('client_inspection_required');
-  if(typeof input.words!=='string'||!input.words.trim())fail('explicit_authorization_required');
+  if(!wordsGiven(input.words))fail('explicit_authorization_required'); // CX15 r7: one predicate
   const mountPlan=prepared?.mount??{};
   if(mountPlan.navigation!==undefined)fail('navigation_unsupported');
   if(mountPlan.interactions!==undefined)fail('interactions_unsupported');
@@ -95,7 +96,8 @@ export async function runO11NativeMount(input,prepared,readers,services={}){
     // The user's words first (wx, in this operation's own folder), then the binding lock.
     fs.mkdirSync(dir,{recursive:true});
     const authorizationFile=path.join(dir,'authorization.json');
-    fs.writeFileSync(authorizationFile,JSON.stringify({schema:'ssam-o11-mount-authorization/1',policy:o11MountPolicy,operationId,words:input.words,
+    // CX15 r5 (N-3): the file keeps wordsSha256 of the user's words, never the words (authorizationSha256 = sha of the file).
+    fs.writeFileSync(authorizationFile,JSON.stringify({schema:'ssam-o11-mount-authorization/1',policy:o11MountPolicy,operationId,wordsSha256:sha(String(input.words)),
       decision,host:binding.host,module:binding.module,moduleKey:binding.moduleKey,runtimeUrl:binding.runtimeUrl,publishedVersionId:binding.publishedVersionId,
       screenKey,sourceSha256:readers.sourceContract.sha256.toLowerCase(),route:report.route,at:new Date().toISOString()}),{flag:'wx',flush:true});
     const authorizationSha256=sha(fs.readFileSync(authorizationFile));

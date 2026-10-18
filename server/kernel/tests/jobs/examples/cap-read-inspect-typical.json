@@ -1,5 +1,5 @@
 {
- "description": "Leitura tipica antes de mudar: find por nome, dump da entidade com os atributos e usages da static Priority (quem a usa: a FK Task.PriorityId). Job so de leitura.",
+ "description": "Typical read before a change: find by name, dump of the entity with its attributes, and usages of the static Priority (who uses it: the FK Task.PriorityId). A read-only job.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,5 +1,5 @@
 {
- "description": "duplicate com `parent` (faixa O11, web tradicional): a Preparation e a UNICA do seu bloco, por isso colar no mesmo pai falha sempre ('Object should be null' da plataforma; o kernel recusa antes, tests/jobs-negative/duplicate-single-slot.json). Com `parent` a copia nativa vai para OUTRO bloco que ainda nao tem Preparation, com o Start e o End dentro. O `get` por $bloco/#IPreparation so resolve se a copia ficou no bloco de destino.",
+ "description": "duplicate with `parent` (O11 lane, traditional web): the Preparation is the ONLY one of its block, so pasting into the same parent always fails ('Object should be null' from the platform; the kernel refuses beforehand, tests/jobs-negative/duplicate-single-slot.json). With `parent` the native copy goes to ANOTHER block that does not have a Preparation yet, with the Start and the End inside. The `get` by $block/#IPreparation only resolves if the copy ended up in the destination block.",
  "base": "tests/fixtures/traditional-ui.oml",
  "expectValid": true,
  "ops": [
@@ -9,8 +9,8 @@
   {"op": "create", "parent": "$prep", "type": "IEndNode", "as": "$end"},
   {"op": "link", "from": "$start", "to": "$end"},
   {"op": "create", "parent": "IWebFlow:MainFlow", "type": "IWebBlock", "name": "DupPrepInto", "as": "$into"},
-  {"op": "duplicate", "target": "$prep", "parent": "$into", "as": "$copy", "_why": "a copia nasce no bloco $into, nao no $from"},
-  {"op": "get", "target": "$into/#IPreparation", "_why": "prova o destino: falha se o bloco nao tiver a Preparation copiada"},
-  {"op": "get", "target": "$from/#IPreparation", "_why": "o original continua no bloco de origem"}
+  {"op": "duplicate", "target": "$prep", "parent": "$into", "as": "$copy", "_why": "the copy is born in the block $into, not in $from"},
+  {"op": "get", "target": "$into/#IPreparation", "_why": "proves the destination: fails if the block does not have the copied Preparation"},
+  {"op": "get", "target": "$from/#IPreparation", "_why": "the original stays in the source block"}
  ]
 }

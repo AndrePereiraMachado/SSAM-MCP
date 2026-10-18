@@ -1,5 +1,5 @@
 {
- "description": "FileLayer do OutSystemsMaps: LayerURL (obrigatorio) de um arquivo de camada, no AddOns_Placeholder de um LeafletMap.",
+ "description": "FileLayer of OutSystemsMaps: LayerURL (required) of a layer file, in the AddOns_Placeholder of a LeafletMap.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

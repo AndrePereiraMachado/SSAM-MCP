@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import {ORGANIZATION_GET,ORGANIZATION_RENAME,organizationRenamePlan} from '../runtime/organization-rename.mjs';
 import {API_CLIENT_CREATE,API_CLIENT_DELETE} from '../runtime/api-client-fixture.mjs';
 
@@ -1842,7 +1843,7 @@ test('a deployment that ends FinishedWithError is refused with every message and
   assert.deepEqual(out.deployment.log.messages[1], { type: 'error', text: "Setting 'ApiUrl' has no value in stage QA", stage: 'deploy',
     element: { name: 'ApiUrl', key: null, kind: null, source: 'text' }, code: 'OS-DPL-1', at: '2026-10-04T15:00:09Z', stepId: 'ApplyConfigurations', assetKey: ASSET1 });
   assert.equal(out.continuation.tool, 'ssam_discover');
-  assert.match(out.continuation.why, /implante de novo/);
+  assert.match(out.continuation.why, /deploy again/);
   assert.equal(portalCalls(h.calls).filter(c => h.requests.get(c[1]).method === 'POST').length, 1);
   // A publish or build read with messages answers the same log shape.
   const pub = harness({ portalCall: request => request.path.endsWith('/messages') ? { ok: true, status: 200, body: messages } : { ok: true, status: 200, body: { key: DEP1, status: 'Finished' } } });

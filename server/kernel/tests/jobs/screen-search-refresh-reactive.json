@@ -1,5 +1,5 @@
 {
- "description": "cold-b: tela Reactive UserSearch com input ligado a variavel local Search, aggregate GetUsers sobre User filtrado por nome (like), Table nativa com Name/Email, botao Refresh -> screen action RefreshUsers (IRefreshDataNode sobre o aggregate) e botao New -> tela UserNew (so titulo) (escrito por uma LLM sem contexto na sessao fria B de 2026-09-04, passou a primeira)",
+ "description": "cold-b: Reactive screen UserSearch with an input bound to the local variable Search, aggregate GetUsers over User filtered by name (like), native Table with Name/Email, button Refresh -> screen action RefreshUsers (IRefreshDataNode over the aggregate) and button New -> screen UserNew (title only) (written by an LLM without context in cold session B of 2026-09-04, passed the first time)",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "ops": [

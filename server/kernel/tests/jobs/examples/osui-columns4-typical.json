@@ -1,5 +1,5 @@
 {
- "description": "Columns4 (OutSystemsUI, Adaptive) tipico; placeholders Column1, Column2, Column3, Column4 com dados do aggregate de tarefas.",
+ "description": "Typical Columns4 (OutSystemsUI, Adaptive); placeholders Column1, Column2, Column3, Column4 with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

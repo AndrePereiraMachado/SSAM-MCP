@@ -1,5 +1,6 @@
 // o11_publish on a real McpServer over InMemoryTransport, against the fake O11 bridge on an ephemeral loopback port.
 // No Studio, no dotnet, no Python, nothing published; every folder is temporary.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -94,7 +95,7 @@ test('the tool is listed with its schema, destructive annotations and a descript
   assert.equal(schema.additionalProperties, false);
   assert.doesNotMatch(JSON.stringify(schema), /password|secret|token|credential/i);
   assert.deepEqual(tool.annotations, { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
-  assert.match(tool.description, /"publicado"/); assert.match(tool.description, /TrueChange/); assert.match(tool.description, /never repeated/);
+  assert.match(tool.description, /"published"/); assert.match(tool.description, /TrueChange/); assert.match(tool.description, /never repeated/);
   assert.doesNotMatch(tool.description, SHELL);
   // Unknown keys and out-of-range values are refused before anything runs.
   for (const args of [{ module: 'Orders', authorize: WORDS, password: 'x' }, { module: 'Orders', authorize: WORDS, timeoutSeconds: 0 },
@@ -126,12 +127,12 @@ test('assertSelected runs before anything; a changed selection refuses with ssam
   assert.deepEqual(h.events, []);
 });
 
-test('published: the answer is "publicado" with lastPublication, after select, active module and TrueChange, with the words kept as a hash', async t => {
+test('published: the answer is "published" with lastPublication, after select, active module and TrueChange, with the words kept as a hash', async t => {
   let journalAtPublish = null;
   const h = await harness(t, { publish: (request, box) => { journalAtPublish = fs.readFileSync(box.journal, 'utf8'); return PUBLISHED_REPLY; } });
   const reply = await h.client.callTool({ name: 'o11_publish', arguments: { module: 'Orders', authorize: WORDS, expectedEnvironment: HOST } });
   // Section 3.2: the publication answers its lastPublication (by SSAM, from the publish result).
-  assert.deepEqual(reply.structuredContent, { ok: true, result: 'publicado', lastPublication: { at: '2026-10-02T10:15:03.000Z', status: 'succeeded',
+  assert.deepEqual(reply.structuredContent, { ok: true, result: 'published', lastPublication: { at: '2026-10-02T10:15:03.000Z', status: 'succeeded',
     version: null, author: null, by: 'ssam', source: 'publish-result' } });
   assert.deepEqual(JSON.parse(reply.content[0].text), reply.structuredContent);
   assert.equal(reply.isError, undefined);
@@ -152,14 +153,14 @@ test('published: the answer is "publicado" with lastPublication, after select, a
   const all = fs.readFileSync(h.box.journal, 'utf8') + JSON.stringify(h.tasks());
   assert.ok(!all.includes(WORDS), 'the words are never written');
   const [task] = h.tasks();
-  assert.equal(task.tool, 'o11_publish'); assert.equal(task.state, 'ok'); assert.equal(task.result.result, 'publicado');
+  assert.equal(task.tool, 'o11_publish'); assert.equal(task.state, 'ok'); assert.equal(task.result.result, 'published');
   assert.equal(task.summary.operationId, lines[0].operationId);
 });
 
 test('message and timeoutSeconds reach the bridge publish', async t => {
   const h = await harness(t);
   const reply = await h.client.callTool({ name: 'o11_publish', arguments: { module: 'orders', authorize: WORDS, message: 'Pedidos v2', timeoutSeconds: 900 } });
-  assert.equal(reply.structuredContent.result, 'publicado');
+  assert.equal(reply.structuredContent.result, 'published');
   assert.deepEqual(h.sent('publish')[0].params, { message: 'Pedidos v2', timeout: 900, module_key: 'k-orders', environment: HOST });
   assert.deepEqual(h.sent('open_module')[0].params, { name: 'orders', timeout: 120, silent: true });
 });
@@ -239,7 +240,7 @@ test('the checks of PublishHandler before the command started are refusals, not 
   }
 });
 
-test('a failure reported by the Studio after running is a failed publication, never "publicado"', async t => {
+test('a failure reported by the Studio after running is a failed publication, never "published"', async t => {
   const h = await harness(t, { publish: fail('publish: \'Orders\' completed with failure; an upload is not a successful publication. Check the server compilation/deployment messages.') });
   const value = await h.call({ module: 'Orders', authorize: WORDS });
   assert.equal(value.code, 'PUBLISH_FAILED'); assert.equal(value.outcome, 'failed'); assert.match(value.operationId, UUID);
@@ -273,7 +274,7 @@ test('a failed publication carries every message the Studio showed, errors first
   assert.match(value.error, /failed at compile: Invalid SQL in 'GetOrders'; it is not published/);
   assert.deepEqual(value.continuation, { tool: 'ssam_map', arguments: { lane: 'o11', target: 'Orders', name: 'GetOrders' },
     why: value.continuation.why });
-  assert.match(value.continuation.why, /Corrija em GetOrders.*o11_publish com as palavras do usuário/);
+  assert.match(value.continuation.why, /Fix it in GetOrders.*o11_publish with the user's words/);
   assert.equal(h.sent('publish').length, 1); assert.equal(h.sent('publish_log').length, 0, 'the messages came with the refusal');
   assert.equal(h.journal().at(-1).outcome, 'failed');
 });
@@ -313,7 +314,7 @@ test('a timeout after the request left is uncertain: never repeated, check the S
   const value = await h.call({ module: 'Orders', authorize: WORDS });
   assert.equal(value.ok, false); assert.equal(value.outcome, 'uncertain'); assert.equal(value.code, 'PUBLISH_UNCERTAIN');
   assert.deepEqual({ tool: value.continuation.tool, arguments: value.continuation.arguments }, STATUS);
-  assert.match(value.continuation.why, /antes de qualquer nova tentativa/);
+  assert.match(value.continuation.why, /before any new attempt/);
   assert.match(value.error, /Nothing was repeated/);
   assert.equal(h.sent('publish').length, 1, 'publish is sent once and never repeated');
   const lines = h.journal();
@@ -380,7 +381,7 @@ test('publishConsumersOf publishes each consumer of a non-tab producer and stops
 
 test('publishOutcome: the pure classification', () => {
   const active = { name: 'Orders' };
-  assert.deepEqual(publishOutcome({ data: { module: 'Orders', published: true } }, active), { ok: true, result: 'publicado' });
+  assert.deepEqual(publishOutcome({ data: { module: 'Orders', published: true } }, active), { ok: true, result: 'published' });
   assert.equal(publishOutcome({ data: { module: 'Orders', published: false } }, active).outcome, 'uncertain');
   assert.equal(publishOutcome({ data: { module: 'Customers', published: true } }, active).outcome, 'uncertain');
   assert.equal(publishOutcome({ error: new BridgeError('connect ECONNREFUSED', { code: 'BRIDGE_NOT_LISTENING', executed: false }) }, active).code, 'O11_NOT_CONNECTED');

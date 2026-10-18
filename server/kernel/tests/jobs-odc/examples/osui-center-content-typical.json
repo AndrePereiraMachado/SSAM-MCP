@@ -1,5 +1,5 @@
 {
- "description": "CenterContent do OSUI com altura: icone no Top, mensagem ligada a variavel no Center e link de volta no Bottom.",
+ "description": "CenterContent of OSUI with a height: an icon in Top, a message bound to a variable in Center and a link back in Bottom.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

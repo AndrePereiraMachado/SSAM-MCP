@@ -1,5 +1,5 @@
 {
- "description": "Loja (parte 3 de 4): tela ProductDetail com o input ProductId - foto externa, nome, categoria, preco e descricao; quantidade e botao que chama Cart_Add, avisa e abre o carrinho; link com icone para o carrinho.",
+ "description": "Store (part 3 of 4): the ProductDetail screen with the input ProductId - external photo, name, category, price and description; a quantity and a button that calls Cart_Add, notifies and opens the cart; a link with an icon to the cart.",
  "base": "job:ecommerce-02-cart",
  "expectValid": true,
  "expectedMessages": [],
@@ -13,7 +13,7 @@
   {"op": "set", "target": "$qty", "prop": "DataType", "value": "Integer"},
   {"op": "set", "target": "$qty", "prop": "DefaultValue", "value": "1"},
 
-  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProduct", "as": "$agg", "_why": "1. o produto do input, com a categoria (static entity) pelo join"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProduct", "as": "$agg", "_why": "1. the product of the input, with the category (static entity) through the join"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}, "as": "$srcProduct"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IStaticEntity:Category"}, "as": "$srcCategory"},
   {"op": "create", "parent": "$agg", "type": "IJoin", "as": "$join"},
@@ -23,7 +23,7 @@
   {"op": "set", "target": "$join", "prop": "Condition", "value": "Product.CategoryId = Category.Id"},
   {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "Product.Id = ProductId"}},
 
-  {"op": "logic", "_why": "2. adicionar ao carrinho: servidor, mensagem e navegacao", "data": {"actions": [
+  {"op": "logic", "_why": "2. add to the cart: server, message and navigation", "data": {"actions": [
    {"name": "AddToCart", "kind": "screen", "owner": "IMobileScreen:ProductDetail",
     "steps": [
      {"call": "Cart_Add", "as": "Add", "args": {"ProductId": "ProductId", "Quantity": "Quantity"}},
@@ -32,7 +32,7 @@
 
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "GetProduct.List.Current.Product.Name"},
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Actions", "type": "ILink", "name": "CartLink", "as": "$cartLink", "_why": "3. link com icone e texto no topo"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Actions", "type": "ILink", "name": "CartLink", "as": "$cartLink", "_why": "3. a link with an icon and a text at the top"},
   {"op": "delete", "target": "$cartLink/#ITextWidget"},
   {"op": "create", "parent": "$cartLink", "type": "IIcon", "name": "CartIcon", "as": "$cartIcon"},
   {"op": "set", "target": "$cartIcon", "prop": "Icon", "value": "shopping-cart"},

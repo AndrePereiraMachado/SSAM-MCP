@@ -1,5 +1,5 @@
 {
- "description": "Tela Traditional Web com padroes do OutSystemsUIWeb (Columns2, Card, Accordion/AccordionItem) montada com a referencia gerada em docs/ui/OutSystemsUIWeb",
+ "description": "Traditional Web screen with OutSystemsUIWeb patterns (Columns2, Card, Accordion/AccordionItem) assembled with the reference generated in docs/ui/OutSystemsUIWeb",
  "base": "tests/fixtures/traditional-ui.oml",
  "expectValid": true,
  "ops": [

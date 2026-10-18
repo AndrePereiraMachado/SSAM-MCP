@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';
 import {emptyRoleAssignmentApproval,EMPTY_ROLE_GRANT,EMPTY_ROLE_REVOKE} from '../runtime/empty-role-assignment-approval.mjs';
 import {ORG_ROLE_CREATE} from '../runtime/organization-role-approval.mjs';import {USER_CREATE} from '../runtime/inactive-user-approval.mjs';

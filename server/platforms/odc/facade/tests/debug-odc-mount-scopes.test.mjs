@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {expandMountLifecycleScopes,mountLifecycleScopesIssues,mountLifecycleLimits} from '../debug-odc-mount-scopes.mjs';
 const M='7WNw7ud8AEKh1ftGQYhllg',sha='a'.repeat(64);

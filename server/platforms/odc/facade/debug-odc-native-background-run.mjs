@@ -1,3 +1,4 @@
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -48,7 +49,7 @@ export function odcBackgroundTrace(lines, functionKey) {
 const portalState = ({applicationUserContext:_a,appUserIdentityProved:_b,rolesProved:_r,propagationProved:_p,requestOwnershipProved:_o,executionCompleted:_e,...state}) => state;
 
 export async function runOdcNativeBackground(input, prepared, readers, services = {}) {
-  if (input.contextMode !== 'native-background' || typeof input.words !== 'string' || !input.words.trim()) fail('explicit_authorization_required');
+  if (input.contextMode !== 'native-background' || !wordsGiven(input.words)) fail('explicit_authorization_required'); // CX15 r7: one predicate
   if (input.context !== undefined || prepared.scenarios.some(s=>s.context!==undefined)) fail('owner_context_unsupported');
   if (prepared.scenarios.length !== 1 || Object.keys(prepared.scenarios[0].inputs??{}).length) fail('timer_has_no_direct_inputs');
   // Interactive Portal wake (run.trigger:'portal-wake' in the server session): no launch, inputs or Workflow.

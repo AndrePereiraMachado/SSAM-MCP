@@ -1,6 +1,7 @@
 // Package 3, lane mb, C25: studio_create_app publishes only when asked, reuses a template the facade already holds when the
 // tenant's revision is the same (template-download --have), and builds the model on the resident ODC worker when it can.
 // Fake bridge, fake kernel, fake worker: no Studio, no tenant, no process.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

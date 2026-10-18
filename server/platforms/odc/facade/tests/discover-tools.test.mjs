@@ -1,3 +1,5 @@
+import './fixtures/isolated-profile.mjs';
+import { sessionText } from './fixtures/session-rules.mjs';
 // ssam_discover as the single entry of every SSAM request (tool-routing.mjs): the tool router over realistic requests
 // (top-1/top-3), silence on model changes, the regression of the model answers against the baseline captured before the
 // router existed, the behaviour per intent class, the byte budget and the MCP strings. The index tests need the lane
@@ -5,6 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ANSWER_BUDGETS } from '../answer-size.mjs';
+import { EXPANSION_DEFAULT_BYTES, budgetCeiling } from '../context-budget.mjs';
 import { wireBytes } from './fixtures/answer-wire.mjs';
 
 test('answer budgets distinguish first discovery from explicit expansion in both lanes; cuts have executable calls', async () => {
@@ -14,7 +17,7 @@ test('answer budgets distinguish first discovery from explicit expansion in both
       request = input;
       return { ok: true, lane, intent: input.intent, size: { bytes: 0, budgetBytes: input.budgetBytes, truncated: [{ section: 'context', recover: 'x'.repeat(100) }] } };
     } });
-    assert.equal(request.budgetBytes, extra.budgetBytes ?? (Object.keys(extra).length ? 40960 : ANSWER_BUDGETS.discoverFirst));
+    assert.equal(request.budgetBytes, extra.budgetBytes ?? (Object.keys(extra).length ? EXPANSION_DEFAULT_BYTES : ANSWER_BUDGETS.discoverFirst));
     const omitted = answer.size.truncated[0];
     assert.equal(omitted.call.tool, 'ssam_discover');
     assert.equal(omitted.call.arguments.lane, lane);
@@ -215,7 +218,20 @@ test('discoverAll keeps the model answers of the baseline (matches identical, mo
       assert.equal('tools' in answer, false, `${lane} ${i.id}: no tools key on a model-only answer`);
       // A raised budget is a measured minimal, and the answer measured holds elapsedMs: its digits move it by a byte.
       const settled = a => stable(raised ? { ...a, inputAdjusted: a.inputAdjusted?.map(x => ({ ...x, to: 0 })), size: { ...a.size, budgetBytes: 0, budgetAdjusted: { ...a.size?.budgetAdjusted, to: 0 } } } : a);
-      if (isDeepStrictEqual(settled(answer), settled(plain))) identical++; else diffs.push(`${lane} ${i.id}: answer differs from discover()`);
+      if (isDeepStrictEqual(settled(answer), settled(plain))) identical++;
+      else {
+        const firstDifference = (actual, expected, at = '') => {
+          if (isDeepStrictEqual(actual, expected)) return null;
+          if (actual && expected && typeof actual === 'object' && typeof expected === 'object') {
+            for (const key of new Set([...Object.keys(actual), ...Object.keys(expected)])) {
+              const diff = firstDifference(actual[key], expected[key], at + '/' + key); if (diff) return diff;
+            }
+          }
+          return { at, actual, expected };
+        };
+        t.diagnostic(JSON.stringify({ lane, id: i.id, budget, difference: firstDifference(settled(answer), settled(plain)) }));
+        diffs.push(`${lane} ${i.id}: answer differs from discover()`);
+      }
     }
   }
   t.diagnostic(`${probes} probes compared with the baseline at the entry; ${raisedProbes} raised to the minimal answer; ${identical} model-only answers deep-equal to discover(); ${floored} under the floor of their sections (OutSystems UI, C07)`);
@@ -541,7 +557,7 @@ test('tools fit the byte budget around the model part (4096, 12000, 40960)', asy
       // A model part kept beside the tools (a mixed request) below its minimal answer is raised to it, with the room of
       // the tools, under the answer ceiling, and the answer says so (discovery.mjs atEntry, 2026-10-11).
       const raised = a.inputAdjusted?.find(x => x.path === '/budgetBytes');
-      if (raised) assert.ok(raised.from === budgetBytes && raised.rule === 'raise-to-minimal' && raised.to > budgetBytes && raised.to <= 38912, JSON.stringify(raised));
+      if (raised) assert.ok(raised.from === budgetBytes && raised.rule === 'raise-to-minimal' && raised.to > budgetBytes && raised.to <= budgetCeiling(), JSON.stringify(raised));
       const B = raised?.to ?? budgetBytes;
       assert.equal(a.size.budgetBytes, B);
       assert.ok(wireBytes(a) <= B, `${lane} ${budgetBytes} ${intent}: within budget`);
@@ -552,15 +568,24 @@ test('tools fit the byte budget around the model part (4096, 12000, 40960)', asy
 test('the MCP surface tells every session to start each request with ssam_discover (no tool call)', async () => {
   const { createSsamServer } = await import('../ssam.mjs');
   const { createFacadeServer } = await import('../mcp.mjs');
-  for (const make of [() => createSsamServer(), () => createFacadeServer()]) {
+  // Each server is judged by what it serves. The ssam server serves its full session guide through ssam_reference
+  // (sessionText = instructions + guide); the standalone ODC server serves no guide, so only getInstructions() counts,
+  // and a rule its instruction leaves out must be in the description of a tool it serves.
+  for (const [label, make] of [['ssam', () => createSsamServer()], ['odc-facade', () => createFacadeServer()]]) {
     const server = await make();
     const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'discover-tools-test', version: '1.0.0' });
     await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
     try {
-      assert.match(client.getInstructions(), /Every SSAM request starts with ssam_discover \{intent, lane\}/);
-      assert.match(client.getInstructions(), /To read an application, start with ssam_map \{lane, target, view:"digest"\}/);
-      const tool = (await client.listTools()).tools.find(t => t.name === 'ssam_discover');
+      const tools = (await client.listTools()).tools;
+      if (label === 'ssam') {
+        assert.match(sessionText(client), /Every request starts ssam_discover \{intent,lane\}/);
+        assert.match(sessionText(client), /Read an app once with ssam_map \{lane,target,view:"digest"\}/);
+      } else {
+        assert.match(client.getInstructions(), /Every request starts ssam_discover \{intent,lane\}/, label);
+        assert.match(tools.find(t => t.name === 'ssam_map').description, /view "digest".*Read it once and work in context; inspect only to go deeper into an @key/, label);
+      }
+      const tool = tools.find(t => t.name === 'ssam_discover');
       assert.match(tool.description, /^Start EVERY SSAM request here, model change or not\./);
       assert.match(tool.description, /`tools`.*exact MCP tool, its verb/);
       assert.doesNotMatch(tool.description, /^\[odc\]/);

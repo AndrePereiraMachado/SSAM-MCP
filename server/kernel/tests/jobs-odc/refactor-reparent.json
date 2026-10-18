@@ -1,5 +1,5 @@
 {
- "description": "O espelho de tests/jobs/refactor-reparent.json na faixa ODC (mesmo kernel, mesmo verbo, IModelServices.MoveObject do ODC Studio). O verbo move com `into` MUDA O PAI, pelos dois caminhos do arrastar do Studio. (1) Widget para outro contentor, antes de um irmao: o move nativo da plataforma (IModelServices.MoveObject) recria o widget e os filhos no pai novo e religa os consumidores; a expressao `RpDentro.Id + RpNeto.Id` continua a citar os dois, e a CHAVE muda (key.preserved false, keysChanged conta a subarvore). (2) Tela para outro UI flow: o botao que navega para ela segue-a, e a Description escrita antes continua cobrada pelo contrato de dados, agora na chave nova. (3) Bloco privado para outro UI flow: a instancia que o usa segue-o. (4) Atributo para outra entidade, depois de um irmao. (5) Client action para uma pasta de Client Actions e de volta para a raiz (`into: @espace`): so a propriedade Folder muda, a chave e os consumidores ficam iguais (key.preserved true). Cada move devolve consumidores antes/religados e as chaves antes/depois; o conjunto final de consumidores e conferido de novo depois de gravar e recarregar (refactorProof). As recusas (destino incompativel, consumidor fora de alcance) estao em tests/jobs-odc-negative/move-into-incompatible.json e tests/jobs-odc-negative/move-into-out-of-reach.json.",
+ "description": "The mirror of tests/jobs/refactor-reparent.json in the ODC lane (same kernel, same verb, IModelServices.MoveObject of the ODC Studio). The verb move with `into` CHANGES THE PARENT, through the two drag paths of the Studio. (1) Widget to another container, before a sibling: the native move of the platform (IModelServices.MoveObject) recreates the widget and the children in the new parent and relinks the consumers; the expression `RpDentro.Id + RpNeto.Id` still cites both, and the KEY changes (key.preserved false, keysChanged counts the subtree). (2) Screen to another UI flow: the button that navigates to it follows it, and the Description written earlier is still charged by the data contract, now on the new key. (3) Private block to another UI flow: the instance that uses it follows it. (4) Attribute to another entity, after a sibling. (5) Client action to a Client Actions folder and back to the root (`into: @espace`): only the Folder property changes, the key and the consumers stay the same (key.preserved true). Each move returns consumers before/relinked and the keys before/after; the final set of consumers is checked again after saving and reloading (refactorProof). The refusals (incompatible destination, consumer out of reach) are in tests/jobs-odc-negative/move-into-incompatible.json and tests/jobs-odc-negative/move-into-out-of-reach.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "ops": [
@@ -16,7 +16,7 @@
   {"op": "set", "target": "$usa", "prop": "Value", "value": "RpDentro.Id + RpNeto.Id"},
   {"op": "usages", "target": "$dentro", "_why": "(1) ANTES: 1 consumidor, a expressao em RpBoxB"},
   {"op": "move", "target": "$dentro", "into": "$b", "before": "$ja", "_why": "(1) consumers.rewired 2 (RpDentro e RpNeto), order RpDentro, RpJa, <IExpression>"},
-  {"op": "usages", "target": "$dentro", "_why": "(1) DEPOIS: o mesmo consumidor, agora do objeto movido (o alias segue o objeto)"},
+  {"op": "usages", "target": "$dentro", "_why": "(1) AFTER: the same consumer, now of the moved object (the alias follows the object)"},
   {"op": "usages", "target": "$neto"},
 
   {"op": "create", "parent": "@espace", "type": "IMobileFlow", "name": "RpOtherFlow", "as": "$flow"},
@@ -28,7 +28,7 @@
   {"op": "create", "parent": "$b", "type": "IButton", "name": "RpGoTarget", "as": "$btn"},
   {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Target"},
   {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$target"},
-  {"op": "move", "target": "$target", "into": "$flow", "_why": "(2) o OnClick do botao segue a tela; keysChanged conta a tela e o que ela tem dentro"},
+  {"op": "move", "target": "$target", "into": "$flow", "_why": "(2) the OnClick of the button follows the screen; keysChanged counts the screen and what it has inside"},
   {"op": "usages", "target": "$target"},
 
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "RpBlock", "as": "$block"},
@@ -52,9 +52,9 @@
   {"op": "create", "parent": "$b", "type": "IButton", "name": "RpRun", "as": "$run"},
   {"op": "set", "target": "$run/#ITextWidget", "prop": "Text", "value": "Run"},
   {"op": "set", "target": "$run/OnClick", "prop": "Destination", "value": "IMobileScreen:RpScreen/RpRunClient"},
-  {"op": "move", "target": "IClientAction:RpClientAction", "into": "$folder", "_why": "(5) moved folder: key.preserved true, consumers 1 antes e 1 depois (o no CallIt)"},
+  {"op": "move", "target": "IClientAction:RpClientAction", "into": "$folder", "_why": "(5) moved folder: key.preserved true, consumers 1 before and 1 after (the CallIt node)"},
   {"op": "get", "target": "IClientAction:RpClientAction"},
-  {"op": "move", "target": "IClientAction:RpClientAction", "into": "@espace", "_why": "(5) de volta para a raiz: Folder null, a mesma chave"},
+  {"op": "move", "target": "IClientAction:RpClientAction", "into": "@espace", "_why": "(5) back to the root: Folder null, the same key"},
   {"op": "usages", "target": "IClientAction:RpClientAction"}
  ]
 }

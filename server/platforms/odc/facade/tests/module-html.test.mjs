@@ -2,6 +2,7 @@
 // the list of screens and blocks, one screen in pages of whole lines that never exceed the budget and join back to the
 // text the reader wrote, every continuation pinned to the same capture, the keys inline only on request, and the
 // arguments that belong to other views refused with their own words.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

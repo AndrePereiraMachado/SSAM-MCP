@@ -1,4 +1,5 @@
 // trackTask and ssam_task: one file per task in a temporary folder, read back by a real McpServer over InMemoryTransport.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -20,14 +21,14 @@ test('a task is recorded as running while it runs, then with its state, times an
   let seen;
   const value = await trackTask({ tool: 'o11_deliver', summary: { module: 'Orders', authorize: 'sim pode', nested: { words: 'x', keep: 1 } }, dir, now }, async task => {
     seen = JSON.parse(fs.readFileSync(path.join(dir, task.id + '.json'), 'utf8'));
-    return { ok: true, result: 'entregue', huge: 'y'.repeat(10000) };
+    return { ok: true, result: 'delivered', huge: 'y'.repeat(10000) };
   });
-  assert.deepEqual(value.result, 'entregue');
+  assert.deepEqual(value.result, 'delivered');
   assert.equal(seen.state, 'running'); assert.equal(seen.pid, process.pid); assert.equal(seen.endedAt, undefined);
   const [task] = listTasks({ dir });
   assert.equal(task.state, 'ok'); assert.equal(task.tool, 'o11_deliver');
   assert.deepEqual(task.summary, { module: 'Orders', nested: { keep: 1 } }, 'words never reach the file');
-  assert.deepEqual(task.result, { ok: true, result: 'entregue' });
+  assert.deepEqual(task.result, { ok: true, result: 'delivered' });
   assert.ok(Date.parse(task.endedAt) > Date.parse(task.startedAt));
   assert.ok(!fs.readFileSync(path.join(dir, task.id + '.json'), 'utf8').includes('sim pode'));
 });

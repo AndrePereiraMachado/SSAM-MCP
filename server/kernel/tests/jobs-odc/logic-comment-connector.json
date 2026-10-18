@@ -1,8 +1,8 @@
 {
- "description": "Comentario de fluxo LIGADO ao passo que ele comenta. O ICommentNode ja nascia pela chave comments da op logic, mas solto: nada criava o ICommentConnector, que e o tipo mais usado do trio no mundo real (3054 instancias em 31 dos 44 modulos do censo, sempre com Source e Target definidos e Label nunca). O link so passou a funcionar depois de o kernel escolher a sobrecarga de CreateConnector pelo TIPO DO ALVO: a classe concreta Comment implementa cinco areas do modelo (Logic.Nodes, UI.Web, UI.Mobile, Processes, BusinessProcesses) e expoe uma sobrecarga por area, e a ordem de Type.GetInterfaces() nao e garantida pelo CLR -- com a primeira que aparecesse, o link morria a dizer que o conector nao existe. A direcao e obrigatoriamente comentario -> no: o Comment nao aceita ligacao de entrada de um no comum.",
+ "description": "Flow Comment LINKED to the step it comments on. The ICommentNode was already being born through the comments key of the logic op, but loose: nothing created the ICommentConnector, which is the most used type of the trio in the real world (3054 instances in 31 of the 44 modules of the census, always with Source and Target defined and Label never). The link only started to work after the kernel chose the CreateConnector overload by the TYPE OF THE TARGET: the concrete class Comment implements five areas of the model (Logic.Nodes, UI.Web, UI.Mobile, Processes, BusinessProcesses) and exposes one overload per area, and the order of Type.GetInterfaces() is not guaranteed by the CLR -- with whichever came first, the link died saying that the connector does not exist. The direction is necessarily comment -> node: the Comment does not accept an incoming link from an ordinary node.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCommented_Total (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCommented_Total (ServerAction)", "why": "ODC: an app (CrossDevice) does not expose a public server action (the live Studio gives an error); the action stays private and without a consumer in this proof job"}],
  "ops": [
   {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfCommented_Total", "as": "$act"},
   {"op": "create", "parent": "$act", "type": "IInputParameter", "name": "Quantidade", "as": "$in"},
@@ -21,15 +21,15 @@
   {"op": "link", "from": "$n1", "to": "$n9"},
 
   {"op": "create", "parent": "$act", "type": "ICommentNode", "name": "PorqueDobra", "as": "$nota",
-   "_why": "o no de comentario e criavel pelo verbo create; a op logic tambem o cria pela chave comments, mas sempre solto"},
+   "_why": "the comment node can be created by the create verb; the logic op also creates it through the comments key, but always loose"},
   {"op": "set", "target": "$nota", "prop": "Text", "value": "Dobra porque o contrato do fornecedor conta cada item duas vezes."},
   {"op": "set", "target": "$nota", "prop": "IsReminder", "value": false},
 
   {"op": "link", "from": "$nota", "to": "$n1",
-   "_why": "E ESTE o op que o job existe para provar: cria o ICommentConnector do comentario para o passo comentado. Antes do conserto do kernel morria com 'has no connector Target'."},
+   "_why": "THIS is the op that the job exists to prove: it creates the comment's ICommentConnector to the commented step. Before the kernel fix it died with 'has no connector Target'."},
 
   {"op": "layout", "target": "$act"},
-  {"op": "get", "target": "$nota", "_why": "Connectors passa de 0 para 1; Label do conector fica vazio, como em toda a producao"},
+  {"op": "get", "target": "$nota", "_why": "Connectors goes from 0 to 1; the connector's Label stays empty, as in all production"},
   {"op": "dump", "target": "$act", "depth": 2}
  ]
 }

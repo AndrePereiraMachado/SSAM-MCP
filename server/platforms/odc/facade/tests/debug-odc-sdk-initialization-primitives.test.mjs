@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {qualifyOdcSdkInitializationPrimitives} from '../debug-odc-sdk-initialization-primitives.mjs';
 const file='_oschunk-SDK.js',contract={file,helperExport:'a',controllerExport:'I'};

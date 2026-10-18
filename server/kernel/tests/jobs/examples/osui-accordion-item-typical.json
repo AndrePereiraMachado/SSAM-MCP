@@ -1,5 +1,5 @@
 {
- "description": "AccordionItem (OutSystemsUI, Content) tipico; dentro de um Accordion vazio (placeholder Content); placeholders Title, CustomIcon, Content com dados do aggregate de tarefas; eventos OnToggle, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "description": "Typical AccordionItem (OutSystemsUI, Content); inside an empty Accordion (placeholder Content); placeholders Title, CustomIcon, Content with data of the tasks aggregate; events OnToggle, Initialized handled by screen actions that keep the parameters in variables.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

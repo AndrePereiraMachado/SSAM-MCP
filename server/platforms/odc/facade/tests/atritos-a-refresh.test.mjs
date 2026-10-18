@@ -3,6 +3,7 @@
 // the environment session (ReferenceRefresher.RefreshModule -> Publisher.Publish, Start1CP), while publish-log reads the
 // Service Studio's 1-Click Publish tabs. Now the refresh-refs answer carries the published version, the time and the
 // operationId of its journal line, and publish-log says which publications it observes and where the others are.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

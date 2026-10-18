@@ -2,6 +2,7 @@
 // both secrets shown once and kept only as SHA-256, verify vs verifyAgent, agent-rotate, revoke kills both, lanes,
 // and phase-1 records (no agent fields) still valid. The owner console's verbs: renew and setLanes (store and CLI),
 // error codes behind unchanged messages, and the writers' lock + atomic replace shared by the CLI and the console.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -283,14 +284,14 @@ test('server-token renew and lanes: outputs, notes and usage errors', () => {
   assert.equal(Date.parse(renewed.renewed.expiresAt) - Date.parse(issued.expiresAt), 30 * DAY);
   assert.deepEqual(Object.keys(renewed.renewed).sort(), VIEW_KEYS);
   assert.equal(renewed.renewed.state, 'active');
-  assert.equal(renewed.note, 'A validade nova vale já. Uma licença vencida volta a valer: o agente reconecta sozinho e o cliente abre sessões novas.');
+  assert.equal(renewed.note, 'The new expiry holds now. An expired license holds again: the agent reconnects by itself and the client opens new sessions.');
   const changed = cli(['lanes', '--id', issued.id, '--lanes', 'odc']);
   assert.deepEqual(Object.keys(changed), ['ok', 'changed', 'previousLanes', 'note']);
   assert.equal(changed.ok, true);
   assert.deepEqual(changed.previousLanes, ['odc', 'o11']);
   assert.deepEqual(changed.changed.lanes, ['odc']);
   assert.deepEqual(Object.keys(changed.changed).sort(), VIEW_KEYS);
-  assert.equal(changed.note, 'Vale para sessões novas; as abertas mantêm as faixas antigas até fecharem (60 min sem uso ou reconexão do cliente).');
+  assert.equal(changed.note, 'It holds for new sessions; the open ones keep the old lanes until they close (60 min unused or a client reconnection).');
   const again = cli(['lanes', '--id', issued.id, '--lanes', 'ODC']);
   assert.deepEqual([again.previousLanes, again.changed.lanes], [['odc'], ['odc']], 'the same set answers ok');
   assert.ok(!JSON.stringify([renewed, changed, again]).includes('ssam_'), 'no secret in the CLI answers');

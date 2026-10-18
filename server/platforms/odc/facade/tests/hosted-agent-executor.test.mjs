@@ -1,5 +1,6 @@
 // hosted/agent-executor.mjs (docs/FASE2-AGENTE.md 4.2, 4.3, 4.7): the error contract (never delivered vs delivered with
 // an unknown outcome, per kind) and the O11 connection record synthesized for the server's O11 modules. Fake AgentLink.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -92,4 +93,37 @@ test('the executor is hosted, with an id of its own per instance, and closes its
   await h.executor.close();
   assert.equal(h.executor.relayPort(), null);
   assert.ok(port > 0);
+});
+
+// B1 (round 3 of studio-build-identity, C:\t\revisoes\studio-build-id-2\REVISAO.md): the o11.connect is judged by the
+// process it attaches, like the odc.attach (A1): another build under "refuse" never reaches the agent; without pid the only
+// Service Studio is judged (the one the agent would choose); with several, the agent answers STUDIO_NOT_SELECTED itself.
+test('B1: o11.connect to a Service Studio the server does not serve is refused before the agent, with or without pid', async () => {
+  const kernel = { o11: '11.55.92', odc: '1.7.28', odcBridge: 'v35', builds: { o11: '11.55.92.6000' }, studioBuildPolicy: 'refuse' };
+  const make = processes => {
+    const dirs = hostedDirs(os.tmpdir());
+    fs.writeFileSync(path.join(dirs.workspace, 'state', 'relay-authority', 'bridge.key'), randomBytes(32).toString('base64url'));
+    const unserved = [];
+    const link = fakeAgentLink({ agentRoot: dirs.agentRoot, info: { kernel }, handlers: {
+      'studio.processes': ({ image }) => ({ processes: image === 'ServiceStudio.exe' ? processes : [] }),
+      'o11.connect': ({ pid }) => ({ ok: true, lane: 'o11', connected: true, pid: pid ?? processes[0].pid, startedUtc: '2026-10-16T09:00:00Z', studioVersion: processes[0].version }) } });
+    link.studioUnserved = (lane, identity, cause) => unserved.push([lane, identity.installed, cause]);
+    const executor = new AgentExecutor({ link, workspace: dirs.workspace, relayAuthorityDir: path.join(dirs.workspace, 'state', 'relay-authority') });
+    return { link, executor, unserved, connects: () => link.calls.filter(c => c.kind === 'o11.connect').length };
+  };
+  const updated = make([{ pid: 6101, path: 'C:\\x\\ServiceStudio.exe', version: '11.55.92.6011' }]);
+  for (const params of [{ pid: 6101 }, {}])
+    await assert.rejects(updated.executor.call('o11.connect', params), e => e.code === 'STUDIO_VERSION_MISMATCH' && e.executed === false && e.sent === false
+      && e.continuation?.tool === 'ssam_doctor' && /11\.55\.92\.6011/.test(e.message) && /11\.55\.92\.6000/.test(e.message), JSON.stringify(params));
+  assert.equal(updated.connects(), 0, 'the agent never saw the connect');
+  assert.deepEqual(updated.unserved[0], ['o11', '11.55.92.6011', 'STUDIO_VERSION_NOT_SERVED_YET']);
+  const served = make([{ pid: 6102, path: 'C:\\x\\ServiceStudio.exe', version: '11.55.92.6000' }]);
+  assert.equal((await served.executor.call('o11.connect', {})).pid, 6102);
+  assert.equal(served.connects(), 1);
+  assert.deepEqual(served.unserved, []);
+  const several = make([{ pid: 6103, path: 'C:\\x\\ServiceStudio.exe', version: '11.55.92.6011' }, { pid: 6104, path: 'C:\\x\\ServiceStudio.exe', version: '11.55.92.6000' }]);
+  await several.executor.call('o11.connect', {});
+  assert.equal(several.connects(), 1, 'several Studios and no pid: no verdict here, the agent chooses or refuses');
+  await assert.rejects(several.executor.call('o11.connect', { pid: 6103 }), e => e.code === 'STUDIO_VERSION_MISMATCH');
+  assert.equal(several.connects(), 1);
 });

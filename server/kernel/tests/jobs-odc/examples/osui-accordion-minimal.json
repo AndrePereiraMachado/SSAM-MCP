@@ -1,5 +1,5 @@
 {
- "description": "Accordion do OSUI: a instancia com os tres AccordionItem de exemplo, que ja nascem validos.",
+ "description": "Accordion of OSUI: the instance with the three sample AccordionItem, which are already born valid.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

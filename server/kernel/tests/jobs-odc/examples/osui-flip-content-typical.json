@@ -1,5 +1,5 @@
 {
- "description": "FlipContent do OSUI: o nome do produto na frente, o preco no verso, StartsFlipped por variavel e OnFlip guardando o lado visivel.",
+ "description": "FlipContent of OSUI: the name of the product on the front, the price on the back, StartsFlipped by a variable and OnFlip keeping the visible side.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

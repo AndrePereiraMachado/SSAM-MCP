@@ -1,5 +1,6 @@
 // Rules of the render lane (docs/PROTOTIPO-NATIVO.md 2.1-2.11), one test per rule over the pure modules: formats,
 // predicates, annotations, names, IR, CSS inventory, script literals, vendor cache, network, perturbation, patches.
+import './fixtures/isolated-profile.mjs';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

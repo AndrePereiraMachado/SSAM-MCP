@@ -146,21 +146,21 @@ public static partial class FunctionCatalog
     public static string ToMarkdown()
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"# Funcoes built-in das expressoes OutSystems (Service Studio {StudioVersion})");
+        sb.AppendLine($"# Built-in functions of the OutSystems expressions (Service Studio {StudioVersion})");
         sb.AppendLine();
-        sb.AppendLine("Gerado do registo do proprio Studio por `dotnet .local/cli/anvil.dll functions --out catalog/functions-<ver>.json --docs docs/functions.md`.");
-        sb.AppendLine("So o que esta aqui existe: qualquer outro nome seguido de `(` da `ExpressionUnknownFunction` no Verify, e o runner avisa antes");
-        sb.AppendLine("(`Hint UnknownFunction`, com as funcoes mais parecidas). Consulta rapida: `anvil functions --find data` ou `--name Substr`.");
+        sb.AppendLine("Generated from the Studio's own registry by `dotnet .local/cli/anvil.dll functions --out catalog/functions-<ver>.json --docs docs/functions.md`.");
+        sb.AppendLine("Only what is here exists: any other name followed by `(` gives `ExpressionUnknownFunction` in the Verify, and the runner warns before");
+        sb.AppendLine("(`Hint UnknownFunction`, with the closest functions). Quick lookup: `anvil functions --find data` or `--name Substr`.");
         sb.AppendLine();
-        sb.AppendLine("Onde: L = expressoes de logica server-side (server actions, timers, telas Traditional); C = client-side (client actions, telas");
-        sb.AppendLine("Reactive/Mobile); AS/AC = aggregates server/client (filtros, colunas calculadas); E = emails; vazio = so em contextos");
-        sb.AppendLine("especiais (ex.: telas Traditional Web). Parametro entre `[]` e opcional.");
+        sb.AppendLine("Where: L = server-side logic expressions (server actions, timers, Traditional screens); C = client-side (client actions,");
+        sb.AppendLine("Reactive/Mobile screens); AS/AC = server/client aggregates (filters, calculated columns); E = emails; empty = only in special");
+        sb.AppendLine("contexts (e.g. Traditional Web screens). A parameter between `[]` is optional.");
         sb.AppendLine();
         foreach (var g in All.GroupBy(f => f.Group).OrderBy(g => g.Key, StringComparer.Ordinal))
         {
             sb.AppendLine($"## {g.Key} ({g.Count()})");
             sb.AppendLine();
-            sb.AppendLine("| Assinatura | Onde | Descricao |");
+            sb.AppendLine("| Signature | Where | Description |");
             sb.AppendLine("|---|---|---|");
             foreach (var f in g)
             {
@@ -169,9 +169,9 @@ public static partial class FunctionCatalog
             }
             sb.AppendLine();
         }
-        sb.AppendLine("## Nomes de outras linguagens que NAO existem aqui");
+        sb.AppendLine("## Names from other languages that do NOT exist here");
         sb.AppendLine();
-        sb.AppendLine("| Escreveu | Use |");
+        sb.AppendLine("| Written | Use |");
         sb.AppendLine("|---|---|");
         foreach (var a in Aliases.OrderBy(a => a.Key, StringComparer.Ordinal))
             sb.AppendLine($"| {a.Key} | {string.Join(", ", a.Value)} |");

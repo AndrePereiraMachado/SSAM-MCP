@@ -9,13 +9,14 @@
 //   - the object around such an array stays inline without it when it is small;
 //   - `outline`: every part that is not inline whole, with its pointer, its size and the fields of its rows;
 //   - `continuation`: ONE ssam_evidence call that returns what is still missing (the omitted columns of a table, or the
-//     largest part left out), as a table of all its rows within the reader's budget (64 KB); none when nothing is missing.
+//     largest part left out), as a table of all its rows within the reader's budget (the shared expansion budget); none when nothing is missing.
 // Pure: the caller writes the file and measures the room.
 
 const bytes = value => Buffer.byteLength(JSON.stringify(value) ?? '', 'utf8');
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const pointer = keys => keys.map(k => '/' + String(k).replace(/~/g, '~0').replace(/\//g, '~1')).join('');
-export const READER_BUDGET = 65536;
+import { EXPANSION_DEFAULT_BYTES } from './context-budget.mjs';
+export const READER_BUDGET = EXPANSION_DEFAULT_BYTES;
 const MAX_ROWS = 1000;
 const PART_BYTES = 512;
 const SKELETON_BYTES = 2048;
@@ -61,12 +62,12 @@ export function table(rows, columns, keys) {
  * Returns {top, tables, outline, missing}: missing = [{at, columns?, rows?}] (what one more call returns).
  */
 export function pagedShape(full, { roomBytes, inlineBytes = 6144 } = {}) {
-  if (!isObject(full)) return { top: {}, tables: [], outline: [], missing: [] };
+  if (!isObject(full)) return { top: {}, tables: [], outline: [], missing: [{ at: '' }] };
   const arrays = largeArrays(full);
   // The answer without its large arrays.
   const skeleton = structuredClone(full);
   for (const a of arrays) { let parent = skeleton; for (const k of a.keys.slice(0, -1)) parent = parent?.[k]; if (isObject(parent)) delete parent[a.keys.at(-1)]; }
-  const top = {}; const outline = [];
+  const top = {}; const outline = []; const missing = [];
   let used = 0;
   for (const [k, v] of Object.entries(skeleton)) {
     if (k === 'paged') continue;
@@ -77,9 +78,10 @@ export function pagedShape(full, { roomBytes, inlineBytes = 6144 } = {}) {
     const small = kept === null || ['string', 'number', 'boolean'].includes(typeof kept) || size <= PART_BYTES || (held && isObject(kept) && size <= SKELETON_BYTES);
     if (!small || used + size > inlineBytes) { outline.push({ at: pointer([k]), bytes: bytes(full[k]), ...(Array.isArray(full[k]) ? { items: full[k].length } : isObject(full[k]) ? { keys: Object.keys(full[k]).slice(0, 20) } : {}) }); continue; }
     top[k === 'continuation' ? 'answerContinuation' : k] = kept; used += size;
+    if (kept !== v) missing.push({ at: pointer([k]) });
   }
   // The large arrays as tables, largest first, within the room the rest leaves.
-  const tables = []; const missing = [];
+  const tables = [];
   let room = roomBytes - used - bytes(outline) - 256;
   for (const a of arrays) {
     const columns = columnsOf(a.rows);

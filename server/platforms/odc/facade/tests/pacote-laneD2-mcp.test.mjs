@@ -2,6 +2,7 @@
 // studio_deliver takes publish and authorize (presence modes, "Alone:" in their schema text, routed by lane E); its text
 // says it publishes on request and no longer "Never publishes"; studio_status says it answers from the evidence while the
 // bridge is busy; studio_publish says it uses the standing grant. Real stdio server, offline: no Studio, vault or tenant.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
@@ -54,6 +55,6 @@ test('studio_deliver serves publish and authorize; status and publish describe t
     assert.match(deliver.description, /PUBLISH_FAILED/);
     assert.match(tools.find(t => t.name === 'studio_status').description, /fromEvidence:true/);
     assert.match(tools.find(t => t.name === 'studio_publish').description, /standing grant/);
-    assert.match(client.getInstructions(), /publish:true/);
+    assert.match(client.getInstructions(), /publish:true/); // the standalone ODC server serves no session guide
   } finally { await client.close(); }
 });

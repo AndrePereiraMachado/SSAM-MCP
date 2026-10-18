@@ -3,6 +3,7 @@
 // differ there and nowhere else; contentSha256 masks those two fields (contract I1), and ssam_map reads a capture through
 // the first intact capture of the same content, so its module index and its keys serve again. Synthetic headers only (the
 // shape of the friend's captures, no customer bytes).
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

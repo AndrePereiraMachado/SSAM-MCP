@@ -1,5 +1,5 @@
 {
- "description": "Legendas: o texto de Button, Link e Label vive no ITextWidget filho de cada um (#ITextWidget); trocar a legenda e um set de Text nele.",
+ "description": "Captions: the text of a Button, a Link and a Label lives in the child ITextWidget of each (#ITextWidget); changing the caption is a set of Text on it.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -9,7 +9,7 @@
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Email", "as": "$email"},
   {"op": "set", "target": "$email", "prop": "DataType", "value": "Email"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ILabel", "name": "EmailLabel", "as": "$lbl"},
-  {"op": "set", "target": "$lbl/#ITextWidget", "prop": "Text", "value": "E-mail", "_why": "o Label nasce com 'label': a legenda e o ITextWidget de dentro"},
+  {"op": "set", "target": "$lbl/#ITextWidget", "prop": "Text", "value": "E-mail", "_why": "the Label is born with 'label': the caption is the ITextWidget inside it"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IInput", "name": "EmailInput", "as": "$in"},
   {"op": "set", "target": "$in", "prop": "Variable", "value": "Email"},
   {"op": "set", "target": "$in", "prop": "InputType", "value": "Email"},

@@ -490,7 +490,7 @@ export function provenFor(t, op, ctx) {
   if ((op === 'read' || op === 'address') && t.platform === 'odc' && ctx.census) { const c = ctx.census[t.shortName.replace(/^I/, '')]; if (c) out.census = { ...c, inclusive: t.kindClass === 'base-interface' ? 'count includes implementers of the base interface' : undefined }; }
   const limits = ctx.limitFor(t.shortName); if (limits.length) out.knownLimits = limits.map(l => ({ title: l.title, type: l.type, verdict: l.verdict, source: l.source }));
   // A documented refusal counts only when its title names this exact short name and the verb of the operation.
-  const refusal = limits.filter(l => l.type === 'recusa-da-plataforma' && new RegExp('\\b' + t.shortName + '\\b').test(l.title) && new RegExp('\\b(' + OP_VERB[op].join('|') + ')\\b', 'i').test(l.title));
+  const refusal = limits.filter(l => l.type === 'platform-refusal' && new RegExp('\\b' + t.shortName + '\\b').test(l.title) && new RegExp('\\b(' + OP_VERB[op].join('|') + ')\\b', 'i').test(l.title));
   if (refusal.length) out.refusal = refusal.map(l => l.title);
   return out;
 }

@@ -1,5 +1,5 @@
 {
- "description": "ODC (cobertura C): o screen-list-reactive.json espelhado na faixa ODC (assume a entidade WfCovTask e a tela WfCovTaskDetail do job screen-form): aggregate ordenado, List com ListItem, expressoes por item, OnClick do item -> WfCovTaskDetail(TaskId) e botao New no placeholder Actions.",
+ "description": "ODC (coverage C): the screen-list-reactive.json mirrored in the ODC lane (assumes the entity WfCovTask and the screen WfCovTaskDetail of the job screen-form): sorted aggregate, List with ListItem, expressions per item, OnClick of the item -> WfCovTaskDetail(TaskId) and a New button in the Actions placeholder.",
  "base": "job:screen-form",
  "expectValid": true,
  "expectedMessages": [],
@@ -18,7 +18,7 @@
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "TaskList", "as": "$list"},
   {"op": "set", "target": "$list", "prop": "Source", "value": "GetTasks.List"},
   {"op": "create", "parent": "$list", "type": "IListItem", "name": "TaskItem", "as": "$item"},
-  {"op": "delete", "target": "$item/RightActions/#IListItemAction", "_why": "o ListItem nasce com uma swipe action de exemplo sem destino (erro RequiredPropertyValue)"},
+  {"op": "delete", "target": "$item/RightActions/#IListItemAction", "_why": "the ListItem is born with a sample swipe action without a destination (RequiredPropertyValue error)"},
   {"op": "create", "parent": "$item/Content", "type": "IExpression", "as": "$exTitle"},
   {"op": "set", "target": "$exTitle", "prop": "Value", "value": "GetTasks.List.Current.WfCovTask.Title"},
   {"op": "create", "parent": "$item/Content", "type": "IExpression", "as": "$exDue"},

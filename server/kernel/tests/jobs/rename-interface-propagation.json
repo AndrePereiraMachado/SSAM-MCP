@@ -1,10 +1,10 @@
 {
- "description": "Renomear INTERFACE e ler de volta o CSS e as URLs que ficaram para tras. Tela, bloco, instancia de bloco, parametro de bloco e variavel de tela sao renomeados; depois de cada rename o job le com get/dump o StyleSheet da propria tela e do proprio bloco, a classe CSS na propriedade Style dos containers, a legenda do botao e uma variavel com um deep link escrito a mao. Destination, SourceBlock e argumentos seguem por chave; CSS, classes, legendas e URLs nao seguem nada.",
+ "description": "Rename INTERFACE and read back the CSS and the URLs that were left behind. Screen, block, block instance, block parameter and screen variable are renamed; after each rename the job reads with get/dump the StyleSheet of the screen itself and of the block itself, the CSS class in the Style property of the containers, the button caption and a variable with a deep link written by hand. Destination, SourceBlock and arguments follow by key; CSS, classes, captions and URLs follow nothing.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "ContactCard", "as": "$blk", "_why": "1. o bloco: CSS proprio com o nome do bloco na classe, e um input citado por uma expressao"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "ContactCard", "as": "$blk", "_why": "1. the block: own CSS with the name of the block in the class, and an input cited by an expression"},
   {"op": "set", "target": "$blk", "prop": "StyleSheet", "value": ".contact-card { border: 1px solid #ddd; }\n.contact-card__title { font-weight: 700; }"},
   {"op": "set", "target": "$blk", "prop": "Description", "value": "Cartao de um Contact, estilizado pela classe contact-card"},
   {"op": "create", "parent": "$blk", "type": "IInputParameter", "name": "Caption", "as": "$blkIn"},
@@ -21,7 +21,7 @@
   {"op": "create", "parent": "$det/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$detTitle"},
   {"op": "set", "target": "$detTitle", "prop": "Value", "value": "\"Contact \" + IntegerToText(ContactId)"},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ContactList", "as": "$scr", "_why": "3. a tela consumidora: CSS proprio, classe no container, instancia do bloco, deep link escrito a mao e botao que navega"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ContactList", "as": "$scr", "_why": "3. the consuming screen: own CSS, class in the container, block instance, deep link written by hand and a button that navigates"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "set", "target": "$scr", "prop": "StyleSheet", "value": ".contact-list { padding: 16px; }\n.contact-list .contact-card { margin-bottom: 8px; }"},
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "DetailUrl", "as": "$url"},
@@ -40,29 +40,29 @@
   {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$det"},
   {"op": "set", "target": "$btn/OnClick/ContactId", "prop": "Value", "value": "1"},
 
-  {"op": "usages", "target": "$det", "_why": "4. ANTES: quem usa a tela de destino e quem usa o bloco"},
+  {"op": "usages", "target": "$det", "_why": "4. BEFORE: who uses the destination screen and who uses the block"},
   {"op": "usages", "target": "$blk"},
 
   {"op": "rename", "target": "$det", "name": "PersonDetail", "_why": "5. renomear a TELA de destino"},
-  {"op": "get", "target": "$btn/OnClick", "_why": "LER DE VOLTA: o Destination seguiu por chave"},
-  {"op": "get", "target": "$url", "_why": "mas o deep link escrito a mao ainda aponta para /Headless_UI/ContactDetail"},
-  {"op": "get", "target": "$btn/#ITextWidget", "_why": "e a legenda do botao ainda diz 'Abrir o Contact'"},
-  {"op": "usages", "target": "$det", "_why": "o mesmo consumidor, agora sob o nome novo"},
+  {"op": "get", "target": "$btn/OnClick", "_why": "READ BACK: the Destination followed by key"},
+  {"op": "get", "target": "$url", "_why": "but the deep link written by hand still points to /Headless_UI/ContactDetail"},
+  {"op": "get", "target": "$btn/#ITextWidget", "_why": "and the caption of the button still says 'Abrir o Contact'"},
+  {"op": "usages", "target": "$det", "_why": "the same consumer, now under the new name"},
 
   {"op": "rename", "target": "$blk", "name": "PersonCard", "_why": "6. renomear o BLOCO"},
-  {"op": "get", "target": "$inst", "_why": "LER DE VOLTA: a propria plataforma renomeou a instancia de ContactCard1 para PersonCard1 (o nome da instancia e derivado do bloco) e o SourceBlock seguiu por chave"},
-  {"op": "get", "target": "$blk", "_why": "o StyleSheet do bloco continua a definir .contact-card, e a Description tambem nao mudou"},
-  {"op": "get", "target": "$cardBody", "_why": "a classe CSS na propriedade Style e um literal: nao mudou"},
+  {"op": "get", "target": "$inst", "_why": "READ BACK: the platform itself renamed the instance from ContactCard1 to PersonCard1 (the name of the instance is derived from the block) and the SourceBlock followed by key"},
+  {"op": "get", "target": "$blk", "_why": "the StyleSheet of the block still defines .contact-card, and the Description did not change either"},
+  {"op": "get", "target": "$cardBody", "_why": "the CSS class in the Style property is a literal: it did not change"},
 
-  {"op": "rename", "target": "$blkIn", "name": "Heading", "_why": "7. renomear o PARAMETRO do bloco: o argumento da instancia segue, a expressao dentro do bloco e reescrita"},
+  {"op": "rename", "target": "$blkIn", "name": "Heading", "_why": "7. rename the block PARAMETER: the argument of the instance follows, the expression inside the block is rewritten"},
   {"op": "get", "target": "$inst/Heading"},
   {"op": "get", "target": "$cardText"},
 
-  {"op": "rename", "target": "$url", "name": "PersonDetailUrl", "_why": "8. renomear a VARIAVEL da tela: a expressao que a le e reescrita, o literal dentro dela nao"},
+  {"op": "rename", "target": "$url", "name": "PersonDetailUrl", "_why": "8. rename the screen VARIABLE: the expression that reads it is rewritten, the literal inside it is not"},
   {"op": "get", "target": "$urlText"},
 
-  {"op": "rename", "target": "$scr", "name": "PersonList", "_why": "9. renomear a propria TELA consumidora"},
-  {"op": "get", "target": "$scr", "_why": "LER DE VOLTA: o StyleSheet da tela continua a falar de .contact-list e .contact-card"},
+  {"op": "rename", "target": "$scr", "name": "PersonList", "_why": "9. rename the consuming SCREEN itself"},
+  {"op": "get", "target": "$scr", "_why": "READ BACK: the StyleSheet of the screen still talks about .contact-list and .contact-card"},
   {"op": "get", "target": "$listBody"},
 
   {"op": "dump", "target": "$scr", "depth": 7},

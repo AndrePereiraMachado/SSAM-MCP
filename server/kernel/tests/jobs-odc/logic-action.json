@@ -1,12 +1,12 @@
 {
- "description": "ODC (WS1): spec de logica sobre a entidade do job data-entity: server action com get (where), assign e if. No ODC, Count de um aggregate e Long Integer, e uma server action sem consumidor recebe o aviso UnusedUserAction (declarado).",
+ "description": "ODC (WS1): logic spec over the entity of the job data-entity: server action with get (where), assign and if. In ODC, the Count of an aggregate is Long Integer, and a server action without a consumer gets the warning UnusedUserAction (declared).",
  "base": "job:data-entity",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "UnusedUserAction",
    "element": "InsuranceApp (ESpace) / WfProof_CountActiveContacts (ServerAction)",
-   "why": "Prova WS1: a action e criada para provar get/assign/if headless no ODC e nao tem consumidor; o ODC avisa sobre actions sem uso (o SS11 nao)."
+   "why": "WS1 proof: the action is created to prove get/assign/if headless in ODC and has no consumer; ODC warns about unused actions (SS11 does not)."
   }
  ],
  "ops": [

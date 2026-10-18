@@ -56,7 +56,7 @@ function familyRows() {
       patch: Array.from({ length: 30 }, (_, i) => ({ op: 'replace', path: `/actions/A/steps/${i}/type`, value: 'Text' })),
     } });
     rows.push({ id: `family-${lane}-receipt`, tool, args: { lane }, value: {
-      ok: true, result: 'entregue', module: 'Module', nextBasedOn: { job: 'job.json', sha256: '2'.repeat(64) },
+      ok: true, result: 'delivered', module: 'Module', nextBasedOn: { job: 'job.json', sha256: '2'.repeat(64) },
       highWarnings: [{ code: 'A03', message: 'The delivered action changes a public contract used by existing consumers.' }],
       removed: Array.from({ length: 12 }, (_, i) => ({ name: `Removed${i}`, kind: 'Action' })),
       summary: { actions: 12, detail: 'A complete summary of delivery changes. '.repeat(150) }, warnings: [],
@@ -393,7 +393,7 @@ test('a plan keeps every launch at the exit; generator receipts keep configure a
 
   const where = name => `Service Center > Factory > Modules > Vc_IS > Site Properties > ${name} (each environment)`;
   const configure = ['BrasilApiUser', 'BrasilApiPassword'].map(name => ({ name, kind: 'Site Property', secret: true, fill: 'the ' + name.slice(9).toLowerCase(), default: null, where: where(name) }));
-  const receipt = { ok: true, result: 'entregue', module: 'Vc_IS',
+  const receipt = { ok: true, result: 'delivered', module: 'Vc_IS',
     integration: [{ op: 'rest-consume', client: { name: 'BrasilApi', key: 'k1', created: true }, imported: Array.from({ length: 40 }, (_, i) => `IRestStructure:BrasilApiFeriado${i}`),
       skipped: [], updated: [], removed: [], consumersBroken: [], warnings: [], unchanged: [],
       generated: { client: 'BrasilApi', baseUrl: 'https://brasilapi.com.br/api', methods: Array.from({ length: 6 }, (_, i) => ({ name: `GetBrasilApiMethod${i}`, signature: `GetBrasilApiMethod${i}(Ano: Integer) -> Result: BrasilApiFeriado${i} List` })) },

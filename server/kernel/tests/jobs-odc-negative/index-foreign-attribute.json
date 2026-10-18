@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA de um indice sobre um atributo de OUTRA entidade. O caminho limpo esta em tests/jobs-odc/entity-lifecycle.json (lote de dados, fase 3).",
+ "description": "ODC: the REFUSAL of an index on an attribute of ANOTHER entity. The clean path is in tests/jobs-odc/entity-lifecycle.json (data lot, phase 3).",
  "base": "job:data-full-model",
  "expectValid": true,
  "expectError": [

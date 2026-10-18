@@ -1,5 +1,5 @@
 {
- "description": "Bloqueado: o arquetipo cards da op screen falha no ODC ao criar o card dentro da List da Gallery (o IContent da List some); use os verbos (usage-gallery-data-action-typical) ate o kernel corrigir.",
+ "description": "Blocked: the cards archetype of the screen op fails on ODC when it creates the card inside the List of the Gallery (the IContent of the List disappears); use the verbs (usage-gallery-data-action-typical) until the kernel is fixed.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectError": ["(create ): InvalidOperationException: Sequence contains no elements"],
  "ops": [

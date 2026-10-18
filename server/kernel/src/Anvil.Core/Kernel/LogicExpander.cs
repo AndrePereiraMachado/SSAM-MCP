@@ -213,7 +213,7 @@ public static class LogicExpander
         catch (Exception ex) { problems.Add(ProblemAt(ex, "")); }
         if (data["actions"] is not JsonArray)
         {
-            problems.Add(new("/actions", "LOGIC_INVALID", new InvalidOperationException("logic: 'actions' e obrigatorio"), "{\"actions\":[{\"name\":\"...\",\"steps\":[...]}]}"));
+            problems.Add(new("/actions", "LOGIC_INVALID", new InvalidOperationException("logic: 'actions' is required"), "{\"actions\":[{\"name\":\"...\",\"steps\":[...]}]}"));
             throw Refusal(problems);
         }
         var normalized = Normalize(data, notes);
@@ -691,7 +691,7 @@ public static class LogicExpander
 
         public void CompileBody()
         {
-            var steps = _a["steps"]?.AsArray() ?? throw new InvalidOperationException($"logic: action {_name}: 'steps' e obrigatorio (pode ser [])");
+            var steps = _a["steps"]?.AsArray() ?? throw new InvalidOperationException($"logic: action {_name}: 'steps' is required (it may be [])");
             // An exposed REST method is born with its Start and End: the flow starts at its own Start (a second one is
             // InvalidFlow_TooManyNodes) and the tails reach its own End.
             var start = BornFlow ? _alias + "/#IStartNode" : Node("IStartNode", "Start", label: false);
@@ -710,7 +710,7 @@ public static class LogicExpander
                     // The Studio's own defaults for a new handler: abort the transaction and log the error.
                     _ops.Add(Set(node, "AbortTransaction", Flag(handler, "abortTransaction", true)));
                     _ops.Add(Set(node, "LogError", Flag(handler, "logError", true)));
-                    var handlerTails = Segment(handler["steps"] as JsonArray ?? throw new FieldException("logic: handler: 'steps' e obrigatorio (pode ser [])", "steps"), [(node, null)], "handler", at + "/steps");
+                    var handlerTails = Segment(handler["steps"] as JsonArray ?? throw new FieldException("logic: handler: 'steps' is required (it may be [])", "steps"), [(node, null)], "handler", at + "/steps");
                     if (handlerTails.Count > 0) { _stepPointer = at; LinkAll(handlerTails, Node("IEndNode", "End" + handler["name"], false)); }
                 }
                 catch (Exception ex) { Record(ex, at); }
@@ -768,10 +768,10 @@ public static class LogicExpander
                 var pn = Req(po, "name", $"action {_name} {key}");
                 _declaredNames.Add(pn);
                 _ops.Add(Op("create", ("parent", _alias), ("type", type), ("name", pn), ("as", $"{_alias}.{pn}")));
-                _ops.Add(Set($"{_alias}.{pn}", "DataType", po["type"]?.GetValue<string>() ?? throw new InvalidOperationException($"logic: action {_name} {key} '{pn}': 'type' e obrigatorio")));
+                _ops.Add(Set($"{_alias}.{pn}", "DataType", po["type"]?.GetValue<string>() ?? throw new InvalidOperationException($"logic: action {_name} {key} '{pn}': 'type' is required")));
                 if (po["mandatory"]?.GetValue<bool>() is false)
                 {
-                    if (type is not ("IInputParameter" or "IRestServiceActionInput")) throw new InvalidOperationException($"logic: action {_name} {key} '{pn}': 'mandatory' so existe em inputs");
+                    if (type is not ("IInputParameter" or "IRestServiceActionInput")) throw new InvalidOperationException($"logic: action {_name} {key} '{pn}': 'mandatory' exists only on inputs");
                     _ops.Add(Set($"{_alias}.{pn}", "IsMandatory", false));
                 }
                 if (po["default"]?.GetValue<string>() is { } dv) _ops.Add(Set($"{_alias}.{pn}", "DefaultValue", dv));
@@ -801,7 +801,7 @@ public static class LogicExpander
                     if (tails.Count == 0) Record(new ArgumentException("logic: unreachable step at " + ctx), at);
                     var kind = StepKinds.Where(k => so.ContainsKey(k)).ToList();
                     if (kind.Count != 1)
-                        throw new InvalidOperationException($"logic: {ctx}: um passo tem exatamente UMA forma ({string.Join(", ", StepKinds)}); encontrado: {(kind.Count == 0 ? "nenhuma" : string.Join(", ", kind))} em {so.ToJsonString()}");
+                        throw new InvalidOperationException($"logic: {ctx}: a step has exactly ONE form ({string.Join(", ", StepKinds)}); found: {(kind.Count == 0 ? "none" : string.Join(", ", kind))} in {so.ToJsonString()}");
                     var k = kind[0];
                     // C18 (atritos 3): `label` is accepted on every step (StepKeys keeps it only where it always was).
                     Keys(so, StepKeys[k].Contains("label") ? StepKeys[k] : [.. StepKeys[k], "label"], $"{ctx} ({k})");
@@ -858,7 +858,7 @@ public static class LogicExpander
             foreach (var key in new[] { "joins", "columns", "calculated" })
                 if (so.ContainsKey(key) && (so[key] is not JsonArray collection || collection.Any(v => v is not JsonObject))) throw new ArgumentException(key + " requires declaration objects");
             var name = so["as"] is JsonValue a && a.TryGetValue<string>(out var given) ? given
-                : LabelAsName(so) ?? throw new FieldException($"logic: {ctx}: get exige 'as' (o nome do aggregate, ex.: {{\"get\":\"{entity}\",\"as\":\"Get{entity}s\",\"where\":\"...\"}})", "as");
+                : LabelAsName(so) ?? throw new FieldException($"logic: {ctx}: get needs 'as' (the name of the aggregate, e.g. {{\"get\":\"{entity}\",\"as\":\"Get{entity}s\",\"where\":\"...\"}})", "as");
             if (so["sql"]?.GetValue<bool>() is true)
                 return SqlGet(so, ctx, entity, name);
             // Aggregate columns/filters may infer types. Flush preceding expressions, then
@@ -867,7 +867,7 @@ public static class LogicExpander
             if (so.ContainsKey("statement") || so.ContainsKey("params"))
                 throw new InvalidOperationException($"logic: {ctx}: statement/params require sql:true");
             var src = _tryRef([$"IServerEntity:{entity}", $"IClientEntity:{entity}", $"IStaticEntity:{entity}", $"IEntitySignature:{entity}"])
-                      ?? throw new InvalidOperationException($"logic: {ctx}: entidade '{entity}' nao existe neste modulo nem esta referenciada (use `reference` antes, ou confira o nome com `find`)");
+                      ?? throw new InvalidOperationException($"logic: {ctx}: entity '{entity}' does not exist in this module nor is it referenced (use `reference` first, or check the name with `find`)");
             var node = Node("IAggregateNode", name, label: false);
             var sources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var sourceIndex = 0;
@@ -963,7 +963,7 @@ public static class LogicExpander
         private string SqlGet(JsonObject so, string ctx, string entity, string name)
         {
             var statement = so["statement"]?.GetValue<string>()
-                            ?? throw new InvalidOperationException($"logic: {ctx}: get com sql=true exige 'statement'");
+                            ?? throw new InvalidOperationException($"logic: {ctx}: get with sql=true needs 'statement'");
             var incompatible = new[] { "where", "sort", "start", "sources", "joins", "columns", "calculated" }.Where(so.ContainsKey).ToArray();
             if (incompatible.Length > 0)
                 throw new InvalidOperationException($"logic: {ctx}: {string.Join(", ", incompatible)} cannot be used with sql:true; filter/order/page in the statement (MaxRecords uses max).");
@@ -972,7 +972,7 @@ public static class LogicExpander
             _ops.Add(Set(node, "Statement", statement));
             foreach (var p in so["params"]?.AsObject() ?? new JsonObject())
             {
-                var po = p.Value?.AsObject() ?? throw new InvalidOperationException($"logic: {ctx}: parametro SQL '{p.Key}' deve ser objeto");
+                var po = p.Value?.AsObject() ?? throw new InvalidOperationException($"logic: {ctx}: SQL parameter '{p.Key}' must be an object");
                 Keys(po, SqlParamKeys, $"{ctx} SQL param {p.Key}");
                 var pt = po["type"]?.GetValue<string>() ?? throw new InvalidOperationException($"logic: {ctx}: parametro SQL '{p.Key}' exige 'type'");
                 var pv = po["value"]?.GetValue<string>() ?? throw new InvalidOperationException($"logic: {ctx}: parametro SQL '{p.Key}' exige 'value'");
@@ -1013,7 +1013,7 @@ public static class LogicExpander
             // names a dropped action; a reference by key or alias has no name to read, so it is Call1, Call2.
             var name = so["as"] != null ? Req(so, "as", ctx) : LabelAsName(so) ?? DefaultCallName(target);
             var resolved = _tryCall!(LogicOrder.CallCandidates(target, _a), _a)
-                ?? throw new InvalidOperationException($"logic: {ctx}: action '{target}' nao existe (propria, referenciada, de entidade como CreateOrUpdateX, ou de sistema como ListAppend); confira com `find`");
+                ?? throw new InvalidOperationException($"logic: {ctx}: action '{target}' does not exist (own, referenced, of an entity such as CreateOrUpdateX, or of the system such as ListAppend); check it with `find`");
             LogicOrder.ValidateCall(_a, resolved);
             RefuseForeignCurrent(target, so, ctx);
             var node = Node(resolved.IsClient ? "IExecuteClientActionNode" : "IExecuteServerActionNode", name, label: false);
@@ -1085,7 +1085,7 @@ public static class LogicExpander
             var entity = Req(so, kind, ctx);
             var verb = kind switch { "save" => "CreateOrUpdate", "create" => "Create", "update" => "Update", _ => "Delete" };
             var reference = _tryRef([$"IEntityActionSignature:{verb}{entity}"])
-                            ?? throw new InvalidOperationException($"logic: {ctx}: entidade '{entity}' nao existe (nao ha {verb}{entity}); confira o nome com `find`");
+                            ?? throw new InvalidOperationException($"logic: {ctx}: entity '{entity}' does not exist (there is no {verb}{entity}); check the name with `find`");
             var client = LogicOrder.IsClient(_a) && _tryRef([$"IClientEntity:{entity}"]) != null;
             // C18 (atritos 3): `record` given as the values of its fields ({Field: expression}) is a local of the entity's
             // record type, an Assign of those fields and the entity action over it, as one writes it in the Studio.
@@ -1150,8 +1150,8 @@ public static class LogicExpander
             if (so["start"] != null) BodySet(node, "StartIndex", so["start"]!.ToString());
             if (so["max"] != null) BodySet(node, "MaximumIterations", so["max"]!.ToString());
             LinkAll(tails, node);
-            var body = so["do"]?.AsArray() ?? throw new InvalidOperationException($"logic: {ctx}: foreach exige 'do' com os passos do ciclo");
-            if (body.Count == 0) throw new InvalidOperationException($"logic: {ctx}: foreach com 'do' vazio");
+            var body = so["do"]?.AsArray() ?? throw new InvalidOperationException($"logic: {ctx}: foreach needs 'do' with the steps of the loop");
+            if (body.Count == 0) throw new InvalidOperationException($"logic: {ctx}: foreach with an empty 'do'");
             var scope = new ControlScope(isLoop: true, canBreak: false); _scopes.Push(scope);
             var bodyTails = Segment(body, [(node, "CycleTarget")], $"{ctx} do", at + "/do");
             _scopes.Pop();
@@ -1257,7 +1257,7 @@ public static class LogicExpander
             var exc = Req(so, "raise", ctx);
             var reference = exc.Contains(':') ? exc
                 : _tryRef([$"IUserException:{exc}", $"IUserExceptionSignature:{exc}"])
-                  ?? throw new InvalidOperationException($"logic: {ctx}: exception '{exc}' nao existe (crie-a com IUserException no @espace, ou na spec de dados)");
+                  ?? throw new InvalidOperationException($"logic: {ctx}: exception '{exc}' does not exist (create it with IUserException in the @espace, or in the data spec)");
             var node = Node("IRaiseExceptionNode", LabelAsName(so) ?? Next("Raise" + exc, numberFirst: false), label: false);
             _ops.Add(Set(node, "Exception", reference));
             BodySet(node, "ExceptionMessage", so["message"]?.GetValue<string>() ?? Quote(exc));
@@ -1369,7 +1369,7 @@ public static class LogicExpander
     }
 
     private static string Req(JsonObject o, string k, string ctx) =>
-        o[k] is JsonValue v && v.TryGetValue<string>(out var text) ? text : throw new FieldException($"logic: {ctx}: '{k}' e obrigatorio (texto)", k);
+        o[k] is JsonValue v && v.TryGetValue<string>(out var text) ? text : throw new FieldException($"logic: {ctx}: '{k}' is required (text)", k);
 
     private static JsonObject Op(string op, params (string Key, object Value)[] fields)
     {

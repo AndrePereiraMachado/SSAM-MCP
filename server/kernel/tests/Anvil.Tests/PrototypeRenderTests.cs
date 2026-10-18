@@ -154,8 +154,9 @@ public class PrototypeRenderTests
 
         // Widgets rendered through inferred rows are counted; evidence rows are not.
         var unverified = dom["runtimeUnverified"]!.AsArray().Select(u => u!["widget"]!.ToString()).ToList();
-        foreach (var widget in new[] { "IList", "IExpression", "IPopup", "IPlaceholderWidget", "IIfWidget" }) Assert.Contains(widget, unverified);
-        foreach (var widget in new[] { "ICheckbox", "IContainer", "IAdvancedHtml", "IMobileBlockInstanceWidget" }) Assert.DoesNotContain(widget, unverified);
+        // CX17: IList (with IInput, IDropdown and ILabel) was read on the published DemoLATAM_UI (2026-10-14): an evidence row now.
+        foreach (var widget in new[] { "IExpression", "IPopup", "IPlaceholderWidget", "IIfWidget" }) Assert.Contains(widget, unverified);
+        foreach (var widget in new[] { "IList", "ICheckbox", "IContainer", "IAdvancedHtml", "IMobileBlockInstanceWidget" }) Assert.DoesNotContain(widget, unverified);
     }
 
     [Fact]

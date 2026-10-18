@@ -3,6 +3,7 @@
 // launch). Scope binding precedes the submission, the debugger keeps a fixed native
 // deadline without autoContinue, and an accepted-unverified submission stays
 // uncertain with the runner lock retained. Run Now is never resent or replayed.
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -30,7 +31,7 @@ export function runNowStartAdmission(run) {
   if (run.trigger !== RUN_NOW_TRIGGER || run.contextMode !== 'native-background')
     return refuse('Run Now requires trigger service-center-run-now with contextMode native-background');
   if (run.launch !== undefined || !emptyInputs(run)) return refuse('Run Now takes no launch, inputs, scenarios or context');
-  if (typeof run.words !== 'string' || !run.words.trim()) return refuse('Run Now requires authorization words');
+  if (!wordsGiven(run.words)) return refuse('Run Now requires authorization words'); // CX15 r7: one predicate
   return { ok: true, adapters: ['native-background-run-now'] };
 }
 
@@ -53,10 +54,10 @@ export async function runO11TimerRunNowInteractive(args) {
     scopes, omittedScopeRoots, inspectionMode: 'interactive', autoContinue: false, valuesComplete: false, executionCompleted: false, ...noIdentity };
   report.needs = { loginWindow: false, contextMode: 'native-background', trigger: RUN_NOW_TRIGGER, words: true };
   if (input.op === 'prepare') { report.state = 'prepared'; return { uncertain: false }; }
-  if (input.op !== 'run' || typeof input.words !== 'string' || !input.words.trim()) fail('explicit_background_authorization_required');
+  if (input.op !== 'run' || !wordsGiven(input.words)) fail('explicit_background_authorization_required');
   // Persist the approval before the debugger start and the single Run Now.
   fs.writeFileSync(path.join(directory, 'run-now-authorization.json'), JSON.stringify({ operationId, contextMode: 'native-background',
-    trigger: RUN_NOW_TRIGGER, words: input.words, plan: report.tracePlan }, null, 2), { flag: 'wx' });
+    trigger: RUN_NOW_TRIGGER, wordsSha256: sha(input.words), plan: report.tracePlan }, null, 2), { flag: 'wx' }); // CX15 r5 (N-3): never the words
   report.background.authorizationWordsSha256 = sha(input.words);
   let session, uncertain = false, baseline = null, stopping = null;
   const outcome = { uncertain: false };

@@ -1,5 +1,5 @@
 {
- "description": "TextArea tipico: ligado ao campo Notes de um record local, com limite de 500 caracteres e 4 linhas; OnChange atualiza o contador de caracteres mostrado ao lado.",
+ "description": "Typical TextArea: bound to the Notes field of a local record, with a limit of 500 characters and 4 lines; OnChange updates the character counter shown beside it.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

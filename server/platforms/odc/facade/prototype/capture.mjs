@@ -855,7 +855,7 @@ export function buildIr(session, interactions, { root, entry, clockIso, tz, scan
       // event is kept, not compiled, so that the receipt names it instead of dropping it.
       const changed = items.filter(item => item.ui);
       if (changed.length) {
-        const notCompiled = [{ why: 'a interface mudou sem efeito da classe fechada (estado só em variável do script)', handler: event.handler }];
+        const notCompiled = [{ why: 'the interface changed without an effect of the closed class (state only in a script variable)', handler: event.handler }];
         notCompiledAll.push(...notCompiled.map(item => ({ event: event.key, ...item })));
         outEvents.push({ key: event.key, view: event.scope, selector: event.selector, on: event.on, params: [], effects: [], when: null, handler: event.handler, compiled: false, notCompiled });
       }
@@ -886,7 +886,7 @@ export function buildIr(session, interactions, { root, entry, clockIso, tz, scan
     for (const entry of finalCases) for (const effect of entry.effects) if (effect.collection && ['insert', 'insertFrom', 'updateFrom', 'removeWhere', 'update', 'toggle', 'increment', 'upsert', 'remove'].includes(effect.kind)) mutated.add(effect.collection);
     const main = finalCases[finalCases.length - 1];
     const notCompiled = residues.map(residue => ({ ...JSON.parse(JSON.stringify(residue)), handler: event.handler }));
-    if (!assembled.separated) notCompiled.push({ why: 'efeitos diferentes por estado sem predicado que os separe', signatures: assembled.groups, handler: event.handler });
+    if (!assembled.separated) notCompiled.push({ why: 'different effects per state without a predicate that separates them', signatures: assembled.groups, handler: event.handler });
     notCompiledAll.push(...notCompiled.map(item => ({ event: event.key, ...item })));
     const out = { key: event.key, view: event.scope, selector: event.selector, on: event.on, params, effects: main.effects, when: null, handler: event.handler, compiled: notCompiled.length === 0 };
     if (finalCases.length > 1) out.cases = finalCases.slice(0, -1);
@@ -924,8 +924,8 @@ export function buildIr(session, interactions, { root, entry, clockIso, tz, scan
   const files = [...read].sort().map(relative => { const data = readBytes(relative); return data ? { path: relative, bytes: data.length, sha256: sha256(data) } : null; }).filter(Boolean);
   const unreferenced = allFiles.filter(name => /\.(jsx|tsx|js|mjs|ts|html?)$/i.test(name) && !read.has(name) && !Object.values(aliases).includes(name)).sort();
   const outOfScope = dedupe(records.outOfScope
-    .concat(warnings.filter(item => item.code === 'PrototypeTimerSkipped' || item.code === 'PrototypeIntervalSkipped').map(item => ({ what: item.code === 'PrototypeTimerSkipped' ? 'timer de ' + item.delay + ' ms' : 'setInterval', where: item.where, why: 'sem timer de cliente nativo sem JS' })))
-    .concat((s0.inspect.listeners ?? []).filter(item => ['keydown', 'keyup', 'keypress', 'error', 'focus', 'blur', 'scroll', 'resize'].includes(item.type) && item.handler).map(item => ({ what: 'listener de ' + item.type, where: item.handler.file + ':' + item.handler.line, why: item.type.startsWith('key') ? 'teclado programático que repete o clique' : 'comportamento de navegador sem equivalente nativo' }))));
+    .concat(warnings.filter(item => item.code === 'PrototypeTimerSkipped' || item.code === 'PrototypeIntervalSkipped').map(item => ({ what: item.code === 'PrototypeTimerSkipped' ? 'timer of ' + item.delay + ' ms' : 'setInterval', where: item.where, why: 'no native client timer without JS' })))
+    .concat((s0.inspect.listeners ?? []).filter(item => ['keydown', 'keyup', 'keypress', 'error', 'focus', 'blur', 'scroll', 'resize'].includes(item.type) && item.handler).map(item => ({ what: 'listener of ' + item.type, where: item.handler.file + ':' + item.handler.line, why: item.type.startsWith('key') ? 'a programmatic keyboard that repeats the click' : 'a browser behavior without a native equivalent' }))));
   const ir = {
     schema: SCHEMA, clock: clockIso, tz,
     engine: { name: 'jsdom', version: JSDOM_VERSION, node: process.version },
@@ -1011,14 +1011,14 @@ export function refusalProblems(session, interactions, { mapping, pointer }) {
     const candidates = storeInfo.candidates ?? [];
     const roles = storeInfo.roles ?? {};
     const said = candidates.map(candidate => candidate + ': ' + (roles[candidate] ?? 'candidate')).concat(['"none": no store, every list stays as rendered']).join('; ');
-    if (hasLists && candidates.length) problems.push({ code: 'PROTOTYPE_AMBIGUOUS', path: pointer + '/mapping/data', message: 'há listas no DOM que correlacionam com dados, mas nenhum store foi achado; candidatos e o papel de cada um: ' + said, key: ['data'], value: candidates[0], alternatives: candidates.slice(1) });
+    if (hasLists && candidates.length) problems.push({ code: 'PROTOTYPE_AMBIGUOUS', path: pointer + '/mapping/data', message: 'there are lists in the DOM that correlate with data, but no store was found; the candidates and the role of each: ' + said, key: ['data'], value: candidates[0], alternatives: candidates.slice(1) });
   }
   if (storeInfo.error) problems.push({ code: 'PROTOTYPE_AMBIGUOUS', path: pointer + '/mapping/data', message: storeInfo.error, key: ['data'], value: (storeInfo.candidates ?? [])[0] ?? mapping.data, alternatives: (storeInfo.candidates ?? []).slice(1) });
   // Modals with the same title and different structures: one problem per title, a name for every split kind.
   const ambiguousModals = (interactions.modals ?? []).filter(item => item.ambiguous);
   for (const slugKey of [...new Set(ambiguousModals.map(item => item.slug))]) {
     const group = ambiguousModals.filter(item => item.slug === slugKey);
-    problems.push({ code: 'PROTOTYPE_AMBIGUOUS', path: pointer + '/mapping/modals', message: group.length + ' modais com o título "' + group[0].title + '" e estruturas diferentes (' + group.map(item => item.key).join(', ') + ')', additions: group.map(item => ({ keys: ['modals', item.key], value: mapping.modals?.[item.key] ?? item.name })) });
+    problems.push({ code: 'PROTOTYPE_AMBIGUOUS', path: pointer + '/mapping/modals', message: group.length + ' modals with the title "' + group[0].title + '" and different structures (' + group.map(item => item.key).join(', ') + ')', additions: group.map(item => ({ keys: ['modals', item.key], value: mapping.modals?.[item.key] ?? item.name })) });
   }
   const additionsOf = problem => problem.additions ?? (problem.key ? [{ keys: problem.key, value: problem.value }] : []);
   const patches = mappingPatches(mapping, problems.flatMap(additionsOf), pointer);
@@ -1114,7 +1114,7 @@ export async function capturePrototype(args = {}) {
     if (!problem.mappingAdditions?.length || !left.has(problem.code + ' ' + problem.path)) return problem;
     const { patch, alternatives, mappingAdditions, ...rest } = problem;
     const tried = JSON.stringify(mappingWith({}, mappingAdditions));
-    return { ...rest, message: problem.message + ' — nenhum patch resolve: a descoberta refeita com mapping ' + tried + ' recusa do mesmo jeito',
+    return { ...rest, message: problem.message + ' — no patch solves it: the discovery redone with mapping ' + tried + ' refuses the same way',
       fix: 'No mapping resolves this problem (the importer applied the one it would propose and ran the discovery again); do not retry with a mapping: report it as an SSAM defect with this refusal.',
       ssamDefect: true, unresolved: true };
   });

@@ -6,6 +6,7 @@
 //   their turn in the queue and never count themselves; status never refreshes references beside another write;
 //   concurrent fake deliveries of one Studio never overlap.
 // Fake bridges on loopback ports and temporary folders only: no Studio, no process is touched.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

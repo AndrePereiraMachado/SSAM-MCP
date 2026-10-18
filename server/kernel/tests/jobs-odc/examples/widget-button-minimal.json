@@ -1,5 +1,5 @@
 {
- "description": "Button: legenda no ITextWidget filho e OnClick com Destination (aqui navega para uma tela que o app ja tem).",
+ "description": "Button: the caption in the child ITextWidget and an OnClick with a Destination (here it navigates to a screen the app already has).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -8,6 +8,6 @@
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IButton", "name": "ProfileButton", "as": "$btn"},
   {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "My profile"},
-  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile", "_why": "sem Destination o Verify da RequiredPropertyValue no OnClick"}
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile", "_why": "without a Destination the Verify gives RequiredPropertyValue on the OnClick"}
  ]
 }

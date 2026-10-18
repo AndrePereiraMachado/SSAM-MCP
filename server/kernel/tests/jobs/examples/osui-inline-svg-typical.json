@@ -1,5 +1,5 @@
 {
- "description": "InlineSVG (OutSystemsUI, Utilities) tipico; eventos Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "description": "Typical InlineSVG (OutSystemsUI, Utilities); events Initialized handled by screen actions that keep the parameters in variables.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

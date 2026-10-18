@@ -36,7 +36,7 @@ import { consumerNames } from './o11-publish.mjs';
 import { CAPABILITY, studioReads } from './service-center/integration-studio.mjs';
 import { hostClass as registeredHostClass } from './service-center/auth.mjs';
 import { recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
-import { DESTRUCTIVE_SUFFIX, tokenNames } from './destructive-operations.mjs';
+import { DESTRUCTIVE_SUFFIX, tokenNames, wordsGiven } from './destructive-operations.mjs';
 
 export const TOOL = 'o11_extension';
 export const ACTIONS = Object.freeze(['read', 'publish', 'delete']);
@@ -47,7 +47,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
 const sha256 = data => createHash('sha256').update(data).digest('hex');
 const fold = text => String(text ?? '').trim().toLowerCase();
-const placeholder = words => /^<[^>]*>$/.test(String(words ?? '').trim());
+const placeholder = words => !wordsGiven(words); // CX15 r7 (L-7): one predicate
 const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value?.ok === false ? { isError: true } : {}) });
 const problem = (code, message, fix, extra = {}) => ({ code, message, fix, ...extra });
 const refusal = (code, error, problems = [], extra = {}) => ({ ok: false, code, error, problems: problems.length ? problems : [problem(code, error, null)], ...extra });
@@ -151,7 +151,7 @@ function referenceContinuation(ctx, work, name, actions) {
   const file = path.join(work, 'reference-' + name + '.json');
   try { fs.mkdirSync(work, { recursive: true }); fs.writeFileSync(file, JSON.stringify(job, null, 2)); } catch { /* the job stays inline in referenceJob */ }
   return { referenceJob: job, continuation: next('ssam_job', { lane: 'o11', job: file, base: '<consumer .oml snapshot>', captureProducers: [name] },
-    'referencie a extensão no módulo consumidor (o runner captura a assinatura dela só leitura); depois o11_deliver e o11_publish do consumidor com as palavras do usuário') };
+    'reference the extension in the consumer module (the runner captures its signature read-only); then o11_deliver and o11_publish of the consumer with the user\'s words') };
 }
 
 async function publish(input, ctx) {
@@ -179,7 +179,7 @@ async function publish(input, ctx) {
   if (!capabilities?.has?.(CAPABILITY))
     return refusal('BRIDGE_TOO_OLD', 'The Service Studio bridge loaded in this Studio has no integration-studio surface; nothing was built or sent.',
       [problem('BRIDGE_TOO_OLD', `The bridge does not announce ${CAPABILITY}.`, 'Close the Service Studio and open it again through the "Service Studio (SSAM)" shortcut, then reconnect with ssam_connect {lane:"o11"}.')],
-      { continuation: next('ssam_connect', { lane: 'o11' }, 'reconecte depois de reabrir o Studio pelo atalho "Service Studio (SSAM)"; a ponte nova vale no próximo Studio aberto') });
+      { continuation: next('ssam_connect', { lane: 'o11' }, 'reconnect after reopening the Studio through the "Service Studio (SSAM)" shortcut; the new bridge applies to the next Studio opened') });
 
   if (previous) return reconcile(previous, reads, ctx);
   if (!name) {
@@ -201,7 +201,7 @@ async function publish(input, ctx) {
   if (input.expectedVersionId != null && String(input.expectedVersionId) !== String(observedVersion ?? 'none'))
     return refusal('EXTENSION_VERSION_CHANGED', `The active version of ${name} is ${observedVersion ?? 'none'}, not ${input.expectedVersionId}; nothing was built or sent.`,
       [problem('EXTENSION_VERSION_CHANGED', 'The extension changed since the version the edit was based on.', 'Read it again (o11_extension read) and rebuild the spec on the active version.')],
-      { observed: { versionId: observedVersion }, continuation: next(TOOL, { action: 'read', host, extension: name }, 'leia a versão ativa antes de editar') });
+      { observed: { versionId: observedVersion }, continuation: next(TOOL, { action: 'read', host, extension: name }, 'read the active version before editing') });
   fs.mkdirSync(work, { recursive: true });
   let base = null;
   if (current) {
@@ -293,7 +293,7 @@ async function publish(input, ctx) {
   }
   const repeat = { action: 'publish', host, spec: input.spec ? '<the same spec>' : undefined, specFile: input.specFile, referencesFrom: input.referencesFrom, words: '<the user\'s words naming ' + name + (affected.length ? ' and ' + affected.join(', ') : '') + '>' };
   const because = { ...summary, consumers };
-  if (!words.trim() || (authorization && breaking))
+  if (!wordsGiven(words) || (authorization && breaking))
     return refusal('WORDS_REQUIRED', breaking && authorization ? `A breaking change of ${name} needs the user's own words; a standing grant never covers it. Nothing was sent.`
       : `Publishing ${name} needs the user's own words naming it (or a standing publish grant that covers it). Nothing was sent.`,
     [problem('WORDS_REQUIRED', 'No words authorize this publication.', `Ask the user and pass their words verbatim in words; they name ${name}${affected.length ? ' and every consumer: ' + affected.join(', ') : ''}.`, breaking ? { ssamRule: true } : {})],
@@ -345,7 +345,7 @@ async function publish(input, ctx) {
 // The Service Center answer of extension-publish (contract I1) as this tool's states.
 function interpret(sent, { name, created, operationId, summary, current, host }) {
   if (sent?.ok === false && sent.code === 'EXTENSION_VERSION_CHANGED')
-    return { ...sent, ok: false, ...summary, operationId, continuation: next(TOOL, { action: 'read', host, extension: name }, 'a extensão mudou desde a leitura; leia de novo antes de editar') };
+    return { ...sent, ok: false, ...summary, operationId, continuation: next(TOOL, { action: 'read', host, extension: name }, 'the extension changed since the read; read it again before editing') };
   const state = sent?.state ?? sent?.result?.state;
   const versionId = sent?.extensionVersionId ?? sent?.result?.extensionVersionId ?? null;
   const extensionId = sent?.extensionId ?? sent?.result?.extensionId ?? current?.id ?? null;
@@ -358,7 +358,7 @@ function interpret(sent, { name, created, operationId, summary, current, host })
     return { ok: false, state: 'uncertain', code: 'EXTENSION_PUBLISH_UNCERTAIN', ...summary, extensionId, versionId, operationId,
       error: `The publication of ${name} has no confirmed end; it is never sent again. The same call with this operationId reconciles by reading.`,
       problems: [problem('EXTENSION_PUBLISH_UNCERTAIN', 'The answer of the publication was lost or not confirmed.', 'Call o11_extension publish again with the same operationId: it reads the environment and never sends twice.')],
-      continuation: next(TOOL, { action: 'publish', host, operationId, spec: '<the same spec>' }, 'reconcilia lendo o ambiente; nunca reenvia') };
+      continuation: next(TOOL, { action: 'publish', host, operationId, spec: '<the same spec>' }, 'reconciles by reading the environment; never sends again') };
   if (sent?.ok === false) return { ...sent, ok: false, problems: sent.problems ?? [problem(sent.code ?? 'EXTENSION_PUBLISH_REFUSED', String(sent.error ?? 'refused'), null)], ...summary, operationId };
   return { ok: false, state: 'uncertain', code: 'EXTENSION_PUBLISH_UNCERTAIN', ...summary, operationId, error: `The Service Center answered no state for ${name}; it is never sent again.`,
     problems: [problem('EXTENSION_PUBLISH_UNCERTAIN', 'No state came back.', 'Call again with the same operationId to reconcile by reading.')] };
@@ -447,7 +447,7 @@ async function read(input, ctx, connected = null, listed = null) {
   try { consumers = consumerNames(await reads.consumers(row.key, ''), name); } catch { consumers = 'unknown'; }
   return { ok: true, extension: name, extensionKey: row.key, extensionId: row.id ?? null, versionId: row.versionId ?? null, xif: file, xifSha256: document.sha256,
     hash: document.hash, signatureHash: document.signatureHash, spec: document.spec, resources: document.resources, exported: document.exported, consumers,
-    continuation: next(TOOL, { action: 'publish', host: input.host, spec: '<this spec, changed>', expectedVersionId: String(row.versionId ?? 'none'), words: '<the user\'s words naming ' + name + '>' }, 'edite o spec e publique numa chamada') };
+    continuation: next(TOOL, { action: 'publish', host: input.host, spec: '<this spec, changed>', expectedVersionId: String(row.versionId ?? 'none'), words: '<the user\'s words naming ' + name + '>' }, 'edit the spec and publish in one call') };
 }
 
 // delete: the Service Center delete engine in two calls (CX15). Without confirmationToken: the preview of the extension

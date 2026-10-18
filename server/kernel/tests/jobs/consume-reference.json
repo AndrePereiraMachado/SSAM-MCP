@@ -1,5 +1,5 @@
 {
- "description": "Adicionar referencias novas headless (Manage Dependencies sem Studio): o modulo Reactive passa a referenciar a entidade Product e a action Product_GetById do produtor (job producer-public) via IESpace.RefreshDependencies, e usa-as numa tela",
+ "description": "Add new references headless (Manage Dependencies without Studio): the Reactive module now references the entity Product and the action Product_GetById of the producer (job producer-public) via IESpace.RefreshDependencies, and uses them on a screen",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "ops": [

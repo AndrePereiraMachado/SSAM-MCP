@@ -45,8 +45,9 @@ public static class Errors
     /// <summary>The first coded error of the chain (outermost first), or null.</summary>
     public static ICodedError? FindCoded(Exception ex)
     {
+        // An empty code is no code (SignatureCaptureException: coded only for an unknown or ambiguous producer name).
         for (var e = ex; e != null; e = e.InnerException)
-            if (e is ICodedError coded) return coded;
+            if (e is ICodedError coded && !string.IsNullOrEmpty(coded.Code)) return coded;
         return null;
     }
 

@@ -1,5 +1,5 @@
 {
- "description": "Galeria dos widgets NATIVOS do Reactive (plugin NRWidgets): Input, TextArea, Checkbox, Switch, RadioGroup/RadioButton, Dropdown, ButtonGroup, Button, Link, Icon, Image, Upload, Label, Container, Expression, If, List/ListItem, Table, Popup, AdvancedHtml",
+ "description": "Gallery of the NATIVE Reactive widgets (NRWidgets plugin): Input, TextArea, Checkbox, Switch, RadioGroup/RadioButton, Dropdown, ButtonGroup, Button, Link, Icon, Image, Upload, Label, Container, Expression, If, List/ListItem, Table, Popup, AdvancedHtml",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "ops": [

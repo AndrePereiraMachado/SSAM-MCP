@@ -1,6 +1,7 @@
 // Package 3 integration (docs/PACOTE-ATRITOS-3.md section 8): what only exists once the lanes, the 17th release and the
 // Codex branch are merged. close-module is one command: moduleKey of lane mb and the two refusal codes of the 16th
 // release, each registered with its continuation; tools.json routes it once. Fake bridge on a loopback port only.
+import './fixtures/isolated-profile.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

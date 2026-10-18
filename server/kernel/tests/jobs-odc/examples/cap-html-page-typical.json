@@ -1,5 +1,5 @@
 {
- "description": "Pagina inteira por HTML com dados: a op html le Product por um aggregate, mostra uma tabela com campos por linha, uma busca por nome e um link por linha que navega para o detalhe com o Id.",
+ "description": "A whole page by HTML with data: the html op reads Product with an aggregate, shows a table with fields per row, a search by name and a link per row that navigates to the detail with the Id.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -8,7 +8,7 @@
    {"name": "Name", "type": "Text", "length": 100, "mandatory": true},
    {"name": "Price", "type": "Currency"}]}]}},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductDetail", "as": "$detail", "_why": "a tela de destino existe antes da pagina que navega para ela"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductDetail", "as": "$detail", "_why": "the target screen exists before the page that navigates to it"},
   {"op": "set", "target": "$detail/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$detail", "type": "IInputParameter", "name": "ProductId", "as": "$pid"},
   {"op": "set", "target": "$pid", "prop": "DataType", "value": "Product Identifier"},

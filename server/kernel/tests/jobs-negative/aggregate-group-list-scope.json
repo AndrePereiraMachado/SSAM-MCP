@@ -6,7 +6,7 @@
     {
       "id": "UnusedUserAction",
       "element": "Headless_CS (ESpace) / Order_Report (ServerAction)",
-      "why": "Action privada isolada para provar joins e agregacoes; este fixture nao tem um chamador."
+      "why": "Isolated private action to prove joins and aggregations; this fixture has no caller."
     }
   ],
   "ops": [

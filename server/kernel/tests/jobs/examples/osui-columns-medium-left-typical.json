@@ -1,5 +1,5 @@
 {
- "description": "ColumnsMediumLeft (OutSystemsUI, Adaptive) tipico; placeholders Column1, Column2 com dados do aggregate de tarefas.",
+ "description": "Typical ColumnsMediumLeft (OutSystemsUI, Adaptive); placeholders Column1, Column2 with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

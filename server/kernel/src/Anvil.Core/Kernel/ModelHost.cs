@@ -99,7 +99,13 @@ public sealed partial class ModelHost
         finally { Release(module); }
     }
 
-    public ESpace Load(byte[] oml) => StudioAdapter.Runtime.Load(oml);
+    public ESpace Load(byte[] oml)
+    {
+        var espace = StudioAdapter.Runtime.Load(oml);
+        // The bytes a disposable copy is loaded from when the Studio's defaults are measured (StudioDefaults).
+        StudioDefaults.Remember(espace, oml);
+        return espace;
+    }
 
     public ESpace Load(string omlPath) => Load(File.ReadAllBytes(omlPath));
 

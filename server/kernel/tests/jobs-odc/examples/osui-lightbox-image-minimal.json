@@ -1,5 +1,5 @@
 {
- "description": "LightboxImage do OSUI: ImageURL da imagem ampliada e a miniatura de exemplo do Thumbnail apontada para a mesma URL externa.",
+ "description": "LightboxImage of OSUI: the ImageURL of the enlarged image and the sample thumbnail of Thumbnail pointed to the same external URL.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -8,7 +8,7 @@
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "LightboxImage1", "source": "IMobileBlock:LightboxImage", "as": "$lb"},
   {"op": "set", "target": "$lb/ImageURL", "prop": "Value", "value": "\"https://picsum.photos/1200/800\""},
-  {"op": "set", "target": "$lb/Thumbnail/#IImage", "prop": "Type", "value": "External", "_why": "a miniatura de exemplo nasce sem imagem: vira externa"},
+  {"op": "set", "target": "$lb/Thumbnail/#IImage", "prop": "Type", "value": "External", "_why": "the sample thumbnail is born without an image: it becomes external"},
   {"op": "set", "target": "$lb/Thumbnail/#IImage", "prop": "Url", "value": "\"https://picsum.photos/200/130\""}
  ]
 }

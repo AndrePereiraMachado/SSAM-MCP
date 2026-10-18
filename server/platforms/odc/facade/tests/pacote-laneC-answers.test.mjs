@@ -1,4 +1,4 @@
-// Lane C, C19: no answer of the ssam server goes above the client's ceiling (SSAM_MAX_ANSWER_BYTES, 40960). A bigger one
+// Lane C, C19: no answer of the ssam server goes above the client's ceiling (SSAM_MAX_ANSWER_BYTES, from context-budget.mjs). A bigger one
 // is kept whole in <anvilRoot>/.local/answers/<sha256>.json and paged, readable by ssam_evidence; a tool with its own byte
 // budget gets the budget held under the ceiling instead; a successful ssam_job answers in about 1 KB and a failed one keeps
 // every problem; ssam_map below its smallest page answers the minimal page with the continuation instead of throwing.
@@ -13,6 +13,7 @@ import * as z from 'zod/v4';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
 import * as m_ssam from '../ssam.mjs';
+import { EXPANSION_DEFAULT_BYTES } from '../context-budget.mjs';
 const { createSsamServer, pageAnswer, clampBudget, budgetCeiling, maxAnswerBytes, MAX_ANSWER_BYTES } = m_ssam; // a namespace: at the base each test fails on its own rule, not at import
 import * as m_job_runner from '../job-runner.mjs';
 const { summarize, runJob, SUCCESS_BYTES } = m_job_runner; // a namespace: at the base each test fails on its own rule, not at import
@@ -43,7 +44,7 @@ test('a 100 KB answer is kept in .local/answers and paged; ssam_evidence reads t
   const reply = await client.callTool({ name: 'o11_job', arguments: { job: [{ op: 'find', kind: 'Entity' }] } });
   assert.ok(bytes(reply.content[0].text) <= MAX_ANSWER_BYTES, bytes(reply.content[0].text) + ' bytes');
   // The per-kind policy now runs before the ceiling: this job receipt fits 2 KB and
-  // its omitted rows remain exact evidence. Exercise the 40 KB safety net separately.
+  // its omitted rows remain exact evidence. Exercise the shared safety net separately.
   const receipt = valueOf(reply);
   assert.ok(bytes(reply.content[0].text) <= 2048);
   assert.ok(receipt.omitted);
@@ -62,7 +63,7 @@ test('a 100 KB answer is kept in .local/answers and paged; ssam_evidence reads t
   // continuation reads all of them as a table, within the reader's budget.
   assert.equal(value.paged.complete, false);
   assert.deepEqual(value.paged.outline.map(o => [o.at, o.rows, o.inline]), [['/rows', 1000, false]]);
-  assert.deepEqual(value.continuation, { tool: 'ssam_evidence', arguments: { file: value.paged.file, pointer: '/rows', table: true, fields: ['i', 'text'], max: 1000, budgetBytes: 65536 }, why: value.continuation.why });
+  assert.deepEqual(value.continuation, { tool: 'ssam_evidence', arguments: { file: value.paged.file, pointer: '/rows', table: true, fields: ['i', 'text'], max: 1000, budgetBytes: EXPANSION_DEFAULT_BYTES }, why: value.continuation.why, more: [{ tool: 'ssam_evidence', arguments: { file: value.paged.file, pointer: '/note', budgetBytes: EXPANSION_DEFAULT_BYTES } }] });
   // The continuation is a call this server answers.
   const read = await client.callTool({ name: 'ssam_evidence', arguments: { file: value.paged.file, pointer: '/rows/999/i' } });
   assert.notEqual(read.isError, true, read.content[0].text);
@@ -76,7 +77,7 @@ test('a 100 KB answer is kept in .local/answers and paged; ssam_evidence reads t
   // pageAnswer alone: a refusal stays a refusal; SSAM_MAX_ANSWER_BYTES moves the ceiling (never below 4096).
   const refused = pageAnswer({ content: [{ type: 'text', text: JSON.stringify({ ok: false, code: 'X', rows }) }], isError: true }, { root, maxBytes: 4096 });
   assert.equal(refused.isError, true); assert.equal(refused.structuredContent.code, 'X');
-  assert.equal(maxAnswerBytes({ SSAM_MAX_ANSWER_BYTES: '20000' }), 20000); assert.equal(maxAnswerBytes({ SSAM_MAX_ANSWER_BYTES: '100' }), 40960); assert.equal(maxAnswerBytes({}), 40960);
+  assert.equal(maxAnswerBytes({ SSAM_MAX_ANSWER_BYTES: '20000' }), 20000); assert.equal(maxAnswerBytes({ SSAM_MAX_ANSWER_BYTES: '100' }), MAX_ANSWER_BYTES); assert.equal(maxAnswerBytes({}), MAX_ANSWER_BYTES);
 });
 
 test('a tool with its own byte budget gets it held under the ceiling before the call, never paged', async t => {

@@ -1,6 +1,7 @@
 // Pacote D2: studio_status while the bridge is busy (C10) and studio_publish with a standing grant (C08, I6).
 // The bridge serves one command at a time; a status during a merge used to wait for the pipe and fail with BRIDGE_BUSY.
 // Now it answers at once from the command in flight and the evidence of that delivery. Fakes only, no Studio, no pipe.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,6 +10,7 @@ import path from 'node:path';
 import { busyEvidence, studioStatus, STATUS_CONNECT_MS } from '../lib.mjs';
 import { PipeError } from '../odc-pipe.mjs';
 import { publishWithGrant } from '../studio-publish-log.mjs';
+import { hashedWords } from '../destructive-operations.mjs';
 
 function lab(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-d2-status-'));
@@ -65,7 +67,8 @@ test('studio_publish: a manifest without words takes the standing grant of its a
   const grants = { findGrant: async q => (q.app === 'Fixture' && q.verb === 'publish' ? { grantId: 'g-9', words: 'publique o Fixture quando quiser' } : null) };
   const publish = async () => ({ ok: true, published: { revision: 12 }, completedAt: '2026-10-05T03:00:00Z' });
   const answer = await publishWithGrant({ manifest: 'm.json', pid: 7 }, { studio, readManifest: () => ({ module: 'Fixture', publishAuthorization: null }), grants, publish });
-  assert.deepEqual(seen[0], ['authorize', 'm.json', 'publish', 'publique o Fixture quando quiser']);
+  // CX15 r5 (N-2, converted): the authorize line carries sha256:<hex> of the grant's words (before: the words).
+  assert.deepEqual(seen[0], ['authorize', 'm.json', 'publish', hashedWords('publique o Fixture quando quiser')]);
   assert.deepEqual(answer.authorization, { source: 'standing-grant', grantId: 'g-9' });
   assert.deepEqual(answer.lastPublication, { at: '2026-10-05T03:00:00Z', status: 'succeeded', version: 12, author: null, by: 'ssam', source: 'publish-result' });
   // Recorded words: no grant lookup, no second authorize.

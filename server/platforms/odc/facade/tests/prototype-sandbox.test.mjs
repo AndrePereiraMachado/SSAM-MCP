@@ -4,6 +4,7 @@
 // the guarantee comes from the OS-level permission model and the stripped environment of the forked child (pool.mjs),
 // plus the realm reparenting of the globals SSAM installs (dom-runtime.mjs). These tests exercise a hostile prototype
 // and assert the escape yields nothing: no write, no read of a secret outside the folder, no spawn, no home directory.
+import './fixtures/isolated-profile.mjs';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

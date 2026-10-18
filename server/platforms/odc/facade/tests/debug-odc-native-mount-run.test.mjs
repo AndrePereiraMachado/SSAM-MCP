@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -109,7 +110,8 @@ test('authorized mount follows the original order and records the authorization 
   assert.ok(report.lifecycleIncompleteReasons.includes('handlers-undeclared'));
   assert.equal(report.appRequestIdentityProved, false); assert.equal(report.lockRetained, false); assert.equal(fs.existsSync(f.lock), false);
   const dir = path.dirname(report.receiptPath), authorization = fs.readFileSync(path.join(dir, 'authorization.json'));
-  assert.equal(JSON.parse(authorization).words, input.words);
+  // CX15 r5 (N-3, converted): the file keeps wordsSha256 of the words, never the words (before: words === input.words).
+  assert.equal(JSON.parse(authorization).words, undefined); assert.equal(JSON.parse(authorization).wordsSha256, createHash('sha256').update(input.words).digest('hex'));
   assert.deepEqual(f.options().mountAuthorization, { policy: odcMountPolicy, runtimeUrl, screenKey,
     authorizationSha256: createHash('sha256').update(authorization).digest('hex') });
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'mount-submission.json'))).metadata.policy, odcMountPolicy);

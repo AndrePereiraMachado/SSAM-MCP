@@ -1,5 +1,5 @@
 {
- "description": "ODC (cobertura C): o hire-data-model.json reduzido para a faixa ODC. Uma unica op spec sobre a fixture do InsuranceApp com static entity de atributo extra e records que o preenchem, tres entidades relacionadas por FK (uma publica), defaults por expressao, Long Text, structure e indices (um unico e um comum).",
+ "description": "ODC (coverage C): hire-data-model.json reduced for the ODC lane. A single spec op on the InsuranceApp fixture with a static entity with an extra attribute and records that fill it, three entities related by FK (one public), defaults by expression, Long Text, structure and indexes (one unique and one common).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -76,7 +76,7 @@
     ]
    }
   },
-  {"op": "get", "target": "$WfCovProject.Notes", "_why": "prova o Long Text: DataType Text com Length 2000000"},
+  {"op": "get", "target": "$WfCovProject.Notes", "_why": "proves Long Text: DataType Text with Length 2000000"},
   {"op": "get", "target": "EntityIndex:UQ_WfCovProject_OrgName", "_why": "prova o indice unico composto"},
   {"op": "find", "name": "WfCovTask"}
  ]

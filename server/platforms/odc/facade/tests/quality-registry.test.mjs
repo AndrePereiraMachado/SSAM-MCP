@@ -6,6 +6,7 @@
 // then the parity sha of quality-line.test.mjs and the console's copies (docs/QUALIDADE.md). Sentinels: a new constant, a
 // new verb, integration op, stage or gate in a source tree is reported missing and stays CODE_UNLISTED until the registry
 // has it; tests and the contract itself are not sources; the customer words of the review are in no registry.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

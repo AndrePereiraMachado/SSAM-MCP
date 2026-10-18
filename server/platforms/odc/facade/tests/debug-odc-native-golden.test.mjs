@@ -1,6 +1,7 @@
 // Golden offline integration: resolve the deterministic entry of a real published action (FloodQuotes r293) and index
 // its public runtime, using only cached PUBLIC assets under SSAM_DEBUG_EVIDENCE_ROOT. No network, no Studio, no login.
 // Skips when the evidence root is absent so the suite still runs on a clean checkout.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

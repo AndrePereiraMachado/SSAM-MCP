@@ -1,5 +1,5 @@
 {
- "description": "REST consumido GET (ViaCEP): IRestClient, structure de resposta, metodo com URL Path {CEP}, input UrlPlacement, output Body (job da investigacao REST de 2026-09-04)",
+ "description": "Consumed REST GET (ViaCEP): IRestClient, response structure, method with URL Path {CEP}, input UrlPlacement, output Body (job of the REST investigation of 2026-09-04)",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "ops": [

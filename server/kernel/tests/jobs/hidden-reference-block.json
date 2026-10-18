@@ -1,67 +1,67 @@
 {
- "description": "Instancia do bloco MouseEvents (OutSystems UI) cuja referencia e OCULTA no fixture (dependencia indireta) com os 3 handlers ligados. O verbo desoculta a referencia ao ligar SourceBlock; sem isso o merge de 3 vias automatico apagava os handlers e argumentos (item 17). O get final mostra Hidden=False.",
+ "description": "Instance of the block MouseEvents (OutSystems UI) whose reference is HIDDEN in the fixture (indirect dependency) with the 3 handlers connected. The verb unhides the reference when linking SourceBlock; without that the automatic 3-way merge deleted the handlers and arguments (item 17). The final get shows Hidden=False.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "UnusedElement",
    "element": "MouseEvents1_End (ScreenAction) / X (InputParameter)",
-   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+   "why": "The handler exists to prove the fidelity of the merge of the MouseEvents events; this parameter of the block contract is not consumed by the proof handler."
   },
   {
    "id": "UnusedElement",
    "element": "MouseEvents1_End (ScreenAction) / Y (InputParameter)",
-   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+   "why": "The handler exists to prove the fidelity of the merge of the MouseEvents events; this parameter of the block contract is not consumed by the proof handler."
   },
   {
    "id": "UnusedElement",
    "element": "MouseEvents1_End (ScreenAction) / OffsetX (InputParameter)",
-   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+   "why": "The handler exists to prove the fidelity of the merge of the MouseEvents events; this parameter of the block contract is not consumed by the proof handler."
   },
   {
    "id": "UnusedElement",
    "element": "MouseEvents1_End (ScreenAction) / OffsetY (InputParameter)",
-   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+   "why": "The handler exists to prove the fidelity of the merge of the MouseEvents events; this parameter of the block contract is not consumed by the proof handler."
   },
   {
    "id": "UnusedElement",
    "element": "MouseEvents1_End (ScreenAction) / TimeTaken (InputParameter)",
-   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+   "why": "The handler exists to prove the fidelity of the merge of the MouseEvents events; this parameter of the block contract is not consumed by the proof handler."
   },
   {
    "id": "UnusedElement",
    "element": "MouseEvents1_Move (ScreenAction) / X (InputParameter)",
-   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+   "why": "The handler exists to prove the fidelity of the merge of the MouseEvents events; this parameter of the block contract is not consumed by the proof handler."
   },
   {
    "id": "UnusedElement",
    "element": "MouseEvents1_Move (ScreenAction) / Y (InputParameter)",
-   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+   "why": "The handler exists to prove the fidelity of the merge of the MouseEvents events; this parameter of the block contract is not consumed by the proof handler."
   },
   {
    "id": "UnusedElement",
    "element": "MouseEvents1_Move (ScreenAction) / OffsetX (InputParameter)",
-   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+   "why": "The handler exists to prove the fidelity of the merge of the MouseEvents events; this parameter of the block contract is not consumed by the proof handler."
   },
   {
    "id": "UnusedElement",
    "element": "MouseEvents1_Move (ScreenAction) / OffsetY (InputParameter)",
-   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+   "why": "The handler exists to prove the fidelity of the merge of the MouseEvents events; this parameter of the block contract is not consumed by the proof handler."
   },
   {
    "id": "UnusedElement",
    "element": "MouseEvents1_Move (ScreenAction) / Evt (InputParameter)",
-   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+   "why": "The handler exists to prove the fidelity of the merge of the MouseEvents events; this parameter of the block contract is not consumed by the proof handler."
   },
   {
    "id": "UnusedElement",
    "element": "MouseEvents1_Start (ScreenAction) / X (InputParameter)",
-   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+   "why": "The handler exists to prove the fidelity of the merge of the MouseEvents events; this parameter of the block contract is not consumed by the proof handler."
   },
   {
    "id": "UnusedElement",
    "element": "MouseEvents1_Start (ScreenAction) / Y (InputParameter)",
-   "why": "Handler existe para provar fidelidade do merge dos eventos MouseEvents; este parametro do contrato do bloco nao e consumido pelo handler de prova."
+   "why": "The handler exists to prove the fidelity of the merge of the MouseEvents events; this parameter of the block contract is not consumed by the proof handler."
   }
  ],
  "ops": [

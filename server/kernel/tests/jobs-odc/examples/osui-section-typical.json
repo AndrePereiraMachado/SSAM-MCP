@@ -1,5 +1,5 @@
 {
- "description": "Section do OSUI sem padding com dados: o titulo mostra a contagem e o conteudo uma List de nomes.",
+ "description": "Section of OSUI without padding with data: the title shows the count and the content a List of names.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

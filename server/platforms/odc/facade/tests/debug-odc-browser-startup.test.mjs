@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';
 import {observeOdcBrowserStartup} from '../debug-odc-browser-startup.mjs';
 // A paused page answers a plain Runtime.evaluate, but an awaited one settles only

@@ -1,5 +1,5 @@
 {
- "description": "HTML Element: um IAdvancedHtml com Tag h2 e um texto dentro dele.",
+ "description": "HTML Element: an IAdvancedHtml with Tag h2 and a text inside it.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -7,8 +7,8 @@
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "HtmlElementDemo", "as": "$scr"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IAdvancedHtml", "name": "SectionTitle", "as": "$h2"},
-  {"op": "set", "target": "$h2", "prop": "Tag", "value": "h2", "_why": "Tag e o nome do elemento HTML"},
-  {"op": "create", "parent": "$h2/Content", "type": "ITextWidget", "as": "$text", "_why": "os filhos de um HTML Element vivem no Content dele"},
+  {"op": "set", "target": "$h2", "prop": "Tag", "value": "h2", "_why": "Tag is the name of the HTML element"},
+  {"op": "create", "parent": "$h2/Content", "type": "ITextWidget", "as": "$text", "_why": "the children of an HTML Element live in its Content"},
   {"op": "set", "target": "$text", "prop": "Text", "value": "Featured products"}
  ]
 }

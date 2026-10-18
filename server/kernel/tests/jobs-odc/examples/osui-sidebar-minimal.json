@@ -1,5 +1,5 @@
 {
- "description": "Sidebar do OSUI: a instancia com titulo no Header e texto no Content.",
+ "description": "Sidebar of OSUI: the instance with a title in the Header and a text in the Content.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

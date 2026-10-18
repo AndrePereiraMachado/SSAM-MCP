@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA do delete de uma entidade usada so pelo tipo gerado `DelListItem List`: a variavel local Items da action DelListUse e desse tipo. O tipo lista (como o registo anonimo `X Record`) e mantido pela plataforma e so deixa de contar enquanto ninguem o usa (tests/jobs-odc/delete-generated-companions.json); aqui ha quem o use, e a recusa nomeia a VARIAVEL, nao o tipo. Cobertura testada, fase 2; o mesmo na faixa O11 em tests/jobs-negative.",
+ "description": "ODC: the REFUSAL of the delete of an entity used only by the generated type `DelListItem List`: the local variable Items of the action DelListUse is of that type. The list type (like the anonymous record `X Record`) is maintained by the platform and only stops counting while nobody uses it (tests/jobs-odc/delete-generated-companions.json); here someone uses it, and the refusal names the VARIABLE, not the type. Tested coverage, phase 2; the same in the O11 lane in tests/jobs-negative.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectError": [
@@ -12,7 +12,7 @@
   {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "DelListUse", "as": "$act"},
   {"op": "create", "parent": "$act", "type": "ILocalVariable", "name": "Items", "as": "$items"},
   {"op": "set", "target": "$items", "prop": "DataType", "value": "DelListItem List"},
-  {"op": "usages", "target": "$DelListItem", "_why": "o IListType 'DelListItem List' aparece com derived false: a variavel usa-o"},
+  {"op": "usages", "target": "$DelListItem", "_why": "the IListType 'DelListItem List' appears with derived false: the variable uses it"},
   {"op": "delete", "target": "$DelListItem"}
  ]
 }

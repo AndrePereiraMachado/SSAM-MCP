@@ -144,6 +144,10 @@ deploy
 # environment (without it every host is "corporate", the strictest class), and labs and debugger tests with his hosts
 .mcp.json
 **/.mcp.json
+# the debug MCP client config of the line (marco-a7, scripts/configure-mcp.mjs): his node and root paths; the server only
+# names the file in a hint, never reads it
+debug.mcp.json
+**/debug.mcp.json
 README-CAIXA.md
 .env.example
 docs/INTEGRACOES-GITSSAM.md

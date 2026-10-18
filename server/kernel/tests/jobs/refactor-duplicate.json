@@ -1,17 +1,17 @@
 {
- "description": "A copia que o Studio faz com Ctrl+D, pelo verbo duplicate, nas tres areas: atributo, entidade inteira, widget dentro de container, screen action com os nos, e a tela inteira. Tres coisas que quem entrega precisa de saber e nada provava ate agora: (1) o nome ganha o sufixo que a PLATAFORMA escolhe (Body vira Body2), nao um nome que o job escolha -- para dar outro nome, renomeie a seguir; (2) a copia entra no FIM da sequencia do mesmo pai; (3) a copia nasce SEM consumidores: quem usava o original continua a usar o original, e e por isso que a copia de uma action aparece no Verify como UnusedAction. Copiar um contentor, uma action ou uma tela leva tudo o que esta dentro.",
+ "description": "The copy that the Studio makes with Ctrl+D, through the duplicate verb, in the three areas: attribute, whole entity, widget inside a container, screen action with its nodes, and the whole screen. Three things that whoever delivers needs to know and that nothing proved until now: (1) the name gets the suffix that the PLATFORM chooses (Body becomes Body2), not a name that the job chooses -- to give another name, rename afterwards; (2) the copy enters at the END of the sequence of the same parent; (3) the copy is born WITHOUT consumers: whoever used the original keeps using the original, and that is why the copy of an action appears in Verify as UnusedAction. Copying a container, an action or a screen takes everything that is inside it.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "UnusedAction",
    "element": "Headless_UI (ESpace) / MainFlow (MobileFlow) / DupScreen (MobileScreen) / Greet2 (ScreenAction)",
-   "why": "A copia de uma screen action nasce sem consumidores: e exatamente o que este job prova, e o Verify diz o mesmo."
+   "why": "The copy of a screen action is born without consumers: that is exactly what this job proves, and Verify says the same."
   },
   {
    "id": "UnusedAction",
    "element": "Headless_UI (ESpace) / MainFlow (MobileFlow) / DupScreen2 (MobileScreen) / Greet2 (ScreenAction)",
-   "why": "A tela copiada leva as duas actions, e a copia da copia continua sem consumidores."
+   "why": "The copied screen takes the two actions, and the copy of the copy still has no consumers."
   }
  ],
  "ops": [
@@ -47,26 +47,26 @@
   {"op": "layout", "target": "$act"},
   {"op": "create", "parent": "$c1", "type": "IButton", "name": "Go", "as": "$btn"},
   {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Go"},
-  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$act", "_why": "a original TEM consumidor; a copia nao vai ter"},
+  {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$act", "_why": "the original HAS a consumer; the copy will not"},
 
-  {"op": "usages", "target": "$DupNotice.Body", "_why": "antes de duplicar: a Expression do Dois usa o atributo"},
+  {"op": "usages", "target": "$DupNotice.Body", "_why": "before duplicating: the Expression of Dois uses the attribute"},
   {"op": "duplicate", "target": "$DupNotice.Body", "as": "$bodyCopy"},
   {"op": "get", "target": "$bodyCopy", "_why": "chama-se Body2: o sufixo e da plataforma"},
-  {"op": "usages", "target": "$bodyCopy", "_why": "a COPIA nasce com zero consumidores"},
-  {"op": "usages", "target": "$DupNotice.Body", "_why": "e o original mantem os seus"},
+  {"op": "usages", "target": "$bodyCopy", "_why": "the COPY is born with zero consumers"},
+  {"op": "usages", "target": "$DupNotice.Body", "_why": "and the original keeps its own"},
   {"op": "dump", "target": "$DupNotice", "depth": 2, "_why": "Body2 entrou no fim"},
 
   {"op": "duplicate", "target": "$DupNotice", "as": "$entityCopy"},
   {"op": "get", "target": "$entityCopy"},
-  {"op": "dump", "target": "$entityCopy", "depth": 2, "_why": "a entidade copiada traz atributos, entity actions e o identificador proprios"},
+  {"op": "dump", "target": "$entityCopy", "depth": 2, "_why": "the copied entity brings its own attributes, entity actions and identifier"},
 
   {"op": "duplicate", "target": "$c2", "as": "$c2copy"},
-  {"op": "dump", "target": "$box", "depth": 2, "_why": "Dois2 entrou no fim do container, com a Expression que estava dentro"},
+  {"op": "dump", "target": "$box", "depth": 2, "_why": "Dois2 entered at the end of the container, with the Expression that was inside it"},
 
   {"op": "duplicate", "target": "$act", "as": "$actCopy"},
   {"op": "get", "target": "$actCopy"},
-  {"op": "dump", "target": "$actCopy", "depth": 2, "_why": "Greet2 leva os tres nos; o botao continua a chamar Greet"},
-  {"op": "usages", "target": "$act", "_why": "o OnClick do botao continua no original"},
+  {"op": "dump", "target": "$actCopy", "depth": 2, "_why": "Greet2 takes the three nodes; the button still calls Greet"},
+  {"op": "usages", "target": "$act", "_why": "the button's OnClick stays on the original"},
 
   {"op": "duplicate", "target": "$scr", "as": "$scrCopy"},
   {"op": "get", "target": "$scrCopy"},

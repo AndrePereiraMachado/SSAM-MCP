@@ -150,9 +150,9 @@ public static class ThemeCss
         var landing = new JsonObject
         {
             ["wroteInto"] = "UserStyleSheet",
-            ["note"] = "este tema tem CSS do Theme Editor: ITheme.StyleSheet escreve a metade do AUTOR (UserStyleSheet) e "
-                     + "le a efetiva. O texto substituiu o CSS do autor; a efetiva foi recomposta como gerada + autor. "
-                     + "Para acrescentar em vez de substituir, leia StyleSheet (ou UserStyleSheet) antes e escreva o todo.",
+            ["note"] = "this theme has Theme Editor CSS: ITheme.StyleSheet writes the AUTHOR half (UserStyleSheet) and "
+                     + "reads the effective one. The text replaced the author's CSS; the effective one was rebuilt as generated + author. "
+                     + "To add instead of replacing, read StyleSheet (or UserStyleSheet) first and write the whole.",
             ["userChars"] = (sheet.UserEffectiveValue ?? "").Length,
             ["generatedChars"] = (sheet.GeneratedEffectiveValue ?? "").Length,
         };

@@ -1,5 +1,5 @@
 {
- "description":"Reescreve uma action com consumidor real; a chave do Execute e os argumentos devem sobreviver.",
+ "description":"Rewrites an action with a real consumer; the key of the Execute and the arguments must survive.",
  "base":"job:logic-call-order",
  "expectValid":true,
  "ops":[

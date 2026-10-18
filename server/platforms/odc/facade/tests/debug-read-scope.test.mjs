@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readClientScope, readServerScope, serializeReadScope, readScopeDescription, READ_SCOPE_MAX_NODES } from '../debug-read-scope.mjs';

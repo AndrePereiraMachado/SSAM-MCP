@@ -1,5 +1,5 @@
 {
- "description": "DatePickerRange do OSUI como filtro: o OnSelected grava o periodo e faz Refresh Data dos pedidos entre as duas datas.",
+ "description": "DatePickerRange of OSUI as a filter: OnSelected saves the period and does a Refresh Data of the orders between the two dates.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

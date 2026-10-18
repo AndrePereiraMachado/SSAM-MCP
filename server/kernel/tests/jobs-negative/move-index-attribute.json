@@ -1,5 +1,5 @@
 {
- "description": "DIFERENCA DE PLATAFORMA (O11): os atributos de um indice nao sao uma sequencia reordenavel no Model API do Service Studio 11 -- `EntityIndex:X/<Atributo>` resolve (desde o lote de dados da fase 3), mas `move` e recusado; a composicao/ordem muda-se apagando e recriando o indice. No ODC o mesmo `move` e aceite (IEntityIndex.IndexAttributes e uma sequencia): tests/jobs-odc/entity-refactor.json.",
+ "description": "PLATFORM DIFFERENCE (O11): the attributes of an index are not a reorderable sequence in the Model API of Service Studio 11 -- `EntityIndex:X/<Atributo>` resolves (since the data lot of phase 3), but `move` is refused; the composition/order is changed by deleting and recreating the index. In ODC the same `move` is accepted (IEntityIndex.IndexAttributes is a sequence): tests/jobs-odc/entity-refactor.json.",
  "base": "job:spec-data",
  "expectValid": true,
  "expectError": ["move: EntityIndex 'IX_Contact_NameEmail' does not keep EntityIndexAttribute", "in an ordered sequence"],

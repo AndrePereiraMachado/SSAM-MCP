@@ -1,5 +1,5 @@
 {
- "description": "Tickets: ciclo de vida (criar, atualizar, status, atribuir, prioridade, escalar, merge, cancelar, avaliar)",
+ "description": "Tickets: lifecycle (create, update, status, assign, priority, escalate, merge, cancel, rate)",
  "base": "job:tickets-02-helpers",
  "expectValid": true,
  "expectedMessages": [],

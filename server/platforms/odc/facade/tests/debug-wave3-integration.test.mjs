@@ -1,4 +1,5 @@
 // Wave 3 integration of the shared debugger entries (P21-P28, PX02-PX07): offline, fakes and temp folders only.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import { foreignPendingReason } from '../debug-foreign-pending.mjs';
 import assert from 'node:assert/strict';

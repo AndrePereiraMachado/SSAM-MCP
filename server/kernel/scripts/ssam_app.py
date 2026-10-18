@@ -97,9 +97,9 @@ def schemas() -> list[dict]:
 
 def contract_review(proposal: dict) -> str:
     # Full declaration, without truncating requirements to a count or a success label.
-    return ("SSAM Hybrid — confira esta alteração do contrato do módulo já fixado. "
-        "A aceitação fixa este conteúdo, módulo, ambiente e faixa; correções técnicas posteriores não mudam esses requisitos. "
-        "Este contrato cobre dados e o fluxo declarado das actions; não comprova sozinho toda a intenção de negócio.\n\n" + json.dumps(proposal, ensure_ascii=False, indent=2))
+    return ("SSAM Hybrid — check this change of the module contract already fixed. "
+        "The acceptance fixes this content, module, environment and lane; later technical corrections do not change these requirements. "
+        "This contract covers the data and the declared flow of the actions; on its own it does not prove the whole business intent.\n\n" + json.dumps(proposal, ensure_ascii=False, indent=2))
 
 
 class Server:
@@ -121,7 +121,7 @@ class Server:
         request_id = "ssam-review-" + uuid.uuid4().hex
         self.send({"jsonrpc": "2.0", "id": request_id, "method": "elicitation/create", "params": {
             "message": contract_review(proposal), "requestedSchema": {"type": "object", "properties": {
-                "accepted": {"type": "boolean", "title": "O contrato corresponde ao meu pedido", "default": False}}, "required": ["accepted"]}}})
+                "accepted": {"type": "boolean", "title": "The contract matches my request", "default": False}}, "required": ["accepted"]}}})
         for line in self.read:
             reply = json.loads(line)
             if reply.get("id") == request_id and "method" not in reply:

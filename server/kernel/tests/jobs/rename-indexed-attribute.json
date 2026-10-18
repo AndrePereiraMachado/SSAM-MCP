@@ -1,5 +1,5 @@
 {
- "description": "Renomear um atributo que esta dentro de um indice, no mesmo job que cria o indice. O indice segue por CHAVE (o get mostra Attributes ja com o nome novo) e o contrato de dados tem de aceitar: antes do conserto do kernel ele guardava os atributos do EntityIndex pelo NOME e recusava a entrega com isValid=True, unexpected=0 e o indice correto no modelo (bloqueio 1 da frente R). O que continua a nao seguir e o NOME do indice, que fica a dizer Body: nome de indice e texto do autor, como o resto da coluna direita do paragrafo Renomear.",
+ "description": "Rename an attribute that is inside an index, in the same job that creates the index. The index follows by KEY (the get shows Attributes already with the new name) and the data contract must accept it: before the kernel fix it stored the EntityIndex attributes by NAME and refused the delivery with isValid=True, unexpected=0 and the correct index in the model (blocker 1 of front R). What still does not follow is the index NAME, which stays saying Body: an index name is author text, like the rest of the right column of the Rename paragraph.",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "ops": [
@@ -11,10 +11,10 @@
   ]}},
 
   {"op": "create", "parent": "$Notice", "type": "EntityIndex", "name": "IX_Notice_Body", "args": {"unique": false, "attributes": ["$Notice.Body"]}},
-  {"op": "get", "target": "EntityIndex:IX_Notice_Body", "_why": "antes: Attributes = [Body]"},
+  {"op": "get", "target": "EntityIndex:IX_Notice_Body", "_why": "before: Attributes = [Body]"},
 
   {"op": "rename", "target": "$Notice.Body", "name": "Message"},
-  {"op": "get", "target": "EntityIndex:IX_Notice_Body", "_why": "depois: Attributes = [Message] sozinho; o nome do indice ainda diz Body"},
-  {"op": "usages", "target": "$Notice.Body", "_why": "o apelido e do OBJETO, nao do nome: continua a resolver depois do rename (o nome novo pede IEntityAttribute:Message)"}
+  {"op": "get", "target": "EntityIndex:IX_Notice_Body", "_why": "after: Attributes = [Message] alone; the index name still says Body"},
+  {"op": "usages", "target": "$Notice.Body", "_why": "the alias belongs to the OBJECT, not to the name: it still resolves after the rename (the new name asks for IEntityAttribute:Message)"}
  ]
 }

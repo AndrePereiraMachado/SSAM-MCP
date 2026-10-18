@@ -4,6 +4,7 @@
 // Studio), refuses before anything when that merge is not clean, already published, from another Studio process, or the
 // open module changed since, and the compact delivery keeps the manifest and names the publication. Offline: the evidence
 // is a temporary lab with the bridge's receipt shapes; the bridge is a fake.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -12,6 +13,7 @@ import path from 'node:path';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
 import { deliveryMerges, publishWithGrant } from '../studio-publish-log.mjs';
+import { hashedWords } from '../destructive-operations.mjs';
 import { compactDelivery, shapeToolResult } from '../responses.mjs';
 
 const TENANT = 'personal-test.outsystems.dev';
@@ -67,7 +69,8 @@ test('A2: studio_publish {module, authorize} publishes the manifest of the last 
   const b = bridge();
   const answer = await publishWithGrant({ module: 'GameStore', authorize: WORDS, pid: STUDIO_PID }, deps(box, b));
   assert.equal(answer.ok, true, JSON.stringify(answer));
-  assert.deepEqual(b.calls, [['status'], ['authorize', last.manifest, 'publish', WORDS], ['publish', last.manifest, '--wait', '10']]);
+  // CX15 r5 (N-2, converted): the authorize line carries sha256:<hex> of the words (before: the words).
+  assert.deepEqual(b.calls, [['status'], ['authorize', last.manifest, 'publish', hashedWords(WORDS)], ['publish', last.manifest, '--wait', '10']]);
   assert.equal(answer.resolvedFrom.manifest, last.manifest);
   assert.equal(answer.resolvedFrom.mergedAt, '2026-10-06T10:00:00Z');
   assert.deepEqual(answer.authorization, { source: 'words' });
@@ -140,7 +143,9 @@ test('A2: the bridge\'s own check (the open module changed since the merge) come
   assert.equal(changed.continuation.tool, 'studio_deliver');
   assert.equal(changed.continuation.arguments.job, path.join(box.lab, '..', 'jobs', '09-AddGenres.json'));
   // The same with the manifest given directly.
-  const direct = await publishWithGrant({ manifest: last.manifest }, deps(box, b));
+  // CX15 r7 (M-3, converted): with no words, no recorded authorization (this fake bridge records none) and no grant, studio_publish
+  // is WORDS_REQUIRED before the bridge; the direct manifest call carries the owner's words (before: none).
+  const direct = await publishWithGrant({ manifest: last.manifest, authorize: WORDS }, deps(box, b));
   assert.equal(direct.code, 'MODULE_CHANGED_SINCE_DELIVERY'); assert.equal(direct.continuation.arguments.module, 'GameStore');
 });
 
@@ -153,12 +158,12 @@ test('A2: module or manifest, exactly one', async t => {
 });
 
 test('A2: the compact delivery keeps the manifest and, when it did not publish, names studio_publish {module}', () => {
-  const merged = { ok: true, until: 'merge', module: 'GameStore', merged: true, strictlyEqual: true, result: 'entregue', manifest: 'C:\\x\\lab\\07\\delivery\\manifest.json', steps: [] };
+  const merged = { ok: true, until: 'merge', module: 'GameStore', merged: true, strictlyEqual: true, result: 'delivered', manifest: 'C:\\x\\lab\\07\\delivery\\manifest.json', steps: [] };
   const compact = compactDelivery('studio_deliver', { module: 'Game Store', pid: 7 }, merged);
-  assert.equal(compact.result, 'entregue'); assert.equal(compact.manifest, merged.manifest);
+  assert.equal(compact.result, 'delivered'); assert.equal(compact.manifest, merged.manifest);
   assert.deepEqual(compact.continuation.arguments, { module: 'GameStore', pid: 7 });
   assert.equal(compact.continuation.tool, 'studio_publish');
-  const published = compactDelivery('studio_deliver', {}, { ...merged, result: 'entregue e publicado', publish: { requested: true, outcome: 'published', version: 3 } });
+  const published = compactDelivery('studio_deliver', {}, { ...merged, result: 'delivered and published', publish: { requested: true, outcome: 'published', version: 3 } });
   assert.equal(published.continuation, undefined); assert.equal(published.manifest, merged.manifest);
   // Through the whole shaper the continuation survives (an exact answer gets no `next`).
   const shaped = shapeToolResult('studio_deliver', { module: 'GameStore' }, { content: [{ type: 'text', text: JSON.stringify(merged) }], structuredContent: merged }).structuredContent;

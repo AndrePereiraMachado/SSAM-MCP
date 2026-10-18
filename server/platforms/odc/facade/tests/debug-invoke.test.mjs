@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -206,7 +207,7 @@ test('ssam_debug_invoke is legacy in the registry, its title/description and its
 });
 test('real stdio MCP discovers invoker and rejects incomplete invocation without runtime access', async () => {
   const client = new Client({ name: 'invoke-test', version: '1' });
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(new URL('../ssam.mjs', import.meta.url)), 'mcp'], stderr: 'ignore' }));
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(new URL('../ssam.mjs', import.meta.url)), 'mcp', '--profile', 'debug'], stderr: 'ignore' }));
   try {
     const tool = (await client.listTools()).tools.find(t => t.name === 'ssam_debug_invoke'); assert.ok(tool);
     const response = await client.callTool({ name: 'ssam_debug_invoke', arguments: { op: 'run', planId } }); assert.equal(response.isError, true);

@@ -1,17 +1,17 @@
 {
- "description": "Seguranca e configuracao: role, tela restrita ao role (link Roles), site property, session variable, client variable, user exception",
+ "description": "Security and configuration: role, screen restricted to the role (Roles link), site property, session variable, client variable, user exception",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "UnusedElement",
    "element": "Headless_UI (ESpace) / LastFilter (ClientVariable)",
-   "why": "Configuracao declarada para demonstrar site property e client variable; nao e usada nesta tela de exemplo."
+   "why": "Configuration declared to demonstrate site property and client variable; not used in this example screen."
   },
   {
    "id": "UnusedElement",
    "element": "Headless_UI (ESpace) / MaxContacts (SiteProperty)",
-   "why": "Configuracao declarada para demonstrar site property e client variable; nao e usada nesta tela de exemplo."
+   "why": "Configuration declared to demonstrate site property and client variable; not used in this example screen."
   }
  ],
  "ops": [

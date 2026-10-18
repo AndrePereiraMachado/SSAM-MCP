@@ -1,5 +1,5 @@
 {
- "description": "Spec compacta de dados -> verbos: static entity com records, entidade publica com FK e defaults, structure; depois uma action normal usa os aliases gerados ($Contact, $Contact.Name)",
+ "description": "Compact data spec -> verbs: static entity with records, public entity with FK and defaults, structure; then a normal action uses the generated aliases ($Contact, $Contact.Name)",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "ops": [

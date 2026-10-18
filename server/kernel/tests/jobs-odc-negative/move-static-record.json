@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA do move de um registo de static entity. A ordem de leitura dos registos e o valor do atributo Order (OrderByAttribute), nao a posicao na arvore, e o verbo move so reordena dentro de uma ISequence do pai; o kernel recusa e diz que sequencias o pai tem. A alternativa provada e escrever o valor de Order (set <registo>/Order prop Value), como em tests/jobs-odc/static-entity-lifecycle.json.",
+ "description": "ODC: the REFUSAL of the move of a static entity record. The reading order of the records is the value of the Order attribute (OrderByAttribute), not the position in the tree, and the move verb only reorders inside an ISequence of the parent; the kernel refuses and says which sequences the parent has. The proven alternative is to write the value of Order (set <record>/Order prop Value), as in tests/jobs-odc/static-entity-lifecycle.json.",
  "base": "job:static-entity",
  "expectValid": true,
  "expectError": [

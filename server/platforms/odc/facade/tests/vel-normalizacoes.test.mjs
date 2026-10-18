@@ -1,6 +1,7 @@
 // lentidao 2026-10-12 (integration of the speed lanes): what the kernel rewrites in a job instead of refusing it
 // (kernel/src/Anvil.Core/Kernel/Preflight/JobNormalizer.cs) reaches the model in every answer that runs a job: delivered and
 // refused o11_deliver, ssam_job/o11_job, and studio_deliver; short (count per rule, first entries), never silent.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizationsOf, diagnosisOf, NORMALIZATIONS_SHOWN } from '../refusal-problems.mjs';
@@ -32,7 +33,7 @@ test('normalizationsOf: count per rule, the first entries and how many were left
   assert.ok(Buffer.byteLength(JSON.stringify(normalizationsOf({ normalizations: many }))) < 2500, 'short enough for every answer');
 });
 
-test('o11_deliver delivered: the apply receipt normalizations come with "entregue"', () => {
+test('o11_deliver delivered: the apply receipt normalizations come with "delivered"', () => {
   const fields = deliveryFields({ apply: { isValid: true, accepted: true, normalizations: [nullTime] } });
   assert.deepEqual(fields.normalizations, { total: 1, byRule: { NULL_FUNCTION_REWRITTEN: 1 }, items: [{ rule: 'NULL_FUNCTION_REWRITTEN',
     path: '/ops/0/data/actions/2/steps/1/assign/Resumo.Hora', from: 'NullTime()', to: 'NewTime(0, 0, 0)' }] });
@@ -60,8 +61,8 @@ test('studio_deliver: the accepted candidate names its normalizations and compac
   const built = interpretKernelResult({ ok: true, data: { accepted: true, isValid: true, flowLayoutEngine: requiredFlowLayoutEngine, normalizations: [sort(1)] } }, { output: 'o' });
   assert.equal(built.ok, true);
   assert.equal(built.normalizations.total, 1);
-  const delivered = compactDelivery('studio_deliver', { module: 'M' }, { ok: true, merged: true, strictlyEqual: true, result: 'entregue', module: 'M', normalizations: built.normalizations });
-  assert.equal(delivered.result, 'entregue');
+  const delivered = compactDelivery('studio_deliver', { module: 'M' }, { ok: true, merged: true, strictlyEqual: true, result: 'delivered', module: 'M', normalizations: built.normalizations });
+  assert.equal(delivered.result, 'delivered');
   assert.deepEqual(delivered.normalizations, built.normalizations);
   const refused = compactDelivery('studio_deliver', { module: 'M' }, { ok: false, failed: 'build', code: 'PREFLIGHT_REFUSED', error: 'x',
     problems: [{ op: 0, code: 'FUNCTION_UNKNOWN' }], ...diagnosisOf({ normalizations: [nullTime] }) });

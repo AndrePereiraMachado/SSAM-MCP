@@ -1,5 +1,5 @@
 {
- "description": "Sessao fria I: modulo Reactive referencia Product e Product_GetById do produtor (job producer-public); tela Products com aggregate + Table (Name, Price) e link por linha para ProductDetail(ProductId), que mostra Name/Price e tem botao Summary -> screen action que chama Product_GetById e guarda o output numa variavel local (escrito por uma LLM sem contexto na sessao fria I, rodada 2, 2026-09-04)",
+ "description": "Cold session I: Reactive module references Product and Product_GetById of the producer (job producer-public); screen Products with aggregate + Table (Name, Price) and a link per row to ProductDetail(ProductId), which shows Name/Price and has a button Summary -> screen action that calls Product_GetById and stores the output in a local variable (written by an LLM without context in cold session I, round 2, 2026-09-04)",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "ops": [

@@ -1,5 +1,5 @@
 {
- "description": "Upload de imagem: Accept limita a imagens, o OnChange monta um resumo com o nome do arquivo escolhido.",
+ "description": "An image Upload: Accept limits it to images, OnChange builds a summary with the name of the chosen file.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -18,7 +18,7 @@
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IUpload", "name": "PhotoUploadWidget", "as": "$up"},
   {"op": "set", "target": "$up", "prop": "FileContent", "value": "Photo"},
   {"op": "set", "target": "$up", "prop": "FileName", "value": "PhotoName"},
-  {"op": "set", "target": "$up", "prop": "Accept", "value": "Image", "_why": "Accept e um enum: Image, Video ou Any"},
+  {"op": "set", "target": "$up", "prop": "Accept", "value": "Image", "_why": "Accept is an enum: Image, Video or Any"},
   {"op": "set", "target": "$up/OnChange", "prop": "Destination", "value": "IMobileScreen:PhotoUpload/PhotoChosen"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$show"},
   {"op": "set", "target": "$show", "prop": "Value", "value": "Summary"},

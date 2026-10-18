@@ -99,7 +99,7 @@ async function liveServer(t) {
       publish: z.boolean().optional(), authorize: z.string().optional(),
     }).strict() }, async args => {
       seen.push(args);
-      const answer = { ok: true, result: 'entregue' };
+      const answer = { ok: true, result: 'delivered' };
       return { content: [{ type: 'text', text: JSON.stringify(answer) }], structuredContent: answer };
     });
     return fake;
@@ -119,7 +119,7 @@ async function deliveryBoundary(t) {
   const server = new McpServer({ name: 'line-edits-boundary', version: '1' });
   registerSsamCode(server, { fromJsonSchema, map: async () => { throw Error('unexpected read'); }, deliver: async (tool, args) => {
     seen.push({ tool, args });
-    const answer = { ok: true, result: 'entregue' };
+    const answer = { ok: true, result: 'delivered' };
     return { content: [{ type: 'text', text: JSON.stringify(answer) }], structuredContent: answer };
   } });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();

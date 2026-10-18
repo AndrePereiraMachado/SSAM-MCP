@@ -59,7 +59,7 @@
     {
       "op": "delete",
       "target": "$da/Out1",
-      "_why": "a data action nasce com um output Out1 de exemplo"
+      "_why": "the data action is born with an example output Out1"
     },
     {
       "op": "create",

@@ -52,18 +52,18 @@ internal static class ModelPath {
             var comEsseNome = todos.Where(n => n.DisplayName == name).Select(Kind).Distinct(StringComparer.Ordinal)
                 .OrderBy(k => k, StringComparer.Ordinal).Take(8).ToArray();
             if (comEsseNome.Length > 0)
-                return basico + " Existe com esse nome, noutro kind: " + string.Join(", ", comEsseNome)
-                       + (kind == "*" ? "" : " (pediu " + kind + ").");
+                return basico + " It exists with that name, as another kind: " + string.Join(", ", comEsseNome)
+                       + (kind == "*" ? "" : " (asked for " + kind + ").");
             var doKind = todos.Where(n => kind == "*" || Matches(n, kind, "*")).Select(n => n.DisplayName)
                 .Where(d => !string.IsNullOrEmpty(d)).ToArray();
-            if (doKind.Length == 0) return basico + " Nao ha nenhum " + kind + " aqui dentro.";
+            if (doKind.Length == 0) return basico + " There is no " + kind + " in here.";
             var parecidos = NameSuggestions.Closest(name, doKind, 6);
-            return basico + " " + kind + " que existem, mais parecidos: " + string.Join(", ", parecidos)
+            return basico + " " + kind + " that exist, the closest: " + string.Join(", ", parecidos)
                    + (doKind.Distinct(StringComparer.Ordinal).Count() > parecidos.Count
-                      ? " (e mais " + (doKind.Distinct(StringComparer.Ordinal).Count() - parecidos.Count) + ")." : ".");
+                      ? " (and " + (doKind.Distinct(StringComparer.Ordinal).Count() - parecidos.Count) + " more)." : ".");
         } catch (Exception e) {
             // Diagnostico nunca derruba trabalho: se a segunda passagem falhar, entrega-se a mensagem simples.
-            return basico + " (a sugestao falhou: " + e.GetType().Name + ")";
+            return basico + " (the suggestion failed: " + e.GetType().Name + ")";
         }
     }
 

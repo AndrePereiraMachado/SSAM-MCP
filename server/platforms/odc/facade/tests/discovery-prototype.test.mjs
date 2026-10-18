@@ -38,7 +38,8 @@ test('tools: every prototype intent routes to the delivery tool of the lane with
 });
 
 async function liveTools() {
-  const server = await createSsamServer();
+  // This test checks the complete prototype source documentation; B2 separately verifies the short listing and exact RPC detail.
+  const server = await createSsamServer({ deps: { listing: 'full' } });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'discovery-prototype-test', version: '1.0.0' });
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
@@ -77,7 +78,7 @@ for (const lane of ['o11', 'odc']) {
       // route adds the rehearsal, the slots and the rules in its entries (the part of routes the budget keeps longest).
       const calls = Object.fromEntries(match.route.operation.split(' ;; ').map(part => { const [, lane_, tool, json] = /^(O11|ODC) => (\w+) (\{.*\})$/.exec(part); return [lane_.toLowerCase(), { tool, arguments: JSON.parse(json) }]; }));
       for (const l of ['o11', 'odc']) { assert.equal(calls[l].tool, ROUTE_TOOL[l]); assert.equal(calls[l].arguments.job.ops[0].op, 'prototype'); }
-      assert.deepEqual(calls.odc.arguments.owners, ['<Prefixo>']); assert.equal(calls.odc.arguments.until, undefined);
+      assert.deepEqual(calls.odc.arguments.owners, ['<Prefix>']); assert.equal(calls.odc.arguments.until, undefined);
       assert.ok(calls.odc.arguments.feature && calls.odc.arguments.changes.length);
       assert.ok(answer.routes?.prototype, `${lane} ${intent}: routes.prototype`);
       const route = answer.routes.prototype.entries[0];
@@ -86,7 +87,7 @@ for (const lane of ['o11', 'odc']) {
       assert.ok(route.slots.source && route.slots.module);
       assert.ok(route.rules.some(r => /Do not read the prototype/.test(r)) && route.rules.some(r => /words in authorize cover the import, the publication and the demo data/.test(r)));
       assert.ok(route.rules.some(r => /mapping only when a refusal asks/.test(r)));
-      if (lane === 'odc') { assert.deepEqual(route.call.arguments.owners, ['<Prefixo>']); assert.equal(route.rehearsal.arguments.until, 'preview'); }
+      if (lane === 'odc') { assert.deepEqual(route.call.arguments.owners, ['<Prefix>']); assert.equal(route.rehearsal.arguments.until, 'preview'); }
       else assert.equal(route.rehearsal.arguments.until, 'apply');
     }
     // The single entry (ssam_discover): the tool of the lane first, with the ready arguments, beside the capability.

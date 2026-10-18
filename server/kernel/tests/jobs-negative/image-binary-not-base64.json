@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA de um Byte[] que nao e base64: o binario de uma imagem vai nos args como texto base64 (o conteudo do ficheiro), nunca como caminho. O caminho limpo esta em tests/jobs/image-localized.json.",
+ "description": "The REFUSAL of a Byte[] that is not base64: the binary of an image goes in the args as base64 text (the content of the file), never as a path. The clean path is in tests/jobs/image-localized.json.",
  "base": "tests/fixtures/traditional-ui.oml",
  "expectValid": true,
  "expectError": [

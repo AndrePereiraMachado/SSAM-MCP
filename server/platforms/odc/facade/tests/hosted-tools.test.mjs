@@ -1,6 +1,7 @@
 // hosted/tools.json (docs/FASE2-AGENTE.md section 5 and 6.4) against the live registry of the ssam MCP server: every
 // tool is classified and nothing stale, classes and agent rules are valid, every path pointer exists in the tool's
 // schema under the 6.4 grammar, and the totals are those of section 5. In-process server, listTools only.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
@@ -18,7 +19,9 @@ const tools = hostedTools();
 let live = null;
 async function liveTools() {
   if (live) return live;
-  const server = await createSsamServer();
+  // servidor/fase4-26 (a7): CX11 gives createSsamServer a profile (app by default: no ssam_debug*); a hosted session serves
+  // the profile all (createSsamServer forces it with hosted), so the live registry here is that one.
+  const server = await createSsamServer({ profile: 'all' });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'hosted-tools-test', version: '1.0.0' });
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);

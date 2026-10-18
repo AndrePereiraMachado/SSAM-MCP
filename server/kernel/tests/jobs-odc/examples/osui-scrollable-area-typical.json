@@ -1,5 +1,5 @@
 {
- "description": "ScrollableArea do OSUI vertical com altura fixa e barra compacta, envolvendo uma List longa de produtos.",
+ "description": "Vertical ScrollableArea of OSUI with a fixed height and a compact bar, wrapping a long List of products.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

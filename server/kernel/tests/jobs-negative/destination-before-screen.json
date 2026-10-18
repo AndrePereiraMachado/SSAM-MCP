@@ -1,5 +1,5 @@
 {
- "description": "Job NEGATIVO (tem de falhar): dois botoes navegam para telas (Catalog, GameDetail) que so sao criadas DEPOIS no mesmo job. O job e uma sequencia: o alvo de um set tem de existir antes. A mensagem diz em que op cada tela nasce e lista todos os forward-refs de uma vez.",
+ "description": "NEGATIVE job (must fail): two buttons navigate to screens (Catalog, GameDetail) that are only created AFTER in the same job. The job is a sequence: the target of a set has to exist before. The message says in which op each screen is born and lists all the forward-refs at once.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": false,
  "expectError": ["op #4 (set Destination)", "IMobileScreen:Catalog does not exist yet at this point of the job: it is created at op #6", "Also out of order: IMobileScreen:GameDetail (created at op #7, used at op #5)"],

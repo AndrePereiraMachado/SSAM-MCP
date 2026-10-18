@@ -1,5 +1,5 @@
 {
- "description": "Button Group nativo: o grupo liga a variavel e nasce com ButtonGroupItem1..3; cada item recebe o seu Value e a sua legenda.",
+ "description": "Native Button Group: the group binds the variable and is born with ButtonGroupItem1..3; each item gets its Value and its caption.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -10,7 +10,7 @@
   {"op": "set", "target": "$period", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IButtonGroup", "name": "PeriodButtonGroup", "as": "$bg"},
   {"op": "set", "target": "$bg", "prop": "Variable", "value": "Period"},
-  {"op": "set", "target": "$bg/Content/ButtonGroupItem1", "prop": "Value", "value": "\"day\"", "_why": "os tres itens nascem sem Value (erro no Verify): cada um recebe o seu"},
+  {"op": "set", "target": "$bg/Content/ButtonGroupItem1", "prop": "Value", "value": "\"day\"", "_why": "the three items are born without a Value (an error in the Verify): each one gets its own"},
   {"op": "set", "target": "$bg/Content/ButtonGroupItem1/#ITextWidget", "prop": "Text", "value": "Day"},
   {"op": "set", "target": "$bg/Content/ButtonGroupItem2", "prop": "Value", "value": "\"week\""},
   {"op": "set", "target": "$bg/Content/ButtonGroupItem2/#ITextWidget", "prop": "Text", "value": "Week"},

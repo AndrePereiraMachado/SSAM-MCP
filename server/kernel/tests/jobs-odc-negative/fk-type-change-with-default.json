@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA de mudar o DataType de uma FK que tem DefaultValue (Entities.WfCovPriority.Normal): a plataforma aceitava a escrita e o Verify do Studio lancava depois \"The element does not need a signature: Condition is false\" (medido em 2026-09-23). Desde o lote de dados da fase 3 o kernel recusa antes de escrever: limpar o DefaultValue primeiro (tests/jobs-odc/entity-refactor.json).",
+ "description": "ODC: the REFUSAL of changing the DataType of an FK that has a DefaultValue (Entities.WfCovPriority.Normal): the platform accepted the write and the Studio's Verify then threw \"The element does not need a signature: Condition is false\" (measured on 2026-09-23). Since the data batch of phase 3 the kernel refuses before writing: clear the DefaultValue first (tests/jobs-odc/entity-refactor.json).",
  "base": "job:data-full-model",
  "expectValid": true,
  "expectError": [

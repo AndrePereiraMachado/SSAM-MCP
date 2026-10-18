@@ -1,5 +1,5 @@
 {
- "description": "ButtonLoading (OutSystemsUI, Utilities) minimo: instancia como o Studio cria ao arrastar o bloco; o Button de exemplo ganha OnClick; inputs obrigatorios IsLoading com valores simples.",
+ "description": "Minimal ButtonLoading (OutSystemsUI, Utilities): an instance as the Studio creates it when the block is dragged; the sample Button gets an OnClick; required inputs IsLoading with simple values.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,5 +1,5 @@
 {
- "description": "ProgressCircle (OutSystemsUI, Numbers) tipico; inputs obrigatorios Progress ligados a variaveis da tela; criado vazio e preenchido com conteudo proprio; placeholders Content com dados do aggregate de tarefas; eventos Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "description": "Typical ProgressCircle (OutSystemsUI, Numbers); required inputs Progress bound to screen variables; created empty and filled with its own content; placeholders Content with data of the tasks aggregate; events Initialized handled by screen actions that keep the parameters in variables.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

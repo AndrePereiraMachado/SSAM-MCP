@@ -1,10 +1,10 @@
 {
- "description": "Map do OutSystemsMaps (Google): chave de API lida de um Setting por uma data action, centro, altura, um MarkerPopup com texto e o OnError guardando a falha.",
+ "description": "Map of OutSystemsMaps (Google): the API key read from a Setting by a data action, center, height, a MarkerPopup with a text and OnError keeping the failure.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "create", "parent": "@espace", "type": "ISiteProperty", "name": "MapsApiKey", "as": "$key", "_why": "a chave fica num Setting configurado no Portal, nunca escrita no modelo"},
+  {"op": "create", "parent": "@espace", "type": "ISiteProperty", "name": "MapsApiKey", "as": "$key", "_why": "the key stays in a Setting configured in the Portal, never written in the model"},
   {"op": "set", "target": "$key", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "GoogleStoreMap", "as": "$scr"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
@@ -12,7 +12,7 @@
   {"op": "set", "target": "$title", "prop": "Value", "value": "\"Store\""},
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "MapError", "as": "$vMapError"},
   {"op": "set", "target": "$vMapError", "prop": "DataType", "value": "Text"},
-  {"op": "logic", "_why": "Settings so existem no servidor: a data action le a chave e a tela usa a saida dela", "data": {"actions": [{"name": "GetMapsConfig", "kind": "data", "owner": "IMobileScreen:GoogleStoreMap", "fetch": "AtStart", "outputs": [{"name": "ApiKey", "type": "Text"}], "steps": [{"assign": {"ApiKey": "Settings.MapsApiKey"}, "as": "ReadKey"}]}]}},
+  {"op": "logic", "_why": "Settings exist only on the server: the data action reads the key and the screen uses its output", "data": {"actions": [{"name": "GetMapsConfig", "kind": "data", "owner": "IMobileScreen:GoogleStoreMap", "fetch": "AtStart", "outputs": [{"name": "ApiKey", "type": "Text"}], "steps": [{"assign": {"ApiKey": "Settings.MapsApiKey"}, "as": "ReadKey"}]}]}},
   {"op": "logic", "data": {"actions": [{"name": "MapFailed", "kind": "screen", "owner": "IMobileScreen:GoogleStoreMap", "inputs": [{"name": "Message", "type": "Text"}], "steps": [{"assign": {"MapError": "Message"}, "as": "Keep"}]}]}},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Map1", "source": "IMobileBlock:Map", "as": "$map"},
   {"op": "set", "target": "$map/APIKey", "prop": "Value", "value": "GetMapsConfig.ApiKey"},

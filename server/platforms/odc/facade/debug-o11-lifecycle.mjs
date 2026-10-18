@@ -238,11 +238,14 @@ export function createO11Lifecycle({ cli = operationalO11Cli, readTree = nativeR
   }
   function publication(target, base, candidate, authorization, directory, message) {
     const operationId = randomUUID(); fs.mkdirSync(directory, { recursive: true });
-    if (!authorization?.words || authorization.host !== target.host || !authorization.modules?.includes(target.moduleKey) ||
+    // CX15 r5 (N-3): the grant binds the words by wordsSha256 (a grant of before, with words, still reads).
+    const grantWordsSha256 = typeof authorization?.wordsSha256 === 'string' && /^[0-9a-f]{64}$/.test(authorization.wordsSha256) ? authorization.wordsSha256
+      : typeof authorization?.words === 'string' && authorization.words ? o11Hash(authorization.words) : null;
+    if (!grantWordsSha256 || authorization.host !== target.host || !authorization.modules?.includes(target.moduleKey) ||
         authorization.scope !== 'ssam-debug-wrapper-create-remove') fail('debug_o11_run_authorization_required');
     const authorizationPath = path.join(directory, 'authorization.json');
     o11Write(authorizationPath, { operationId, host: target.host, moduleKey: target.moduleKey, candidateSha256: candidate.sha256,
-      scope: authorization.scope, words: authorization.words, grantedAt: authorization.grantedAt });
+      scope: authorization.scope, wordsSha256: grantWordsSha256, grantedAt: authorization.grantedAt });
     const request = { operationId, ...target, baseVersionId: base.versionId, basePath: base.file, baseSha256: base.sha256,
       candidatePath: candidate.file, candidateSha256: candidate.sha256, authorizationPath,
       authorizationSha256: o11Hash(fs.readFileSync(authorizationPath)), receiptDirectory: directory, message, timeoutSeconds: 300 };

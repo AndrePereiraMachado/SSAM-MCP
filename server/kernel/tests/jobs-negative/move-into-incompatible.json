@@ -1,5 +1,5 @@
 {
- "description": "A recusa do move com `into` quando o pai novo nao aceita aquele tipo: um contentor nao entra numa entidade. O teste e o da propria plataforma (CloneAllowed, o mesmo do arrastar do Studio), e a mensagem nomeia o destino, o tipo recusado e onde o objeto fica. O caminho limpo esta em tests/jobs/refactor-reparent.json.",
+ "description": "The refusal of the move with `into` when the new parent does not accept that type: a container does not enter an entity. The test is the platform's own (CloneAllowed, the same as the Studio drag), and the message names the destination, the refused type and where the object stays. The clean path is in tests/jobs/refactor-reparent.json.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectError": [

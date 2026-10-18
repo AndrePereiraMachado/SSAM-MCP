@@ -1,5 +1,5 @@
 {
- "description": "Acesso anonimo declarado uma vez por tela: set Roles com a lista inteira (Anonymous leva Registered junto) na tela publica, so Registered na area logada. Um set por tela, nunca um link por role nem um ajuste no modulo. A tela anonima nao chama server action (seria aviso de seguranca).",
+ "description": "Anonymous access declared once per screen: set Roles with the whole list (Anonymous brings Registered with it) on the public screen, only Registered in the signed-in area. One set per screen, never a link per role nor a change in the module. The anonymous screen calls no server action (it would be a security warning).",
  "base": "reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],

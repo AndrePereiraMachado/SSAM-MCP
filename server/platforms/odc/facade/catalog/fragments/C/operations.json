@@ -366,7 +366,7 @@
           "negative": [],
           "limits": [
             {
-              "text": "Reading is proven live; inserts/updates/deletes have no receipt in the repository (HANDOFF 'P sem prova').",
+              "text": "Reading is proven live; inserts/updates/deletes have no receipt in the repository (HANDOFF: the 'P' items without proof).",
               "origin": "platforms/odc/docs/HANDOFF.md 4 and rule 3"
             },
             {

@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -82,10 +83,10 @@ for (const runtime of ['server', 'client']) {
     assert.equal(mcp.audit.sequence.templatesSha256, cli.audit.sequence.templatesSha256);
     assert.equal(mcp.audit.transport, 'mcp-stdio'); assert.equal(cli.audit.transport, 'cli-json-lines');
     const entry = path.join(root, 'facade', 'ssam.mjs');
-    assert.deepEqual(mcp.recorded, [{ kind: 'mcp', command: process.execPath, args: [entry, 'mcp'], cwd: root }]);
+    assert.deepEqual(mcp.recorded, [{ kind: 'mcp', command: process.execPath, args: [entry, 'mcp', '--profile', 'all'], cwd: root }]);
     assert.deepEqual(cli.recorded[0], { kind: 'cli', command: process.execPath, args: [entry, 'debug', runtime, '--stdio', '--lane', 'o11'],
       cwd: root, stdio: ['pipe', 'pipe', 'ignore'] });
-    assert.deepEqual(cli.recorded[1], { kind: 'mcp', command: process.execPath, args: [entry, 'mcp'], cwd: root });
+    assert.deepEqual(cli.recorded[1], { kind: 'mcp', command: process.execPath, args: [entry, 'mcp', '--profile', 'all'], cwd: root });
     for (const { audit, hookCalls } of [mcp, cli]) {
       assert.deepEqual(hookCalls, [{ action: 'set-value', operationUuid: '22222222-3333-4444-8555-666666666666', words: GRANT }]);
       assert.equal(audit.sessionId, SESSION); assert.equal(audit.runnerOperationId, '99999999-8888-4777-8666-555555555555');

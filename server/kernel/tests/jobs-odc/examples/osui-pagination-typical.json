@@ -1,5 +1,5 @@
 {
- "description": "Pagination do OSUI sobre um aggregate: StartIndex/MaxRecords em variaveis, TotalCount do Count do aggregate e OnNavigate com Refresh Data.",
+ "description": "Pagination of OSUI over an aggregate: StartIndex/MaxRecords in variables, TotalCount from the Count of the aggregate and OnNavigate with Refresh Data.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -20,7 +20,7 @@
   {"op": "create", "parent": "$GetProducts", "type": "ISort", "as": "$GetProductsSort"},
   {"op": "set", "target": "$GetProductsSort", "prop": "Attribute", "value": "Product.Name"},
   {"op": "set", "target": "$GetProducts", "prop": "MaxRecords", "value": "PageSize"},
-  {"op": "set", "target": "$GetProducts", "prop": "StartIndex", "value": "StartIndex", "_why": "o aggregate pagina pelas variaveis"},
+  {"op": "set", "target": "$GetProducts", "prop": "StartIndex", "value": "StartIndex", "_why": "the aggregate pages by the variables"},
   {"op": "logic", "data": {"actions": [{"name": "PageChanged", "kind": "screen", "owner": "IMobileScreen:PagedProducts", "inputs": [{"name": "NewStartIndex", "type": "Integer"}], "steps": [{"assign": {"StartIndex": "NewStartIndex"}, "as": "Move"}, {"node": "IRefreshDataNode", "as": "Reload", "properties": {"DataSource": "IMobileScreen:PagedProducts/GetProducts"}}]}]}},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ProductList", "as": "$list"},
   {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},

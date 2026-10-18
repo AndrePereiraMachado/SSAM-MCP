@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import { foreignImport, gatedTest } from './fixtures/debug-foreign-gate.mjs';
 // Port D7: timer-background, timer-screen-defaults pending in the consolidation; the tests that reach it skip by name (fixtures/debug-foreign-gate.mjs).
 const test = gatedTest();
@@ -135,7 +136,8 @@ test('public MCP Timer run preserves authorization and depth through strict disp
   assert.equal(calls[0][0].trace.depth,4);assert.equal(calls[0][0].trace.fullValues,true);assert.deepEqual(calls[0][0].trace.scopes,{[actionKey]:['Counter']});
   assert.equal(calls.at(-1)[0].op,'stop');assert.equal(result.executionCompleted,false);
   const authorization=JSON.parse(fs.readFileSync(path.join(f.root,'.local/debugger/native-background/odc',result.operationId,'authorization.json')));
-  assert.equal(authorization.words,raw.words);
+  // CX15 r5 (N-3, converted): the file keeps wordsSha256 of the words, never the words (before: words === raw.words).
+  assert.equal(authorization.words,undefined);assert.equal(authorization.wordsSha256,createHash('sha256').update(raw.words).digest('hex'));
 });
 
 test('public Timer authorization and depth fail before readers or authentication',async()=>{

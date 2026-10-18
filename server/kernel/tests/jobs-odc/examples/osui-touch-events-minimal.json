@@ -1,5 +1,5 @@
 {
- "description": "TouchEvents do OSUI: WidgetId obrigatorio com o Id de um Container da tela.",
+ "description": "TouchEvents of OSUI: the required WidgetId with the Id of a Container of the screen.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

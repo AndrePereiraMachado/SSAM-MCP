@@ -1,5 +1,5 @@
 {
- "description": "Tabs do OSUI: a instancia com as tres abas de exemplo (TabsHeaderItem e TabsContentItem) que ja nascem validas.",
+ "description": "Tabs of OSUI: the instance with the three sample tabs (TabsHeaderItem and TabsContentItem) which are already born valid.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

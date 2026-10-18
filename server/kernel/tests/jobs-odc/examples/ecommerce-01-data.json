@@ -1,10 +1,10 @@
 {
- "description": "Loja (parte 1 de 4): modelo de dados e logica de servidor do carrinho - Category, Product, CartItem, o resumo CartSummary e as server actions Cart_Add, Cart_ChangeQuantity e Cart_GetSummary.",
+ "description": "Store (part 1 of 4): the data model and the server logic of the cart - Category, Product, CartItem, the summary CartSummary and the server actions Cart_Add, Cart_ChangeQuantity and Cart_GetSummary.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [
-  {"id": "UnusedUserAction", "element": "Cart_Add (ServerAction)", "why": "a tela de detalhe (ecommerce-03-detail) e quem chama Cart_Add"},
-  {"id": "UnusedUserAction", "element": "Cart_ChangeQuantity (ServerAction)", "why": "a tela do carrinho (ecommerce-02-cart) e quem chama Cart_ChangeQuantity"}
+  {"id": "UnusedUserAction", "element": "Cart_Add (ServerAction)", "why": "the detail screen (ecommerce-03-detail) is the one that calls Cart_Add"},
+  {"id": "UnusedUserAction", "element": "Cart_ChangeQuantity (ServerAction)", "why": "the cart screen (ecommerce-02-cart) is the one that calls Cart_ChangeQuantity"}
  ],
  "ops": [
   {"op": "spec", "data": {
@@ -16,11 +16,11 @@
      {"name": "Price", "type": "Currency", "mandatory": true},
      {"name": "ImageUrl", "type": "Text", "length": 500},
      {"name": "CategoryId", "type": "Category Identifier", "mandatory": true}]},
-    {"name": "CartItem", "description": "Linha do carrinho", "attributes": [
+    {"name": "CartItem", "description": "A line of the cart", "attributes": [
      {"name": "ProductId", "type": "Product Identifier", "mandatory": true},
      {"name": "Quantity", "type": "Integer", "mandatory": true},
      {"name": "UnitPrice", "type": "Currency", "mandatory": true}]}],
-   "structures": [{"name": "CartSummary", "description": "Resumo do carrinho devolvido pelo servidor", "attributes": [
+   "structures": [{"name": "CartSummary", "description": "Summary of the cart returned by the server", "attributes": [
     {"name": "ItemCount", "type": "Integer"},
     {"name": "Total", "type": "Currency"}]}]}},
 
@@ -32,7 +32,7 @@
      {"foreach": "ReadLines.List", "as": "EachLine", "do": [
       {"assign": {"Summary.ItemCount": "Summary.ItemCount + ReadLines.List.Current.CartItem.Quantity",
                   "Summary.Total": "Summary.Total + ReadLines.List.Current.CartItem.Quantity * ReadLines.List.Current.CartItem.UnitPrice"}, "as": "Accumulate"}]}]},
-   {"name": "Cart_Add", "kind": "server", "description": "Poe o produto no carrinho: soma a quantidade se a linha ja existe, senao cria a linha com o preco atual",
+   {"name": "Cart_Add", "kind": "server", "description": "Puts the product in the cart: adds the quantity if the line already exists, otherwise creates the line with the current price",
     "inputs": [{"name": "ProductId", "type": "Product Identifier"}, {"name": "Quantity", "type": "Integer"}],
     "outputs": [{"name": "CartItemId", "type": "CartItem Identifier"}],
     "vars": [{"name": "Line", "type": "CartItem"}],
@@ -45,7 +45,7 @@
                {"assign": {"Line.Quantity": "Line.Quantity + Quantity"}, "as": "AddQuantity"}]},
      {"save": "CartItem", "record": "Line", "as": "SaveLine"},
      {"assign": {"CartItemId": "SaveLine.Id"}, "as": "SetOutput"}]},
-   {"name": "Cart_ChangeQuantity", "kind": "server", "description": "Soma Delta a quantidade da linha (minimo 1) e devolve a quantidade nova e o resumo do carrinho",
+   {"name": "Cart_ChangeQuantity", "kind": "server", "description": "Adds Delta to the quantity of the line (at least 1) and returns the new quantity and the summary of the cart",
     "inputs": [{"name": "CartItemId", "type": "CartItem Identifier"}, {"name": "Delta", "type": "Integer"}],
     "outputs": [{"name": "NewQuantity", "type": "Integer"}, {"name": "Summary", "type": "CartSummary"}],
     "vars": [{"name": "Line", "type": "CartItem"}],

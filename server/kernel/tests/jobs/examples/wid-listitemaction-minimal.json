@@ -1,5 +1,5 @@
 {
- "description": "ListItemAction minimo: o ListItem ja nasce com uma acao de deslizar em RightActions; basta dar-lhe texto e um OnClick (aqui uma screen action vazia). Para remover a acao: delete $item/RightActions/#IListItemAction.",
+ "description": "Minimal ListItemAction: the ListItem is already born with a swipe action in RightActions; it only needs a text and an OnClick (here an empty screen action). To remove the action: delete $item/RightActions/#IListItemAction.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

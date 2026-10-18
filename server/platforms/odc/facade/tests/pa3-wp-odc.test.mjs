@@ -77,12 +77,12 @@ test('wp odc: BASE_DRIFT before any merge rebuilds once on the module as it is n
   const first = evidence('lab-1'); const second = evidence('lab-2');
   const asked = [];
   const answers = [{ ok: false, code: 'BASE_DRIFT', failed: 'merge', merged: false, evidence: first, steps: [{ step: 'build' }, { step: 'merge' }] },
-    { ok: true, result: 'entregue', merged: true, strictlyEqual: true, evidence: second, steps: [{ step: 'build' }, { step: 'merge' }] }];
+    { ok: true, result: 'delivered', merged: true, strictlyEqual: true, evidence: second, steps: [{ step: 'build' }, { step: 'merge' }] }];
   const deliver = async args => { asked.push(args); return answers[asked.length - 1]; };
   const value = await phased(deps, 'App', () => phasedDeliver({ module: 'App', feature: 'f', job: 'j.json', output: 'lab-1' }, {}, { deliver }));
   assert.equal(asked.length, 2);
   assert.equal(asked[1].output, undefined, 'the rebuild takes a new evidence folder');
-  assert.equal(value.result, 'entregue');
+  assert.equal(value.result, 'delivered');
   assert.deepEqual(value.phases.rebased, { reason: 'BASE_DRIFT', from: first });
   for (const dir of [first, second]) assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'deliver-result.json'), 'utf8')).phases, value.phases);
   const once = [];
@@ -114,7 +114,7 @@ test('wp odc: two studio_deliver to different modules of one Studio overlap thei
       deliverKernel({ ...args, output: path.join(root, 'lab', module) }, { root, studio: x.studio, ...x.kernel, nextLabDir: () => null, journal: () => {}, cache: null, prefetch: () => {}, guide: null, grants: null }) });
   });
   const [a, b] = await Promise.all([one('Shop'), one('Admin')]);
-  for (const r of [a, b]) assert.equal(r.result, 'entregue', JSON.stringify(r));
+  for (const r of [a, b]) assert.equal(r.result, 'delivered', JSON.stringify(r));
   assert.ok(overlap(log.builds[0], log.builds[1]), 'builds overlapped: ' + JSON.stringify(log.builds));
   assert.ok(!overlap(log.merges[0], log.merges[1]), 'merges serialized: ' + JSON.stringify(log.merges));
   for (const r of [a, b]) assert.ok(r.phases?.buildMs >= 100, JSON.stringify(r.phases));

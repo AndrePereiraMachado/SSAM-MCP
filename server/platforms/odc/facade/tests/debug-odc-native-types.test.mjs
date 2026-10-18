@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { canonicalizeInputs, canonicalizeValue, decodeOutput, SUPPORTED_INPUT_TYPES } from '../debug-odc-native-types.mjs';

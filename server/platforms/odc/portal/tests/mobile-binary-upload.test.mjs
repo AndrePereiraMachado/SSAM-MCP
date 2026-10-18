@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';
 import {mobileBinaryContent,mobileBinaryUploadApproval,binaryPatchProvenance,binaryDownloadUrl,MOBILE_FILE_UPLOAD} from '../runtime/mobile-binary-upload.mjs';
 import {fingerprint} from '../runtime/write-journal.mjs';import {extensibilityStateHash,extensibilityChanges} from '../runtime/mobile-extensibility.mjs';

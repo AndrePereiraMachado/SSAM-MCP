@@ -1,5 +1,5 @@
 {
- "description": "Role numa tela: role Approver, tela Approvals restrita a ela (Roles declarado uma vez), OnInitialize chama CheckApproverRole e guarda HasRole numa variavel; o botao de aprovacao fica dentro de um If sobre ela (nunca Visible) e a server action confere o mesmo role no servidor antes de gravar.",
+ "description": "A role on a screen: the role Approver, the screen Approvals restricted to it (Roles declared once), OnInitialize calls CheckApproverRole and keeps HasRole in a variable; the approval button stays inside an If on it (never Visible) and the server action checks the same role on the server before saving.",
  "base": "reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -11,7 +11,7 @@
    {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
    {"name": "Approved", "type": "Boolean"}]}]}},
   {"op": "logic", "data": {"actions": [
-   {"name": "Request_Approve", "kind": "server", "description": "Aprova o pedido; so para o role Approver",
+   {"name": "Request_Approve", "kind": "server", "description": "Approves the order; only for the role Approver",
     "inputs": [{"name": "RequestId", "type": "Request Identifier"}],
     "vars": [{"name": "Item", "type": "Request"}],
     "steps": [
@@ -31,7 +31,7 @@
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Request"}},
   {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "not Request.Approved"}},
   {"op": "logic", "data": {"actions": [
-   {"name": "LoadPermissions", "kind": "screen", "owner": "IMobileScreen:Approvals", "description": "Le o role do usuario uma vez, ao abrir a tela",
+   {"name": "LoadPermissions", "kind": "screen", "owner": "IMobileScreen:Approvals", "description": "Reads the role of the user once, when the screen opens",
     "steps": [
      {"call": "CheckApproverRole", "as": "CheckApprover", "args": {"UserId": "GetUserId()"}},
      {"assign": {"IsApprover": "CheckApprover.HasRole"}, "as": "KeepRole"}]},

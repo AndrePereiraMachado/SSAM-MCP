@@ -1,5 +1,5 @@
 {
- "description": "BreadcrumbsItem (OutSystemsUI, Navigation) tipico; dentro de um Breadcrumbs vazio (placeholder Content); placeholders Title, Icon com dados do aggregate de tarefas.",
+ "description": "Typical BreadcrumbsItem (OutSystemsUI, Navigation); inside an empty Breadcrumbs (placeholder Content); placeholders Title, Icon with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,5 +1,5 @@
 {
- "description": "CardBackground (OutSystemsUI, Content) tipico; placeholders Content, BackgroundImage com dados do aggregate de tarefas.",
+ "description": "Typical CardBackground (OutSystemsUI, Content); placeholders Content, BackgroundImage with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

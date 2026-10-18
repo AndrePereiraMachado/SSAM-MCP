@@ -1,5 +1,5 @@
 {
- "description": "SectionIndex do OSUI: a instancia com empty (os itens de exemplo nascem sem ScrollToWidgetId).",
+ "description": "SectionIndex of OSUI: the instance with empty (the sample items are born without ScrollToWidgetId).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

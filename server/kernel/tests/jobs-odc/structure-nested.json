@@ -1,12 +1,12 @@
 {
- "description": "ODC (cobertura T): ESTRUTURA ANINHADA, LISTA DE ESTRUTURA DENTRO DE ESTRUTURA e ESTRUTURA COMO PARAMETRO - o formato que REST consumido e REST exposto produzem e consomem, e que o structure-list-type.json ainda nao cobria (la a lista de estrutura era so de uma variavel e de um output). Espelha tests/jobs/spec-data.json (uma unica op spec declara os tipos compostos) e tests/jobs/rest-query-nested.json (aninhamento lido por caminho: Address.Geo.Latitude). Tres niveis: WfCovPolicyQuote tem um atributo do tipo WfCovAddress, que por sua vez tem um atributo do tipo WfCovGeoPoint; e um atributo 'Items' do tipo 'WfCovCoverageItem List', que faz o kernel pedir o LIST TYPE ao IESpace dentro da propria declaracao da structure. Depois uma server action recebe record E lista de record como INPUT, devolve record como OUTPUT, le o aninhamento pelo caminho completo e ACRESCENTA a lista que vive dentro do record de saida (ListAppend com Quote.Items). No ODC tudo o que a action publica (shareable) toca tem de ser partilhavel, por isso as quatro structures nascem publicas - e ser publica e tambem o que as impede de nascer com UnusedElement.",
+ "description": "ODC (coverage T): NESTED STRUCTURE, STRUCTURE LIST INSIDE A STRUCTURE and STRUCTURE AS A PARAMETER - the shape that consumed REST and exposed REST produce and consume, and that structure-list-type.json did not cover yet (there the structure list belonged only to a variable and to an output). It mirrors tests/jobs/spec-data.json (a single spec op declares the composite types) and tests/jobs/rest-query-nested.json (nesting read by path: Address.Geo.Latitude). Three levels: WfCovPolicyQuote has an attribute of type WfCovAddress, which in turn has an attribute of type WfCovGeoPoint; and an attribute 'Items' of type 'WfCovCoverageItem List', which makes the kernel ask the IESpace for the LIST TYPE inside the declaration of the structure itself. Then a server action receives a record AND a list of records as INPUT, returns a record as OUTPUT, reads the nesting by the full path and APPENDS to the list that lives inside the output record (ListAppend with Quote.Items). In ODC everything that the public (shareable) action touches has to be shareable, so the four structures are born public - and being public is also what stops them from being born with UnusedElement.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCovQuote_Build (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCovQuote_Build (ServerAction)", "why": "ODC: an app (CrossDevice) does not expose a public server action (the live Studio gives an error); the action stays private and without a consumer in this proof job"}],
  "ops": [
   {
    "op": "spec",
-   "_why": "UMA op declara as quatro structures: o compilador declara todos os tipos ANTES dos campos, por isso um atributo pode citar uma structure declarada adiante no mesmo bloco e o aninhamento nao exige entregas separadas (a mesma regra das FKs circulares de entidade)",
+   "_why": "ONE op declares the four structures: the compiler declares all the types BEFORE the fields, so an attribute can cite a structure declared further down in the same block and the nesting does not require separate deliveries (the same rule as circular entity FKs)",
    "data": {
     "structures": [
      {
@@ -59,12 +59,12 @@
   {"op": "create", "parent": "$act", "type": "IInputParameter", "name": "Holder", "as": "$inHolder"},
   {"op": "set", "target": "$inHolder", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$act", "type": "IInputParameter", "name": "Address", "as": "$inAddress"},
-  {"op": "set", "target": "$inAddress", "prop": "DataType", "value": "WfCovAddress", "_why": "ESTRUTURA COMO PARAMETRO (record): o input inteiro e um tipo composto, e ele proprio ja traz um nivel aninhado (Geo)"},
+  {"op": "set", "target": "$inAddress", "prop": "DataType", "value": "WfCovAddress", "_why": "STRUCTURE AS A PARAMETER (record): the whole input is a composite type, and it already carries a nested level of its own (Geo)"},
   {"op": "create", "parent": "$act", "type": "IInputParameter", "name": "CoverLines", "as": "$inLines"},
-  {"op": "set", "target": "$inLines", "prop": "DataType", "value": "WfCovCoverageItem List", "_why": "LISTA DE ESTRUTURA COMO PARAMETRO: o list type ja existe porque a structure WfCovPolicyQuote o pediu no atributo Items; aqui prova-se que o mesmo tipo serve de contrato de entrada"},
+  {"op": "set", "target": "$inLines", "prop": "DataType", "value": "WfCovCoverageItem List", "_why": "STRUCTURE LIST AS A PARAMETER: the list type already exists because the structure WfCovPolicyQuote requested it in the attribute Items; here it is proven that the same type serves as an input contract"},
 
   {"op": "create", "parent": "$act", "type": "IOutputParameter", "name": "Quote", "as": "$out"},
-  {"op": "set", "target": "$out", "prop": "DataType", "value": "WfCovPolicyQuote", "_why": "ESTRUTURA COMO SAIDA: um unico output carrega o aninhamento inteiro - e exatamente a forma de um corpo JSON de REST"},
+  {"op": "set", "target": "$out", "prop": "DataType", "value": "WfCovPolicyQuote", "_why": "STRUCTURE AS AN OUTPUT: a single output carries the whole nesting - it is exactly the shape of a REST JSON body"},
 
   {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$s0"},
 
@@ -72,31 +72,31 @@
   {"op": "set", "target": "$head", "prop": "Label", "value": "SetHeader"},
   {"op": "create", "parent": "$head", "type": "IAssignment", "as": "$h1"},
   {"op": "set", "target": "$h1", "prop": "Variable", "value": "Quote.Address"},
-  {"op": "set", "target": "$h1", "prop": "Value", "value": "Address", "_why": "record inteiro para dentro de record: o atributo Address do output recebe o parametro Address de uma vez, sem copiar campo a campo (e leva o Geo junto)"},
+  {"op": "set", "target": "$h1", "prop": "Value", "value": "Address", "_why": "whole record into a record: the Address attribute of the output receives the Address parameter in one go, without copying field by field (and takes the Geo along)"},
   {"op": "create", "parent": "$head", "type": "IAssignment", "as": "$h2"},
   {"op": "set", "target": "$h2", "prop": "Variable", "value": "Quote.Holder"},
-  {"op": "set", "target": "$h2", "prop": "Value", "value": "Holder + \" - \" + Quote.Address.Zone", "_why": "leitura ANINHADA pelo caminho completo no lado DIREITO: Quote.Address.Zone atravessa output -> structure -> atributo. Le do Quote (ja preenchido pelo assignment anterior, que corre primeiro) para provar que o aninhamento e navegavel depois de escrito"},
+  {"op": "set", "target": "$h2", "prop": "Value", "value": "Holder + \" - \" + Quote.Address.Zone", "_why": "NESTED read by the full path on the RIGHT side: Quote.Address.Zone crosses output -> structure -> attribute. It reads from Quote (already filled in by the previous assignment, which runs first) to prove that the nesting is navigable after being written"},
   {"op": "create", "parent": "$head", "type": "IAssignment", "as": "$h3"},
   {"op": "set", "target": "$h3", "prop": "Variable", "value": "Quote.IsCoastal"},
-  {"op": "set", "target": "$h3", "prop": "Value", "value": "Address.Geo.Latitude > 26.0", "_why": "TRES NIVEIS a partir do PARAMETRO: parametro -> WfCovAddress -> WfCovGeoPoint -> Latitude. E a mesma forma de 'GetLatest.Response.Rates.USD' do rest-query-nested.json do SS11, aqui sem passar por REST"},
+  {"op": "set", "target": "$h3", "prop": "Value", "value": "Address.Geo.Latitude > 26.0", "_why": "THREE LEVELS from the PARAMETER: parameter -> WfCovAddress -> WfCovGeoPoint -> Latitude. It is the same shape as 'GetLatest.Response.Rates.USD' of rest-query-nested.json in SS11, here without going through REST"},
   {"op": "create", "parent": "$head", "type": "IAssignment", "as": "$h4"},
   {"op": "set", "target": "$h4", "prop": "Variable", "value": "Quote.Total"},
   {"op": "set", "target": "$h4", "prop": "Value", "value": "0.0"},
 
   {"op": "create", "parent": "$act", "type": "IForEachNode", "as": "$each"},
   {"op": "set", "target": "$each", "prop": "Label", "value": "EachLine"},
-  {"op": "set", "target": "$each", "prop": "RecordList", "value": "CoverLines", "_why": "ciclo sobre a LISTA DE ESTRUTURA recebida como parametro: le-se CoverLines.Current.<Atributo>, SEM o nivel do aggregate (nao ha aggregate nenhum neste job)"},
+  {"op": "set", "target": "$each", "prop": "RecordList", "value": "CoverLines", "_why": "loop over the STRUCTURE LIST received as a parameter: CoverLines.Current.<Attribute> is read, WITHOUT the aggregate level (there is no aggregate in this job)"},
 
   {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$sum"},
   {"op": "set", "target": "$sum", "prop": "Label", "value": "AddLine"},
   {"op": "create", "parent": "$sum", "type": "IAssignment", "as": "$s1"},
   {"op": "set", "target": "$s1", "prop": "Variable", "value": "Quote.Total"},
-  {"op": "set", "target": "$s1", "prop": "Value", "value": "Quote.Total + CoverLines.Current.Limit", "_why": "acumula lendo o elemento corrente da lista de structure do parametro"},
+  {"op": "set", "target": "$s1", "prop": "Value", "value": "Quote.Total + CoverLines.Current.Limit", "_why": "accumulates by reading the current element of the structure list of the parameter"},
 
   {"op": "create", "parent": "$act", "type": "IExecuteServerActionNode", "name": "AppendLine", "as": "$append"},
-  {"op": "set", "target": "$append", "prop": "Action", "value": "IServerActionSignature:ListAppend", "_why": "no ODC o ListAppend existe como IClientActionSignature E como IServerActionSignature; dentro de uma server action o IExecuteServerActionNode so aceita a do servidor"},
-  {"op": "set", "target": "$append/List", "prop": "Value", "value": "Quote.Items", "_why": "o ponto do job: a lista que se acrescenta NAO e uma variavel solta, e o atributo-lista que vive DENTRO do record de saida. Escrever Quote.Items prova que a lista de structure aninhada e um destino gravavel como outro qualquer"},
-  {"op": "set", "target": "$append/Element", "prop": "Value", "value": "CoverLines.Current", "_why": "elemento = o record corrente do parametro-lista, passado inteiro"},
+  {"op": "set", "target": "$append", "prop": "Action", "value": "IServerActionSignature:ListAppend", "_why": "in ODC the ListAppend exists as IClientActionSignature AND as IServerActionSignature; inside a server action the IExecuteServerActionNode only accepts the server one"},
+  {"op": "set", "target": "$append/List", "prop": "Value", "value": "Quote.Items", "_why": "the point of the job: the list being appended to is NOT a loose variable, it is the list attribute that lives INSIDE the output record. Writing Quote.Items proves that the nested structure list is a writable destination like any other"},
+  {"op": "set", "target": "$append/Element", "prop": "Value", "value": "CoverLines.Current", "_why": "element = the current record of the list parameter, passed whole"},
 
   {"op": "create", "parent": "$act", "type": "IEndNode", "as": "$s9"},
   {"op": "link", "from": "$s0", "to": "$head"},
@@ -107,15 +107,15 @@
   {"op": "link", "from": "$each", "to": "$s9"},
   {"op": "layout", "target": "$act"},
 
-  {"op": "get", "target": "$WfCovPolicyQuote/Address", "_why": "le de volta o atributo ANINHADO: DataType e a structure WfCovAddress, nao um primitivo"},
-  {"op": "get", "target": "$WfCovPolicyQuote/Items", "_why": "le de volta o atributo LISTA DE ESTRUTURA: DataType e o list type de WfCovCoverageItem, criado pelo kernel dentro da propria op spec"},
-  {"op": "get", "target": "$WfCovAddress/Geo", "_why": "prova o segundo salto do aninhamento: a structura do meio tambem tem um atributo composto"},
+  {"op": "get", "target": "$WfCovPolicyQuote/Address", "_why": "reads back the NESTED attribute: DataType is the structure WfCovAddress, not a primitive"},
+  {"op": "get", "target": "$WfCovPolicyQuote/Items", "_why": "reads back the STRUCTURE LIST attribute: DataType is the list type of WfCovCoverageItem, created by the kernel inside the spec op itself"},
+  {"op": "get", "target": "$WfCovAddress/Geo", "_why": "proves the second hop of the nesting: the middle structure also has a composite attribute"},
   {"op": "get", "target": "$inAddress", "_why": "prova ESTRUTURA COMO PARAMETRO de entrada"},
-  {"op": "get", "target": "$inLines", "_why": "prova LISTA DE ESTRUTURA COMO PARAMETRO de entrada"},
+  {"op": "get", "target": "$inLines", "_why": "proves STRUCTURE LIST AS an input PARAMETER"},
   {"op": "get", "target": "$out", "_why": "prova ESTRUTURA COMO SAIDA"},
-  {"op": "dump", "target": "$WfCovPolicyQuote", "depth": 2, "_why": "a arvore do tipo composto do topo: primitivos, record e lista de record lado a lado"},
-  {"op": "usages", "target": "IStructure:WfCovAddress", "_why": "prova os dois papeis do mesmo tipo composto: atributo de outra structure (aninhamento) e parametro de uma action"},
-  {"op": "usages", "target": "IStructure:WfCovCoverageItem", "_why": "prova o list type: a structure e consumida como LISTA em dois sitios (o atributo Items e o input CoverLines) sem nunca aparecer solta"},
-  {"op": "dump", "target": "$append", "depth": 3, "_why": "prova o ListAppend a escrever dentro do record de saida: List = Quote.Items, Element = CoverLines.Current"}
+  {"op": "dump", "target": "$WfCovPolicyQuote", "depth": 2, "_why": "the tree of the top composite type: primitives, record and list of records side by side"},
+  {"op": "usages", "target": "IStructure:WfCovAddress", "_why": "proves the two roles of the same composite type: attribute of another structure (nesting) and parameter of an action"},
+  {"op": "usages", "target": "IStructure:WfCovCoverageItem", "_why": "proves the list type: the structure is consumed as a LIST in two places (the attribute Items and the input CoverLines) without ever appearing loose"},
+  {"op": "dump", "target": "$append", "depth": 3, "_why": "proves the ListAppend writing inside the output record: List = Quote.Items, Element = CoverLines.Current"}
  ]
 }

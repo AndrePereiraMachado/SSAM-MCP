@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {mobileConfigurationExpectation,verifyMobileConfiguration} from '../runtime/mobile-configuration-proof.mjs';
 import {MOBILE_CONFIGURATION_WRITES} from '../runtime/mobile-configuration-approval.mjs';

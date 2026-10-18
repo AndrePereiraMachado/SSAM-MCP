@@ -96,4 +96,14 @@
   <ItemGroup>
     <Compile Include="../Shared/ActionNameCollisionTests.cs" Link="ActionNameCollisionTests.cs" />
   </ItemGroup>
+  <!-- fix/a5-lows (R4-3): the user's profile is never written by a test; the guard runs after every other collection. -->
+  <ItemGroup>
+    <Compile Include="../Shared/TestProfileIsolation.cs" Link="TestProfileIsolation.cs" />
+    <Compile Include="../Shared/ProfileIsolationGuardTests.cs" Link="ProfileIsolationGuardTests.cs" />
+    <Compile Include="../Shared/DeclaredLook.cs" Link="DeclaredLook.cs" />
+    <AssemblyAttribute Include="Xunit.TestCollectionOrdererAttribute">
+      <_Parameter1>Anvil.Tests.GuardLastCollectionOrderer</_Parameter1>
+      <_Parameter2>$(AssemblyName)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
 </Project>

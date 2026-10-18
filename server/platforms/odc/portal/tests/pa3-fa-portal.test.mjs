@@ -2,6 +2,7 @@
 // to 50 rows when 100 were asked, and a row falls 1 s after the window (server rounding); both refused the whole page with
 // PORTAL_RESPONSE_SCOPE_MISMATCH. Now the server's Limit is accepted with the requested Offset (serverLimit, the next page
 // from the server's values) and a row out of scope leaves the answer, counted. Fake broker; no network, no Studio.
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PortalReadAdapter } from '../runtime/portal-read.mjs';

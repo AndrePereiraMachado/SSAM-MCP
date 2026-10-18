@@ -1,5 +1,5 @@
 {
- "description": "Video (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios URL com valores simples.",
+ "description": "Minimal Video (OutSystemsUI, Interaction): an instance as the Studio creates it when the block is dragged; required inputs URL with simple values.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

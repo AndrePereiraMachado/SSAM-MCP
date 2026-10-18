@@ -1,5 +1,5 @@
 {
- "description": "Job NEGATIVO (tem de falhar): Right( nao existe no OutSystems. Mostra o que o runner devolve: o erro do Verify com o Label do Assign (CalculaCauda) e o Hint UnknownFunction com as funcoes parecidas (Substr, Length). A versao certa e Substr(Value, Length(Value) - 1, 1).",
+ "description": "NEGATIVE job (must fail): Right( does not exist in OutSystems. It shows what the runner returns: the Verify error with the Label of the Assign (CalculaCauda) and the UnknownFunction Hint with similar functions (Substr, Length). The right version is Substr(Value, Length(Value) - 1, 1).",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": false,
  "ops": [

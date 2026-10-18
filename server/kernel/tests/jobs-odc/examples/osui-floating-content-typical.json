@@ -1,5 +1,5 @@
 {
- "description": "FloatingContent do OSUI como barra fixa: largura total no rodape, total do carrinho calculado e botao de checkout.",
+ "description": "FloatingContent of OSUI as a fixed bar: full width at the bottom, the computed total of the cart and a checkout button.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -32,7 +32,7 @@ function delivery(deps, module, { buildMs = 120, applyMs = 60, log }) {
     const apply = { module, start: Date.now() };
     await sleep(applyMs);
     apply.end = Date.now(); log.applies.push(apply);
-    return { ok: true, result: 'entregue', module };
+    return { ok: true, result: 'delivered', module };
   });
 }
 
@@ -50,7 +50,7 @@ test('wp: two deliveries to different modules of one Studio overlap their builds
   const deps = depsFor(tmp());
   const log = { builds: [], applies: [] };
   const [a, b] = await Promise.all([delivery(deps, 'Orders', { log }), delivery(deps, 'Customers', { log })]);
-  assert.deepEqual([a.result, b.result], ['entregue', 'entregue']);
+  assert.deepEqual([a.result, b.result], ['delivered', 'delivered']);
   assert.ok(overlap(log.builds[0], log.builds[1]), 'the builds ran at the same time: ' + JSON.stringify(log.builds));
   assert.ok(!overlap(log.applies[0], log.applies[1]), 'the applies ran one after the other: ' + JSON.stringify(log.applies));
   for (const answer of [a, b]) {
@@ -86,26 +86,26 @@ test('wp: a write nested in the build takes the Studio for the rest of the call;
     const inner = await withStudioWriteLock({ tool: 'o11_studio', args: { command: 'open-module', module: 'A' }, lane: 'o11', deps }, async () => 'opened');
     nested.resolve({ beside, inner, phase: phaseOfCall() });
     await gate.promise;
-    return { ok: true, result: 'entregue' };
+    return { ok: true, result: 'delivered' };
   });
   const seen = await nested.promise;
   assert.deepEqual([seen.beside, seen.inner, seen.phase.promoted], ['beside', 'opened', true]);
   const blocked = await withStudioWriteLock({ tool: 'o11_studio', args: { command: 'dismiss-dialog' }, lane: 'o11', deps: { ...deps, queueMs: 0 } }, async () => 'x');
   assert.equal(blocked.code, QUEUE_TIMEOUT_CODE, 'from its first write the call holds the Studio');
   gate.resolve();
-  assert.equal((await phased).result, 'entregue');
+  assert.equal((await phased).result, 'delivered');
 });
 
 test('wp: a guarded Studio call whose turn does not come refuses the call with nothing applied (STUDIO_WRITE_QUEUE_TIMEOUT)', async () => {
   const deps = depsFor(tmp());
   const gate = deferred(); const holding = deferred();
-  const holder = withStudioWriteLock({ tool: 'o11_publish', args: { module: 'B' }, lane: 'o11', deps }, async () => { holding.resolve(); await gate.promise; return 'publicado'; });
+  const holder = withStudioWriteLock({ tool: 'o11_publish', args: { module: 'B' }, lane: 'o11', deps }, async () => { holding.resolve(); await gate.promise; return 'published'; });
   await holding.promise;
   let applied = false;
   const merge = phaseGuard(async () => { applied = true; return 'merged'; });
   const answer = await withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'A', job: [] }, lane: 'o11', deps: { ...deps, queueMs: 60 }, phased: true }, async () => {
     notePhase({ built: true });
-    try { await merge(); return { ok: true, result: 'entregue' }; }
+    try { await merge(); return { ok: true, result: 'delivered' }; }
     catch (error) { assert.ok(error instanceof StudioTurnRefused); return { ok: false, error: 'handler saw ' + error.code }; }
   });
   assert.equal(applied, false, 'nothing after the build ran');
@@ -157,9 +157,9 @@ test('wp: a phased call that built stamps its phases into the receipts it named'
   const answer = await withStudioWriteLock({ tool: 'studio_deliver', args: { module: 'A' }, lane: 'odc', deps, phased: true }, async () => {
     notePhase({ built: true, receipt }); notePhase({ receipt: sidecar });
     await enterApplyPhase();
-    return { content: [{ type: 'text', text: 'entregue' }] };
+    return { content: [{ type: 'text', text: 'delivered' }] };
   });
-  assert.equal(answer.content[0].text, 'entregue', 'the plain answer stays first');
+  assert.equal(answer.content[0].text, 'delivered', 'the plain answer stays first');
   const extra = JSON.parse(answer.content[1].text);
   assert.deepEqual(Object.keys(extra.phases).sort(), ['applyMs', 'buildMs', 'queuedMs']);
   assert.deepEqual(JSON.parse(fs.readFileSync(receipt, 'utf8')).phases, extra.phases);
@@ -169,9 +169,9 @@ test('wp: a phased call that built stamps its phases into the receipts it named'
 test('wp: without phased:true a delivery holds the Studio for the whole call, as before', async () => {
   const deps = depsFor(tmp());
   const gate = deferred(); const running = deferred();
-  const whole = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'A', job: [] }, lane: 'o11', deps }, async () => { running.resolve(phaseOfCall()); await gate.promise; return 'entregue'; });
+  const whole = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'A', job: [] }, lane: 'o11', deps }, async () => { running.resolve(phaseOfCall()); await gate.promise; return 'delivered'; });
   assert.equal(await running.promise, null, 'not a phased call');
   const other = await withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'B', job: [] }, lane: 'o11', deps: { ...deps, queueMs: 0 } }, async () => 'x');
   assert.equal(other.code, QUEUE_TIMEOUT_CODE);
-  gate.resolve(); assert.equal(await whole, 'entregue');
+  gate.resolve(); assert.equal(await whole, 'delivered');
 });

@@ -1,5 +1,5 @@
 {
- "description": "SectionIndexItem (OutSystemsUI, Navigation) tipico; dentro de um SectionIndex vazio (placeholder Content); inputs obrigatorios ScrollToWidgetId ligados ao Id de um Container da tela; placeholders Content com dados do aggregate de tarefas; eventos Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "description": "Typical SectionIndexItem (OutSystemsUI, Navigation); inside an empty SectionIndex (placeholder Content); required inputs ScrollToWidgetId bound to the Id of a Container of the screen; placeholders Content with data of the tasks aggregate; events Initialized handled by screen actions that keep the parameters in variables.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

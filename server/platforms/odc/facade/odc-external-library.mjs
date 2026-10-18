@@ -6,7 +6,7 @@
 // with the library, revision, tag, runtime, the consumers left outdated and the continuation of the reference job.
 // status (reads) and discard (deletes an open job; destructive). No username or password ever: the ODC Studio session
 // first, then the vault, then the private prompt. Every refusal comes before any change, with every problem at once.
-import { DESTRUCTIVE_SUFFIX, ODC_EXECUTION_UUID, withSignal } from './destructive-operations.mjs';
+import { DESTRUCTIVE_SUFFIX, ODC_EXECUTION_UUID, withSignal, wordsGiven } from './destructive-operations.mjs';
 import { OWNED_CLEANUP } from '../portal/runtime/owned-cleanup-approval.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -242,6 +242,10 @@ export function createExternalLibraryTool(deps = {}) {
 
   // The words for a deploy: the user's, naming the library, or a standing publish grant of the library.
   async function wordsFor(input, name) {
+    // CX15 r7 (M-3): words that are a marker, a <template> or a sha256 of the server are no words, before the approval, the
+    // naming rule and the grant (never a grant instead).
+    if (typeof input.authorize === 'string' && input.authorize.trim() && !wordsGiven(input.authorize))
+      return { problem: { code: 'WORDS_REQUIRED', path: '/authorize', message: 'authorize holds a text of the server (a marker, a <template> or a sha256), never the owner\'s words. Nothing was sent.', fix: 'Ask the owner and pass his literal words, naming ' + (name ?? 'the library') + '.' } };
     if(input.authorizationContext) {
       try {
         const host=await (await accessOf()).pickTenant(input.tenant);
@@ -257,7 +261,7 @@ export function createExternalLibraryTool(deps = {}) {
     if (typeof name === 'string' && name) {
       let grant = null;
       try { grant = await (await grantsOf())?.findGrant?.({ lane: 'odc', app: name, module: name, verb: 'publish' }); } catch { grant = null; }
-      if (grant && typeof grant.words === 'string' && grant.words.trim()) return { words: grant.words, userWords: false, authorization: { source: 'standing-grant', grantId: grant.grantId } };
+      if (grant && wordsGiven(grant.words)) return { words: grant.words, userWords: false, authorization: { source: 'standing-grant', grantId: grant.grantId } };
     }
     return { problem: { code: 'WORDS_MUST_NAME_LIBRARY', path: '/authorize', message: 'A deploy changes the tenant and needs the user\'s own words naming ' + (name ?? 'the library') + ', or a standing publish grant of it.', fix: 'Repeat with authorize: the user\'s words that name ' + (name ?? 'the library') + '; or ask for a standing grant (ssam_grant).', ssamRule: true } };
   }

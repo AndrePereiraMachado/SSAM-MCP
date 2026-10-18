@@ -1,25 +1,25 @@
 {
- "description": "Frente B (catalogo abrangente): APAGAR um evento de bloco que tem handler, pelo caminho limpo, na faixa ODC, sobre job:block-events. A recusa esta em tests/jobs-odc-negative/delete-block-event-in-use.json; a ordem que a faz passar so estava medida no O11 (tests/jobs/block-events-delete-reactive.json). Diferenca de faixa: aqui a instancia RatingPicker1 nasceu da autoria visual dentro do container RatingPanel, por isso o handler e enderecado por busca profunda. Ordem: (1) o IEventHandler da instancia, na TELA, sai sozinho e a instancia fica; (2) o ITriggerNode, no BLOCO, sai depois de religar o predecessor ao End; (3) o IBlockEvent sai sem force, com zero consumidores; (4) a screen action que era handler (WfRateReceived) fica orfa e sai tambem, senao o Verify avisa UnusedAction.",
+ "description": "Front B (broad catalog): DELETE a block event that has a handler, through the clean path, in the ODC lane, over job:block-events. The refusal is in tests/jobs-odc-negative/delete-block-event-in-use.json; the order that makes it pass was only measured in O11 (tests/jobs/block-events-delete-reactive.json). Lane difference: here the instance RatingPicker1 was born from visual authoring inside the container RatingPanel, so the handler is addressed by deep search. Order: (1) the IEventHandler of the instance, in the SCREEN, goes out by itself and the instance stays; (2) the ITriggerNode, in the BLOCK, goes out after relinking the predecessor to the End; (3) the IBlockEvent goes out without force, with zero consumers; (4) the screen action that was the handler (WfRateReceived) is left orphaned and goes out too, otherwise the Verify warns UnusedAction.",
  "base": "job:block-events",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "antes: 2 consumidores, o trigger no bloco e o handler da instancia na tela"},
+  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "before: 2 consumers, the trigger in the block and the instance handler in the screen"},
 
-  {"op": "delete", "target": "IMobileScreen:WfRatingDemo/#IMobileBlockInstanceWidget/MainContent/**IEventHandler[1]", "_why": "1. desligar o handler SEM apagar a instancia"},
-  {"op": "get", "target": "IMobileScreen:WfRatingDemo/#IMobileBlockInstanceWidget/MainContent/**IMobileBlockInstanceWidget[1]", "_why": "a instancia sobrevive com o argumento Caption"},
+  {"op": "delete", "target": "IMobileScreen:WfRatingDemo/#IMobileBlockInstanceWidget/MainContent/**IEventHandler[1]", "_why": "1. unlink the handler WITHOUT deleting the instance"},
+  {"op": "get", "target": "IMobileScreen:WfRatingDemo/#IMobileBlockInstanceWidget/MainContent/**IMobileBlockInstanceWidget[1]", "_why": "the instance survives with the argument Caption"},
   {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "sobrou 1: o disparo"},
 
   {"op": "link", "from": "IMobileBlock:WfRatingPicker/Rate/#IAssignNode", "to": "IMobileBlock:WfRatingPicker/Rate/#IEndNode", "_why": "2. religar o predecessor ANTES de apagar o no do meio"},
   {"op": "delete", "target": "IMobileBlock:WfRatingPicker/Rate/RaiseOnRate"},
   {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "zero consumidores"},
 
-  {"op": "delete", "target": "IBlockEvent:OnRate", "_why": "3. agora sai sem force"},
+  {"op": "delete", "target": "IBlockEvent:OnRate", "_why": "3. now it goes out without force"},
 
-  {"op": "usages", "target": "IScreenAction:WfRateReceived", "_why": "4. a screen action que era handler ficou sem consumidor"},
+  {"op": "usages", "target": "IScreenAction:WfRateReceived", "_why": "4. the screen action that was the handler was left without a consumer"},
   {"op": "delete", "target": "IScreenAction:WfRateReceived"},
 
-  {"op": "get", "target": "IMobileBlock:WfRatingPicker", "_why": "o bloco perdeu o evento e manteve o resto"},
+  {"op": "get", "target": "IMobileBlock:WfRatingPicker", "_why": "the block lost the event and kept the rest"},
   {"op": "dump", "target": "IMobileBlock:WfRatingPicker", "depth": 6},
   {"op": "dump", "target": "IMobileScreen:WfRatingDemo", "depth": 8}
  ]

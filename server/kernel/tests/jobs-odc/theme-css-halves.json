@@ -1,12 +1,12 @@
 {
- "description": "As TRES metades do CSS de um tema. O tema InsuranceApp tem CSS do Theme Editor, e nesse caso ITheme.StyleSheet LE a efetiva e ESCREVE a do autor: sem o conserto do kernel o set parecia perdido (o get devolvia o texto antigo) enquanto o CSS do autor ja tinha sido substituido. Depois do conserto o get mostra as tres metades (StyleSheet efetiva, UserStyleSheet do autor, GeneratedStyleSheet do Theme Editor), o set diz onde o texto caiu, e a efetiva volta a ser gerada + CRLF + autor. Os valores sao aferidos em Anvil.Tests.Odc.ThemeCssTests; aqui prova-se que o modulo continua valido e que o OML grava as tres metades coerentes.",
+ "description": "The THREE halves of the CSS of a theme. The InsuranceApp theme has Theme Editor CSS, and in that case ITheme.StyleSheet READS the effective one and WRITES the author's: without the kernel fix the set seemed lost (the get returned the old text) while the author's CSS had already been replaced. After the fix the get shows the three halves (effective StyleSheet, author's UserStyleSheet, GeneratedStyleSheet of the Theme Editor), the set says where the text landed, and the effective one is again generated + CRLF + author. The values are checked in Anvil.Tests.Odc.ThemeCssTests; here it is proven that the module remains valid and that the OML saves the three halves coherently.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "ops": [
-  {"op": "get", "target": "IMobileTheme:InsuranceApp", "_why": "antes: StyleSheet = GeneratedStyleSheet + CRLF + UserStyleSheet"},
+  {"op": "get", "target": "IMobileTheme:InsuranceApp", "_why": "before: StyleSheet = GeneratedStyleSheet + CRLF + UserStyleSheet"},
   {"op": "set", "target": "IMobileTheme:InsuranceApp", "prop": "StyleSheet",
    "value": "/* anvil:theme-css-halves */\n.anvil-halves { color: #0066db; }",
-   "_why": "substitui o CSS do AUTOR; para acrescentar, leia o texto antes e escreva o todo (ou use o op html, que ja faz o ciclo)"},
-  {"op": "get", "target": "IMobileTheme:InsuranceApp", "_why": "depois: UserStyleSheet e o texto novo e StyleSheet e gerada + CRLF + esse texto"}
+   "_why": "replaces the AUTHOR's CSS; to append, read the text first and write the whole (or use the html op, which already does the cycle)"},
+  {"op": "get", "target": "IMobileTheme:InsuranceApp", "_why": "after: UserStyleSheet is the new text and StyleSheet is generated + CRLF + that text"}
  ]
 }

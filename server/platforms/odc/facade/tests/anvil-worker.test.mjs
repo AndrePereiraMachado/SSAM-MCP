@@ -2,6 +2,7 @@
 // worker_process.py), against fake TCP workers on ephemeral loopback ports. No worker process is ever started: the spawn is
 // injected (the startup lock's live owner is an idle node child), every root, authority folder and user folder is
 // temporary, and every target names its fake's port.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

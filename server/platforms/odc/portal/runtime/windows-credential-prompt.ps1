@@ -105,14 +105,14 @@ try {
  $form=New-Object Windows.Forms.Form;$form.Text="SSAM - $HostName - $Kind";$form.ClientSize=New-Object Drawing.Size(580,235)
  $form.StartPosition='CenterScreen';$form.FormBorderStyle='FixedDialog';$form.MaximizeBox=$false;$form.MinimizeBox=$true;$form.TopMost=$true
  $label=New-Object Windows.Forms.Label;$label.Location=New-Object Drawing.Point(16,14);$label.Size=New-Object Drawing.Size(548,48)
- $label.Text="ODC: $HostName`r`n$Kind $EntryName - valores guardados somente no Cofre do Windows; nunca no chat.";$form.Controls.Add($label)
- $userLabel=New-Object Windows.Forms.Label;$userLabel.Location=New-Object Drawing.Point(16,78);$userLabel.Text=$(if($Kind -eq 'api-client'){'Client ID'}else{'Usuario'});$form.Controls.Add($userLabel)
+ $label.Text="ODC: $HostName`r`n$Kind $EntryName - values stored only in the Windows Vault; never in the chat.";$form.Controls.Add($label)
+ $userLabel=New-Object Windows.Forms.Label;$userLabel.Location=New-Object Drawing.Point(16,78);$userLabel.Text=$(if($Kind -eq 'api-client'){'Client ID'}else{'User'});$form.Controls.Add($userLabel)
  $user=New-Object Windows.Forms.TextBox;$user.Location=New-Object Drawing.Point(140,74);$user.Size=New-Object Drawing.Size(422,24);$form.Controls.Add($user)
- $secretLabel=New-Object Windows.Forms.Label;$secretLabel.Location=New-Object Drawing.Point(16,119);$secretLabel.Text=$(if($Kind -eq 'api-client'){'Client secret'}elseif($Kind -eq 'setting'){'Valor secreto'}else{'Senha'});$form.Controls.Add($secretLabel)
+ $secretLabel=New-Object Windows.Forms.Label;$secretLabel.Location=New-Object Drawing.Point(16,119);$secretLabel.Text=$(if($Kind -eq 'api-client'){'Client secret'}elseif($Kind -eq 'setting'){'Secret value'}else{'Password'});$form.Controls.Add($secretLabel)
  $secret=New-Object Windows.Forms.TextBox;$secret.Location=New-Object Drawing.Point(140,115);$secret.Size=New-Object Drawing.Size(422,24);$secret.UseSystemPasswordChar=$true;$form.Controls.Add($secret)
  if($Kind -eq 'setting'){$user.Text='setting';$user.ReadOnly=$true}
- $save=New-Object Windows.Forms.Button;$save.Text='Guardar';$save.Location=New-Object Drawing.Point(360,177);$save.Size=New-Object Drawing.Size(96,32);$form.Controls.Add($save);$form.AcceptButton=$save
- $cancel=New-Object Windows.Forms.Button;$cancel.Text='Cancelar';$cancel.DialogResult='Cancel';$cancel.Location=New-Object Drawing.Point(466,177);$cancel.Size=New-Object Drawing.Size(96,32);$form.Controls.Add($cancel);$form.CancelButton=$cancel
+ $save=New-Object Windows.Forms.Button;$save.Text='Save';$save.Location=New-Object Drawing.Point(360,177);$save.Size=New-Object Drawing.Size(96,32);$form.Controls.Add($save);$form.AcceptButton=$save
+ $cancel=New-Object Windows.Forms.Button;$cancel.Text='Cancel';$cancel.DialogResult='Cancel';$cancel.Location=New-Object Drawing.Point(466,177);$cancel.Size=New-Object Drawing.Size(96,32);$form.Controls.Add($cancel);$form.CancelButton=$cancel
  $script:stored=$false
  $save.Add_Click({
   $pointer=[IntPtr]::Zero
@@ -124,7 +124,7 @@ try {
    $record.CredentialBlob=$pointer;$record.CredentialBlobSize=[Text.Encoding]::Unicode.GetByteCount($secret.Text)
    if($record.CredentialBlobSize -gt 2560 -or ![SsamCredentialWindow]::Write([ref]$record,0)){throw 'Storage failed'}
    $script:stored=$true;$secret.Clear();$form.DialogResult='OK';$form.Close()
-  }catch{[void][Windows.Forms.MessageBox]::Show($form,'Confira os campos. Nao foi possivel guardar a credencial.','SSAM')}
+  }catch{[void][Windows.Forms.MessageBox]::Show($form,'Check the fields. The credential could not be saved.','SSAM')}
   finally{if($pointer -ne [IntPtr]::Zero){[Runtime.InteropServices.Marshal]::ZeroFreeCoTaskMemUnicode($pointer)}}
  })
  function Focus-OwnForm {

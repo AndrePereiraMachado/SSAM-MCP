@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {randomUUID} from 'node:crypto';
 import {DEBUG_STATE_AREAS,debugStateBase,debugStateRoot,legacyDebugStateRoots,debugStoreInventory,localAppDataViews} from '../debug-state-root.mjs';
 import {privateInspectionVault} from '../debug-private-inspection.mjs';

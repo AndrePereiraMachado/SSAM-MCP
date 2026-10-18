@@ -1,9 +1,9 @@
 {
- "description": "Diagnostico minimo: um aviso novo do Verify declarado no contrato expectedMessages (id, elemento e motivo). Declarado, o aviso aparece em validation.matched com o motivo; sem a declaracao, um aviso de elemento criado pelo proprio job cai em allowlisted (nao bloqueia, A03), e um erro cairia em unexpected.",
+ "description": "Minimal diagnostic: a new Verify warning declared in the expectedMessages contract (id, element and reason). Declared, the warning appears in validation.matched with the reason; without the declaration, a warning of an element the job itself created falls in allowlisted (it does not block, A03), and an error would fall in unexpected.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [
-  {"id": "UnusedElement", "element": "Showcase (MobileScreen) / DraftNote (LocalVariable)", "why": "Variavel reservada para o proximo passo; o exemplo mostra como declarar um aviso esperado."}
+  {"id": "UnusedElement", "element": "Showcase (MobileScreen) / DraftNote (LocalVariable)", "why": "Variable reserved for the next step; the example shows how to declare an expected warning."}
  ],
  "ops": [
   {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "DraftNote", "as": "$draft"},

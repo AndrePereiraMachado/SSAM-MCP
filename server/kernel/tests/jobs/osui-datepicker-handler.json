@@ -1,12 +1,12 @@
 {
- "description": "Sessao fria J: tela Booking (Reactive) com padroes do OutSystems UI: DatePicker ligado a SelectedDate com OnSelected -> screen action que copia para Confirmed; Tag Pending amarela; Tooltip em volta de um Icon com Pick a date; Counter com 42 (escrito por uma LLM sem contexto na sessao fria J, rodada 2, 2026-09-04)",
+ "description": "Cold session J: Booking screen (Reactive) with OutSystems UI patterns: DatePicker bound to SelectedDate with OnSelected -> screen action that copies to Confirmed; yellow Tag Pending; Tooltip around an Icon with Pick a date; Counter with 42 (written by an LLM without context in cold session J, round 2, 2026-09-04)",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "UnusedElement",
    "element": "DatePicker1_OnSelected (ScreenAction) / DatePickerId (InputParameter)",
-   "why": "DatePickerId faz parte do contrato do evento; este exemplo usa somente a data selecionada."
+   "why": "DatePickerId is part of the event contract; this example only uses the selected date."
   }
  ],
  "ops": [

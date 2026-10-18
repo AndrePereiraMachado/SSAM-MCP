@@ -53,12 +53,12 @@ test('o11_inspect and studio_inspect: a summarized answer reads its navigation; 
   // The schema fills the defaults in: they never reach the next call.
   const args = { oml: OML, kind: 'MobileScreen', offset: 0, usages: false, includeInternal: false, depth: 3, max: 60, all: false, full: false, cold: false, budget: 60000 };
   assert.deepEqual(next('o11_inspect', args, summarized), [
-    { tool: 'o11_inspect', arguments: { oml: OML, path: KEY_MARKER, expectedSourceSha256: SHA }, why: 'troque <key> por uma reference de summary.targets' },
+    { tool: 'o11_inspect', arguments: { oml: OML, path: KEY_MARKER, expectedSourceSha256: SHA }, why: 'replace <key> with a reference of summary.targets' },
     { tool: 'o11_inspect', arguments: { oml: OML, kind: 'MobileScreen', offset: 60, expectedSourceSha256: SHA } }]);
   // ODC: target instead of oml; a module name in the call becomes the captured file.
   const odc = { ...summarized, file: ODC_OML, navigation: { target: ODC_OML, expectedSourceSha256: SHA }, summary: { schema: 's', nodes: 900 } };
   assert.deepEqual(next('studio_inspect', { target: 'Orders', path: 'MobileScreen:Home', depth: 6 }, odc),
-    [{ tool: 'studio_inspect', arguments: { target: ODC_OML, path: KEY_MARKER, expectedSourceSha256: SHA }, why: 'troque <key> por uma reference de summary.targets' }]);
+    [{ tool: 'studio_inspect', arguments: { target: ODC_OML, path: KEY_MARKER, expectedSourceSha256: SHA }, why: 'replace <key> with a reference of summary.targets' }]);
   // Inline list with more pages: only the next page; inline tree: nothing.
   assert.deepEqual(next('studio_inspect', { target: ODC_OML, name: 'Quote', max: 10 }, { ok: true, file: ODC_OML, inline: true, sourceSha256: SHA, count: 30, returned: 10, nextOffset: 10, entries: [] }),
     [{ tool: 'studio_inspect', arguments: { target: ODC_OML, name: 'Quote', max: 10, offset: 10, expectedSourceSha256: SHA } }]);
@@ -161,7 +161,7 @@ test('o11_deliver refused by validation: the corrected job with closePrevious an
   const refused = { ok: false, outcome: 'refused', code: 'VALIDATION_REFUSED', stage: 'apply', taskId: TASK, error: 'Job rejected', messages: ['E1'] };
   const c = refusalContinuation('o11_deliver', args, refused);
   assert.deepEqual(c.arguments, { module: 'Orders_CS', job: JOB_MARKER, checks: ['Home'], closePrevious: TASK, authorize: WORDS_MARKER });
-  assert.equal(c.tool, 'o11_deliver'); assert.match(c.why, /marcador/);
+  assert.equal(c.tool, 'o11_deliver'); assert.match(c.why, /marker/);
   assert.equal(WORDS_MARKER, CYCLE_MARKER, 'the same marker o11_deliver refuses as words');
   assert.doesNotMatch(JSON.stringify(c), /Joao 4471/);
   // until=apply: validate again, no task to close.
@@ -183,12 +183,12 @@ test('o11_deliver refusal that names its job: the continuation is a patch over i
   const args = { module: 'Orders_CS', job: { ops: [{ op: 'rename' }] }, authorize: WORDS };
   const refused = { ok: false, outcome: 'refused', code: 'VALIDATION_REFUSED', taskId: TASK, error: 'Job rejected', job, jobSha256: SHA, failedOp: 2 };
   const c = refusalContinuation('o11_deliver', args, refused);
-  assert.deepEqual(c.arguments, { module: 'Orders_CS', patch: [{ op: 'replace', path: '/ops/2/<campo>', value: '<valor corrigido>' }],
+  assert.deepEqual(c.arguments, { module: 'Orders_CS', patch: [{ op: 'replace', path: '/ops/2/<field>', value: '<corrected value>' }],
     basedOn: { job, sha256: SHA }, closePrevious: TASK, authorize: WORDS_MARKER });
-  assert.equal(c.arguments.job, undefined); assert.match(c.why, /sem reenviar o job inteiro/);
+  assert.equal(c.arguments.job, undefined); assert.match(c.why, /without resending the whole job/);
   // Without failedOp the index is a marker; until=apply validates the patch again, no task to close.
   const { failedOp: _f, ...unnamed } = refused;
-  assert.equal(refusalContinuation('o11_deliver', { ...args, until: 'apply' }, { ...unnamed, stage: 'apply' }).arguments.patch[0].path, '/ops/<i>/<campo>');
+  assert.equal(refusalContinuation('o11_deliver', { ...args, until: 'apply' }, { ...unnamed, stage: 'apply' }).arguments.patch[0].path, '/ops/<i>/<field>');
   // A job without a valid sha256 cannot be a base: the whole corrected job, as before.
   assert.equal(refusalContinuation('o11_deliver', args, { ...refused, jobSha256: 'x' }).arguments.job, JOB_MARKER);
 });
@@ -199,7 +199,7 @@ test('a real delivery refused by the headless validation (the kernel records sta
   const refused = { ok: false, outcome: 'refused', code: 'VALIDATION_REFUSED', stage: 'apply', taskId: TASK, error: 'job rejected by validation contract; merge was not attempted', job, jobSha256: SHA };
   for (const until of [undefined, 'merge']) {
     const c = refusalContinuation('o11_deliver', { module: 'Orders', job, ...(until ? { until } : {}), authorize: WORDS }, refused);
-    assert.deepEqual(c.arguments, { module: 'Orders', patch: [{ op: 'replace', path: '/ops/<i>/<campo>', value: '<valor corrigido>' }], basedOn: { job, sha256: SHA },
+    assert.deepEqual(c.arguments, { module: 'Orders', patch: [{ op: 'replace', path: '/ops/<i>/<field>', value: '<corrected value>' }], basedOn: { job, sha256: SHA },
       closePrevious: TASK, authorize: WORDS_MARKER }, String(until));
     assert.equal(c.arguments.until, undefined, 'never only a validation after a real delivery');
   }
@@ -211,12 +211,12 @@ test('the patch of an array job is at /<i>/...: from the refusal (jobShape) or t
   const job = 'C:\\lane\\.local\\jobs\\inline\\b.json';
   const refused = { ok: false, outcome: 'refused', code: 'VALIDATION_REFUSED', stage: 'apply', taskId: TASK, error: 'x', job, jobSha256: SHA, failedOp: 0 };
   const pathOf = (input, value) => refusalContinuation('o11_deliver', { module: 'Orders', authorize: WORDS, ...input }, value).arguments.patch[0].path;
-  assert.equal(pathOf({ job }, { ...refused, jobShape: 'array' }), '/0/<campo>');
-  assert.equal(pathOf({ job: [{ op: 'rename', name: 'X' }] }, refused), '/0/<campo>');
+  assert.equal(pathOf({ job }, { ...refused, jobShape: 'array' }), '/0/<field>');
+  assert.equal(pathOf({ job: [{ op: 'rename', name: 'X' }] }, refused), '/0/<field>');
   const { failedOp: _f, ...unnamed } = refused;
-  assert.equal(pathOf({ job }, { ...unnamed, jobShape: 'array' }), '/<i>/<campo>');
-  assert.equal(pathOf({ job: { ops: [{ op: 'rename' }] } }, refused), '/ops/0/<campo>');
-  assert.equal(pathOf({ patch: [{ op: 'remove', path: '/0' }], basedOn: { job, sha256: SHA } }, refused), '/ops/0/<campo>', 'a patch call: only the refusal names the shape');
+  assert.equal(pathOf({ job }, { ...unnamed, jobShape: 'array' }), '/<i>/<field>');
+  assert.equal(pathOf({ job: { ops: [{ op: 'rename' }] } }, refused), '/ops/0/<field>');
+  assert.equal(pathOf({ patch: [{ op: 'remove', path: '/0' }], basedOn: { job, sha256: SHA } }, refused), '/ops/0/<field>', 'a patch call: only the refusal names the shape');
 });
 
 test('ODC gates: base_drift -> a new snapshot of the module; studio_busy -> studio_status; without the module nothing', () => {
@@ -228,7 +228,7 @@ test('ODC gates: base_drift -> a new snapshot of the module; studio_busy -> stud
   // An edit in the Studio between the capture and the merge of a job delivery: the same call again, which captures anew.
   const call = { feature: 'F', module: 'Orders', job: 'C:\\jobs\\j.json', owners: ['A'], changes: ['B'] };
   const again = refusalContinuation('studio_deliver', call, { ok: false, failed: 'check-base', gate: 'base_drift', error: 'Open module differs' });
-  assert.deepEqual([again.tool, again.arguments], ['studio_deliver', call]); assert.match(again.why, /nada foi mesclado/);
+  assert.deepEqual([again.tool, again.arguments], ['studio_deliver', call]); assert.match(again.why, /nothing was merged/);
   // The refused attempt claimed its output directory (evidence is never overwritten): the repeat takes a new one.
   const claimed = refusalContinuation('studio_deliver', { ...call, output: 'lab/x' }, { ok: false, failed: 'check-base', gate: 'base_drift', error: 'Open module differs' });
   assert.deepEqual(claimed.arguments, call);
@@ -262,7 +262,7 @@ test('the user\'s words never reach a next or a continuation', () => {
 });
 
 test('exact answers stay the whole text: entregue, publicado, fechada', () => {
-  for (const [tool, result] of [['o11_deliver', 'entregue'], ['o11_publish', 'publicado'], ['o11_deliver', 'fechada'], ['studio_deliver', 'entregue']]) {
+  for (const [tool, result] of [['o11_deliver', 'delivered'], ['o11_publish', 'published'], ['o11_deliver', 'closed'], ['studio_deliver', 'delivered']]) {
     const value = Object.freeze({ ok: true, result });
     assert.equal(addNextSteps(tool, { module: 'M', authorize: WORDS }, value), value);
     const reply = { content: [{ type: 'text', text: result }], structuredContent: value };

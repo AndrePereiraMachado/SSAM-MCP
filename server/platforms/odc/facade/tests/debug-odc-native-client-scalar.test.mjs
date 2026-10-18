@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {qualifyScalarClientModel,qualifyScalarClientRuntime} from '../debug-odc-native-client-scalar.mjs';

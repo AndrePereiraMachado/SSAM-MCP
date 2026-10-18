@@ -1,5 +1,5 @@
 {
- "description": "Rating do OSUI: o input obrigatorio RatingValue.",
+ "description": "Rating of OSUI: the required input RatingValue.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

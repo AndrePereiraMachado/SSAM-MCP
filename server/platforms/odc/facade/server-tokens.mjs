@@ -263,7 +263,7 @@ export function tokenCli(args, { root, env = process.env } = {}) {
     if (args.includes('--lanes') && lanes === undefined) throw usage(USAGE);
     const issued = store.issue({ customer: value('--customer'), ...(days !== undefined ? { days: Number(days) } : {}), ...(lanes !== undefined ? { lanes } : {}) });
     return { ok: true, ...issued,
-      note: 'O token e a credencial do agente aparecem só agora. O token vai na configuração do cliente MCP; a credencial vai no setup do agente. O servidor guarda só o hash SHA-256 de cada um.' };
+      note: 'The token and the agent credential are shown only now. The token goes in the MCP client configuration; the credential goes in the agent setup. The server keeps only the SHA-256 hash of each.' };
   }
   if (action === 'agent-rotate') {
     const id = value('--id');
@@ -271,7 +271,7 @@ export function tokenCli(args, { root, env = process.env } = {}) {
     const rotated = store.agentRotate(id);
     const { agentCredential, ...view } = rotated;
     return { ok: true, agentCredential, rotated: view,
-      note: 'A credencial nova aparece só agora. A anterior já não vale e o canal do agente aberto com ela fecha em até 1 s; rode o setup do agente com a nova.' };
+      note: 'The new credential is shown only now. The previous one no longer holds and the agent channel opened with it closes within 1 s; run the agent setup with the new one.' };
   }
   if (action === 'renew') {
     const id = value('--id');
@@ -279,7 +279,7 @@ export function tokenCli(args, { root, env = process.env } = {}) {
     if (!id || days === undefined) throw usage('Usage: ssam server-token renew --id <id> --days N');
     const { previousExpiresAt, ...renewed } = store.renew(id, { days: Number(days) });
     return { ok: true, renewed, previousExpiresAt,
-      note: 'A validade nova vale já. Uma licença vencida volta a valer: o agente reconecta sozinho e o cliente abre sessões novas.' };
+      note: 'The new expiry holds now. An expired license holds again: the agent reconnects by itself and the client opens new sessions.' };
   }
   if (action === 'lanes') {
     const id = value('--id');
@@ -287,12 +287,12 @@ export function tokenCli(args, { root, env = process.env } = {}) {
     if (!id || lanes === undefined) throw usage('Usage: ssam server-token lanes --id <id> --lanes odc,o11');
     const { previousLanes, ...changed } = store.setLanes(id, lanes);
     return { ok: true, changed, previousLanes,
-      note: 'Vale para sessões novas; as abertas mantêm as faixas antigas até fecharem (60 min sem uso ou reconexão do cliente).' };
+      note: 'It holds for new sessions; the open ones keep the old lanes until they close (60 min unused or a client reconnection).' };
   }
   if (action === 'revoke') {
     const id = value('--id');
     if (!id) throw usage('Usage: ssam server-token revoke --id <id>');
-    return { ok: true, revoked: store.revoke(id), note: 'Vale já para o token e para a credencial do agente: pedidos novos recebem 403, as sessões abertas e o canal do agente deste token são fechados.' };
+    return { ok: true, revoked: store.revoke(id), note: 'It holds now for the token and the agent credential: new requests get 403, the open sessions and the agent channel of this token are closed.' };
   }
   if (action === 'list') return { ok: true, file: store.file, tokens: store.list() };
   throw usage(USAGE);

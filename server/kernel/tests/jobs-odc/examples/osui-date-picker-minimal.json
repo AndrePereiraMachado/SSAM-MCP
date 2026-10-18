@@ -1,5 +1,5 @@
 {
- "description": "DatePicker do OSUI: o Input de exemplo ligado a uma variavel Date e o evento obrigatorio OnSelected guardando a data.",
+ "description": "DatePicker of OSUI: the sample Input bound to a Date variable and the required event OnSelected keeping the date.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,5 +1,5 @@
 {
- "description": "DatePickerRange (OutSystemsUI, Interaction) tipico; o Input de exemplo ligado a uma variavel Date; placeholders Placeholder_SSPreview com dados do aggregate de tarefas; eventos OnSelected, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "description": "Typical DatePickerRange (OutSystemsUI, Interaction); the sample Input bound to a Date variable; placeholders Placeholder_SSPreview with data of the tasks aggregate; events OnSelected, Initialized handled by screen actions that keep the parameters in variables.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

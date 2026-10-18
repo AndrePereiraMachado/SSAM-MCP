@@ -341,7 +341,7 @@ test('o11_deliver: a partial job + basedOn delivers the whole job; success and r
   t.after(async () => { await client.close(); await server.close(); });
   const call = async args => { const r = await client.callTool({ name: 'o11_deliver', arguments: { module: 'Orders_CS', authorize: 'pode entregar', ...args } }); return JSON.parse(r.content[0].text); };
   const delivered = await call({ job: { ops: [{ op: 'logic', data: { actions: [{ name: 'Order_Create', steps: [] }] } }] }, basedOn: { job: s.file, sha256: s.sha } });
-  assert.equal(delivered.result, 'entregue', JSON.stringify(delivered));
+  assert.equal(delivered.result, 'delivered', JSON.stringify(delivered));
   const sent = runAnvil.calls[0].args[runAnvil.calls[0].args.indexOf('--job') + 1];
   assert.deepEqual(readJson(sent).ops[1].data.actions[0].steps, [], 'the whole job with Order_Create replaced');
   assert.deepEqual(delivered.nextBasedOn, { job: sent, sha256: sha256(fs.readFileSync(sent)) });
@@ -375,7 +375,7 @@ test('studio_deliver through ssam: a partial job + basedOn reaches the ODC serve
   assert.match(tool.description, /partial job/); assert.match(tool.inputSchema.properties.patch.description, /actions\/<Action>\/steps\/<as>/);
   replies.push({ ok: true, merged: true, strictlyEqual: true });
   const done = await call({ job: [{ op: 'set', target: '$legacy', prop: 'Description', value: 'odc' }], basedOn: { job: s.file, sha256: s.sha } });
-  assert.equal(done.result, 'entregue', JSON.stringify(done));
+  assert.equal(done.result, 'delivered', JSON.stringify(done));
   assert.equal(seen[0].job.ops[4].value, 'odc'); assert.equal(seen[0].job.ops.length, JOB.ops.length);
   assert.deepEqual(done.nextBasedOn, { job: seen[0].args.job, sha256: sha256(fs.readFileSync(seen[0].args.job)) });
   assert.equal(done.partial.replaced, 1);
@@ -385,5 +385,5 @@ test('studio_deliver through ssam: a partial job + basedOn reaches the ODC serve
   assert.equal(refused.problems[0].patchByName[0].path, 'actions/Order_Create/steps/AssignTotal/assign/Rec.Total');
   // compactDelivery keeps them (a success keeps only what the next call needs).
   assert.deepEqual(compactDelivery('studio_deliver', {}, { ok: true, merged: true, strictlyEqual: true, nextBasedOn: { job: 'j', sha256: 'h' }, steps: [1] }),
-    { ok: true, result: 'entregue', nextBasedOn: { job: 'j', sha256: 'h' } });
+    { ok: true, result: 'delivered', nextBasedOn: { job: 'j', sha256: 'h' } });
 });

@@ -5,7 +5,7 @@
 //   in the URL; the client cut 15 k from its middle. A data: URL or a base64 run (never a slash path) is cut to its head
 //   with its original size, and equal warnings (the same id on the same element: its ownerKey, else its path) come once
 //   with count.
-// - The job of a delivery (G16): "entregue" names nextBasedOn, but that job is in the module now; a basedOn naming it is
+// - The job of a delivery (G16): "delivered" names nextBasedOn, but that job is in the module now; a basedOn naming it is
 //   refused once, before anything runs (BASED_ON_DELIVERED).
 import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
@@ -49,7 +49,7 @@ test('a data: URL in a warning is cut to its head with its original size, so the
   // The key keeps its identity (id, owner, property) and the URL's size, counted in characters of the URL (\u002B is one).
   assert.equal(w.key, '["InvalidResourceURL_Offline","EHWy15q2lEymE4eJ_Th8yQ.#StyleSheet",["CssSource"],["data:image/svg\\u002Bxml,…(435 chars)"]]');
   assert.equal(w.path, THEME);
-  // The detail as the 22nd kernel wrote it in "entregue" (cut at 200 inside the URL): the size is not known, none is said.
+  // The detail as the 22nd kernel wrote it in "delivered" (cut at 200 inside the URL): the size is not known, none is said.
   const live = "Offline Behavior | The url '" + SVG1.slice(0, 171) + '…';
   assert.equal(dw.warningOf({ id: 'InvalidResourceURL_Offline', path: THEME, detail: live, fix: null }).detail, "Offline Behavior | The url 'data:image/svg+xml,…");
   // Before: 870 characters, the key carried the whole URL (526) and the detail ended inside it at 200 characters.
@@ -102,7 +102,7 @@ test('equal warnings (same id, same element) come once with count: call 105 is 2
   assert.equal(dw.warningFields([high, { ...high, op: 2 }]).warnings.length, 2);
 });
 
-// ---- o11_deliver after "entregue" (G16): every answer names nextBasedOn (the contract of the 23rd, patch-por-nome), "entregue"
+// ---- o11_deliver after "delivered" (G16): every answer names nextBasedOn (the contract of the 23rd, patch-por-nome), "delivered"
 // too, but a delivered job is in the module: a patch or a partial job over it is that whole job again over the merged
 // module. Call 105 delivered 331 ops (the FarmaVirtual screen, its variables and 62 actions); a correction over its
 // nextBasedOn would have applied all of them again. Refused once, before anything runs, with the new-job continuation.
@@ -148,8 +148,8 @@ test('G16: a delivered job is never the base of a patch or a partial job: BASED_
   const box = o11Box(t, [DELIVERED, DELIVERED]);
   const call = await o11Serve(t, box.deps);
   const done = await call({ module: 'Haiku_UI', job: box.job });
-  assert.equal(done.result, 'entregue', JSON.stringify(done));
-  assert.deepEqual(done.nextBasedOn, { job: box.job, sha256: box.sha }, 'the 23rd contract: "entregue" names the job it used');
+  assert.equal(done.result, 'delivered', JSON.stringify(done));
+  assert.deepEqual(done.nextBasedOn, { job: box.job, sha256: box.sha }, 'the 23rd contract: "delivered" names the job it used');
   const ran = box.runAnvil.calls.length; const selected = box.selected.length;
   // The correction the 23rd invited: a patch over nextBasedOn, a partial job over it, a validation of either.
   for (const args of [{ patch: [{ op: 'replace', path: '/ops/0/data/html', value: '<div class="fv">Farma 2</div>' }] },
@@ -169,12 +169,12 @@ test('G16: a delivered job is never the base of a patch or a partial job: BASED_
   const bound = { checks: ['FarmaVirtual'], producers: { Theme: 'published' }, captureProducers: ['System=(System)'], expectedEnvironment: 'dev.example.com', publish: true };
   const kept = await call({ module: 'Haiku_UI', basedOn: done.nextBasedOn, patch: [{ op: 'remove', path: '/ops/1' }], ...bound });
   assert.equal(kept.code, 'BASED_ON_DELIVERED', JSON.stringify(kept));
-  assert.deepEqual(kept.continuation.arguments, { module: 'Haiku_UI', job: '<a new job: only the change, over the module as it is now>', ...bound, authorize: '<palavras do usuário>' });
+  assert.deepEqual(kept.continuation.arguments, { module: 'Haiku_UI', job: '<a new job: only the change, over the module as it is now>', ...bound, authorize: "<the user's own words>" });
   assert.equal(box.runAnvil.calls.length, ran, 'nothing ran'); assert.equal(box.selected.length, selected, 'the Studio was not touched');
   // The same module named as the person sees it (letters and digits) is the same module; another module takes the patch.
   assert.equal((await call({ module: 'Haiku UI', basedOn: done.nextBasedOn, patch: [{ op: 'remove', path: '/ops/1' }] })).code, 'BASED_ON_DELIVERED');
   const other = await call({ module: 'Billing', basedOn: done.nextBasedOn, patch: [{ op: 'remove', path: '/ops/1' }] });
-  assert.equal(other.result, 'entregue', JSON.stringify(other)); assert.equal(box.runAnvil.calls.length, ran + 1);
+  assert.equal(other.result, 'delivered', JSON.stringify(other)); assert.equal(box.runAnvil.calls.length, ran + 1);
 });
 
 test('G16: the job a delivered job was corrected from is refused too; a refused job stays the base of its correction', async t => {
@@ -183,7 +183,7 @@ test('G16: the job a delivered job was corrected from is refused too; a refused 
   const refused = await call({ module: 'Haiku_UI', job: box.job });
   assert.equal(refused.code, 'PREFLIGHT_REFUSED');
   const fixed = await call({ module: 'Haiku_UI', basedOn: refused.nextBasedOn, patch: [{ op: 'replace', path: '/ops/1/data/actions/0/steps/0/assign/X', value: '1' }] });
-  assert.equal(fixed.result, 'entregue', JSON.stringify(fixed));
+  assert.equal(fixed.result, 'delivered', JSON.stringify(fixed));
   assert.notEqual(fixed.nextBasedOn.job, box.job, 'the correction is a new job file');
   for (const basedOn of [fixed.nextBasedOn, refused.nextBasedOn]) {
     const again = await call({ module: 'Haiku_UI', basedOn, patch: [{ op: 'remove', path: '/ops/1' }] });
@@ -208,7 +208,7 @@ test('G16: every version of a corrected job is refused after its delivery, the 1
     answer = await call({ module: 'Haiku_UI', basedOn: answer.nextBasedOn, patch: ASSIGN(String(i)) });
     versions.push(answer.nextBasedOn);
   }
-  assert.equal(answer.result, 'entregue', JSON.stringify(answer));
+  assert.equal(answer.result, 'delivered', JSON.stringify(answer));
   assert.equal(new Set(versions.map(v => v.sha256)).size, 13, 'thirteen versions, each its own job');
   const delivered = versions[12]; const ran = box.runAnvil.calls.length;
   assert.equal(ran, 13);
@@ -242,7 +242,7 @@ test('G16: a version refused before its delivery started is still a version of t
   assert.equal(unselected.code, 'STUDIO_NOT_SELECTED', JSON.stringify(unselected));
   studio = true;
   const done = await call({ module: 'Haiku_UI', basedOn: unselected.nextBasedOn, patch: ASSIGN('2') });
-  assert.equal(done.result, 'entregue', JSON.stringify(done));
+  assert.equal(done.result, 'delivered', JSON.stringify(done));
   for (const basedOn of [first, unselected.nextBasedOn]) {
     const again = await call({ module: 'Haiku_UI', basedOn, patch: ASSIGN('3') });
     assert.equal(again.code, 'BASED_ON_DELIVERED', JSON.stringify(again));
@@ -266,5 +266,5 @@ test('G16: basedOn {taskId} of a delivered task is refused the same way, for its
   assert.equal(box.runAnvil.calls.length, 0);
   // Another module takes the patch, as with basedOn {job, sha256}.
   const other = await call({ module: 'Billing', basedOn: { taskId: id, sha256: box.sha }, patch: [{ op: 'remove', path: '/ops/1' }] });
-  assert.equal(other.result, 'entregue', JSON.stringify(other)); assert.equal(box.runAnvil.calls.length, 1);
+  assert.equal(other.result, 'delivered', JSON.stringify(other)); assert.equal(box.runAnvil.calls.length, 1);
 });

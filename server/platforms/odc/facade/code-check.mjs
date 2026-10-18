@@ -5,7 +5,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { anvilRoot, odcRoot, o11Lane } from './workspace.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { modelSha256 } from './o11-capture-store.mjs';
-import { cacheEntries } from './producer-signatures.mjs';
+import { cacheEntries, odcCaptures } from './producer-signatures.mjs';
+import { canonicalKeyOf, sameProducer, studioNameOf } from './producer-names.mjs';
 import { writeCall } from './ssam-code.mjs';
 import { runJob, withJobIdentity } from './job-runner.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
@@ -68,16 +69,6 @@ export function newestCapture({ lane = 'o11', module, base } = {}, deps = {}) {
   return null;
 }
 
-function odcEntries(root) {
-  const dir = path.join(root, '.local', 'producer-cache', 'odc');
-  return filesIn(dir).filter(name => /\.json$/i.test(name)).flatMap(name => {
-    const record = readJson(path.join(dir, name)), file = path.join(dir, name.replace(/\.json$/i, '.avsig'));
-    if (!record?.producer || !stat(file)) return [];
-    try { if (record.sha256 !== hash(fs.readFileSync(file))) return []; } catch { return []; }
-    return [{ ...record, path: file, storedAtUtc: record.storedAtUtc ?? record.observedAtUtc ?? null }];
-  });
-}
-
 // Read references even when another file failed facade validation, so one refusal reports missing inputs together.
 function referenceOps(input, call) {
   if (call.arguments?.job) return call.arguments.job.ops ?? [];
@@ -89,35 +80,70 @@ function referenceOps(input, call) {
   return ops;
 }
 
-function resolveProducers(input, ops, deps, problems) {
+// fix/system-reference (d): a producer is one by its binding key ("(System)" and "System" are System); the check binds the
+// capture the lane already has of it (o11: the producer cache; odc: the delivery cache and the capture folder
+// <odcRoot>/snapshots, producer-signatures.mjs odcCaptures), and a producer with none is ONE problem with the exact capture
+// to take, read-only, as its continuation (the check itself never reads the Studio).
+function resolveProducers(input, ops, deps, problems, { module, capture } = {}) {
   const { local, odc } = locations(deps);
   const provided = input.producers && typeof input.producers === 'object' && !Array.isArray(input.producers) ? input.producers : {};
   const bindings = {}, receipts = {};
   if (input.producers != null && provided !== input.producers) problems.push({ code: 'INPUT_INVALID', at: 'producers', message: 'producers is an object of binding names and absolute file paths' });
   for (const [name, file] of Object.entries(provided)) {
-    if (typeof file !== 'string' || !path.isAbsolute(file) || !stat(file)) problems.push({ code: 'INPUT_INVALID', at: 'producers/' + name, message: 'producer binding needs an existing absolute file path' });
-    else { bindings[name] = file; receipts[name] = { path: file, storedAtUtc: null }; }
+    const key = canonicalKeyOf(name);
+    if (key == null) problems.push({ code: 'INPUT_INVALID', at: 'producers/' + name, message: 'Invalid producer binding name: ' + name + ' (a name such as Users, or the Studio form (System))' });
+    else if (typeof file !== 'string' || !path.isAbsolute(file) || !stat(file)) problems.push({ code: 'INPUT_INVALID', at: 'producers/' + name, message: 'producer binding needs an existing absolute file path' });
+    else { bindings[key] = file; receipts[key] = { path: file, storedAtUtc: null }; }
   }
   const requested = new Map();
   for (const op of ops) {
     if (op?.op !== 'reference' || !op.producer) continue;
     const name = String(op.producer);
-    const row = requested.get(name) ?? new Set();
-    for (const e of Array.isArray(op.elements) ? op.elements : []) row.add(String(e));
-    requested.set(name, row);
+    const key = canonicalKeyOf(name);
+    if (key == null) continue; // a job: source or a fixture path: the kernel resolves it offline
+    const held = [...requested.keys()].find(k => lower(k) === lower(key)) ?? key;
+    const row = requested.get(held) ?? { elements: new Set(), written: [] };
+    if (!row.written.includes(name)) row.written.push(name);
+    for (const e of Array.isArray(op.elements) ? op.elements : []) row.elements.add(String(e));
+    requested.set(held, row);
   }
-  const entries = input.lane === 'o11' ? cacheEntries(path.join(local, 'producer-cache')) : odcEntries(odc);
-  for (const [name, elements] of requested) {
-    if (Object.keys(bindings).some(key => lower(key) === lower(name))) continue;
-    const matches = entries.filter(entry => lower(entry.producer) === lower(name) && (input.lane !== 'o11' || [...elements].every(e => entry.elements.includes(e))));
-    matches.sort((a, b) => (input.lane === 'o11' ? a.elements.length - b.elements.length : 0) || (Date.parse(b.storedAtUtc) || 0) - (Date.parse(a.storedAtUtc) || 0));
-    const found = matches[0];
+  // The environment of the base capture (an ODC snapshot names its tenant in <capture>.oml.json), when it is known.
+  const environment = input.lane === 'odc' && capture?.path ? readJson(capture.path + '.json')?.host ?? null : null;
+  const entries = input.lane === 'o11' ? cacheEntries(path.join(local, 'producer-cache')) : null;
+  for (const [key, { elements, written }] of requested) {
+    if (Object.keys(bindings).some(k => lower(k) === lower(key))) continue;
+    let found;
+    if (input.lane === 'o11') {
+      const matches = entries.filter(entry => sameProducer(entry.producer, key) && [...elements].every(e => entry.elements.includes(e)));
+      matches.sort((a, b) => a.elements.length - b.elements.length || (Date.parse(b.storedAtUtc) || 0) - (Date.parse(a.storedAtUtc) || 0));
+      found = matches[0];
+    } else {
+      const newest = odcCaptures(odc, { producer: key, environment })[0];
+      found = newest && { path: newest.path, storedAtUtc: newest.observedAtUtc, source: newest.source };
+    }
     if (found) {
-      bindings[name] = found.path;
-      receipts[name] = { path: found.path, storedAtUtc: found.storedAtUtc, ageSeconds: found.storedAtUtc ? Math.max(0, (nowMs(deps) - Date.parse(found.storedAtUtc)) / 1000) : null };
-    } else problems.push({ code: 'PRODUCER_NOT_CAPTURED', producer: name, message: `No captured producer covers ${name}`, fix: 'one delivery or o11_job captureProducers captures it once; check never reads the Studio' });
+      bindings[key] = found.path;
+      receipts[key] = { path: found.path, storedAtUtc: found.storedAtUtc, ageSeconds: found.storedAtUtc ? Math.max(0, (nowMs(deps) - Date.parse(found.storedAtUtc)) / 1000) : null,
+        ...(written.some(w => w !== key) ? { requested: written } : {}), ...(found.source ? { source: found.source } : {}) };
+    } else problems.push(notCaptured({ lane: input.lane, key, written, elements: [...elements], module, odc }));
   }
   return { bindings, receipts };
+}
+// The one capture that lets the check bind the producer: read-only, through the lane's Studio, into the capture folder the
+// check reads (o11: o11_dependencies capture keeps it in the producer cache; odc: studio_reference_snapshot keeps it in the
+// delivery cache, and its file lands in <odcRoot>/snapshots).
+function notCaptured({ lane, key, written, elements, module, odc }) {
+  const studioName = studioNameOf(written[0] ?? key) ?? key;
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+  const continuation = lane === 'o11'
+    ? { tool: 'o11_dependencies', arguments: { action: 'capture', producer: studioName, ...(elements.length ? { elements } : {}) },
+      why: `captures ${studioName} once, read-only, into the producer cache; the same check then binds it as ${key}` }
+    : { tool: 'studio_reference_snapshot', arguments: { module: module ?? '<the open consumer module>', producer: studioName, output: path.join(odc, 'snapshots', 'producers', `${key}-${stamp}.avsig`) },
+      why: `captures ${studioName} once, read-only, from the consumer session into the capture folder; the same check then binds it as ${key}` };
+  return { code: 'PRODUCER_NOT_CAPTURED', producer: written[0] ?? key, ...(studioName !== (written[0] ?? key) ? { studioName } : {}),
+    message: `No capture of ${studioName} is in this workspace (the job names ${written.map(w => '"' + w + '"').join(', ')})`,
+    fix: (lane === 'o11' ? 'o11_dependencies capture' : 'studio_reference_snapshot') + ` of ${studioName} once (continuation), or a delivery, which captures it by itself; the check never reads the Studio`,
+    continuation };
 }
 
 function withOrigin(problem, origins = []) {
@@ -181,10 +207,13 @@ export async function codeCheck(input = {}, deps = {}) {
   const refusalFields = (r, file) => ({ ...(({ job: j, jobSha256, nextBasedOn }) => ({ job: j, ...(jobSha256 ? { jobSha256 } : {}), ...(nextBasedOn ? { nextBasedOn } : {}) }))(r.jobSha256 ? r : withJobIdentity({ ok: false, job: r.job ?? file })),
     ...(r.stage === 'static' ? { stage: r.stage, ...(r.stoppedBefore ? { stoppedBefore: r.stoppedBefore } : {}), ...(r.static ? { static: r.static } : {}) } : {}) });
   const ops = referenceOps(clean, call);
-  const { bindings, receipts } = resolveProducers(clean, ops, deps, problems);
+  const { bindings, receipts } = resolveProducers(clean, ops, deps, problems, { module, capture });
   // Prototype capture is a Studio operation in runJob; a check must never enter that path.
   for (let i = 0; i < ops.length; i++) if (ops[i]?.op === 'prototype') problems.push({ code: 'INPUT_INVALID', pointer: `/ops/${i}`, message: 'prototype requires a live capture and cannot run in an offline check' });
+  // fix/system-reference (d): a check refused only for producers with no capture continues with the capture to take.
+  const capturing = problems.filter(p => p.code === 'PRODUCER_NOT_CAPTURED');
   const continuation = !capture && input.base == null ? { tool: 'ssam_map', arguments: { lane, target: module }, why: 'the main agent reads the module once; that capture serves every check' }
+    : capturing.length && capturing.length === problems.length ? capturing[0].continuation
     : { tool: 'ssam_code', arguments: { ...input, lane, action: 'check' } };
   if (problems.length) return { ok: false, code: problems.some(p => p.code === 'INPUT_INVALID') ? 'INPUT_INVALID' : !capture ? 'CAPTURE_MISSING' : 'PRODUCER_NOT_CAPTURED', lane, module, action: 'check', problems, ...(capture ? { capture } : {}), continuation };
   const { root, local } = locations(deps);

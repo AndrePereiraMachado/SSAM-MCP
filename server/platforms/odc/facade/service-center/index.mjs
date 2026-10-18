@@ -21,7 +21,7 @@ import { ACTIONS, Client, Journal, LOG_PAGES, SCHEDULE, SECRET_WRITES, WEB_WRITE
 import { StudioWebTransport, Transport, hostName } from './http.mjs';
 import { DESTRUCTIVE as API_DESTRUCTIVE, READS as API_READ_TABLE, StudioApi, WRITES as API_WRITE_TABLE } from './studio-api.mjs';
 import { DELETE_ACTIONS, DeleteEngine, TWO_CALLS, deleteRequest, noBackupNote, refusalError, withNoBackupNote } from './delete.mjs';
-import { OWNER_REPLY, OperationRunning, beginOperation, checkExecute, createPreview, currentSignal, endOperation, markItem, noteWords, parseToken, previewFile, readOperation, readPreview, storeBackup, summarizeOperation } from '../destructive-operations.mjs';
+import { OWNER_REPLY, OperationRunning, beginOperation, checkExecute, createPreview, currentSignal, endOperation, markItem, noteWords, parseToken, previewFile, readOperation, readPreview, storeBackup, summarizeOperation, wordsGiven } from '../destructive-operations.mjs';
 import { namesWhole } from './auth.mjs';
 import { createPowerShellRunner, createVault, vaultPresent } from './vault.mjs';
 import { CredentialProfiles } from '../credential-profiles.mjs';
@@ -107,6 +107,10 @@ export function parseArgs(argv) {
   return args;
 }
 
+// CX15 r7 (M-3): the words of a write are the owner's (wordsGiven), never a marker, a <template> or a sha256 of the server.
+function ownerWords(words) {
+  if (!wordsGiven(words)) throw new ProtocolError('WORDS_REQUIRED: --words must be the owner\'s own words, never a marker, a <template> or a sha256 of the server');
+}
 function required(args, ...names) {
   if (names.some(n => !args[n])) throw new ProtocolError('Required: ' + names.map(n => '--' + n.replaceAll('_', '-')).join(', '));
 }
@@ -443,7 +447,7 @@ async function pageDeleteCall(args, client, data, approve, { host, registry, jou
   // A token that no read again can make good (cancelled, running, interrupted, another preview), or a call without words
   // (the write runner would refuse that alone, before any read): one refusal with every problem (the count and the names
   // among them), on the target read again, without opening the record.
-  if (!words.trim() || head.problems.some(p => BLOCKING.has(p.code) || (p.code === 'PREVIEW_OTHER_TARGET' && p.previewOf))) refuse(await client.webWrite(args.action, data, { execute: false }));
+  if (!wordsGiven(words) || head.problems.some(p => BLOCKING.has(p.code) || (p.code === 'PREVIEW_OTHER_TARGET' && p.previewOf))) refuse(await client.webWrite(args.action, data, { execute: false }));
   if (signal?.aborted) return cancelled('before the execution started');
   // The record opens at the start of the execution, before the read again (ssam_task finds it 'running'); a token whose
   // receipt exists only answers by it (runWrite never sends it again).
@@ -564,6 +568,7 @@ export async function main(argv, deps = {}) {
   }
   if (write && args.execute && !deletes && !pageDelete) {
     required(args, 'words', 'operation_id');
+    ownerWords(args.words); // CX15 r7 (M-3): one predicate
     guardWrite(host, args.words, args.confirm_host, [], registry);
   }
   // Past the guard, a write to a non-personal host tells the bridge it carries the explicit instruction (a delete sets it
@@ -652,6 +657,7 @@ export async function main(argv, deps = {}) {
       note: "Local only. Execute with the user's words to mark this download abandoned: nothing is sent to Service Center and the UUID is never resumed." };
     // Nothing reaches the host, so no host guard; the words still authorize the change of SSAM's own record.
     required(args, 'words');
+    ownerWords(args.words); // CX15 r7 (M-3): one predicate
     const [auth, client] = await pagesClient();
     return answer(auth, await client.solutionDownloadAbandon(args.solution, { operationId: args.operation_id, words: args.words, question: args.question }));
   }

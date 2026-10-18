@@ -1,4 +1,5 @@
 // O11 Custom REST endpoint credential through the runner (P08 wiring, integrated in wave 1).
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

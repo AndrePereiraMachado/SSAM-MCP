@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';
 import {observeOdcBrowserController} from '../debug-odc-browser-controller.mjs';
 function fixture(){

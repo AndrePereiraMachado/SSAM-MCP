@@ -101,7 +101,7 @@ test('every BAD_ARGS carries the corrected call: keys mapped or dropped, numbers
     const value = await s.run({ command, args });
     assert.equal(value.code, 'BAD_ARGS', command + ' ' + JSON.stringify(args));
     assert.deepEqual(value.continuation, { tool: 'o11_studio', arguments: { command, args: corrected }, why: value.continuation.why }, command + ' ' + JSON.stringify(args));
-    assert.match(value.continuation.why, /argumentos/);
+    assert.match(value.continuation.why, /arguments/);
     assert.deepEqual(studioTool.correctedArgs?.(command, args), corrected);
   }
   assert.equal(JSON.stringify(await s.run({ command: 'login', args: { host: HOST, password: 'segredo' } })).includes('segredo'), false, 'a dropped value never comes back');

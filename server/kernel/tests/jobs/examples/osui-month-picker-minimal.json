@@ -1,5 +1,5 @@
 {
- "description": "MonthPicker (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; evento obrigatorio OnSelected ligado a uma screen action vazia; o Input de exemplo do placeholder MonthPicker ligado a uma variavel Text.",
+ "description": "Minimal MonthPicker (OutSystemsUI, Interaction): an instance as the Studio creates it when the block is dragged; the required event OnSelected bound to an empty screen action; the sample Input of the MonthPicker placeholder bound to a Text variable.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,5 +1,5 @@
 {
- "description": "Switch com evento: liga o modo escuro, fica desabilitado sem permissao (Enabled) e o OnChange guarda a preferencia numa client variable.",
+ "description": "A Switch with an event: turns on the dark mode, stays disabled without permission (Enabled) and OnChange keeps the preference in a client variable.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

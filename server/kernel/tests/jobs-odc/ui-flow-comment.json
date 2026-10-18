@@ -1,33 +1,33 @@
 {
- "description": "ODC: o Comment do canvas de um fluxo de UI (IMobileFlow) — a nota que o autor cola ao lado das telas para explicar o desenho. E um IMobileFlowNode de pleno direito, nao um widget: mora no FLUXO, nunca dentro de uma tela. Quatro coisas que so o modelo real ensina e que este job prova: (1) o tipo tem de vir QUALIFICADO, OutSystems.Model.UI.Mobile.IComment, porque o nome nu IComment empata com OutSystems.Model.UI.Web.IComment no Rank 2 do FindCreateCore (Verbs.cs:877-880); (2) nao se chama layout (AGENTS.md:247 limita-o a action/preparation/processo) porque a posicao ja vem de .AtDefaultPosition(), em IMobileFlow.CreateNode<T> (NRFlows.cs:1257); (3) o Comment NAO tem nome — o name do create e descartado, o get devolve name=null e o DisplayName do objeto passa a ser o proprio texto; (4) a propriedade da interface e Text (IComment.cs:32), e o Comment que aparece no get e a MESMA gaveta vista pela classe concreta unica (ServiceStudio.Model.Nodes+Comment, a que serve tambem o no de BPT), nao uma segunda propriedade. O que a plataforma preenche sozinha: CreatedBy, LastModifiedBy e LastModifiedDate com a identidade de quem esta a editar, e uma posicao de omissao. O que NAO acompanha: essa posicao e a MESMA para todos os comentarios do fluxo (o segundo nasce em cima do primeiro), por isso quem quer duas notas legiveis tem de as separar com move x/y — e o conector que liga a nota a uma tela (Connectors continua 0 nos dois gets).",
+ "description": "ODC: the Comment of the canvas of a UI flow (IMobileFlow) — the note that the author pastes beside the screens to explain the design. It is a full IMobileFlowNode, not a widget: it lives in the FLOW, never inside a screen. Four things that only the real model teaches and that this job proves: (1) the type has to come QUALIFIED, OutSystems.Model.UI.Mobile.IComment, because the bare name IComment ties with OutSystems.Model.UI.Web.IComment at Rank 2 of FindCreateCore (Verbs.cs:877-880); (2) layout is not called (AGENTS.md:247 limits it to action/preparation/process) because the position already comes from .AtDefaultPosition(), in IMobileFlow.CreateNode<T> (NRFlows.cs:1257); (3) the Comment has NO name — the name of the create is discarded, the get returns name=null and the DisplayName of the object becomes the text itself; (4) the property of the interface is Text (IComment.cs:32), and the Comment that appears in the get is the SAME slot seen through the single concrete class (ServiceStudio.Model.Nodes+Comment, the one that also serves the BPT node), not a second property. What the platform fills in by itself: CreatedBy, LastModifiedBy and LastModifiedDate with the identity of whoever is editing, and a default position. What does NOT follow along: that position is the SAME for all comments of the flow (the second one is born on top of the first), so whoever wants two legible notes has to separate them with move x/y — and the connector that links the note to a screen (Connectors stays 0 in both gets).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "Reminder",
    "element": "MainFlow (MobileFlow) / Comment",
-   "why": "Marcar IsReminder=true faz a plataforma emitir uma mensagem 'Reminder' no TrueChange com o texto do proprio comentario: e para isso que a caixa serve, e e exatamente o que este job prova. O comentario com IsReminder=false nao emite nada. Nao e defeito do job: e o significado da propriedade."
+   "why": "Setting IsReminder=true makes the platform emit a 'Reminder' message in TrueChange with the text of the comment itself: that is what the box is for, and it is exactly what this job proves. The comment with IsReminder=false emits nothing. It is not a defect of the job: it is the meaning of the property."
   }
  ],
  "ops": [
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "OutSystems.Model.UI.Mobile.IComment", "name": "WfFlowNote", "as": "$note",
-   "_why": "nome QUALIFICADO: o nu IComment casa tambem com OutSystems.Model.UI.Web.IComment e os dois empatam em Rank 2 (Verbs.cs:877-880). O name 'WfFlowNote' vai ser DESCARTADO: o get adiante mostra name=null"},
+   "_why": "QUALIFIED name: the bare IComment also matches OutSystems.Model.UI.Web.IComment and the two tie at Rank 2 (Verbs.cs:877-880). The name 'WfFlowNote' will be DISCARDED: the get further on shows name=null"},
   {"op": "set", "target": "$note", "prop": "Text", "value": "Prova ODC: comentario no canvas do fluxo de UI",
-   "_why": "a propriedade da interface UI.Mobile e Text; e tambem o que passa a ser o DisplayName do objeto, ja que o Comment nao tem nome"},
+   "_why": "the property of the UI.Mobile interface is Text; and it is also what becomes the DisplayName of the object, since the Comment has no name"},
   {"op": "get", "target": "$note",
-   "_why": "prova o estado por omissao: name=null, IsReminder=False, Connectors=0, posicao ja dada por .AtDefaultPosition() (NRFlows), e CreatedBy/LastModifiedBy/LastModifiedDate preenchidos pela plataforma sem nenhum set. Mostra Text e Comment com o MESMO valor: uma gaveta, dois nomes"},
+   "_why": "proves the default state: name=null, IsReminder=False, Connectors=0, position already given by .AtDefaultPosition() (NRFlows), and CreatedBy/LastModifiedBy/LastModifiedDate filled in by the platform with no set. It shows Text and Comment with the SAME value: one slot, two names"},
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "OutSystems.Model.UI.Mobile.IComment", "as": "$reminder",
-   "_why": "segundo comentario no mesmo fluxo, para provar que IsReminder=true e uma escrita de verdade e nao o valor por omissao do primeiro"},
+   "_why": "second comment in the same flow, to prove that IsReminder=true is a real write and not the default value of the first"},
   {"op": "set", "target": "$reminder", "prop": "Text", "value": "Prova ODC: este comentario esta marcado como Is Reminder"},
   {"op": "set", "target": "$reminder", "prop": "IsReminder", "value": true,
-   "_why": "booleana recebe JSON (true), nao texto de expressao OutSystems"},
+   "_why": "a boolean takes JSON (true), not OutSystems expression text"},
   {"op": "get", "target": "$reminder",
-   "_why": "IsReminder=True no modelo. E a armadilha: a posicao por omissao deste e EXATAMENTE a do primeiro (3196,800) — .AtDefaultPosition() nao empilha nada, poe todos os comentarios no mesmo ponto, sobrepostos"},
+   "_why": "IsReminder=True in the model. And here is the trap: the default position of this one is EXACTLY that of the first (3196,800) — .AtDefaultPosition() stacks nothing, it puts all the comments at the same point, overlapping"},
   {"op": "move", "target": "$reminder", "x": 3196, "y": 1040,
-   "_why": "o unico jeito de separar comentarios no canvas: move com x/y, que e so desenho. Nao ha aqui nada para o layout fazer — o layout arruma os nos de UM fluxo de logica (AGENTS.md:247) e nao o canvas de um fluxo de UI. O proprio resultado do move devolve a posicao que ficou"},
+   "_why": "the only way to separate comments on the canvas: move with x/y, which is only drawing. There is nothing here for the layout to do — the layout tidies the nodes of ONE logic flow (AGENTS.md:247) and not the canvas of a UI flow. The result of the move itself returns the position that remained"},
   {"op": "get", "target": "$reminder",
-   "_why": "confirma no modelo que HorizontalPosition/VerticalPosition sao agora (3196,1040) e que nada mais mudou"},
+   "_why": "confirms in the model that HorizontalPosition/VerticalPosition are now (3196,1040) and that nothing else changed"},
   {"op": "dump", "target": "IMobileFlow:MainFlow", "depth": 1,
-   "_why": "os dois comentarios aparecem como filhos do FLUXO, ao lado das telas, e nao dentro de nenhuma"}
+   "_why": "the two comments appear as children of the FLOW, beside the screens, and not inside any of them"}
  ]
 }

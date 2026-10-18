@@ -1,5 +1,5 @@
 {
- "description": "Badge do OSUI com dados: Number do Count do aggregate, cor e forma, ao lado do texto Carrinho.",
+ "description": "Badge of OSUI with data: Number from the Count of the aggregate, color and shape, beside the cart text.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

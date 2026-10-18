@@ -1,5 +1,5 @@
 {
- "description": "MonthPicker do OSUI: formato MM/YYYY e o OnSelected grava o mes e o ano escolhidos e mostra o texto do periodo.",
+ "description": "MonthPicker of OSUI: the format MM/YYYY and OnSelected saves the chosen month and year and shows the text of the period.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

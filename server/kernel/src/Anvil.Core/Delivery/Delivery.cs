@@ -84,6 +84,12 @@ public static partial class Delivery
         // fam-deps: the reference closure belongs to this run; a dialog that blocked the merge (blockedBy, question) stays
         // until the merge settles (RecordMerge).
         result.Remove("referenceClosure"); result.Remove("referenceSignatureChanges");
+        // fix-ext-refs: the alignment a rollback answers and the Manage Dependencies after it belong to this run. Review A1: the
+        // one before the merge (referencesAdded) stays: its write stays in the module until Ctrl+Z, and the next one keeps it.
+        result.Remove("alignment"); result.Remove("referencesAddedAfterRollback");
+        // Review round 3: one record per Studio write outside the merge (studioWrites, kept across the runs of the task); a
+        // command that waited for the person in an earlier run ended by itself after the answer.
+        BeginStudioWritesRun(result);
         // CX14 N6: what a call sent again after the proof of a call it settled belongs to that call's answer.
         result.Remove("sentAgainAfterIdle");
         IReadOnlyDictionary<string, VerifyHint>? hints = null;
@@ -109,6 +115,8 @@ public static partial class Delivery
                 // CX14 N6: from here on, what this call sends again is counted for the calls it settled (their notes).
                 sentAfterSettlement = CountingBridge.Wrap(bridge);
                 sentAfterSettlement.Settled.AddRange(DeliveryTask.SettlePendingUi(result));
+                // Review round 4 (N1): the idle proof is the evidence that the Studio commands of earlier runs ended.
+                EndStudioWrites(result, "idle");
                 task.Save("pending-ui-settled");
                 bridge = sentAfterSettlement;
             }
@@ -282,10 +290,16 @@ public static partial class Delivery
             // the owners R5 links (the module lacks an object they must provide) are refreshed to their published signature, so
             // the candidate does not change their signature and the live merge never selects one; only the kept owners stay
             // out. When the module cannot be read here, the owners stay out of the refresh, as before.
-            if (writeState == "not-sent" && result["capturedProducers"] is JsonObject { Count: > 0 } capturedNow && Offers(bridge, RefreshReferencesCapability))
+            // fix-ext-refs (2026-10-16): with a bridge that runs the Studio's own Manage Dependencies (refresh_references:add) the
+            // same call adds the elements the job's reference ops name and brings each producer to its published signature, for
+            // every producer the delivery captured or binds (eSpace, Extension or system alike), all or nothing; a refusal is one
+            // answer before any merge (REFERENCES_NOT_ADDED). The candidate then changes no producer signature (DeliveryManageDependencies.cs).
+            var capturedNow = result["capturedProducers"] as JsonObject;
+            var boundNow = writeState == "not-sent" ? BoundSignatures(request) : new Dictionary<string, (string Key, string? Hash)>();
+            if (writeState == "not-sent" && (capturedNow is { Count: > 0 } || boundNow.Count > 0) && Offers(bridge, RefreshReferencesCapability))
             {
                 var keptBeforeRefresh = new List<string>();
-                var owners = capturedNow.Where(p => p.Value?["ownerKey"] != null).Select(p => p.Key).ToList();
+                var owners = (capturedNow ?? new JsonObject()).Where(p => p.Value?["ownerKey"] != null).Select(p => p.Key).ToList();
                 if (owners.Count > 0)
                 {
                     keptBeforeRefresh.AddRange(owners);
@@ -296,27 +310,63 @@ public static partial class Delivery
                         var preRefresh = bridge.Call("snapshot_module", Target(new() { ["path"] = preRefreshPath }));
                         if (preRefresh["key"]?.ToString() == key && ReadReferences(preRefreshPath, "preRefresh") is { } current)
                         {
-                            var (keptNow, ownersNow) = ReferenceClosure.OwnersKeptByBase(capturedNow, current, SameProducerKey);
+                            var (keptNow, ownersNow) = ReferenceClosure.OwnersKeptByBase(capturedNow!, current, SameProducerKey);
                             keptBeforeRefresh.Clear(); keptBeforeRefresh.AddRange(keptNow);
                             Closure()["ownersBeforeRefresh"] = ownersNow;
                         }
                     }
                 }
-                var toRefresh = capturedNow.Where(p => !keptBeforeRefresh.Contains(p.Key, StringComparer.OrdinalIgnoreCase)).Select(p => p.Value).OfType<JsonObject>().ToList();
-                if (toRefresh.Count > 0)
+                var toRefreshPairs = (capturedNow ?? new JsonObject()).Where(p => !keptBeforeRefresh.Contains(p.Key, StringComparer.OrdinalIgnoreCase) && p.Value is JsonObject).ToList();
+                var toRefresh = toRefreshPairs.Select(p => (JsonObject)p.Value!).ToList();
+                var manage = Offers(bridge, ManageDependenciesCapability);
+                var aligned = toRefreshPairs.Select(p => new AlignedProducer(p.Key, p.Value!["key"]?.ToString(), p.Value["producer"]?.ToString(), p.Value["kind"]?.ToString())).ToList();
+                if (manage)
+                    foreach (var (binding, (signatureKey, _)) in boundNow)
+                        if (!aligned.Any(a => a.Key != null && SameProducerKey(a.Key, signatureKey))) aligned.Add(new AlignedProducer(binding, signatureKey, null, null));
+                if (toRefresh.Count > 0 || (manage && aligned.Count > 0))
                 {
-                    stage = "refresh-references";
+                    stage = manage ? "add-references" : "refresh-references";
                     var names = new JsonArray(); var keys = new JsonArray();
-                    foreach (var entry in toRefresh)
+                    foreach (var producer in aligned)
                     {
-                        if (entry["producer"]?.ToString() is { Length: > 0 } producerName) names.Add(producerName);
-                        if (entry["key"]?.ToString() is { Length: > 0 } producerKey) keys.Add(producerKey);
+                        if (producer.Name is { Length: > 0 } producerName) names.Add(producerName);
+                        if (producer.Key is { Length: > 0 } producerKey) keys.Add(producerKey);
                     }
-                    var refreshed = bridge.Call("refresh_references", Target(new() { ["producers"] = names, ["producer_keys"] = keys, ["timeout"] = 600 }));
+                    var parameters = new JsonObject { ["producers"] = names, ["producer_keys"] = keys, ["timeout"] = 600 };
+                    if (manage) { parameters["add"] = AlignmentAdd(referenceOps, aligned); parameters["published"] = true; }
+                    var refreshed = CallStudioWrite(bridge, result, "before-merge", Target(parameters), request.Module);
                     result["refreshReferences"] = refreshed;
+                    // Review A1: what the Studio's Manage Dependencies wrote to the module, declared in every answer from here on.
+                    if (manage) result["referencesAdded"] = DeclareReferencesAdded(refreshed, result["referencesAdded"], request.Module, "before-merge");
+                    // The same family (C26): the Studio's Refresh References that changed the module is declared too.
+                    else result["referencesRefreshedBeforeMerge"] = DeclareReferencesRefreshed(refreshed, result["referencesRefreshedBeforeMerge"], request.Module);
+                    LinkDetail(result, manage ? "referencesAdded" : "referencesRefreshedBeforeMerge");
                     task.Save(stage);
-                    log?.Invoke($"deliver: refresh_references before the merge changed={refreshed["changed"]}");
+                    log?.Invoke(manage ? $"deliver: Manage Dependencies before the merge committed={refreshed["committed"]} added={(refreshed["added"] as JsonArray)?.Count ?? 0}"
+                        : $"deliver: refresh_references before the merge changed={refreshed["changed"]}");
                     if (RefreshBlocked(result, refreshed, stage) is { } waiting) return Fail(waiting);
+                    if (manage && ReferencesNotAdded(result, refreshed) is { } refused) return Fail(refused);
+                    // A Manage Dependencies that failed inside the Studio (an exception, its command rolled back): recorded, and the
+                    // delivery goes on as with a bridge without it (the Studio's Refresh References, then the merge).
+                    if (manage && refreshed["committed"]?.GetValue<bool>() == false && toRefresh.Count > 0)
+                    {
+                        stage = "refresh-references";
+                        var plainNames = new JsonArray(); var plainKeys = new JsonArray();
+                        foreach (var entry in toRefresh)
+                        {
+                            if (entry["producer"]?.ToString() is { Length: > 0 } producerName) plainNames.Add(producerName);
+                            if (entry["key"]?.ToString() is { Length: > 0 } producerKey) plainKeys.Add(producerKey);
+                        }
+                        // Review B1: the answer names the fallback that ran instead of the Manage Dependencies.
+                        if (result["referencesAdded"] is JsonObject failedManage) failedManage["fallback"] = "Refresh References";
+                        if ((result["studioWrites"] as JsonArray)?.LastOrDefault() is JsonObject failedRecord) failedRecord["fallback"] = RefreshReferencesCommand;
+                        var plain = CallStudioWrite(bridge, result, "before-merge", Target(new() { ["producers"] = plainNames, ["producer_keys"] = plainKeys, ["timeout"] = 600 }), request.Module);
+                        result["refreshReferences"] = plain;
+                        result["referencesRefreshedBeforeMerge"] = DeclareReferencesRefreshed(plain, result["referencesRefreshedBeforeMerge"], request.Module);
+                        LinkDetail(result, "referencesRefreshedBeforeMerge");
+                        task.Save(stage);
+                        if (RefreshBlocked(result, plain, stage) is { } waitingAgain) return Fail(waitingAgain);
+                    }
                 }
             }
             if (writeState == "not-sent")
@@ -722,6 +772,8 @@ public static partial class Delivery
                     ["sourceAbis"] = frozenCompilation.Compilation.SourceAbis!.DeepClone() };
             }
             result["delivered"] = true; result["everDelivered"] = true; stage = "complete";
+            // Review A1: the declared Studio writes say their undo for a merge that applied after them.
+            StudioWritesText(result);
             return result;
 
             JsonObject InspectSpecification(string snapshot, JsonObject specification, JsonObject? expectedTypes)
@@ -934,22 +986,38 @@ public static partial class Delivery
                 // Review finding 2: "the same job again" only when the next run will not select these signatures. That changes
                 // only if the module already holds them: the kernel runs the Studio's Refresh References of exactly those
                 // producers now and reads the module again; the same job is said only when every one is at the candidate's
-                // signature. Otherwise the answer is a different fix (the producers as OML), never a loop of the same refusal.
+                // signature. Otherwise the answer is a different fix (fix-ext-refs: the Studio's own Manage Dependencies, `alignment`;
+                // producers as OML only when every one is an eSpace module), never a loop of the same refusal.
                 var aligned = changes.Count > 0 ? AlignAfterRollback(changes) : null;
                 var sameJob = aligned?["aligned"]?.GetValue<bool>() == true;
                 result["sameJobAgain"] = sameJob;
                 var producerNames = string.Join(", ", changes.OfType<JsonObject>().Select(c => c["producer"]?.ToString()).Distinct());
+                // fix-ext-refs: what the Studio's own Manage Dependencies must do for the next delivery (producers, kinds, the
+                // elements the job names) and whether the loaded bridge runs it; the facade answers it as the continuation.
+                // Producers as OML are named only when every one is an eSpace module: an Extension has no OML.
+                var alignment = changes.Count > 0 && !sameJob ? Alignment(changes, referenceOps, result["capturedProducers"] as JsonObject,
+                    merge["referenceSignatures"] ?? result["signaturePreview"]?["plan"], Offers(bridge, ManageDependenciesCapability)) : null;
+                if (alignment != null) result["alignment"] = alignment;
+                var onlyModules = alignment != null && alignment["bridgeOffers"]?.GetValue<bool>() != true
+                    && (alignment["add"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().All(a => string.Equals(a["kind"]?.ToString() ?? "eSpace", "eSpace", StringComparison.OrdinalIgnoreCase));
+                // Review A1: the base is the module as the Studio's Manage Dependencies left it before the merge; what it (and the
+                // alignment after the rollback) wrote is said right here, with the undo, never "nothing was applied".
+                var written = StudioWritesText(result);
+                // Review A1 (D3): the command the kernel ran after the rollback, by its name.
+                var ranAfter = aligned?["command"]?.ToString() ?? "Refresh References";
                 return Fail("The Studio rolled the merge back (" + result["closedReason"] + "): the live module equals this task's base, sha256 "
-                    + merge["liveSha256"] + ". Nothing was applied, the task is closed and the module is free."
+                    + merge["liveSha256"] + ". " + (written.Length > 0 ? "Nothing was merged, the task is closed and the module is free. " + written
+                        : "Nothing was applied, the task is closed and the module is free.")
                     + (changes.Count > 0 ? " Producer signatures the merge had to select: " + ReferenceClosure.Describe(changes) + "." : "")
                     + (merge["stage"] is { } failedStage ? " Failed at stage " + failedStage + "." : "")
                     + (merge["error"] is { } cause ? " Cause reported by the Studio: " + cause : "")
                     + string.Concat((merge["dialogs"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().Where(OperationDialogPolicy.IsStudioError).Take(1)
                         .Select(d => " The Studio showed \"" + d["title"] + "\" (closed by the bridge): " + d["text"] + "."))
-                    + (sameJob ? " The module now holds those signatures (the Studio's Refresh References of " + producerNames + " ran now; Ctrl+Z undoes it): "
+                    + (sameJob ? " The module now holds those signatures (the Studio's " + ranAfter + " of " + producerNames + " ran now, after the rollback"
+                            + (ranAfter == ManageDependenciesCommand ? "" : "; Ctrl+Z undoes it") + "): "
                             + "deliver the same job again as a new delivery; its merge selects no producer signature."
-                        : changes.Count > 0 ? " The same job would roll back the same way (" + aligned?["reason"] + "): deliver it with " + producerNames
-                            + " as OML (producers: {<name>: <capture OML>}), so the candidate carries the signature the module has."
+                        : alignment != null ? AlignmentText(alignment, producerNames, aligned?["reason"]?.ToString())
+                            + (onlyModules ? " Or deliver it with " + producerNames + " as OML (producers: {<name>: <capture OML>}), so the candidate carries the signature the module has." : "")
                         : " Deliver the corrected job as a new delivery."));
             }
             // Review finding 2: the Studio's Refresh References of the producers a rolled-back merge had to select, then the
@@ -968,11 +1036,38 @@ public static partial class Delivery
                 try
                 {
                     stage = "refresh-references";
-                    var refreshed = bridge.Call("refresh_references", Target(new() { ["producers"] = names, ["producer_keys"] = keys, ["timeout"] = 600 }));
+                    // fix-ext-refs: the Studio's own Manage Dependencies when the bridge runs it (the elements the job names, each
+                    // producer brought to its published signature); the Refresh References alone keeps a reference that only
+                    // lacks new elements where it is ("up to date"), so it can never align such a producer.
+                    var parameters = new JsonObject { ["producers"] = names, ["producer_keys"] = keys, ["timeout"] = 600 };
+                    var manage = Offers(bridge, ManageDependenciesCapability);
+                    var command = manage ? ManageDependenciesCommand : "Refresh References";
+                    report["command"] = command;
+                    if (manage)
+                    {
+                        parameters["add"] = Alignment(changes, referenceOps, result["capturedProducers"] as JsonObject,
+                            result["merge"]?["referenceSignatures"] ?? result["signaturePreview"]?["plan"], true)["add"]!.DeepClone();
+                        parameters["published"] = true;
+                    }
+                    var refreshed = CallStudioWrite(bridge, result, "after-rollback", Target(parameters), request.Module);
                     report["refresh"] = refreshed.DeepClone();
+                    // Review A1: what this Manage Dependencies wrote after the rollback is declared like the one before the merge.
+                    if (manage) { result["referencesAddedAfterRollback"] = DeclareReferencesAdded(refreshed, null, request.Module, "after-rollback"); LinkDetail(result, "referencesAddedAfterRollback"); }
                     if (refreshed["blocked"]?.GetValue<bool>() == true)
                     {
-                        report["reason"] = "the refresh waits for the person in the Studio: " + refreshed["blockedBy"]?["question"];
+                        report["reason"] = "the " + command + " waits for the person in the Studio: " + refreshed["blockedBy"]?["question"];
+                        return report;
+                    }
+                    if (refreshed["committed"]?.GetValue<bool>() == false && refreshed["problems"] is JsonArray { Count: > 0 } refusedNow)
+                    {
+                        report["problems"] = refusedNow.DeepClone();
+                        report["reason"] = "the Studio's Manage Dependencies refused: " + string.Join(" ", refusedNow.OfType<JsonObject>().Select(p => p["message"] + " Fix: " + p["fix"]));
+                        return report;
+                    }
+                    // Review B1: a Manage Dependencies that failed inside the Studio (its command rolled back) is named with its cause.
+                    if (manage && refreshed["committed"]?.GetValue<bool>() == false)
+                    {
+                        report["reason"] = "the Studio's Manage Dependencies failed inside the Studio (" + (refreshed["error"]?.ToString() ?? "no cause reported") + ") and its command rolled back";
                         return report;
                     }
                     var livePath = Path.Combine(attemptDirectory, "refreshed-" + Guid.NewGuid().ToString("N") + ".oml");
@@ -995,7 +1090,7 @@ public static partial class Delivery
                     }
                     report["references"] = each; report["aligned"] = all;
                     if (!all)
-                        report["reason"] = "the Studio's Refresh References did not bring " + string.Join(", ", each.OfType<JsonObject>().Where(e => e["aligned"]?.GetValue<bool>() != true)
+                        report["reason"] = "the Studio's " + command + " did not bring " + string.Join(", ", each.OfType<JsonObject>().Where(e => e["aligned"]?.GetValue<bool>() != true)
                             .Select(e => e["producer"] + " (now " + (e["liveHash"]?.ToString() ?? "absent") + ", candidate " + e["candidateHash"] + ")")) + " to the candidate's signature";
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException and not BridgeCallException { Stall: not null }) { report["reason"] = Errors.Text(ex); }
@@ -1138,6 +1233,8 @@ public static partial class Delivery
             if (method is "merge_from_oml" or "refresh_references" or "open_module" or "close_module" && result["pendingBridgeOperation"] == null)
             {
                 var pending = new JsonObject { ["method"] = method, ["moduleKey"] = result["moduleKey"]?.DeepClone() };
+                // Review round 3 (L7): which Studio command the stopped refresh_references was (its note names it).
+                if (method == "refresh_references" && PendingStudioCommand(result) is { } stoppedCommand) pending["command"] = stoppedCommand;
                 if (method == "merge_from_oml") pending["operationId"] = result["operationId"]?.DeepClone();
                 pending["stall"] = stall.DeepClone();
                 result["pendingBridgeOperation"] = pending;
@@ -1147,7 +1244,9 @@ public static partial class Delivery
             else if (method is "refresh_references" or "open_module" or "close_module" && result["pendingBridgeOperation"] is JsonObject existing)
             {
                 if (existing["after"] is not JsonArray after) existing["after"] = after = new JsonArray();
-                after.Add(new JsonObject { ["method"] = method, ["moduleKey"] = result["moduleKey"]?.DeepClone(), ["stall"] = stall.DeepClone() });
+                var next = new JsonObject { ["method"] = method, ["moduleKey"] = result["moduleKey"]?.DeepClone(), ["stall"] = stall.DeepClone() };
+                if (method == "refresh_references" && PendingStudioCommand(result) is { } stoppedCommand) next["command"] = stoppedCommand;
+                after.Add(next);
             }
         }
         void RecordWarnings(JsonArray? live)
@@ -1238,6 +1337,9 @@ public static partial class Delivery
                 message = "Job refused by the preflight; nothing was merged. "
                     + string.Join(" ", (pure["errors"] as JsonArray ?? new JsonArray()).Select(e => e?.ToString()).Where(e => !string.IsNullOrWhiteSpace(e)));
             }
+            // Review A1: every refusal or failure after the Studio's Manage Dependencies wrote the module declares that write
+            // with its undo and never says that nothing was applied (whatever stage or exception raised it).
+            message = DeclareStudioWrites(result, message);
             result["error"] = message; return result;
         }
     }

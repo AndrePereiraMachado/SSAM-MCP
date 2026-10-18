@@ -1,6 +1,7 @@
 // hosted/mirror.mjs (docs/FASE2-AGENTE.md 4.5, 6.1, 6.2): fromAgent is the only door for an agent path, the mirror rule
 // (inputs staged, outputs only in writable prefixes, server copies never replace a bridge receipt) and the quota.
 // A fake AgentLink and temporary folders only: no hub, no agent, no Studio.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

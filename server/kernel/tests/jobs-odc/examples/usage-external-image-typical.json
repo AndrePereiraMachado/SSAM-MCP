@@ -1,5 +1,5 @@
 {
- "description": "Foto externa de cada produto numa List: a Url vem do atributo ImageUrl do registro e o logo do modulo fica como imagem padrao se a URL falhar.",
+ "description": "An external photo of each product in a List: the Url comes from the ImageUrl attribute of the record and the logo of the module stays as the default image if the URL fails.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -18,8 +18,8 @@
   {"op": "create", "parent": "$list", "type": "IContainer", "name": "PhotoRow", "as": "$row"},
   {"op": "create", "parent": "$row", "type": "IImage", "name": "Photo", "as": "$img"},
   {"op": "set", "target": "$img", "prop": "Type", "value": "External"},
-  {"op": "set", "target": "$img", "prop": "Url", "value": "GetProducts.List.Current.Product.ImageUrl", "_why": "a URL e um atributo do registro da linha"},
-  {"op": "set", "target": "$img", "prop": "DefaultImage", "value": "IImage:Logo", "_why": "imagem do modulo mostrada quando a URL nao carrega"},
+  {"op": "set", "target": "$img", "prop": "Url", "value": "GetProducts.List.Current.Product.ImageUrl", "_why": "the URL is an attribute of the record of the row"},
+  {"op": "set", "target": "$img", "prop": "DefaultImage", "value": "IImage:Logo", "_why": "image of the module shown when the URL does not load"},
   {"op": "set", "target": "$img", "prop": "Style", "value": "\"border-radius-soft\""},
   {"op": "create", "parent": "$row", "type": "IExpression", "as": "$name"},
   {"op": "set", "target": "$name", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"},

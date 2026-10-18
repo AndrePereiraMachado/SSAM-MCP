@@ -1,8 +1,8 @@
 {
- "description": "ODC (contexto: app de agente). Uma app CrossDevice recusa agentes ('Agent objects can't be children of App objects'). Sobre o modulo AIAgent em branco (create-blank --kind AIAgent --connection ai-model:CovAIModel) o agente nasce, com action handler, e e chamado por uma server action (Call Agent) e direto do modelo (Call Agent Core). O AI model de um agente tem de ser uma action de uma conexao de AI model ('A IServerAction cannot be used as the value for IAgent.AIModel'): a fixture traz uma conexao construida offline (IModelServices.CreateAIModelConnection + IESpace.AddDependency), referida por IServerActionSignature:CovAIModel. Messages e uma lista de AIMessage; '[]' basta para o Verify.",
+ "description": "ODC (context: agent app). A CrossDevice app refuses agents ('Agent objects can't be children of App objects'). Over the blank AIAgent module (create-blank --kind AIAgent --connection ai-model:CovAIModel) the agent is born, with action handler, and is called by a server action (Call Agent) and directly from the model (Call Agent Core). The AI model of an agent has to be an action of an AI model connection ('A IServerAction cannot be used as the value for IAgent.AIModel'): the fixture brings a connection built offline (IModelServices.CreateAIModelConnection + IESpace.AddDependency), referenced by IServerActionSignature:CovAIModel. Messages is a list of AIMessage; '[]' is enough for the Verify.",
  "base": "tests/fixtures/odc/blank-agent.oml",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "CovBlankAgent (ESpace) / CovGAsk (ServerAction)", "why": "ODC: um app nao expoe server action publica (o Studio ao vivo da erro); CovGAsk fica privada e sem consumidor neste job. A CovGLookup nao precisa: o agente a usa como ferramenta"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "CovBlankAgent (ESpace) / CovGAsk (ServerAction)", "why": "ODC: an app does not expose a public server action (the live Studio errors); CovGAsk stays private and without a consumer in this job. CovGLookup does not need it: the agent uses it as a tool"}],
  "ops": [
   {"op": "create", "parent": "@espace", "type": "IAgent", "name": "CovGHelper", "as": "$agent"},
   {"op": "set", "target": "$agent", "prop": "AIModel", "value": "IServerActionSignature:CovAIModel"},
@@ -19,7 +19,7 @@
   {"op": "create", "parent": "$ask", "type": "IStartNode", "as": "$ask0"},
   {"op": "create", "parent": "$ask", "type": "ICallAgentNode", "name": "CovGCallHelper", "as": "$call"},
   {"op": "set", "target": "$call", "prop": "Agent", "value": "$agent"},
-  {"op": "set", "target": "$call/Messages", "prop": "Value", "value": "[]", "_why": "o argumento Messages do agente: sem expressao, ArgumentRequiredExpression"},
+  {"op": "set", "target": "$call/Messages", "prop": "Value", "value": "[]", "_why": "the Messages argument of the agent: without an expression, ArgumentRequiredExpression"},
   {"op": "create", "parent": "$ask", "type": "ICallAgentCoreNode", "name": "CovGCallModel", "as": "$core"},
   {"op": "set", "target": "$core", "prop": "AIModel", "value": "IServerActionSignature:CovAIModel"},
   {"op": "set", "target": "$core", "prop": "Messages", "value": "[]"},

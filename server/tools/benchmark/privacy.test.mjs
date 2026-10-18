@@ -1,3 +1,4 @@
+import '../../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import os from 'node:os';import path from 'node:path';import {fileURLToPath}from'node:url';
 import {sanitizeRows,privacyIssues} from './sanitize-fixture.mjs';import {ledgerRow,parseArguments} from './speed-ledger.mjs';import {enrichRequest} from './measure/request-metrics.mjs';import {isCont} from './measure/legacy-owner-continuation.mjs';
 const person=['synthetic','person'].join('-'),tenant='personal-'+'z'.repeat(8),fakeHome=path.win32.join('C:','Users',person);

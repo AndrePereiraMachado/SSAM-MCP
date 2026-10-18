@@ -1,8 +1,8 @@
 {
- "description": "ODC (contexto: produtor offline). Sobre a app Mobile em branco (create-blank --kind Mobile), uma service action publica e um global event publico disparado por uma server action. E o produtor que um workflow (automatic activity, human activity, conditional start, inicio por evento) e um agent definition (tool references de service action e de evento) referenciam: workflow e agent definition nao podem ter service actions nem eventos proprios ('Server Action can't be created in BusinessProcess runtime kind', 'Event can't be created in BusinessProcess runtime kind'). A saida deste job e a fixture tests/fixtures/odc/blank-mobile-producer.oml (apply com --base blank-mobile.oml --out blank-mobile-producer.oml).",
+ "description": "ODC (context: offline producer). On the blank Mobile app (create-blank --kind Mobile), a public service action and a public global event triggered by a server action. It is the producer that a workflow (automatic activity, human activity, conditional start, start by event) and an agent definition (tool references for service action and for event) reference: a workflow and an agent definition cannot have service actions or events of their own ('Server Action can't be created in BusinessProcess runtime kind', 'Event can't be created in BusinessProcess runtime kind'). The output of this job is the fixture tests/fixtures/odc/blank-mobile-producer.oml (apply with --base blank-mobile.oml --out blank-mobile-producer.oml).",
  "base": "tests/fixtures/odc/blank-mobile.oml",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "CovBlankMobile (ESpace) / CovSRaiseEvent (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "CovBlankMobile (ESpace) / CovSRaiseEvent (ServerAction)", "why": "ODC: an app (CrossDevice) does not expose a public server action (the live Studio gives an error); the action stays private and without a consumer in this proof job"}],
  "ops": [
   {"op": "create", "parent": "@espace", "type": "IServiceAction", "name": "CovSService", "as": "$svc"},
   {"op": "set", "target": "$svc", "prop": "Description", "value": "Service action que um workflow dispara (automatic activity) e que um agente usa como ferramenta."},
@@ -12,7 +12,7 @@
   {"op": "create", "parent": "@espace", "type": "IGlobalEvent", "name": "CovSEvent", "as": "$ev"},
   {"op": "set", "target": "$ev", "prop": "Public", "value": true},
   {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "CovSRaiseEvent", "as": "$raise",
-   "_why": "um evento sem quem o dispare avisa UnusedGlobalEvent: a app que o publica tambem o dispara"},
+   "_why": "an event with nobody triggering it warns UnusedGlobalEvent: the app that publishes it also triggers it"},
   {"op": "create", "parent": "$raise", "type": "IStartNode", "as": "$r0"},
   {"op": "create", "parent": "$raise", "type": "ITriggerGlobalNode", "as": "$rt"},
   {"op": "set", "target": "$rt", "prop": "Event", "value": "$ev"},

@@ -1,6 +1,7 @@
 // The built-ins the work packet carries (builtin-functions.mjs, 2026-10-12): from the kernel's checked-in catalog, the
 // signatures of the functions the intent names and of every date and time function when it speaks of dates; a typed null
 // the catalog lacks (NullDateTime, NullTime) with its closest names and the literal that means it.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

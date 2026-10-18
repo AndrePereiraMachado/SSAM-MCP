@@ -86,7 +86,7 @@ for (const [slug, type, map = {}] of WIDGETS) {
   for (const level of ['minimal', 'typical']) {
     const job = level in map ? map[level] : ex(`widget-${slug}-${level}`);
     add('widget.' + slug, 'widget', level, { job, existing: level === 'minimal' ? created : bound,
-      notes: `${type}${job && !job.startsWith('widget-') ? '; exemplo partilhado com ' + job : ''}` });
+      notes: `${type}${job && !job.startsWith('widget-') ? '; example shared with ' + job : ''}` });
   }
   if (map.rich) add('widget.' + slug, 'widget', 'rich', { job: map.rich, notes: `${type} na loja (cenario rico)` });
 }
@@ -120,26 +120,26 @@ const LIBS = {
 for (const [prefix, { lib, patterns, map = {} }] of Object.entries(LIBS))
   for (const n of patterns) for (const level of ['minimal', 'typical']) {
     const job = map[n]?.[level] ?? ex(`${prefix}-${kebab(n)}-${level}`);
-    add(`${prefix}.${n}`, 'pattern', level, { job, notes: job ? `${lib} referenciado pelo fixture` : `${lib} referenciado pelo fixture; sem exemplo nesta rodada (add-on, forma ou ferramenta de desenho)` });
+    add(`${prefix}.${n}`, 'pattern', level, { job, notes: job ? `${lib} referenced by the fixture` : `${lib} referenced by the fixture; no example in this round (an add-on, a shape or a drawing tool)` });
   }
 
 // 3. Padroes de uso que um usuario real precisou (loja, 2026-10-06) e o cenario rico
 const USAGE = [
   ['gallery-data-action', [null, 'usage-gallery-data-action-typical'], 'Gallery OSUI + List ligada a data action'],
-  ['clickable-card', ['usage-clickable-card-minimal', 'usage-clickable-card-typical'], 'Container com onclick (IEvent) e argumento'],
-  ['link-icon-text', ['usage-link-icon-text-minimal', 'usage-link-icon-text-typical'], 'Link com Icon e texto visivel'],
-  ['external-image', ['usage-external-image-minimal', 'usage-external-image-typical'], 'Image externa por URL'],
-  ['cart-line-quantity', [null, 'usage-cart-line-quantity-typical'], 'linha com - e +: Assign List[indice] + resumo do retorno da server action, sem Refresh Data'],
-  ['category-filter', [null, 'usage-category-filter-typical'], 'Dropdown de categoria com OnChange + Refresh Data'],
-  ['navigation-input', ['usage-navigation-input-minimal', 'usage-navigation-input-typical'], 'navegacao com parametro de entrada da tela'],
+  ['clickable-card', ['usage-clickable-card-minimal', 'usage-clickable-card-typical'], 'a Container with onclick (IEvent) and an argument'],
+  ['link-icon-text', ['usage-link-icon-text-minimal', 'usage-link-icon-text-typical'], 'a Link with an Icon and a visible text'],
+  ['external-image', ['usage-external-image-minimal', 'usage-external-image-typical'], 'an external Image by URL'],
+  ['cart-line-quantity', [null, 'usage-cart-line-quantity-typical'], 'a line with - and +: Assign List[index] + the summary returned by the server action, without Refresh Data'],
+  ['category-filter', [null, 'usage-category-filter-typical'], 'a category Dropdown with OnChange + Refresh Data'],
+  ['navigation-input', ['usage-navigation-input-minimal', 'usage-navigation-input-typical'], 'navigation with an input parameter of the screen'],
 ];
 for (const [slug, [minimal, typical], note] of USAGE) {
   if (minimal) add('usage.' + slug, 'pattern', 'minimal', { job: minimal, notes: note });
-  else add('usage.' + slug, 'pattern', 'minimal', { job: typical, notes: note + '; o exemplo tipico ja e o menor que faz sentido' });
+  else add('usage.' + slug, 'pattern', 'minimal', { job: typical, notes: note + '; the typical example is already the smallest that makes sense' });
   add('usage.' + slug, 'pattern', 'typical', { job: typical, notes: note });
 }
 const ECOMMERCE = 'ecommerce-01-data,ecommerce-02-cart,ecommerce-03-detail,ecommerce-04-catalog,ecommerce-all';
-add('usage.ecommerce-flow', 'pattern', 'rich', { job: ECOMMERCE, notes: 'loja: dados + carrinho em tabela + detalhe + catalogo com filtro e Gallery; ecommerce-all entrega tudo numa transacao' });
+add('usage.ecommerce-flow', 'pattern', 'rich', { job: ECOMMERCE, notes: 'store: data + cart as a table + detail + catalog with a filter and a Gallery; ecommerce-all delivers everything in one transaction' });
 
 // 4. Capacidades do catalogo do discover (faixa odc) e ausencias declaradas
 const CAP_NEW = {
@@ -151,19 +151,19 @@ const CAP_RICH = { 'ui.screen': ECOMMERCE, 'ui.list': 'ecommerce-04-catalog', 'u
   'logic.server-action': 'ecommerce-01-data', 'logic.data-action': 'ecommerce-02-cart,ecommerce-04-catalog', 'logic.aggregate': 'ecommerce-02-cart,ecommerce-03-detail',
   'data.entity': 'ecommerce-01-data', 'data.static': 'ecommerce-01-data', 'data.structure': 'ecommerce-01-data', 'logic.native-nodes': 'ecommerce-03-detail' };
 const CAP_BLOCKED = {
-  'integration.external-library-odc': 'rota operations (odc_external_library): build com NuGet e deploy pelo Portal; nao e op de job do kernel',
-  'reference.external-library-odc': 'o job precisa da assinatura capturada na sessao viva (studio_deliver + bridge reference-snapshot); headless o kernel recusa: "producer SSAMTextTools not bound: o11_deliver binds a producer by its name ..."',
-  'read.discover': 'rota reader (ssam_discover): leitura do indice, nao e job',
-  'deliver.job': 'rota delivery (studio_deliver): merge no Studio aberto; todo exemplo desta pasta e um job entregavel, mas a entrega so se prova ao vivo',
-  'deliver.feature': 'rota feature (C# do builder, odc build --smoke): nao e job do kernel',
-  'deliver.publish': 'rota delivery (publicacao com as palavras do usuario): so ao vivo',
-  'data.records': 'rota data (studio_data*): registros do banco de desenvolvimento, nao modelo; so ao vivo',
-  'ops.references-refresh': 'rota operations (studio_refresh_references): so ao vivo',
-  'ops.studio-session': 'rota operations (studio_status, attach, snapshot...): so ao vivo',
+  'integration.external-library-odc': 'operations route (odc_external_library): a build with NuGet and a deploy through the Portal; not a kernel job op',
+  'reference.external-library-odc': 'the job needs the signature captured in the live session (studio_deliver + bridge reference-snapshot); headless the kernel refuses it: "producer SSAMTextTools not bound: o11_deliver binds a producer by its name ..."',
+  'read.discover': 'reader route (ssam_discover): a read of the index, not a job',
+  'deliver.job': 'delivery route (studio_deliver): a merge in the open Studio; every example of this folder is a deliverable job, but the delivery is proven only live',
+  'deliver.feature': 'feature route (C# of the builder, odc build --smoke): not a kernel job',
+  'deliver.publish': 'delivery route (publication with the user\'s words): live only',
+  'data.records': 'data route (studio_data*): records of the development database, not the model; live only',
+  'ops.references-refresh': 'operations route (studio_refresh_references): live only',
+  'ops.studio-session': 'operations route (studio_status, attach, snapshot...): live only',
   'ops.portal': 'rota portal (APIs publicas do Portal): rede',
-  'ops.debugger': 'rota operations (depurador headless contra o app publicado): so ao vivo',
-  'ops.environment': 'rota operations (doctor, URLs, tenants): nao e job',
-  'diagnostic.troubleshoot': 'rota diagnostic (taxonomia de falhas): nao e job',
+  'ops.debugger': 'operations route (headless debugger against the published app): live only',
+  'ops.environment': 'operations route (doctor, URLs, tenants): not a job',
+  'diagnostic.troubleshoot': 'diagnostic route (failure taxonomy): not a job',
 };
 const BLOCKED_JOB = { 'reference.external-library-odc': 'blocked-reference-external-library' };
 for (const c of capabilities) {
@@ -179,7 +179,7 @@ for (const c of capabilities) {
   if (CAP_RICH[c.id]) add(c.id, 'capability', 'rich', { job: CAP_RICH[c.id], notes: c.title + ' (loja)' });
 }
 add('ui.screen-spec.cards', 'capability', 'typical', { status: 'blocked', job: 'blocked-screen-spec-cards',
-  notes: 'kind cards da op screen falha no ODC: "screen op #N (create ): InvalidOperationException: Sequence contains no elements" (List.GetContent sem IContent); table/detail/form/dashboard passam' });
+  notes: 'the cards kind of the screen op fails on ODC: "screen op #N (create ): InvalidOperationException: Sequence contains no elements" (List.GetContent without an IContent); table/detail/form/dashboard pass' });
 // Ausencias declaradas: o catalogo diz que nao da; um job da suite ou um exemplo que prova o contrario vira divergencia.
 const CONTRADICTED = { 'button-group-native': ['widget-button-group-minimal', 'widget-button-group-typical'], 'ai.agents': ['agent-calls', 'agent-definition-tools'],
   'ai.semantic-search': ['logic-semantic-search', 'semantic-search-attributes'], 'event.global-events': ['global-event-unused'], 'process.odc-workflow': ['workflow-nodes'], 'module-image': ['image-create'] };
@@ -202,7 +202,7 @@ const summary = {
 };
 const matrix = {
   schema: 'ssam-examples-odc-matrix/1',
-  note: 'Gerado por scripts/examples-odc-matrix.mjs. status: new = exemplo desta pasta; proven-existing = so a suite tests/jobs-odc cobre; blocked = recusa provada ou rota fora de job (notes diz qual); pending = sem exemplo ainda. existing = jobs da suite que ja cobriam a linha antes destes exemplos.',
+  note: 'Generated by scripts/examples-odc-matrix.mjs. status: new = an example of this folder; proven-existing = only the suite tests/jobs-odc covers it; blocked = a proven refusal or a route outside a job (notes says which); pending = no example yet. existing = jobs of the suite that already covered the line before these examples.',
   fixture: 'kernel/tests/fixtures/odc/insurance-reactive-r8.oml',
   summary,
   entries: entries.sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id) || ['minimal', 'typical', 'rich'].indexOf(a.level) - ['minimal', 'typical', 'rich'].indexOf(b.level)),
@@ -213,9 +213,9 @@ const compact = v => Array.isArray(v) ? '[' + v.map(compact).join(', ') + ']'
 const text = ['{', ` "schema": ${JSON.stringify(matrix.schema)},`, ` "note": ${JSON.stringify(matrix.note)},`, ` "fixture": ${JSON.stringify(matrix.fixture)},`,
   ` "summary": ${compact(matrix.summary)},`, ' "entries": [', matrix.entries.map(e => '  ' + compact(e)).join(',\n'), ' ]', '}'].join('\n') + '\n';
 const unknown = entries.flatMap(e => (e.job ? e.job.split(',') : []).filter(j => !examples.has(j) && !suite.has(j)).map(j => keyed(e) + ' -> ' + j));
-if (unknown.length) { console.error('jobs que nao existem:\n' + unknown.join('\n')); process.exit(1); }
+if (unknown.length) { console.error('jobs that do not exist:\n' + unknown.join('\n')); process.exit(1); }
 const orphans = [...examples.keys()].filter(n => !entries.some(e => e.job.split(',').includes(n)));
-if (orphans.length) console.error('exemplos fora da matriz: ' + orphans.join(', '));
+if (orphans.length) console.error('examples outside the matrix: ' + orphans.join(', '));
 if (process.argv.includes('--check')) {
   // O git pode trocar LF por CRLF no checkout (autocrlf): compara o texto, nao os finais de linha.
   const same = fs.existsSync(outFile) && fs.readFileSync(outFile, 'utf8').replace(/\r\n/g, '\n') === text;

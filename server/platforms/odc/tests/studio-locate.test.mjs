@@ -1,6 +1,7 @@
 // platforms/odc/facade/studio-locate.mjs (lane A): the fixed order variable -> connection record -> process -> HKLM
 // Uninstall (64, 32) -> HKCU Uninstall -> %ProgramFiles%, with every source injected. Only regQuery's own parsing is
 // run against the real registry, read only.
+import '../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';

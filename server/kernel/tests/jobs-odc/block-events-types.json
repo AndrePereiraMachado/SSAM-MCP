@@ -1,10 +1,10 @@
 {
- "description": "ODC: o CONTRATO do evento de bloco com o vocabulario inteiro de tipos, sobre o InsuranceApp do tenant pessoal. O bloco WfCartPanel declara OnCheckout com oito parametros - LISTA de estrutura (WfCovCartLine List), REGISTO (WfCovCartLine), identificador de entidade (WfCovCartProduct Identifier), Decimal, Integer, Date Time, Boolean e Text - o ITriggerNode manda os oito e o handler WfCartPanel1_OnCheckout recebe-os com os mesmos tipos. A tela usa os dois compostos: o registo por atributo e a lista como Source de uma IList. Equivalente ODC de tests/jobs/block-events-types-reactive.json: prova que a faixa ODC nao limita o contrato de evento a escalares.",
+ "description": "ODC: the block event CONTRACT with the whole type vocabulary, over the InsuranceApp of the personal tenant. The block WfCartPanel declares OnCheckout with eight parameters - structure LIST (WfCovCartLine List), RECORD (WfCovCartLine), entity identifier (WfCovCartProduct Identifier), Decimal, Integer, Date Time, Boolean and Text - the ITriggerNode sends the eight and the handler WfCartPanel1_OnCheckout receives them with the same types. The screen uses the two composites: the record by attribute and the list as the Source of an IList. ODC equivalent of tests/jobs/block-events-types-reactive.json: proves that the ODC lane does not limit the event contract to scalars.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "create", "parent": "@espace", "type": "IServerEntity", "name": "WfCovCartProduct", "as": "$ent", "_why": "1. entidade propria para o tipo Identifier nao depender de nada do InsuranceApp"},
+  {"op": "create", "parent": "@espace", "type": "IServerEntity", "name": "WfCovCartProduct", "as": "$ent", "_why": "1. own entity so that the Identifier type does not depend on anything in the InsuranceApp"},
   {"op": "create", "parent": "$ent", "type": "IEntityAttribute", "name": "Id", "as": "$pid"},
   {"op": "set", "target": "$pid", "prop": "DataType", "value": "Long Integer"},
   {"op": "set", "target": "$pid", "prop": "IsAutoNumber", "value": "Yes"},
@@ -12,7 +12,7 @@
   {"op": "create", "parent": "$ent", "type": "IEntityAttribute", "name": "Name", "as": "$pname"},
   {"op": "set", "target": "$pname", "prop": "DataType", "value": "Text"},
 
-  {"op": "create", "parent": "@espace", "type": "IStructure", "name": "WfCovCartLine", "as": "$st", "_why": "2. a structure que vai viajar no evento, como registo e como lista"},
+  {"op": "create", "parent": "@espace", "type": "IStructure", "name": "WfCovCartLine", "as": "$st", "_why": "2. the structure that is going to travel in the event, as a record and as a list"},
   {"op": "create", "parent": "$st", "type": "IStructureAttribute", "name": "ProductId", "as": "$slp"},
   {"op": "set", "target": "$slp", "prop": "DataType", "value": "WfCovCartProduct Identifier"},
   {"op": "create", "parent": "$st", "type": "IStructureAttribute", "name": "Qty", "as": "$slq"},
@@ -20,7 +20,7 @@
   {"op": "create", "parent": "$st", "type": "IStructureAttribute", "name": "LineTotal", "as": "$slt"},
   {"op": "set", "target": "$slt", "prop": "DataType", "value": "Decimal"},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfCartPanel", "as": "$blk", "_why": "3. o bloco produtor"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfCartPanel", "as": "$blk", "_why": "3. the producer block"},
   {"op": "create", "parent": "$blk", "type": "IInputParameter", "name": "Title", "as": "$blkIn"},
   {"op": "set", "target": "$blkIn", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$blk", "type": "ILocalVariable", "name": "Lines", "as": "$vLines"},
@@ -28,7 +28,7 @@
   {"op": "create", "parent": "$blk", "type": "ILocalVariable", "name": "Line", "as": "$vLine"},
   {"op": "set", "target": "$vLine", "prop": "DataType", "value": "WfCovCartLine"},
 
-  {"op": "create", "parent": "$blk", "type": "IBlockEvent", "name": "OnCheckout", "as": "$ev", "_why": "4. o contrato, um IInputParameter por tipo"},
+  {"op": "create", "parent": "$blk", "type": "IBlockEvent", "name": "OnCheckout", "as": "$ev", "_why": "4. the contract, one IInputParameter per type"},
   {"op": "set", "target": "$ev", "prop": "Description", "value": "Disparado quando o carrinho fecha; leva as linhas inteiras"},
   {"op": "set", "target": "$ev", "prop": "IsMandatory", "value": false},
   {"op": "create", "parent": "$ev", "type": "IInputParameter", "name": "Lines", "as": "$e1", "_why": "LISTA de estrutura"},
@@ -45,7 +45,7 @@
   {"op": "set", "target": "$e6", "prop": "DataType", "value": "Boolean"},
   {"op": "create", "parent": "$ev", "type": "IInputParameter", "name": "Note", "as": "$e7"},
   {"op": "set", "target": "$e7", "prop": "DataType", "value": "Text"},
-  {"op": "create", "parent": "$ev", "type": "IInputParameter", "name": "FirstProductId", "as": "$e8", "_why": "IDENTIFICADOR de entidade"},
+  {"op": "create", "parent": "$ev", "type": "IInputParameter", "name": "FirstProductId", "as": "$e8", "_why": "entity IDENTIFIER"},
   {"op": "set", "target": "$e8", "prop": "DataType", "value": "WfCovCartProduct Identifier"},
 
   {"op": "create", "parent": "$blk", "type": "IContainer", "name": "Body", "as": "$body"},
@@ -54,7 +54,7 @@
   {"op": "create", "parent": "$body", "type": "IButton", "name": "CheckoutButton", "as": "$btn"},
   {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Checkout"},
 
-  {"op": "create", "parent": "$blk", "type": "IScreenAction", "name": "Checkout", "as": "$act", "_why": "5. disparar com os oito argumentos"},
+  {"op": "create", "parent": "$blk", "type": "IScreenAction", "name": "Checkout", "as": "$act", "_why": "5. fire with the eight arguments"},
   {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$c0"},
   {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$cAs"},
   {"op": "set", "target": "$cAs", "prop": "Label", "value": "BuildLine"},
@@ -81,7 +81,7 @@
   {"op": "layout", "target": "$act"},
   {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$act"},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfCartDemo", "as": "$scr", "_why": "6. a tela consumidora"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfCartDemo", "as": "$scr", "_why": "6. the consuming screen"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "\"Carrinho\""},
@@ -103,7 +103,7 @@
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "LastProductId", "as": "$s8"},
   {"op": "set", "target": "$s8", "prop": "DataType", "value": "WfCovCartProduct Identifier"},
 
-  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "WfCartPanel1_OnCheckout", "as": "$h", "_why": "7. o handler com os oito inputs, dos mesmos tipos"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "WfCartPanel1_OnCheckout", "as": "$h", "_why": "7. the handler with the eight inputs, of the same types"},
   {"op": "create", "parent": "$h", "type": "IInputParameter", "name": "Lines", "as": "$h1"},
   {"op": "set", "target": "$h1", "prop": "DataType", "value": "WfCovCartLine List"},
   {"op": "create", "parent": "$h", "type": "IInputParameter", "name": "Summary", "as": "$h2"},
@@ -164,12 +164,12 @@
   {"op": "set", "target": "$inst/OnCheckout/Note", "prop": "Value", "value": "Note"},
   {"op": "set", "target": "$inst/OnCheckout/FirstProductId", "prop": "Value", "value": "FirstProductId"},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "LinesList", "as": "$list", "_why": "9. a LISTA que chegou pelo evento e iteravel, sem nivel intermediario no Current"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "LinesList", "as": "$list", "_why": "9. the LIST that arrived through the event is iterable, without an intermediate level in the Current"},
   {"op": "set", "target": "$list", "prop": "Source", "value": "LastLines"},
   {"op": "create", "parent": "$list", "type": "IExpression", "as": "$lex"},
   {"op": "set", "target": "$lex", "prop": "Value", "value": "IntegerToText(LastLines.Current.Qty)"},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$echo", "_why": "10. os outros sete, com o REGISTO lido por atributo"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$echo", "_why": "10. the other seven, with the RECORD read by attribute"},
   {"op": "set", "target": "$echo", "prop": "Value", "value": "IntegerToText(LastCount) + \" linhas, \" + DecimalToText(LastTotal) + \", \" + LastNote + \", \" + BooleanToText(LastExpress) + \", \" + DateTimeToText(LastPlacedAt) + \", \" + LongIntegerToText(LastProductId) + \", \" + IntegerToText(LastSummary.Qty)"},
 
   {"op": "get", "target": "$ev", "_why": "InputParameters 8"},

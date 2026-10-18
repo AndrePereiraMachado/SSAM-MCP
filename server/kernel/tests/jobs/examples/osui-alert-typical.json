@@ -1,5 +1,5 @@
 {
- "description": "Alert (OutSystemsUI, Content) tipico; placeholders MessageText com dados do aggregate de tarefas.",
+ "description": "Typical Alert (OutSystemsUI, Content); placeholders MessageText with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

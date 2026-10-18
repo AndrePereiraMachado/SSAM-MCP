@@ -1,12 +1,12 @@
 {
- "description": "Base mobile dos exemplos O11: tela vazia Showcase no modulo Mobile (bloco Layout, placeholder Content) e os mesmos dados de apoio de ex-base (static Priority e entidade Task). Para os blocos que so o template Mobile referencia (ActionSheet, BottomSheet, BottomBarItem).",
+ "description": "Mobile base of the O11 examples: an empty Showcase screen in the Mobile module (Layout block, Content placeholder) and the same supporting data as ex-base (static Priority and entity Task). For the blocks only the Mobile template references (ActionSheet, BottomSheet, BottomBarItem).",
  "base": "mobile-ui.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
   {"op": "spec", "data": {
    "static": [{"name": "Priority", "records": [{"name": "Low"}, {"name": "Medium"}, {"name": "High"}]}],
-   "entities": [{"name": "Task", "description": "Tarefa de exemplo", "attributes": [
+   "entities": [{"name": "Task", "description": "Example task", "attributes": [
     {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
     {"name": "Notes", "type": "Text", "length": 500},
     {"name": "DueDate", "type": "Date"},

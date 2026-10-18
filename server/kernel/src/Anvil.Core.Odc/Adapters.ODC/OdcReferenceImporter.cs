@@ -21,7 +21,9 @@ public static class OdcReferenceImporter
         if (existing == null && target.References.Any(r => r.Name.Equals(snapshot.Name, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Reference name belongs to another producer: " + snapshot.Name);
         if (existing != null && existing.ReferenceHash != snapshot.SignatureHash)
-            throw new InvalidOperationException("Reference version differs from the captured signature; refresh explicitly and capture again: " + snapshot.Name);
+            // fix/system-reference round 2 (M3): the same capture again gives the same signature; only the Studio's refresh of the
+            // consumer's reference moves it (JobRunner.ReferenceProblems: REFERENCE_OUTDATED, studio_refresh_references).
+            throw new InvalidOperationException(JobRunner.OutdatedReference + "; refresh the consumer's reference to it in the Studio, then deliver again: " + snapshot.Name);
 
         var modelKey = Loader.ModelServicesInstance.ParseKey(snapshot.ModuleKey);
         var signature = OdcPublicSignature.Read(snapshot.SignatureBinary);

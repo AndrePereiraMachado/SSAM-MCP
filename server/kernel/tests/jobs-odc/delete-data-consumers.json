@@ -1,8 +1,8 @@
 {
- "description": "ODC: apagar DADOS com consumidores reais sobre o InsuranceApp do tenant pessoal. O atributo WfProofNotice.Body e usado por um filtro de aggregate, pela expressao de um Assign e por um argumento de Execute. Um consumidor e REPONTADO (para Title), os outros dois sao REMOVIDOS, e so entao o delete passa sem force. A recusa (sem force) esta em tests/jobs-odc/delete-data-in-use.json.",
+ "description": "ODC: delete DATA with real consumers over the InsuranceApp of the personal tenant. The attribute WfProofNotice.Body is used by an aggregate filter, by the expression of an Assign and by an Execute argument. One consumer is REPOINTED (to Title), the other two are REMOVED, and only then does the delete pass without force. The refusal (without force) is in tests/jobs-odc/delete-data-in-use.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfProof_Digest (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfProof_Digest (ServerAction)", "why": "ODC: an app (CrossDevice) does not expose a public server action (the live Studio gives an error); the action stays private and without a consumer in this proof job"}],
  "ops": [
   {
    "op": "spec",
@@ -43,17 +43,17 @@
 
   {"op": "create", "parent": "$dig", "type": "IAggregateNode", "name": "ReadNotices", "as": "$agg"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$WfProofNotice"}},
-  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "WfProofNotice.Body <> \"\""}, "as": "$flt", "_why": "(1) consumidor de DADOS: o filtro do aggregate cita o atributo"},
+  {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "WfProofNotice.Body <> \"\""}, "as": "$flt", "_why": "(1) DATA consumer: the aggregate filter cites the attribute"},
 
   {"op": "create", "parent": "$dig", "type": "IAssignNode", "as": "$dAs"},
   {"op": "set", "target": "$dAs", "prop": "Label", "value": "SetSummary"},
   {"op": "create", "parent": "$dAs", "type": "IAssignment", "as": "$dA1"},
   {"op": "set", "target": "$dA1", "prop": "Variable", "value": "Summary"},
-  {"op": "set", "target": "$dA1", "prop": "Value", "value": "ReadNotices.List.Current.WfProofNotice.Body", "_why": "(2) consumidor de LOGICA: a expressao do Assign"},
+  {"op": "set", "target": "$dA1", "prop": "Value", "value": "ReadNotices.List.Current.WfProofNotice.Body", "_why": "(2) LOGIC consumer: the expression of the Assign"},
 
   {"op": "create", "parent": "$dig", "type": "IExecuteServerActionNode", "name": "Send", "as": "$call"},
   {"op": "set", "target": "$call", "prop": "Action", "value": "$send"},
-  {"op": "set", "target": "$call/Body", "prop": "Value", "value": "ReadNotices.List.Current.WfProofNotice.Body", "_why": "(3) consumidor por ARGUMENTO"},
+  {"op": "set", "target": "$call/Body", "prop": "Value", "value": "ReadNotices.List.Current.WfProofNotice.Body", "_why": "(3) consumer by ARGUMENT"},
 
   {"op": "create", "parent": "$dig", "type": "IEndNode", "as": "$d9"},
   {"op": "link", "from": "$d0", "to": "$agg"},
@@ -65,14 +65,14 @@
   {"op": "usages", "target": "$WfProofNotice.Body", "_why": "(4) tres consumidores reais: filtro, Assign e argumento"},
 
   {"op": "delete", "target": "$flt", "_why": "(5a) REMOVER: o filtro sai"},
-  {"op": "set", "target": "$dA1", "prop": "Value", "value": "ReadNotices.List.Current.WfProofNotice.Title", "_why": "(5b) REPONTAR: o Assign passa a ler Title, e a action continua a atribuir o output"},
-  {"op": "link", "from": "$dAs", "to": "$d9", "_why": "(5c) religar ANTES de apagar o no: o conector de entrada conta como consumidor do no"},
+  {"op": "set", "target": "$dA1", "prop": "Value", "value": "ReadNotices.List.Current.WfProofNotice.Title", "_why": "(5b) REPOINT: the Assign now reads Title, and the action keeps assigning the output"},
+  {"op": "link", "from": "$dAs", "to": "$d9", "_why": "(5c) relink BEFORE deleting the node: the incoming connector counts as a consumer of the node"},
   {"op": "delete", "target": "$call"},
-  {"op": "delete", "target": "$send", "_why": "(5d) a action chamada ficou sem chamadores; apagar evita um UnusedUserAction"},
+  {"op": "delete", "target": "$send", "_why": "(5d) the called action was left without callers; deleting it avoids an UnusedUserAction"},
   {"op": "layout", "target": "$dig"},
 
-  {"op": "usages", "target": "$WfProofNotice.Body", "_why": "(6) os tres consumidores de autoria sairam; o que sobra e o valor do registo de exemplo da entidade (IRecord/IRecordAttributeValue), que no ODC NAO e classificado como derivado (na faixa O11 o equivalente chama-se SampleRecord e e derivado) - ver a diferenca no relatorio da frente A"},
-  {"op": "delete", "target": "$WfProofNotice.Body", "_why": "(7) sem force: os tres consumidores de autoria sairam, e o valor do registo de exemplo conta como uso derivado (o Studio limpa-o sozinho)"},
+  {"op": "usages", "target": "$WfProofNotice.Body", "_why": "(6) the three authoring consumers are gone; what remains is the value of the sample record of the entity (IRecord/IRecordAttributeValue), which in ODC is NOT classified as derived (in the O11 lane the equivalent is called SampleRecord and is derived) - see the difference in the front A report"},
+  {"op": "delete", "target": "$WfProofNotice.Body", "_why": "(7) without force: the three authoring consumers are gone, and the value of the sample record counts as derived use (the Studio cleans it by itself)"},
 
   {"op": "find", "name": "WfProof_Send", "_why": "(8) lista vazia"},
   {"op": "get", "target": "$WfProofNotice"},

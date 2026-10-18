@@ -3,6 +3,7 @@
 // null). The kernel's odcBridge (kernel.json) is asked for; odc.attach (no version) is unchanged. Fake AgentLink info.
 // 24th release of the line: the server's bridge is v96 and the packs of v48 and v45 stay accepted. ODC Studio 1.7.28: the
 // server's bridge is v97 (built against 1.7.28) and the packs of v96, v48 and v45 stay accepted.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';

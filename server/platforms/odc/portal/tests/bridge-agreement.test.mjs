@@ -1,6 +1,7 @@
 // The facade sends through bridge v32 only what PortalCore.cs lets through, read from its source: the public API
 // families, the six read-only POST searches, the known Portal reads, the Portal writes as writes, the secretRefs the
 // bridge resolves (shape, limit, roots, targets, capabilities and refusal gates), and no secret key the bridge would mask.
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

@@ -1,12 +1,12 @@
 {
- "description": "WS4 T7 (ODC): o mesmo job html-visual-block sobre o InsuranceApp do tenant pessoal: instancia de bloco (DatePicker do OutSystems UI, referenciado pelo modulo) com input e handler nativo.",
+ "description": "WS4 T7 (ODC): the same job html-visual-block over the InsuranceApp of the personal tenant: block instance (DatePicker from OutSystems UI, referenced by the module) with input and native handler.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "UnusedElement",
    "element": "DateChosen (ScreenAction) / DatePickerId (InputParameter)",
-   "why": "DatePickerId faz parte do contrato do evento OnSelected; este exemplo usa somente a data selecionada."
+   "why": "DatePickerId is part of the contract of the OnSelected event; this example uses only the selected date."
   }
  ],
  "ops": [

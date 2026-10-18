@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {inspectOdcApplicationController} from '../debug-odc-application-controller.mjs';
 import {qualifyOdcBaseControllerConstruction} from '../debug-odc-base-controller-construction.mjs';

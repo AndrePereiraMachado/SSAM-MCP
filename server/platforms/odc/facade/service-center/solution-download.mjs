@@ -1,3 +1,4 @@
+import { wordsGiven } from '../destructive-operations.mjs';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { CookieJar as ToughCookieJar } from 'tough-cookie';
@@ -101,7 +102,8 @@ export async function solutionDownloadStatus(client, name, options = {}) {
 export async function solutionDownloadAbandon(client, name, options = {}) {
   const { operationId, principal, words, question = null, store = new DownloadContextStore(), now = () => new Date().toISOString() } = options;
   if (!UUID.test(operationId ?? '')) throw new ProtocolError('solution-download-abandon requires the original operationId UUID');
-  if (typeof words !== 'string' || !words.trim() || words.length > 2000) throw new ProtocolError('solution-download-abandon requires the user\'s words, verbatim');
+  if (!wordsGiven(words) || words.length > 2000) throw new ProtocolError( // CX15 r7 (M-3): one predicate
+   'solution-download-abandon requires the user\'s words, verbatim');
   if (question !== null && (typeof question !== 'string' || question.length > 2000)) throw new ProtocolError('question is the text the user answered, at most 2000 characters');
   const identity = { host:client.vault.host, principal, solution:name, version:'current-running' };
   const record = await store.find(operationId, identity);

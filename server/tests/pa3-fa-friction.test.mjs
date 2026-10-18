@@ -2,6 +2,7 @@
 // ids per group) instead of reading every operation file (6,000 records took 1.45 s and 23.9 KB); an observer takes the
 // MCP session id of its transport; auditOutcome reads structuredContent.ok and the code for the hosted audit. Temporary
 // folders only.
+import '../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

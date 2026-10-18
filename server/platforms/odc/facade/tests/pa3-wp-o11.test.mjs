@@ -73,7 +73,7 @@ test('wp o11: two deliveries to different modules of one Studio build at once; t
   const fake = lane(root);
   const client = await serve(t, root, fake);
   const [a, b] = await Promise.all(['Orders', 'Customers'].map(module => client.callTool({ name: 'o11_deliver', arguments: { module, job, authorize: words } })));
-  for (const answer of [a, b]) { assert.notEqual(answer.isError, true, JSON.stringify(answer)); assert.equal(JSON.parse(answer.content[0].text).result, 'entregue'); }
+  for (const answer of [a, b]) { assert.notEqual(answer.isError, true, JSON.stringify(answer)); assert.equal(JSON.parse(answer.content[0].text).result, 'delivered'); }
   assert.equal(fake.log.builds.length, 2);
   assert.ok(overlap(fake.log.builds[0], fake.log.builds[1]), 'the builds overlapped: ' + JSON.stringify(fake.log.builds));
   assert.ok(!overlap(fake.log.delivers[0], fake.log.delivers[1]), 'the delivers ran one after the other: ' + JSON.stringify(fake.log.delivers));
@@ -100,7 +100,7 @@ test('wp o11: the kernel rebuilt the candidate on a changed module: the answer s
   const fake = lane(root, { prebuilt: { reused: false, reason: 'base-changed' } });
   const client = await serve(t, root, fake);
   const answer = await client.callTool({ name: 'o11_deliver', arguments: { module: 'Orders', job, authorize: words } });
-  assert.equal(JSON.parse(answer.content[0].text).result, 'entregue');
+  assert.equal(JSON.parse(answer.content[0].text).result, 'delivered');
   const phases = phasesOf(answer);
   assert.deepEqual(phases.rebased, { reason: 'base-changed' });
   const receipt = path.join(root, '.local', 'work', 'deliver', '1'.padStart(32, '0'), 'phases.json');
@@ -126,7 +126,7 @@ test('wp o11: a module that is not open in a tab skips the build phase and deliv
   const fake = lane(root, { open: [] });
   const client = await serve(t, root, fake);
   const answer = await client.callTool({ name: 'o11_deliver', arguments: { module: 'Orders', job, authorize: words } });
-  assert.equal(JSON.parse(answer.content[0].text).result, 'entregue');
+  assert.equal(JSON.parse(answer.content[0].text).result, 'delivered');
   assert.equal(fake.log.builds.length, 0);
   assert.equal(fake.log.delivers[0].prebuilt, null);
   assert.equal(phasesOf(answer), undefined, 'no build phase ran: the answer is as before');

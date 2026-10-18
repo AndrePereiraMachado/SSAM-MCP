@@ -44,7 +44,7 @@ async function serve(t, deps) {
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
   t.after(async () => { await client.close(); await server.close(); });
   return args => client.callTool({ name: args.__tool ?? 'o11_deliver', arguments: Object.fromEntries(Object.entries(args).filter(([k]) => k !== '__tool')) })
-    .then(reply => reply.structuredContent ?? JSON.parse(reply.content[0].text === 'entregue' ? '{"ok":true,"result":"entregue"}' : reply.content[0].text));
+    .then(reply => reply.structuredContent ?? JSON.parse(reply.content[0].text === 'delivered' ? '{"ok":true,"result":"delivered"}' : reply.content[0].text));
 }
 
 function setup(t, { handlers, publish, extra = {} } = {}) {
@@ -58,11 +58,11 @@ function setup(t, { handlers, publish, extra = {} } = {}) {
 }
 
 // ---- C08: publish:true
-test('publish:true publishes only after a clean merge, with the same words, and answers "entregue e publicado"', async t => {
-  const s = setup(t, { publish: { ok: true, result: 'publicado', lastPublication: { at: '2026-10-05T10:01:00Z', status: 'succeeded', version: null, author: null, by: 'ssam', source: 'publish-result' }, dialogsSeen: ['login: Sign in'] } });
+test('publish:true publishes only after a clean merge, with the same words, and answers "delivered and published"', async t => {
+  const s = setup(t, { publish: { ok: true, result: 'published', lastPublication: { at: '2026-10-05T10:01:00Z', status: 'succeeded', version: null, author: null, by: 'ssam', source: 'publish-result' }, dialogsSeen: ['login: Sign in'] } });
   const call = await serve(t, s.deps);
   const value = await call({ module: 'Orders', job: s.job('a.json', { ops: [{ op: 'get', target: 'ServerAction:SaveOrder' }] }), publish: true, authorize: WORDS });
-  assert.equal(value.ok, true); assert.equal(value.result, 'entregue e publicado');
+  assert.equal(value.ok, true); assert.equal(value.result, 'delivered and published');
   assert.deepEqual(value.publish, { requested: true, outcome: 'published', at: '2026-10-05T10:01:00Z', dialogsSeen: ['login: Sign in'] });
   assert.equal(value.lastPublication.by, 'ssam');
   assert.equal(s.published.length, 1);
@@ -80,7 +80,7 @@ test('a merge that is not clean skips the publication; a failed or uncertain one
   const failed = setup(t, { publish: { ok: false, outcome: 'failed', code: 'PUBLISH_FAILED', error: 'The publication of Orders failed at Compilation: x; it is not published.',
     messages: [{ type: 'Warning', text: 'w' }, { type: 'Error', stage: 'Compilation', text: 'x' }] } });
   const answer = await (await serve(t, failed.deps))({ module: 'Orders', job: failed.job('c.json', { ops: [{ op: 'get', target: 'X:Y' }] }), publish: true, authorize: WORDS });
-  assert.equal(answer.ok, false); assert.equal(answer.result, 'entregue'); assert.equal(answer.code, 'PUBLISH_FAILED');
+  assert.equal(answer.ok, false); assert.equal(answer.result, 'delivered'); assert.equal(answer.code, 'PUBLISH_FAILED');
   assert.equal(answer.publish.outcome, 'failed'); assert.equal(answer.publish.messages[0].type, 'Error', 'errors first');
   assert.equal(answer.continuation.tool, 'o11_publish');
   assert.deepEqual(answer.continuation.arguments, { module: 'Orders', authorize: WORDS_MARKER });
@@ -88,7 +88,7 @@ test('a merge that is not clean skips the publication; a failed or uncertain one
 
   const uncertain = setup(t, { publish: { ok: false, outcome: 'uncertain', code: 'PUBLISH_UNCERTAIN', error: 'no confirmed end' } });
   const unsure = await (await serve(t, uncertain.deps))({ module: 'Orders', job: uncertain.job('d.json', { ops: [{ op: 'get', target: 'X:Y' }] }), publish: true, authorize: WORDS });
-  assert.equal(unsure.code, 'PUBLISH_UNCERTAIN'); assert.equal(unsure.outcome, 'uncertain'); assert.equal(unsure.result, 'entregue');
+  assert.equal(unsure.code, 'PUBLISH_UNCERTAIN'); assert.equal(unsure.outcome, 'uncertain'); assert.equal(unsure.result, 'delivered');
 });
 
 // ---- I6: standing grants
@@ -187,7 +187,7 @@ test('a delivery answers leftovers and screenRoles from the apply; the kernel co
   assert.deepEqual(fields.screenRoles, [{ screen: 'Home', mode: 'create', roles: ['Registered'], anonymous: false }]);
   const s = setup(t, { handlers: { deliver: () => ({ ...envelopes.delivered, data }) } });
   const value = await (await serve(t, s.deps))({ module: 'Orders', job: s.job('k.json', { ops: [{ op: 'get', target: 'X:Y' }] }), authorize: WORDS });
-  assert.equal(value.result, 'entregue'); assert.equal(value.leftovers.length, 2); assert.equal(value.screenRoles[0].screen, 'Home');
+  assert.equal(value.result, 'delivered'); assert.equal(value.leftovers.length, 2); assert.equal(value.screenRoles[0].screen, 'Home');
   assert.ok(JSON.stringify(value).length < 1024, 'a delivered answer stays under ~1 KB');
 
   const rolled = setup(t, { handlers: { deliver: () => ({ ok: false, command: 'deliver', data: { taskId: TASK, module: 'Orders', delivered: false, writeState: 'not-applied',
@@ -220,7 +220,7 @@ test('ssam_task close: an uncertain task is closed through deliver --close (the 
   assert.deepEqual([read.kernelTask.id, read.kernelTask.writeState, read.kernelTask.closeState], [uncertain, 'unknown', 'uncertain']);
   assert.deepEqual([read.continuation.tool, read.continuation.arguments], ['o11_deliver', { resume: uncertain }]);
   const closed = await call({ __tool: 'ssam_task', id: uncertain, close: { reason: 'the merge was rolled back by the Studio' } });
-  assert.equal(closed.ok, true, JSON.stringify(closed)); assert.equal(closed.result, 'fechada');
+  assert.equal(closed.ok, true, JSON.stringify(closed)); assert.equal(closed.result, 'closed');
   assert.match(closed.proof, /nothing was applied/);
   assert.deepEqual(s.runAnvil.calls[0].args.slice(0, 5), ['deliver', '--close', uncertain, '--reason', 'the merge was rolled back by the Studio']);
   const refused = await call({ __tool: 'ssam_task', id: delivered, close: { reason: 'x' } });
@@ -236,6 +236,6 @@ test('ssam_task close: an uncertain task is closed through deliver --close (the 
   const facadeId = tasks.tasks.find(x => x.result?.taskId === uncertain).id;
   const one = await call({ __tool: 'ssam_task', id: facadeId });
   assert.equal(one.task.state, 'uncertain');
-  assert.deepEqual(one.continuation.arguments, { id: uncertain, close: { reason: '<motivo>' } });
+  assert.deepEqual(one.continuation.arguments, { id: uncertain, close: { reason: '<reason>' } });
   assert.equal(one.continuation.tool, 'ssam_task');
 });

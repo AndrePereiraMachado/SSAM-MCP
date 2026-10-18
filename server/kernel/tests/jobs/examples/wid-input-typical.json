@@ -1,5 +1,5 @@
 {
- "description": "Input tipico: variavel de pesquisa ligada ao Input, aggregate filtrado por ela e OnChange que refaz a consulta (Refresh Data).",
+ "description": "Typical Input: a search variable bound to the Input, an aggregate filtered by it and an OnChange that runs the query again (Refresh Data).",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

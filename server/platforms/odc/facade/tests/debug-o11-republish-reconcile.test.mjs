@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { inspectO11RepublishNeutralization, o11RemoteDebugAbsenceCapability } from '../debug-o11-republish-reconcile.mjs';

@@ -1,16 +1,16 @@
-# Funcoes built-in das expressoes OutSystems (Service Studio 11.55.92)
+# Built-in functions of the OutSystems expressions (Service Studio 11.55.92)
 
-Gerado do registo do proprio Studio por `dotnet .local/cli/anvil.dll functions --out catalog/functions-<ver>.json --docs docs/functions.md`.
-So o que esta aqui existe: qualquer outro nome seguido de `(` da `ExpressionUnknownFunction` no Verify, e o runner avisa antes
-(`Hint UnknownFunction`, com as funcoes mais parecidas). Consulta rapida: `anvil functions --find data` ou `--name Substr`.
+Generated from the Studio's own registry by `dotnet .local/cli/anvil.dll functions --out catalog/functions-<ver>.json --docs docs/functions.md`.
+Only what is here exists: any other name followed by `(` gives `ExpressionUnknownFunction` in the Verify, and the runner warns before
+(`Hint UnknownFunction`, with the closest functions). Quick lookup: `anvil functions --find data` or `--name Substr`.
 
-Onde: L = expressoes de logica server-side (server actions, timers, telas Traditional); C = client-side (client actions, telas
-Reactive/Mobile); AS/AC = aggregates server/client (filtros, colunas calculadas); E = emails; vazio = so em contextos
-especiais (ex.: telas Traditional Web). Parametro entre `[]` e opcional.
+Where: L = server-side logic expressions (server actions, timers, Traditional screens); C = client-side (client actions,
+Reactive/Mobile screens); AS/AC = server/client aggregates (filters, calculated columns); E = emails; empty = only in special
+contexts (e.g. Traditional Web screens). A parameter between `[]` is optional.
 
 ## Data Conversion (44)
 
-| Assinatura | Onde | Descricao |
+| Signature | Where | Description |
 |---|---|---|
 | `BooleanToInteger(b: Boolean): Integer` | L C AS AC E | Converts Boolean 'b' to an Integer value, either 1 if 'b' is True or 0 if 'b' is False. |
 | `BooleanToText(b: Boolean): Text` | L C AS AC E | Converts Boolean 'b' to a Text value, either "True" or "False". |
@@ -59,7 +59,7 @@ especiais (ex.: telas Traditional Web). Parametro entre `[]` e opcional.
 
 ## Date and Time (24)
 
-| Assinatura | Onde | Descricao |
+| Signature | Where | Description |
 |---|---|---|
 | `AddDays(dt: Date Time, n: Integer): Date Time` | L C AS AC E | Adds 'n' days to 'dt' and returns a valid Date Time. |
 | `AddHours(dt: Date Time, n: Integer): Date Time` | L C AS AC E | Adds 'n' hours to 'dt' and returns a valid Date Time. |
@@ -88,7 +88,7 @@ especiais (ex.: telas Traditional Web). Parametro entre `[]` e opcional.
 
 ## Email (3)
 
-| Assinatura | Onde | Descricao |
+| Signature | Where | Description |
 |---|---|---|
 | `EmailAddressCreate(name: Text, email: Text): Text` | L E | Returns a full email address string containing the display name (usually it's the name of the email address owner) and the email address itself. The resulting full email address may then be used in the Send Email element (action flows) or in the Send Email activity (process flows). To build a list of email addresses use the EmailAddressesConcatenate built-in function. |
 | `EmailAddressValidate(address: Text): Boolean` | L C E | Returns true if Text 'address' is a valid email address. Note that EmailAddressValidate("") returns True. This built-in function implements the validation specified by HTML5 (https://html.spec.whatwg.org/multipage/input.html#valid-e-mail-address) which has a practical approach to RFC 5322. |
@@ -96,7 +96,7 @@ especiais (ex.: telas Traditional Web). Parametro entre `[]` e opcional.
 
 ## Environment (8)
 
-| Assinatura | Onde | Descricao |
+| Signature | Where | Description |
 |---|---|---|
 | `GetApplicationServerType(): Text` |  | Returns ".Net". |
 | `GetCurrentLocale(): Text` | C | Returns the name of the current language locale of the user session. The name of the language locale is used for presentation purposes and follows the RFC 1766 standard format. |
@@ -109,7 +109,7 @@ especiais (ex.: telas Traditional Web). Parametro entre `[]` e opcional.
 
 ## Format (6)
 
-| Assinatura | Onde | Descricao |
+| Signature | Where | Description |
 |---|---|---|
 | `FormatCurrency(value: Currency, symbol: Text, decimal_digits: Integer, decimal_separator: Text, group_separator: Text): Text` | L C E | Builds a Text output of the specified Currency 'value', preceded by the currency 'symbol', using 'decimal_digits' after the decimal point. The decimal point is specified using 'decimal_separator', while the thousands can be separated with the 'group_separator'. When rounding, the function behaves differently depending on where you use it: - In the application server, it applies the method round half up (rounds to the nearest integer, 0.5 rounds up). - In client-side logic, it applies the method round half to even (rounds to the nearest integer, 0.5 rounds to the nearest even integer). |
 | `FormatDateTime(value: Date Time, format: Text): Text` | L C E | Builds a Text output of the specified Date Time 'value' using the specified 'format'. Formatting pattern can be any combination of the following: Day: - d: day without leading zero; - dd: day WITH leading zero; - ddd: abbreviated day name; - dddd: full day name; Month: - M: month without leading zero; - MM: month WITH leading zero; - MMM: abbreviated month name; - MMMM: full month name; Year: - y: last one or two digits of the year; - yy: last two digits of the year; - yyyy: year; Hour: - h: hour from 0 to 12 without leading zero; - hh: hour from 0 to 12 WITH leading zero; - H: hour from 0 to 24 without leading zero; - HH: hour from 0 to 24 WITH leading zero; Minute: - m: minutes without leading zero; - mm: minutes WITH leading zero; Second: - s: seconds without leading zero; - ss: seconds WITH leading zero; AM Designator: - t: first letter of AM or PM; - tt: AM or PM. If you want to output any of these characters then precede it with '\'. Changing the environment date format does not change the way the FormatDateTime function formats the dates. |
@@ -120,7 +120,7 @@ especiais (ex.: telas Traditional Web). Parametro entre `[]` e opcional.
 
 ## Math (6)
 
-| Assinatura | Onde | Descricao |
+| Signature | Where | Description |
 |---|---|---|
 | `Abs(n: Decimal): Decimal` | L C AS AC E | Returns the absolute value (unsigned magnitude) of the decimal number 'n'. |
 | `Mod(n: Decimal, m: Decimal): Decimal` | L C E | Returns the remainder of decimal division of 'n' by 'm'. |
@@ -131,7 +131,7 @@ especiais (ex.: telas Traditional Web). Parametro entre `[]` e opcional.
 
 ## Miscellaneous (4)
 
-| Assinatura | Onde | Descricao |
+| Signature | Where | Description |
 |---|---|---|
 | `CurrentThemeIsMobile(): Boolean` |  | Returns true when the current web screen is using a mobile theme. |
 | `GeneratePassword(l: Integer, alpha: Boolean): Text` | E | Generates and returns a password string of length 'l'. If 'alpha' is True the string can contain both digits and letters, if False the string can only contain digits. The generated password string is a random combination of letters and digits, or just digits, depending on 'alpha'. |
@@ -140,7 +140,7 @@ especiais (ex.: telas Traditional Web). Parametro entre `[]` e opcional.
 
 ## Numeric (3)
 
-| Assinatura | Onde | Descricao |
+| Signature | Where | Description |
 |---|---|---|
 | `Max(n: Decimal, m: Decimal): Decimal` | L C E | Returns the largest number of 'n' and 'm'. |
 | `Min(n: Decimal, m: Decimal): Decimal` | L C E | Returns the smallest number of 'n' and 'm'. |
@@ -148,14 +148,14 @@ especiais (ex.: telas Traditional Web). Parametro entre `[]` e opcional.
 
 ## Roles (2)
 
-| Assinatura | Onde | Descricao |
+| Signature | Where | Description |
 |---|---|---|
 | `CheckRole(RoleId: RoleId, UserId: UserId): Boolean` | AS AC | Returns true when the given user has the specific role. |
 | `GetUserId(): UserId` | C | Returns the identifier of the user that is currently authenticated with the server or 'NullIdentifier()' if the user is not authenticated. |
 
 ## Text (16)
 
-| Assinatura | Onde | Descricao |
+| Signature | Where | Description |
 |---|---|---|
 | `Chr(c: Integer): Text` | L C E | Returns a single-character string corresponding to the 'c' character code. |
 | `Concat(t1: Text, t2: Text): Text` | L C AS AC E | Returns the concatenation of two Texts: 't1' and 't2'. |
@@ -176,7 +176,7 @@ especiais (ex.: telas Traditional Web). Parametro entre `[]` e opcional.
 
 ## URL (5)
 
-| Assinatura | Onde | Descricao |
+| Signature | Where | Description |
 |---|---|---|
 | `AddPersonalAreaToURLPath(url: Text): Text` |  | Returns a string where the Personal Area is added (if applicable) to the URL path set in Text 't' input parameter. This function enables you to run any page (or resource) of your module in the Personal Area without having to manually change their paths. This function adds the Personal Area of the developer that is running the module to the URL path provided by the input parameter. |
 | `GetBookmarkableURL(): Text` | C | Returns the URL of the screen that is currently being processed. The URL returned by this function is a complete URL with the format http://server/module/personal_area/screen?param1=value&param2=value... Parameters and their values aren't included when parameters are optional and their values aren't set. |
@@ -184,9 +184,9 @@ especiais (ex.: telas Traditional Web). Parametro entre `[]` e opcional.
 | `GetOwnerURLPath(): Text` | C | Returns the URL path of the module that owns the element that is being processed. Note that this function does not return the complete URL but only the component containing the location of the resource within the domain and, if applicable, the personal area. |
 | `GetPersonalAreaName(): Text` |  | Returns the name of the Personal Area where the module is currently running. |
 
-## Nomes de outras linguagens que NAO existem aqui
+## Names from other languages that do NOT exist here
 
-| Escreveu | Use |
+| Written | Use |
 |---|---|
 | Ceiling | Round |
 | Contains | Index |

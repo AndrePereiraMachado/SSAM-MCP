@@ -1,5 +1,5 @@
 {
- "description": "Sidebar do OSUI: abre pela esquerda com overlay, largura fixa, StartsOpen por variavel, OnToggle guardando o estado e um Checkbox de filtro no Content.",
+ "description": "Sidebar of OSUI: opens from the left with an overlay, a fixed width, StartsOpen by a variable, OnToggle keeping the state and a filter Checkbox in the Content.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

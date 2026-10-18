@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA do delete de interface: o bloco proprio ContactCard esta INSTANCIADO na tela ContactDetail. Sem force o delete tem de ser recusado E a mensagem tem de nomear a instancia (o caminho limpo esta em tests/jobs/delete-interface-consumers.json).",
+ "description": "THE REFUSAL of the delete of an interface: the own block ContactCard is INSTANTIATED on the screen ContactDetail. Without force the delete must be refused AND the message must name the instance (the clean path is in tests/jobs/delete-interface-consumers.json).",
  "base": "job:screen-form-reactive",
  "expectValid": true,
  "expectError": [

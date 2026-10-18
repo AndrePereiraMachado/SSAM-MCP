@@ -1,5 +1,5 @@
 {
- "description": "CenterContent (OutSystemsUI, Utilities) tipico; placeholders Top, Center, Bottom com dados do aggregate de tarefas.",
+ "description": "Typical CenterContent (OutSystemsUI, Utilities); placeholders Top, Center, Bottom with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

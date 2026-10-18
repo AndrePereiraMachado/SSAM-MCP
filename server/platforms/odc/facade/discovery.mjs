@@ -6,6 +6,8 @@
 // pointer in it is checked against the extracted sources when the index is built, so the descriptor cannot drift
 // silently.
 import fs from 'node:fs';
+import { limitType, limitVerdict, VERDICT_LINE, SEEN_IN } from './limit-values.mjs';
+import { jobSearchText } from './search-aliases.mjs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
@@ -25,7 +27,8 @@ export const DISCOVERY_SCHEMA = 'ssam-discovery/4';
 export const INDEX_SCHEMA = 'ssam-discovery-index/3';
 const DESCRIPTOR_FILE = path.join(here, 'discovery-capabilities.json');
 const API_OPS = ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-consume', 'rest-expose', 'soap', 'entity-actions'];
-export const DEFAULT_BUDGET_BYTES = 40 * 1024;
+import { EXPANSION_DEFAULT_BYTES, budgetCeiling, maxAnswerBytes } from './context-budget.mjs';
+export const DEFAULT_BUDGET_BYTES = EXPANSION_DEFAULT_BYTES;
 export const EXPAND_PARTS = ['contract', 'example', 'evidence', 'bindings', 'native', 'operations'];
 
 const sha256 = buffer => createHash('sha256').update(buffer).digest('hex');
@@ -501,7 +504,7 @@ export function classifyExecutions(jobs, current) {
         if (expected == null) mismatches.push(`${key}: current value undetermined`);
         else if (p[key] == null) mismatches.push(`${key}: absent from the stamp`);
         else if (String(p[key]).toLowerCase() === String(expected).toLowerCase()) continue;
-        else if (key === 'jobSha256' && (job.sha256Eol ?? []).includes(String(p[key]).toLowerCase())) x.jobIdentity = 'same job text modulo line endings (the stamp hashed the other line-ending form; JSON whitespace only)';
+        else if (key === 'jobSha256' && (job.sha256Eol ?? []).includes(String(p[key]).toLowerCase())) x.jobIdentity = 'same job text up to line endings (the stamp hashed the other line-ending form; JSON whitespace only)';
         else mismatches.push(`${key}: result ${String(p[key]).slice(0, 16)} vs current ${String(expected).slice(0, 16)}`);
       }
       if (!p.nativeAssemblies || typeof p.nativeAssemblies !== 'object') mismatches.push('nativeAssemblies: absent from the stamp (older stamp schema)');
@@ -556,9 +559,10 @@ export function loadLimits(sources) {
     if (line.startsWith('## ')) { section = line.slice(3).trim(); continue; }
     if (line.startsWith('### ')) { if (current) out.push(current); current = { title: line.slice(4).trim(), section, type: null, seenAt: null, verdict: null }; continue; }
     if (!current) continue;
-    const tag = /^`([a-z-]+)`\s*$/.exec(line.trim()); if (tag && !current.type) current.type = tag[1];
-    if (/^Visto em:/i.test(line.trim())) current.seenAt = line.trim().replace(/^Visto em:\s*/i, '').slice(0, 300);
-    const verdict = /^>\s*\*\*?(CONFIRMADO|IMPRECISO|REFUTADO|OBSOLETO|NAO MEDIDO)/.exec(line.trim()); if (verdict) current.verdict = verdict[1];
+    // English values since 16/10 (limit-values.mjs); the Portuguese ones of the document before are read as aliases.
+    const tag = /^`([a-z-]+)`\s*$/.exec(line.trim()); if (tag && !current.type) current.type = limitType(tag[1]);
+    if (SEEN_IN.test(line.trim())) current.seenAt = line.trim().replace(SEEN_IN, '').slice(0, 300);
+    const verdict = VERDICT_LINE.exec(line.trim()); if (verdict) current.verdict = limitVerdict(verdict[1]);
   }
   if (current) out.push(current);
   return out.filter(l => l.type).map(l => ({ ...l, source: path.relative(sources.kernel, sources.naoDa).replaceAll('\\', '/') }));
@@ -1155,8 +1159,14 @@ function scoreCapability(c, terms, consumed = new Map(), says = () => false, gat
   for (const t of terms) { if (LEXICAL_NOISE.has(t) || muted(t)) continue; if (text.title.includes(t) && !why.has(t)) { score += 2; why.add(t); if (!OPERATION_WORDS.has(t)) elementHits++; else operationHits++; } else if (text.summary.includes(t) && !why.has(t)) { score += 1; why.add(t); } }
   return { score, why: [...why].map(w => labels.get(w) ?? w), elementHits, operationHits, anchoredHits };
 }
-function scoreJob(job, terms) {
-  const text = tokens(job.name.replaceAll('-', ' ') + ' ' + job.description + ' ' + job.notes.map(n => n.text).join(' '));
+// The words of the Portuguese prose the job had before 16/10 (search-aliases.mjs: search only, never served).
+const suiteDir = lane => (lane === 'odc' ? 'jobs-odc' : 'jobs');
+function scoreJob(job, terms, lane = null) {
+  // Ranked on the text it had when its prose was Portuguese (search-aliases.mjs jobSearchText: the same score, the same
+  // order as before the translation); a job with no alias (written in English) on its own text.
+  const key = lane ? suiteDir(lane) + '/' + job.name : null;
+  const said = (part, current) => (key ? jobSearchText(anvilRoot, key, part, current) : current);
+  const text = tokens(job.name.replaceAll('-', ' ') + ' ' + said('description', job.description) + ' ' + said('notes', job.notes.map(n => n.text).join(' ')));
   const hits = terms.filter(t => text.includes(t));
   return { score: hits.length, why: hits };
 }
@@ -1360,7 +1370,7 @@ export function query(index, { intent = '', limit = 8 } = {}) {
     .map(x => ({ id: x.u.id, why: x.hits, reason: x.u.reason, evidence: x.u.evidence ?? null, negative: (x.u.negative?.[index.lane] ?? []), alternative: x.u.alternative ?? null }));
   const cited = new Set(matches.flatMap(m => (m.proofs ?? []).map(p => p.job)));
   // A suite job of a pending generator is its proof: never listed unasked (the generator gate; named, it is listed).
-  const relatedJobs = index.jobs.filter(j => !cited.has(j.name) && generatorShown(j.generator, intent)).map(j => ({ j, ...scoreJob(j, terms) })).filter(x => x.score > 1).sort((a, b) => b.score - a.score).slice(0, 3)
+  const relatedJobs = index.jobs.filter(j => !cited.has(j.name) && generatorShown(j.generator, intent)).map(j => ({ j, ...scoreJob(j, terms, index.lane) })).filter(x => x.score > 1).sort((a, b) => b.score - a.score).slice(0, 3)
     .map(x => ({ job: x.j.name, why: x.why, description: x.j.description.slice(0, 120), level: jobLevel(x.j) }));
   const covered = new Set(matches.flatMap(m => m.why).concat(unavailable.flatMap(u => u.why)).flatMap(whyWords));
   const unmatched = raw.filter(t => ![...from.get(t) ?? []].some(c => c.split(' ').every(part => covered.has(part))));
@@ -1405,7 +1415,9 @@ export function packetMatch(index, id, why = [], from = 'module') {
 }
 function relatedNotes(index, c, terms) {
   const notes = [];
-  for (const name of c.proofs?.[index.lane] ?? []) { const job = index.jobs.find(j => j.name === name); for (const n of job?.notes ?? []) if (terms.some(t => tokens(n.text).includes(t))) notes.push({ job: name, op: n.op, verb: n.verb, text: n.text.length > 200 ? n.text.slice(0, 197) + '...' : n.text }); }
+  for (const name of c.proofs?.[index.lane] ?? []) {
+    const job = index.jobs.find(j => j.name === name); const key = suiteDir(index.lane) + '/' + name;
+    for (const n of job?.notes ?? []) if (terms.some(t => tokens(jobSearchText(anvilRoot, key, n.op, n.text)).includes(t))) notes.push({ job: name, op: n.op, verb: n.verb, text: n.text.length > 200 ? n.text.slice(0, 197) + '...' : n.text }); }
   return notes.slice(0, 4);
 }
 
@@ -2031,9 +2043,9 @@ function fitAsked(answer, { expansions, units, rejected }, fit, { budgetBytes, l
 // model part, never to a part asked (review of 2026-10-11: +20 KB of matches, contracts and outsystemsUi in calls 15 and
 // 20). continuations.next / continuations.pages are the exact expand calls of the rest, each packed to fit the ceiling.
 // The ceiling of one answer is the MCP answer ceiling of ssam.mjs less the room its shaper keeps: budgetCeiling(
-// maxAnswerBytes()) there (SSAM_MAX_ANSWER_BYTES, 40960, less 2048), as module-map.mjs DEFAULT_MAP_BUDGET. It is written
+// maxAnswerBytes()) from the shared context budget, as module-map.mjs DEFAULT_MAP_BUDGET. It is written
 // again here because discovery.mjs never loads the server (ssam.mjs loads it); discover-asked.test.mjs holds the two equal.
-export const answerCeiling = (env = process.env) => { const n = Number(env.SSAM_MAX_ANSWER_BYTES); return Math.max(4096, (Number.isInteger(n) && n >= 4096 ? n : 40960) - 2048); };
+export const answerCeiling = (env = process.env) => budgetCeiling(maxAnswerBytes(env));
 const neededBytes = r => (r.answer?.size?.status === 'insufficient' ? r.answer.size.minimalBytes ?? null : r.minimalBytes ?? null);
 // The adjustment, written right after the intent (or the lane), in place of the one the answer had (discoverAll restates
 // it), and in size.budgetAdjusted (the answer's own field: an input layer that writes its own inputAdjusted over the
@@ -2091,6 +2103,17 @@ export function silentlyLost(answer, { osui = null, extras = null } = {}) {
   return [...(osui && answer.outsystemsUi == null && !truncated.some(t => t.section === 'outsystemsUi') ? ['outsystemsUi'] : []),
     ...['provenExample', 'steps', 'values'].filter(k => (extras?.[k] != null || extras?.omitted?.includes(k)) && answer[k] == null && !noted(k))];
 }
+// The sections an answer would lose without a word, named in size.truncated in the form silentlyLost reads (outsystemsUi;
+// c07 "left out by the budget: <keys>; raise budgetBytes"): the answer may pass its budget by that note, never by content.
+function declareLost(answer, keys) {
+  if (!keys.length || !answer?.size) return answer;
+  const c07 = keys.filter(k => k !== 'outsystemsUi');
+  const notes = [...(keys.includes('outsystemsUi') ? [{ section: 'outsystemsUi', recover: 'left out by the budget; raise budgetBytes' }] : []),
+    ...(c07.length ? [{ section: 'c07', recover: `left out by the budget: ${c07.join(', ')}; raise budgetBytes` }] : [])];
+  const out = { ...answer, size: { ...answer.size, status: answer.size.status === 'within' ? 'reduced' : answer.size.status, truncated: [...(answer.size.truncated ?? []), ...notes], bytes: 0 } };
+  for (let i = 0, m = bytes(out); i < 6 && out.size.bytes !== m; i++) { out.size.bytes = m; m = bytes(out); }
+  return out;
+}
 // `fitAt(budget, {page, model})` -> {answer, minimalBytes, keptMinimalBytes}: the answer at that budget (page: the units
 // left out go to pages of the ceiling; model: the model part, with the parts asked, budgeted at that many bytes, the room
 // above it left to the sections). `sections` {floor(budget), lost(answer)}: the floor of the sections of the request and
@@ -2101,10 +2124,15 @@ export function silentlyLost(answer, { osui = null, extras = null } = {}) {
 // not fit there, the budget rises by the floor, the model part as the caller's budget gave it.
 function atEntry(fitAt, { budgetBytes, ceilingBytes, sections = null }) {
   const first = fitAt(budgetBytes);
-  if (ceilingBytes == null) return first.answer;
   const floorOf = B => (sections ? sections.floor(B) : 0);
   const lost = a => !!sections && sections.lost(a);
   const capped = (B, cap, options = {}) => fitAt(B, cap < B ? { ...options, model: cap } : options);
+  // Without a ceiling (a caller that budgets the answer itself: the reruns of discoverAll, the work packet, tests) the
+  // model part stays as the budget gave it, but a section is never lost without a word (INT-3 of the CX11 integration: at
+  // the 28 KB default the o11 timer answer dropped provenExample and values in silence): what found no room is named in
+  // size.truncated (declareLost). The entry with a ceiling (ssam_discover, discoverAll) refits below: the model part under
+  // the budget less the sections' floor, so lower-priority model detail goes first and the sections stay.
+  if (ceilingBytes == null) return lost(first.answer) ? declareLost(first.answer, sections.which?.(first.answer) ?? []) : first.answer;
   let need = neededBytes(first);
   if (need == null || need <= budgetBytes) {
     if (!lost(first.answer)) return first.answer;
@@ -2259,7 +2287,9 @@ export function provenExample(sources, index, matches, intent, { unmatched = [] 
     const c = index.capabilities.find(k => k.id === m.id);
     for (const [order, name] of (c?.proofs?.[index.lane] ?? []).entries()) {
       const job = index.jobs.find(j => j.name === name); if (!job) continue;
-      const text = normalize([job.name.replaceAll('-', ' '), job.description, ...Object.keys(job.types ?? {}), ...Object.keys(job.props ?? {}), ...Object.keys(job.steps ?? {})].join(' '));
+      // Matched on the Portuguese description the job had (search-aliases.mjs: search only), as before the translation.
+      const said = jobSearchText(anvilRoot, suiteDir(index.lane) + '/' + job.name, 'description', job.description) || job.description;
+      const text = normalize([job.name.replaceAll('-', ' '), said,...Object.keys(job.types ?? {}), ...Object.keys(job.props ?? {}), ...Object.keys(job.steps ?? {})].join(' '));
       // A job named for another operation (delete-..., rename-...) than the ones the intent focuses is not its example.
       const named = /(?:^|-)(delete|rename|move|reorder|replace|duplicate)(?:-|$)/.exec(job.name)?.[1];
       const off = named && !(m.focus?.ops ?? []).includes(named === 'reorder' ? 'move' : named);
@@ -2383,7 +2413,8 @@ async function discoverCore({ lane = 'odc', intent = '', app = null, detail = nu
   else if (index.identity.jobs.current === 0) identity.warnings.push(`job results exist (${index.identity.jobs.results}) but none matches the current job/fixture/kernel/Studio combination: they are historical; rerun the lane suite for current proofs`);
   // `--detail <id>` is the single-capability form of `--expand`; `--type` adds the native metadata of one interface.
   const expandSpec = [expand, detail ? `${detail}:contract+example+evidence+bindings` : null, type ? `native:${type}` : null].filter(Boolean).join(',');
-  const parsed = expandSpec ? parseExpand(expandSpec) : null;
+  const packetPart = packet && String(expand ?? '').startsWith('packet:') ? expand : null;
+  const parsed = expandSpec && !packetPart ? parseExpand(expandSpec) : null;
   if (parsed && !intent.trim()) {
     const { requests, problems: parseProblems } = parsed;
     if (parseProblems.length) return { ok: false, schemaVersion: DISCOVERY_SCHEMA, lane, error: 'invalid expand: ' + parseProblems.join('; '), identity };
@@ -2419,7 +2450,7 @@ async function discoverCore({ lane = 'odc', intent = '', app = null, detail = nu
     const fitAt = (B, { page = false, model = null } = {}) => (ceilingBytes == null ? { answer: fitExpand(B), minimalBytes: null }
       : fitAsked(answer, { expansions, units, rejected: [] }, b => fitExpand(b, { keepExpansions: true }, model), { budgetBytes: B, lane, pageBytes: page ? ceilingBytes : null, reduce: page }));
     const requestUi = uiOf(expansions);
-    return atEntry(fitAt, { budgetBytes, ceilingBytes, sections: requestUi ? { floor: () => sectionsFloor({ osui: requestUi }).bytes, lost: a => silentlyLost(a, { osui: uiOf(a.expansions) }).length > 0 } : null });
+    return atEntry(fitAt, { budgetBytes, ceilingBytes, sections: requestUi ? { floor: () => sectionsFloor({ osui: requestUi }).bytes, lost: a => silentlyLost(a, { osui: uiOf(a.expansions) }).length > 0, which: a => silentlyLost(a, { osui: uiOf(a.expansions) }) } : null });
   }
   // What this lane covers: its own capabilities plus the shared ones projected for it. Nothing is inherited from
   // another lane's descriptor: an intent outside this coverage answers with this list, not with the other lane's.
@@ -2441,7 +2472,9 @@ async function discoverCore({ lane = 'odc', intent = '', app = null, detail = nu
   // example, plus the elements of the capture the intent names (its module digest) and the team rules; nothing in it
   // depends on the time or the cache, so the same input gives the same bytes. Within the answer ceiling (PACKET_BUDGET).
   if (packet) {
-    const { workPacket, PACKET_BUDGET, namedCapabilities } = await import('./work-packet.mjs');
+    const { workPacket, PACKET_BUDGET, namedCapabilities, packetRecovery } = await import('./work-packet.mjs');
+    const recover = packetPart ? packetRecovery(packetPart) : null;
+    if (recover?.invalid) return { ok: false, code: 'PACKET_RECOVERY_INVALID', error: 'invalid packet section recovery' };
     let found = null;
     if (app) { const reader = digest ?? laneDigest(lane, sources); found = reader ? await reader(app) : { ok: false, target: app, error: 'no module digest reader on lane ' + lane }; }
     // The capabilities of the elements the intent names exactly in the module come first; the proven example is chosen
@@ -2477,12 +2510,12 @@ async function discoverCore({ lane = 'odc', intent = '', app = null, detail = nu
     // servidor/fase4-25: hosted, no producer cache of the server is read (the O11 cache is off hosted: no .local above ws:o11/work).
     const producers = lane === 'o11' && !(await import('./executor.mjs')).hostedContext() ? packetProducers(producerCache === undefined ? path.join(anvilRoot, '.local', 'producer-cache') : producerCache,
       { intent: said, module: found?.ok ? found.digest?.module?.name ?? null : null }) : null;
-    return workPacket({ lane, intent, app, basis: { index: index.key }, matches, unavailable: q.unavailable, functions, text, environment, textRoute, producers,
+    return workPacket({ lane, intent, app, limit, basis: { index: index.key }, matches, unavailable: q.unavailable, functions, text, environment, textRoute, producers,
       categories: new Map(index.capabilities.map(c => [c.id, c.category])),
       slices: (pointers, form) => contractSlice(index, pointers, { full: form === 'full', capBytes: 3072 }),
       steps: steps ? { kinds: steps.kinds, shape: steps.shape, grammar: steps.grammar } : null,
-      proven: chosen, example: firstExample, exampleFor: first?.id ?? null, module: found, operations, expand: expandSpec || null },
-    { budgetBytes: Math.min(budgetBytes, PACKET_BUDGET) });
+      proven: chosen, example: firstExample, exampleFor: first?.id ?? null, module: found, operations, expand: packetPart ? null : expandSpec || null },
+    { budgetBytes: Math.min(budgetBytes, PACKET_BUDGET), recover });
   }
   let context = null;
   if (app) context = inspect ? await applicationContext(index, sources, { app, matches: q.matches, terms: q.terms, inspect, map }) : { ok: false, status: 'failed', code: 'NO_READER', target: app, error: 'no reader available in this entry for lane ' + lane, reads: [], signatures: [], reuse: [] };
@@ -2566,7 +2599,7 @@ async function discoverCore({ lane = 'odc', intent = '', app = null, detail = nu
   };
   const fit = (B, cap = null) => fitWithSteps(room => fitRouted(room, cap), extras, B);
   const fitAt = (B, { page = false, model = null } = {}) => (asked ? fitAsked(answer, asked, b => fit(b, model), { budgetBytes: B, lane, pageBytes: page ? ceilingBytes : null }) : { answer: fit(B, model), minimalBytes: null });
-  const sections = osui || proven || steps || values ? { floor: B => sectionsFloor({ osui, extras }, B).bytes, lost: a => silentlyLost(a, { osui, extras }).length > 0 } : null;
+  const sections = osui || proven || steps || values ? { floor: B => sectionsFloor({ osui, extras }, B).bytes, lost: a => silentlyLost(a, { osui, extras }).length > 0, which: a => silentlyLost(a, { osui, extras }) } : null;
   return atEntry(fitAt, { budgetBytes, ceilingBytes, sections });
 }
 

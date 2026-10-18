@@ -1,10 +1,10 @@
 {
- "description": "O CONTRATO do evento de bloco aguenta o vocabulario inteiro de tipos, nao so Text e Integer: o bloco CartPanel declara OnCheckout com OITO parametros - uma LISTA de estrutura (CartLine List), um REGISTO (CartLine), um identificador de entidade (Product Identifier), Decimal, Integer, Date Time, Boolean e Text. O ITriggerNode manda os oito, o handler CartPanel1_OnCheckout recebe-os com os mesmos tipos e a tela USA os dois compostos: o registo por atributo (LastSummary.Qty) e a lista como Source de uma IList que itera com LastLines.Current.Qty (lista de estrutura nao tem o nivel intermediario do aggregate). Complementa tests/jobs/block-events-reactive.json, que so prova Integer e Text.",
+ "description": "The block event CONTRACT holds up the whole type vocabulary, not only Text and Integer: the block CartPanel declares OnCheckout with EIGHT parameters - a LIST of structure (CartLine List), a RECORD (CartLine), an entity identifier (Product Identifier), Decimal, Integer, Date Time, Boolean and Text. The ITriggerNode sends all eight, the handler CartPanel1_OnCheckout receives them with the same types and the screen USES the two composites: the record by attribute (LastSummary.Qty) and the list as the Source of an IList that iterates with LastLines.Current.Qty (a list of structure does not have the intermediate level of the aggregate). It complements tests/jobs/block-events-reactive.json, which only proves Integer and Text.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "create", "parent": "@espace", "type": "IServerEntity", "name": "Product", "as": "$ent", "_why": "1. os tipos compostos precisam de uma entidade e de uma structure reais"},
+  {"op": "create", "parent": "@espace", "type": "IServerEntity", "name": "Product", "as": "$ent", "_why": "1. the composite types need a real entity and a real structure"},
   {"op": "create", "parent": "$ent", "type": "IEntityAttribute", "name": "Id", "as": "$pid"},
   {"op": "set", "target": "$pid", "prop": "DataType", "value": "Long Integer"},
   {"op": "set", "target": "$pid", "prop": "IsAutoNumber", "value": "Yes"},
@@ -20,7 +20,7 @@
   {"op": "create", "parent": "$st", "type": "IStructureAttribute", "name": "LineTotal", "as": "$slt"},
   {"op": "set", "target": "$slt", "prop": "DataType", "value": "Decimal"},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "CartPanel", "as": "$blk", "_why": "2. o bloco produtor; Lines e Line sao o que vai viajar no evento"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "CartPanel", "as": "$blk", "_why": "2. the producer block; Lines and Line are what will travel in the event"},
   {"op": "create", "parent": "$blk", "type": "IInputParameter", "name": "Title", "as": "$blkIn"},
   {"op": "set", "target": "$blkIn", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$blk", "type": "ILocalVariable", "name": "Lines", "as": "$vLines"},
@@ -28,7 +28,7 @@
   {"op": "create", "parent": "$blk", "type": "ILocalVariable", "name": "Line", "as": "$vLine"},
   {"op": "set", "target": "$vLine", "prop": "DataType", "value": "CartLine"},
 
-  {"op": "create", "parent": "$blk", "type": "IBlockEvent", "name": "OnCheckout", "as": "$ev", "_why": "3. o contrato: um IInputParameter por tipo, do mais simples ao composto"},
+  {"op": "create", "parent": "$blk", "type": "IBlockEvent", "name": "OnCheckout", "as": "$ev", "_why": "3. the contract: one IInputParameter per type, from the simplest to the composite"},
   {"op": "set", "target": "$ev", "prop": "Description", "value": "Disparado quando o carrinho fecha; leva as linhas inteiras, nao so o total"},
   {"op": "set", "target": "$ev", "prop": "IsMandatory", "value": false},
   {"op": "create", "parent": "$ev", "type": "IInputParameter", "name": "Lines", "as": "$e1", "_why": "LISTA de estrutura"},
@@ -45,16 +45,16 @@
   {"op": "set", "target": "$e6", "prop": "DataType", "value": "Boolean"},
   {"op": "create", "parent": "$ev", "type": "IInputParameter", "name": "Note", "as": "$e7"},
   {"op": "set", "target": "$e7", "prop": "DataType", "value": "Text"},
-  {"op": "create", "parent": "$ev", "type": "IInputParameter", "name": "FirstProductId", "as": "$e8", "_why": "IDENTIFICADOR de entidade"},
+  {"op": "create", "parent": "$ev", "type": "IInputParameter", "name": "FirstProductId", "as": "$e8", "_why": "entity IDENTIFIER"},
   {"op": "set", "target": "$e8", "prop": "DataType", "value": "Product Identifier"},
 
-  {"op": "create", "parent": "$blk", "type": "IContainer", "name": "Body", "as": "$body", "_why": "4. conteudo do bloco e o botao que dispara"},
+  {"op": "create", "parent": "$blk", "type": "IContainer", "name": "Body", "as": "$body", "_why": "4. content of the block and the button that triggers"},
   {"op": "create", "parent": "$body", "type": "IExpression", "as": "$capt"},
   {"op": "set", "target": "$capt", "prop": "Value", "value": "Title"},
   {"op": "create", "parent": "$body", "type": "IButton", "name": "CheckoutButton", "as": "$btn"},
   {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Checkout"},
 
-  {"op": "create", "parent": "$blk", "type": "IScreenAction", "name": "Checkout", "as": "$act", "_why": "5. disparar: cada argumento e uma expressao no escopo do BLOCO"},
+  {"op": "create", "parent": "$blk", "type": "IScreenAction", "name": "Checkout", "as": "$act", "_why": "5. trigger: each argument is an expression in the scope of the BLOCK"},
   {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$c0"},
   {"op": "create", "parent": "$act", "type": "IAssignNode", "as": "$cAs"},
   {"op": "set", "target": "$cAs", "prop": "Label", "value": "BuildLine"},
@@ -81,7 +81,7 @@
   {"op": "layout", "target": "$act"},
   {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$act"},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CartDemo", "as": "$scr", "_why": "6. a tela consumidora guarda os oito valores em variaveis do mesmo tipo"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CartDemo", "as": "$scr", "_why": "6. the consumer screen stores the eight values in variables of the same type"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "\"Cart\""},
@@ -103,7 +103,7 @@
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "LastProductId", "as": "$s8"},
   {"op": "set", "target": "$s8", "prop": "DataType", "value": "Product Identifier"},
 
-  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "CartPanel1_OnCheckout", "as": "$h", "_why": "7. o handler: um IInputParameter por parametro do evento, com o MESMO tipo"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "CartPanel1_OnCheckout", "as": "$h", "_why": "7. the handler: one IInputParameter per event parameter, with the SAME type"},
   {"op": "create", "parent": "$h", "type": "IInputParameter", "name": "Lines", "as": "$h1"},
   {"op": "set", "target": "$h1", "prop": "DataType", "value": "CartLine List"},
   {"op": "create", "parent": "$h", "type": "IInputParameter", "name": "Summary", "as": "$h2"},
@@ -152,7 +152,7 @@
   {"op": "link", "from": "$hAs", "to": "$h9"},
   {"op": "layout", "target": "$h"},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "CartPanel1", "as": "$inst", "source": "IMobileBlock:CartPanel", "_why": "8. a instancia: os oito argumentos sao expressoes no escopo do EVENTO"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "CartPanel1", "as": "$inst", "source": "IMobileBlock:CartPanel", "_why": "8. the instance: the eight arguments are expressions in the scope of the EVENT"},
   {"op": "set", "target": "$inst/Title", "prop": "Value", "value": "\"Carrinho\""},
   {"op": "set", "target": "$inst/OnCheckout", "prop": "Handler", "value": "$h"},
   {"op": "set", "target": "$inst/OnCheckout/Lines", "prop": "Value", "value": "Lines"},
@@ -164,12 +164,12 @@
   {"op": "set", "target": "$inst/OnCheckout/Note", "prop": "Value", "value": "Note"},
   {"op": "set", "target": "$inst/OnCheckout/FirstProductId", "prop": "Value", "value": "FirstProductId"},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "LinesList", "as": "$list", "_why": "9. a LISTA que chegou pelo evento e iteravel: Source da IList e Current SEM nivel intermediario"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "LinesList", "as": "$list", "_why": "9. the LIST that arrived through the event is iterable: Source of the IList and Current WITHOUT an intermediate level"},
   {"op": "set", "target": "$list", "prop": "Source", "value": "LastLines"},
   {"op": "create", "parent": "$list", "type": "IExpression", "as": "$lex"},
   {"op": "set", "target": "$lex", "prop": "Value", "value": "IntegerToText(LastLines.Current.Qty)"},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$echo", "_why": "10. os outros sete, inclusive o REGISTO por atributo (LastSummary.Qty)"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$echo", "_why": "10. the other seven, including the RECORD by attribute (LastSummary.Qty)"},
   {"op": "set", "target": "$echo", "prop": "Value", "value": "IntegerToText(LastCount) + \" linhas, \" + DecimalToText(LastTotal) + \", \" + LastNote + \", \" + BooleanToText(LastExpress) + \", \" + DateTimeToText(LastPlacedAt) + \", \" + LongIntegerToText(LastProductId) + \", \" + IntegerToText(LastSummary.Qty)"},
 
   {"op": "get", "target": "$ev", "_why": "InputParameters 8"},

@@ -1,5 +1,5 @@
 {
- "description": "TimelineItem (OutSystemsUI, Navigation) tipico; placeholders Left, Title, Content com dados do aggregate de tarefas.",
+ "description": "Typical TimelineItem (OutSystemsUI, Navigation); placeholders Left, Title, Content with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

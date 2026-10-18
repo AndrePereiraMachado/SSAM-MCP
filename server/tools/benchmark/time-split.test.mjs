@@ -1,3 +1,4 @@
+import '../../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

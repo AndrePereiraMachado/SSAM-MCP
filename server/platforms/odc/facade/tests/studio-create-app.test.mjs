@@ -2,6 +2,7 @@
 // of the steps (session, template, model, words, upload, open, publish), the journal reserved before the upload and
 // closed with the outcome, a lost upload answer is uncertain and never repeated, and the continuations are reads.
 // No Studio, no tenant, no kernel process.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,6 +10,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { registerStudioCreateApp, validateCreateAppInput, kernelArguments, namesWhole, APP_TEMPLATES } from '../studio-create-app.mjs';
 import { fakeAnvil } from './fixtures/fake-anvil.mjs';
+import { hashedWords } from '../destructive-operations.mjs';
 import { tempKernel, linked } from './fixtures/o11env-kernel.mjs';
 
 const WORDS = 'pode criar o app ZZ Criar Web e publicar';
@@ -112,7 +114,9 @@ test('create: session, template, model, words, upload, open, publish, in that or
   assert.deepEqual(h.bridge.calls[4].args, ['publish', manifest, '--wait', '15']);
   // one authorization, recorded for creating and publishing; the author is the open module's developer
   const m = JSON.parse(fs.readFileSync(manifest, 'utf8'));
-  assert.match(m.createAuthorization, /^pode criar o app ZZ Criar Web e publicar \[recorded /);
+  // CX15 r5 (N-2, converted): the manifest keeps sha256:<hex> of the words, never the words (before: the words).
+  assert.match(m.createAuthorization, new RegExp('^' + hashedWords('pode criar o app ZZ Criar Web e publicar') + ' \\[recorded '));
+  assert.equal(m.createAuthorization.includes('pode criar'), false);
   assert.equal(m.publishAuthorization, m.createAuthorization);
   assert.equal(m.author, 'dev-id-from-studio');
   assert.equal(v.app, 'ZZ Criar Web'); assert.equal(v.module, 'ZZCriarWeb'); assert.equal(v.published, true);

@@ -1,5 +1,5 @@
 {
- "description": "Image tipico: imagem binaria vinda da base (Type Binary, ImageContent = campo Binary Data do registro) numa lista de anexos, com o nome do arquivo ao lado.",
+ "description": "Typical Image: a binary image from the database (Type Binary, ImageContent = the Binary Data field of the record) in a list of attachments, with the file name beside it.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

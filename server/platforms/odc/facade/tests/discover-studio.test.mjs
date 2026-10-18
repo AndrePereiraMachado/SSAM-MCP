@@ -3,6 +3,7 @@
 // while the suite stamped its results with the installed Studio (11.55.91), so every proof read as historical. Order: the
 // selected connection's Studio > ANVIL_STUDIO_DIR > the registry's installation > %ProgramFiles% > the old copy. The
 // stamps are compared as before; only the folder they are compared against is the one the CLI binds.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

@@ -1,5 +1,5 @@
 {
- "description": "ProgressCircle do OSUI ligado a uma variavel: Progress, cor, tamanho e o percentual escrito no Content.",
+ "description": "ProgressCircle of OSUI bound to a variable: Progress, color, size and the percentage written in the Content.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

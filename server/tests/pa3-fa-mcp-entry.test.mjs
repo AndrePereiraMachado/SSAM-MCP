@@ -1,6 +1,7 @@
 // Atritos 3, lane fa, C39: one MCP entry per server. configure-mcp refuses to write a second entry that runs the SSAM
 // server of the same root under another name, keeps the existing one and names it back (DUPLICATE_MCP_ENTRY). Temporary
 // folders only; no client configuration outside the checkout is read or written.
+import '../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

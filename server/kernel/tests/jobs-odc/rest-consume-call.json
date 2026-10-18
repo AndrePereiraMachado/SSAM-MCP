@@ -1,8 +1,8 @@
 {
- "description": "ODC (cobertura C): CHAMAR o REST consumido. Espelha tests/jobs/rest-consume-call.json e fecha o elo que faltava na faixa ODC: criar o cliente REST nao serve de nada se nada o chama. O job cria o cliente (IRestClient + IRestStructure + IRestAction GET com URLPath parametrizado) e depois uma server action que o INVOCA com IExecuteServerActionNode apontado a IRestAction:<Nome>, passa o input da action como argumento do metodo e guarda um campo da resposta num Assign. Diferenca de plataforma: o O11 faz o mesmo com base job:rest-consume-get; aqui o job e autonomo sobre a fixture do InsuranceApp e tudo nasce com prefixo Wf para nao colidir com o app real da fixture.",
+ "description": "ODC (C coverage): CALL the consumed REST. Mirrors tests/jobs/rest-consume-call.json and closes the link that was missing in the ODC lane: creating the REST client is useless if nothing calls it. The job creates the client (IRestClient + IRestStructure + IRestAction GET with a parameterized URLPath) and then a server action that INVOKES it with an IExecuteServerActionNode pointed at IRestAction:<Name>, passes the input of the action as the argument of the method and stores a field of the response in an Assign. Platform difference: O11 does the same with base job:rest-consume-get; here the job is standalone over the InsuranceApp fixture and everything is born with the Wf prefix so as not to collide with the real app of the fixture.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCall_CepLookup (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCall_CepLookup (ServerAction)", "why": "ODC: an app (CrossDevice) does not expose a public server action (the live Studio gives an error); the action stays private and without a consumer in this proof job"}],
  "ops": [
   {"op": "create", "parent": "@espace", "type": "IRestClient", "name": "WfCallViaCepApi", "as": "$api"},
   {"op": "set", "target": "$api", "prop": "BaseURL", "value": "https://viacep.com.br"},
@@ -25,28 +25,28 @@
   {"op": "create", "parent": "$m", "type": "IRestActionInput", "name": "CEP", "as": "$in"},
   {"op": "set", "target": "$in", "prop": "DataType", "value": "Text"},
   {"op": "set", "target": "$in", "prop": "IsMandatory", "value": true},
-  {"op": "set", "target": "$in", "prop": "InputPlacement", "value": "UrlPlacement", "_why": "o {CEP} do URLPath so e substituido se o input for colocado na URL; sem isto o metodo compila mas chama o endpoint errado"},
+  {"op": "set", "target": "$in", "prop": "InputPlacement", "value": "UrlPlacement", "_why": "the {CEP} of the URLPath is only substituted if the input is placed in the URL; without this the method compiles but calls the wrong endpoint"},
   {"op": "create", "parent": "$m", "type": "IRestActionOutput", "name": "Response", "as": "$out"},
   {"op": "set", "target": "$out", "prop": "DataType", "value": "WfCallAddressResponse"},
   {"op": "set", "target": "$out", "prop": "OutputPlacement", "value": "BodyPlacement"},
 
-  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfCall_CepLookup", "as": "$act", "_why": "o ponto do job: uma server action propria que CHAMA o metodo REST consumido"},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfCall_CepLookup", "as": "$act", "_why": "the point of the job: an own server action that CALLS the consumed REST method"},
   {"op": "create", "parent": "$act", "type": "IInputParameter", "name": "Cep", "as": "$pin"},
   {"op": "set", "target": "$pin", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$act", "type": "IOutputParameter", "name": "Uf", "as": "$pout"},
   {"op": "set", "target": "$pout", "prop": "DataType", "value": "Text"},
 
-  {"op": "create", "parent": "$act", "type": "IStartNode", "name": "Start", "as": "$start", "_why": "ao contrario do IRestServiceAction (REST exposto, que ja nasce com Start e End), uma IServerAction crua precisa que o job crie os seus terminais"},
+  {"op": "create", "parent": "$act", "type": "IStartNode", "name": "Start", "as": "$start", "_why": "unlike the IRestServiceAction (exposed REST, which is already born with Start and End), a raw IServerAction needs the job to create its terminals"},
 
   {"op": "create", "parent": "$act", "type": "IExecuteServerActionNode", "name": "WfCallGetAddressByCep", "as": "$call"},
-  {"op": "set", "target": "$call", "prop": "Action", "value": "IRestAction:WfCallGetAddressByCep", "_why": "e ESTE set que faz a chamada existir: o no de Execute aponta para o metodo REST pela referencia Tipo:Nome, exatamente como apontaria para uma server action propria"},
-  {"op": "set", "target": "$call/CEP", "prop": "Value", "value": "Cep", "_why": "argumento pelo nome do input do metodo REST; o valor e expressao OutSystems e le o input da action que chama"},
+  {"op": "set", "target": "$call", "prop": "Action", "value": "IRestAction:WfCallGetAddressByCep", "_why": "it is THIS set that makes the call exist: the Execute node points to the REST method through the reference Type:Name, exactly as it would point to an own server action"},
+  {"op": "set", "target": "$call/CEP", "prop": "Value", "value": "Cep", "_why": "argument by the name of the input of the REST method; the value is an OutSystems expression and reads the input of the action that calls"},
 
   {"op": "create", "parent": "$act", "type": "IAssignNode", "name": "SetOut", "as": "$assign"},
-  {"op": "set", "target": "$assign", "prop": "Label", "value": "SetOut", "_why": "Assign nao tem Name: o que aparece no fluxo e o Label"},
+  {"op": "set", "target": "$assign", "prop": "Label", "value": "SetOut", "_why": "Assign has no Name: what appears in the flow is the Label"},
   {"op": "create", "parent": "$assign", "type": "IAssignment", "as": "$as1"},
   {"op": "set", "target": "$as1", "prop": "Variable", "value": "Uf"},
-  {"op": "set", "target": "$as1", "prop": "Value", "value": "WfCallGetAddressByCep.Response.uf", "_why": "a resposta le-se pelo NOME DO NO (nao pelo nome do metodo): <No>.<Output>.<Atributo>, com o atributo escrito como esta na IRestStructure"},
+  {"op": "set", "target": "$as1", "prop": "Value", "value": "WfCallGetAddressByCep.Response.uf", "_why": "the response is read by the NODE NAME (not by the method name): <Node>.<Output>.<Attribute>, with the attribute written as it is in the IRestStructure"},
 
   {"op": "create", "parent": "$act", "type": "IEndNode", "name": "End", "as": "$end"},
   {"op": "link", "from": "$start", "to": "$call"},
@@ -55,8 +55,8 @@
   {"op": "layout", "target": "$act"},
 
   {"op": "get", "target": "$m", "_why": "le de volta o metodo consumido: HTTPMethod e URLPath parametrizado"},
-  {"op": "get", "target": "$call", "_why": "prova que o no de Execute ficou mesmo apontado ao IRestAction"},
-  {"op": "dump", "target": "$act", "depth": 4, "_why": "le de volta o fluxo inteiro da action que chama: Start, Execute com o argumento, Assign com a expressao da resposta e End"},
-  {"op": "usages", "target": "$m", "_why": "a prova do elo: o metodo REST consumido tem agora um consumidor real, o no de Execute da WfCall_CepLookup"}
+  {"op": "get", "target": "$call", "_why": "proves that the Execute node really ended up pointed at the IRestAction"},
+  {"op": "dump", "target": "$act", "depth": 4, "_why": "reads back the whole flow of the calling action: Start, Execute with the argument, Assign with the response expression and End"},
+  {"op": "usages", "target": "$m", "_why": "the proof of the link: the consumed REST method now has a real consumer, the Execute node of WfCall_CepLookup"}
  ]
 }

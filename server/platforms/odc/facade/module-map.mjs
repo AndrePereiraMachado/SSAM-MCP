@@ -25,6 +25,7 @@
 //   node module-map.mjs --prefetch <capture.oml> --lane o11|odc      (the detached warm-up, see prefetchIndex)
 import { withNormalizationsOf } from './normalizations.mjs';
 import fs from 'node:fs';
+import { budgetCeiling, maxAnswerBytes } from './context-budget.mjs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -225,13 +226,10 @@ const integer = (name, value, min, max, fallback) => {
   if (!Number.isInteger(n) || n < min || n > max) throw new Error(name + ' must be an integer between ' + min + ' and ' + max);
   return n;
 };
-// The default byte budget is the MCP answer ceiling of ssam.mjs (SSAM_MAX_ANSWER_BYTES, 40960) less the room its shaper
+// The default byte budget is the MCP answer ceiling of ssam.mjs (SSAM_MAX_ANSWER_BYTES from context-budget.mjs) less the room its shaper
 // keeps for next steps (2048 bytes, ssam.mjs budgetCeiling): a map never answers more than a client takes in one piece,
 // and the ceiling never has to page it.
-export const DEFAULT_MAP_BUDGET = (env = process.env) => {
-  const n = Number(env.SSAM_MAX_ANSWER_BYTES); const ceiling = Number.isInteger(n) && n >= 4096 ? n : 40960;
-  return Math.min(1048576, Math.max(4096, ceiling - 2048));
-};
+export const DEFAULT_MAP_BUDGET = (env = process.env) => Math.min(1048576, budgetCeiling(maxAnswerBytes(env)));
 function mapRequest(input) {
   const lane = input.lane ?? 'odc';
   if (!['odc', 'o11'].includes(lane)) throw new Error('Unknown lane ' + lane + '; lanes: odc, o11');
@@ -808,8 +806,10 @@ async function ddlAnswer(q, { file, sha256, canonical, captured, snapshot, start
 }
 
 // The whole module digest of a target, unpaged (the work packet of ssam_discover, work-packet.mjs): the same target rules,
-// capture and store as view "digest". {ok, lane, target, file, sourceSha256, contentSha256, module, digest, cache}; a
-// failure answers {ok:false, error} (or the snapshot's own refusal) and never throws.
+// capture and store as view "digest". {ok, lane, target, file, sourceSha256, contentSha256, module, digest, cache,
+// capturedBy?, versionId?}; a failure answers {ok:false, error} (or the snapshot's own refusal) and never throws.
+// fix/unpublished-library round 2 (A3): it says how a module name was captured, as the paged digest does (digestAnswer):
+// capturedBy "open-tab" (a Service Studio tab) or "published-oml" (a closed module: its published OML, with versionId).
 export async function moduleDigest(input = {}, deps = {}) {
   const { read = readSnapshot, reader = {}, env = process.env } = deps;
   const lane = input.lane ?? 'odc';
@@ -821,8 +821,11 @@ export async function moduleDigest(input = {}, deps = {}) {
     if (target.refused) return target.refused;
     if (!expectedHolds(q, target)) throw new Error(CHANGED);
     const { loaded, cache } = await ensureDigest(lane, { file: target.file, sha256: target.sha256, read, reader, env });
+    const snapshot = target.snapshot;
     return { ok: true, lane, target: input.target, file: target.file, sourceSha256: target.sha256, contentSha256: target.canonical.contentSha256,
-      module: loaded.digest.module, digest: loaded.digest, cache };
+      module: loaded.digest.module, digest: loaded.digest, cache,
+      ...(typeof snapshot?.capturedBy === 'string' ? { capturedBy: snapshot.capturedBy } : {}),
+      ...(snapshot?.capturedBy === PUBLISHED_CAPTURE ? { versionId: snapshot.versionId ?? null } : {}) };
   } catch (error) {
     return { ok: false, lane, target: input.target, error: error.message };
   }
@@ -1123,7 +1126,7 @@ export async function captureO11Module(module, { tool = 'ssam_map', env = proces
   // Way 1: the published OML (contract I7), never a tab.
   const published = async (name, reason) => {
     const fetchIt = { tool: 'o11_environment', arguments: { action: 'download', module: name },
-      why: 'baixa o OML publicado sem abrir aba; depois ssam_map {lane:"o11", target:<arquivo devolvido>}' };
+      why: 'downloads the published OML without opening a tab; then ssam_map {lane:"o11", target:<returned file>}' };
     let fn = download;
     if (fn === undefined) { try { fn = (await import('./o11-environment.mjs')).downloadModule ?? null; } catch { fn = null; } }
     if (typeof fn !== 'function') return { ok: false, code: 'MODULE_NOT_OPEN', module: name, outcome: 'not-sent',
@@ -1149,7 +1152,7 @@ export async function captureO11Module(module, { tool = 'ssam_map', env = proces
   catch (error) {
     const refused = (await studioTool()).studioFailure(error);
     return { ...refused, code: refused.code ?? 'STUDIO_READ_FAILED', module, outcome: refused.outcome ?? 'not-sent',
-      continuation: refused.continuation ?? { tool: 'o11_studio', arguments: { command: 'status' }, why: 'as abas abertas do Studio não puderam ser lidas; veja o estado dele' } };
+      continuation: refused.continuation ?? { tool: 'o11_studio', arguments: { command: 'status' }, why: 'the open tabs of the Studio could not be read; see its state' } };
   }
   const all = (Array.isArray(listed?.modules) ? listed.modules : []).filter(m => m && m.hasESpace !== false && typeof m.name === 'string' && m.name);
   const resolved = resolveOpenModule(module, { open: all, lane: 'o11' });
@@ -1168,7 +1171,7 @@ export async function captureO11Module(module, { tool = 'ssam_map', env = proces
       if (error?.code === 'CANCELLED' || signal?.aborted) return { ok: false, code: 'CANCELLED', method: 'snapshot_module', outcome: 'unknown',
         error: 'The capture was cancelled; it stopped waiting.', continuation: { tool: 'o11_studio', arguments: { command: 'status' }, why: 'read the Studio state before repeating it' } };
       if (error?.code === 'BRIDGE_TIMEOUT') return { ok: false, code: 'BRIDGE_TIMEOUT', method: 'snapshot_module', outcome: error.executed === false ? 'not-sent' : 'unknown',
-        error: 'The capture of ' + tab.name + ' got no answer in time.', continuation: { tool: 'o11_studio', arguments: { command: 'status' }, why: 'o Studio pode estar ocupado; leia o estado antes de repetir' } };
+        error: 'The capture of ' + tab.name + ' got no answer in time.', continuation: { tool: 'o11_studio', arguments: { command: 'status' }, why: 'the Studio may be busy; read the state before repeating' } };
       return null;
     }
   };

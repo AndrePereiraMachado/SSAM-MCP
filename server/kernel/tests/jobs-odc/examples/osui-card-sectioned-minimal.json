@@ -1,5 +1,5 @@
 {
- "description": "CardSectioned do OSUI: a instancia com titulo e conteudo nos placeholders.",
+ "description": "CardSectioned of OSUI: the instance with a title and content in the placeholders.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

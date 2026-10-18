@@ -150,7 +150,16 @@ public class DeliveryStallRefreshTests
         Assert.Equal(0, test.Studio.Count("merge_from_oml"));
         Assert.Equal(1, test.Studio.Count("refresh_references"));
         AssertTheNoteNamesWhatTheCallSentAgain(resumed, SettledRefresh(resumed), test.Studio);
-        Assert.Equal("BridgeCallException: refresh_references: Studio call stopped (dialog): Unexpected Error; this call was not retried", resumed["error"]!.ToString());
+        var error = resumed["error"]!.ToString();
+        Assert.StartsWith("BridgeCallException: refresh_references: Studio call stopped (dialog): Unexpected Error; this call was not retried", error);
+        // fix-ext-refs round 3 (F3): the refresh that stopped may still change the module; the answer declares it (pending,
+        // with its undo) after the stop, and still never says that nothing was repeated.
+        Assert.Contains("the Studio's Refresh References did not finish (the Studio stopped answering", error);
+        Assert.Contains("and may still refresh", error);
+        // Review round 4 (N1): the earlier run's stopped refresh is never said to have ended while this run saw no end.
+        Assert.DoesNotContain("ended by itself", error);
+        Assert.Contains("Ctrl+Z", error);
+        Assert.DoesNotContain("nothing was repeated", error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

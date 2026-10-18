@@ -3,6 +3,7 @@
 // here); one action by element (@key, full name or last segment), its text in pages inside the budget with nothing
 // dropped, the id table on request; without element the list of the actions; a name that matches several actions or
 // none answers the candidates.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

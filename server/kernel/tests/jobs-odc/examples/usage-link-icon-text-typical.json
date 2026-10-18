@@ -1,5 +1,5 @@
 {
- "description": "Link com icone e texto dinamico em cada linha de uma List: o texto vem do registro e o clique abre o detalhe passando o Id como argumento.",
+ "description": "A Link with an icon and a dynamic text in each row of a List: the text comes from the record and the click opens the detail passing the Id as an argument.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -22,12 +22,12 @@
 
   {"op": "create", "parent": "$list", "type": "ILink", "name": "OpenLink", "as": "$lnk"},
   {"op": "set", "target": "$lnk", "prop": "Style", "value": "\"display-flex align-items-center\""},
-  {"op": "delete", "target": "$lnk/#ITextWidget", "_why": "sem o texto fixo 'Link', o conteudo do Link e o que o job cria dentro dele"},
+  {"op": "delete", "target": "$lnk/#ITextWidget", "_why": "without the fixed text 'Link', the content of the Link is what the job creates inside it"},
   {"op": "create", "parent": "$lnk", "type": "IIcon", "name": "OpenIcon", "as": "$ico"},
   {"op": "set", "target": "$ico", "prop": "Icon", "value": "caret-right"},
-  {"op": "set", "target": "$ico", "prop": "Weight", "value": "regular", "_why": "no ODC o nome do icone (Phosphor) so resolve junto com o Weight"},
+  {"op": "set", "target": "$ico", "prop": "Weight", "value": "regular", "_why": "on ODC the icon name (Phosphor) resolves only together with the Weight"},
   {"op": "create", "parent": "$lnk", "type": "IExpression", "as": "$text"},
-  {"op": "set", "target": "$text", "prop": "Value", "value": "GetProducts.List.Current.Product.Name", "_why": "texto visivel e dinamico: uma Expression filha do Link"},
+  {"op": "set", "target": "$text", "prop": "Value", "value": "GetProducts.List.Current.Product.Name", "_why": "a visible and dynamic text: an Expression child of the Link"},
   {"op": "set", "target": "$lnk/OnClick", "prop": "Destination", "value": "IMobileScreen:ProductDetail"},
   {"op": "set", "target": "$lnk/OnClick/ProductId", "prop": "Value", "value": "GetProducts.List.Current.Product.Id"},
 

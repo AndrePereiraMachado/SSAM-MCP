@@ -1,12 +1,12 @@
 {
- "description": "ODC (cobertura: APAGAR uma tela que JA EXISTIA): a tela WfCovTaskDetail vem da cadeia screen-form -> screen-list e nao e criada aqui; este job so mexe no que herdou. Apagar uma tela e tratar TRES consumidores, e so dois estao na interface: o OnClick do TaskItem da lista WfCovTasks, o OnClick do botao NewButton e - o que ninguem procura - o proprio modulo, porque no ODC o ESpace tem DefaultScreen e a primeira tela criada headless ficou com esse papel; esse terceiro aparece na recusa com o caminho VAZIO, que e o ESpace a nao ter caminho nenhum. A recusa completa esta em tests/jobs-odc-negative/delete-screen-in-use.json. O caminho limpo trata cada um a seu modo: a navegacao do item e REPONTADA para a tela nova WfCovTaskEditor (o set de Destination reconstroi os argumentos pelo contrato do destino, por isso o valor do argumento volta a ser escrito), a do botao e REMOVIDA com o proprio botao porque o link so existia para chegar a tela que sai, e a DefaultScreen do modulo passa para a lista. Com zero consumidores o delete passa sem force e leva consigo o aggregate, o form e a screen action da tela; a server action herdada WfCovTask_Save nao fica orfa porque a tela nova passa a chama-la.",
+ "description": "ODC (coverage: DELETE a screen that ALREADY EXISTED): the screen WfCovTaskDetail comes from the chain screen-form -> screen-list and is not created here; this job only touches what it inherited. Deleting a screen means handling THREE consumers, and only two are in the interface: the OnClick of the TaskItem of the list WfCovTasks, the OnClick of the button NewButton and - the one nobody looks for - the module itself, because in ODC the ESpace has a DefaultScreen and the first screen created headless took that role; this third one appears in the refusal with the EMPTY path, which is the ESpace having no path at all. The complete refusal is in tests/jobs-odc-negative/delete-screen-in-use.json. The clean path handles each one in its own way: the navigation of the item is REPOINTED to the new screen WfCovTaskEditor (the Destination set rebuilds the arguments by the contract of the destination, so the argument value is written again), the button's is REMOVED together with the button itself because the link only existed to reach the screen that is leaving, and the DefaultScreen of the module moves to the list. With zero consumers the delete passes without force and takes with it the aggregate, the form and the screen action of the screen; the inherited server action WfCovTask_Save is not left orphan because the new screen starts calling it.",
  "base": "job:screen-list",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "usages", "target": "IMobileScreen:WfCovTaskDetail", "_why": "(1) ANTES: tres consumidores reais - os dois OnClick da tela WfCovTasks e o IESpace, com caminho vazio. Sao estes os caminhos que a recusa do delete nomeia"},
+  {"op": "usages", "target": "IMobileScreen:WfCovTaskDetail", "_why": "(1) BEFORE: three real consumers - the two OnClick of the screen WfCovTasks and the IESpace, with an empty path. These are the paths that the refusal of the delete names"},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfCovTaskEditor", "as": "$editor", "_why": "(2) a substituta, com o MESMO contrato de entrada (TaskId): sem isso a navegacao repontada fica sem para onde levar o identificador"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfCovTaskEditor", "as": "$editor", "_why": "(2) the replacement, with the SAME input contract (TaskId): without it the repointed navigation has nowhere to take the identifier"},
   {"op": "set", "target": "$editor/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$editor/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$editorTitle"},
   {"op": "set", "target": "$editorTitle", "prop": "Value", "value": "\"Task editor\""},
@@ -29,7 +29,7 @@
   {"op": "create", "parent": "$editor", "type": "IScreenAction", "name": "WfSaveTask", "as": "$save"},
   {"op": "create", "parent": "$save", "type": "IStartNode", "as": "$s0"},
   {"op": "create", "parent": "$save", "type": "IExecuteServerActionNode", "name": "WfCovTask_Save", "as": "$call"},
-  {"op": "set", "target": "$call", "prop": "Action", "value": "IServerAction:WfCovTask_Save", "_why": "a tela nova assume tambem o consumo da server action HERDADA: sem isto ela ficaria sem chamadores quando a tela antiga sair"},
+  {"op": "set", "target": "$call", "prop": "Action", "value": "IServerAction:WfCovTask_Save", "_why": "the new screen also takes over the consumption of the INHERITED server action: without this it would be left with no callers when the old screen leaves"},
   {"op": "set", "target": "$call/Task", "prop": "Value", "value": "WfGetTaskToEdit.List.Current.WfCovTask"},
   {"op": "create", "parent": "$save", "type": "IEndNode", "as": "$s9"},
   {"op": "link", "from": "$s0", "to": "$call"},
@@ -37,20 +37,20 @@
   {"op": "layout", "target": "$save"},
   {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$save"},
 
-  {"op": "set", "target": "IMobileScreen:WfCovTasks/#IMobileBlockInstanceWidget/MainContent/TaskList/#IContent/TaskItem/OnClick", "prop": "Destination", "value": "$editor", "_why": "(3a) REPONTAR: a navegacao herdada do item da lista passa a levar para a tela nova. O IListItem nao e filho direto do IList: o List guarda-o no seu IContent, por isso o caminho passa por #IContent"},
-  {"op": "set", "target": "IMobileScreen:WfCovTasks/#IMobileBlockInstanceWidget/MainContent/TaskList/#IContent/TaskItem/OnClick/TaskId", "prop": "Value", "value": "GetTasks.List.Current.WfCovTask.Id", "_why": "(3b) o argumento e do destino NOVO: o Destination reconstroi a lista de argumentos pelo contrato do destino, e o valor tem de ser escrito outra vez"},
+  {"op": "set", "target": "IMobileScreen:WfCovTasks/#IMobileBlockInstanceWidget/MainContent/TaskList/#IContent/TaskItem/OnClick", "prop": "Destination", "value": "$editor", "_why": "(3a) REPOINT: the inherited navigation of the list item now leads to the new screen. The IListItem is not a direct child of the IList: the List keeps it in its IContent, so the path goes through #IContent"},
+  {"op": "set", "target": "IMobileScreen:WfCovTasks/#IMobileBlockInstanceWidget/MainContent/TaskList/#IContent/TaskItem/OnClick/TaskId", "prop": "Value", "value": "GetTasks.List.Current.WfCovTask.Id", "_why": "(3b) the argument belongs to the NEW destination: the Destination rebuilds the argument list by the contract of the destination, and the value has to be written again"},
 
-  {"op": "delete", "target": "IMobileScreen:WfCovTasks/#IMobileBlockInstanceWidget/Actions/NewButton", "_why": "(4) REMOVER: o botao New so existia para abrir a tela em modo de criacao; sem a tela, o link sai com o botao"},
+  {"op": "delete", "target": "IMobileScreen:WfCovTasks/#IMobileBlockInstanceWidget/Actions/NewButton", "_why": "(4) REMOVE: the New button only existed to open the screen in creation mode; without the screen, the link leaves with the button"},
 
-  {"op": "set", "target": "@espace", "prop": "DefaultScreen", "value": "IMobileScreen:WfCovTasks", "_why": "(5) o consumidor que nao esta em tela nenhuma: o ESpace do ODC guarda DefaultScreen e a tela a apagar ainda tinha esse papel. Enquanto for a tela por omissao do modulo, o delete recusa com um consumidor de caminho vazio; a lista assume o lugar"},
+  {"op": "set", "target": "@espace", "prop": "DefaultScreen", "value": "IMobileScreen:WfCovTasks", "_why": "(5) the consumer that is on no screen: the ESpace of ODC keeps DefaultScreen and the screen to be deleted still had that role. As long as it is the default screen of the module, the delete refuses with a consumer of empty path; the list takes its place"},
 
-  {"op": "usages", "target": "IMobileScreen:WfCovTaskDetail", "_why": "(6) DEPOIS: tem de ficar em zero - um consumidor repontado, um removido, um transferido"},
-  {"op": "delete", "target": "IMobileScreen:WfCovTaskDetail", "_why": "(7) sem consumidores o delete passa sem force: brokenConsumers=0, e a tela leva consigo o aggregate GetTaskById, o form TaskForm e a screen action Save"},
+  {"op": "usages", "target": "IMobileScreen:WfCovTaskDetail", "_why": "(6) AFTER: must be at zero - one consumer repointed, one removed, one transferred"},
+  {"op": "delete", "target": "IMobileScreen:WfCovTaskDetail", "_why": "(7) without consumers the delete passes without force: brokenConsumers=0, and the screen takes with it the aggregate GetTaskById, the form TaskForm and the screen action Save"},
 
-  {"op": "find", "name": "WfCovTaskDetail", "_why": "(8) lista vazia: a tela saiu do modulo"},
-  {"op": "usages", "target": "IServerAction:WfCovTask_Save", "_why": "(9) a server action herdada nao ficou orfa: quem a chama agora e a screen action da tela nova"},
-  {"op": "usages", "target": "IMobileScreen:WfCovTasks", "_why": "(10) a lista, que nao tinha consumidor nenhum, passou a ter um: o IESpace, por ser agora a DefaultScreen"},
-  {"op": "get", "target": "IMobileScreen:WfCovTasks/#IMobileBlockInstanceWidget/MainContent/TaskList/#IContent/TaskItem/OnClick", "_why": "(11) ler de volta: Destination e Arguments do item apontam para a tela nova"},
+  {"op": "find", "name": "WfCovTaskDetail", "_why": "(8) empty list: the screen left the module"},
+  {"op": "usages", "target": "IServerAction:WfCovTask_Save", "_why": "(9) the inherited server action was not left orphan: whoever calls it now is the screen action of the new screen"},
+  {"op": "usages", "target": "IMobileScreen:WfCovTasks", "_why": "(10) the list, which had no consumer at all, now has one: the IESpace, for being the DefaultScreen now"},
+  {"op": "get", "target": "IMobileScreen:WfCovTasks/#IMobileBlockInstanceWidget/MainContent/TaskList/#IContent/TaskItem/OnClick", "_why": "(11) read back: Destination and Arguments of the item point to the new screen"},
   {"op": "dump", "target": "IMobileScreen:WfCovTasks", "depth": 7}
  ]
 }

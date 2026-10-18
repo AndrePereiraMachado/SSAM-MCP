@@ -1,12 +1,12 @@
 {
- "description": "Op html visual (WS4): instancia de bloco com input e handler. O fragmento so nomeia o bloco, o input e o evento; o handler e uma screen action nativa que ja existe, e os parametros do evento chegam por nome.",
+ "description": "Visual html op (WS4): block instance with input and handler. The fragment only names the block, the input and the event; the handler is an already existing native screen action, and the event parameters arrive by name.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "UnusedElement",
    "element": "DateChosen (ScreenAction) / DatePickerId (InputParameter)",
-   "why": "DatePickerId faz parte do contrato do evento OnSelected; este exemplo usa somente a data selecionada."
+   "why": "DatePickerId is part of the OnSelected event contract; this example only uses the selected date."
   }
  ],
  "ops": [

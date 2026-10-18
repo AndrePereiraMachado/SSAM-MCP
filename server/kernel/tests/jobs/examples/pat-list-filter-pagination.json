@@ -1,5 +1,5 @@
 {
- "description": "Lista com filtro e paginacao: aggregate paginado (StartIndex/MaxRecords), pesquisa por texto, filtro por static num Dropdown, Table e bloco Pagination com OnNavigate. Mudar um filtro volta a primeira pagina.",
+ "description": "A list with a filter and pagination: a paged aggregate (StartIndex/MaxRecords), a text search, a filter by a static in a Dropdown, a Table and the Pagination block with OnNavigate. Changing a filter goes back to the first page.",
  "base": "reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -38,11 +38,11 @@
   {"op": "create", "parent": "$aggStatus", "type": "IAliasedSource", "args": {"dataSource": "IStaticEntity:TicketStatus"}},
 
   {"op": "logic", "data": {"actions": [
-   {"name": "FiltersChanged", "kind": "screen", "owner": "IMobileScreen:Tickets", "description": "Filtro mudou: volta a primeira pagina e refaz a consulta",
+   {"name": "FiltersChanged", "kind": "screen", "owner": "IMobileScreen:Tickets", "description": "The filter changed: back to the first page and the query again",
     "steps": [
      {"assign": {"StartIndex": "0"}, "as": "FirstPage"},
      {"node": "IRefreshDataNode", "as": "RefreshTickets", "properties": {"DataSource": "IScreenAggregate:GetTicketPage"}}]},
-   {"name": "PageChanged", "kind": "screen", "owner": "IMobileScreen:Tickets", "description": "Pagination.OnNavigate: guarda o novo inicio e refaz a consulta",
+   {"name": "PageChanged", "kind": "screen", "owner": "IMobileScreen:Tickets", "description": "Pagination.OnNavigate: keeps the new start and runs the query again",
     "inputs": [{"name": "NewStartIndex", "type": "Integer"}],
     "steps": [
      {"assign": {"StartIndex": "NewStartIndex"}, "as": "GoToPage"},

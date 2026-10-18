@@ -48,13 +48,13 @@ internal static partial class Authoring {
         var alvo = ModelPath.Describe(target);
         if (encontradas.Length > 1)
             throw new InvalidOperationException(
-                alvo + " tem " + encontradas.Length + " propriedades chamadas '" + property + "' -- o descritor e ambiguo.");
+                alvo + " has " + encontradas.Length + " properties named '" + property + "' -- the descriptor is ambiguous.");
         var nomes = todas.Select(p => p.Name).Where(n => !string.IsNullOrEmpty(n)).ToArray();
         var parecidas = NameSuggestions.Closest(property, nomes, 4);
         throw new InvalidOperationException(
-            alvo + (escrita ? " nao tem a propriedade '" : " nao tem a propriedade '") + property + "'."
-            + (parecidas.Count > 0 ? " Parecidas: " + string.Join(", ", parecidas) + "." : "")
-            + " Tem " + nomes.Length + ": " + string.Join(", ", nomes.OrderBy(n => n, StringComparer.Ordinal).Take(40))
+            alvo + (escrita ? " has no property '" : " has no property '") + property + "'."
+            + (parecidas.Count > 0 ? " Closest: " + string.Join(", ", parecidas) + "." : "")
+            + " It has " + nomes.Length + ": " + string.Join(", ", nomes.OrderBy(n => n, StringComparer.Ordinal).Take(40))
             + (nomes.Length > 40 ? ", ..." : ""));
     }
     // Some properties hold an expression the API refuses to render: IExpression.Text throws "Error on

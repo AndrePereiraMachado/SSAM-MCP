@@ -1,5 +1,5 @@
 {
- "description": "AlignCenter do OSUI na vertical (IsHorizontal False) com um texto ligado a variavel e um botao.",
+ "description": "AlignCenter of OSUI vertical (IsHorizontal False) with a text bound to a variable and a button.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

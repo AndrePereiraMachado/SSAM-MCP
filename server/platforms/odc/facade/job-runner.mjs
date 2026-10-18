@@ -19,7 +19,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { anvilRoot, o11Lane } from './workspace.mjs';
+import { anvilRoot, o11Lane, odcRoot as workspaceOdcRoot } from './workspace.mjs';
+import { odcCaptures } from './producer-signatures.mjs';
+import { producersNamed, bindingKeyOf, listedKeyOf, slotKeyOf, sameProducer, studioNameOf, o11UnknownProducer } from './producer-names.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { readConnection } from './studio-session.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
@@ -43,7 +45,6 @@ const clip = (text, max = 400) => { const s = String(text ?? ''); return s.lengt
 const tail = (lines, max) => (Array.isArray(lines) ? lines.join('\n') : String(lines ?? '')).slice(-max);
 // pathlib.Path.with_suffix: the last suffix replaced (or added).
 const withSuffix = (file, suffix) => { const p = path.parse(file); return path.join(p.dir, p.name + suffix); };
-const bindingName = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const refusal = (code, error, extra = {}) => ({ ok: false, code, error, ...extra });
 
 // "Name=path" with the path made absolute against the kernel root (run_job.py ran there); anything else as it came.
@@ -52,6 +53,29 @@ function producerArg(entry, abs) {
   return at >= 0 && text.slice(at + 1) ? text.slice(0, at) + '=' + abs(text.slice(at + 1)) : text;
 }
 const producerList = value => (!value ? [] : Array.isArray(value) ? value.map(String) : Object.entries(value).map(([name, file]) => name + '=' + file));
+// fix/system-reference (b): each producer an ODC job names with no binding is bound to the capture the lane already has of it
+// (the delivery cache, then the capture folder <odcRoot>/snapshots: producer-signatures.mjs odcCaptures), by its binding key
+// ((System) and System are System); a producer with none is left to the kernel, which names the capture to take.
+// servidor/fase4-26 a7 (R1): hosted, the captures a job is bound to are the customer's own (<ws>/odc: its snapshots and its
+// delivery cache), never the server's ODC root, which no customer writes and every customer shares.
+export const jobOdcRoot = () => { const context = hostedContext(); return context ? path.join(context.workspace, 'odc') : workspaceOdcRoot; };
+export function odcCapturesForJob(job, bound, { odcRoot, base = null } = {}) {
+  let document = null;
+  try { document = JSON.parse(fs.readFileSync(job, 'utf8').replace(/^﻿/, '')); } catch { return []; }
+  const ops = Array.isArray(document) ? document : Array.isArray(document?.ops) ? document.ops : [];
+  const named = producersNamed(ops.map(op => (op?.op === 'reference' ? op.producer : null)));
+  const boundNames = bound.map(entry => String(entry).split('=')[0]);
+  let environment = null;
+  try { environment = base ? JSON.parse(fs.readFileSync(base + '.json', 'utf8').replace(/^﻿/, ''))?.host ?? null : null; } catch { environment = null; }
+  const found = [];
+  for (const { key, written } of named) {
+    if (boundNames.some(name => sameProducer(name, key))) continue;
+    const newest = odcCaptures(odcRoot, { producer: key, environment })[0];
+    if (newest) found.push({ name: key, ...(written.some(w => w !== key) ? { requested: written } : {}), path: newest.path, source: newest.source, observedAtUtc: newest.observedAtUtc,
+      ...(newest.revision != null ? { revision: newest.revision } : {}) });
+  }
+  return found;
+}
 // The worker is a cache of the same CLI: a refusal it answers with executed:false (another controller's key, "Worker
 // operation requires the trusted Hybrid controller") ran nothing, so the same command runs cold in this process. The
 // worker's refusal is never the answer: it named no fix the session can apply (QuizLive, 2026-10-05).
@@ -149,12 +173,14 @@ export function summarize({ lane, job, out, resultFile, saved, note, quiet = fal
     ...(r?.reused === true ? { reused: true, observed: r?.observed?.by ?? 'ledger', mergeReady: false } : {}) }));
   // The candidate of a job round built on a signature nothing read on the server now is not valid for a direct OML merge.
   if (value.capturedProducers?.some(r => r.reused === true))
-    value.capturedProducersNote = 'assinatura de produtor reaproveitada do cache, sem leitura no servidor agora: este resultado não vale para merge direto do OML; o o11_deliver confere a versão de cada produtor no servidor antes do merge';
+    value.capturedProducersNote = 'producer signature reused from the cache, without a read on the server now: this result does not hold for a direct merge of the OML; o11_deliver checks the version of each producer on the server before the merge';
   if (note) value.worker = note;
   // The HIGH warnings of the data-access rules (QUERY_IN_LOOP legacy/allowed, AGGREGATES_MERGEABLE): always in the answer,
   // success or refusal, outside the 1 KB budget of a success (never blocking, never hidden).
   const high = highWarningsOf(x.highWarnings);
   if (high.length) value.highWarnings = high.slice(0, 10);
+  // CX17 review 1 (M2): the kernel orders them (data and owner rules first); a cut says how many there were.
+  if (high.length > 10) value.highWarningsTotal = high.length;
   const results = !quiet && x.results?.length ? resultsOf(x.results) : [];
   if (value.ok) {
     if (Array.isArray(x.messages)) value.messages = x.messages.length; else if (x.messages !== undefined) value.messages = x.messages;
@@ -189,13 +215,16 @@ export function summarize({ lane, job, out, resultFile, saved, note, quiet = fal
 export async function runJob(request = {}, deps = {}) {
   // CX16 r3 (M3): the UI precheck runs alongside the apply path (started before prepareIntegrationJob and the apply, waited
   // for only here): its problems join the answer of the apply path, one refusal with everything (ui-precheck.mjs
-  // joinPrecheck). A headless job has no step to spare, so even a complete verdict joins.
+  // joinPrecheck). A headless job has no step to spare, so even a complete verdict joins. CX16 r4 (M3): an answer the
+  // precheck cannot change (accepted or uncertain) never waits for check-job; its journal line is written when it ends.
   const carried = { pending: null };
   const answer = await runJobOnce(request, deps, carried);
   if (!carried.pending) return answer;
+  const precheck = await import('./ui-precheck.mjs');
+  if (!precheck.waitsForPrecheck(answer)) { precheck.settleLater(carried.pending, answer); return answer; }
   const pre = await carried.pending;
   if (!pre?.carry) return answer;
-  return (await import('./ui-precheck.mjs')).joinPrecheck(answer, pre);
+  return precheck.joinPrecheck(answer, pre);
 }
 
 async function runJobOnce(request, deps, carried) {
@@ -254,6 +283,9 @@ async function runJobOnce(request, deps, carried) {
   if (prepared?.changed) job = prepared.job;
   const stem = path.parse(job).name;
   const producers = producerList(request.producers).map(p => producerArg(p, abs));
+  const foundProducers = lane === 'odc' ? odcCapturesForJob(job, producers, { odcRoot: deps.odcRoot ?? jobOdcRoot(), base: request.base != null && String(request.base) !== '' ? abs(request.base) : null }) : [];
+  for (const found of foundProducers) producers.push(found.name + '=' + found.path);
+  const withFound = v => (foundProducers.length && v && typeof v === 'object' ? { ...v, boundProducers: foundProducers } : v);
   const base = request.base != null && String(request.base) !== '' ? abs(request.base) : null;
   const boundInputs = lane === 'odc' && base && fs.existsSync(base) ? captureJobArtifacts(base,job) : null;
   const runAnvil = deps.runAnvil ?? createAnvilRunner({ lane: o11.name, root, env });
@@ -271,10 +303,21 @@ async function runJobOnce(request, deps, carried) {
     fs.mkdirSync(folder, { recursive: true });
     for (const entry of captures) {
       const at = entry.indexOf('=');
-      const binding = at < 0 ? entry : entry.slice(0, at);
-      const producer = at >= 0 && entry.slice(at + 1) ? entry.slice(at + 1) : binding;
+      // fix/system-reference: the binding by its key ((System) -> System), the producer as the Studio lists it (System -> (System)).
+      const written = at < 0 ? entry : entry.slice(0, at);
+      // Round 2 (H1): the capture file is named by the key (letters, digits, underscore), never by the name as written.
+      const binding = at < 0 ? slotKeyOf(written) : bindingKeyOf(written) && slotKeyOf(written);
+      if (binding == null) return refusal('invalid-capture', 'Invalid captureProducers entry: ' + entry + ' (a producer name as the Studio lists it; a name with / or \\ is never bound)', { lane, job });
+      const producer = at >= 0 && entry.slice(at + 1) ? entry.slice(at + 1) : studioNameOf(written) ?? written;
       const target = path.join(folder, binding + '.avsig');
       const r = await runAnvil(['signature', '--producer', producer, '--job', job, '--binding', binding, '--out', target, '--bridge-port', String(capturePort())], { cwd: root });
+      // Round 2 (M4): a producer the referenceable catalog does not list by that name is ONE refusal with every name it lists
+      // and the same call with that capture bound to a listed name, as on ODC (producer-names.mjs o11UnknownProducer).
+      const unknown = r.envelope && /^PRODUCER_(UNKNOWN|AMBIGUOUS)$/.test(String(r.envelope.code ?? ''))
+        ? o11UnknownProducer(r.envelope.problems, { captures, call: { tool: lane === 'odc' ? 'ssam_job' : 'o11_job', arguments: { lane, job,
+            ...(request.base != null && String(request.base) !== '' ? { base: request.base } : {}), ...(Object.keys(request.producers ?? {}).length ? { producers: request.producers } : {}),
+            captureProducers: captures } } }) : null;
+      if (unknown) return refusal(unknown.code, r.envelope.error, { lane, job, stage: 'capture-producer', ...unknown });
       if (r.envelope?.ok !== true) return refusal('capture-failed', r.envelope?.error ?? 'the CLI printed no JSON', { lane, job, stage: 'capture-producer', producer,
         ...(r.envelope ? {} : { stdout: tail(r.stdout, 2000) }) });
       receipts.push(r.envelope.data);
@@ -358,7 +401,7 @@ async function runJobOnce(request, deps, carried) {
     if (b.refusal) return { ...b.refusal, lane, job: proto.original };
   } else applied = await applyOnce(job);
   const noted = v => withNormalizationsOf(v, jobNotes);
-  if (applied.answer) return noted(applied.answer);
+  if (applied.answer) return withFound(noted(applied.answer));
   const { saved, out, note } = applied;
   if (receipts.length) saved.capturedProducers = receipts;
   if (boundInputs) {
@@ -370,7 +413,7 @@ async function runJobOnce(request, deps, carried) {
   }
   const resultFile = withSuffix(out, '.result.json');
   fs.writeFileSync(resultFile, JSON.stringify(saved, null, 2), 'utf8');
-  let value = noted(summarize({ lane, job, out, resultFile, saved, note, quiet: request.quiet === true }));
+  let value = withFound(noted(summarize({ lane, job, out, resultFile, saved, note, quiet: request.quiet === true })));
   // What the proven job creates or changes (job-summary.mjs), outside the 1 KB budget of a success, as highWarnings: the
   // same summary a delivery of it answers with.
   if (value.ok && !proto) { try { const summary = jobSummary(JSON.parse(fs.readFileSync(job, 'utf8').replace(/^﻿/, ''))); if (summary) value.summary = summary; } catch { /* a summary never changes the run */ } }
@@ -415,7 +458,7 @@ export function jobToolRequest(input = {}) {
   const producers = input.producers ?? {};
   if (typeof producers !== 'object' || Array.isArray(producers)) return refusal('invalid-producers', 'producers is {Name: absolute path of a frozen producer .oml or .avsig}');
   for (const [name, file] of Object.entries(producers)) {
-    if (!bindingName.test(name)) return refusal('invalid-producers', 'Invalid producer binding name: ' + name);
+    if (listedKeyOf(name) == null) return refusal('invalid-producers', 'Invalid producer binding name: ' + name);
     if (typeof file !== 'string' || !path.isAbsolute(file)) return refusal('invalid-producers', 'Producer ' + name + ' needs an absolute path');
   }
   const captures = input.captureProducers ?? [];
@@ -423,7 +466,7 @@ export function jobToolRequest(input = {}) {
   if (lane !== 'o11' && captures.length) return refusal('capture-o11-only', 'captureProducers reads O11 producer signatures; it exists only in lane o11.', { lane });
   for (const entry of captures) {
     const [name, producer] = String(entry).split(/=(.*)/s);
-    if (!bindingName.test(name) || producer === '') return refusal('invalid-capture', 'Invalid captureProducers entry: ' + entry);
+    if ((producer === undefined ? listedKeyOf(name) : bindingKeyOf(name)) == null || producer === '') return refusal('invalid-capture', 'Invalid captureProducers entry: ' + entry);
     if (Object.hasOwn(producers, name)) return refusal('invalid-capture', 'Producer ' + name + ' is both bound and captured');
   }
   return { ok: true, request: { lane, job: input.job, base: input.base, out: input.out, producers, captureProducers: captures, ...(input.quiet ? { quiet: true } : {}),

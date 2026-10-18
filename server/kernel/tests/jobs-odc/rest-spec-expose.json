@@ -1,5 +1,5 @@
 {
- "description": "ODC: op rest-expose sobre a fixture do InsuranceApp: servico WfSpecZoneService com GET /zone/{Postcode} mapeado para a server action WfSpecZone_Get; espelha tests/jobs/rest-spec-expose.json.",
+ "description": "ODC: op rest-expose over the InsuranceApp fixture: service WfSpecZoneService with GET /zone/{Postcode} mapped to the server action WfSpecZone_Get; mirrors tests/jobs/rest-spec-expose.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

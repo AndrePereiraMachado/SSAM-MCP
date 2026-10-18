@@ -1,5 +1,5 @@
 {
- "description": "Separator do OSUI configurado: espaco Large, cor neutra e um separador vertical entre dois textos ligados a variaveis.",
+ "description": "Configured Separator of OSUI: space Large, a neutral color and a vertical separator between two texts bound to variables.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

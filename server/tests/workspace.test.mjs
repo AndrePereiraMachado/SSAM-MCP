@@ -1,3 +1,4 @@
+import { profileReadPath } from '../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -10,7 +11,8 @@ import { Client } from '../platforms/odc/node_modules/@modelcontextprotocol/clie
 import { StdioClientTransport } from '../platforms/odc/node_modules/@modelcontextprotocol/client/dist/stdio.mjs';
 
 const exec = promisify(execFile);
-const python = process.env.SSAM_PYTHON ?? path.join(os.homedir(), '.cache', 'codex-runtimes', 'codex-primary-runtime', 'dependencies', 'python', 'python.exe');
+// The Python of the Codex runtime is read from the profile the process started with (the isolation moves USERPROFILE).
+const python = process.env.SSAM_PYTHON ?? profileReadPath('.cache', 'codex-runtimes', 'codex-primary-runtime', 'dependencies', 'python', 'python.exe');
 
 test('one repository with both original HEAD commits reachable', async () => {
   for (const source of ['anvil', 'odc']) {

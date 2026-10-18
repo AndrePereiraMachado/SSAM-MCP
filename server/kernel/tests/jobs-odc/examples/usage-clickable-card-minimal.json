@@ -1,5 +1,5 @@
 {
- "description": "Card clicavel: um Container numa List com o evento onclick (IEvent) ligado a uma screen action que recebe o Id da linha como argumento.",
+ "description": "A clickable card: a Container in a List with the onclick event (IEvent) bound to a screen action that receives the Id of the row as an argument.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -24,10 +24,10 @@
   {"op": "create", "parent": "$card", "type": "IExpression", "as": "$name"},
   {"op": "set", "target": "$name", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"},
 
-  {"op": "create", "parent": "$card", "type": "IEvent", "as": "$click", "_why": "o Container nao tem OnClick proprio: o clique e um evento estendido (Events > onclick) criado no proprio widget"},
+  {"op": "create", "parent": "$card", "type": "IEvent", "as": "$click", "_why": "the Container has no OnClick of its own: the click is an extended event (Events > onclick) created on the widget itself"},
   {"op": "set", "target": "$click", "prop": "Event", "value": "onclick"},
   {"op": "set", "target": "$click", "prop": "Handler", "value": "IMobileScreen:ProductCards/SelectProduct"},
-  {"op": "set", "target": "$click/ProductId", "prop": "Value", "value": "GetProducts.List.Current.Product.Id", "_why": "o argumento do handler e enderecado pelo nome do input da screen action, como num OnClick de botao"},
+  {"op": "set", "target": "$click/ProductId", "prop": "Value", "value": "GetProducts.List.Current.Product.Id", "_why": "the argument of the handler is addressed by the name of the input of the screen action, as in the OnClick of a button"},
 
   {"op": "get", "target": "$click"}
  ]

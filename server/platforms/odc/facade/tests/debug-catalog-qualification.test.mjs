@@ -1,5 +1,6 @@
 // Port review B2: the ops.debugger catalog limits (what ssam_discover announces per lane) are generated from
 // debug-adapter-registry, so the catalog follows D7 and the evidence index. Offline; writes only temp copies.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

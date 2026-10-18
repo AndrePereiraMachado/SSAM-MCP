@@ -3,6 +3,7 @@
 //   - the .cmd wrappers resolve Node as SSAM_NODE -> the Codex runtime's Node -> node on PATH;
 //   - the versioned .mcp.json expands ${SSAM_NODE:-...} and ${SSAM_ROOT:-...} to the previous literal paths;
 //   - the O11 interpreter is SSAM_PYTHON -> the Codex runtime's Python under USERPROFILE -> python.
+import { originalProfile } from '../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -60,11 +61,13 @@ test('the .cmd wrappers take SSAM_NODE, then the Codex Node of USERPROFILE, then
   }
 });
 
+// The profile the process started with (the isolation moves USERPROFILE): the wrapper only resolves Node, and the preload
+// exits before the entry module runs, so nothing is written under that profile.
 test('without SSAM_NODE, the wrappers still run the Codex Node of this profile when it exists', { skip: process.platform !== 'win32' }, async t => {
-  const real = codexNode(process.env.USERPROFILE ?? os.homedir());
+  const real = codexNode(originalProfile.home);
   if (!fs.existsSync(real)) return t.skip('no Codex runtime on this machine');
   const { probe } = fixture(t);
-  for (const wrapper of wrappers) assert.equal(await ranWith(wrapper, baseEnv(probe, { SSAM_NODE: undefined })), real, wrapper);
+  for (const wrapper of wrappers) assert.equal(await ranWith(wrapper, baseEnv(probe, { SSAM_NODE: undefined, USERPROFILE: originalProfile.home })), real, wrapper);
 });
 
 // The ${VAR} and ${VAR:-default} expansion Claude Code documents for .mcp.json (command, args, env).
@@ -102,8 +105,10 @@ test('the O11 interpreter is SSAM_PYTHON, then the Codex Python of USERPROFILE, 
   const lanes = pathToFileURL(path.join(root, 'platforms', 'odc', 'facade', 'lanes.mjs')).href;
   const script = 'import(process.argv[1]).then(m => process.stdout.write(m.python()))';
   const run = async env => (await exec(process.execPath, ['-e', script, lanes], { env, windowsHide: true })).stdout;
-  const without = { ...process.env }; delete without.SSAM_PYTHON;
-  const profile = process.env.USERPROFILE ?? os.homedir();
+  // The child resolves the Python of the profile the process started with (the isolation moves USERPROFILE); it only
+  // loads lanes.mjs and prints a path.
+  const without = { ...process.env, USERPROFILE: originalProfile.home }; delete without.SSAM_PYTHON;
+  const profile = originalProfile.home;
   assert.equal(await run(without), fs.existsSync(codexPython(profile)) ? codexPython(profile) : 'python');
   assert.equal(await run({ ...without, SSAM_PYTHON: 'D:\\py\\python.exe' }), 'D:\\py\\python.exe');
   // On Windows a child spawned without USERPROFILE gets it back from the parent (libuv restores the required

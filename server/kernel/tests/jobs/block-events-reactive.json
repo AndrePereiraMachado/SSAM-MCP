@@ -1,16 +1,16 @@
 {
- "description": "Evento de bloco, o ciclo inteiro na faixa Reactive: o bloco RatingPicker declara o evento OnRate com parametros (Rating, Comment), dispara-o de uma screen action do proprio bloco com um ITriggerNode e argumentos, e a tela RatingDemo instancia o bloco, liga o handler RatingPicker1_OnRate ao evento e USA os dois parametros que chegaram (grava-os em variaveis da tela e mostra-os). Cobre a area 'eventos de bloco', que nao tinha nenhum job.",
+ "description": "Block event, the whole cycle in the Reactive lane: the block RatingPicker declares the event OnRate with parameters (Rating, Comment), triggers it from a screen action of the block itself with an ITriggerNode and arguments, and the screen RatingDemo instantiates the block, links the handler RatingPicker1_OnRate to the event and USES the two parameters that arrived (stores them in screen variables and shows them). It covers the area 'block events', which had no job.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "RatingPicker", "as": "$blk", "_why": "1. o bloco que produz o evento"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "RatingPicker", "as": "$blk", "_why": "1. the block that produces the event"},
   {"op": "create", "parent": "$blk", "type": "IInputParameter", "name": "Caption", "as": "$blkIn"},
   {"op": "set", "target": "$blkIn", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$blk", "type": "ILocalVariable", "name": "Score", "as": "$score"},
   {"op": "set", "target": "$score", "prop": "DataType", "value": "Integer"},
 
-  {"op": "create", "parent": "$blk", "type": "IBlockEvent", "name": "OnRate", "as": "$ev", "_why": "2. o contrato do evento: nome, obrigatoriedade e parametros"},
+  {"op": "create", "parent": "$blk", "type": "IBlockEvent", "name": "OnRate", "as": "$ev", "_why": "2. the event contract: name, mandatory flag and parameters"},
   {"op": "set", "target": "$ev", "prop": "Description", "value": "Disparado quando o utilizador escolhe uma nota no bloco"},
   {"op": "set", "target": "$ev", "prop": "IsMandatory", "value": false},
   {"op": "create", "parent": "$ev", "type": "IInputParameter", "name": "Rating", "as": "$evRating"},
@@ -18,13 +18,13 @@
   {"op": "create", "parent": "$ev", "type": "IInputParameter", "name": "Comment", "as": "$evComment"},
   {"op": "set", "target": "$evComment", "prop": "DataType", "value": "Text"},
 
-  {"op": "create", "parent": "$blk", "type": "IContainer", "name": "Body", "as": "$body", "_why": "3. conteudo do bloco: o Caption que o consumidor passa e o botao que dispara"},
+  {"op": "create", "parent": "$blk", "type": "IContainer", "name": "Body", "as": "$body", "_why": "3. block content: the Caption the consumer passes and the button that triggers"},
   {"op": "create", "parent": "$body", "type": "IExpression", "as": "$capt"},
   {"op": "set", "target": "$capt", "prop": "Value", "value": "Caption"},
   {"op": "create", "parent": "$body", "type": "IButton", "name": "RateButton", "as": "$btn"},
   {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Rate"},
 
-  {"op": "create", "parent": "$blk", "type": "IScreenAction", "name": "Rate", "as": "$rate", "_why": "4. disparar o evento: ITriggerNode com o evento e os argumentos do contrato"},
+  {"op": "create", "parent": "$blk", "type": "IScreenAction", "name": "Rate", "as": "$rate", "_why": "4. trigger the event: ITriggerNode with the event and the contract arguments"},
   {"op": "create", "parent": "$rate", "type": "IStartNode", "as": "$r0"},
   {"op": "create", "parent": "$rate", "type": "IAssignNode", "as": "$rAssign"},
   {"op": "set", "target": "$rAssign", "prop": "Label", "value": "BumpScore"},
@@ -42,7 +42,7 @@
   {"op": "layout", "target": "$rate"},
   {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$rate"},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "RatingDemo", "as": "$scr", "_why": "5. a tela consumidora e o handler que USA os parametros do evento"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "RatingDemo", "as": "$scr", "_why": "5. the consumer screen and the handler that USES the event parameters"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "\"Rating\""},
@@ -70,19 +70,19 @@
   {"op": "link", "from": "$hAssign", "to": "$h9"},
   {"op": "layout", "target": "$h"},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RatingPicker1", "as": "$inst", "source": "IMobileBlock:RatingPicker", "_why": "6. a instancia: input, handler ligado ao evento e argumentos no escopo do evento"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RatingPicker1", "as": "$inst", "source": "IMobileBlock:RatingPicker", "_why": "6. the instance: input, handler linked to the event and arguments in the event scope"},
   {"op": "set", "target": "$inst/Caption", "prop": "Value", "value": "\"Que nota da a esta estadia?\""},
   {"op": "set", "target": "$inst/OnRate", "prop": "Handler", "value": "$h"},
   {"op": "set", "target": "$inst/OnRate/Rating", "prop": "Value", "value": "Rating"},
   {"op": "set", "target": "$inst/OnRate/Comment", "prop": "Value", "value": "Comment"},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$echo", "_why": "7. a tela mostra o que o evento trouxe"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$echo", "_why": "7. the screen shows what the event brought"},
   {"op": "set", "target": "$echo", "prop": "Value", "value": "\"Ultima nota: \" + IntegerToText(LastRating) + \" (\" + LastComment + \")\""},
 
   {"op": "get", "target": "$ev"},
   {"op": "get", "target": "$trg"},
   {"op": "get", "target": "$inst/OnRate"},
-  {"op": "usages", "target": "$ev", "_why": "o evento tem de ter a instancia da tela como consumidor"},
+  {"op": "usages", "target": "$ev", "_why": "the event must have the screen instance as a consumer"},
   {"op": "dump", "target": "$blk", "depth": 6},
   {"op": "dump", "target": "$scr", "depth": 7}
  ]

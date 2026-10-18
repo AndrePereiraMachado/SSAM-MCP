@@ -1,5 +1,5 @@
 {
- "description": "Table: um ITableRecords com Source no aggregate e uma coluna (IHeaderCell em HeaderRow + IRowCell em Row).",
+ "description": "Table: an ITableRecords with the Source on the aggregate and one column (IHeaderCell in HeaderRow + IRowCell in Row).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

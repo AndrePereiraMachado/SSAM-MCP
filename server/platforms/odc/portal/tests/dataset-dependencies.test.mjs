@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';
 import {datasetDependencies} from '../runtime/dataset-dependencies.mjs';
 const datasetId=randomUUID(),portfolio=randomUUID(),evaluationId=randomUUID();

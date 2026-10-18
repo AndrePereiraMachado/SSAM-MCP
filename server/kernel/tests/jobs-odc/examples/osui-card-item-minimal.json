@@ -1,5 +1,5 @@
 {
- "description": "CardItem do OSUI: um item com texto no Title.",
+ "description": "CardItem of OSUI: one item with a text in the Title.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

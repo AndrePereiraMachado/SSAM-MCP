@@ -2,6 +2,7 @@
 // lane, adapter and the hash of the bytes read now match; a miss asks the lane's kernel reader ({"ddl":"ensure"}, mocked
 // here); one page when the whole text fits, else whole blocks per page with nothing dropped and every cut said at both
 // ends as a comment the text's parser skips; element reads one block by name or @key; every continuation is pinned.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

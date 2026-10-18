@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {randomUUID as uuid,createHash} from 'node:crypto';
 import {GUARDRAILS_SAVE,guardrailsApproval,guardrailHash,guardrailValues,guardrailReadInput,guardrailState,validateGuardrailPolicies,guardrailObservation} from '../runtime/guardrails.mjs';
 import {guardrailPolicies,wordGuardrail} from './guardrail-fixture.mjs';

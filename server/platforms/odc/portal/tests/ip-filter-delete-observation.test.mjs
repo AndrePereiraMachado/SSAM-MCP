@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import crypto from 'node:crypto';
 import {OdcAccess} from '../runtime/access.mjs';
 import {sha256} from '../runtime/write-journal.mjs';

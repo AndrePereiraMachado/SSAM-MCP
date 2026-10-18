@@ -1,5 +1,5 @@
 {
- "description": "Table Reactive com cabecalho e celulas ligadas a aggregate (ordenavel por SortAttribute) e widget If com ramos True/False (SortAttribute do HeaderCell ainda em aberto: o Verify recusa \"User.Name\" e \"Name\"; os modulos reais nao o definem)",
+ "description": "Reactive Table with header and cells bound to an aggregate (sortable by SortAttribute) and If widget with True/False branches (SortAttribute of the HeaderCell still open: the Verify refuses \"User.Name\" and \"Name\"; the real modules do not define it)",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "ops": [

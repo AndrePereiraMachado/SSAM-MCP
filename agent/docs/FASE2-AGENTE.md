@@ -263,9 +263,11 @@ Teste de rede (`ssam_doctor {network:true}`, só no hospedado, uns 5 s):
   chegou e quando. O hub só manda `net.probe` a um agente cujo Hello lista o tipo (`link.supports`).
 - `hosted/network-check.mjs` junta o que o agente mediu com o que o hub viu e classifica cada subida: `ok`, `slow`,
   `stalled` (chegou ao servidor e andou a menos de 32 KiB/s ou parou) ou `unreached` (a conexão nova nunca chegou).
-  Por saída: `boa`, `lenta` ou `perde`. Veredito em palavras simples: `ok`, `slow`, `one-exit-lossy` ("uma das suas
-  saídas de internet (177.26.87.x) perde pacotes nas subidas..."), `uploads-lossy` e `new-connections-fail` (um quarto
-  ou mais das conexões novas não chegou: o caso do 5G ancorado da nota da integradora).
+  Por saída: `boa`, `lenta` ou `perde`. Veredito em palavras simples: `ok`, `slow`, `one-exit-lossy` ("one of your
+  internet exits (177.26.87.x) loses packets on uploads..."), `uploads-lossy` e `new-connections-fail` (um quarto
+  ou mais das conexões novas não chegou: o caso do 5G ancorado da nota da integradora). As mensagens são em inglês
+  desde `server/english-agent` (16/10/2026). Os valores `boa`/`lenta`/`perde` e a saída `desconhecida` continuam como
+  estão até o dono decidir.
 - Sem `network:true`, o hub mede cada parte de arquivo que sobe (`noteUpload`): uma parte acima de 3 s + 1 s por 128 KiB
   é lenta (log `agent-upload-slow`). Com partes lentas nos últimos 30 min, o doctor mostra `agent.uploads` e
   `network: {ran:false, code:"UPLOADS_SLOW", continuation: ssam_doctor {network:true}}`. O `ok` do doctor não muda.
@@ -740,7 +742,26 @@ Igual a `connectO11` de hoje, sem compilar nada no cliente:
 A mesma trava por porta de hoje (`private\runtime-connect\port-<porta>.lock`) e a mesma recusa de reanexar uma bridge
 já carregada.
 
-## 5. Classificação das 95 ferramentas
+## 5. Classificação das 96 ferramentas
+
+marco-a5 (`fase4-25/marco-a5`, 15/10/2026): entra a `ssam_code` (linha 94), indisponível no hospedado. São 96 ferramentas:
+`createSsamServer` registra 91, mais as 4 do hook e a `ssam_friction`. Totais: servidor 23 (10 delas com um modo que usa o
+agente), agente 33, tenant-agente 22 e indisponível 18. No ar, o `tools/list` sem o hook deve mostrar 92 (não conferido no ar).
+
+Regras novas do marco-a5 no portão e na costura:
+
+- Os ops de gerador que ainda esperam o teste cego (`entity-actions`, `rest-consume` e o op `screen` com `data.generate`) são
+  recusados no portão das 4 ferramentas de job e entrega, antes do agente e de qualquer captura: `HOSTED_UNAVAILABLE`,
+  `cause:"GENERATOR_PENDING"`, `policy:"HOSTED_GENERATOR_OPS"`. A chave é uma só (`HOSTED_GENERATOR_OPS = 'refuse'`). Um
+  gerador que o dono aprovar (`generators.mjs`) passa como qualquer op.
+- A amostra GET do `rest-consume` usa o cliente só-público (`hosted/public-fetch.mjs`), nunca o `fetch` global do servidor.
+- O mapa `handlers` do `ssam.mjs` (por onde o `ssam_code write` entrega) guarda o handler com o portão.
+- Os componentes do ambiente no `ssam_discover` O11 ficam desligados (`HOSTED_UNAVAILABLE`, `cause:"COMPONENTS_HOSTED_PENDING"`);
+  o pacote de trabalho não lê o cache de produtores do servidor.
+- `odc_portal_login` com `action` `prompt` ou `focus` (a janela privada de credencial do produto) responde
+  `HOSTED_PROMPT_UNAVAILABLE` antes de ler o Studio, o cofre ou um perfil.
+- As respostas que o produto agora encurta por tipo (`answer-size.mjs`) gravam a resposta inteira no mesmo lugar das
+  paginadas: `ws:o11/answers`, lida só pelo `ssam_evidence` da mesma conta.
 
 24º envio (`servidor/fase4-24`): o `catalog/tools.json` passa de 83 para 95 ferramentas, sem nenhuma removida.
 `createSsamServer` registra 90, mais as 4 do hook e a `ssam_friction`. O `hosted/tools.json` cobre as 95. As 12 novas
@@ -883,6 +904,7 @@ seção 8), exceto `ssam_connect` e as de relatório.
 | 91 | `ssam_debug_server` | indisponível | — | — | o mesmo motivo do `ssam_debug` |
 | 92 | `ssam_debug_client` | indisponível | — | — | idem, mais perfis de navegador (CDP) da máquina do servidor |
 | 93 | `ssam_debug_matrix` | indisponível | — | — | lê e grava a evidência de `.local/debugger` da máquina do servidor (do dono) |
+| 94 | `ssam_code` | indisponível | — | — | marco-a5: `check` e `plan` leem a captura mais nova e o cache de produtores das raízes do servidor e gravam planos lá; `cause:"SSAM_CODE_HOSTED_PENDING"`, continuação para o `ssam_map` (views `ddl`, `flow`, `html`) e a entrega por `o11_deliver`/`studio_deliver` |
 
 Notas da tabela:
 
@@ -988,6 +1010,8 @@ conferências daquela faixa; sem `lane`, só as do agente).
   bin\o11\bridge\                Anvil.Bridge.dll (a bridge fina, sem o kernel) [+ Anvil.Bridge.deps.json] e nada mais,
                                  compilada para o Service Studio do kernel (O11-BRIDGE-FINA.md §6.1)
   agent\node\                    node.exe + LICENSE, por padrão (O11-BRIDGE-FINA.md §6.3)
+  docs\AGENTE-CLIENTE.md         o guia do cliente, em inglês (o agente, o ssam-agent.ps1 e as dicas do servidor citam
+                                 este caminho; desde server/english-agent, 15/10/2026)
   odc\README.md                  marcador da raiz da bridge ODC
   odc\studio\bridge\bin\Release\net8.0\ODC3.Bridge.v35.dll
   odc\studio\bridge\client\bin\Release\net10.0\ODC3.Bridge.Client.dll (+ deps, runtimeconfig)
@@ -1150,8 +1174,22 @@ Regras da faixa `hosted` (em `hosted/policy.mjs`):
   versão, e o servidor atende o Studio do cliente (identidade pelo build, abaixo). ODC também exige
   `pack.odcBridge === kernel.odcBridge`; O11 também exige `pack.o11BuiltFor` igual ao kernel (a bridge O11 do pacote foi
   compilada contra aquele Service Studio).
-- O agente confere também o PROCESSO escolhido (4.8): instalação lado a lado ou atualização automática não passam. O
-  agente 0.3.1 compara 3 números (segunda trava); o build é julgado pelo servidor.
+- O agente confere também o PROCESSO escolhido (4.8), mas só os 3 números: o agente 0.3.1 deixa passar outro build da
+  mesma versão. Quem julga o build é o servidor, em dois lugares (rodada 2 da revisão, A1):
+  - o hub julga o Studio **instalado em disco** (`Hello` e `pong.versions`). O agente relê o disco a cada 5 min, e um
+    `pong` perdido nunca é reenviado: logo depois de uma atualização do Studio, por 15 a 315 s, ou até o agente
+    reconectar se o `pong` se perder, o hub ainda tem o build velho;
+  - por isso, em cada chamada, o servidor julga também o **processo** que vai rodar, com a mesma regra e a mesma recusa:
+    no ODC o `AgentExecutor` acha o pid da chamada (`odc.pipe`, `odc.attach`) na lista `studio.processes` do agente, que
+    já traz a versão de cada processo; no O11 o portão julga o `studioVersion` do registro do Service Studio conectado
+    (`o11.connect`/`o11.selected`). Vale o pior dos dois veredictos. Um pid que o agente não lista, ou um registro O11 sem
+    versão, fica só com o veredicto do hub; um processo ODC listado sem versão é recusado (`STUDIO_VERSION_UNKNOWN`), como
+    o próprio agente já recusaria;
+  - o próprio `o11.connect` (rodada 3, B1) é julgado pelo processo que ele anexa, como o `odc.attach`: o pid pedido ou,
+    sem pid, o único Service Studio listado. No `ssam_connect`, o julgamento vem antes de qualquer chamada à bridge (a
+    sonda `ping` incluída): um build que o servidor não atende não recebe nada, e a resposta é a recusa (ou
+    `studioSkipped`, ao lado das faixas que conectaram). Depois do manipulador do `ssam_connect`, o registro novo da
+    conexão também é julgado: outro build atendido traz `studioBuildDiffers`.
 - **Identidade pelo build (A-M1, `C:\t\multiver\minimo\PROPOSTA.md`; `studio-identity.mjs`).** Uma regra só, lida pelo
   hub, pelo portão hospedado e pelos eventos:
   - O Studio do cliente é o `ProductVersion` do `.exe` que o agente manda no `Hello` (e no `pong.versions`), com 4 números
@@ -1169,27 +1207,35 @@ Regras da faixa `hosted` (em `hosted/policy.mjs`):
   - Versão que o agente não leu: `STUDIO_VERSION_UNKNOWN`, depois das conferências do pacote, como antes.
 - Recusa (faixa `hosted`, antes do handler, só para ferramentas que precisam do agente naquela faixa): UMA resposta com
   tudo. A direção (`cause`), os dois builds (`installed`, `served`), o que continua funcionando (`stillWorks`: as
-  ferramentas só de servidor da faixa, de `hosted/tools.json`), `outcome: "not-sent"` e "nada rodou". `userMessage` em
-  pt-BR para o usuário (os licenciados são brasileiros), `error` em inglês para o modelo. A continuação antiga ("instale o
-  Studio na versão do servidor", impossível no ODC) saiu:
+  ferramentas só de servidor da faixa, de `hosted/tools.json`), `outcome: "not-sent"` e "nada rodou". `userMessage` para
+  o usuário e `error` para o modelo, dois textos, os dois em inglês (rodada 3, B3: regra do dono de 15/10, todo texto que
+  o SSAM emite em inglês, sem linha bilíngue). A continuação antiga ("instale o Studio na versão do servidor", impossível
+  no ODC) saiu:
 
 ```json
 { "ok": false, "code": "STUDIO_VERSION_MISMATCH", "cause": "STUDIO_VERSION_NOT_SERVED_YET", "lane": "odc",
   "installed": "1.7.29.10900", "served": ["1.7.28.10850"], "relation": "newer", "policy": "warn", "outcome": "not-sent",
   "stillWorks": ["ssam_discover", "ssam_map", "ssam_reference", "ssam_job", "studio_build", "odc_search_operations", "..."],
   "error": "This SSAM server serves ODC Studio 1.7.28.10850; the user's machine has ODC Studio 1.7.29.10900, which is newer: the server does not serve this version yet; the owner was notified (server event studio-version-unserved). Do not roll the Studio back and do not reinstall the agent; repeat the call once the server is updated. Nothing ran on the user's Studio. Server-only tools (...) still work, with the studioNotServed warning.",
-  "userMessage": "O ODC Studio deste computador (1.7.29.10900) é mais novo que o ODC Studio que o servidor SSAM atende hoje (1.7.28.10850). O servidor ainda não tem esta versão; o dono do SSAM já foi avisado (o servidor registrou este pedido). Não volte o ODC Studio para a versão anterior e não reinstale o agente: quando o servidor for atualizado, repita o pedido. Nada rodou no seu Studio. Enquanto isso, as ferramentas só de servidor (...) continuam funcionando, com um aviso.",
+  "userMessage": "The ODC Studio on this computer (1.7.29.10900) is newer than the ODC Studio the SSAM server serves today (1.7.28.10850). The server does not have this version yet; the SSAM owner was already notified (the server recorded this request). Do not roll ODC Studio back to the previous version and do not reinstall the agent: once the server is updated, repeat the request. Nothing ran on your Studio. Meanwhile, the server-only tools (...) keep working, with a warning.",
   "serverKernel": "1.7.28", "agentStudio": "1.7.29.10900",
-  "continuation": { "tool": "ssam_doctor", "arguments": {}, "why": "Show the user the userMessage (pt-BR) as it is: nothing to do on their machine until the server owner updates the server; never ask the user to roll the Studio back or to reinstall the agent. ..." } }
+  "continuation": { "tool": "ssam_doctor", "arguments": {}, "why": "Show the user the userMessage as it is: nothing to do on their machine until the server owner updates the server; never ask the user to roll the Studio back or to reinstall the agent. ..." } }
 ```
 
 - Avisos nas respostas que rodaram (campo `studioWarning`, ao lado dos campos da ferramenta): `studioBuildDiffers` em toda
   resposta da faixa quando o servidor atende outro build com `"warn"`; `studioNotServed` quando uma ferramenta só de
   servidor (ou um relatório de estado) roda enquanto o Studio da faixa não é atendido (E2: antes respondia calada com o
-  kernel do servidor).
+  kernel do servidor). Com mais de uma faixa, `studioWarning` é o primeiro e `studioWarnings` traz todos.
+- Ferramentas da faixa `none` (rodada 2, A2) passam pela identidade de cada faixa que tocam: `ssam_task` conta como O11
+  (o `close` roda o kernel O11 contra o Service Studio); as outras, todas as faixas do token. `ssam_connect` sem `lane`
+  conecta só as faixas atendidas e devolve as puladas em `studioSkipped` (a recusa inteira de cada uma); sem nenhuma
+  atendida, é uma recusa só, com `lanes`. Uma chamada do Studio recusada pelo processo, numa ferramenta que já mandou
+  outra chamada ao Studio ou num relatório de estado, também volta em `studioSkipped`; sem nenhuma chamada enviada, a
+  resposta é a própria recusa.
 - Log (E1): `agent-connected` grava `studios` (só os números de versão de cada Studio instalado, nunca a pasta). Novo
   evento `studio-version-unserved` {`token` (o id `tok_…`), `lane`, `installed`, `served`, `relation`, `cause`,
-  `policy`}: uma vez por acesso, faixa e versões, quando o hub julga o `Hello` ou um `pong.versions`.
+  `policy`}: uma vez por acesso, faixa e versões, quando o hub julga o `Hello` ou um `pong.versions`, ou quando o
+  servidor recusa o processo de uma chamada (a mesma chave: um evento só). Repete depois de um reinício do servidor.
 - `AGENT_PACK_MISMATCH` usa o formato antigo, com `why` "ask the server owner for the current agent package".
 - Um único kernel por faixa no servidor: o limite está na seção 11.
 - Imagem interina (desenho de várias versões, O.6.1; `kernel-image.mjs`). A imagem declara as versões que serve:
@@ -1337,6 +1383,10 @@ ssam server-token revoke --id tok_xxxxxxxxxxxx                                # 
 - `-NoBuild -Prebuilt <pasta>` usa binários já prontos (é o modo dos testes; nenhum `dotnet build` em teste).
 
 ### 9.5 Guia do cliente (`docs/AGENTE-CLIENTE.md`, faixa `agent`)
+
+Em inglês desde 15/10/2026 (regra do dono: todo texto que chega ao licenciado em inglês), e o pacote o leva em
+`docs\AGENTE-CLIENTE.md`. As frases da seção "Privacy" são conferidas por `privacy-record.test.mjs` e
+`quality-privacy-doc.test.mjs` do servidor.
 
 Pré-requisitos (Windows; o Node vem no pacote, `agent\node\node.exe` com a licença em `agent\node\LICENSE`, e só um
 pacote `-NoNode` pede o Node 24 instalado com `--use-env-proxy` e `--use-system-ca`, conferidos pelo `doctor` por

@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import crypto from 'node:crypto';
 import {stageRenamePlan,stageRenameObservation,stageBatchRenamePlan,stageOrderPlan} from '../runtime/stage-rename.mjs';
 const portfolioKey=crypto.randomUUID();

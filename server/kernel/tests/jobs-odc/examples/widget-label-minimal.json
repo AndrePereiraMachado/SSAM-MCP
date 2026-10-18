@@ -1,5 +1,5 @@
 {
- "description": "Label: a legenda no ITextWidget do Label e TargetWidget apontando o Input que ela descreve.",
+ "description": "Label: the caption in the ITextWidget of the Label and TargetWidget pointing to the Input it describes.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -12,6 +12,6 @@
   {"op": "set", "target": "$lbl/#ITextWidget", "prop": "Text", "value": "Coupon code"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IInput", "name": "CouponInput", "as": "$in"},
   {"op": "set", "target": "$in", "prop": "Variable", "value": "Coupon"},
-  {"op": "set", "target": "$lbl", "prop": "TargetWidget", "value": "$in", "_why": "o clique no Label foca o Input; o Input passa a ter o Label como consumidor"}
+  {"op": "set", "target": "$lbl", "prop": "TargetWidget", "value": "$in", "_why": "a click on the Label focuses the Input; the Input gets the Label as a consumer"}
  ]
 }

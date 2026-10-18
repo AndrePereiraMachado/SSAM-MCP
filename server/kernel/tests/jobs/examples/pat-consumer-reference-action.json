@@ -1,5 +1,5 @@
 {
- "description": "Consumidor: op reference traz a entidade e a action publica do produtor (aqui job:pat-producer-public-action; ao vivo producer e o NOME do modulo, com ssam_job/o11_job captureProducers:[\"<Modulo>\"] ou --producer <Modulo>=<snapshot.oml>) e a tela chama a action pelo nome.",
+ "description": "Consumer: the reference op brings the entity and the public action of the producer (here job:pat-producer-public-action; live, producer is the NAME of the module, with ssam_job/o11_job captureProducers:[\"<Module>\"] or --producer <Module>=<snapshot.oml>) and the screen calls the action by its name.",
  "base": "reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -14,7 +14,7 @@
   {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetSupplierList", "as": "$agg"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IEntitySignature:Supplier"}},
   {"op": "logic", "data": {"actions": [
-   {"name": "ShowSummary", "kind": "screen", "owner": "IMobileScreen:Suppliers", "description": "Chama a action publica do produtor e mostra o resultado",
+   {"name": "ShowSummary", "kind": "screen", "owner": "IMobileScreen:Suppliers", "description": "Calls the public action of the producer and shows the result",
     "inputs": [{"name": "SupplierId", "type": "Supplier Identifier"}],
     "steps": [
      {"call": "Supplier_GetSummary", "as": "GetSummary", "args": {"SupplierId": "SupplierId"}},

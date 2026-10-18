@@ -1,12 +1,15 @@
 // Reconciles only the historical 4c debugger binding from immutable evidence.
 // It never changes original receipts, starts/stops a debugger or alters the
 // separate uncertain publication lock. Registration is a separate local step.
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { assertLockNotRetained, retainedLock } from './debug-retained-locks.mjs';
 
 const H = b => createHash('sha256').update(b).digest('hex');
+// CX15 r5 (N-3): an authorization binds the user's words by wordsSha256 (or, from before, by the words).
+const boundWords = a => /^[0-9a-f]{64}$/.test(String(a?.wordsSha256 ?? '')) || wordsGiven(a?.words); // CX15 r7: one predicate
 const fail = code => { throw new Error('debug_o11_neutralization_' + code); };
 const OLD = Object.freeze({ lane: 'o11', host: 'personal-2qqw9srv.outsystemscloud.com', module: 'Headless_UI',
   moduleKey: 'Mif02PxcH0K7KiABEHTwMg', applicationKey: 'gNS4vvu930yjPSk9Y3awUg', operationId: '4c7016f0a51445108b185fdcd0109586',
@@ -49,7 +52,7 @@ export function assessO11NativeNeutralization(input, { read = pinRead, now = Dat
       request.candidateSha256 !== OLD.sourceSha256 || request.authorizationPath !== input.publicationAuthorization.path || request.authorizationSha256 !== input.publicationAuthorization.sha256 ||
       !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(request.operationId ?? '')) fail('publication_request_invalid');
   if (auth.operationId !== request.operationId || auth.host !== OLD.host || auth.moduleKey !== OLD.moduleKey || auth.candidateSha256 !== OLD.sourceSha256 ||
-      auth.baseVersionId !== OLD.versionId || auth.scope !== 'ssam-debug-republish-published' || typeof auth.words !== 'string' || !auth.words.trim()) fail('authorization_invalid');
+      auth.baseVersionId !== OLD.versionId || auth.scope !== 'ssam-debug-republish-published' || !boundWords(auth)) fail('authorization_invalid');
   // Keep the publication's uncertain causal attribution. This report records
   // the desired state through independent observations, never a fabricated ack.
   if (publish.operationId !== request.operationId || publish.host !== OLD.host || publish.moduleKey !== OLD.moduleKey || publish.applicationKey !== OLD.applicationKey ||

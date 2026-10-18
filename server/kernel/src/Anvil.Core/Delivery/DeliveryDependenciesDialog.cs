@@ -52,7 +52,7 @@ public static partial class Delivery
         var parameters = new JsonObject { ["module_key"] = key, ["timeout"] = 600, ["answer_dependencies"] = true };
         if (environment != null) parameters["environment"] = environment;
         JsonObject refreshed;
-        try { refreshed = bridge.Call("refresh_references", parameters); }
+        try { refreshed = CallStudioWrite(bridge, result, stage, parameters, module); }
         catch (BridgeCallException ex) when (ex.Stall != null) { throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -60,6 +60,11 @@ public static partial class Delivery
             result["code"] = ReferencesRefreshFailedCode;
             result["referencesRefreshFailed"] = new JsonObject { ["stage"] = stage, ["module"] = module, ["moduleKey"] = key,
                 ["dialog"] = answered.DeepClone(), ["error"] = text, ["next"] = RefreshNext(module) };
+            // Review round 4 (N2): a refresh sent with no answer that says what it did may still run in the Studio (an unknown
+            // record, fenced): the next call is the resume, which proves the Studio idle first, never a second refresh now.
+            if (result["pendingBridgeOperation"]?["outcomeUnknown"] != null)
+                return "The Studio showed the dependencies dialog for " + module + " (answered: Cancel) and the Refresh References of its producers got no answer that says what it did: "
+                    + text + ". It may still run in the Studio: resume this task, which first proves the Studio idle and never sends it again blind.";
             return "The Studio showed the dependencies dialog for " + module + " (answered: Cancel) and the Refresh References of its producers failed: "
                 + text + ". Next call: o11_studio {command:\"refresh-references\", args:{module:\"" + module + "\"}}, then resume this task.";
         }
@@ -91,13 +96,15 @@ public static partial class Delivery
             }
         if (refreshed["blocked"]?.GetValue<bool>() != true || refreshed["blockedBy"] is not JsonObject dialog) return null;
         result["code"] = StudioDialogPending; result["blockedBy"] = dialog.DeepClone(); result["question"] = dialog["question"]?.DeepClone();
-        return "The Studio opened \"" + dialog["title"] + "\" during the Refresh References (" + stage + ") and only the person can answer it. "
+        // Review round 3 (F3): the command that waits by its name (the Manage Dependencies answers with its command).
+        var command = refreshed["command"]?.ToString() is { Length: > 0 } named ? named : RefreshReferencesCommand;
+        return "The Studio opened \"" + dialog["title"] + "\" during the " + command + " (" + stage + ") and only the person can answer it. "
             + dialog["question"] + " Nothing was merged; after the answer, resume this task.";
     }
 
     private static JsonObject RefreshNext(string module) => new()
     {
         ["tool"] = "o11_studio", ["arguments"] = new JsonObject { ["command"] = "refresh-references", ["args"] = new JsonObject { ["module"] = module } },
-        ["why"] = "o Refresh References do próprio Studio para os produtores do módulo; depois retome a entrega",
+        ["why"] = "the Studio's own Refresh References for the producers of the module; then resume the delivery",
     };
 }

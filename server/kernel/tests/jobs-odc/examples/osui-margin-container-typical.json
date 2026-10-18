@@ -1,5 +1,5 @@
 {
- "description": "MarginContainer do OSUI envolvendo uma List ligada a dados, para recuar a lista das bordas da tela.",
+ "description": "MarginContainer of OSUI wrapping a List bound to data, to move the list in from the edges of the screen.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,5 +1,5 @@
 {
- "description": "ChatMessage do OSUI por linha de uma List: lado (DisplayOnRight), hora e status vindos do registro e o texto da mensagem no Content.",
+ "description": "ChatMessage of OSUI per row of a List: the side (DisplayOnRight), the time and the status from the record and the text of the message in the Content.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

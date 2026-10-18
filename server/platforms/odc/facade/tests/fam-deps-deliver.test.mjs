@@ -3,6 +3,7 @@
 // exact text (STUDIO_DIALOG_PENDING, outcome blocked), never "outcome unknown"; the Studio's crash report is classified by
 // its title and closed by it. Family E: a merge rolled back names the producer signatures it had to select and the failed
 // stage, and, when the job named none of them, says the job is right. Pure: deliverOutcome over kernel task results.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { deliverOutcome } from '../o11-cycle.mjs';
@@ -22,7 +23,7 @@ test('a dialog only the person answers comes back as one question, blocked, with
   assert.equal(answer.dialog.title, 'Recover module');
   assert.deepEqual(answer.dialog.buttons, ['Open', 'Discard']);
   assert.deepEqual(answer.continuation.arguments, { resume: TASK });
-  assert.match(answer.continuation.why, /nada é repetido/);
+  assert.match(answer.continuation.why, /nothing is repeated/);
 });
 
 test('a merge rolled back names the producer signatures it had to select, the stage, and the same job once the kernel aligned the module', () => {
@@ -37,7 +38,7 @@ test('a merge rolled back names the producer signatures it had to select, the st
   assert.deepEqual(answer.signatureChanges.map(c => [c.producer, c.namedByJob]), [['(System)', false]]);
   assert.equal(answer.continuation.tool, 'o11_deliver');
   assert.equal(answer.sameJobAgain, true);
-  assert.match(answer.continuation.why, /mesmo job de novo/);
+  assert.match(answer.continuation.why, /same job again/);
 });
 
 // Review finding 2: a producer the job does not name is not enough to say "the same job": only the kernel's proof is.
@@ -48,7 +49,7 @@ test('a merge rolled back without the kernel proof never sends the same job agai
     merge: { merged: false, rolledBack: true, stage: 'reference-merge' },
     referenceSignatureChanges: [{ producer: '(System)', key: 'uXCIR2Atc0+es3zYuZSnNw', baseHash: '25c9070b', candidateHash: 'eee5a39e', namedByJob: false, owner: true }] } } }, ctx);
   assert.equal(answer.sameJobAgain, false);
-  assert.doesNotMatch(answer.continuation.why, /mesmo job de novo|O job está certo/);
+  assert.doesNotMatch(answer.continuation.why, /same job again|The job is right|mesmo job de novo|O job está certo/);
   assert.match(answer.continuation.why, /OML/);
 });
 
@@ -57,7 +58,7 @@ test('the dialogs the bridge closed reach the answer, delivered or refused, with
   const crash = { kind: 'UnexpectedError', title: 'Unexpected Error', text: 'An unexpected error occurred. NullReferenceException', answer: 'close', closed: true };
   const delivered = deliverOutcome({ envelope: { ok: true, command: 'deliver', data: { taskId: TASK, delivered: true, writeState: 'applied', stage: 'done',
     merge: { merged: true, dialogs: [{ kind: 'DependenciesDialog', title: '', text: 'Incompatible or missing dependencies found.', answer: 'close', closed: true }] } } } }, ctx);
-  assert.equal(delivered.result, 'entregue');
+  assert.equal(delivered.result, 'delivered');
   assert.equal(delivered.dialogs[0].kind, 'DependenciesDialog');
   const refused = deliverOutcome({ envelope: { ok: false, command: 'deliver', data: { taskId: TASK, delivered: false, writeState: 'not-applied', stage: 'studio-error',
     code: 'STUDIO_ERROR_DURING_MERGE', closed: true, error: 'The Studio reported an error while the merge ran ("Unexpected Error": NullReferenceException), closed by the bridge.',

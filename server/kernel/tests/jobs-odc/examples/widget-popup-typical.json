@@ -1,5 +1,5 @@
 {
- "description": "Popup de confirmacao: o botao Remover abre o popup, Cancelar fecha, e Confirmar chama a server action com o Id escolhido e fecha.",
+ "description": "A confirmation Popup: the Remove button opens the popup, Cancel closes it, and Confirm calls the server action with the chosen Id and closes it.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

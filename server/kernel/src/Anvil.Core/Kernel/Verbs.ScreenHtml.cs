@@ -160,7 +160,11 @@ public sealed partial class ModelSession
             edits = rebased.Edits;
             foreach (var note in rebased.Notes) notes.Add(note);
         }
-        var plan = module.Edit(reading, edits, pointer);
+        // CX17 review 3, M6/M7: the theme the screen shows, so the plan decides the markers of the engine again on a screen of the op
+        // (review 4, N1: a block, the themes of the screens that show it, read now).
+        ScreenVisual.PageTheme? pageTheme = null;
+        try { if (Resolve("@" + reading.RootKey) is IObjectSignature shown) pageTheme = RootThemeOf(shown); } catch (KeyNotFoundException) { }
+        var plan = module.Edit(reading, edits, pointer, pageTheme);
         if (plan.Refused) throw Refusal(plan.Result);
         var writer = new ScreenHtmlNativeWriter(this);
         plan.Apply(writer);
@@ -169,6 +173,13 @@ public sealed partial class ModelSession
         ScreenHtmlAfter = after;
         plan.Verify(after.Read("@" + reading.RootKey));
         if (plan.Refused) throw Refusal(plan.Result);
+        // A page that carries markers of the engine (its own as the plan wrote them, or a marked block it places) needs the native
+        // layout block in every theme it shows now (written once per theme, said; a theme of another module said with the markers
+        // that have no effect there): review 4, N2, whoever wrote the markers and whatever theme they were written for.
+        try {
+            if (Resolve("@" + reading.RootKey) is IObjectSignature marked && (plan.CarriesMarkers || MarkedBlocksOn(marked).Count > 0))
+                foreach (var layout in InstallNativeLayouts(marked)) plan.Result.Normalized.Add(layout);
+        } catch (KeyNotFoundException) { }
         // A new Verify message under the edited screen that no nearer write explains is this op's (an expression the edit wrote in
         // an element it kept: the review of 2026-10-12 found them with no op and no pointer).
         try { if (Resolve("@" + reading.RootKey) is IObjectSignature root) Anchor(root); } catch (KeyNotFoundException) { }

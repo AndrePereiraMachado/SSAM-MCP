@@ -1,5 +1,5 @@
 {
- "description": "BlankSlate do OSUI como estado vazio: aparece num If quando o aggregate volta vazio, com icone, texto e um botao que leva a outra tela.",
+ "description": "BlankSlate of OSUI as the empty state: it appears in an If when the aggregate comes back empty, with an icon, a text and a button that leads to another screen.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

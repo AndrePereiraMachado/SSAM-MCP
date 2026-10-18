@@ -1,5 +1,5 @@
 {
- "description": "DropdownServerSideItem (OutSystemsUI, Advanced) minimo: instancia como o Studio cria ao arrastar o bloco; criado vazio, porque o conteudo de exemplo do bloco usa elementos que a tela nao tem; inputs obrigatorios ItemId com valores simples; evento obrigatorio OnSelected ligado a uma screen action vazia.",
+ "description": "Minimal DropdownServerSideItem (OutSystemsUI, Advanced): an instance as the Studio creates it when the block is dragged; created empty, because the sample content of the block uses elements the screen does not have; required inputs ItemId with simple values; the required event OnSelected bound to an empty screen action.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

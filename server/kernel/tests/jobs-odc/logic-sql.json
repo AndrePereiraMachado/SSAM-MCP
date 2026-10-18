@@ -1,8 +1,8 @@
 {
- "description": "ODC (cobertura C): o logic-sql-params.json espelhado na faixa ODC sobre o modelo do data-full-model. Statement com dois parametros (@ProjectId e @MaxDue) declarados em params e alimentados pelos inputs da action, MaxRecords por max, e a saida tipada pela entidade atribuida ao output List.",
+ "description": "ODC (C coverage): the logic-sql-params.json mirrored in the ODC lane over the model of the data-full-model. Statement with two parameters (@ProjectId and @MaxDue) declared in params and fed by the inputs of the action, MaxRecords via max, and the output typed by the entity assigned to the output List.",
  "base": "job:data-full-model",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCov_Tasks_SearchSql (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCov_Tasks_SearchSql (ServerAction)", "why": "ODC: an app (CrossDevice) does not expose a public server action (the live Studio errors); the action stays private and without a consumer in this proof job"}],
  "ops": [
   {"op": "logic", "data": {"actions": [
    {

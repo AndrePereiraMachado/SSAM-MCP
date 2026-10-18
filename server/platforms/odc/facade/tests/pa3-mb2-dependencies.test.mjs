@@ -4,6 +4,7 @@
 // by its key (refresh_references) and go on, listing the dialog and referencesRefreshed; an older bridge keeps the dialog
 // for the person. Also (live 2026-10-07, DCIPS): a module whose tab is in the Studio's second window is published,
 // captured and refreshed by its key instead of MODULE_NOT_ACTIVE. Fake bridges on loopback ports only.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

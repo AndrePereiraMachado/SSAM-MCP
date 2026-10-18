@@ -1,5 +1,5 @@
 {
- "description": "Card (OutSystemsUI, Content) tipico; placeholders Content com dados do aggregate de tarefas.",
+ "description": "Typical Card (OutSystemsUI, Content); placeholders Content with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

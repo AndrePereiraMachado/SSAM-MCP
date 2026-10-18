@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA de `move` sobre um indice: os indices de uma entidade nao sao uma sequencia de autor (o Studio lista-os sozinho); a ordem dos ATRIBUTOS DE UM INDICE muda-se apagando e recriando o indice (tests/jobs/entity-lifecycle.json, lote de dados, fase 3).",
+ "description": "The REFUSAL of `move` on an index: the indexes of an entity are not an author sequence (the Studio lists them by itself); the order of the ATTRIBUTES OF AN INDEX is changed by deleting and recreating the index (tests/jobs/entity-lifecycle.json, data lot, phase 3).",
  "base": "job:spec-data",
  "expectValid": true,
  "expectError": ["move: IServerEntity 'Contact' does not keep EntityIndex 'IX_Contact_Name' in an ordered sequence", "Sequences of this parent: Attributes"],

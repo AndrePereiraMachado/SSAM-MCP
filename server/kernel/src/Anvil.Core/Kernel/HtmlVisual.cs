@@ -10,6 +10,9 @@ public sealed record HtmlVisualFragment(List<JsonObject> Ops, JsonObject Report,
 {
     public IReadOnlyDictionary<string, string> Ids { get; init; } = new Dictionary<string, string>();
     public IReadOnlyCollection<string> Created { get; init; } = [];
+    /// <summary>The widgets the fragment creates without class whose type the Studio gives a class (ScreenVisual.DecisionFor):
+    /// their alias, type and line. The op gives each the class of F2 once they exist (ScreenVisual.StudioClassOf).</summary>
+    public IReadOnlyList<(string Alias, string Type, int Line)> Unclassed { get; init; } = [];
 }
 
 /// <summary>
@@ -269,6 +272,7 @@ public static class HtmlVisual
         private readonly Dictionary<HtmlNode, Target?> targets = [];
         private readonly JsonArray adjusted = [], implicitArguments = [], canvasSelectors = [];
         private readonly List<string> importsHoisted = [];
+        private readonly List<(string Alias, string Type, int Line)> unclassed = [];
         private int counter, lightDark;
 
         private void Record(InvalidOperationException error)
@@ -319,6 +323,7 @@ public static class HtmlVisual
             {
                 Ids = new Dictionary<string, string>(idAliases, StringComparer.Ordinal),
                 Created = widgetNames.ToArray(),
+                Unclassed = unclassed.ToArray(),
             };
         }
 
@@ -1006,7 +1011,8 @@ public static class HtmlVisual
         /// attribute outside the closed list becomes an extended property with its literal value.</summary>
         private void Attributes(HtmlNode node, string alias, string type, string? extraClass = null)
         {
-            var authored = node.Attribute("class") is { Length: > 0 } written ? written : null;
+            var written = node.Attribute("class");
+            var authored = written is { Length: > 0 } ? written : null;
             var css = authored == null ? extraClass : extraClass == null ? authored : authored + " " + extraClass;
             if (css != null)
             {
@@ -1016,12 +1022,23 @@ public static class HtmlVisual
                 if (resolve.Accepts(type, "Style")) Set(alias, "Style", expression);
                 else Extended(node, alias, type, "class", expression);
             }
+            // M2 of the review of the M1 fix: class="" is the author's empty class, as in the document and the edit forms (they
+            // read it back as class=""): the class the Studio gave the widget goes, and F2 does not apply.
+            else if (written != null) { if (resolve.Accepts(type, "Style")) Set(alias, "Style", Quote("")); }
+            // F2 (the owner's decision D1 of 2026-10-17): a widget written without class whose type the Studio gives one; the op
+            // decides its class on the widget it created (ScreenVisual.StudioClassOf), as the document and the edit forms do.
+            else if (ScreenVisual.DecisionFor(type) != null && resolve.Accepts(type, "Style"))
+                unclassed.Add((alias, type, node.Line));
             foreach (var (attribute, value) in node.Attributes)
             {
                 if (Reserved.Contains(attribute) || attribute.StartsWith(':') || attribute.StartsWith('@')) continue;
                 // Inline JavaScript never becomes an attribute (the one table): onclick is the syntax of a destination.
                 if (ElementWidgetMap.IsInlineScript(attribute))
                     throw Error($"{node.Where}: attribute '{attribute}' is inline JavaScript, which is not compiled; logic is native", TagNotAllowed, "remove it; a link or a button names its action with onclick=\"Action\"");
+                // CX17 review 2, M4: a marker of the theme's native layout block is the engine's (the one rule of the text forms);
+                // a fragment goes into a screen that exists, where the op marks nothing.
+                if (ScreenVisual.MarkerOf(attribute) != null)
+                    throw Error($"{node.Where}: " + ScreenVisual.ReservedMarkerMessage(attribute, value, false, false), ScreenVisual.ReservedMarker, "remove " + attribute + "; a fragment carries no marker of the engine");
                 Extended(node, alias, type, attribute, value.Contains("{{", StringComparison.Ordinal) ? AttributeExpression(value, node) : Quote(value));
             }
             // An href that is a URL (not a screen) stays the attribute the author wrote.
@@ -1209,6 +1226,24 @@ public sealed partial class ModelSession
             if (!_handles.ContainsKey("$" + id) && _handles.TryGetValue(alias, out var widget)) { Register("$" + id, widget); aliases.Add("$" + id); }
         var report = fragment.Report.DeepClone().AsObject();
         report["expanded"] = fragment.Ops.Count;
+        // F2 (the owner's decision D1 of 2026-10-17; M1 of the review of the CX17 merge): a widget the fragment created without
+        // class is born with the class the Studio gave it, or its trimmed form, by the one rule of the forms of the language that
+        // create a widget (ScreenVisual.StudioClassOf); a trim is written by its own set (in the receipt), each said in normalized.
+        var classes = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+        var normalized = new JsonArray();
+        foreach (var (alias, type, line) in fragment.Unclassed)
+        {
+            if (!_handles.TryGetValue(alias, out var handle) || handle is not IObjectSignature widget) continue;
+            var born = (ModelHost.Prop(widget, "Style") as IExpression)?.Text;
+            if (ScreenVisual.StudioClassOf(type, born) is not { } studio) continue;
+            if (studio.Writes && studio.Expression != born)
+            {
+                try { ApplyOne(new JsonObject { ["op"] = "set", ["target"] = alias, ["prop"] = "Style", ["value"] = studio.Expression }); }
+                catch (Exception ex) { throw new InvalidOperationException($"html: the class {studio.Expression} of the new {studio.Kind} at line {line}: {Unwrap(ex)}", ex); }
+            }
+            if (ScreenVisual.CountStudioClass(classes, studio, line) is { } note) normalized.Add(note);
+        }
+        if (normalized.Count > 0) report["normalized"] = normalized;
         if (aliases.Count > 0) report["aliases"] = aliases;
         if (parentRef != authoredParent) report["parentAuthored"] = authoredParent;
         // The block of the theme is keyed by the screen or block that receives the fragment and the class of its stylesheet

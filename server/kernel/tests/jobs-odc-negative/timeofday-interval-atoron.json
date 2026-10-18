@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA de Interval AtOrOn num ITimeOfDay. O item guarda a hora em Hour/Minute, nao em Values; com AtOrOn a ordenacao do Schedule (SortScheduleItemsComparer) le Values nulo e a plataforma caia em NullReferenceException ao segundo item, sem dizer o op. O kernel recusa antes de escrever e diz o caminho: o CronSchedule do timer, ou itens IHour/IMinute. O caminho limpo esta em tests/jobs-odc/timer-time-of-day.json.",
+ "description": "ODC: the REFUSAL of Interval AtOrOn on an ITimeOfDay. The item stores the time in Hour/Minute, not in Values; with AtOrOn the sorting of the Schedule (SortScheduleItemsComparer) reads Values as null and the platform crashed with NullReferenceException at the second item, without saying the op. The kernel refuses before writing and says the way: the CronSchedule of the timer, or IHour/IMinute items. The clean path is in tests/jobs-odc/timer-time-of-day.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectError": [

@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import crypto from 'node:crypto';
 import {apiClientInventoryInput,collectApiClientInventory,apiClientAbsent} from '../runtime/api-client-inventory.mjs';
 const raw=(StartIndex=0,NameContains='')=>({inputParameters:{},clientVariables:{},screenVariables:{StartIndex,MaxRecords:1,Filter:{NameContains,Status:''}}});

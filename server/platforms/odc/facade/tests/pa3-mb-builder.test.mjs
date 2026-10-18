@@ -1,6 +1,7 @@
 // Package 3, lane mb, C02 item 2: the resident builder. prepareManifest asks the resident process when it serves and the
 // cold builder otherwise; residentManifest finds the server of its generation by its state file and ping and maps its answers.
 // Fakes only: no process is started, no key file is read.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

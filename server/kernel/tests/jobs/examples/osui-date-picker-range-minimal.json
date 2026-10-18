@@ -1,5 +1,5 @@
 {
- "description": "DatePickerRange (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; evento obrigatorio OnSelected ligado a uma screen action vazia; o Input de exemplo do placeholder Datepicker ligado a uma variavel Date.",
+ "description": "Minimal DatePickerRange (OutSystemsUI, Interaction): an instance as the Studio creates it when the block is dragged; the required event OnSelected bound to an empty screen action; the sample Input of the Datepicker placeholder bound to a Date variable.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

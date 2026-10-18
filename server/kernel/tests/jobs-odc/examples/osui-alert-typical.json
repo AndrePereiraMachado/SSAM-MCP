@@ -1,5 +1,5 @@
 {
- "description": "Alert do OSUI ligado a dados: AlertType muda por expressao (Warning ou Success) e a mensagem vem do Count do aggregate, dentro de um If.",
+ "description": "Alert of OSUI bound to data: AlertType changes by expression (Warning or Success) and the message comes from the Count of the aggregate, inside an If.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -48,7 +48,7 @@ function fit(text, info) {
 // The valid sentinel of a control; in a pre-filled form it always differs from the current value.
 export function sentinel(node, { clock } = {}) {
   const info = controlInfo(node);
-  const label = info.name ?? info.id ?? 'campo';
+  const label = info.name ?? info.id ?? 'field';
   switch (info.type) {
     case 'checkbox': return !info.current;
     case 'radio': return true;

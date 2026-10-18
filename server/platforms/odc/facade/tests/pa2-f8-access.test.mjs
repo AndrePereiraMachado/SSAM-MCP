@@ -3,6 +3,7 @@
 // Edit Data here" (cx-0e61, 06/10 01:05). o11_access {action:"users"} is the read-only lookup of users and roles through
 // the Studio's own login (CLI `users`, UserDirectory): a closed list of fields, never a password or hash, no words.
 // The CLI is a fake; no Studio, no dotnet.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

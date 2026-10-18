@@ -106,7 +106,7 @@ public static class ReferenceClosure
             foreach (var op in (node is JsonArray array ? array : node?["ops"] as JsonArray) ?? new JsonArray())
             {
                 if (op?["op"]?.ToString() != "reference" || op["producer"]?.ToString() is not { Length: > 0 } producer) continue;
-                var entry = found.FirstOrDefault(f => string.Equals(f.Producer, producer, StringComparison.OrdinalIgnoreCase));
+                var entry = found.FirstOrDefault(f => JobSources.SameProducer(f.Producer, producer));
                 if (entry.Elements == null) found.Add(entry = (producer, new List<string>()));
                 foreach (var element in op["elements"] as JsonArray ?? new JsonArray())
                     if (element?.ToString() is { Length: > 0 } text && !entry.Elements.Contains(text, StringComparer.Ordinal)) entry.Elements.Add(text);
@@ -126,13 +126,13 @@ public static class ReferenceClosure
         var list = new List<Expectation>();
         foreach (var (producer, elements) in ops)
         {
-            var entry = captured?.FirstOrDefault(p => string.Equals(p.Key, producer, StringComparison.OrdinalIgnoreCase)).Value as JsonObject;
+            var entry = captured?.FirstOrDefault(p => JobSources.SameProducer(p.Key, producer)).Value as JsonObject;
             if (entry != null)
             {
                 list.Add(new(producer, entry["key"]?.ToString(), entry["signatureHash"]?.ToString(), elements, entry["producer"]?.ToString()));
                 continue;
             }
-            if (bound != null && bound.FirstOrDefault(b => string.Equals(b.Key, producer, StringComparison.OrdinalIgnoreCase)) is { Key: not null } b)
+            if (bound != null && bound.FirstOrDefault(b => JobSources.SameProducer(b.Key, producer)) is { Key: not null } b)
             {
                 list.Add(new(producer, b.Value.Key, b.Value.Hash, elements));
                 continue;
@@ -207,7 +207,7 @@ public static class ReferenceClosure
             if (!string.IsNullOrWhiteSpace(e.PublishedHash) && !SameHash(reference.Hash, e.PublishedHash))
                 problems.Add(Problem("outdated", label, reference.ProducerKey, null,
                     $"The candidate references {label} at {reference.Hash}; the published {label} is {e.PublishedHash}.",
-                    $"Refresh the references of {label} in the Studio (o11_studio refresh-references) and deliver again; if {label} has unpublished changes, publish it first.",
+                    $"Bring {label} to its published signature with the Studio's own Manage Dependencies (o11_studio refresh-references {{producers:[\"{label}\"], published:true}}) and deliver again; if {label} has unpublished changes, publish it first.",
                     ReferencePatch(e), expectedHash: e.PublishedHash, actualHash: reference.Hash));
         }
         foreach (var reference in candidate)
@@ -221,7 +221,8 @@ public static class ReferenceClosure
                 $"The candidate changes the signature of {reference.Name} ({original.Hash} -> {reference.Hash}), which the job does not name and no "
                 + "named producer needs: the live merge would have to select that signature, the path that rolls back.",
                 $"The job is right (SSAM defect, reported). Refresh {reference.Name} in the Studio (o11_studio refresh-references {{producers:[\"{reference.Name}\"]}}) "
-                + $"so the module already has that signature, then deliver the same job again; if the Studio says {reference.Name} is up to date, deliver with the named producers as OML (producers: {{<name>: <capture OML>}}).",
+                + $"so the module already has that signature, then deliver the same job again; if the Studio says {reference.Name} is up to date, bring it to its published signature with the Studio's own Manage Dependencies "
+                + $"(o11_studio refresh-references {{producers:[\"{reference.Name}\"], published:true}}), which also covers an Extension (its signature comes from its extension reference, never from an OML), then deliver the same job again.",
                 null, expectedHash: original.Hash, actualHash: reference.Hash, ssamDefect: true));
         }
         return problems;

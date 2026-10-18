@@ -1,5 +1,5 @@
 {
- "description": "TabsContentItem do OSUI: o conteudo de uma aba, no Content de um Tabs vazio, ao lado do seu cabecalho.",
+ "description": "TabsContentItem of OSUI: the content of a tab, in the Content of an empty Tabs, beside its header.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

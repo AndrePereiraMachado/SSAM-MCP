@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -253,7 +254,7 @@ test('the common runner requires explicit O11 selection, validates its strict sc
 test('real MCP stdio exposes both runner schemas and rejects incomplete O11 preparation before any native operation', async () => {
   const client = new Client({ name: 'debug-reconcile-contract-test', version: '1' });
   await client.connect(new StdioClientTransport({ command: process.execPath,
-    args: [fileURLToPath(new URL('../ssam.mjs', import.meta.url)), 'mcp'], stderr: 'ignore' }));
+    args: [fileURLToPath(new URL('../ssam.mjs', import.meta.url)), 'mcp', '--profile', 'debug'], stderr: 'ignore' }));
   try {
     const listed = (await client.listTools()).tools;
     const tool = listed.find(value => value.name === 'ssam_debug_run');

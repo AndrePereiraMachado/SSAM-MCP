@@ -2,18 +2,34 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
 import { canonicalArguments } from './read-budget.mjs';
 import { keepAnswer } from './answer-size.mjs';
 import { mergeTask, readTask, findCallTask, ensureTaskIndexes, releaseKernelFacadeTasks, sanitizeAnswer, tasksDir, stateOf, kernelTaskAnswer, awaitsReplay, kernelWorkFolders } from './ssam-task.mjs';
 import { isMutation, declareToolClassification, classifyTool, phaseOfCall } from './tool-classification.mjs';
 import { taskStepOfCall, tokensOfCall } from './destructive-operations.mjs';
 import { WORDS_MARKER } from './next-steps.mjs';
+import { RESULT, resultIs } from './result-values.mjs';
 
 export const CALL_DEADLINE_MS = 25000;
 export const callScope = new AsyncLocalStorage();
 const liveTasks = new Map();
 const liveKey = (dir, id) => dir.toLowerCase() + ':' + id.toLowerCase();
 export const isLiveTask = (id, dir) => !!liveTasks.get(liveKey(dir, id));
+// CT-2 (servidor/fase4-26): the identical-call index (by tool and argument hash) and the calls by id are the process's,
+// per task folder, like liveTasks: every deadline on one folder (the MCP sessions of one customer hosted; the bootstrap
+// deadline and the server's own locally) joins the same live call and replays the same undelivered final under the same
+// 10-minute rule. A deadline on another folder (another customer) never sees them. The folder is compared exactly, only
+// case-folded on Windows.
+export const folderKey = dir => { const resolved = path.resolve(String(dir)); return process.platform === 'win32' ? resolved.toLowerCase() : resolved; };
+const callsByKey = new Map(), callsById = new Map();
+const scopedMap = (map, scope) => ({ get: key => map.get(scope + '|' + key), set: (key, value) => map.set(scope + '|' + key, value),
+  delete: key => map.delete(scope + '|' + key), has: key => map.has(scope + '|' + key),
+  values: () => [...map].filter(([key]) => key.startsWith(scope + '|')).map(([, value]) => value) });
+// The live calls the current async scope runs inside, innermost first (callScope holds the entry of each call).
+const runsInside = entry => { for (let scope = callScope.getStore(), depth = 0; scope && depth < 64; scope = scope.parent, depth++) if (scope === entry) return true; return false; };
+// CT-1: a task whose handler a deadline of this process runs now, on that folder.
+export const runsHere = (id, dir) => isLiveTask(String(id), dir);
 export function stopTask(id, { dir = tasksDir() } = {}) {
   const entry = liveTasks.get(liveKey(dir, id));
   if (!entry) return refusal(readTask(id, { dir }) ? 'TASK_NOT_RUNNING' : 'TASK_NOT_FOUND', 'No live task ' + id);
@@ -49,9 +65,14 @@ export function continuationSchema(config) {
 }
 const valueOf = answer => { if (answer?.structuredContent !== undefined) return answer.structuredContent; try { return JSON.parse(answer?.content?.find(c => c.type === 'text')?.text); } catch { return answer; } };
 const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value.ok === false ? { isError: true } : {}) });
-const why = 'Cancelar a espera não para a obra; use ssam_task {id,stop:true} ou ssam_doctor {task:{id,stop:true}}. Segue no servidor; esta chamada espera at\u00e9 25 s e devolve o resultado assim que terminar; nunca repita a chamada original nem durma';
+const why = 'Cancelling the wait does not stop the work; use ssam_task {id,stop:true} or ssam_doctor {task:{id,stop:true}}. It goes on in the server; this call waits up to 25 s and returns the result as soon as it ends; never repeat the original call nor sleep';
 const next = task => ({ tool: task.tool, arguments: { continueTask: task.id, ...(task.continuationLane ? { lane: task.continuationLane } : {}) }, why });
 const refusal = (code, error, extra = {}) => reply({ ok: false, code, error, ...extra });
+// fix/no-internals round 6 (D15): a refusal of a continuation that never reached the call or its task (an extra field,
+// another tool, an unknown id) carries this mark, so the exposure gate (ssam.mjs exposeHandler) never takes it for the end of
+// the call. The mark is a non-enumerable symbol: it never reaches the JSON of an answer.
+export const CONTINUATION_REFUSED = Symbol.for('ssam.continuationRefused');
+const notReached = answer => Object.defineProperty(answer, CONTINUATION_REFUSED, { value: true });
 const completionState = result => { const value = valueOf(result); return value?.ok != null || value?.outcome === 'uncertain' ? stateOf(value) : result?.isError === true ? 'failed' : 'ok'; };
 // The saved answer of a facade task (its hash checked), else its brief summary.
 function savedOriginal(task) {
@@ -61,7 +82,7 @@ function savedOriginal(task) {
   return original;
 }
 // R4-3: the confirmation answers the ORIGINAL call and never promises more than the resume proved. A publish:true call
-// whose publication did not run (or is not confirmed) gets result "entregue", failed "publish" and only the o11_publish
+// whose publication did not run (or is not confirmed) gets result "delivered", failed "publish" and only the o11_publish
 // continuation (the contract of o11-cycle.mjs C08); the publication of before is labelled previousPublication.
 // The module of a kernel delivery task (work/deliver/<id>/task.json), read only when a confirmation needs it.
 async function kernelModuleOf(kernelId, root) {
@@ -77,13 +98,13 @@ export function deliveredConfirmation(original, reconciled, { module: kernelModu
   if (original?.publish?.requested === true && !published) {
     const module = original?.module ?? reconciled?.module ?? kernelModule;
     const ran = reconciled?.publish?.requested === true;
-    return { ...proven, ...(lastPublication ? { previousPublication: lastPublication } : {}), ok: false, result: 'entregue', code: ran && reconciled?.code ? reconciled.code : 'PUBLISH_SKIPPED', failed: 'publish',
+    return { ...proven, ...(lastPublication ? { previousPublication: lastPublication } : {}), ok: false, result: RESULT.delivered, code: ran && reconciled?.code ? reconciled.code : 'PUBLISH_SKIPPED', failed: 'publish',
       publish: ran ? reconciled.publish : { requested: true, outcome: 'skipped' },
-      continuation: { tool: 'o11_publish', arguments: { module, authorize: WORDS_MARKER }, why: 'A entrega já está no Studio; publique só o módulo (nunca repita a entrega). authorize: as palavras do usuário no lugar do marcador.' },
-      message: 'A entrega foi reconciliada como entregue; a publicação pedida pela chamada original não rodou.' };
+      continuation: { tool: 'o11_publish', arguments: { module, authorize: WORDS_MARKER }, why: 'The delivery is already in the Studio; publish only the module (never repeat the delivery). authorize: the user\'s words in place of the marker.' },
+      message: 'The delivery was reconciled as delivered; the publication the original call asked for did not run.' };
   }
-  if (reconciled?.ok !== true) return { ...reconciled, result: 'entregue' };
-  return { ...reconciled, ok: true, code: 'TASK_DELIVERED', result: reconciled.result === 'entregue e publicado' ? reconciled.result : 'entregue', message: 'A operação foi entregue e reconciliada.' };
+  if (reconciled?.ok !== true) return { ...reconciled, result: RESULT.delivered };
+  return { ...reconciled, ok: true, code: 'TASK_DELIVERED', result: resultIs(reconciled.result, 'deliveredAndPublished') ? RESULT.deliveredAndPublished : RESULT.delivered, message: 'The operation was delivered and reconciled.' };
 }
 function annotate(answer, fields) {
   const value = valueOf(answer);
@@ -95,12 +116,19 @@ function annotate(answer, fields) {
   if (!changed) content.unshift({ type: 'text', text: JSON.stringify(updated) });
   return { ...answer, structuredContent: updated, content };
 }
-export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = callDeadlineMs(), env = process.env, notify, hasTool = () => true, defaultLane = 'o11', persistTask = mergeTask, saveAnswer = keepAnswer } = {}) {
-  const entries = new Map(), byId = new Map();
+// answerOrigin(tool, args) -> {tool, kind?} | null (fix/no-internals round 4, a licensee's server): whose answer the final
+// answer of a call is, kept with it (answer-size.mjs keepAnswer), so ssam_evidence reads it back as that tool's answer.
+export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = callDeadlineMs(), env = process.env, notify, hasTool = () => true, defaultLane = 'o11', persistTask = mergeTask, saveAnswer = keepAnswer, answerOrigin = null } = {}) {
+  const originOf = (tool, args) => { try { return answerOrigin?.(tool, args) ?? null; } catch { return null; } };
+  const scope = folderKey(dir);
+  const entries = scopedMap(callsByKey, scope), byId = scopedMap(callsById, scope);
   try { ensureTaskIndexes(dir); } catch {}
+  // The detached count (and its notification) stays this deadline's: an entry counts for the deadline that started it,
+  // whichever deadline of the folder detaches it; runningTasks lists only those.
   let detached = 0;
   const changed = () => { if (env.SSAM_RELAY_CHILD === '1') Promise.resolve(notify?.({ method: 'notifications/ssam/detached_tasks', params: { running: detached } })).catch(() => {}); };
-  const persist = (entry, fields) => persistTask(dir, { id: entry.id, tool: entry.tool, pid: process.pid, startedAt: new Date(entry.started).toISOString(), state: 'running', call: entry.call, continuationLane: entry.continuationLane, isWrite: entry.isWrite, cancelled: entry.cancelled === true, ...fields });
+  const owner = { up: () => { detached++; changed(); }, down: () => { detached--; changed(); } };
+  const persist = (entry, fields) => (entry.persistTask ?? persistTask)(dir, { id: entry.id, tool: entry.tool, pid: process.pid, startedAt: new Date(entry.started).toISOString(), state: 'running', call: entry.call, continuationLane: entry.continuationLane, isWrite: entry.isWrite, cancelled: entry.cancelled === true, ...fields });
   // M6 adjustment 6: a destructive execution still running also names the record of its operation (taskStepOfCall).
   const recordOf = entry => entry.step ? { destructiveRecord: entry.step, ...(entry.previewIds.length > 1 ? { previewIds: entry.previewIds } : {}) } : {};
   const running = (entry, joined = false) => reply({ state: 'running', task: { id: entry.id, tool: entry.tool, elapsedMs: Date.now() - entry.started }, continuation: next(entry), ...recordOf(entry), ...(joined ? { joined: true } : {}) });
@@ -110,7 +138,7 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
   };
   const detach = entry => {
     if (entry.detached) return;
-    entry.detached = true; entry.removeAbort?.(); detached++; changed();
+    entry.detached = true; entry.removeAbort?.(); (entry.owner ?? owner).up();
     safePersist(entry);
   };
   const evidenceNext = (task, close = false) => hasTool('ssam_task')
@@ -121,7 +149,7 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
     if (original?.taskId && task.call?.lane === 'o11') original = { ...original, continuation: { tool: 'o11_deliver', arguments: { resume: original.taskId }, why: 'Resume this kernel delivery to reconcile its outcome; proof close via ssam_task also releases this facade record.' } };
     return refusal(task.cancelled ? 'TASK_CANCELLED_UNCERTAIN' : 'TASK_UNCERTAIN_PENDING', 'The previous operation has no definitive outcome; reconcile and explicitly close its task before a new operation.', {
       ...original, ok: false, code: task.cancelled ? 'TASK_CANCELLED_UNCERTAIN' : 'TASK_UNCERTAIN_PENDING', outcome: 'uncertain',
-      task: { id: task.id, tool: task.tool }, continuation: original?.continuation ?? evidenceNext(task), close: evidenceNext(task, true)
+      task: { id: task.id, tool: task.tool, ...(task.orphaned ? { orphaned: true } : {}) }, continuation: original?.continuation ?? evidenceNext(task), close: evidenceNext(task, true)
     });
   };
   const cancelOriginal = entry => {
@@ -153,8 +181,8 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
   }
   async function fromDisk(tool, args, signal) {
     let task = readTask(args.continueTask, { dir });
-    if (!task) return refusal('TASK_NOT_FOUND', 'No task ' + args.continueTask);
-    if (task.tool !== tool) return refusal('TASK_TOOL_MISMATCH', 'This task belongs to ' + task.tool, { continuation: next(task) });
+    if (!task) return notReached(refusal('TASK_NOT_FOUND', 'No task ' + args.continueTask));
+    if (task.tool !== tool) return notReached(refusal('TASK_TOOL_MISMATCH', 'This task belongs to ' + task.tool, { continuation: next(task) }));
     const started = Date.now();
     while (true) {
       if (task.answer) {
@@ -169,9 +197,10 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
       }
       if (task.state === 'uncertain') return uncertainAnswer(task);
       if (task.state !== 'running') return refusal('TASK_ANSWER_UNAVAILABLE', 'This task ended without a saved final answer. Read its evidence before any new operation.');
-      // servidor/fase4-26 (M3): a task this process still runs for another server instance on the same folder (another
-      // session of the same customer, or the bootstrap deadline) is waited for like any running task, never orphaned.
-      if (task.orphaned || (task.pid === process.pid && !byId.has(task.id) && !isLiveTask(task.id, dir))) {
+      // M3 and CT-1 (from servidor/fase4-26): readTask applies the one rule of ssam-task.mjs (orphanedTask): a task this
+      // process still runs for another deadline on the same folder is waited for, never orphaned; a record of this pid that
+      // no handler here runs (a restart that got the same pid) is orphaned.
+      if (task.orphaned) {
         let continuation = { tool: task.call?.lane === 'odc' ? 'studio_status' : 'ssam_doctor', arguments: task.call?.lane ? { lane: task.call.lane } : {}, why: 'reconcile the original state; never repeat an uncertain write' };
         if (continuation.tool === 'studio_status') continuation.arguments = {};
         if (task.result?.taskId && task.call?.lane === 'o11') continuation = (await kernelTaskAnswer(task.result.taskId, { root }))?.continuation ?? continuation;
@@ -195,9 +224,9 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
       const signal = ctx?.mcpReq?.signal;
       if (Object.hasOwn(args, 'continueTask')) {
         const extras = Object.keys(args).filter(k => k !== 'continueTask' && k !== 'lane');
-        if (extras.length) return refusal('INPUT_INVALID', 'A continuation accepts only continueTask and lane.', { violations: extras.map(k => ({ path: '/' + k, message: 'Unexpected continuation field', accepted: ['continueTask', 'lane'] })), continuation: { tool, arguments: { continueTask: args.continueTask, ...(args.lane ? { lane: args.lane } : {}) }, why: 'remove all extra fields' } });
+        if (extras.length) return notReached(refusal('INPUT_INVALID', 'A continuation accepts only continueTask and lane.', { violations: extras.map(k => ({ path: '/' + k, message: 'Unexpected continuation field', accepted: ['continueTask', 'lane'] })), continuation: { tool, arguments: { continueTask: args.continueTask, ...(args.lane ? { lane: args.lane } : {}) }, why: 'remove all extra fields' } }));
         const entry = byId.get(args.continueTask);
-        if (entry && entry.tool !== tool) return refusal('TASK_TOOL_MISMATCH', 'This task belongs to ' + entry.tool, { continuation: next(entry) });
+        if (entry && entry.tool !== tool) return notReached(refusal('TASK_TOOL_MISMATCH', 'This task belongs to ' + entry.tool, { continuation: next(entry) }));
         return entry ? wait(entry, signal) : fromDisk(tool, args, signal);
       }
       // Elicitation may require the still-open request: propose must never detach.
@@ -209,6 +238,10 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
       // running one is joined (the same call, never a second send); a definitive one (ok/failed) is delivered as CX12 does.
       const phase = phaseOfCall(tool, args);
       let entry = entries.get(key);
+      // CT-2: a call never joins a live call it runs inside (a nested identical call through another deadline of the folder
+      // would wait for itself); it goes on as a call of its own and leaves the index to the outer call, as before.
+      const nested = !!entry && !entry.finished && runsInside(entry);
+      if (nested) entry = null;
       if (entry?.finished && entry.phase === 'execute' && completionState(entry.result) === 'uncertain') { entries.delete(key); if (entry.deliveries) byId.delete(entry.id); entry = null; }
       if (entry?.finished && (!entry.isWrite || completionState(entry.result) !== 'uncertain') && (entry.deliveries || entry.cancelled && (!entry.isWrite || valueOf(entry.result)?.outcome === 'not-sent') || Date.now() - entry.finished > 600000 && !(entry.cancelled && entry.isWrite))) { entries.delete(key); entry = null; }
       if (entry) {
@@ -232,11 +265,12 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
       if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
       const previewIds = phase === 'execute' ? tokensOfCall(args) : [];
       entry = { id: randomUUID(), dir, tool, key, exempt, started: Date.now(), continuationLane: args.lane, call: { argsSha256: hash, lane: args.lane ?? (/^o11_/.test(tool) ? 'o11' : /^(studio_|odc_|hybrid_)/.test(tool) ? 'odc' : defaultLane), ...(previewIds.length ? { previewIds } : {}) }, isWrite: mutation, deliveries: 0, controller,
-        phase, previewIds, step: phase === 'execute' ? taskStepOfCall(args) : null,
+        phase, previewIds, step: phase === 'execute' ? taskStepOfCall(args) : null, owner, persistTask, parent: callScope.getStore() ?? null,
         removeAbort: () => signal?.removeEventListener('abort', abort) };
       const notifyOriginal = ctx?.mcpReq?.notify;
       const context = ctx?.mcpReq ? { ...ctx, mcpReq: { ...ctx.mcpReq, signal: controller.signal, notify: (...params) => entry.detached ? Promise.resolve() : notifyOriginal?.(...params) } } : ctx;
-      entries.set(key, entry); byId.set(entry.id, entry); liveTasks.set(liveKey(dir, entry.id), entry);
+      if (!nested) entries.set(key, entry);
+      byId.set(entry.id, entry); liveTasks.set(liveKey(dir, entry.id), entry);
       entry.promise = Promise.resolve().then(() => callScope.run(entry, () => handler(args, context))).catch(error => reply({ ok: false, error: error.message, ...(entry.isWrite ? { outcome: 'uncertain', code: entry.cancelled ? 'TASK_CANCELLED_UNCERTAIN' : 'TASK_FAILED_UNCERTAIN', continuation: entry.step ?? evidenceNext(entry), ...(entry.step ? recordOf(entry) : {}) } : {}) })).then(async result => {
         if (result == null && entry.isWrite) result = uncertainAnswer(entry);
         // R4-2: the live answer is the handler's; only the persisted copy (saveAnswer below) and its replay are sanitized.
@@ -245,13 +279,13 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
         if ((args.resume || args.close) && /^[0-9a-f]{32}$/i.test(String(reconciled?.taskId ?? args.resume ?? args.close?.taskId))) {
           const kernelId = reconciled?.taskId ?? args.resume ?? args.close.taskId;
           if (reconciled?.writeState === 'not-applied' || reconciled?.code === 'MERGE_ROLLED_BACK' && reconciled?.closed === true || reconciled?.closed === true && reconciled?.ok === true) releaseKernelFacadeTasks(kernelId, { dir, outcome: 'not-applied' });
-          else if (reconciled?.result === 'entregue' || reconciled?.delivered === true || reconciled?.writeState === 'applied' && reconciled?.ok === true) {
+          else if (resultIs(reconciled?.result, 'delivered') || reconciled?.delivered === true || reconciled?.writeState === 'applied' && reconciled?.ok === true) {
             // Read before any release, so a record is never closed while its confirmation waits.
             const module = await kernelModuleOf(kernelId, root);
             for (const task of releaseKernelFacadeTasks(kernelId, { dir, outcome: 'delivered' })) {
               // R4-3: built for the original call of this record; R4-7: its own marker, never cancelled:true.
               const confirmation = reply(deliveredConfirmation(savedOriginal(task), reconciled, { module }));
-              mergeTask(dir, { id: task.id, state: stateOf(valueOf(confirmation)), closedAt: null, confirmation: 'delivered', deliveries: 0, answer: saveAnswer(sanitizeAnswer(confirmation), root), callResult: valueOf(confirmation) });
+              mergeTask(dir, { id: task.id, state: stateOf(valueOf(confirmation)), closedAt: null, confirmation: 'delivered', deliveries: 0, answer: saveAnswer(sanitizeAnswer(confirmation), root, originOf(task.tool, {})), callResult: valueOf(confirmation) });
             }
           }
         }
@@ -260,14 +294,14 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
         if (!entry.detached && entry.isWrite && completionState(result) === 'uncertain') detach(entry);
         if (entry.detached) {
           try {
-            try { entry.answer = saveAnswer(sanitizeAnswer(result), root); } catch { entry.storageFailed = true; }
+            try { entry.answer = saveAnswer(sanitizeAnswer(result), root, originOf(entry.tool, args)); } catch { entry.storageFailed = true; }
             safePersist(entry, { state: completionState(result), answer: entry.answer, deliveries: entry.deliveries, endedAt: new Date(entry.finished).toISOString(), callResult: valueOf(result), ...(!entry.tracked ? { result: valueOf(result) } : {}), cancelled: entry.cancelled === true });
-          } finally { detached--; changed(); }
+          } finally { entry.owner.down(); }
         }
         if (entry.tracked && !entry.detached) safePersist(entry, { state: completionState(result), callResult: valueOf(result), deliveries: entry.deliveries, endedAt: new Date(entry.finished).toISOString() });
         return result;
       });
       return wait(entry, signal, false, true);
     };
-  }, stop: id => stopTask(id, { dir }), runningCount: () => detached, runningTasks: () => [...byId.values()].filter(entry => entry.detached && !entry.finished).map(entry => ({ id: entry.id, tool: entry.tool, isWrite: entry.isWrite, continuation: next(entry) })) };
+  }, stop: id => stopTask(id, { dir }), runningCount: () => detached, runningTasks: () => [...byId.values()].filter(entry => entry.owner === owner && entry.detached && !entry.finished).map(entry => ({ id: entry.id, tool: entry.tool, isWrite: entry.isWrite, continuation: next(entry) })) };
 }

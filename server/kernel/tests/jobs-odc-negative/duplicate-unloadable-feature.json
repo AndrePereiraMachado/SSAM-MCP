@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA de `duplicate` de um widget com ColumnGap (faixa ODC; achado odc-columngap-blocks-duplicate da cobertura testada). ColumnGap usa a model feature ModelFeature_ModernLayouts, InDevelopment neste ODC Studio: a copia leva a feature no clipboard e ClipboardManager.ContainsValidVersion recusa a colagem em QUALQUER destino. Com MarginLeft (sem feature) o mesmo duplicate passa. O kernel diz a feature, o elemento e a propriedade.",
+ "description": "The REFUSAL of `duplicate` of a widget with ColumnGap (ODC lane; finding odc-columngap-blocks-duplicate of the tested coverage). ColumnGap uses the model feature ModelFeature_ModernLayouts, InDevelopment in this ODC Studio: the copy carries the feature in the clipboard and ClipboardManager.ContainsValidVersion refuses the paste at ANY destination. With MarginLeft (no feature) the same duplicate passes. The kernel states the feature, the element and the property.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectError": [

@@ -1,5 +1,5 @@
 {
- "description": "ProviderLoginButton do OSUI: o provedor obrigatorio (static entity do OSUI) e o evento obrigatorio OnClick.",
+ "description": "ProviderLoginButton of OSUI: the required provider (a static entity of OSUI) and the required event OnClick.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

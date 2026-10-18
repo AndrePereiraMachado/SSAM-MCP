@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA do delete de logica: Contact_Save e chamada por outra server action (Contact_Import) e pela screen action Save. Sem force o delete tem de ser recusado E a mensagem tem de nomear os dois chamadores (o caminho limpo, com replace, esta em tests/jobs/delete-logic-consumers.json).",
+ "description": "THE REFUSAL of the delete of logic: Contact_Save is called by another server action (Contact_Import) and by the screen action Save. Without force the delete must be refused AND the message must name the two callers (the clean path, with replace, is in tests/jobs/delete-logic-consumers.json).",
  "base": "job:screen-form-reactive",
  "expectValid": true,
  "expectError": [

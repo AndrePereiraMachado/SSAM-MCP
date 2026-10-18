@@ -1,12 +1,12 @@
 {
- "description": "ODC (cobertura T): LITERAIS DE REGISTO E DE LISTA, quatro tipos que nenhum verbo nomeia porque nascem do TEXTO escrito num argumento. No ODC uma propriedade-expressao e escrita por ExpressionDefinition.Parse: texto entre chavetas vira IRecordLiteralExpression com um IRecordLiteralField por par 'Nome: valor'; texto entre parentesis retos vira IListLiteralExpression com um IListLiteralItem por elemento. So funciona onde a propriedade declara SupportsRecordAndListLiterals - o Value de um IArgument, e tambem o Value do proprio campo e do proprio elemento, e e por isso que aninham. Uma action recebe os tres formatos (registo, lista de registos, lista de textos) e a action publica chama-a passando os literais.",
+ "description": "ODC (coverage T): RECORD AND LIST LITERALS, four types that no verb names because they are born from the TEXT written in an argument. In ODC an expression property is written by ExpressionDefinition.Parse: text between curly braces becomes an IRecordLiteralExpression with one IRecordLiteralField per 'Name: value' pair; text between square brackets becomes an IListLiteralExpression with one IListLiteralItem per element. It only works where the property declares SupportsRecordAndListLiterals - the Value of an IArgument, and also the Value of the field itself and of the element itself, which is why they nest. One action receives the three formats (record, list of records, list of texts) and the public action calls it passing the literals.",
  "base": "job:data-full-model",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCovLiterals_Demo (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCovLiterals_Demo (ServerAction)", "why": "ODC: an app (CrossDevice) does not expose a public server action (the live Studio gives an error); the action stays private and without a consumer in this proof job"}],
  "ops": [
   {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfCovProject_Report", "as": "$rep"},
   {"op": "create", "parent": "$rep", "type": "IInputParameter", "name": "Summary", "as": "$pRow"},
-  {"op": "set", "target": "$pRow", "prop": "DataType", "value": "WfCovProjectSummary", "_why": "o argumento tem de ter um tipo de registo CONCRETO: e dele que o literal tira os atributos para ligar a cada campo"},
+  {"op": "set", "target": "$pRow", "prop": "DataType", "value": "WfCovProjectSummary", "_why": "the argument must have a CONCRETE record type: it is from it that the literal takes the attributes to bind to each field"},
   {"op": "create", "parent": "$rep", "type": "IInputParameter", "name": "Summaries", "as": "$pSum"},
   {"op": "set", "target": "$pSum", "prop": "DataType", "value": "WfCovProjectSummary List"},
   {"op": "create", "parent": "$rep", "type": "IInputParameter", "name": "Tags", "as": "$pTags"},
@@ -18,7 +18,7 @@
   {"op": "set", "target": "$rAs", "prop": "Label", "value": "BuildLine"},
   {"op": "create", "parent": "$rAs", "type": "IAssignment", "as": "$rA1"},
   {"op": "set", "target": "$rA1", "prop": "Variable", "value": "Line"},
-  {"op": "set", "target": "$rA1", "prop": "Value", "value": "Summary.ProjectName + \" / \" + Summaries.Current.ProjectName + \" / \" + Tags.Current", "_why": "usa os tres inputs dentro da propria action: um IInputParameter sem uso no corpo apanha o warning UnusedElement"},
+  {"op": "set", "target": "$rA1", "prop": "Value", "value": "Summary.ProjectName + \" / \" + Summaries.Current.ProjectName + \" / \" + Tags.Current", "_why": "uses the three inputs inside the action itself: an IInputParameter unused in the body catches the warning UnusedElement"},
   {"op": "create", "parent": "$rep", "type": "IEndNode", "as": "$r9"},
   {"op": "link", "from": "$r0", "to": "$rAs"},
   {"op": "link", "from": "$rAs", "to": "$r9"},
@@ -29,10 +29,10 @@
   {"op": "create", "parent": "$demo", "type": "IExecuteServerActionNode", "name": "CallReport", "as": "$call"},
   {"op": "set", "target": "$call", "prop": "Action", "value": "IServerAction:WfCovProject_Report"},
 
-  {"op": "set", "target": "$call/Summary", "prop": "Value", "value": "{ProjectName: \"Alpha\", OpenTasks: 3}", "_why": "AQUI nasce 1 IRecordLiteralExpression + 2 IRecordLiteralField. Escrever este argumento com um nome de variavel daria uma expressao normal; as chavetas sao a unica diferenca. O argumento tem de estar VIRGEM (Value null): so ai o kernel usa IArgument.SetValue(ExpressionDefinition), que e quem reconhece {} e []. Se ja houver expressao, o set entra pelo caminho expression.Text e o mesmo texto fica guardado como ITextBasedExpression literal - o segundo set NAO substitui um literal por outro"},
-  {"op": "set", "target": "$call/Summaries", "prop": "Value", "value": "[{ProjectName: \"Alpha\", OpenTasks: 3}, {ProjectName: \"Beta\", OpenTasks: 0}]", "_why": "UM op cobre os quatro tipos de uma vez: 1 IListLiteralExpression, 2 IListLiteralItem e, porque o Value de um item tambem e SupportsRecordAndListLiterals, 2 IRecordLiteralExpression com 2 IRecordLiteralField cada. E a forma dominante no codigo real (lista de registos)"},
-  {"op": "set", "target": "$call/Tags", "prop": "Value", "value": "[\"alpha\", \"beta\"]", "_why": "o caso minimo: os itens de uma lista de textos guardam ITextBasedExpression em vez de um registo"},
-  {"op": "create", "parent": "$call/Summaries/#IListLiteralExpression", "type": "IListLiteralItem", "as": "$item3", "_why": "a segunda porta para o mesmo tipo: em vez do texto, a fabrica do pai (IListLiteralExpression.CreateItem). O item nasce sem Value e recebe o seu proprio literal de registo a seguir"},
+  {"op": "set", "target": "$call/Summary", "prop": "Value", "value": "{ProjectName: \"Alpha\", OpenTasks: 3}", "_why": "HERE is born 1 IRecordLiteralExpression + 2 IRecordLiteralField. Writing this argument with a variable name would give a normal expression; the curly braces are the only difference. The argument must be BLANK (Value null): only then does the kernel use IArgument.SetValue(ExpressionDefinition), which is what recognizes {} and []. If there is already an expression, the set goes through the expression.Text path and the same text is stored as a literal ITextBasedExpression - the second set does NOT replace one literal with another"},
+  {"op": "set", "target": "$call/Summaries", "prop": "Value", "value": "[{ProjectName: \"Alpha\", OpenTasks: 3}, {ProjectName: \"Beta\", OpenTasks: 0}]", "_why": "ONE op covers the four types at once: 1 IListLiteralExpression, 2 IListLiteralItem and, because the Value of an item is also SupportsRecordAndListLiterals, 2 IRecordLiteralExpression with 2 IRecordLiteralField each. It is the dominant form in real code (list of records)"},
+  {"op": "set", "target": "$call/Tags", "prop": "Value", "value": "[\"alpha\", \"beta\"]", "_why": "the minimal case: the items of a list of texts store an ITextBasedExpression instead of a record"},
+  {"op": "create", "parent": "$call/Summaries/#IListLiteralExpression", "type": "IListLiteralItem", "as": "$item3", "_why": "the second door to the same type: instead of the text, the parent's factory (IListLiteralExpression.CreateItem). The item is born without a Value and then receives its own record literal"},
   {"op": "set", "target": "$item3", "prop": "Value", "value": "{ProjectName: \"Gama\", OpenTasks: 1}"},
 
   {"op": "create", "parent": "$demo", "type": "IEndNode", "as": "$d9"},
@@ -40,9 +40,9 @@
   {"op": "link", "from": "$call", "to": "$d9"},
   {"op": "layout", "target": "$demo"},
 
-  {"op": "get", "target": "$call/Summary", "_why": "le de volta o argumento: o modelo recompoe o texto '{ ProjectName: \"Alpha\", OpenTasks: 3 }' a partir dos campos"},
-  {"op": "dump", "target": "$call/Summary", "depth": 3, "_why": "prova IRecordLiteralExpression com os seus IRecordLiteralField"},
-  {"op": "dump", "target": "$call/Summaries", "depth": 5, "_why": "prova a arvore inteira: IListLiteralExpression > 3 IListLiteralItem (2 do texto, 1 do create) > IRecordLiteralExpression > IRecordLiteralField"},
-  {"op": "dump", "target": "$call/Tags", "depth": 3, "_why": "prova o IListLiteralItem sobre texto simples"}
+  {"op": "get", "target": "$call/Summary", "_why": "reads back the argument: the model recomposes the text '{ ProjectName: \"Alpha\", OpenTasks: 3 }' from the fields"},
+  {"op": "dump", "target": "$call/Summary", "depth": 3, "_why": "proves IRecordLiteralExpression with its IRecordLiteralField"},
+  {"op": "dump", "target": "$call/Summaries", "depth": 5, "_why": "proves the whole tree: IListLiteralExpression > 3 IListLiteralItem (2 from the text, 1 from the create) > IRecordLiteralExpression > IRecordLiteralField"},
+  {"op": "dump", "target": "$call/Tags", "depth": 3, "_why": "proves the IListLiteralItem over plain text"}
  ]
 }

@@ -1,6 +1,7 @@
 // platforms/odc/facade/release-layout.mjs (lane A): the checkout answers are today's values (workspace.mjs and
 // studio-session.mjs included), the release answers follow the contract of docs/DISTRIBUICAO.md, and a child started
 // with childEnv writes only inside the temporary profile it was given.
+import '../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

@@ -1,6 +1,6 @@
 // Lane F1 of the atritos 2 package (docs/PACOTE-ATRITOS-2.md), facade part, on a real McpServer over InMemoryTransport with a
 // fake Anvil CLI and temporary folders only (no Studio, no bridge, no kernel CLI):
-// - A03 (I9): warnings that block nothing come back in "entregue" (at most 20 plus warningsTotal) and in a refusal with
+// - A03 (I9): warnings that block nothing come back in "delivered" (at most 20 plus warningsTotal) and in a refusal with
 //   errors, from the kernel task (result.warnings) or, for an older kernel, from the apply's nonblocking verdicts; the ODC
 //   studio_deliver path reads them from the kernel apply's verdicts (kernel-delivery.mjs);
 // - A12: DATA_PROOF_DIFFERS answers dataProof.differences (at most 20 plus differencesTotal) and the ssam_evidence
@@ -50,7 +50,7 @@ async function serve(t, deps) {
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
   t.after(async () => { await client.close(); await server.close(); });
   return args => client.callTool({ name: args.__tool ?? 'o11_deliver', arguments: Object.fromEntries(Object.entries(args).filter(([k]) => k !== '__tool')) })
-    .then(reply => reply.structuredContent ?? JSON.parse(reply.content[0].text === 'entregue' ? '{"ok":true,"result":"entregue"}' : reply.content[0].text));
+    .then(reply => reply.structuredContent ?? JSON.parse(reply.content[0].text === 'delivered' ? '{"ok":true,"result":"delivered"}' : reply.content[0].text));
 }
 
 function setup(t, { deliver, extra = {} } = {}) {
@@ -72,12 +72,12 @@ const warning = i => ({ id: i % 2 ? 'UnusedElement' : 'JSNodeTooLarge', path: 'O
   detail: 'Structure E' + i + ' is never used.', fix: i % 2 ? 'Remova o elemento ou use-o.' : null });
 
 // ---- A03
-test('a delivery with only warnings answers "entregue" with at most 20 warnings and warningsTotal, each with path and fix', async t => {
+test('a delivery with only warnings answers "delivered" with at most 20 warnings and warningsTotal, each with path and fix', async t => {
   const warnings = Array.from({ length: 25 }, (_, i) => warning(i));
   const s = setup(t, { deliver: () => ({ ok: true, command: 'deliver', data: { taskId: TASK, module: 'Orders', delivered: true, writeState: 'applied',
     validation: { newErrors: 0 }, warnings } }) });
   const value = await (await serve(t, s.deps))({ module: 'Orders', job: s.job('a.json', { ops: [{ op: 'get', target: 'X:Y' }] }), authorize: WORDS });
-  assert.equal(value.ok, true, JSON.stringify(value)); assert.equal(value.result, 'entregue');
+  assert.equal(value.ok, true, JSON.stringify(value)); assert.equal(value.result, 'delivered');
   assert.equal(value.warnings.length, 20); assert.equal(value.warningsTotal, 25);
   assert.deepEqual(value.warnings[1], { id: 'UnusedElement', path: 'Orders (ESpace) / E1 (Structure)', key: 'k1', detail: 'Structure E1 is never used.', fix: 'Remova o elemento ou use-o.' });
   // Up to 20, no total.
@@ -178,7 +178,7 @@ test('a task never sent closes without the selected Studio, through o11_deliver 
   writeKernelTask(s.work, applied, { moduleKey: 'k', environment: 'lab.example', writeState: 'applied', delivered: false, validation: { newErrors: 1 }, error: 'kept for review' });
   const call = await serve(t, s.deps);
   const closed = await call({ close: { taskId: notSent, reason: 'superseded by a corrected job' }, authorize: WORDS });
-  assert.equal(closed.ok, true, JSON.stringify(closed)); assert.equal(closed.result, 'fechada');
+  assert.equal(closed.ok, true, JSON.stringify(closed)); assert.equal(closed.result, 'closed');
   const viaTask = await call({ __tool: 'ssam_task', id: notSent, close: { reason: 'again' } });
   assert.equal(viaTask.ok, true, JSON.stringify(viaTask));
   assert.deepEqual(s.runAnvil.calls.map(c => c.args.slice(0, 3)), [['deliver', '--close', notSent], ['deliver', '--close', notSent]]);

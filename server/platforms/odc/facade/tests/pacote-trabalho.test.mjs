@@ -3,13 +3,14 @@
 // budget, in the declared order with every cut named; with a module (the elements the intent names, from a synthetic module
 // digest) and without one; the team rules chosen by the intent; a proven example. The checks over the real index need the
 // lane CLI; the rest runs on synthetic digests and the repository's own rule documents.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { workPacket, moduleItems, namedCapabilities, ruleUnits, rulesSection, intentTopics, PACKET_ORDER, PACKET_BUDGET, PACKET_SCHEMA, BATCH_RULE } from '../work-packet.mjs';
+import { workPacket as workPacketAtBudget, moduleItems, namedCapabilities, ruleUnits, rulesSection, intentTopics, PACKET_ORDER, PACKET_BUDGET, PACKET_SCHEMA, BATCH_RULE } from '../work-packet.mjs';
 import { moduleDigest, digestFile } from '../module-map.mjs';
 import { DIGEST_EXTRACTOR, DIGEST_SECTIONS } from '../module-digest.mjs';
 import { discover, laneSources, parseDiscoverArguments } from '../discovery.mjs';
@@ -17,6 +18,9 @@ import { discoverAll } from '../tool-routing.mjs';
 import { writeCapture } from './fixtures/module-index.mjs';
 import { snapshotSources } from './fixtures/discovery-results.mjs';
 
+// These established cases inspect content at the maximum explicit budget.
+// The default 8KB and executable section recovery are covered by context-budget-packet.
+const workPacket = (input, options = {}) => workPacketAtBudget(input, { budgetBytes: PACKET_BUDGET, ...options });
 const bytes = v => Buffer.byteLength(JSON.stringify(v), 'utf8');
 const block = (key, kind, name, text, extra = {}) => ({ key, kind, name, text, ...extra });
 
@@ -116,7 +120,7 @@ test('with a module: the elements the intent names, most relevant first, the nei
   // A small budget cuts the module and says what was left out and how to read it.
   const small = workPacket(inputOf({ intent: 'alterar as actions de relatorio' }), { budgetBytes: 8192 });
   const cut = small.cuts.find(c => c.section === 'module');
-  assert.ok(cut?.left.actions > 0 && small.module.actions.length > 0, JSON.stringify(small.cuts)); assert.deepEqual(cut.recover, small.module.read);
+  assert.ok(cut?.left.actions > 0 && small.module.actions.length > 0, JSON.stringify(small.cuts)); assert.equal(cut.recover.tool, 'ssam_discover'); assert.match(cut.recover.arguments.expand, /^packet:module:/);
   assert.equal(small.module.actions.length + cut.left.actions, 40, 'every named action is shown or counted');
 });
 
@@ -142,7 +146,8 @@ test('the capabilities carry operation and contract; the proven example is prese
   const tight = workPacket(inputOf(), { budgetBytes: 8192 });
   assert.equal(tight.example.job, 'switch-exception-handler');
   assert.ok(tight.example.opsShown == null || tight.example.opsShown < 30);
-  assert.deepEqual(tight.cuts.find(c => c.section === 'example').recover, tight.example.reference);
+  const recovery = tight.cuts.find(c => c.section === 'example').recover;
+  assert.equal(recovery.tool, 'ssam_discover'); assert.match(recovery.arguments.expand, /^packet:example:/);
   // The first match's own example when no proven job fits the words.
   const fallback = workPacket({ ...inputOf(), proven: null, example: { job: 'logic-steps', path: 'tests/jobs/logic-steps.json', base: 'x', fragment: true, opsTotal: 9, ops: [{ op: 'logic' }] }, exampleFor: 'logic.exception' });
   assert.equal(fallback.example.job, 'logic-steps'); assert.equal(fallback.example.for, 'logic.exception');
@@ -151,16 +156,16 @@ test('the capabilities carry operation and contract; the proven example is prese
 
 test('the team rules come by the intent: exception handling, screens, the O11 timer lesson only on O11, AR1 only on O11', () => {
   const units = ruleUnits();
-  assert.ok(units.some(u => u.from === 'padroes' && u.id === 'N1') && units.some(u => u.from === 'time' && /^Acesso a dados/.test(u.title)));
-  assert.ok(units.filter(u => u.from === 'padroes').length >= 35, 'the 35 rules and P7');
+  assert.ok(units.some(u => u.from === 'standards' && u.id === 'N1') && units.some(u => u.from === 'team' && /^Data access/.test(u.title)));
+  assert.ok(units.filter(u => u.from === 'standards').length >= 35, 'the 35 rules and P7');
   const ids = (lane, intent, matches = []) => rulesSection({ intent, matches, categories: new Map() }, 12000, { lane }).value.items.map(i => i.id ?? i.title);
   const crud = ids('o11', 'criar actions de CRUD de pedido com tratamento de exceção', [{ id: 'logic.exception', category: 'logic', via: 'match', score: 7 }]);
   assert.ok(crud.includes('S3'), 'exception handling: S3 ' + crud);
-  assert.ok(crud.some(t => /^Acesso a dados/.test(t)) && crud.includes('N1'), crud.join(', '));
+  assert.ok(crud.some(t => /^Data access/.test(t)) && crud.includes('N1'), crud.join(', '));
   assert.ok(!crud.includes('U1'), 'no screen rule for actions');
   const screen = ids('odc', 'alterar a tela de busca de produtos', [{ id: 'ui.screen', category: 'ui', via: 'match', score: 18 }]);
   assert.ok(screen.includes('U1') && screen.includes('S1') && !screen.includes('S3'), screen.join(', '));
-  assert.ok(ids('o11', 'criar um timer que roda a cada hora').some(t => /^O11: agenda de timer/.test(t)));
+  assert.ok(ids('o11', 'criar um timer que roda a cada hora').some(t => /^O11: timer schedule/.test(t)));
   assert.ok(!ids('odc', 'criar um timer que roda a cada hora').some(t => /^O11:/.test(t)), 'O11 lessons never on ODC');
   const data = 'criar entidade de pedido com atributos';
   assert.equal(ids('odc', data, [{ id: 'data.entity', category: 'data', via: 'match', score: 9 }]).includes('AR1'), false, 'AR1 is O11 only');
@@ -216,13 +221,14 @@ test('ssam_discover takes packet:true (MCP schema, CLI --packet) and the instruc
   const { InMemoryTransport } = await import('@modelcontextprotocol/server');
   const { createFacadeServer } = await import('../mcp.mjs');
   const { createSsamServer } = await import('../ssam.mjs');
-  for (const make of [() => createFacadeServer(), () => createSsamServer({ o11: false, odc: false })]) {
+  // Each server by what its own instruction says (getInstructions): the standalone ODC server serves no session guide.
+  for (const [label, make] of [['odc-facade', () => createFacadeServer()], ['ssam', () => createSsamServer({ o11: false, odc: false })]]) {
     const server = await make();
     const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'pacote-trabalho', version: '1' });
     await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
     try {
-      assert.match(client.getInstructions(), /An agent or subagent starts its task with ssam_discover \{intent, lane, app, packet:true\}/);
+      assert.match(client.getInstructions(), /agents\/subagents start \{intent,lane,app,packet:true\}/, label);
       const tool = (await client.listTools()).tools.find(t => t.name === 'ssam_discover');
       if (tool) { assert.equal(tool.inputSchema.properties.packet.type, 'boolean'); assert.match(tool.description, /packet:true is the work packet/); }
     } finally { await client.close(); await server.close(); }
@@ -244,8 +250,8 @@ for (const lane of ['o11', 'odc']) {
     const digest = async target => ({ ...found(lane), target, file: target });
     for (const input of [{ intent: 'criar actions de CRUD de pedido com tratamento de exceção', app: 'C:\\captures\\Vendas_CS.oml' },
       { intent: 'corrigir a action Pedido_Create', app: 'C:\\captures\\Vendas_CS.oml' }, { intent: 'alterar a tela de busca de produtos' }]) {
-      const a = await discoverAll({ lane, ...input, packet: true, sources, digest });
-      const b = await discoverAll({ lane, ...input, packet: true, sources, digest });
+      const a = await discoverAll({ lane, ...input, packet: true, budgetBytes: PACKET_BUDGET, sources, digest });
+      const b = await discoverAll({ lane, ...input, packet: true, budgetBytes: PACKET_BUDGET, sources, digest });
       assert.equal(JSON.stringify(a), JSON.stringify(b), 'same input, same bytes: ' + input.intent);
       assert.equal(a.schemaVersion, PACKET_SCHEMA); assert.ok(a.size.bytes <= PACKET_BUDGET && bytes(a) === a.size.bytes, String(a.size.bytes));
       assert.ok(a.capabilities.items.length, 'capabilities: ' + input.intent);
@@ -253,7 +259,7 @@ for (const lane of ['o11', 'odc']) {
       assert.ok(a.rules.items.length, 'rules: ' + input.intent);
       if (input.app) assert.equal(a.module.name, 'Vendas_CS'); else assert.equal(a.module.none, true);
     }
-    const fix = await discoverAll({ lane, intent: 'corrigir a action Pedido_Create', app: 'C:\\captures\\Vendas_CS.oml', packet: true, sources, digest });
+    const fix = await discoverAll({ lane, intent: 'corrigir a action Pedido_Create', app: 'C:\\captures\\Vendas_CS.oml', packet: true, budgetBytes: PACKET_BUDGET, sources, digest });
     assert.equal(fix.capabilities.items[0].id, 'logic.server-action', 'the kind of the action named comes first');
     assert.match(fix.module.bodies[0], /^server action Pedido_Create @A1/);
     // A budget above the ceiling is held at the ceiling; a smaller one is kept.

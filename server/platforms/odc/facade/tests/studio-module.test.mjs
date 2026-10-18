@@ -1,6 +1,7 @@
 // The module a Studio tool names reaches the open module (studio-module.mjs, lib.mjs resolveModuleArgs). QuizLive,
 // 2026-10-05: studio_deliver {module:"QuizLive Web"} failed at the snapshot ("Expected exactly one open QuizLive Web;
 // found 0") and the session spent a status call and a second delivery on the name. Pure, plus a fake bridge client.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveOpenModule, compactName } from '../studio-module.mjs';

@@ -95,12 +95,12 @@ test('writes run with the exact argv of Program.cs and never --credentials', asy
       out => ['create-module', '--app', 'Demo', '--name', 'Demo_UI2', '--out', out, '--replace', '--template-key', 'tpl-1', '--description', 'Second UI', '--no-publish'],
       out => ({ ok: true, module: 'Demo_UI2', key: 'mod-11', file: path.join(out, 'Demo_UI2.oml') })],
     [{ action: 'update-app', name: 'Demo', color: '#112233', description: 'New text' },
-      () => ['update-app', '--name', 'Demo', '--color', '#112233', '--description', 'New text'], { ok: true, result: 'feito' }],
+      () => ['update-app', '--name', 'Demo', '--color', '#112233', '--description', 'New text'], { ok: true, result: 'done' }],
     [{ action: 'refresh-refs', module: 'Demo_CS', all: true, publish: true },
       out => ['refresh-refs', '--module', 'Demo_CS', '--out', out, '--all', '--publish'],
       { ok: true, module: 'Demo_CS', refreshed: ['Users', 'OutSystemsUI'], published: true }],
     [{ action: 'set-user-provider', module: 'Demo_CS', providerName: 'Users', providerKey: 'ref-1' },
-      out => ['set-user-provider', '--module', 'Demo_CS', '--out', out, '--provider-name', 'Users', '--provider-key', 'ref-1'], { ok: true, result: 'feito' }],
+      out => ['set-user-provider', '--module', 'Demo_CS', '--out', out, '--provider-name', 'Users', '--provider-key', 'ref-1'], { ok: true, result: 'done' }],
   ];
   for (const [index, [input, argv, expected]] of cases.entries()) {
     const value = await h.call('o11_environment', { ...input, authorize: WORDS });
@@ -166,7 +166,7 @@ test('delete-app runs the Service Center delete engine (the server simulation fi
   assert.deepEqual(longer.problems.map(p => p.code), ['WORDS_MUST_NAME'], 'another application whose name starts the same is not this one');
   assert.deepEqual(sc.deletes(), []);
   const named = await h.call('o11_environment', { action: 'delete-app', host: PERSONAL, confirmationToken: token, authorize: 'Pode apagar o 1, o zzscratch.' });
-  assert.deepEqual([named.ok, named.result, named.state, named.deleted.map(d => d.name), named.deletedModules], [true, 'feito', 'confirmed', ['ZZScratch'], ['ZZScratch_UI']]);
+  assert.deepEqual([named.ok, named.result, named.state, named.deleted.map(d => d.name), named.deletedModules], [true, 'done', 'confirmed', ['ZZScratch'], ['ZZScratch_UI']]);
   // Not only ZZ: any application the words name (the engine's rules decide, not the name).
   const demoPreview = await h.call('o11_environment', { action: 'delete-app', app: 'Demo', host: PERSONAL });
   sc.clock.advance(CONFIRM_MIN_AGE_MS);

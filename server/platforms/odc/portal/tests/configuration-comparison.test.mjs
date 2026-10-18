@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { compareApplicationConfigurations as compare } from '../runtime/configuration-comparison.mjs';

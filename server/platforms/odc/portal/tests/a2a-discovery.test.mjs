@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';
 import {A2A_DISCOVER,a2aDiscoveryApproval,a2aDiscoveryOutcome} from '../runtime/a2a-discovery.mjs';
 import {sha256,fingerprint} from '../runtime/write-journal.mjs';

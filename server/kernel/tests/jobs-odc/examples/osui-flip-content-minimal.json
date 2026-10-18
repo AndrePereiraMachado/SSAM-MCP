@@ -1,5 +1,5 @@
 {
- "description": "FlipContent do OSUI: frente e verso com texto.",
+ "description": "FlipContent of OSUI: a front and a back with text.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

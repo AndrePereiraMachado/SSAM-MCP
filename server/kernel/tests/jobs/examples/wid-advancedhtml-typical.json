@@ -1,5 +1,5 @@
 {
- "description": "HTML Element (IAdvancedHtml) tipico pela op html visual: section com aria-label, titulo h2 e paragrafo com expressoes ligadas ao aggregate; as tags viram HTML Elements nativos e os atributos extended properties.",
+ "description": "Typical HTML Element (IAdvancedHtml) through the visual html op: a section with aria-label, an h2 title and a paragraph with expressions bound to the aggregate; the tags become native HTML Elements and the attributes extended properties.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

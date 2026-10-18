@@ -33,6 +33,10 @@ export function responseObject(value) {
   if (value.result && typeof value.result === 'object' && !('ok' in value)) return responseObject(value.result);
   return value;
 }
+// The delivery results (platforms/odc/facade/result-values.mjs): English since 16/10; the Portuguese values the sessions
+// recorded before answered are kept, so old and new recordings classify alike.
+const DELIVERED = new Set(['delivered', 'entregue']);
+const DELIVERED_ANY = new Set([...DELIVERED, 'delivered and published', 'entregue e publicado']);
 const refusalStages = new Set(['preflight', 'build', 'documents', 'apply', 'verify', 'check-base', 'preview']);
 export function classifyOutcome(call) {
   const raw = call.output ?? call.result ?? call.response;
@@ -41,7 +45,7 @@ export function classifyOutcome(call) {
   const outcome = object?.outcome;
   const write = isDeliveryWrite(call) || isPublication(call);
   const result = object?.result;
-  const publishFailedAfterDelivery = object?.ok === false && result === 'entregue' && object.failed === 'publish';
+  const publishFailedAfterDelivery = object?.ok === false && DELIVERED.has(result) && object.failed === 'publish';
   const rawText = typeof raw === 'string' ? raw : JSON.stringify(raw ?? '');
   const clientError = call.isError || call.is_error || raw?.isError || raw?.is_error || call.status === 'failed';
   let classification;
@@ -50,7 +54,7 @@ export function classifyOutcome(call) {
   else if (!object && /InputValidationError\b/.test(rawText) && (clientError || /<tool_use_error>/.test(rawText))) { classification = 'refused'; code = 'CLIENT_INPUT_INVALID'; }
   else if (write && !object && (/Request timed out/i.test(rawText) || clientError)) classification = 'uncertain';
   else if (object?.ok === false && (refusalStages.has(object.failed) || /_REFUSED$/.test(code ?? ''))) classification = 'refused';
-  else if (publishFailedAfterDelivery || (object?.ok === true && (['entregue', 'entregue e publicado', 'delivered'].includes(result) || outcome === 'delivered')) || (isPublication(call) && (outcome === 'published' || object?.status === 'succeeded'))) classification = 'accepted';
+  else if (publishFailedAfterDelivery || (object?.ok === true && (DELIVERED_ANY.has(result) || outcome === 'delivered')) || (isPublication(call) && (outcome === 'published' || object?.status === 'succeeded'))) classification = 'accepted';
   else if (object?.ok === true && object.merged === false && object.publishInvoked === false && ['build', 'preview'].includes(object.until)) classification = 'staged';
   else if (object?.ok === false) classification = 'failed';
   else classification = 'unclassified';

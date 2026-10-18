@@ -1,5 +1,5 @@
 {
- "description": "Tela Reactive de detalhe/edicao ligada a dados: entidade Contact, tela ContactDetail com input ContactId, aggregate filtrado, Form com Inputs ligados ao registro, Button OnClick -> screen action Save que chama CreateOrUpdateContact",
+ "description": "Reactive detail/edit screen bound to data: entity Contact, screen ContactDetail with input ContactId, filtered aggregate, Form with Inputs bound to the record, Button OnClick -> screen action Save that calls CreateOrUpdateContact",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "ops": [

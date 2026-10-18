@@ -22,8 +22,11 @@ public sealed class ScreenHtmlTests
         public Node Set(string property, object? value) { Props[property] = value; return this; }
     }
     private sealed record Code(string Text);
-    private sealed class Reader : ModelReader<Node>
+    // A reader over the test model; with a Studio (studio), the defaults it measured: the kernel's adapter gives the installed
+    // Studio's (StudioDefaults), this one the test's.
+    private sealed class Reader(ScreenDefaults? studio = null) : ModelReader<Node>
     {
+        protected internal override ScreenDefaults? DefaultsOf(Node module, Node? flow) => studio;
         protected override IEnumerable<Node> Referrers(Node n) => [];
         protected override IEnumerable<Node> Children(Node n) => n.Children;
         protected override Node? Parent(Node n) => n.Parent;
@@ -223,8 +226,170 @@ public sealed class ScreenHtmlTests
         Assert.Contains("TableRecords", opaque); Assert.Contains("MobileWidget", opaque); Assert.Contains("ContainerWidget", opaque);
         Assert.DoesNotContain("Container", opaque);
         Assert.Equal("bind", contract["named"]!["Input"]!["Variable"]!.ToString());
-        Assert.Equal("True", contract["defaults"]!["Container"]!["Visible"]!.ToString());
         Assert.Contains("ObjectKey", contract["notFacts"]!.AsArray().Select(o => o!.ToString()));
+        // The defaults are no table of the reading: without a Studio the contract says only the rule; with one, its values.
+        Assert.Contains("installed Studio", contract["defaults"]!["rule"]!.ToString());
+        Assert.Null(contract["defaults"]!["Container"]);
+        var measured = ScreenHtml.Contract(Studio());
+        Assert.Equal("fake-studio", measured["defaults"]!["studio"]!.ToString());
+        Assert.Equal("True", measured["defaults"]!["Container"]!["Visible"]!.ToString());
+        Assert.Equal("8px", measured["defaults"]!["Container"]!["Gap"]!.ToString());
+    }
+
+    // A Studio whose fresh Container is born Visible, with a Gap of 8px, 3 grid columns, the class "box" and a name of its own,
+    // and whose events are born Inherited on a page and Fade inside a Popup (as StudioBornValues measures a real one).
+    private static ScreenDefaults Studio() => ScreenDefaults.FromBorn("fake-studio",
+        new Dictionary<string, SortedDictionary<string, string>> {
+            ["Container"] = new(StringComparer.Ordinal) { ["Visible"] = "e:True", ["Gap"] = "t:8px", ["GridColumns"] = "v:3", ["Style"] = "e:\"box\"", ["Name"] = "t:Container1" },
+            ["UILifeCycleEvent"] = new(StringComparer.Ordinal) { ["Transition"] = "v:Inherited", ["Name"] = "t:OnClick" },
+            ["UILifeCycleEvent" + ScreenDefaults.PopupSuffix] = new(StringComparer.Ordinal) { ["Transition"] = "v:Fade", ["Name"] = "t:OnClick" },
+        },
+        new Dictionary<string, string> { ["Container"] = "widget", ["UILifeCycleEvent"] = "event", ["UILifeCycleEvent" + ScreenDefaults.PopupSuffix] = "event" });
+
+    [Fact]
+    public void APropertyIsOmittedExactlyWhenItHoldsTheDefaultTheReadersStudioGivesIt()
+    {
+        // The settings a fresh element is born with are defaults; its class and its name are the developer's.
+        var studio = Studio();
+        Assert.Equal("True", studio.DefaultOf("Container", "Visible", 'e'));
+        Assert.Equal("8px", studio.DefaultOf("Container", "Gap", 't'));
+        Assert.Equal("3", studio.DefaultOf("Container", "GridColumns", 'v'));
+        Assert.Equal("", studio.DefaultOf("Container", "Style", 'e'));
+        Assert.Equal("", studio.DefaultOf("Container", "Name", 't'));
+        Assert.Equal("False", studio.DefaultOf("Container", "Animate", 'b'));
+        Assert.Equal("Inherited", studio.DefaultOf("UILifeCycleEvent", "Transition", 'v'));
+        Assert.Equal("Fade", studio.DefaultOf("UILifeCycleEvent", "Transition", 'v', inPopup: true));
+        // A screen with a container at the Studio's values, one with its own Gap, and one in a Popup with an event at the Popup's
+        // Transition: read with that Studio, only what differs from it is written.
+        keys = 0;
+        var module = N("ESpace", "Shop");
+        var flow = module.Add(N("MobileFlow", "MainFlow"));
+        var screen = flow.Add(N("MobileScreen", "Home"));
+        var go = screen.Add(N("ScreenAction", "Go"));
+        screen.Add(W("Container")).Set("Visible", new Code("True")).Set("Gap", "8px").Set("GridColumns", 3).Set("Style", new Code("\"box\""));
+        screen.Add(W("Container")).Set("Visible", new Code("True")).Set("Gap", "12px").Set("GridColumns", 3);
+        var popup = screen.Add(W("Popup"));
+        var inside = popup.Add(W("Container")).Set("Visible", new Code("True")).Set("Gap", "8px");
+        var click = inside.Add(N("UILifeCycleEvent")).Set("Destination", go).Set("Transition", "Fade");
+        inside.Set("OnClick", click);
+        var read = ScreenHtml.Module(module, new Reader(studio)).Read("Home");
+        Assert.Empty(read.Problems);
+        var text = Regex.Replace(read.Html, " k=\"w[0-9]+\"", "");
+        Assert.Equal("<screen name=\"Home\" actions=\"Go\">\n<div class=\"box\"/>\n<div os-Gap=\"12px\"/>\n<popup>\n <div onclick=\"Go\"/>\n</popup>\n</screen>\n", text);
+        Assert.Empty(read.Compare(read.Html));
+        // The same module read without a Studio: nothing is a default but the empty value, so every value is written (the reading
+        // has no list of its own to fall back on).
+        var bare = ScreenHtml.Module(module, new Reader()).Read("Home");
+        Assert.Contains("os-Gap=\"8px\"", bare.Html);
+        Assert.Contains("os-GridColumns=\"3\"", bare.Html);
+        Assert.Contains("os-Visible=\"True\"", bare.Html);
+        Assert.Contains("os-onclick.Transition=\"Fade\"", bare.Html);
+        Assert.Empty(bare.Compare(bare.Html));
+    }
+
+    // A Studio that creates a screen or block input and a block event mandatory (ODC Studio 1.7.28.10873 and Service Studio
+    // 11.55.87 do), and whose fresh Input widget would be born required and disabled (no Studio does today).
+    private static ScreenDefaults MandatoryStudio() => ScreenDefaults.FromBorn("mandatory-studio",
+        new Dictionary<string, SortedDictionary<string, string>> {
+            ["InputParameter"] = new(StringComparer.Ordinal) { ["IsMandatory"] = "b:True", ["Name"] = "t:In1" },
+            ["BlockEvent"] = new(StringComparer.Ordinal) { ["IsMandatory"] = "b:True", ["Name"] = "t:Event1" },
+            ["Input"] = new(StringComparer.Ordinal) { ["Mandatory"] = "e:True", ["Enabled"] = "e:False" },
+            ["Input" + ScreenDefaults.PopupSuffix] = new(StringComparer.Ordinal) { ["Mandatory"] = "e:True", ["Enabled"] = "e:False" },
+        },
+        new Dictionary<string, string> { ["InputParameter"] = "parameter", ["BlockEvent"] = "event", ["Input"] = "widget", ["Input" + ScreenDefaults.PopupSuffix] = "widget" });
+
+    [Fact]
+    public void ANamedAttributeLeftOutMeansWhatTheLanguageSaysWhateverTheStudioGivesAFreshElement()
+    {
+        // <input> and <event> without mandatory are not mandatory; an input widget without required is not required and without
+        // enabled is enabled: the language's meaning, whatever the installed Studio gives a fresh element.
+        var studio = MandatoryStudio();
+        Assert.Equal("False", studio.DefaultOf("InputParameter", "IsMandatory", 'b'));
+        Assert.Equal("False", studio.DefaultOf("BlockEvent", "IsMandatory", 'b'));
+        Assert.Equal("False", studio.DefaultOf("Input", "Mandatory", 'e'));
+        Assert.Equal("True", studio.DefaultOf("Input", "Enabled", 'e'));
+        Assert.Equal("False", studio.DefaultOf("Input", "Mandatory", 'e', inPopup: true));
+        Assert.Equal("True", studio.DefaultOf("Input", "Enabled", 'e', inPopup: true));
+        // The contract an author reads says the same.
+        var contract = ScreenHtml.Contract(studio)["defaults"]!;
+        Assert.Equal("False", contract["InputParameter"]!["IsMandatory"]!.ToString());
+        Assert.Equal("False", contract["BlockEvent"]!["IsMandatory"]!.ToString());
+        // The reading writes mandatory only on what is mandatory, and the text decodes back to the same page.
+        keys = 0;
+        var module = N("ESpace", "Shop");
+        var text = new Node("T-Text", "BasicType", "Text");
+        var flow = module.Add(N("MobileFlow", "MainFlow"));
+        var screen = flow.Add(N("MobileScreen", "Search"));
+        var filter = screen.Add(N("InputParameter", "Filter")).Set("DataType", text).Set("IsMandatory", false).Set("DefaultValue", new Code("\"all\""));
+        var term = screen.Add(N("InputParameter", "Term")).Set("DataType", text).Set("IsMandatory", true);
+        screen.Set("InputParameters", new List<Node> { filter, term });
+        var query = screen.Add(N("LocalVariable", "Query")).Set("DataType", text);
+        screen.Add(W("Input")).Set("Variable", query).Set("Mandatory", new Code("False")).Set("Enabled", new Code("True"));
+        var block = flow.Add(N("MobileBlock", "Picker"));
+        var label = block.Add(N("InputParameter", "Label")).Set("DataType", text).Set("IsMandatory", false);
+        block.Set("InputParameters", new List<Node> { label });
+        block.Add(N("BlockEvent", "OnPick")).Set("IsMandatory", false);
+        block.Add(N("BlockEvent", "OnClose")).Set("IsMandatory", true);
+        var reading = ScreenHtml.Module(module, new Reader(studio));
+        var page = reading.Read("Search");
+        var picker = reading.Read("Picker");
+        Assert.Empty(page.Problems); Assert.Empty(picker.Problems);
+        string Tag(ScreenHtmlDocument d, string name) => Regex.Match(d.Html, "<(?:input|event) [^>]*name=\"" + name + "\"[^>]*>").Value;
+        Assert.DoesNotContain("mandatory", Tag(page, "Filter"));
+        Assert.Contains("mandatory=\"True\"", Tag(page, "Term"));
+        Assert.DoesNotContain("mandatory", Tag(picker, "Label"));
+        Assert.DoesNotContain("mandatory", Tag(picker, "OnPick"));
+        Assert.Contains("mandatory=\"True\"", Tag(picker, "OnClose"));
+        Assert.DoesNotContain("mandatory=\"False\"", page.Html + picker.Html);
+        Assert.DoesNotContain("required=", page.Html);
+        Assert.DoesNotContain("enabled=", page.Html);
+        Assert.Empty(page.Compare(page.Html));
+        Assert.Empty(picker.Compare(picker.Html));
+        // mandatory="False" written out names the default (the value the input already has); mandatory="True" left out makes the
+        // input optional.
+        var written = Assert.Single(page.Compare(page.Html.Replace(Tag(page, "Filter"), Tag(page, "Filter").Replace(" type=", " mandatory=\"False\" type="))));
+        Assert.Equal(("p:IsMandatory", "b:False"), (written["fact"]!.ToString(), written["to"]!.ToString()));
+        Assert.Equal(studio.DefaultOf("InputParameter", "IsMandatory", 'b'), written["to"]!.ToString()[2..]);
+        var dropped = page.Compare(page.Html.Replace(Tag(page, "Term"), Tag(page, "Term").Replace(" mandatory=\"True\"", "")));
+        var op = Assert.Single(dropped);
+        Assert.Equal(("set", "p:IsMandatory", "b:True"), (op["op"]!.ToString(), op["fact"]!.ToString(), op["from"]!.ToString()));
+        Assert.Null(op["to"]);
+    }
+
+    private enum IconSize { FontSize, Twotimes }
+
+    // A Studio that creates an Icon twice the font size and a Join of an aggregate inner (ODC Studio 1.7.28.10873 and Service
+    // Studio 11.55.87 do).
+    private static ScreenDefaults SizedStudio() => ScreenDefaults.FromBorn("sized-studio",
+        new Dictionary<string, SortedDictionary<string, string>> {
+            ["Icon"] = new(StringComparer.Ordinal) { ["IconSize"] = "v:Twotimes", ["Icon"] = "t:flag" },
+            ["Icon" + ScreenDefaults.PopupSuffix] = new(StringComparer.Ordinal) { ["IconSize"] = "v:Twotimes", ["Icon"] = "t:flag" },
+            ["Join"] = new(StringComparer.Ordinal) { ["JoinType"] = "v:Inner" },
+        },
+        new Dictionary<string, string> { ["Icon"] = "widget", ["Icon" + ScreenDefaults.PopupSuffix] = "widget", ["Join"] = "query" });
+
+    [Fact]
+    public void AnIconWithoutASizeAndAJoinWithoutATypeKeepTheLanguagesMeaningWhateverTheStudioGivesAFreshOne()
+    {
+        // <i icon> without size keeps the font size around it, and a join of an aggregate without a type (join= of the short form,
+        // os-Join without os-JoinType) is a left join, as the language wrote them before the Studio's defaults were measured.
+        var studio = SizedStudio();
+        Assert.Equal("FontSize", studio.DefaultOf("Icon", "IconSize", 'v'));
+        Assert.Equal("FontSize", studio.DefaultOf("Icon", "IconSize", 'v', inPopup: true));
+        Assert.Equal("Left", studio.DefaultOf("Join", "JoinType", 'v'));
+        Assert.Equal("Left", ScreenHtml.Contract(studio)["defaults"]!["Join"]!["JoinType"]!.ToString());
+        // The reading writes size only on an icon of another size, and the text decodes back to the same page.
+        keys = 0;
+        var module = N("ESpace", "Shop");
+        var screen = module.Add(N("MobileFlow", "MainFlow")).Add(N("MobileScreen", "Icons"));
+        screen.Add(W("Icon")).Set("Icon", "lock").Set("IconSize", IconSize.FontSize);
+        screen.Add(W("Icon")).Set("Icon", "star").Set("IconSize", IconSize.Twotimes);
+        var page = ScreenHtml.Module(module, new Reader(studio)).Read("Icons");
+        Assert.Empty(page.Problems);
+        var text = Regex.Replace(page.Html, " k=\"w[0-9]+\"", "");
+        Assert.Contains("<i icon=\"lock\"/>", text);
+        Assert.Contains("<i icon=\"star\" size=\"Twotimes\"/>", text);
+        Assert.Empty(page.Compare(page.Html));
     }
 
     [Fact]

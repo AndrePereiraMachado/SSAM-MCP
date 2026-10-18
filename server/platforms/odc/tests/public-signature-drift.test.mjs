@@ -2,6 +2,7 @@
 // compiling the kernel's Anvil.Core.OdcPublicSignature, so ODC3.Bridge.v<N>.dll carries no type of the kernel namespace
 // (docs/O11-BRIDGE-FINA.md 6.5). The class bodies stay equal, normalized only for namespace, class name, visibility and
 // whitespace. The same holds for the merge order's rule (MergeOrderCopy.cs, a copy of the kernel's MergeOrder.cs).
+import '../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

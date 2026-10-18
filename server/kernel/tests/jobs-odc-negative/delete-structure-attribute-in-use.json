@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA do delete de um atributo de structure lido por uma expressao. A expressao herdada do Assign SetHeader diz 'Holder + \" - \" + Quote.Address.Zone'; sem force o delete de WfCovAddress/Zone e recusado e a mensagem nomeia o consumidor. O caminho limpo (apagar um atributo sem consumidores) esta em tests/jobs-odc/structure-refactor.json.",
+ "description": "ODC: the REFUSAL of deleting a structure attribute read by an expression. The inherited expression of the Assign SetHeader says 'Holder + \" - \" + Quote.Address.Zone'; without force the delete of WfCovAddress/Zone is refused and the message names the consumer. The clean path (deleting an attribute without consumers) is in tests/jobs-odc/structure-refactor.json.",
  "base": "job:structure-nested",
  "expectValid": true,
  "expectError": [

@@ -1,3 +1,5 @@
+import './fixtures/isolated-profile.mjs';
+import { sessionText } from './fixtures/session-rules.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -36,7 +38,16 @@ test('job tools turn producer bindings and captures into job flags, refusing amb
     ['--producer', 'HMISPdfText=' + avsig, '--capture-producer', 'System=(System)', '--capture-producer', 'AgentOps_Core_CS']);
   assert.deepEqual(producerArgs(undefined, undefined), []);
   assert.throws(() => producerArgs({ HMISPdfText: 'relative.avsig' }), /absolute path/);
-  assert.throws(() => producerArgs({ '(System)': avsig }), /binding name/);
+  // fix/system-reference round 2 (H1): "Sys tem" is a producer name bound by its letters and digits (System); a name with
+  // / or \ is no binding name.
+  assert.deepEqual(producerArgs({ 'Sys tem': avsig }), ['--producer', 'System=' + avsig]);
+  // Round 3 (H1-R): "a/b" takes the slot of its letters (ab); a name with no letter or digit is no binding name.
+  // fix/a5-lows (B10, declared change): only for a job that writes exactly "a/b"; without the job's names it is refused.
+  assert.deepEqual(producerArgs({ 'a/b': avsig }, [], { names: ['a/b'] }), ['--producer', 'ab=' + avsig]);
+  assert.throws(() => producerArgs({ 'a/b': avsig }), /no job was given to match it against/);
+  assert.throws(() => producerArgs({ '-': avsig }), /binding name/);
+  // fix/system-reference: the Studio form (System) is the binding System, never an invalid name.
+  assert.deepEqual(producerArgs({ '(System)': avsig }), ['--producer', 'System=' + avsig]);
   assert.throws(() => producerArgs({}, ['System=']), /captureProducers entry/);
   assert.throws(() => producerArgs({ HMISPdfText: avsig }, ['HMISPdfText']), /both bound and captured/);
 });
@@ -199,7 +210,7 @@ test('the ssam MCP server lists the tools of both lanes', async t => {
       assert.ok(names.includes(odc), 'missing ODC tool ' + odc);
     // The ODC access tools reach the ssam MCP with the lane prefix, and the session instructions give the auth order.
     assert.match((await client.listTools()).tools.find(t => t.name === 'odc_write').description, /^\[odc\] .*user's words/);
-    assert.match(client.getInstructions(), /ODC Studio session first.*Windows vault.*private Windows prompt only when nothing is stored/);
+    assert.match(sessionText(client), /Studio session first, compatible Windows-vault credential next, private Windows prompt only when none is stored/);
     for (const o11 of ['context', 'propose', 'continue', 'status', 'o11_job', 'o11_data', 'o11_inspect', 'o11_deliver',
       'o11_studio', 'o11_environment', 'ssam_reference', 'ssam_task', 'odc_portal_routes'])
       assert.ok(names.includes(o11), 'missing tool ' + o11);
@@ -220,7 +231,7 @@ test('the ssam MCP server lists the tools of both lanes', async t => {
     assert.equal(map.annotations.readOnlyHint, true);
     for (const own of ['ssam_map', 'ssam_discover']) assert.doesNotMatch(tools.find(t => t.name === own).description, /^\[odc\]/, own);
     assert.match(tools.find(t => t.name === 'ssam_app_url').description, /^\[odc\] /);
-    assert.match(client.getInstructions(), /To read an application, start with ssam_map/);
+    assert.match(sessionText(client), /Read an app once with ssam_map/);
   } finally { await client.close(); await server.close(); }
 });
 

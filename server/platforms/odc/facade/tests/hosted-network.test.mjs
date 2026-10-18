@@ -170,7 +170,7 @@ test('hub: a slow upload part is noted per token (agent.uploads, log agent-uploa
   assert.ok(h.events.some(e => e.event === 'agent-upload-slow' && e.via === '177.26.87.x'));
   const hint = uploadsHint(h.link());
   assert.equal(hint.code, 'UPLOADS_SLOW');
-  assert.match(hint.message, /1 subida de arquivo do agente demorou nos últimos 30 min \(a pior: 2 KB em 1,\d s, pela saída 177\.26\.87\.x\)/);
+  assert.match(hint.message, /1 file upload of the agent was slow in the last 30 min \(the worst: 2 KB in 1\.\d s, through the exit 177\.26\.87\.x\)/);
   assert.deepEqual(hint.continuation, { tool: 'ssam_doctor', arguments: { network: true }, why: hint.continuation.why });
   assert.equal(slowUpload(60631, 26300), true, 'the production part of 60 KB in 26.3 s');
   assert.equal(slowUpload(60631, 750), false);
@@ -188,26 +188,26 @@ test('summarizeProbes: per exit, in plain words: one exit loses packets, all goo
   const oneExit = of([ok(1, 1024, 90, '177.26.82.x'), ok(2, 1024, 110, '177.26.87.x'), ok(3, 1024, 95, '177.26.82.x'), ok(4, 1024, 120, '177.26.87.x'),
     ok(5, 1048576, 700, '177.26.82.x'), stalled(6, 1048576, 14000, '177.26.87.x')]);
   assert.equal(oneExit.verdict, 'one-exit-lossy');
-  assert.match(oneExit.message, /^uma das suas saídas de internet \(177\.26\.87\.x\) perde pacotes nas subidas: 1 de 3 envios por ela travaram; a outra, 177\.26\.82\.x \(subiu 1 MB em 700 ms\), está boa\./);
+  assert.match(oneExit.message, /^one of your internet exits \(177\.26\.87\.x\) loses packets on uploads: 1 of 3 uploads through it stalled; the other one, 177\.26\.82\.x \(uploaded 1 MB in 700 ms\), is fine\./);
   assert.deepEqual(oneExit.paths.map(p => [p.via, p.status, p.uploads, p.ok, p.stalled]), [['177.26.82.x', 'boa', 3, 3, 0], ['177.26.87.x', 'perde', 3, 2, 1]]);
 
   const good = of([ok(1, 1024, 80, '127.0.0.x'), ok(2, 1024, 85, '127.0.0.x'), ok(3, 1048576, 400, '127.0.0.x')]);
   assert.equal(good.verdict, 'ok');
-  assert.equal(good.message, 'subidas boas: 3 de 3 envios em conexão nova chegaram (pequenos em 80 ms, 1 MB em 400 ms).');
+  assert.equal(good.message, 'uploads are fine: 3 of 3 uploads on a new connection arrived (small ones in 80 ms, 1 MB in 400 ms).');
   const twoGood = of([ok(1, 1024, 80, '177.26.82.x'), ok(2, 1024, 85, '177.26.87.x')]);
-  assert.match(twoGood.message, /a sua internet sai por 2 endereços \(177\.26\.82\.x, 177\.26\.87\.x\) e todos estão bons/);
+  assert.match(twoGood.message, /your internet goes out through 2 addresses \(177\.26\.82\.x, 177\.26\.87\.x\) and all of them are fine/);
 
   const slow = of([ok(1, 1024, 300, '10.1.2.x'), ok(2, 1048576, 4200, '10.1.2.x')]);
   assert.equal(slow.verdict, 'slow');
-  assert.match(slow.message, /^a sua internet está lenta nas subidas: 10\.1\.2\.x \(subiu 1 MB em 4,2 s\)\. Nada travou/);
+  assert.match(slow.message, /^your internet is slow on uploads: 10\.1\.2\.x \(uploaded 1 MB in 4\.2 s\)\. Nothing stalled/);
 
   const lossy = of([ok(1, 1024, 90, '10.1.2.x'), ok(2, 1024, 95, '10.1.2.x'), stalled(3, 1048576, 9000, '10.1.2.x'), stalled(4, 1048576, 0, '10.1.2.x')]);
   assert.equal(lossy.verdict, 'uploads-lossy');
-  assert.match(lossy.message, /^a sua internet perde pacotes nas subidas: 2 de 4 envios em conexão nova chegaram ao servidor e travaram\./);
+  assert.match(lossy.message, /^your internet loses packets on uploads: 2 of 4 uploads on a new connection reached the server and stalled\./);
 
   const unreached = of([ok(1, 1024, 90, '10.1.2.x'), lost(2, 1024), lost(3, 1024), ok(4, 1024, 90, '10.1.2.x')]);
   assert.equal(unreached.verdict, 'new-connections-fail');
-  assert.match(unreached.message, /^2 de 4 envios em conexão nova não chegaram ao servidor: a sua internet está perdendo conexões novas/);
+  assert.match(unreached.message, /^2 of 4 uploads on a new connection did not reach the server: your internet is losing new connections/);
   assert.equal(unreached.unreached, 2);
 
   // A large upload that moved at more than 32 KiB/s before its time ran out is slow, not stalled.
@@ -220,10 +220,10 @@ test('networkCheck: never throws; an agent without the kind or not connected is 
   const calls = [];
   const link = (over = {}) => ({ connected: () => true, info: () => ({ agentVersion: '0.2.1' }), supports: kind => kind !== 'net.probe',
     call: async (...args) => { calls.push(args); return {}; }, ...over });
-  assert.deepEqual(await networkCheck(link({ connected: () => false })), { ran: false, code: 'AGENT_NOT_CONNECTED', message: 'o teste de rede roda pelo agente, que não está conectado agora' });
+  assert.deepEqual(await networkCheck(link({ connected: () => false })), { ran: false, code: 'AGENT_NOT_CONNECTED', message: 'the network check runs through the agent, which is not connected now' });
   const old = await networkCheck(link());
   assert.equal(old.code, 'AGENT_KIND_MISSING');
-  assert.match(old.message, /o agente desta conta \(0\.2\.1\) ainda não faz o teste de rede/);
+  assert.match(old.message, /the agent of this account \(0\.2\.1\) does not run the network check yet/);
   assert.equal(calls.length, 0);
   const failing = await networkCheck(link({ supports: () => true, call: async () => { throw Object.assign(new Error('The agent did not answer net.probe before the deadline.'), { code: 'AGENT_TIMEOUT' }); } }));
   assert.deepEqual([failing.ran, failing.code], [false, 'AGENT_TIMEOUT']);
@@ -251,7 +251,7 @@ test('ssam_doctor {network:true} (hosted): the check in network; without it, slo
   assert.equal(probes.length, 0, 'no check without network:true');
   assert.deepEqual(plain.agent.uploads.slow, 2);
   assert.equal(plain.network.code, 'UPLOADS_SLOW');
-  assert.match(plain.network.message, /2 subidas de arquivo do agente demoraram nos últimos 30 min \(a pior: 73 KB em 36,6 s, pela saída 177\.26\.87\.x\)/);
+  assert.match(plain.network.message, /2 file uploads of the agent were slow in the last 30 min \(the worst: 73 KB in 36\.6 s, through the exit 177\.26\.87\.x\)/);
   assert.deepEqual(plain.network.continuation.arguments, { network: true });
   const server = await createSsamServer({ o11: false, odc: false, hosted: { context, session: { tokenId: 'tok_net', lanes: [], workspace, agent: link }, run: (ctx, fn) => fn() } });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
@@ -286,7 +286,7 @@ test('end to end over the real hub: the agent\'s channel and net.mjs, every othe
   assert.ok(elapsed < 6500, 'the check took ' + elapsed + ' ms');
   assert.deepEqual(relay.exits.filter((_, i) => i < 10), [EXIT_A, EXIT_B, EXIT_A, EXIT_B, EXIT_A, EXIT_B, EXIT_A, EXIT_B, EXIT_A, EXIT_B]);
   assert.equal(result.verdict, 'one-exit-lossy', JSON.stringify(result));
-  assert.match(result.message, /^uma das suas saídas de internet \(177\.26\.87\.x\) perde pacotes nas subidas: 1 de 5 envios por ela travaram; a outra, 177\.26\.82\.x \(subiu 1 MB em [\d,]+ (ms|s)\), está boa\./);
+  assert.match(result.message, /^one of your internet exits \(177\.26\.87\.x\) loses packets on uploads: 1 of 5 uploads through it stalled; the other one, 177\.26\.82\.x \(uploaded 1 MB in [\d.]+ (ms|s)\), is fine\./);
   const byVia = Object.fromEntries(result.paths.map(p => [p.via, p]));
   assert.deepEqual([byVia['177.26.82.x'].status, byVia['177.26.82.x'].ok, byVia['177.26.82.x'].uploads], ['boa', 5, 5]);
   assert.deepEqual([byVia['177.26.87.x'].status, byVia['177.26.87.x'].ok, byVia['177.26.87.x'].stalled], ['perde', 4, 1]);

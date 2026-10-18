@@ -1,5 +1,5 @@
 {
- "description": "Add-ons do OutSystemsCharts num ColumnChart: titulos dos eixos X e Y ligados a variaveis, legenda visivel, rotulo da serie com valores e nome do arquivo de exportacao.",
+ "description": "Add-ons of OutSystemsCharts in a ColumnChart: the titles of the X and Y axes bound to variables, a visible legend, the series label with values and the export file name.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

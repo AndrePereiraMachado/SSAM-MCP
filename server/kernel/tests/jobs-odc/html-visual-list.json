@@ -1,5 +1,5 @@
 {
- "description": "WS4 T7 (ODC): o mesmo job html-visual-list sobre o InsuranceApp do tenant pessoal: uma lista sobre um aggregate que ja existe na tela; {{ Row.User.Name }} vira a expressao nativa.",
+ "description": "WS4 T7 (ODC): the same job html-visual-list over the InsuranceApp of the personal tenant: a list over an aggregate that already exists in the screen; {{ Row.User.Name }} becomes the native expression.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

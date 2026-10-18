@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {PORTAL_READS,PORTAL_WRITES,routeOf} from '../runtime/portal-routes.mjs';
 import {CONNECTION_NAME_AVAILABILITY_READS,connectionNameAvailabilityInput,connectionNameAvailabilityResult} from '../runtime/connection-name-availability.mjs';

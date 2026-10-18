@@ -1,5 +1,5 @@
 {
- "description": "RangeSlider (OutSystemsUI, Interaction) tipico; inputs obrigatorios MinValue, MaxValue, StartingValue ligados a variaveis da tela; eventos OnValueChange, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "description": "Typical RangeSlider (OutSystemsUI, Interaction); required inputs MinValue, MaxValue, StartingValue bound to screen variables; events OnValueChange, Initialized handled by screen actions that keep the parameters in variables.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

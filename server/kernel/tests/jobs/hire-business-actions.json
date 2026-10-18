@@ -1,5 +1,5 @@
 {
- "description": "Hire: núcleo de negócio com autorização, concorrência, auditoria e integrações indisponíveis até configurar provedores.",
+ "description": "Hire: business core with authorization, concurrency, auditing and integrations unavailable until providers are configured.",
  "base": "job:hire-data-model",
  "expectValid": true,
  "expectedMessages": [],

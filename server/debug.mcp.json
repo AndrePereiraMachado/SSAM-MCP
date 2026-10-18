@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "ssam-debug": {
+      "command": "${SSAM_NODE:-C:\\Users\\andre\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe}",
+      "args": [
+        "${SSAM_ROOT:-C:\\Users\\andre\\SSAM-Hybrid}\\facade\\ssam.mjs",
+        "mcp",
+        "--profile",
+        "debug"
+      ],
+      "env": {
+        "ANVIL_LANE": "ss4"
+      }
+    }
+  }
+}

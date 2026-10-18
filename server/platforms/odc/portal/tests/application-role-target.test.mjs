@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {OdcAccess,guardTarget} from '../runtime/access.mjs';
 test('role revocation resolves only the exact live role name and preserves the target gate',async()=>{

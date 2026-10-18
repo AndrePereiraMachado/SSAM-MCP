@@ -36,7 +36,7 @@ import { BridgeError, ProtocolError, Refusal, connectStudio } from './errors.mjs
 import { bridgeFailure } from './client.mjs';
 import { field, items, messageOf } from './studio-api.mjs';
 import { canonicalUuid, fold, same, utc, waitFor } from './util.mjs';
-import { OWNER_REPLY, OperationRunning, backupDir, beginOperation, checkExecute, createPreview, derivedOperationId, endOperation, itemsSentence, markItem, noteExecutionRequested, noteWords, parseToken, previewFile, readOperation, readPreview, summarizeOperation } from '../destructive-operations.mjs';
+import { OWNER_REPLY, OperationRunning, backupDir, beginOperation, checkExecute, createPreview, derivedOperationId, endOperation, itemsSentence, markItem, noteExecutionRequested, noteWords, parseToken, previewFile, readOperation, readPreview, summarizeOperation, wordsGiven } from '../destructive-operations.mjs';
 
 // D2, bound to the token since CX15: the prefix, as a whole word of the owner's words given AFTER a preview selected by
 // that prefix, names the targets that preview listed (protected ones excepted), and the words state their exact count.
@@ -194,7 +194,8 @@ export function deleteRequest(args) {
   if (!targets.length && prefix === null && !confirmationToken && !operationId)
     throw new ProtocolError('delete needs its targets: applications, modules, extensions or prefix (--target=<kind>:<name or key>, --prefix)');
   const words = text(args.words);
-  if (args.execute && !words.trim() && !confirmationToken) throw new ProtocolError("Execution requires the user's own authorization words (they name every target)");
+  if (args.execute && !wordsGiven(words) && !confirmationToken) throw new ProtocolError( // CX15 r7 (M-3): one predicate
+   "Execution requires the user's own authorization words (they name every target)");
   if (args.execute && args.plan_only) throw new ProtocolError('--execute and --plan-only exclude each other');
   if (confirmationToken && args.plan_only) throw new ProtocolError('--plan-only previews; a confirmation-token executes: give one of them');
   return { targets, prefix: prefix === null ? null : prefix.trim(), prefixKind, maxDeletes, words, confirmHost: args.confirm_host ?? null,

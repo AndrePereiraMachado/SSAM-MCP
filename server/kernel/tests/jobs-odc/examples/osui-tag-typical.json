@@ -1,5 +1,5 @@
 {
- "description": "Tag do OSUI por linha: cor por expressao do estado do registro, forma, tamanho e texto vindo do registro.",
+ "description": "Tag of OSUI per row: the color by an expression of the state of the record, the shape, the size and the text from the record.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

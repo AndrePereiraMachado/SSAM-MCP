@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {assetFilterComparison as compare} from '../runtime/asset-filter-comparison.mjs';
 const op='asset-repository-api-v1:get:/assets';

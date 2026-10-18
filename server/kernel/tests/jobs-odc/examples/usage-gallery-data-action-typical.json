@@ -1,5 +1,5 @@
 {
- "description": "Galeria OSUI (Gallery) com uma List ligada a saida de uma data action: cada item mostra a foto externa, o nome e o preco do produto.",
+ "description": "OSUI Gallery with a List bound to the output of a data action: each item shows the external photo, the name and the price of the product.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -14,19 +14,19 @@
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "\"Products\""},
 
-  {"op": "logic", "_why": "a data action nasce na tela (kind data + owner); a saida Products e a fonte da List", "data": {"actions": [
+  {"op": "logic", "_why": "the data action is born on the screen (kind data + owner); the output Products is the source of the List", "data": {"actions": [
    {"name": "GetCatalog", "kind": "data", "owner": "IMobileScreen:ProductCatalog", "fetch": "AtStart",
     "outputs": [{"name": "Products", "type": "Product List"}],
     "steps": [
      {"get": "Product", "as": "ReadProducts", "sort": "Product.Name"},
      {"assign": {"Products": "ReadProducts.List"}, "as": "SetProducts"}]}]}},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ProductGallery", "source": "IMobileBlock:Gallery", "empty": true, "as": "$gal", "_why": "a Gallery nasce com uma List de exemplo (sem Source e com uma Image vazia): empty tira o exemplo"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ProductGallery", "source": "IMobileBlock:Gallery", "empty": true, "as": "$gal", "_why": "the Gallery is born with a sample List (without a Source and with an empty Image): empty removes the sample"},
   {"op": "set", "target": "$gal/RowItemsDesktop", "prop": "Value", "value": "3"},
   {"op": "set", "target": "$gal/RowItemsPhone", "prop": "Value", "value": "1"},
 
-  {"op": "create", "parent": "$gal/Content", "type": "IList", "name": "ProductList", "as": "$list", "_why": "a List vai no placeholder Content da Gallery: cada linha vira um item da grade"},
-  {"op": "set", "target": "$list", "prop": "Source", "value": "GetCatalog.Products", "_why": "saida de entidade List: a linha le-se .Current.<Atributo>, sem o nivel da entidade de um aggregate"},
+  {"op": "create", "parent": "$gal/Content", "type": "IList", "name": "ProductList", "as": "$list", "_why": "the List goes in the Content placeholder of the Gallery: each row becomes an item of the grid"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetCatalog.Products", "_why": "output of an entity List: the row reads .Current.<Attribute>, without the entity level of an aggregate"},
   {"op": "create", "parent": "$list", "type": "IContainer", "name": "ProductCard", "as": "$card"},
   {"op": "set", "target": "$card", "prop": "Style", "value": "\"card\""},
   {"op": "create", "parent": "$card", "type": "IImage", "name": "ProductPhoto", "as": "$img"},

@@ -1,5 +1,5 @@
 {
- "description": "Sessao fria C: tela Traditional ExpenseReview (input Amount Decimal + expressao com o valor); processo ApproveExpense (input Amount, Detail, Start -> Human Activity Review -> End, layout); server action publica Expenses_Cleanup (Start -> End) e timer ExpensesCleanupTimer que a executa (escrito por uma LLM sem contexto na sessao fria C de 2026-09-04, passou a primeira)",
+ "description": "Cold session C: Traditional screen ExpenseReview (input Amount Decimal + expression with the value); process ApproveExpense (input Amount, Detail, Start -> Human Activity Review -> End, layout); public server action Expenses_Cleanup (Start -> End) and timer ExpensesCleanupTimer that runs it (written by an LLM without context in cold session C of 2026-09-04, passed the first time)",
  "base": "tests/fixtures/traditional-ui.oml",
  "expectValid": true,
  "ops": [

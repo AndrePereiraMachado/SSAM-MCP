@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -30,7 +31,7 @@ test('uncertain facade UUID names its close and closes without a kernel task or 
   const dir = folder(t); const before = record(dir);
   const call = await clientFor(t, dir);
   const reading = await call({ id });
-  assert.deepEqual(reading.continuation?.arguments, { id, close: { reason: '<motivo>' } });
+  assert.deepEqual(reading.continuation?.arguments, { id, close: { reason: '<reason>' } });
   const answer = await call({ id, close: { reason: 'Synthetic reconciliation completed' } });
   assert.equal(answer.ok, true);
   const after = tasks.readTask(id, { dir });
@@ -39,12 +40,17 @@ test('uncertain facade UUID names its close and closes without a kernel task or 
   for (const key of ['state', 'summary', 'call', 'result', 'cancelled']) assert.deepEqual(after[key], before[key]);
   assert.equal((await call({ id })).continuation, undefined);
 });
-test('closeFacadeTask rejects live running and definitive records, closes orphaned running and validates reason', t => {
+test('closeFacadeTask rejects live running and definitive records, closes orphaned running and validates reason', async t => {
   const dir = folder(t);
   assert.equal(typeof tasks.closeFacadeTask, 'function');
-  record(dir, { state: 'running' });
+  // CT-1: a running record of this process is live only while this process runs its handler (here a trackTask body); one
+  // that no handler here runs is orphaned (call-deadline-same-pid-restart.test.mjs).
+  let release;
+  const body = tasks.trackTask({ id, tool: 'odc_deploy', dir }, () => new Promise(resolve => { release = () => resolve({ ok: true }); }));
+  assert.equal(tasks.readTask(id, { dir }).state, 'running');
   assert.equal(tasks.closeFacadeTask(id, 'Synthetic reason', { dir }).code, 'CLOSE_TASK_RUNNING');
   assert.equal(tasks.readTask(id, { dir }).closedAt, undefined);
+  release(); await body;
   record(dir, { state: 'failed' });
   assert.equal(tasks.closeFacadeTask(id, 'Synthetic reason', { dir }).code, 'CLOSE_TASK_NOT_UNCERTAIN');
   record(dir, { state: 'running', pid: 2147483646 });

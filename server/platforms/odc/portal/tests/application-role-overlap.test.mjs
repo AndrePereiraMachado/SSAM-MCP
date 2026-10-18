@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';
 import {ownedGroupRoleFixture} from './owned-role-fixture.mjs';
 import {applicationRoleOverlapApproval as approve,applicationRoleOverlapObservation as observe,applicationRoleOverlapSnapshot} from '../runtime/application-role-overlap.mjs';

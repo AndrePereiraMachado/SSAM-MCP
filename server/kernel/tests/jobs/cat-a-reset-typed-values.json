@@ -1,9 +1,9 @@
 {
- "description": "Frente A (catalogo abrangente), cenario de composicao generico, faixa O11 (mesmo desenho do job ODC homonimo, resultado independente). (1) Uma server action NOVA devolve saidas de tipos diferentes e as repoe nos valores neutros de cada tipo, PRESERVANDO duas saidas excluidas (KeptText, KeptCount), que so copiam as entradas: um Assign de semente e depois um Assign de reposicao com uma atribuicao por saida nao excluida. Valores de reposicao medidos aqui: Text \"\", Integer/Long Integer/Decimal/Currency 0, Boolean False, Date e Date Time NullDate(), Time #00:00:00#, Identifier NullIdentifier(), registo/estrutura/listas copiados de uma variavel local nunca atribuida do mesmo tipo. (2) A CHAMADA dessa action e inserida num RAMO de um If de uma action HERDADA (FalseTarget do unico If de Customer_AddCredit, que vinha de job:smoke-data-logic), antes do unico no de raise desse ramo: cria-se o no, liga-se primeiro a saida do no novo ao sucessor e so depois se reaponta o conector do If. (3) Leituras: o inventario tipado da action nova (dump), o If e o no novo antes/depois, e usages da action nova. Headless: prova o modelo e o Verify, nao o valor em tempo de execucao.",
+ "description": "Front A (broad catalog), generic composition scenario, O11 lane (same design as the homonymous ODC job, independent result). (1) A NEW server action returns outputs of different types and resets them to the neutral values of each type, PRESERVING two excluded outputs (KeptText, KeptCount), which only copy the inputs: a seed Assign and then a reset Assign with one assignment per non-excluded output. Reset values measured here: Text \"\", Integer/Long Integer/Decimal/Currency 0, Boolean False, Date and Date Time NullDate(), Time #00:00:00#, Identifier NullIdentifier(), record/structure/lists copied from a never-assigned local variable of the same type. (2) The CALL of that action is inserted into a BRANCH of an If of an INHERITED action (FalseTarget of the only If of Customer_AddCredit, which came from job:smoke-data-logic), before the only raise node of that branch: the node is created, the output of the new node is first linked to the successor and only then is the connector of the If repointed. (3) Reads: the typed inventory of the new action (dump), the If and the new node before/after, and usages of the new action. Headless: proves the model and the Verify, not the value at run time.",
  "base": "job:smoke-data-logic",
  "expectValid": true,
  "ops": [
-  {"op": "spec", "data": {"structures": [{"name": "CatAWorkState", "public": true, "description": "Frente A: tipo composto usado por uma saida da action de reposicao", "attributes": [{"name": "Label", "type": "Text"}, {"name": "Count", "type": "Integer"}]}]}, "_why": "(0) estrutura propria do job"},
+  {"op": "spec", "data": {"structures": [{"name": "CatAWorkState", "public": true, "description": "Frente A: tipo composto usado por uma saida da action de reposicao", "attributes": [{"name": "Label", "type": "Text"}, {"name": "Count", "type": "Integer"}]}]}, "_why": "(0) structure of the job's own"},
   {"op": "logic", "data": {"actions": [{
    "name": "CatA_ResetValues", "kind": "server",
    "description": "Frente A: repoe saidas de tipos diferentes nos valores neutros, preservando as saidas excluidas",
@@ -28,9 +28,9 @@
      "OutId": "NullIdentifier()", "OutRecord": "BlankRecord", "OutState": "BlankState",
      "OutTexts": "BlankTexts", "OutRecords": "BlankRecords"
     }, "as": "ResetExceptKept"}
-   ]}]}, "_why": "(1) a action de reposicao pela linguagem compacta; KeptText/KeptCount ficam de fora do Assign de reposicao"},
-  {"op": "dump", "target": "IServerAction:CatA_ResetValues", "depth": 2, "_why": "(1a) inventario tipado lido de volta"},
-  {"op": "get", "target": "IServerAction:CatA_ResetValues/OutDateTime", "_why": "(1b) um parametro de saida pelo nome"},
+   ]}]}, "_why": "(1) the reset action through the compact language; KeptText/KeptCount stay out of the reset Assign"},
+  {"op": "dump", "target": "IServerAction:CatA_ResetValues", "depth": 2, "_why": "(1a) typed inventory read back"},
+  {"op": "get", "target": "IServerAction:CatA_ResetValues/OutDateTime", "_why": "(1b) an output parameter by name"},
 
   {"op": "get", "target": "IServerAction:Customer_AddCredit/#IIfNode[1]", "_why": "(2a) ANTES: o unico If da action herdada; FalseTarget = chave do no de raise"},
   {"op": "get", "target": "IServerAction:Customer_AddCredit/#IRaiseExceptionNode[1]", "_why": "(2b) ANTES: o sucessor no ramo"},
@@ -38,11 +38,11 @@
   {"op": "set", "target": "$call", "prop": "Action", "value": "IServerAction:CatA_ResetValues"},
   {"op": "set", "target": "$call/KeepText", "prop": "Value", "value": "\"kept\""},
   {"op": "set", "target": "$call/KeepCount", "prop": "Value", "value": "0"},
-  {"op": "link", "from": "$call", "to": "IServerAction:Customer_AddCredit/#IRaiseExceptionNode[1]", "_why": "(2c) primeiro a saida do no novo ao sucessor"},
-  {"op": "link", "from": "IServerAction:Customer_AddCredit/#IIfNode[1]", "connector": "FalseTarget", "to": "$call", "_why": "(2d) depois o conector do ramo: o FalseTarget existente passa a apontar ao no novo"},
-  {"op": "get", "target": "IServerAction:Customer_AddCredit/#IIfNode[1]", "_why": "(2e) DEPOIS: FalseTarget = chave do no novo; TrueTarget inalterado"},
-  {"op": "get", "target": "$call", "_why": "(2f) DEPOIS: IncomingConnectors 1, Target = chave do raise"},
-  {"op": "get", "target": "IServerAction:Customer_AddCredit/#IRaiseExceptionNode[1]", "_why": "(2g) DEPOIS: o sucessor continua com IncomingConnectors 1"},
+  {"op": "link", "from": "$call", "to": "IServerAction:Customer_AddCredit/#IRaiseExceptionNode[1]", "_why": "(2c) first the output of the new node to the successor"},
+  {"op": "link", "from": "IServerAction:Customer_AddCredit/#IIfNode[1]", "connector": "FalseTarget", "to": "$call", "_why": "(2d) then the connector of the branch: the existing FalseTarget now points to the new node"},
+  {"op": "get", "target": "IServerAction:Customer_AddCredit/#IIfNode[1]", "_why": "(2e) AFTER: FalseTarget = key of the new node; TrueTarget unchanged"},
+  {"op": "get", "target": "$call", "_why": "(2f) AFTER: IncomingConnectors 1, Target = key of the raise"},
+  {"op": "get", "target": "IServerAction:Customer_AddCredit/#IRaiseExceptionNode[1]", "_why": "(2g) AFTER: the successor still has IncomingConnectors 1"},
   {"op": "layout", "target": "IServerAction:Customer_AddCredit"},
   {"op": "usages", "target": "IServerAction:CatA_ResetValues", "max": 10, "_why": "(3) o unico consumidor real e o no inserido"}
  ]

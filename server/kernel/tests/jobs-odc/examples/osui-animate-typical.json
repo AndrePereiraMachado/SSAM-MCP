@@ -1,5 +1,5 @@
 {
- "description": "Animate do OSUI por linha: cada item entra da esquerda com atraso proporcional a posicao da linha e velocidade Fast.",
+ "description": "Animate of OSUI per row: each item enters from the left with a delay proportional to the position of the row and the speed Fast.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';
 import {libraryPublicationApproval,LIBRARY_PUBLISH,libraryReleaseApproval,verifyLibraryRelease,LIBRARY_RELEASE} from '../runtime/library-release-approval.mjs';

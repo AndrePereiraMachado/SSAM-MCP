@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { o11InspectionDeadline, o11InvocationBudget, o11NativeInspectionTimeout, o11NativeDeadlineAt, o11RequestHoldBudget } from '../debug-o11-inspection-deadline.mjs';

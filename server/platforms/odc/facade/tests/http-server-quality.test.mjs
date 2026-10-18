@@ -165,7 +165,7 @@ test('hosted: session lines, sequence, spans and attribution, a paged refusal, a
     const [deliver, read] = await Promise.all([
       call('studio_deliver', { module: S.module, job: S.job, kernelMs: 400, relay: true }),
       call('ssam_map', { target: S.path, view: 'search', text: S.expr, waitMs: 100 })]);
-    assert.equal(deliver.structuredContent.result, 'entregue');
+    assert.equal(deliver.structuredContent.result, 'delivered'); // the answer is English since 15/10; the record keeps deliv 'entregue' (below)
     assert.equal(read.structuredContent.ok, true);
     await sleep(1100);
     const hostile = await call('o11_deliver', { module: S.module, job: { ops: [{ op: 'set', target: S.entity, value: S.expr }] }, authorize: S.msg,

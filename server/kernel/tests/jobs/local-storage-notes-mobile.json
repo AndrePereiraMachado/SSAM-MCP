@@ -1,5 +1,5 @@
 {
- "description": "cold-f: Mobile local storage. Client entity Note (Title obrigatorio, CreatedOn) + client action Note_Add(Title) que grava com CreateOrUpdateNote e CreatedOn = CurrDateTime() + tela Notes (layout, aggregate local GetNotes, lista com Title, input ligado a NewTitle, botao Add -> screen action AddNote que chama Note_Add e recarrega o aggregate) + Accordion do OutSystems UI com AccordionItem Ajuda (escrito por uma LLM sem contexto na sessao fria F de 2026-09-04) (escrito por uma LLM sem contexto na sessao fria F, rodada 2, 2026-09-04)",
+ "description": "cold-f: Mobile local storage. Client entity Note (Title mandatory, CreatedOn) + client action Note_Add(Title) that saves with CreateOrUpdateNote and CreatedOn = CurrDateTime() + screen Notes (layout, local aggregate GetNotes, list with Title, input bound to NewTitle, button Add -> screen action AddNote that calls Note_Add and reloads the aggregate) + OutSystems UI Accordion with AccordionItem Ajuda (written by an LLM with no context in cold session F of 2026-09-04) (written by an LLM with no context in cold session F, round 2, 2026-09-04)",
  "base": "tests/fixtures/mobile-ui.oml",
  "expectValid": true,
  "ops": [

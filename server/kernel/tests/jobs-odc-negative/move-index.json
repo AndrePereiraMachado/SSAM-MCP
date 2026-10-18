@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA de `move` sobre um indice: os indices de uma entidade nao sao uma sequencia de autor. A ordem dos ATRIBUTOS DE UM INDICE, essa, e reordenavel no ODC (tests/jobs-odc/entity-refactor.json), ao contrario do O11.",
+ "description": "ODC: the REFUSAL of `move` on an index: the indexes of an entity are not an author sequence. The order of the ATTRIBUTES OF AN INDEX, that one, is reorderable in ODC (tests/jobs-odc/entity-refactor.json), unlike O11.",
  "base": "job:data-full-model",
  "expectValid": true,
  "expectError": [

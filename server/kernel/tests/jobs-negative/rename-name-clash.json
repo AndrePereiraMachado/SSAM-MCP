@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA do rename por colisao de nome. Contact ja tem um atributo Phone; renomear Email para Phone tem de ser recusado com a explicacao de que o Studio sufixaria o nome em silencio (e um rename silenciosamente diferente do pedido e pior do que um erro). O caminho limpo esta em tests/jobs/rename-data-propagation.json.",
+ "description": "The REFUSAL of the rename by name collision. Contact already has an attribute Phone; renaming Email to Phone must be refused with the explanation that Studio would silently suffix the name (and a rename silently different from the requested one is worse than an error). The clean path is in tests/jobs/rename-data-propagation.json.",
  "base": "job:screen-form-reactive",
  "expectValid": true,
  "expectError": [

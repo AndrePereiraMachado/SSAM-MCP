@@ -3,6 +3,7 @@
 // the producer by its GlobalKey); built only on request (a miss asks the lane's kernel reader {"rich":"ensure"}, mocked
 // here) and said so; served only when schema, extractor, lane, adapter and the hash of the bytes read now match; every
 // page inside the budget, nothing lost between pages, every continuation pinned to the same captures.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

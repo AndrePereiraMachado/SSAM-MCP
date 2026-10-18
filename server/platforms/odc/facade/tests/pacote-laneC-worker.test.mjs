@@ -4,7 +4,7 @@
 // same creation time, never another; the build never starts a worker and warms the discover index at its end.
 // Fake workers on loopback ports and fake process identities: no real process is inspected, started or terminated
 // (the Python harness replaces anvil_cli's ping, request, birth and terminate before calling stop()).
-import './fixtures/isolated-profile.mjs';
+import { profileReadPath } from './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -22,7 +22,7 @@ const exec = promisify(execFile);
 const facade = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const workspace = path.resolve(facade, '..', '..', '..');
 const kernelScripts = path.join(workspace, 'kernel', 'scripts');
-const python = process.env.SSAM_PYTHON ?? path.join(os.homedir(), '.cache', 'codex-runtimes', 'codex-primary-runtime', 'dependencies', 'python', 'python.exe');
+const python = process.env.SSAM_PYTHON ?? profileReadPath('.cache', 'codex-runtimes', 'codex-primary-runtime', 'dependencies', 'python', 'python.exe');
 // isolated-profile moved USERPROFILE: the runtime Python of the real profile is found from the path of this checkout's user.
 const pythonExe = [python, path.join(workspace, '..', '..', '.cache', 'codex-runtimes', 'codex-primary-runtime', 'dependencies', 'python', 'python.exe'),
   path.join('C:\\Users', os.userInfo().username, '.cache', 'codex-runtimes', 'codex-primary-runtime', 'dependencies', 'python', 'python.exe')].find(p => fs.existsSync(p));

@@ -2,6 +2,7 @@
 // Order: bind the runner-derived scope (prepareServerInspection) before any request, then the
 // debugger with a fixed deadline, then the single reserved Portal POST (timer-background keeps its
 // one-send marker and lock). A refusal before the POST sends nothing; an uncertain POST is never re-sent.
+import { wordsGiven } from './destructive-operations.mjs';
 const fail = code => { throw new Error('debug_odc_timer_' + code); };
 export const PORTAL_WAKE_TRIGGER = 'portal-wake';
 const MAX_MS = 600000;
@@ -12,7 +13,7 @@ export function portalWakeStartAdmission(run) {
   if (run?.trigger !== PORTAL_WAKE_TRIGGER) return refuse('portal-wake requires run.trigger:"portal-wake"');
   if ((run.lane ?? 'odc') !== 'odc' || run.op !== 'run' || run.execution && run.execution !== 'native-entry') return refuse('portal-wake requires an explicit ODC native-entry run');
   if (run.contextMode !== 'native-background') return refuse('portal-wake requires contextMode native-background');
-  if (typeof run.words !== 'string' || !run.words.trim()) return refuse('portal-wake requires words with the user authorization');
+  if (!wordsGiven(run.words)) return refuse('portal-wake requires words with the user authorization'); // CX15 r7: one predicate
   if (['launch', 'inputs', 'scenarios', 'context', 'workflow'].some(k => run[k] !== undefined))
     return refuse('portal-wake has no app caller: omit launch, inputs, scenarios, context and workflow');
   if (run.trace !== undefined && run.trace !== 'full') return refuse('portal-wake interactive inspection requires trace full');

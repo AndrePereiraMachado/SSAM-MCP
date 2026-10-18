@@ -3,6 +3,7 @@
 // waited for in the same call (SSAM_PROMPT_WAIT_MS, never past the read budget), else CREDENTIAL_PROMPT_PENDING.
 // No legacy window is ever signed in, no identity source changes silently and an existing entry is never overwritten.
 // Synthetic bridges, credentials, prompts and clocks only; no external service, no real vault, no window.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';

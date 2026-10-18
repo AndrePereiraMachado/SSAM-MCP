@@ -1,5 +1,5 @@
 {
- "description": "TimelineItem do OSUI numa List: um item por evento do pedido, com titulo e data do registro, icone e IsActive no evento mais recente.",
+ "description": "TimelineItem of OSUI in a List: one item per event of the order, with the title and the date of the record, an icon and IsActive on the most recent event.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

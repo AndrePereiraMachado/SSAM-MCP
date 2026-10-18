@@ -1,3 +1,4 @@
+import { originalProfile } from '../../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -25,7 +26,7 @@ function walk(dir){return fs.existsSync(dir)?fs.readdirSync(dir,{withFileTypes:t
 const windows={tickets:['2026-10-13T15:32:00Z','2026-10-13T15:48:30Z'],blocks:['2026-10-13T15:48:30Z','2026-10-13T16:07:30Z'],osTickets:['2026-10-13T15:37:10Z','2026-10-13T15:44:30Z'],manhaActions:['2026-10-13T12:42:44Z','2026-10-13T12:45:38Z'],manhaBlocks:['2026-10-13T13:05:50Z','2026-10-13T13:11:00Z'],manhaTelas:['2026-10-13T13:11:00Z','2026-10-13T13:16:15Z'],P1:['2026-10-13T14:09:25Z','2026-10-13T14:14:55Z'],P2:['2026-10-13T14:14:59Z','2026-10-13T14:19:27Z'],P3:['2026-10-13T14:19:31Z','2026-10-13T14:25:48Z'],P4:['2026-10-13T14:25:53Z','2026-10-13T14:46:55Z']};
 test('W1 recorded context equivalence, all source units',{skip:!gate},async t=>{
  const expected=JSON.parse(fs.readFileSync('C:/t/lacunas/contexto/saida/medidas.json','utf8'));
- const files=walk(path.join(os.homedir(),'.codex','archived_sessions')).concat(walk(path.join(os.homedir(),'.codex','sessions','2026','10','13')),walk(path.join(os.homedir(),'.claude','projects')));
+ const files=walk(path.join(originalProfile.home,'.codex','archived_sessions')).concat(walk(path.join(originalProfile.home,'.codex','sessions','2026','10','13')),walk(path.join(originalProfile.home,'.claude','projects')));
  const cache=new Map();
  for(const unit of expected.units){
   await t.test(unit.label,st=>{
@@ -48,7 +49,7 @@ test('W1 recorded context equivalence, all source units',{skip:!gate},async t=>{
 });
 test('W1 polling and long calls compare every unchanged recorded source',{skip:!gate},async t=>{
  const savedFile='C:/t/lacunas/esperas-rede/longas-1213.json',saved=JSON.parse(fs.readFileSync(savedFile,'utf8'));
- const files=walk(path.join(os.homedir(),'.codex','sessions')).concat(walk(path.join(os.homedir(),'.codex','archived_sessions'))),sources=[];let changed=0;
+ const files=walk(path.join(originalProfile.home,'.codex','sessions')).concat(walk(path.join(originalProfile.home,'.codex','archived_sessions'))),sources=[];let changed=0;
  const expectedPolling=JSON.parse(fs.readFileSync('C:/t/lacunas/esperas-rede/polls-codex.json','utf8'));
  for(const entry of saved.sessions)await t.test(entry.file,st=>{
   const selected=selectRecordedSources({sessions:[entry]},files,{reportMtimeMs:fs.statSync(savedFile).mtimeMs});
@@ -61,10 +62,10 @@ test('W1 polling and long calls compare every unchanged recorded source',{skip:!
  if(!changed)assert.deepEqual(longCalls(sources).summary,saved.summary);else t.diagnostic('Aggregate comparison omitted because '+changed+' source changed');
 });
 test('W1 recorded Claude tool schemas remain independently verified',{skip:!gate},()=>{
- const file=walk(path.join(os.homedir(),'.claude','projects')).find(f=>path.basename(f)==='7427c081-1701-4dd3-a1a7-c966a91e7d8d.jsonl');
+ const file=walk(path.join(originalProfile.home,'.claude','projects')).find(f=>path.basename(f)==='7427c081-1701-4dd3-a1a7-c966a91e7d8d.jsonl');
  const sc=schemas(fs.readFileSync(file,'utf8').split('\n').filter(Boolean).map(JSON.parse));assert.equal(sc.loadedCount,29);assert.equal(sc.loadedChars,117189);assert.equal(sc.serverInstructionsChars,2069);
 });
 test('W1 recorded truncation extras remain independently verified',{skip:!gate},()=>{
- const files=walk(path.join(os.homedir(),'.codex','sessions')).concat(walk(path.join(os.homedir(),'.codex','archived_sessions'))).filter(file=>/01a135c4|01a135e5/.test(path.basename(file)));
+ const files=walk(path.join(originalProfile.home,'.codex','sessions')).concat(walk(path.join(originalProfile.home,'.codex','archived_sessions'))).filter(file=>/01a135c4|01a135e5/.test(path.basename(file)));
  const ex=files.map(file=>extras(fs.readFileSync(file,'utf8').split('\n').filter(Boolean).map(JSON.parse)).truncated);assert.equal(ex.reduce((n,v)=>n+v.n,0),9);assert.equal(ex.reduce((n,v)=>n+v.originalTokens,0),164510);
 });

@@ -1,5 +1,5 @@
 {
- "description": "Tela por arquetipo (op screen): uma tabela de produtos gerada de uma so declaracao kind table, com fonte na entidade e duas colunas.",
+ "description": "A screen by archetype (op screen): a table of products generated from one single declaration kind table, with the entity as the source and two columns.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

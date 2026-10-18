@@ -2,6 +2,7 @@
 // descriptor into the SAME index (no second catalog), the pure check refuses what the contract forbids, the accounting
 // follows the pinned ownership, and the real index build checks fragment pointers and native types against the lane
 // CLI and runtime. The fixture fragments (tests/fixtures/catalog/fragments) are mechanism probes, not coverage claims.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';

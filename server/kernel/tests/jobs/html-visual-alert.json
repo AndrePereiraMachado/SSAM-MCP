@@ -1,5 +1,5 @@
 {
- "description": "Op html visual (WS4): um fragmento HTML vira widgets nativos dentro de uma tela que ja existe. O alerta traz painel, icone, titulo, tres textos, dois inputs e um botao; variaveis e acao sao nativas e o fragmento so as liga pelo nome.",
+ "description": "Visual html op (WS4): an HTML fragment becomes native widgets inside a screen that already exists. The alert carries a panel, icon, title, three texts, two inputs and a button; variables and action are native and the fragment only binds them by name.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],

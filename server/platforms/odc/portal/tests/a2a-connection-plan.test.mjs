@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import crypto from 'node:crypto';
 import {a2aConnectionPlan,a2aSaveInput,validateA2aCard} from '../runtime/a2a-connection-plan.mjs';
 const input=()=>({name:'A2AProof',description:'Owned',agentUrl:'https://example.test/agent/',portfolioKey:crypto.randomUUID(),stage:{Key:crypto.randomUUID(),Name:'Development',Purpose:'Development'},

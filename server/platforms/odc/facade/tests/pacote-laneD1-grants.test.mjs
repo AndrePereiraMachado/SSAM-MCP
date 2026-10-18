@@ -44,7 +44,7 @@ test('a grant is written, found, listed without its words and revoked', t => {
 test('the words must name the app as written; a placeholder or a bad request writes nothing', t => {
   const file = path.join(temp(t), 'standing-grants.json');
   assert.equal(addGrant({ lane: 'o11', app: 'QuizLive Core', words: 'pode criar o QuizLive' }, { file }).code, 'GRANT_WORDS_MUST_NAME_APP');
-  assert.equal(addGrant({ lane: 'o11', app: 'QuizLive', words: '<palavras do usuário>' }, { file }).code, 'GRANT_INVALID');
+  assert.equal(addGrant({ lane: 'o11', app: 'QuizLive', words: "<the user's own words>" }, { file }).code, 'GRANT_INVALID');
   assert.equal(addGrant({ lane: 'o12', app: 'QuizLive', words: 'pode publicar o QuizLive' }, { file }).code, 'GRANT_INVALID');
   assert.equal(addGrant({ lane: 'o11', app: 'QuizLive', verbs: ['delete'], words: 'pode publicar o QuizLive' }, { file }).code, 'GRANT_INVALID');
   assert.equal(fs.existsSync(file), false);
@@ -82,7 +82,7 @@ test('ssam_grant is served with o11_publish; o11_publish without authorize uses 
   const bad = await call('ssam_grant', { action: 'grant', lane: 'o11', app: 'Billing', words: 'pode publicar tudo' });
   assert.equal(bad.code, 'GRANT_WORDS_MUST_NAME_APP'); assert.equal(bad.continuation.tool, 'ssam_grant');
   const published = await call('o11_publish', { module: 'Orders' });
-  assert.equal(published.ok, true, JSON.stringify(published)); assert.equal(published.result, 'publicado');
+  assert.equal(published.ok, true, JSON.stringify(published)); assert.equal(published.result, 'published');
   assert.deepEqual(published.authorization, { source: 'standing-grant', grantId: granted.grant.grantId });
   const start = events.find(e => e?.event === 'start');
   assert.equal(start.wordsSha256, sha256(words)); assert.equal(start.grantId, granted.grant.grantId);

@@ -1,5 +1,6 @@
 // Focused checks of the phase-1 coverage extractor (identity, ambiguity, inheritance, signatures, correspondence,
 // IWebScreen on ODC, pilot family). Pure over the checked-in metadata; no reader, no CLI, no long suite.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

@@ -4,6 +4,7 @@
 // once by exact key and compare hashes. An uncertain grant or revoke is never
 // resent; only a later read decides what remains. Roles reach the app-user token
 // at sign-in, so the grant precedes it (wrapPrepareUser).
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -27,7 +28,7 @@ const writeSummary = answer => ({ outcome: roleWriteOutcome(answer), receiptStat
   ...(typeof answer?.error?.code === 'string' ? { errorCode: answer.error.code } : {}) });
 
 export async function runWithRoleCycle({ roleKey, words, access, journalDir } = {}, run) {
-  if (!GUID.test(roleKey ?? '') || typeof words !== 'string' || words.trim().length < 8 || !access || typeof run !== 'function' ||
+  if (!GUID.test(roleKey ?? '') || !wordsGiven(words) || words.trim().length < 8 || !access || typeof run !== 'function' ||
       typeof journalDir !== 'string' || !path.isAbsolute(journalDir)) fail('input_invalid');
   const key = roleKey.toLowerCase(), file = path.join(journalDir, 'role-cycle.json');
   const record = { schema: 'ssam-odc-role-cycle/1', roleKey: key, wordsSha256: sha(words), grantOperationUuid: randomUUID(), revokeOperationUuid: randomUUID(),

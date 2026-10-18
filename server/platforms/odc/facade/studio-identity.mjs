@@ -15,8 +15,9 @@
 //     its build is STUDIO_BUILD_UNKNOWN). Any other value refuses (fails closed) and the start names it.
 //   - A version the agent could not read: STUDIO_VERSION_UNKNOWN. No Studio installed: STUDIO_NOT_INSTALLED (the hub's).
 // The refusal is ONE answer with everything: code STUDIO_VERSION_MISMATCH (the code of the family, unchanged), the cause
-// (what to do), both builds, what still works (the server-only tools), "nothing ran", userMessage in pt-BR for the user
-// (licensees are Brazilian) and error in English for the model. Codes and field names are English.
+// (what to do), both builds, what still works (the server-only tools), "nothing ran", userMessage for the user (shown as it
+// is) and error for the model. B3 of round 3 (owner rule of 2026-10-15): every text SSAM emits is English, with no
+// bilingual line, so both are English; they stay two texts, one per reader. Codes and field names are English.
 
 export const BUILD_POLICIES = Object.freeze(['warn', 'refuse']);
 export const DEFAULT_BUILD_POLICY = 'warn';
@@ -104,7 +105,8 @@ export function studioVersions(studios) {
   }));
 }
 
-// ---- the texts (pt-BR for the user, English for the model), one place for the hub, the gate and the warnings
+// ---- the texts, one place for the hub, the gate and the warnings. B3 (owner rule of 2026-10-15): every text in English,
+// no bilingual line: `user` is the userMessage (for the person, shown as it is), `en` the error (for the model).
 const listOf = names => names.join(', ');
 function words(identity) {
   const S = STUDIO[identity.lane];
@@ -112,50 +114,50 @@ function words(identity) {
   const three = threePart(served);
   const examples = listOf(SERVER_ONLY_EXAMPLES[identity.lane]);
   const still = {
-    pt: `Enquanto isso, as ferramentas só de servidor (${examples}) continuam funcionando, com um aviso.`,
+    user: `Meanwhile, the server-only tools (${examples}) keep working, with a warning.`,
     en: `Server-only tools (${examples}) still work, with the studioNotServed warning.`,
   };
-  const nothing = { pt: 'Nada rodou no seu Studio.', en: 'Nothing ran on the user\'s Studio.' };
+  const nothing = { user: 'Nothing ran on your Studio.', en: 'Nothing ran on the user\'s Studio.' };
   const notified = {
-    pt: 'o dono do SSAM já foi avisado (o servidor registrou este pedido)',
+    user: 'the SSAM owner was already notified (the server recorded this request)',
     en: 'the owner was notified (server event studio-version-unserved)',
   };
   const wait = {
-    pt: `Não volte o ${S} para a versão anterior e não reinstale o agente: quando o servidor for atualizado, repita o pedido.`,
+    user: `Do not roll ${S} back to the previous version and do not reinstall the agent: once the server is updated, repeat the request.`,
     en: 'Do not roll the Studio back and do not reinstall the agent; repeat the call once the server is updated.',
   };
-  let pt, en;
+  let user, en;
   switch (`${identity.relation}:${identity.direction}`) {
     case 'older:older':
-      pt = `O ${S} deste computador (${installed}) é mais antigo que o ${S} que o servidor SSAM atende (${served}). Atualize o ${S} para ${served} e abra-o de novo; depois repita o pedido. Reinstalar o agente não resolve.`;
+      user = `The ${S} on this computer (${installed}) is older than the ${S} the SSAM server serves (${served}). Update ${S} to ${served} and open it again; then repeat the request. Reinstalling the agent does not fix this.`;
       en = `This SSAM server serves ${S} ${served}; the user's machine has ${S} ${installed}, which is older: update ${S} to ${served} and reopen it; no agent package changes that.`;
       break;
     case 'newer:newer':
-      pt = `O ${S} deste computador (${installed}) é mais novo que o ${S} que o servidor SSAM atende hoje (${served}). O servidor ainda não tem esta versão; ${notified.pt}. ${wait.pt}`;
+      user = `The ${S} on this computer (${installed}) is newer than the ${S} the SSAM server serves today (${served}). The server does not have this version yet; ${notified.user}. ${wait.user}`;
       en = `This SSAM server serves ${S} ${served}; the user's machine has ${S} ${installed}, which is newer: the server does not serve this version yet; ${notified.en}. ${wait.en}`;
       break;
     case 'build-differs:older':
-      pt = `O ${S} deste computador é o build ${installed}; o servidor SSAM atende o build ${served} (mesma versão ${three}, build diferente), e o dono configurou o servidor para não atender outro build. Atualize o ${S} (o servidor atende o build ${served}) e abra-o de novo; depois repita o pedido.`;
+      user = `The ${S} on this computer is build ${installed}; the SSAM server serves build ${served} (same version ${three}, another build), and the owner set the server to serve no other build. Update ${S} (the server serves build ${served}) and open it again; then repeat the request.`;
       en = `This SSAM server serves ${S} build ${served}; the user's machine has ${S} build ${installed} (same version ${three}, another build), which is older, and kernel.json studioBuildPolicy "refuse" serves no other build: update ${S} to build ${served} and reopen it.`;
       break;
     case 'build-differs:newer':
-      pt = `O ${S} deste computador é o build ${installed}; o servidor SSAM atende o build ${served} (mesma versão ${three}, build diferente), e o dono configurou o servidor para não atender outro build. O servidor ainda não tem este build; ${notified.pt}. ${wait.pt}`;
+      user = `The ${S} on this computer is build ${installed}; the SSAM server serves build ${served} (same version ${three}, another build), and the owner set the server to serve no other build. The server does not have this build yet; ${notified.user}. ${wait.user}`;
       en = `This SSAM server serves ${S} build ${served}; the user's machine has ${S} build ${installed} (same version ${three}, another build), which is newer, and kernel.json studioBuildPolicy "refuse" serves no other build: the server does not serve this build yet; ${notified.en}. ${wait.en}`;
       break;
     case 'build-unknown:null':
-      pt = `O agente informou a versão ${installed} do ${S} deste computador, sem o build (os 4 números), e o servidor SSAM só atende o build ${served}. Sem o build não dá para confirmar que é o mesmo Studio do servidor. Fale com o dono do SSAM.`;
+      user = `The agent reported version ${installed} of the ${S} on this computer without its build (the 4 numbers), and the SSAM server serves only build ${served}. Without the build there is no way to confirm it is the same Studio as the server's. Talk to the SSAM owner.`;
       en = `This SSAM server serves ${S} build ${served}; the agent reports the user's ${S} as ${installed}, without its build, and kernel.json studioBuildPolicy "refuse" serves no unconfirmed build. Ask the server owner.`;
       break;
     default: // unknown
-      pt = `O agente não conseguiu ler a versão do ${S} deste computador, e o servidor SSAM só atende o ${S} ${served}. Confira se o ${S} está instalado e repita em alguns minutos; se continuar, fale com o dono do SSAM.`;
+      user = `The agent could not read the version of the ${S} on this computer, and the SSAM server serves only ${S} ${served}. Check that ${S} is installed and repeat in a few minutes; if it persists, talk to the SSAM owner.`;
       en = `This SSAM server serves ${S} ${served}; the agent could not read the version of the user's ${S}. Ask the user to check the ${S} installation and repeat in a few minutes; if it persists, ask the server owner.`;
   }
   const why = identity.direction === 'older'
-    ? `Show the user the userMessage (pt-BR) as it is: they update ${S} to ${served} and reopen it, then repeat this call. ssam_doctor shows both builds. Server-only tools still work.`
+    ? `Show the user the userMessage as it is: they update ${S} to ${served} and reopen it, then repeat this call. ssam_doctor shows both builds. Server-only tools still work.`
     : identity.direction === 'newer'
-      ? 'Show the user the userMessage (pt-BR) as it is: nothing to do on their machine until the server owner updates the server; never ask the user to roll the Studio back or to reinstall the agent. ssam_doctor shows both builds. Server-only tools still work.'
-      : 'Show the user the userMessage (pt-BR) as it is. ssam_doctor shows the versions the agent reports. Server-only tools still work.';
-  return { pt: `${pt} ${nothing.pt} ${still.pt}`, en: `${en} ${nothing.en} ${still.en}`, why };
+      ? 'Show the user the userMessage as it is: nothing to do on their machine until the server owner updates the server; never ask the user to roll the Studio back or to reinstall the agent. ssam_doctor shows both builds. Server-only tools still work.'
+      : 'Show the user the userMessage as it is. ssam_doctor shows the versions the agent reports. Server-only tools still work.';
+  return { user: `${user} ${nothing.user} ${still.user}`, en: `${en} ${nothing.en} ${still.en}`, why };
 }
 
 // The one refusal of a Studio the server does not serve, or null when it is served (or not installed: the hub's own).
@@ -166,7 +168,7 @@ export function studioRefusal(identity, { stillWorks = null } = {}) {
   const w = words(identity);
   return { ok: false, code: 'STUDIO_VERSION_MISMATCH', cause, lane: identity.lane, installed: identity.installed, served: [identity.served],
     relation: identity.relation, policy: identity.policy, outcome: 'not-sent', stillWorks: list,
-    error: w.en, userMessage: w.pt, continuation: { tool: 'ssam_doctor', arguments: {}, why: w.why } };
+    error: w.en, userMessage: w.user, continuation: { tool: 'ssam_doctor', arguments: {}, why: w.why } };
 }
 
 // The warning an answer carries for the lane's Studio: studioBuildDiffers when another build is served (policy "warn");
@@ -180,8 +182,8 @@ export function studioWarningOf(identity) {
     const unknown = relation === 'build-unknown';
     return { code: 'studioBuildDiffers', lane, installed, served, relation, policy,
       userMessage: unknown
-        ? `Aviso: o agente informou o ${S} deste computador como ${installed}, sem o build, e o servidor SSAM usa o kernel do build ${served}. Não dá para confirmar que é o mesmo build; o dono do SSAM decidiu atender assim por enquanto. Confira o resultado no ${S} antes de publicar.`
-        : `Aviso: o ${S} deste computador é o build ${installed} e o servidor SSAM usa o kernel do build ${served} (mesma versão ${three}, build diferente). O dono do SSAM decidiu atender este caso com aviso; essa combinação não foi provada. Confira o resultado no ${S} antes de publicar.`,
+        ? `Warning: the agent reported the ${S} on this computer as ${installed}, without its build, and the SSAM server uses the kernel of build ${served}. There is no way to confirm it is the same build; the SSAM owner decided to serve it this way for now. Check the result in ${S} before publishing.`
+        : `Warning: the ${S} on this computer is build ${installed} and the SSAM server uses the kernel of build ${served} (same version ${three}, another build). The SSAM owner decided to serve this case with a warning; this combination is not proven. Check the result in ${S} before publishing.`,
       error: unknown
         ? `Warning: the agent reports the user's ${S} as ${installed}, without its build; this SSAM server runs the kernel of build ${served}. The owner serves an unconfirmed build with a warning (kernel.json studioBuildPolicy "warn"). Check the result in the Studio before publishing.`
         : `Warning: the user's ${S} is build ${installed}; this SSAM server runs the kernel of build ${served} (same version ${three}, another build). The owner serves this pair with a warning (kernel.json studioBuildPolicy "warn"); the pair is not proven. Check the result in the Studio before publishing.` };
@@ -189,12 +191,12 @@ export function studioWarningOf(identity) {
   const cause = causeOf(identity);
   if (!cause) return null;
   const todo = identity.direction === 'older'
-    ? { pt: `Para usar as ferramentas do Studio, atualize o ${S} para ${served}.`, en: `To use the Studio tools, the user updates ${S} to ${served}.` }
+    ? { user: `To use the Studio tools, update ${S} to ${served}.`, en: `To use the Studio tools, the user updates ${S} to ${served}.` }
     : identity.direction === 'newer'
-      ? { pt: `O servidor ainda não tem esta versão; o dono do SSAM já foi avisado. Não volte o ${S}.`, en: 'The server does not serve this version yet; the owner was notified. Never ask the user to roll the Studio back.' }
-      : { pt: 'Fale com o dono do SSAM se continuar.', en: 'Ask the server owner if it persists.' };
-  const shown = installed ?? 'versão não lida';
+      ? { user: `The server does not have this version yet; the SSAM owner was already notified. Do not roll ${S} back.`, en: 'The server does not serve this version yet; the owner was notified. Never ask the user to roll the Studio back.' }
+      : { user: 'Talk to the SSAM owner if it persists.', en: 'Ask the server owner if it persists.' };
+  const shown = installed ?? 'version not read';
   return { code: 'studioNotServed', lane, cause, installed, served, relation, policy,
-    userMessage: `Aviso: esta ferramenta rodou só no servidor, com o kernel do ${S} ${served}, mas o ${S} deste computador (${shown}) não é atendido por este servidor, e as ferramentas que tocam o ${S} estão recusadas. ${todo.pt}`,
+    userMessage: `Warning: this tool ran on the server only, with the kernel of ${S} ${served}, but the ${S} on this computer (${shown}) is not served by this server, and the tools that touch ${S} are refused. ${todo.user}`,
     error: `Warning: this tool ran on the server only, with the kernel of ${S} ${served}, but the user's ${S} ${installed ?? '(version unread)'} is not served by this server (${cause}); tools that touch the ${S} are refused. ${todo.en}` };
 }

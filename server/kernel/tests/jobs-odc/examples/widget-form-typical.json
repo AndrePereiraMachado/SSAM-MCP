@@ -1,5 +1,5 @@
 {
- "description": "Form de cadastro: Labels ligados aos Inputs (TargetWidget), campos obrigatorios, e o botao Salvar so chama o servidor quando ContactForm.Valid.",
+ "description": "A registration Form: Labels bound to the Inputs (TargetWidget), required fields, and the Save button only calls the server when ContactForm.Valid.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -41,7 +41,7 @@
   {"op": "set", "target": "$i3", "prop": "InputType", "value": "Number"},
   {"op": "set", "target": "$l3", "prop": "TargetWidget", "value": "$i3"},
 
-  {"op": "logic", "_why": "ContactForm.Valid fica falso quando um campo obrigatorio esta vazio ou um valor nao bate com o InputType", "data": {"actions": [
+  {"op": "logic", "_why": "ContactForm.Valid stays false when a required field is empty or a value does not match the InputType", "data": {"actions": [
    {"name": "SaveContact", "kind": "screen", "owner": "IMobileScreen:NewContact",
     "steps": [
      {"if": "ContactForm.Valid", "as": "IsFormValid",

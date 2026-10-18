@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';
 import {a2aConnectionPlan,a2aSaveInput} from '../runtime/a2a-connection-plan.mjs';
 import {a2aConnectionApproval,A2A_TEST,A2A_SAVE} from '../runtime/a2a-connection-approval.mjs';

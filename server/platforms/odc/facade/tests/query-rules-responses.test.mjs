@@ -1,7 +1,8 @@
 // Data-access rules of 2026-10-09 (kernel QueryInLoopRule/AggregateConsolidationRule): the HIGH warnings never block a
-// delivery (A03) but are always shown: first in `warnings` and on their own in `highWarnings`, in the compacted
-// studio_deliver answer (delivered or refused), in the O11 task answers (warningFields over taskWarnings) and in the
-// ssam_job/o11_job summary. Pure: no Studio, no CLI.
+// delivery (A03) but are always shown. Source helpers expose them first in warnings and on their own in highWarnings;
+// the shared output policy removes that duplication in final MCP answers. These tests exercise the unchanged sources:
+// compactDelivery, warningFields/taskWarnings and ssam_job/o11_job summary. Pure: no Studio, no CLI.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { compactDelivery, shapeToolResult } from '../responses.mjs';

@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA de `duplicate` de um no de diagrama de entidades (faixa ODC). A regra de importacao do diagrama (AllowImportOf) so aceita um no colado junto com a origem da sua entidade e uma vez por entidade: o no copiado sozinho e recusado pelo mesmo diagrama e por qualquer outro. O kernel diz isso e manda por a entidade no diagrama com create IEntityDiagramNode.",
+ "description": "The REFUSAL of `duplicate` of an entity diagram node (ODC lane). The import rule of the diagram (AllowImportOf) only accepts a node pasted together with the source of its entity and once per entity: the node copied alone is refused by the same diagram and by any other. The kernel says so and tells to put the entity in the diagram with create IEntityDiagramNode.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectError": [

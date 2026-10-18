@@ -288,7 +288,8 @@ try {
   // servidor/fase4-25: marco-a5 keeps a whole answer above its kind's budget in <answersRoot>/.local/answers even locally
   // (answer-size.mjs); the owner's stdio server of this step writes them in the temporary folder, so kernel/.local keeps
   // proving that no hosted call wrote there.
-  const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), deps: { answersRoot: path.join(T, 'owner-answers') } });
+  // servidor/fase4-26 a7: a hosted session serves the profile all (CX11); the parity is with the stdio list of that profile.
+const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), profile: 'all', deps: { answersRoot: path.join(T, 'owner-answers') } });
   const [left, right] = InMemoryTransport.createLinkedPair();
   const local = new Client({ name: 'e2e-stdio', version: '1' });
   await Promise.all([stdio.connect(left), local.connect(right)]);
@@ -409,8 +410,8 @@ try {
   };
   const task = latestTask();
   const serverBase = task?.artifacts?.[0]?.path, serverForeign = task?.artifacts?.[1]?.path;
-  check('thin: o11_deliver delivers ("entregue") through the relay and the agent to the fake thin bridge',
-    delivered.isError !== true && sc(delivered)?.ok === true && sc(delivered)?.result === 'entregue' && task?.delivered === true && task?.writeState === 'applied',
+  check('thin: o11_deliver delivers ("delivered") through the relay and the agent to the fake thin bridge',
+    delivered.isError !== true && sc(delivered)?.ok === true && sc(delivered)?.result === 'delivered' && task?.delivered === true && task?.writeState === 'applied',
     { reply: sc(delivered) ?? delivered, task: task ? { stage: task.stage, error: task.error, writeState: task.writeState } : null, seen: deliverSeen.map(e => e.method + (e.success ? '' : ':' + e.error)) });
   check('thin: the candidate is computed on the server (apply over the capture) and differs from the base; the bridge merged exactly those bytes',
     task?.apply?.accepted === true && serverBase && serverForeign && fs.existsSync(serverBase) && fs.existsSync(serverForeign) && shaFile(serverForeign) !== shaFile(serverBase)
@@ -464,7 +465,7 @@ try {
   const orderTask = latestTask();
   const firstPass = orderTask?.mergePlan?.firstPass;
   check('thin: the merge order over the relay: the server plans the deferred default, the first-pass copy reaches the thin bridge with its sha256, one call merges twice',
-    sc(ordered)?.ok === true && sc(ordered)?.result === 'entregue' && orderTask?.writeState === 'applied' && orderTask?.mergePlan?.deferred?.length >= 1
+    sc(ordered)?.ok === true && sc(ordered)?.result === 'delivered' && orderTask?.writeState === 'applied' && orderTask?.mergePlan?.deferred?.length >= 1
       && typeof firstPass === 'string' && fs.existsSync(firstPass) && orderSeen.some(e => e.method === 'bridge_manifest')
       && orderMerges.length === 1 && orderMerges[0].merged === true && orderMerges[0].paramKeys.includes('first_pass_path')
       && orderMerges[0].paramKeys.includes('first_pass_sha256') && orderMerges[0].firstPassSha256 === shaFile(firstPass) && orderMerges[0].plan === 'ok',
@@ -587,7 +588,7 @@ try {
     const viaEvidence = omitted?.tool === 'ssam_evidence' && /^ws:o11\/answers\/[0-9a-f]{64}\.json$/.test(omitted.arguments?.file ?? '');
     check(`22nd: hosted ssam_map {lane:"${lane}", view:"digest"} over a capture of the customer's workspace: the server's reader writes the digest, page 1 names the module`,
       digest.isError !== true && page?.ok === true && page.schema === 'ssam-digest-page/1' && page.page === 1 && typeof page.text === 'string' && page.text.includes(moduleName)
-        && page.file === captured && (page.store === undefined ? viaEvidence : page.store?.file === '<servidor>'),
+        && page.file === captured && (page.store === undefined ? viaEvidence : page.store?.file === '<server>'),
       page ? { ok: page.ok, schema: page.schema, file: page.file, store: page.store, pages: page.pages, cache: page.cache, omitted, error: page.error } : digest);
     check(`22nd: the ${lane} digest answer pins the ws: capture in its continuations and names no server path`,
       (page?.continuations ? page.continuations.page?.arguments?.target === captured && (next === null || next.arguments?.target === captured) : viaEvidence)
@@ -669,15 +670,21 @@ try {
     const value = sc(packet);
     check(`23rd: hosted ssam_discover {lane:"${lane}", app: ws: capture, packet:true}: the work packet with the module read by the server's kernel reader, no server path, no client text`,
       // module.file is the capture that answers the read: this one, or the first intact one of the same content (C15).
-      packet.isError !== true && value?.ok === true && value.schemaVersion === 'ssam-packet/1' && value.app === captured && value.module?.name === moduleName && inWs(value.module?.file, 'ws:' + lane + '/')
-        && value.next?.deliver?.arguments?.module === moduleName && !serverPathIn(value) && clientHits(value).length === 0,
+      // servidor/fase4-26 a7 (CX11 R5): the packet's default budget is 8 KB; a module section that does not fit is a cut whose
+      // recover call names the same ws: capture. The read is the server's either way: the delivery step names the module, and
+      // it is the lane's delivery tool, never ssam_code (unavailable hosted).
+      packet.isError !== true && value?.ok === true && value.schemaVersion === 'ssam-packet/1' && value.app === captured
+        && (value.module ? value.module.name === moduleName && inWs(value.module.file, 'ws:' + lane + '/')
+          : (value.cuts ?? []).some(c => c.section === 'module' && c.recover?.tool === 'ssam_discover' && c.recover.arguments?.app === captured))
+        && value.next?.deliver?.tool === (lane === 'o11' ? 'o11_deliver' : 'studio_deliver') && value.next.deliver.arguments?.module === moduleName
+        && !JSON.stringify(value).includes('ssam_code') && !serverPathIn(value) && clientHits(value).length === 0,
       value ? { ok: value.ok, schema: value.schemaVersion, app: value.app, module: value.module ? { name: value.module.name, file: value.module.file } : null, next: value.next?.deliver ?? null,
         size: value.size, error: value.error ?? null, client: clientHits(value) } : packet);
   }
 
   const search = sc(await call(clientA, 'ssam_map', { lane: 'odc', target: odcCapture?.path, view: 'search', text: ODC_MODULE.name }, 600000));
   check('23rd: hosted ssam_map {view:"search"} over a ws: capture: the server\'s reader writes the rich index, hits with @key, captures pinned to ws:, no server path',
-    search?.ok === true && search.count >= 1 && inWs(search.captures?.[0]?.file, 'ws:odc/') && search.captures[0].rich?.file === '<servidor>' && !serverPathIn(search),
+    search?.ok === true && search.count >= 1 && inWs(search.captures?.[0]?.file, 'ws:odc/') && search.captures[0].rich?.file === '<server>' && !serverPathIn(search),
     search ? { ok: search.ok, count: search.count, captures: search.captures?.map(c => ({ module: c.module, file: c.file, rich: c.rich?.file, cache: c.cache })), error: search.error ?? null } : search);
   seen = o11Count();
   const uses = sc(await call(clientA, 'ssam_map', { lane: 'o11', target: [capture?.path, O11_MODULE.name], view: 'uses', element: 'ThinE2EPing' }, 600000));
@@ -946,8 +953,13 @@ try {
   }
   // machine-pins.json and access-alerts.jsonl: the access trail of each token (agent-hub.mjs), as hosted-e2e.test.mjs allows.
   // The quality record (docs/QUALIDADE.md) lives beside the audit.
-  const top = fs.readdirSync(serverDir).filter(name => !['customers', 'tokens.json', 'kernel.json', 'server.log', 'server.pid', 'server.json', 'machine-pins.json', 'access-alerts.jsonl'].includes(name) && !/^(audit|quality)-\d{8}\.jsonl$/.test(name));
-  check('the server folder holds only tokens, kernel.json, servidor.ps1 files, audit, quality, the access trail and customers', top.length === 0, top);
+  // a7 (no-internals list item 7): exposure/ holds the bytes each token is served per day (served-<day>.json, sizes only).
+  const top = fs.readdirSync(serverDir).filter(name => !['customers', 'tokens.json', 'kernel.json', 'server.log', 'server.pid', 'server.json', 'machine-pins.json', 'access-alerts.jsonl', 'exposure'].includes(name) && !/^(audit|quality)-\d{8}\.jsonl$/.test(name));
+  check('the server folder holds only tokens, kernel.json, servidor.ps1 files, audit, quality, the access trail, the served bytes and customers', top.length === 0, top);
+  const served = (() => { try { return fs.readdirSync(path.join(serverDir, 'exposure')); } catch { return []; } })();
+  const servedText = served.map(n => fs.readFileSync(path.join(serverDir, 'exposure', n), 'utf8')).join('\n');
+  check('the served bytes are one file per day, by token id and tool, with no token, credential or argument', served.length > 0 && served.every(n => /^served-\d{4}-\d{2}-\d{2}\.json$/.test(n))
+    && ![issued.a, issued.b, issued.c].some(x => servedText.includes(x.token) || servedText.includes(x.credential)) && !/ws:|"file"|"query"|"intent"/.test(servedText), { files: served, sample: servedText.slice(0, 300) });
   const logs = fs.readdirSync(serverDir).filter(n => n.endsWith('.log') || n.endsWith('.jsonl')).map(n => fs.readFileSync(path.join(serverDir, n), 'utf8')).join('\n');
   check('server.log and audit carry no token or agent credential', ![issued.a, issued.b, issued.c].some(x => logs.includes(x.token) || logs.includes(x.credential)));
   check('the customer workspaces are separate folders', fs.existsSync(issued.a.workspace) && fs.existsSync(issued.b.workspace) && !fs.existsSync(path.join(issued.b.workspace, 'odc', 'lab', 'Candidate.oml')));

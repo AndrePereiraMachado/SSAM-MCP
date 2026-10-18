@@ -1,5 +1,5 @@
 {
- "description": "OverflowMenu (OutSystemsUI, Navigation) tipico; criado vazio e preenchido com conteudo proprio; placeholders Menu, TriggerContent com dados do aggregate de tarefas; eventos OnMenuToggle, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "description": "Typical OverflowMenu (OutSystemsUI, Navigation); created empty and filled with its own content; placeholders Menu, TriggerContent with data of the tasks aggregate; events OnMenuToggle, Initialized handled by screen actions that keep the parameters in variables.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

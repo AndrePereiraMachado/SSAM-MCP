@@ -1,5 +1,5 @@
 {
- "description": "REST consumido chamado numa server action (IExecuteServerActionNode com IRestAction) e Assign do output (job da investigacao REST de 2026-09-04)",
+ "description": "Consumed REST called in a server action (IExecuteServerActionNode with IRestAction) and Assign of the output (job of the REST investigation of 2026-09-04)",
  "base": "job:rest-consume-get",
  "expectValid": true,
  "ops": [

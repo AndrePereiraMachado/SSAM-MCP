@@ -1,5 +1,5 @@
 {
- "description": "Tabs do OutSystems UI tipico: duas abas (cabecalho + conteudo), aba inicial vinda de uma variavel, OnTabChange guarda a aba ativa; a primeira aba tem a tabela de tarefas e a segunda o total por estado.",
+ "description": "Typical Tabs of OutSystems UI: two tabs (header + content), the initial tab from a variable, OnTabChange keeps the active tab; the first tab has the table of tasks and the second the total per state.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

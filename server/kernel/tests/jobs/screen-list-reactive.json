@@ -1,5 +1,5 @@
 {
- "description": "Tela Reactive de lista com navegacao (assume a entidade Contact e a tela ContactDetail do job screen-form-reactive): aggregate ordenado, List com ListItem, expressoes por item, OnClick do item -> ContactDetail(ContactId)",
+ "description": "Reactive list screen with navigation (assumes the entity Contact and the screen ContactDetail of the job screen-form-reactive): sorted aggregate, List with ListItem, per-item expressions, OnClick of the item -> ContactDetail(ContactId)",
  "base": "job:screen-form-reactive",
  "expectValid": true,
  "ops": [
@@ -84,7 +84,7 @@
   {
    "op": "delete",
    "target": "$item/RightActions/#IListItemAction",
-   "_why": "o ListItem nasce com uma swipe action de exemplo sem destino (erro RequiredPropertyValue)"
+   "_why": "the ListItem is born with a sample swipe action without a destination (error RequiredPropertyValue)"
   },
   {
    "op": "create",

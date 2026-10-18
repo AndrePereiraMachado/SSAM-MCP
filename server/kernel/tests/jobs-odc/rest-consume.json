@@ -1,5 +1,5 @@
 {
- "description": "ODC (cobertura C): o rest-consume-get.json espelhado na faixa ODC. REST consumido GET (ViaCEP) sobre a fixture do InsuranceApp: IRestClient com BaseURL, IRestStructure de resposta, IRestAction com URLPath parametrizado, input em UrlPlacement e output em BodyPlacement.",
+ "description": "ODC (coverage C): rest-consume-get.json mirrored in the ODC lane. Consumed REST GET (ViaCEP) over the InsuranceApp fixture: IRestClient with BaseURL, response IRestStructure, IRestAction with parameterized URLPath, input in UrlPlacement and output in BodyPlacement.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,5 +1,5 @@
 {
- "description": "SectionIndex do OSUI: dois SectionIndexItem que rolam ate dois Containers da tela pelo Id do widget (SectionA.Id).",
+ "description": "SectionIndex of OSUI: two SectionIndexItem that scroll to two Containers of the screen by the Id of the widget (SectionA.Id).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -22,7 +22,7 @@
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "SectionB", "as": "$secB"},
   {"op": "create", "parent": "$secB", "type": "ITextWidget", "as": "$text4"},
   {"op": "set", "target": "$text4", "prop": "Text", "value": "Returns are free for 30 days."},
-  {"op": "set", "target": "$i1/ScrollToWidgetId", "prop": "Value", "value": "SectionA.Id", "_why": "o Id de um widget com nome le-se <Nome>.Id"},
+  {"op": "set", "target": "$i1/ScrollToWidgetId", "prop": "Value", "value": "SectionA.Id", "_why": "the Id of a named widget reads <Name>.Id"},
   {"op": "set", "target": "$i2/ScrollToWidgetId", "prop": "Value", "value": "SectionB.Id"}
  ]
 }

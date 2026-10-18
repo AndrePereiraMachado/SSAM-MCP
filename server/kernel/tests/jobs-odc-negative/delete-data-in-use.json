@@ -1,5 +1,5 @@
 ﻿{
- "description": "ODC: a RECUSA do delete de dados. O atributo WfProofNotice.Body e usado pelo filtro de um aggregate e pela expressao de um Assign. Sem force o delete tem de ser recusado E a mensagem tem de nomear os consumidores. Roda automaticamente em OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane, o espelho do NegativeJobTests da faixa O11. O caminho limpo esta em tests/jobs-odc/delete-data-consumers.json.",
+ "description": "ODC: the REFUSAL of data delete. The attribute WfProofNotice.Body is used by the filter of an aggregate and by the expression of an Assign. Without force the delete has to be refused AND the message has to name the consumers. Runs automatically in OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane, the mirror of the NegativeJobTests of the O11 lane. The clean path is in tests/jobs-odc/delete-data-consumers.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectError": [

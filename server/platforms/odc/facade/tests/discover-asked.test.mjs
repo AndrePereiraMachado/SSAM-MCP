@@ -2,6 +2,7 @@
 // (Codex, module Haiku_UI, 22nd release): 11 of its 22 discovers sent expand/detail beside an intent and got none of it,
 // without a word (discovery.mjs honoured the expansion only without an intent).
 // The arguments below are the calls as sent (calls.json of the session), on the O11 lane; the index needs the lane CLI.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -108,7 +109,7 @@ const INSUFFICIENT = {
 };
 
 test('a budget below the minimal answer is raised to it when the minimal fits under the answer ceiling, and the answer says so in inputAdjusted and size.budgetAdjusted (calls 11, 31, 37, 40, 47, 67, 147; 49, 106, 142)', { skip, timeout: 600000 }, async () => {
-  const ceiling = discovery.answerCeiling?.() ?? 38912;
+  const ceiling = discovery.answerCeiling();
   // The minimal a budget rises to has every part asked whole (stage F never cuts them): calls 49, 106 and 142 rose to the
   // form stage F had cut (an example of 4 ops, 8 bindings) while the whole parts fit under the ceiling (review of 2026-10-11).
   const raisedCalls = { ...INSUFFICIENT, 49: CALLS[49], 106: CALLS[106], 142: CALLS[142] };
@@ -118,6 +119,32 @@ test('a budget below the minimal answer is raised to it when the minimal fits un
     assert.equal(a.ok, true, label);
     assert.notEqual(a.size.status, 'insufficient', `${label}: ${JSON.stringify(a.size)}`);
     const adjusted = a.inputAdjusted?.find(x => x.path === '/budgetBytes');
+    // A lower shared ceiling can split the whole answer while the requested budget
+    // already holds its first page. No increase is truthful in that case.
+    if (!adjusted && a.continuations?.next) {
+      const whole = await discover({ lane: 'o11', ...args, budgetBytes: 400000, sources: o11 });
+      assert.ok(bytes(whole) > ceiling, `${label}: only a whole answer above the ceiling may page`);
+      assert.equal(a.size.budgetBytes, args.budgetBytes, `${label}: the first page honors the given budget`);
+      assert.equal(a.size.budgetAdjusted, undefined);
+      const wanted = asked(args), seen = new Set(), continuations = new Set();
+      let page = a, count = 0;
+      for (;;) {
+        assert.equal(page.ok, true); assert.notEqual(page.size.status, 'insufficient');
+        assert.ok(wireBytes(page) <= page.size.budgetBytes && page.size.bytes === bytes(page), `${label}: page bytes`);
+        for (const unit of wanted) if (page.expansions?.[unit.id]?.[unit.part] !== undefined) {
+          assert.deepEqual(page.expansions[unit.id][unit.part], await wholeOf(unit), `${label}: ${unit.spec} whole`);
+          assert.ok(!seen.has(unit.spec), `${label}: no duplicate part`); seen.add(unit.spec);
+        }
+        const next = page.continuations?.next;
+        if (!next) break;
+        assert.equal(next.tool, 'ssam_discover');
+        const signature = JSON.stringify(next.arguments); assert.ok(!continuations.has(signature), `${label}: no page loop`); continuations.add(signature);
+        assert.ok(++count <= wanted.length, `${label}: pages end`);
+        page = await discoverAll({ ...next.arguments, sources: o11 });
+      }
+      assert.deepEqual([...seen].sort(), wanted.map(unit => unit.spec).sort(), `${label}: every requested part is reachable whole`);
+      continue;
+    }
     assert.ok(adjusted, `${label}: inputAdjusted names the budget`);
     // With the lane's stamped job results the evidence grows: the whole answer of call 40 (detail ui.html-page) is about
     // 52.8 KB without them and 63.5 KB with the 95 current results, and its minimal then outgrows the ceiling. It pages

@@ -1,5 +1,5 @@
 {
- "description": "O11: a RECUSA de um set Identifier que colide com o nome de outro registo da mesma static entity. Sem esta pre-verificacao o setter nativo sufixaria em SILENCIO (Active -> Active2), como a grelha do Studio; o kernel confere a colisao no escopo antes de escrever, como o rename ja fazia, e recusa dizendo o nome que o Studio usaria. O caminho limpo (Identifier para um nome livre, com os consumidores reescritos) esta em tests/jobs/static-entity-lifecycle.json. Medido com a base job:spec-data.",
+ "description": "O11: the REFUSAL of a set Identifier that collides with the name of another record of the same static entity. Without this pre-check the native setter would add a suffix SILENTLY (Active -> Active2), like the Studio grid; the kernel checks the clash in the scope before writing, as the rename already did, and refuses, saying the name the Studio would use. The clean path (Identifier to a free name, with the consumers rewritten) is in tests/jobs/static-entity-lifecycle.json. Measured with the base job:spec-data.",
  "base": "job:spec-data",
  "expectValid": true,
  "expectError": [
@@ -8,8 +8,8 @@
   "pick another identifier"
  ],
  "ops": [
-  {"op": "get", "target": "IStaticEntity:Status/Inactive", "_why": "o registo que vai tentar mudar de nome: Identifier = Inactive."},
-  {"op": "get", "target": "IStaticEntity:Status/Active", "_why": "o nome que ja existe no mesmo escopo: Identifier = Active."},
-  {"op": "set", "target": "IStaticEntity:Status/Inactive", "prop": "Identifier", "value": "Active", "_why": "recusado com \"op #2 (set Identifier): InvalidOperationException: set Identifier: 'Active' clashes with an existing name in that scope (the Studio would use 'Active2'); pick another identifier\"."}
+  {"op": "get", "target": "IStaticEntity:Status/Inactive", "_why": "the record that will try to change its name: Identifier = Inactive."},
+  {"op": "get", "target": "IStaticEntity:Status/Active", "_why": "the name that already exists in the same scope: Identifier = Active."},
+  {"op": "set", "target": "IStaticEntity:Status/Inactive", "prop": "Identifier", "value": "Active", "_why": "refused with \"op #2 (set Identifier): InvalidOperationException: set Identifier: 'Active' clashes with an existing name in that scope (the Studio would use 'Active2'); pick another identifier\"."}
  ]
 }

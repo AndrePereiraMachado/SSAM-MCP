@@ -44,7 +44,8 @@ public sealed partial class ModelSession
     public JsonObject ReceiptFields(ExpectationResult? policy = null, JobFootprint? footprint = null)
     {
         var fields = new JsonObject();
-        foreach (var (field, list) in _receipt.OrderBy(r => r.Key, StringComparer.Ordinal)) fields[field] = list.DeepClone();
+        foreach (var (field, list) in _receipt.OrderBy(r => r.Key, StringComparer.Ordinal))
+            fields[field] = field == "highWarnings" ? HighWarningsByPriority(list) : list.DeepClone();
         // C08: the screens the job declared open to anonymous users, with the server actions the Verify names on them.
         var exposure = (policy?.Verdicts ?? []).Where(v => v.Reason == MessageExpectations.AnonymousDeclaredReason)
             .GroupBy(v => ScreenOfPath(v.Path), StringComparer.Ordinal)
@@ -53,6 +54,20 @@ public sealed partial class ModelSession
             .ToArray();
         if (exposure.Length > 0) fields["anonymousExposure"] = new JsonArray(exposure);
         return fields;
+    }
+
+    /// <summary>The high warnings in the order the answer keeps them (the facade cuts at 10; review 1 of CX17, M2): the data
+    /// access, the owner's rules and the compile check first (QUERY_IN_LOOP, AGGREGATES_MERGEABLE, ...), then the visual ones of
+    /// the html op, then HTML_CLASS_NO_RULE; the order of each group as it was raised.</summary>
+    private static JsonArray HighWarningsByPriority(JsonArray list)
+    {
+        static int Rank(JsonNode? warning) => warning?["code"]?.ToString() switch
+        {
+            ScreenVisual.SelectorMissesRuntime or ScreenVisual.ThemeTokenScoped or ScreenVisual.TextJoined or ScreenVisual.ListNotLayoutContainer => 1,
+            ScreenDocument.ClassNoRule => 2,
+            _ => 0,
+        };
+        return new JsonArray(list.Select((w, i) => (w, i)).OrderBy(x => Rank(x.w)).ThenBy(x => x.i).Select(x => x.w?.DeepClone()).ToArray());
     }
 
     /// <summary>"M (ESpace) / Home (Screen) / GetX (DataAction)": the level that names the screen, else the parent level.</summary>

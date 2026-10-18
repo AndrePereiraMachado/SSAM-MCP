@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import crypto from 'node:crypto';
 import {organizationRenamePlan,organizationRenameObservation,ORGANIZATION_GET} from '../runtime/organization-rename.mjs';
 const organization={id:crypto.randomUUID(),name:'Synthetic organization',ring:'GA',assetPortfolioCount:1,platformRegion:'us-east-1',dataPlatformRegion:'us-east-1'};

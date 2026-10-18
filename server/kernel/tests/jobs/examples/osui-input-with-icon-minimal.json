@@ -1,5 +1,5 @@
 {
- "description": "InputWithIcon (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; o Input de exemplo do placeholder Input ligado a uma variavel Text.",
+ "description": "Minimal InputWithIcon (OutSystemsUI, Interaction): an instance as the Studio creates it when the block is dragged; the sample Input of the Input placeholder bound to a Text variable.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

@@ -50,17 +50,24 @@ public static class ProducerSignatures
             if (node is JsonObject obj)
                 foreach (var part in obj["jobs"]?.AsArray() ?? new JsonArray()) Visit(JobRunner.ResolveJobFile(part!.ToString(), dir));
             foreach (var op in (node is JsonArray array ? array : node["ops"]?.AsArray()) ?? new JsonArray())
-                if (op?["op"]?.ToString() == "reference" && string.Equals(op["producer"]?.ToString(), producer, StringComparison.OrdinalIgnoreCase))
+                if (op?["op"]?.ToString() == "reference" && JobSources.SameProducer(op["producer"]?.ToString(), producer))
                     elements.AddRange(op["elements"]?.AsArray().Select(e => e!.GetValue<string>()) ?? []);
         }
     }
 
-    /// <summary>"Binding" or "Binding=Producer" (the environment's producer name, e.g. System=(System)).</summary>
+    /// <summary>"Binding" or "Binding=Producer" (the environment's producer name, e.g. System=(System)). fix/system-reference:
+    /// the binding may be written as the Studio lists it ("(System)": binding System), and a binding that names no producer
+    /// captures the one the Studio knows by it ("System" and "(System)" capture "(System)"; JobSources.StudioName).</summary>
     public static (string Binding, string Producer) ParseCapture(string entry)
     {
         var parts = (entry ?? "").Split('=', 2);
-        var binding = parts[0].Trim(); var producer = parts.Length == 2 ? parts[1].Trim() : binding;
-        if (!JobSources.IsBindingName(binding) || producer.Length == 0)
+        var written = parts[0].Trim();
+        // Round 3 (H1-R): a name with / or \ ("Acme/Core Lib") takes the slot of its letters and digits and captures the
+        // producer of exactly that text (the catalog resolves it only exactly); a "Binding=Producer" binding is a binding key.
+        var binding = (parts.Length == 2 ? JobSources.BindingKey(written) : JobSources.SlotKey(written)) ?? written;
+        var producer = parts.Length == 2 ? parts[1].Trim() : JobSources.StudioName(written);
+        // Round 2 (H1): a binding is any producer name with a binding key ("OutSystems UI" binds as OutSystemsUI).
+        if ((parts.Length == 2 ? JobSources.BindingKey(written) : JobSources.SlotKey(written)) == null || producer.Length == 0)
             throw new ArgumentException($"invalid --capture-producer '{entry}': use --capture-producer Name or Name=<producer>, e.g. System=(System)");
         return (binding, producer);
     }

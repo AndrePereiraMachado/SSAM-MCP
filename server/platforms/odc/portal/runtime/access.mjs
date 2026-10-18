@@ -71,7 +71,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { authorizationContext as readAuthorizationContext } from '../../facade/authorization-context.mjs';
 import { boundedRead, readCheckpoint, readOptions } from '../../facade/read-budget.mjs';
-import { currentSignal } from '../../facade/destructive-operations.mjs';
+import { currentSignal, wordsGiven } from '../../facade/destructive-operations.mjs';
 import { prepareRequest } from './request.mjs';
 import { assetFilterComparison } from './asset-filter-comparison.mjs';
 import { readCatalogPage } from './quality-pattern-pagination.mjs';
@@ -843,6 +843,7 @@ export class OdcAccess {
     try {
       const { state, read, authorize } = reconcile;
       if (typeof authorize !== 'string' || authorize.trim().length < 8) fail('AUTHORIZATION_REQUIRED', 'Reconciling a write needs the user\'s words that state what the read showed.');
+      if (!wordsGiven(authorize)) fail('WORDS_REQUIRED', 'reconcile.authorize holds a text of the server (a marker, a <template> or a sha256), never the owner\'s words: ask the owner. Nothing was changed.'); // CX15 r6 (M-1)
       const tenant = existing.identity.tenant;
       if(existing.identity.operationId===IP_FILTER_DELETE){
         const scope=ipFilterDeleteScope(existing,reconcile);
@@ -2472,7 +2473,9 @@ function refusal(code, message, extra = {}) { return { ok: false, code, error: {
 // CX15 r4 (W-1): {reconciling} = the read-only reconciliation of an existing receipt (reconcilesWithoutWords): no words.
 function writeProblems(authorize, operationUuid, { reconciling = false } = {}) {
   return [
-    ...(!reconciling && (typeof authorize !== 'string' || authorize.trim().length < 8) ? [{ code: 'AUTHORIZATION_REQUIRED', path: '/authorize', message: 'Writes need the user\'s own authorization words (authorize), quoted verbatim; only their sha256 is kept.' }] : []),
+    ...(!reconciling && (typeof authorize !== 'string' || authorize.trim().length < 8) ? [{ code: 'AUTHORIZATION_REQUIRED', path: '/authorize', message: 'Writes need the user\'s own authorization words (authorize), quoted verbatim; only their sha256 is kept.' }]
+      // CX15 r6 (M-1): a marker, a <template> or a sha256 of the server is never the owner's words.
+      : !reconciling && !wordsGiven(authorize) ? [{ code: 'WORDS_REQUIRED', path: '/authorize', message: 'authorize holds a text of the server (a marker, a <template> or a sha256), never the owner\'s words: ask the owner and pass his literal words. Nothing was sent.' }] : []),
     ...(!isUuid(operationUuid) ? [{ code: 'INPUT_INVALID', path: '/operationUuid', message: 'operationUuid must be a new UUID for this write; reuse it only to read the same receipt.' }] : [])];
 }
 // CX15 r4 (W-1): a call WITHOUT authorize whose operationUuid already has a receipt of this kind is the read-only

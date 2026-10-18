@@ -19,7 +19,8 @@ import { o11LaneOf } from './o11-lane.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
 import { assertSelectedO11 } from './studio-connect.mjs';
 import { producerCacheDir, recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
-import { DESTRUCTIVE_SUFFIX, tokenNames } from './destructive-operations.mjs';
+import { DESTRUCTIVE_SUFFIX, tokenNames, withoutWordEchoes, wordsGiven } from './destructive-operations.mjs';
+import { RESULT } from './result-values.mjs';
 
 export const ENVIRONMENT_READS = ['inventory', 'download', 'download-app', 'templates', 'references', 'referenceable'];
 export const ENVIRONMENT_WRITES = ['create-app', 'add-modules', 'create-module', 'update-app', 'refresh-refs', 'set-user-provider', 'delete-app'];
@@ -77,7 +78,8 @@ const publishErrors = publish => (get(publish, 'Messages') ?? []).filter(m => /e
   .slice(0, 5).map(m => firstLine(get(m, 'Message')));
 const validationSample = validation => (get(validation, 'Sample') ?? []).slice(0, 5).map(firstLine);
 
-const refusal = (code, error, continuation, extra = {}) => ({ ok: false, code, error, ...extra, continuation });
+// CX15 r5 (N-1): a continuation rebuilt from the input never gives the owner's words back (they become the words marker).
+const refusal = (code, error, continuation, extra = {}) => ({ ok: false, code, error, ...extra, continuation: withoutWordEchoes(continuation) });
 const inventoryRead = (host, why) => ({ tool: 'o11_environment', arguments: { action: 'inventory', ...(host ? { host } : {}) }, why });
 const withoutKeys = (input, keys) => Object.fromEntries(Object.entries(input).filter(([k]) => !keys.includes(k)));
 
@@ -124,7 +126,8 @@ export function validateEnvironmentInput(input) {
   // (after the preview, naming the app and every consumer, with the count) with every other problem at once. With the
   // token and no words at all: WORDS_REQUIRED, with the warning (CX15 r2, T4).
   if (isWrite(action) && (action !== 'delete-app' || input.confirmationToken)) {
-    if (typeof input.authorize !== 'string' || !input.authorize.trim())
+    // CX15 r6 (M-1): missing words, or a marker / <template> / sha256 of the server, are no words.
+    if (!wordsGiven(input.authorize))
       return refusal('WORDS_REQUIRED', `${action} changes the environment and needs the user's own words (authorize)`,
         { tool: 'o11_environment', arguments: { ...input, authorize: "<the user's literal words>" }, why: 'ask the user; never write the words yourself' });
   }
@@ -370,13 +373,13 @@ function shapeWrite(i, data, { out, operationId, at }) {
         { module: get(data, 'ModuleName') ?? i.name, ...(valid ? { publishErrors: publishErrors(get(data, 'Publish')) } : { validation: validationSample(get(data, 'Validation')) }) });
     }
     case 'update-app':
-      return get(data, 'ok') === true ? { ok: true, result: 'feito' } : failed('UPDATE_APP_FAILED', firstLine(get(data, 'message')) || 'application not updated', { app: i.name });
+      return get(data, 'ok') === true ? { ok: true, result: RESULT.done } : failed('UPDATE_APP_FAILED', firstLine(get(data, 'message')) || 'application not updated', { app: i.name });
     case 'refresh-refs': {
       const applied = get(data, 'RefreshApplied') === true;
       const before = get(data, 'Before') ?? [];
       const refreshed = applied ? before.filter(b => get(b, 'InCatalog') === true && (i.all === true || get(b, 'Stale') === true)).map(b => get(b, 'Name')) : [];
       const stillStale = (get(data, 'After') ?? []).filter(a => get(a, 'Stale') === true).map(a => get(a, 'Name'));
-      if (!applied) return { ok: true, result: 'nada a atualizar' };
+      if (!applied) return { ok: true, result: RESULT.nothingToUpdate };
       const after = get(data, 'ValidationAfter');
       const validation = after ? { total: get(after, 'Total') ?? 0, byType: get(after, 'ByType') ?? {}, sample: (get(after, 'Sample') ?? []).slice(0, 5).map(firstLine) } : undefined;
       if (i.publish === true && !publishOk(get(data, 'Publish')))
@@ -387,7 +390,7 @@ function shapeWrite(i, data, { out, operationId, at }) {
     }
     case 'set-user-provider': {
       const valid = get(data, 'IsValid') === true;
-      if (valid && publishOk(get(data, 'Publish'))) return { ok: true, result: 'feito' };
+      if (valid && publishOk(get(data, 'Publish'))) return { ok: true, result: RESULT.done };
       return failed('SET_USER_PROVIDER_FAILED', valid ? 'publish failed' : 'the changed module is not valid',
         { module: get(data, 'ModuleName') ?? i.module, ...(valid ? { publishErrors: publishErrors(get(data, 'Publish')) } : { validation: validationSample(get(data, 'Validation')) }) });
     }
@@ -540,7 +543,7 @@ export function registerO11Environment(server, deps = {}) {
         // CX15 r3 (CT-5): after an interrupted operation, its record first; this token is the new preview's.
         : answer.operation?.orphaned ? `read ssam_task {id:"${answer.operation.operationId}"} and tell the owner what the interrupted operation did (this call sent nothing); then show the owner the new preview of what is left (preview) and confirm it with this new token and the owner's new reply`
           : 'fix every item of problems, then the same call' } } : {};
-    if (answer.ok && answer.state !== 'previewed') return { ...answer, result: 'feito' };
+    if (answer.ok && answer.state !== 'previewed') return { ...answer, result: RESULT.done };
     return { ...answer, ...(answer.state === 'previewed' ? {} : { ok: false }), ...next };
   }
 

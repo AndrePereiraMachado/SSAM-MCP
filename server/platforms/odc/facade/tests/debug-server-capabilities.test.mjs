@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { serverCapabilities, serverCapabilityEvidence } from '../debug-server-capabilities.mjs';

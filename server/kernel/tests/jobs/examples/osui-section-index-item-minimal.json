@@ -1,5 +1,5 @@
 {
- "description": "SectionIndexItem (OutSystemsUI, Navigation) minimo: instancia como o Studio cria ao arrastar o bloco; dentro de um SectionIndex vazio (placeholder Content); inputs obrigatorios ScrollToWidgetId com valores simples.",
+ "description": "Minimal SectionIndexItem (OutSystemsUI, Navigation): an instance as the Studio creates it when the block is dragged; inside an empty SectionIndex (placeholder Content); required inputs ScrollToWidgetId with simple values.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

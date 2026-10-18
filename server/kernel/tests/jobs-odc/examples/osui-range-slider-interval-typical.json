@@ -1,5 +1,5 @@
 {
- "description": "RangeSliderInterval do OSUI como filtro de faixa de preco: o OnValueChange grava o intervalo e faz Refresh Data dos produtos dentro dele.",
+ "description": "RangeSliderInterval of OSUI as a price range filter: OnValueChange saves the interval and does a Refresh Data of the products inside it.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

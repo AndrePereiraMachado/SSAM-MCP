@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import{randomUUID}from'node:crypto';
 import{reconcileClientPrivateValues as reconcileActual}from'../debug-client-private-reconcile.mjs';
 const reconcileClientPrivateValues=(root,session,id,services)=>reconcileActual(root,session,id,{...services,

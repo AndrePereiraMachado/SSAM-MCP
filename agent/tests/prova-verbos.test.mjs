@@ -1,6 +1,7 @@
 // scripts/prova-verbos.mjs (live proof 2 of docs/PROVAS-AO-VIVO.md) against a fake request function: the 22 verbs in the
 // bridge's order, the agent's own port and key, nothing that changes the Studio without the opt-in flags, and the load
 // errors that only a real Studio's JIT shows classified apart. No socket, no Studio.
+import '../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

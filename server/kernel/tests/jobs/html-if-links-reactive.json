@@ -1,5 +1,5 @@
 {
-  "description": "op html (pagina inteira): binding visible vira IIfWidget nativo com o elemento no ramo True (tambem dentro de um <a>), e os filhos de <a>/<button> viram widgets filhos do Link/Button (card com div, icone <i> e bindings dentro de um link na lista; icone dentro de um botao). Prova do Verify sobre reactive-ui.oml.",
+  "description": "op html (whole page): visible binding becomes a native IIfWidget with the element in the True branch (also inside an <a>), and the children of <a>/<button> become child widgets of the Link/Button (card with div, <i> icon and bindings inside a link in the list; icon inside a button). Verify proof over reactive-ui.oml.",
   "base": "reactive-ui.oml",
   "expectValid": true,
   "ops": [

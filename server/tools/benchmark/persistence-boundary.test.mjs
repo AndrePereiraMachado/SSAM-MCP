@@ -1,5 +1,6 @@
 // N4c + X1: every persistence boundary (ledger, --md, --json) is checked before any write, in one refusal.
 // Exercised through the CLIs as child processes, with a synthetic USERPROFILE and synthetic values only.
+import '../../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';import {spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
 import {privacyIssues} from './privacy.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url)),ledgerCli=path.join(here,'speed-ledger.mjs'),analyzeCli=path.join(here,'analyze.mjs');

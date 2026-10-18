@@ -1,5 +1,5 @@
 {
- "description": "Popover: o IPopover nasce com texto e icone no TopContent; o job troca o texto e poe o conteudo no BottomContent.",
+ "description": "Popover: the IPopover is born with a text and an icon in TopContent; the job changes the text and puts the content in BottomContent.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -7,7 +7,7 @@
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "PopoverDemo", "as": "$scr"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IPopover", "name": "ReturnsPopover", "as": "$pop"},
-  {"op": "set", "target": "$pop/TopContent/#ITextWidget", "prop": "Text", "value": "Return policy", "_why": "o TopContent e o gatilho que o usuario toca"},
+  {"op": "set", "target": "$pop/TopContent/#ITextWidget", "prop": "Text", "value": "Return policy", "_why": "TopContent is the trigger the user taps"},
   {"op": "create", "parent": "$pop/BottomContent", "type": "IExpression", "as": "$body"},
   {"op": "set", "target": "$body", "prop": "Value", "value": "\"30 days to return any product\""},
   {"op": "dump", "target": "$pop", "depth": 3}

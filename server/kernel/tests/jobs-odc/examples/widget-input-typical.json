@@ -1,5 +1,5 @@
 {
- "description": "Input numerico com evento: InputType Number ligado a uma variavel Integer, MaxLength, e OnChange numa screen action que limita o valor e recalcula o total.",
+ "description": "A numeric Input with an event: InputType Number bound to an Integer variable, MaxLength, and OnChange in a screen action that limits the value and computes the total again.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

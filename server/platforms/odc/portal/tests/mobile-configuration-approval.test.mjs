@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';
 import {mobileConfigurationApproval,MOBILE_CONFIGURATION_WRITES,mobileConfigurationHash as hash,mobileConfigurationStateHash as stateHash} from '../runtime/mobile-configuration-approval.mjs';
 test('mobile configuration binds ownership, stage, body and current state; restoration has a fresh baseline',async t=>{

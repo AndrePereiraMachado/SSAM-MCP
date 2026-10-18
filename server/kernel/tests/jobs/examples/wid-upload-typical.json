@@ -1,5 +1,5 @@
 {
- "description": "Upload tipico: FileContent e FileName ligados a variaveis da tela; OnChange grava o arquivo pela server action TaskFile_Create (entidade TaskFile com Binary Data) e mostra uma mensagem.",
+ "description": "Typical Upload: FileContent and FileName bound to screen variables; OnChange saves the file through the server action TaskFile_Create (entity TaskFile with Binary Data) and shows a message.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],
@@ -8,7 +8,7 @@
    {"name": "FileName", "type": "Text", "mandatory": true, "length": 250},
    {"name": "Content", "type": "Binary Data"}]}]}},
   {"op": "logic", "data": {"actions": [
-   {"name": "TaskFile_Create", "kind": "server", "description": "Guarda um arquivo enviado",
+   {"name": "TaskFile_Create", "kind": "server", "description": "Keeps an uploaded file",
     "inputs": [{"name": "FileName", "type": "Text"}, {"name": "Content", "type": "Binary Data"}],
     "outputs": [{"name": "TaskFileId", "type": "TaskFile Identifier"}],
     "vars": [{"name": "Item", "type": "TaskFile"}],
@@ -21,7 +21,7 @@
   {"op": "create", "parent": "IMobileScreen:Showcase", "type": "ILocalVariable", "name": "UploadName", "as": "$vName"},
   {"op": "set", "target": "$vName", "prop": "DataType", "value": "Text"},
   {"op": "logic", "data": {"actions": [
-   {"name": "UploadOnChange", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Grava o arquivo escolhido",
+   {"name": "UploadOnChange", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Saves the chosen file",
     "steps": [
      {"call": "TaskFile_Create", "as": "SaveTaskFile", "args": {"FileName": "UploadName", "Content": "UploadContent"}},
      {"node": "IMessageNode", "as": "UploadedMessage", "properties": {"Message": "UploadName + \" uploaded\"", "Type": "Success"}}]}]}},

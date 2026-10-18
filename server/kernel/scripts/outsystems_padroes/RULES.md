@@ -1,91 +1,91 @@
-# Regras do OutSystems padrões
+# Rules of the OutSystems standards
 
-São 35 regras de implementação OutSystems e uma regra de produto (P7). A coluna **Checagem** diz quanto a ferramenta
-consegue decidir sozinha: automática (o detector decide), parcial (o detector acusa o que consegue ver e o resto vai
-para perguntas de revisão) ou manual (só pergunta de revisão). A coluna **Estágios** diz em que estágio há detector
-hoje. A coluna **Plataformas** diz onde a regra vale.
+There are 35 OutSystems implementation rules and one product rule (P7). The **Checking** column says how much the tool
+can decide by itself: automatic (the detector decides), partial (the detector flags what it can see and the rest goes
+to review questions) or manual (a review question only). The **Stages** column says at which stage there is a detector
+today. The **Platforms** column says where the rule applies.
 
-Hoje toda detecção lê jobs e OML do O11. Numa execução com `--platform odc`, os estágios job, truechange e oml não
-rodam, e cada regra que vale no ODC sai como "não checada no ODC ainda"; a AR1 sai como "não se aplica ao ODC". O
-estágio runtime não depende de plataforma. O pré-requisito K0 do estágio truechange (ok, accepted, isValid e nenhuma
-policyMessage) é interno: não é regra e não aceita exceção.
+Today every detection reads O11 jobs and OML. In a run with `--platform odc`, the job, truechange and oml stages do not
+run, and every rule that applies to ODC comes out as "not checked on ODC yet"; AR1 comes out as "does not apply to ODC".
+The runtime stage does not depend on the platform. The prerequisite K0 of the truechange stage (ok, accepted, isValid and
+no policyMessage) is internal: it is not a rule and takes no exception.
 
-| Id | Regra | Checagem | Estágios | Plataformas |
+| Id | Rule | Checking | Stages | Platforms |
 |---|---|---|---|---|
-| L1 | Simples e direta. Antes de criar qualquer coisa, pergunte se existe uma forma nativa mais curta: uma função built-in, um list action, um mapping ou um filtro no aggregate. | manual | — | O11 e ODC |
-| L2 | Sem variável auxiliar quando dá para calcular direto. Use a expressão no ponto de uso. Crie uma local só quando o valor é reutilizado ou quando deixa o fluxo mais legível. | parcial | job | O11 e ODC |
-| L3 | No máximo um If por valor em um Assign. Com mais de um, use um If node no fluxo ou uma client ou server action com nome claro. | automática | job, oml | O11 e ODC |
-| L4 | Um Assign por intenção. Um Assign chamado "Aplicar defaults" não deve também limpar erros. | manual | — | O11 e ODC |
-| L5 | Sem JavaScript para lógica de negócio. JavaScript só para o que o runtime não oferece, como clipboard ou foco em elemento, sempre isolado e nomeado. | automática | job, truechange, oml | O11 e ODC |
-| L6 | Sem JSONSerialize ou JSONDeserialize para passar dados dentro do app. Use estruturas e parâmetros tipados. | parcial | job, oml | O11 e ODC |
-| L7 | Sem valores fixos no código. Configuração vai em Site Properties, e domínios fixos vão em Static Entities. | parcial | job | O11 e ODC |
-| T1 | List actions em vez de For Each sempre que possível: ListFilter, ListAny, ListAll, ListIndexOf, ListSort, ListDistinct e ListAppendAll. | parcial | job | O11 e ODC |
-| T2 | Mapping em vez de For Each com ListAppend. Para converter uma lista de um tipo em outro, use o mapeamento de dados do Assign ou do parâmetro. | parcial | job | O11 e ODC |
-| T3 | For Each só quando cada item exige efeito ou uma decisão que os list actions não expressam. Nunca coloque uma chamada ao servidor ou ao banco dentro de um For Each: isso gera N+1 chamadas. | automática | job, oml | O11 e ODC |
-| T4 | Valide os filtros de lista em runtime. No ODC, uma condição de ListFilter no client escrita como Lista.Current.X passou no build e falhou em execução. Não se sabe se o O11 tem o mesmo problema. Não confie só na validação do Studio: teste. | parcial | job, oml, runtime | O11 e ODC |
-| D1 | Leitura de banco só por Screen Aggregate ou Data Action em Reactive e Mobile. Em Traditional Web, pela Preparation. | parcial (hoje só revisão) | — | O11 e ODC |
-| D2 | Filtrar, ordenar e juntar dentro do aggregate, não no client depois. Busque só os atributos usados e defina Max Records. | parcial | job, oml | O11 e ODC |
-| D3 | SQL só quando o aggregate não resolve. Sempre com parâmetros, e Expand Inline só com valores validados. | parcial | job, truechange, oml | O11 e ODC |
-| D4 | API que preenche a tela vai numa Data Action. API chamada num submit pode ficar na screen action, via uma server action wrapper. | parcial | job | O11 e ODC |
-| D5 | Nada de aggregate ou server action dentro de loops. | automática | job, truechange, oml | O11 e ODC |
-| S1 | Não use eventos de ciclo de vida para chamar server ou service actions. Isso vale para OnInitialize, OnReady, OnRender, OnParametersChanged e OnAfterFetch. Esses dados vêm de Data Actions ou Aggregates com Fetch at start. | automática | job, truechange, oml | O11 e ODC |
-| S2 | Uma client ou screen action faz no máximo uma chamada ao servidor. Quando precisar de várias, crie uma server action que orquestra tudo. Isso dá um round-trip só, uma transação só e um único ponto de tratamento de erro. | automática | job, oml | O11 e ODC |
-| S3 | Toda integração externa (REST ou SOAP) fica numa server action wrapper, com tratamento de exceção, timeout adequado e sem logar tokens nem dados pessoais. | parcial | job, oml | O11 e ODC |
-| S4 | Tempo limite pensado para a API real. O padrão de 20 s das screen requests nem sempre basta. | parcial | job | O11 e ODC |
-| U1 | Não use a propriedade Visible. Controle a visibilidade com If widgets. | automática | job, oml | O11 e ODC |
-| U2 | Reutilize primeiro os padrões da library de padrões do app (configurável) e depois o OutSystems UI. Não crie blocks sem necessidade. Prefira uma estrutura simples na própria tela. | parcial (hoje só revisão) | — | O11 e ODC |
-| U3 | Nada de lógica pesada em expressões de widget. Calcule no fluxo, uma vez só. | parcial | job | O11 e ODC |
-| U4 | CSS no tema ou na library, não inline. Use as classes utilitárias do OutSystems UI. | parcial | job, truechange, oml | O11 e ODC |
-| U5 | Blocks se comunicam por parâmetros e eventos, nunca lendo o estado da tela-pai. | manual | — | O11 e ODC |
-| N1 | Todo elemento criado tem nome e descrição curtos e significativos: actions, variáveis, parâmetros, widgets relevantes e nodes do fluxo. Actions: verbo + objeto (ValidateAddress, GetOrderOptions). Booleanos: prefixo Is, Has ou Can. If nodes: uma pergunta (Order load succeeded?). Assigns: a intenção (Apply default values). | parcial | job, oml | O11 e ODC |
-| N2 | Descrições explicam o porquê, não repetem o nome. | parcial | job, oml | O11 e ODC |
-| N3 | Fluxos grandes levam comentários flutuantes marcando cada bloco lógico. Se o fluxo não cabe numa tela, extraia partes para actions com nome próprio. | parcial | job | O11 e ODC |
-| N4 | Sem nodes mortos: nada de End órfão, ramo inalcançável ou variável sem uso. Os warnings do TrueChange ficam zerados. | automática | job, truechange, oml | O11 e ODC |
-| E1 | Evite locais desnecessárias: poucas, escalares sempre que possível. | parcial | job | O11 e ODC |
-| E2 | Client Variables só com tipos básicos, poucas e nunca sensíveis. Session Variables em Traditional Web seguem a mesma regra. | parcial | job, oml | O11 e ODC |
-| E3 | Configuração em Site Properties, nunca numa variável com valor padrão fixo. | parcial | job, oml | O11 e ODC |
-| AR1 | Respeite o Architecture Canvas (End-user, Core e Foundation): sem referências para cima, sem ciclos. Entidades ficam no Core, expostas como read-only, e a escrita passa por actions. | automática | job, oml | só O11 |
-| AR2 | Checagem de role no servidor, não só escondendo botão na UI. Nunca confie no input vindo do client. | parcial | job, truechange, oml | O11 e ODC |
-| AR3 | Processos longos vão para Timers ou BPT, nunca numa screen request. | parcial | job, oml | O11 e ODC |
-| P7 | Regra de produto. Pontos de entrada automáticos (tools, runners, timers) não gravam entidades protegidas nem chamam actions reservadas a decisão humana, e o código nunca atribui site properties de switch. Configurável em `config.p7`; a checagem de escrita fica desligada enquanto a lista de entidades protegidas estiver vazia. Não aceita exceção. | automática | job, oml | O11 e ODC |
+| L1 | Simple and direct. Before creating anything, ask whether a shorter native form exists: a built-in function, a list action, a mapping or a filter in the aggregate. | manual | — | O11 and ODC |
+| L2 | No auxiliary variable when the value can be computed directly. Use the expression where it is used. Create a local only when the value is reused or when it makes the flow easier to read. | partial | job | O11 and ODC |
+| L3 | At most one If per value in an Assign. With more than one, use an If node in the flow or a client or server action with a clear name. | automatic | job, oml | O11 and ODC |
+| L4 | One Assign per intent. An Assign named "Apply defaults" must not also clear errors. | manual | — | O11 and ODC |
+| L5 | No JavaScript for business logic. JavaScript only for what the runtime does not offer, such as the clipboard or the focus on an element, always isolated and named. | automatic | job, truechange, oml | O11 and ODC |
+| L6 | No JSONSerialize or JSONDeserialize to pass data inside the app. Use typed structures and parameters. | partial | job, oml | O11 and ODC |
+| L7 | No fixed values in the code. Configuration goes in Site Properties, and fixed domains go in Static Entities. | partial | job | O11 and ODC |
+| T1 | List actions instead of For Each whenever possible: ListFilter, ListAny, ListAll, ListIndexOf, ListSort, ListDistinct and ListAppendAll. | partial | job | O11 and ODC |
+| T2 | Mapping instead of For Each with ListAppend. To convert a list of one type into another, use the data mapping of the Assign or of the parameter. | partial | job | O11 and ODC |
+| T3 | For Each only when each item needs an effect or a decision the list actions cannot express. Never put a call to the server or to the database inside a For Each: it makes N+1 calls. | automatic | job, oml | O11 and ODC |
+| T4 | Validate the list filters at runtime. On ODC, a client ListFilter condition written as List.Current.X passed the build and failed when running. Whether O11 has the same problem is not known. Do not trust the Studio validation alone: test. | partial | job, oml, runtime | O11 and ODC |
+| D1 | Database reads only through a Screen Aggregate or a Data Action in Reactive and Mobile. In Traditional Web, through the Preparation. | partial (review only today) | — | O11 and ODC |
+| D2 | Filter, sort and join inside the aggregate, not on the client afterwards. Fetch only the attributes used and set Max Records. | partial | job, oml | O11 and ODC |
+| D3 | SQL only when the aggregate cannot do it. Always with parameters, and Expand Inline only with validated values. | partial | job, truechange, oml | O11 and ODC |
+| D4 | An API that fills the screen goes in a Data Action. An API called on a submit may stay in the screen action, through a server action wrapper. | partial | job | O11 and ODC |
+| D5 | No aggregate or server action inside loops. | automatic | job, truechange, oml | O11 and ODC |
+| S1 | Do not use lifecycle events to call server or service actions. This applies to OnInitialize, OnReady, OnRender, OnParametersChanged and OnAfterFetch. That data comes from Data Actions or Aggregates with Fetch at start. | automatic | job, truechange, oml | O11 and ODC |
+| S2 | A client or screen action makes at most one call to the server. When it needs several, create a server action that orchestrates them all. That gives one round trip, one transaction and one single point of error handling. | automatic | job, oml | O11 and ODC |
+| S3 | Every external integration (REST or SOAP) stays in a server action wrapper, with exception handling, a suitable timeout and without logging tokens or personal data. | partial | job, oml | O11 and ODC |
+| S4 | A timeout thought out for the real API. The default 20 s of screen requests is not always enough. | partial | job | O11 and ODC |
+| U1 | Do not use the Visible property. Control visibility with If widgets. | automatic | job, oml | O11 and ODC |
+| U2 | Reuse first the patterns of the app's pattern library (configurable) and then OutSystems UI. Do not create blocks without need. Prefer a simple structure on the screen itself. | partial (review only today) | — | O11 and ODC |
+| U3 | No heavy logic in widget expressions. Compute it in the flow, only once. | partial | job | O11 and ODC |
+| U4 | CSS in the theme or in the library, not inline. Use the OutSystems UI utility classes. | partial | job, truechange, oml | O11 and ODC |
+| U5 | Blocks communicate through parameters and events, never by reading the state of the parent screen. | manual | — | O11 and ODC |
+| N1 | Every element created has a short, meaningful name and description: actions, variables, parameters, relevant widgets and flow nodes. Actions: verb + object (ValidateAddress, GetOrderOptions). Booleans: the prefix Is, Has or Can. If nodes: a question (Order load succeeded?). Assigns: the intent (Apply default values). | partial | job, oml | O11 and ODC |
+| N2 | Descriptions explain the why, they do not repeat the name. | partial | job, oml | O11 and ODC |
+| N3 | Large flows carry floating comments marking each logical block. If the flow does not fit in one screen, extract parts into actions with their own names. | partial | job | O11 and ODC |
+| N4 | No dead nodes: no orphan End, unreachable branch or unused variable. The TrueChange warnings stay at zero. | automatic | job, truechange, oml | O11 and ODC |
+| E1 | Avoid unneeded locals: few, scalar whenever possible. | partial | job | O11 and ODC |
+| E2 | Client Variables only with basic types, few and never sensitive. Session Variables in Traditional Web follow the same rule. | partial | job, oml | O11 and ODC |
+| E3 | Configuration in Site Properties, never in a variable with a fixed default value. | partial | job, oml | O11 and ODC |
+| AR1 | Respect the Architecture Canvas (End-user, Core and Foundation): no upward references, no cycles. Entities stay in the Core, exposed as read-only, and writes go through actions. | automatic | job, oml | O11 only |
+| AR2 | Role checks on the server, not only by hiding a button in the UI. Never trust input coming from the client. | partial | job, truechange, oml | O11 and ODC |
+| AR3 | Long processes go to Timers or BPT, never in a screen request. | partial | job, oml | O11 and ODC |
+| P7 | Product rule. Automatic entry points (tools, runners, timers) do not write protected entities nor call actions reserved to a human decision, and the code never assigns switch site properties. Configurable in `config.p7`; the write check stays off while the list of protected entities is empty. Takes no exception. | automatic | job, oml | O11 and ODC |
 
-## O que a detecção procura hoje (O11)
+## What the detection looks for today (O11)
 
-| Regra | Sinais |
+| Rule | Signals |
 |---|---|
-| L1 | Só revisão: pergunta se built-in, list action, mapping ou filtro de aggregate substitui algum trecho. |
-| L2 | Local escrita uma vez e pouco lida (aviso). |
-| L3 | Mais de um `If(` no valor de um Assign. |
-| L4 | Só revisão. |
-| L5 | Nó JavaScript, Script, `html.scripts`, atributo `on*`, JavaScript no módulo ou no bloco, warning `JavascriptInjection`. |
-| L6 | Nó JSON (só passa com exceção do próprio elemento), Text com nome `*Json`, campos de `config.l6`. |
-| L7 | Literal de URL, host ou e-mail; texto comparado com `=` ou `<>` (aviso); número fora de `numericAllowProps` (aviso); site property secreta com DefaultValue. |
-| T1 | Corpo de ForEach que parece list action (aviso); `html.derived`. |
-| T2 | ListAppend de `*.Current.*` dentro de ForEach (aviso). |
-| T3 | Igual à D5. |
-| T4 | Cada list action vira item de `runtimeTests` com a condição; o estágio runtime cobra a evidência do E2E. |
-| D1 | Sem detector hoje; pergunta de revisão. |
-| D2 | Aggregate sem Max Records, `get` sem `max`, ListFilter ou ListSort no cliente sobre aggregate, `html.derived`. Atributos usados ficam na revisão. |
-| D3 | Todo nó SQL precisa de exceção com o motivo; ExpandInline fora de token T-SQL literal; `sp_executesql` ou `EXEC()`; warnings `SQLInjection` e `SQL_ExpandInlineNotValidated`. |
-| D4 | REST fora de `config.integrationModules`; REST chamado direto da tela. |
-| D5 | Consulta ou chamada ao servidor dentro de laço ou de ciclo do fluxo (Tarjan); warning `EntityActionInsideLoop`. |
-| S1 | Evento de ciclo de vida que chega ao servidor; warnings `ClientActionWithServerRequestsOnLifecycleEvent` e `SelfRefreshingAggregate`. |
-| S2 | Mais de uma chamada ao servidor no mesmo caminho, inclusive por client actions chamadas; binding `call` da op html. |
-| S3 | REST fora dos módulos de integração; site property que parece segredo sem IsSecret. |
-| S4 | Método REST sem `TimeoutinSeconds` ou fora de `config.timeoutPolicy`. |
-| U1 | Visible fora de vazio e `True`; atributo `hidden`; binding `visible`. |
-| U2 | Sem detector hoje; a pergunta de revisão cita `config.patternLibrary` quando preenchida. |
-| U3 | Expressão de binding que chama função client. |
-| U4 | Atributo `style`, CustomStyle (aviso), StyleSheet de tela, StyleSheet de bloco fora de `config.libraries`, warning `InvalidCSSStyle`. |
-| U5 | Só revisão. |
-| N1 | Descrição vazia, Label genérico, If que não é pergunta, action que não começa por verbo, booleano sem Is, Has ou Can. |
-| N2 | Descrição curta, igual ao nome, só com as palavras do nome, ou com marcador. |
-| N3 | Fluxo acima de `limits.commentAt` passos sem comentário; acima de `limits.extractAt` (aviso). |
-| N4 | Todo warning do TrueChange (base e novos), End órfão, nó inalcançável, nó desativado. |
-| E1 | Mais locais que `limits.maxLocals`; local lista ou record (aviso). |
-| E2 | Toda client variable (exige exceção), tipo não básico, nome sensível. |
-| E3 | Local com default literal nunca atribuída; site property esperada ausente (`config.expectedSiteProperties`). |
-| AR1 | Camadas (`config.modules`, `modulePatterns`, `forbiddenRefs`); entidade ou static fora do Core; entidade pública sem ExposeReadOnly. |
-| AR2 | Tela sem Roles ou com Anonymous; escrita ou leitura de dado do sujeito sem guarda antes; AllExceptions sobre a guarda; `GetUserId()` vindo do cliente. Fachada pública que só repassa ao próprio `<Nome>_Impl` herda a verificação do `_Impl`. |
-| AR3 | Tela que chega a `config.longRunning` ou a REST; timer sem TimeoutInMinutes (aviso). |
-| P7 | Escrita em `config.p7.protectedEntities` (menos `allowedEntities`) a partir de `config.p7.entryPatterns`; chamada a `config.p7.forbiddenCalls`; assign de `config.p7.siteSwitches`. |
+| L1 | Review only: asks whether a built-in, a list action, a mapping or an aggregate filter replaces some part. |
+| L2 | A local written once and seldom read (warning). |
+| L3 | More than one `If(` in the value of an Assign. |
+| L4 | Review only. |
+| L5 | A JavaScript node, Script, `html.scripts`, an `on*` attribute, JavaScript in the module or in the block, the warning `JavascriptInjection`. |
+| L6 | A JSON node (passes only with an exception of the element itself), a Text named `*Json`, fields of `config.l6`. |
+| L7 | A URL, host or e-mail literal; a text compared with `=` or `<>` (warning); a number outside `numericAllowProps` (warning); a secret site property with a DefaultValue. |
+| T1 | A ForEach body that looks like a list action (warning); `html.derived`. |
+| T2 | A ListAppend of `*.Current.*` inside a ForEach (warning). |
+| T3 | Same as D5. |
+| T4 | Each list action becomes an item of `runtimeTests` with its condition; the runtime stage asks for the E2E evidence. |
+| D1 | No detector today; a review question. |
+| D2 | An aggregate without Max Records, a `get` without `max`, a ListFilter or ListSort on the client over an aggregate, `html.derived`. The attributes used stay in the review. |
+| D3 | Every SQL node needs an exception with its reason; ExpandInline outside a literal T-SQL token; `sp_executesql` or `EXEC()`; the warnings `SQLInjection` and `SQL_ExpandInlineNotValidated`. |
+| D4 | REST outside `config.integrationModules`; REST called directly from the screen. |
+| D5 | A query or a server call inside a loop or a cycle of the flow (Tarjan); the warning `EntityActionInsideLoop`. |
+| S1 | A lifecycle event that reaches the server; the warnings `ClientActionWithServerRequestsOnLifecycleEvent` and `SelfRefreshingAggregate`. |
+| S2 | More than one server call on the same path, including through called client actions; the `call` binding of the html op. |
+| S3 | REST outside the integration modules; a site property that looks like a secret without IsSecret. |
+| S4 | A REST method without `TimeoutinSeconds` or outside `config.timeoutPolicy`. |
+| U1 | Visible other than empty and `True`; the `hidden` attribute; the `visible` binding. |
+| U2 | No detector today; the review question names `config.patternLibrary` when it is filled. |
+| U3 | A binding expression that calls a client function. |
+| U4 | The `style` attribute, CustomStyle (warning), a screen StyleSheet, a block StyleSheet outside `config.libraries`, the warning `InvalidCSSStyle`. |
+| U5 | Review only. |
+| N1 | An empty description, a generic Label, an If that is no question, an action that does not start with a verb, a boolean without Is, Has or Can. |
+| N2 | A description that is short, equal to the name, made only of the words of the name, or a marker. |
+| N3 | A flow above `limits.commentAt` steps without a comment; above `limits.extractAt` (warning). |
+| N4 | Every TrueChange warning (base and new), an orphan End, an unreachable node, a disabled node. |
+| E1 | More locals than `limits.maxLocals`; a list or record local (warning). |
+| E2 | Every client variable (needs an exception), a non-basic type, a sensitive name. |
+| E3 | A local with a literal default never assigned; an expected site property missing (`config.expectedSiteProperties`). |
+| AR1 | Layers (`config.modules`, `modulePatterns`, `forbiddenRefs`); an entity or static outside the Core; a public entity without ExposeReadOnly. |
+| AR2 | A screen without Roles or with Anonymous; a write or read of the subject's data without a guard before it; AllExceptions over the guard; `GetUserId()` coming from the client. A public facade that only forwards to its own `<Name>_Impl` inherits the check of the `_Impl`. |
+| AR3 | A screen that reaches `config.longRunning` or REST; a timer without TimeoutInMinutes (warning). |
+| P7 | A write to `config.p7.protectedEntities` (except `allowedEntities`) from `config.p7.entryPatterns`; a call to `config.p7.forbiddenCalls`; an assign of `config.p7.siteSwitches`. |

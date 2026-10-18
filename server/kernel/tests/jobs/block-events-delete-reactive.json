@@ -1,25 +1,25 @@
 {
- "description": "APAGAR um evento de bloco que tem handler, pelo caminho limpo, sobre job:block-events-reactive. A recusa esta em tests/jobs-negative/delete-block-event-in-use.json; aqui prova-se a ORDEM que a faz passar, que nao e obvia porque os consumidores de um evento vivem em dois modulos logicos diferentes: (1) o IEventHandler da instancia, na TELA - apaga-se o IEventHandler sozinho, a instancia do bloco fica de pe e so perde a ligacao; (2) o ITriggerNode, no BLOCO - e um no no meio de um fluxo, por isso religa-se o predecessor ao End ANTES de apagar, senao o conector de entrada conta como consumidor; (3) so entao o IBlockEvent sai sem force, com zero consumidores; (4) o RESTO que ninguem lembra: apagar o evento NAO apaga a screen action que era handler, e ela fica orfa - sem este passo o Verify devolve 'Warning UnusedAction: 'RatingPicker1_OnRate' action is never used in RatingDemo'. No fim o modulo fica valido e sem mensagem nova; o botao do bloco continua a chamar a Rate, que agora so incrementa o Score.",
+ "description": "DELETE a block event that has a handler, by the clean path, over job:block-events-reactive. The refusal is in tests/jobs-negative/delete-block-event-in-use.json; here what is proven is the ORDER that makes it pass, which is not obvious because the consumers of an event live in two different logical modules: (1) the IEventHandler of the instance, in the SCREEN - the IEventHandler is deleted alone, the block instance stays up and only loses the link; (2) the ITriggerNode, in the BLOCK - it is a node in the middle of a flow, so the predecessor is relinked to the End BEFORE deleting, otherwise the incoming connector counts as a consumer; (3) only then does the IBlockEvent leave without force, with zero consumers; (4) the REST that nobody remembers: deleting the event does NOT delete the screen action that was the handler, and it is left orphaned - without this step the Verify returns 'Warning UnusedAction: 'RatingPicker1_OnRate' action is never used in RatingDemo'. In the end the module is valid and with no new message; the button of the block still calls Rate, which now only increments the Score.",
  "base": "job:block-events-reactive",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "antes: 2 consumidores, em telas e blocos diferentes"},
+  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "before: 2 consumers, in different screens and blocks"},
 
-  {"op": "delete", "target": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent/RatingPicker1/#IEventHandler", "_why": "1. desligar o handler SEM apagar a instancia: o IEventHandler e um objeto proprio e sai sozinho"},
+  {"op": "delete", "target": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent/RatingPicker1/#IEventHandler", "_why": "1. disconnect the handler WITHOUT deleting the instance: the IEventHandler is an object of its own and leaves alone"},
   {"op": "get", "target": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent/RatingPicker1", "_why": "a instancia sobrevive: EventHandlers 0, Arguments 1 (o input Caption continua ligado)"},
   {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "sobrou 1: o disparo"},
 
-  {"op": "link", "from": "IMobileBlock:RatingPicker/Rate/#IAssignNode", "to": "IMobileBlock:RatingPicker/Rate/#IEndNode", "_why": "2. religar o predecessor ANTES de apagar o no do meio; sem isto o conector de entrada e um consumidor"},
+  {"op": "link", "from": "IMobileBlock:RatingPicker/Rate/#IAssignNode", "to": "IMobileBlock:RatingPicker/Rate/#IEndNode", "_why": "2. relink the predecessor BEFORE deleting the middle node; without this the incoming connector is a consumer"},
   {"op": "delete", "target": "IMobileBlock:RatingPicker/Rate/RaiseOnRate"},
   {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "zero consumidores"},
 
-  {"op": "delete", "target": "IBlockEvent:OnRate", "_why": "3. agora sai sem force"},
+  {"op": "delete", "target": "IBlockEvent:OnRate", "_why": "3. now it leaves without force"},
 
-  {"op": "usages", "target": "IScreenAction:RatingPicker1_OnRate", "_why": "4. o resto: apagar o evento NAO levou a screen action que era handler; ela ficou sem nenhum consumidor"},
-  {"op": "delete", "target": "IScreenAction:RatingPicker1_OnRate", "_why": "sem este passo o Verify devolve Warning UnusedAction sobre ela"},
+  {"op": "usages", "target": "IScreenAction:RatingPicker1_OnRate", "_why": "4. the rest: deleting the event did NOT take the screen action that was the handler; it was left with no consumer"},
+  {"op": "delete", "target": "IScreenAction:RatingPicker1_OnRate", "_why": "without this step the Verify returns Warning UnusedAction about it"},
 
-  {"op": "get", "target": "IMobileBlock:RatingPicker", "_why": "o bloco perdeu o evento e manteve tudo o resto"},
+  {"op": "get", "target": "IMobileBlock:RatingPicker", "_why": "the block lost the event and kept everything else"},
   {"op": "dump", "target": "IMobileBlock:RatingPicker", "depth": 6},
   {"op": "dump", "target": "IMobileScreen:RatingDemo", "depth": 7}
  ]

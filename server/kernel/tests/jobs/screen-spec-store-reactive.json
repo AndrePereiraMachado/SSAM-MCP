@@ -1,5 +1,5 @@
 {
-  "description": "Avaliacao fria SS5: app Reactive sintetico de jogos com Home, Catalog e GameDetail, dados por spec e telas por screen.",
+  "description": "Cold evaluation SS5: synthetic Reactive games app with Home, Catalog and GameDetail, data by spec and screens by screen.",
   "base": "reactive-ui.oml",
   "expectValid": true,
   "expectedMessages": [],

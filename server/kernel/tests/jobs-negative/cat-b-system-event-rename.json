@@ -1,5 +1,5 @@
 {
- "description": "Frente B (catalogo abrangente), O11 Reactive: a RECUSA do rename de um system event. No O11 11.55.69 ISystemEvent herda um Name gravavel de IFlowSignature (kernel/catalog/model-api-11.55.69.json), mas o evento e um lugar fixo do modulo (OnApplicationReady): o rename e recusado pela plataforma. Medido na sonda B-009 fase 1 (2026-09-24, CLI O11 e8cac2f7): \"op #14 (rename CatBOnReady): InvalidOperationException: Cannot find handler for object OnApplicationReady of type On Application Ready.\". Desde 2026-10-03 o kernel traduz essa recusa do NameClashHandler da plataforma numa frase curta (\"has a fixed name; the Studio does not rename it\"). No ODC o rename de ISystemEvent tambem e recusado (tests/jobs-odc/platform-events-lifecycle.json). O system event e criado pela primeira fabrica de ISystemEvent do IESpace (CreateOnApplicationReady, medido em tests/jobs/cat-b-app-events.json) com um corpo minimo valido.",
+ "description": "Front B (broad catalog), O11 Reactive: the REFUSAL of the rename of a system event. In O11 11.55.69 ISystemEvent inherits a writable Name from IFlowSignature (kernel/catalog/model-api-11.55.69.json), but the event is a fixed place of the module (OnApplicationReady): the rename is refused by the platform. Measured in probe B-009 phase 1 (2026-09-24, O11 CLI e8cac2f7): \"op #14 (rename CatBOnReady): InvalidOperationException: Cannot find handler for object OnApplicationReady of type On Application Ready.\". Since 2026-10-03 the kernel translates that refusal from the NameClashHandler of the platform into a short sentence (\"has a fixed name; the Studio does not rename it\"). In ODC the rename of an ISystemEvent is also refused (tests/jobs-odc/platform-events-lifecycle.json). The system event is created by the first ISystemEvent factory of the IESpace (CreateOnApplicationReady, measured in tests/jobs/cat-b-app-events.json) with a minimal valid body.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectError": [
@@ -7,9 +7,9 @@
   "rename: ISystemEvent 'OnApplicationReady' has a fixed name; the Studio does not rename it"
  ],
  "ops": [
-  {"op": "create", "parent": "@espace", "type": "IClientVariable", "name": "CatBSysReadyAt", "as": "$ready", "_why": "o que o system event escreve"},
+  {"op": "create", "parent": "@espace", "type": "IClientVariable", "name": "CatBSysReadyAt", "as": "$ready", "_why": "what the system event writes"},
   {"op": "set", "target": "$ready", "prop": "DataType", "value": "Text"},
-  {"op": "create", "parent": "@espace", "type": "ISystemEvent", "as": "$ev", "_why": "OnApplicationReady no O11, com Start, Assign e End"},
+  {"op": "create", "parent": "@espace", "type": "ISystemEvent", "as": "$ev", "_why": "OnApplicationReady in O11, with Start, Assign and End"},
   {"op": "create", "parent": "$ev", "type": "IStartNode", "as": "$s0"},
   {"op": "create", "parent": "$ev", "type": "IAssignNode", "as": "$assign"},
   {"op": "set", "target": "$assign", "prop": "Label", "value": "RememberReady"},
@@ -20,7 +20,7 @@
   {"op": "link", "from": "$s0", "to": "$assign"},
   {"op": "link", "from": "$assign", "to": "$s9"},
   {"op": "layout", "target": "$ev"},
-  {"op": "get", "target": "$ev", "_why": "o nome fixo do system event"},
-  {"op": "rename", "target": "$ev", "name": "CatBOnReady", "_why": "recusado: \"op #14 (rename CatBOnReady): InvalidOperationException: rename: ISystemEvent 'OnApplicationReady' has a fixed name; the Studio does not rename it\""}
+  {"op": "get", "target": "$ev", "_why": "the fixed name of the system event"},
+  {"op": "rename", "target": "$ev", "name": "CatBOnReady", "_why": "refused: \"op #14 (rename CatBOnReady): InvalidOperationException: rename: ISystemEvent 'OnApplicationReady' has a fixed name; the Studio does not rename it\""}
  ]
 }

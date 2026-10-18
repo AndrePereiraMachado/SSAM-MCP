@@ -1,5 +1,6 @@
 // hosted/o11-stage.mjs through the AgentExecutor (docs/FASE2-AGENTE.md 4.6): the O11 bridge methods that carry files,
 // the refused methods and parameters, and port/authorization never reaching the agent. Fake AgentLink only.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

@@ -1,9 +1,11 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { runO11NativeMount, o11MountDecisionFile } from '../debug-o11-native-mount-run.mjs';
 import { o11MountPolicy } from '../debug-o11-browser-mount.mjs';
 
@@ -101,7 +103,8 @@ test('authorized mount records the words before any download or browser, takes t
   assert.equal(report.render.error, 'debug_o11_native_mount_render_unavailable');
   assert.equal(report.lockRetained, false); assert.equal(fs.existsSync(f.lock), false);
   const dir = path.dirname(report.receiptPath), authorization = JSON.parse(fs.readFileSync(path.join(dir, 'authorization.json'), 'utf8'));
-  assert.equal(authorization.words, input.words); assert.equal(authorization.policy, o11MountPolicy); assert.equal(authorization.decision.decision, 'o11-owned-browser-mount');
+  // CX15 r5 (N-3, converted): the file keeps wordsSha256 of the words, never the words (before: words === input.words).
+  assert.equal(authorization.words, undefined); assert.equal(authorization.wordsSha256, createHash('sha256').update(input.words).digest('hex')); assert.equal(authorization.policy, o11MountPolicy); assert.equal(authorization.decision.decision, 'o11-owned-browser-mount');
   assert.deepEqual(f.options().mountAuthorization, { policy: o11MountPolicy, authorizationSha256: report.authorizationSha256, runtimeUrl, screenKey });
   for (const name of ['sign-in-submission', 'sign-in-result', 'mount-submission', 'mount-result'])
     assert.equal(fs.existsSync(path.join(dir, name + '.json')), true, name);
@@ -151,7 +154,7 @@ test('authorization.json (wx) is written before the binding lock is taken', asyn
   await assert.rejects(runO11NativeMount(input, prepared(), f.readers, f.services), /binding_busy/);
   // The words were recorded first; the other run's lock and latest receipt are untouched.
   const dirs = fs.readdirSync(folder, { withFileTypes: true }).filter(d => d.isDirectory());
-  assert.equal(dirs.length, 1); assert.equal(JSON.parse(fs.readFileSync(path.join(folder, dirs[0].name, 'authorization.json'), 'utf8')).words, input.words);
+  assert.equal(dirs.length, 1); assert.equal(JSON.parse(fs.readFileSync(path.join(folder, dirs[0].name, 'authorization.json'), 'utf8')).wordsSha256, createHash('sha256').update(input.words).digest('hex')); // CX15 r5 (N-3, converted)
   assert.equal(fs.readFileSync(f.lock, 'utf8'), '{"operationId":"other"}'); assert.equal(fs.existsSync(path.join(folder, moduleKey + '.json')), false);
   assert.deepEqual(f.calls, []);
 });

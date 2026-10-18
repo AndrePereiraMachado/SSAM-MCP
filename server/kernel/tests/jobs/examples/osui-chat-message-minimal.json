@@ -1,5 +1,5 @@
 {
- "description": "ChatMessage (OutSystemsUI, Content) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios MessageStatus com valores simples.",
+ "description": "Minimal ChatMessage (OutSystemsUI, Content): an instance as the Studio creates it when the block is dragged; required inputs MessageStatus with simple values.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

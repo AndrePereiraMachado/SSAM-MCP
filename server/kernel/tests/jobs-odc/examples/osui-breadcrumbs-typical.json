@@ -1,5 +1,5 @@
 {
- "description": "Breadcrumbs do OSUI com dois BreadcrumbsItem: um com Link para outra tela no Title e o ultimo com o nome da tela atual.",
+ "description": "Breadcrumbs of OSUI with two BreadcrumbsItem: one with a Link to another screen in the Title and the last with the name of the current screen.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

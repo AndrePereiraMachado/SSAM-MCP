@@ -23,6 +23,7 @@ import { createAnvilRunner } from './anvil-cli.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { bridgeTarget, o11Bridge } from './o11-bridge.mjs';
 import { anvilRoot, o11Lane } from './workspace.mjs';
+import { RESULT } from './result-values.mjs';
 
 // The Codex MCP server name of the app profile (configure_app_profile.py). The host's guard (AppSessions.Guard) and
 // permits (ConsumePermit) are keyed by these exact tool names; serving the tools under another server name changes them.
@@ -35,7 +36,7 @@ export const APP_TOOLS = {
 };
 export const ACCEPTANCE_UNSUPPORTED = 'Client does not support user contract acceptance; controlled delivery remains blocked';
 export const REVIEW_SCHEMA = { type: 'object', properties: {
-  accepted: { type: 'boolean', title: 'O contrato corresponde ao meu pedido', default: false } }, required: ['accepted'] };
+  accepted: { type: 'boolean', title: 'The contract matches my request', default: false } }, required: ['accepted'] };
 const HOST_TIMEOUT_MS = 30000;   // ssam_app.py host(): subprocess timeout=30
 const LANE_PROBE_MS = 3000;      // ssam_app.py lanes(): AnvilBridge(timeout=3)
 const REVIEW_TTL_MS = 900000;    // above the SDK shim's 600 s per-round timeout (inputRequired.roundTimeoutMs)
@@ -60,9 +61,9 @@ const SCHEMAS = appSessionSchemas();
 
 // ssam_app.py contract_review(): the full declaration, never a count or a success label.
 export function contractReview(proposal) {
-  return 'SSAM Hybrid — confira esta alteração do contrato do módulo já fixado. '
-    + 'A aceitação fixa este conteúdo, módulo, ambiente e faixa; correções técnicas posteriores não mudam esses requisitos. '
-    + 'Este contrato cobre dados e o fluxo declarado das actions; não comprova sozinho toda a intenção de negócio.\n\n' + JSON.stringify(proposal, null, 2);
+  return 'SSAM Hybrid — check this change of the module contract already fixed. '
+    + 'The acceptance fixes this content, module, environment and lane; later technical corrections do not change these requirements. '
+    + 'This contract covers the data and the declared flow of the actions; on its own it does not prove the whole business intent.\n\n' + JSON.stringify(proposal, null, 2);
 }
 
 // json.dumps() with Python's defaults (", " / ": ", ensure_ascii): the host's stdin and the hook's stdout, byte for byte.
@@ -275,7 +276,7 @@ export function registerO11AppSession(server, deps = {}) {
           const value = await session.call(name, args ?? {}, ctx);
           if (value?.resultType === 'input_required') return value;
           if (name === 'continue' && value?.delivered === true && Object.keys(value).length === 1)
-            return { content: [{ type: 'text', text: 'entregue' }], structuredContent: { delivered: true } };
+            return { content: [{ type: 'text', text: RESULT.delivered }], structuredContent: { delivered: true } };
           return reply(value);
         } catch (error) {
           return reply({ ok: false, code: error instanceof AppSessionError ? error.code : 'APP_SESSION_ERROR', error: error.message,

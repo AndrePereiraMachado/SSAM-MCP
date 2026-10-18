@@ -1,5 +1,5 @@
 {
- "description": "Badge (OutSystemsUI, Numbers) tipico; inputs obrigatorios Number ligados a variaveis da tela.",
+ "description": "Typical Badge (OutSystemsUI, Numbers); required inputs Number bound to screen variables.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

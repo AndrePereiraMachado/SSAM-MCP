@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createOdcNativeTransport, odcNativeEndpoints } from '../debug-odc-native-transport.mjs';

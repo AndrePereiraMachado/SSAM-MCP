@@ -269,7 +269,7 @@ public sealed class Pa2F3LogicTests
     {
         var spec = Spec("""{"actions":[{"name":"A","steps":[{"get":"Pedido"}]}]}""");
         var ex = Assert.Throws<InvalidOperationException>(() => LogicExpander.Expand(spec));
-        Assert.Contains("get exige 'as'", ex.Message);
+        Assert.Contains("get needs 'as'", ex.Message);
         var coded = Errors.FindCoded(ex)!;
         Assert.Equal("LOGIC_INVALID", coded.Code);
         Assert.Equal("/actions/0/steps/0/as", coded.Problems![0]!["pointer"]!.ToString());

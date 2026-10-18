@@ -1,5 +1,5 @@
 {
- "description": "DisplayOnDevice do OSUI: a instancia com os tres placeholders vazios.",
+ "description": "DisplayOnDevice of OSUI: the instance with the three placeholders empty.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

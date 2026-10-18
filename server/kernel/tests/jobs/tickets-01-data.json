@@ -1,37 +1,37 @@
 {
- "description": "Tickets: data model (14 entidades, 6 static), structures, site properties, exceptions e roles do app de tickets (warnings: site properties ainda sem uso e sugestoes de UpdateBehavior)",
+ "description": "Tickets: data model (14 entities, 6 static), structures, site properties, exceptions and roles of the tickets app (warnings: site properties not yet used and UpdateBehavior suggestions)",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "UnusedElement",
    "element": "Headless_CS (ESpace) / AutoCloseDays (SiteProperty)",
-   "why": "Configuracao criada na etapa de dados; sera consumida pelas etapas posteriores do app de tickets."
+   "why": "Configuration created in the data step; it will be consumed by the later steps of the tickets app."
   },
   {
    "id": "UnusedElement",
    "element": "Headless_CS (ESpace) / BlockedExtensions (SiteProperty)",
-   "why": "Configuracao criada na etapa de dados; sera consumida pelas etapas posteriores do app de tickets."
+   "why": "Configuration created in the data step; it will be consumed by the later steps of the tickets app."
   },
   {
    "id": "UnusedElement",
    "element": "Headless_CS (ESpace) / DefaultFirstResponseMinutes (SiteProperty)",
-   "why": "Configuracao criada na etapa de dados; sera consumida pelas etapas posteriores do app de tickets."
+   "why": "Configuration created in the data step; it will be consumed by the later steps of the tickets app."
   },
   {
    "id": "UnusedElement",
    "element": "Headless_CS (ESpace) / DefaultResolutionMinutes (SiteProperty)",
-   "why": "Configuracao criada na etapa de dados; sera consumida pelas etapas posteriores do app de tickets."
+   "why": "Configuration created in the data step; it will be consumed by the later steps of the tickets app."
   },
   {
    "id": "UnusedElement",
    "element": "Headless_CS (ESpace) / MaxAttachmentMB (SiteProperty)",
-   "why": "Configuracao criada na etapa de dados; sera consumida pelas etapas posteriores do app de tickets."
+   "why": "Configuration created in the data step; it will be consumed by the later steps of the tickets app."
   },
   {
    "id": "UnusedElement",
    "element": "Headless_CS (ESpace) / ReminderDays (SiteProperty)",
-   "why": "Configuracao criada na etapa de dados; sera consumida pelas etapas posteriores do app de tickets."
+   "why": "Configuration created in the data step; it will be consumed by the later steps of the tickets app."
   }
  ],
  "ops": [

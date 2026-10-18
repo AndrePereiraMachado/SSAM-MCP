@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {inspectOdcExceptionEffects} from '../debug-odc-native-exception-effects.mjs';
 const moduleKey='j8fMmV32B0iyTfbxwOOejQ',actionKey='LXQ1dKTtRUeai5qBhffq7g.#FlowExceptionHandler',nodeKey='d6D9gvHjH0+Su8QAH4Mp_Q';

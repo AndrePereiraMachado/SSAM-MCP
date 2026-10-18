@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';
 import {inspectOdcInstrumentationState,bindOdcInstrumentationState} from '../debug-odc-instrumentation-state.mjs';
 function fixture(){class Tracer{}const tracer=new Tracer,enabled=new WeakMap([[tracer,false]]),factory={getTracer:()=>tracer};

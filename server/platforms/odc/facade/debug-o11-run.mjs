@@ -1,7 +1,7 @@
 // O11 same-module server/service-action runner. Original provider login occurs within each wrapper request.
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import * as z from 'zod/v4';
 import { workspaceRoot } from './workspace.mjs';
 import * as W from './debug-wrapper.mjs';
@@ -326,7 +326,7 @@ export function createO11Runner(services = {}) {
     if (input.op === 'status') return { ok: true, lane: 'o11', wrapper: summary(lease) };
     if (input.op === 'authorize') {
       o11Write(grantPath, { host: target.host, modules: [target.moduleKey], scope: 'ssam-debug-wrapper-create-remove',
-        words: input.words, grantedAt: new Date().toISOString() });
+        wordsSha256: createHash('sha256').update(String(input.words)).digest('hex'), grantedAt: new Date().toISOString() }); // CX15 r5 (N-3): never the words
       return { ok: true, lane: 'o11', state: 'authorized', moduleKey: target.moduleKey };
     }
     let fd, appUser, sessionId, ownOperationId, stopped = null, cleanup = null, returned;

@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {readA2aCleanupMetadata,readA2aProvisionalState} from '../runtime/a2a-cleanup-metadata.mjs';
 import {fingerprint} from '../runtime/write-journal.mjs';

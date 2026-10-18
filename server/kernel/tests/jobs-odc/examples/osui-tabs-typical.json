@@ -1,5 +1,5 @@
 {
- "description": "Tabs do OSUI com duas abas: titulo em cada TabsHeaderItem, conteudo ligado a dados em cada TabsContentItem e OnTabChange guardando a aba ativa.",
+ "description": "Tabs of OSUI with two tabs: a title in each TabsHeaderItem, content bound to data in each TabsContentItem and OnTabChange keeping the active tab.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -15,7 +15,7 @@
   {"op": "set", "target": "$vActiveTab", "prop": "DataType", "value": "Integer"},
   {"op": "set", "target": "$vActiveTab", "prop": "DefaultValue", "value": "0"},
   {"op": "logic", "data": {"actions": [{"name": "TabChanged", "kind": "screen", "owner": "IMobileScreen:ProductTabs", "inputs": [{"name": "NewTab", "type": "Integer"}], "steps": [{"assign": {"ActiveTab": "NewTab"}, "as": "Remember"}]}]}},
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Tabs1", "source": "IMobileBlock:Tabs", "empty": true, "as": "$tabs", "_why": "empty tira as tres abas de exemplo; o job cria as suas"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Tabs1", "source": "IMobileBlock:Tabs", "empty": true, "as": "$tabs", "_why": "empty removes the three sample tabs; the job creates its own"},
   {"op": "set", "target": "$tabs/StartingTab", "prop": "Value", "value": "ActiveTab"},
   {"op": "create", "parent": "$tabs/Header", "type": "IMobileBlockInstanceWidget", "name": "OverviewHeader", "source": "IMobileBlock:TabsHeaderItem", "as": "$h1"},
   {"op": "create", "parent": "$h1/Title", "type": "ITextWidget", "as": "$text1"},

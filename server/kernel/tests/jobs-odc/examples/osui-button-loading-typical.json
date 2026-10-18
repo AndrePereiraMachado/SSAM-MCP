@@ -1,5 +1,5 @@
 {
- "description": "ButtonLoading do OSUI: IsLoading liga durante a chamada ao servidor (True antes, False depois) e mostra a legenda durante o carregamento.",
+ "description": "ButtonLoading of OSUI: IsLoading turns on during the call to the server (True before, False after) and shows the caption while loading.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

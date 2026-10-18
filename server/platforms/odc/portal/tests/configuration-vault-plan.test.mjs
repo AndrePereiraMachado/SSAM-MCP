@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {configurationVaultPlan} from '../runtime/configuration-vault-plan.mjs';
 const secret={key:'password',isSecret:true},integration={key:'api',pluginType:'RESTConsume',configs:[secret,{key:'url',isSecret:false}]};

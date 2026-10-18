@@ -1,143 +1,144 @@
-# Agente SSAM na sua máquina (guia do cliente)
+# The SSAM agent on your machine (customer guide)
 
-## O que é
+## What it is
 
-- Você usa o SEU cliente MCP (Claude Code ou outro) com o SEU LLM, na SUA conta. Ele chama as ferramentas do servidor
-  SSAM do dono por HTTPS, com um token.
-- O servidor guarda o que é do dono (kernel, catálogo, regras, receitas). **Nenhum LLM roda no servidor.**
-- O agente SSAM roda na sua máquina e faz só o que precisa tocar a sua máquina: falar com o ODC Studio e o Service Studio
-  que VOCÊ abriu, listar esses processos e ler e gravar arquivos dentro da pasta dele.
-- A conexão é só de SAÍDA, da sua máquina para o servidor. Nenhuma porta é aberta na sua máquina.
-- Tudo o que usa a sua sessão do Studio (Portal/tenant ODC, Service Center, ambiente O11) roda dentro do SEU Studio. O
-  login, os cookies e os tokens do Studio nunca saem do processo do Studio; o servidor recebe só o resultado de cada
-  passo.
-- Os OMLs viajam entre o servidor e o agente com conferência de sha256. Nunca passam pelo LLM.
+- You use YOUR MCP client (Claude Code or another one) with YOUR LLM, on YOUR account. It calls the tools of the owner's
+  SSAM server over HTTPS, with a token.
+- The server keeps what belongs to the owner (kernel, catalog, rules, recipes). **No LLM runs on the server.**
+- The SSAM agent runs on your machine and does only what has to touch your machine: talk to the ODC Studio and the
+  Service Studio that YOU opened, list those processes, and read and write files inside its own folder.
+- The connection is OUTBOUND only, from your machine to the server. No port is opened on your machine.
+- Everything that uses your Studio session (ODC Portal/tenant, Service Center, O11 environment) runs inside YOUR Studio.
+  The Studio login, cookies and tokens never leave the Studio process; the server receives only the result of each
+  step.
+- OMLs travel between the server and the agent with a sha256 check. They never go through the LLM.
 
-## Privacidade: o que o servidor registra sobre o seu acesso
+## Privacy: what the server records about your access
 
-Só o dono do servidor vê o log, a auditoria e o registro de qualidade descritos abaixo. Eles ficam no servidor dele e não são repassados a terceiros.
+Only the server owner sees the log, the audit and the quality record described below. They stay on the owner's server and are not passed on to third parties.
 
-**Log do servidor.** Para saber quem usa cada acesso e de onde, o servidor grava, em cada linha, a hora, o evento e o identificador do seu acesso:
+**Server log.** To know who uses each access and from where, the server writes, on each line, the time, the event and the identifier of your access:
 
-- **Quando o seu cliente MCP abre uma sessão:** o nome que o dono deu ao seu acesso, o número da sessão MCP, o IP de onde você conecta, o nome e a versão do cliente MCP (por exemplo, Claude Code) e o user-agent. O IP é o público que o túnel vê. Muda se você trocar de rede, VPN ou 4G. Quando a sessão fecha, o motivo.
-- **Quando o agente conecta:** o IP, a versão do agente, o nome do computador, o seu usuário do Windows e um identificador da máquina. O identificador é um hash do `MachineGuid` do Windows com esses dois e não permite recuperá-los. Também a versão de cada Studio instalado (só o número, sem a pasta). Com o Service Studio ligado ao agente, também a versão, a porta local, o número do processo e a hora em que ele abriu.
-- **Quando o seu Studio não é atendido pelo servidor:** a plataforma (O11 ou ODC), a versão do seu Studio, a do servidor, como as duas se comparam, o motivo e a regra do dono para builds diferentes. Uma vez por versão, para o dono saber quem precisa de uma atualização (sua ou do servidor).
-- **A cada chamada:** as ferramentas (só as da lista do servidor; outro nome vira `?`), o tamanho da resposta e o tempo. Numa chamada ao agente, o tipo, o comando (só da lista do agente), o tempo, se deu certo e o código do resultado.
-- **O canal do agente:** quando ele conecta, cai ou volta, com o motivo; e os problemas do canal (um pedido recusado, uma mensagem desconhecida, um arquivo que chegou diferente ou expirou), com o código, o tipo e quantos. Uma parte de arquivo que demora para subir fica com o tamanho, o tempo e o IP sem o último número.
+- **When your MCP client opens a session:** the name the owner gave your access, the MCP session number, the IP you connect from, the name and version of the MCP client (for example, Claude Code) and the user-agent. The IP is the public one the tunnel sees. It changes if you switch network, VPN or 4G. When the session closes, the reason.
+- **When the agent connects:** the IP, the agent version, the computer name, your Windows user and a machine identifier. The identifier is a hash of the Windows `MachineGuid` with those two and does not allow recovering them. Also the version of each installed Studio (only the number, without the folder). With the Service Studio connected to the agent, also its version, the local port, the process number and the time it opened.
+- **When the server does not serve your Studio:** the platform (O11 or ODC), the version of your Studio, the server's version, how the two compare, the cause and the owner's rule for different builds. Once per version, so the owner knows who needs an update (yours or the server's).
+- **On each call:** the tools (only those of the server's list; any other name becomes `?`), the size of the answer and the time. In a call to the agent, the kind, the command (only from the agent's list), the time, whether it succeeded and the result code.
+- **The agent's channel:** when it connects, drops or comes back, with the reason; and the problems of the channel (a refused request, an unknown message, a file that arrived different or expired), with the code, the type and how many. A file part that is slow to upload is kept with its size, the time and the IP without its last number.
 
-**A primeira máquina fica registrada.** Na primeira conexão do agente, o servidor guarda o nome do computador, o seu usuário do Windows, o identificador, a hora e o IP. Se a sua credencial conectar de outra máquina, o acesso continua funcionando, mas o dono recebe um alerta com a hora, o nome do seu acesso, as duas máquinas e o IP. Trocou de computador? Avise o dono. Trocar de rede, VPN ou 4G não gera alerta de máquina.
+**The first machine is recorded.** On the agent's first connection, the server keeps the computer name, your Windows user, the identifier, the time and the IP. If your credential connects from another machine, the access keeps working, but the owner gets an alert with the time, the name of your access, the two machines and the IP. Changed computers? Tell the owner. Switching network, VPN or 4G does not raise a machine alert.
 
-**O que o agente envia e não fica gravado.** A cada conexão, o agente também envia a pasta onde ele está (ela costuma ter o seu usuário do Windows), a versão do Node, o sistema, a hora em que o agente abriu, o que ele sabe fazer, o pacote instalado e a pasta de cada Studio instalado. O servidor usa esses dados só na memória, para conferir as versões e para o `ssam_doctor`. Eles não vão para o log, para a auditoria nem para o registro de qualidade.
+**What the agent sends and is not stored.** On each connection, the agent also sends the folder it is in (it usually contains your Windows user), the Node version, the system, the time the agent started, what it can do, the installed pack and the folder of each installed Studio. The server uses this data only in memory, to check the versions and for `ssam_doctor`. It does not go to the log, the audit or the quality record.
 
-Nada além disso sobre a sua máquina é enviado: nenhum arquivo de fora da pasta do agente, nenhum histórico, nenhum outro programa. Se você não concordar, não instale o agente e fale com o dono.
+Nothing else about your machine is sent: no file from outside the agent folder, no history, no other program. If you do not agree, do not install the agent and talk to the owner.
 
-**Auditoria e registro de qualidade.** De cada chamada de ferramenta, o servidor guarda só códigos, contagens e tempos. Os códigos vêm de uma lista fechada do SSAM. Um valor fora da lista vira um marcador fixo, como `CODE_UNLISTED`, e só é contado.
+**Audit and quality record.** For each tool call, the server keeps only codes, counts and times. The codes come from a closed SSAM list. A value outside the list becomes a fixed marker, such as `CODE_UNLISTED`, and is only counted.
 
-- **Em toda linha:** a hora, o identificador do seu acesso, o nome que o dono deu a ele e um resumo da sessão MCP que não permite recuperá-la.
-- **A chamada:** a ferramenta (só da lista de ferramentas do servidor; outro nome vira `?`), a ação escolhida nela (da lista da ferramenta), a plataforma (O11 ou ODC), a ordem na sessão, a duração, o intervalo desde a resposta anterior e quantas chamadas corriam juntas.
-- **O resultado:** se deu certo, foi recusado, ficou incerto ou falhou; o código; o passo em que parou; e se foi `entregue`, `entregue e publicado` ou `criado`.
-- **A resposta:** quantos problemas de cada código (por fase, quantos eram avisos, quantos vieram com correção pronta e se a lista foi cortada), quantos avisos (e quantos graves), quantas correções automáticas de cada regra, o tamanho, se veio em páginas e como o servidor a leu.
-- **O tempo:** quanto levou cada fase (fila, captura, compilação, Studio, verificação, publicação, ambiente, transferência, rede e o próprio servidor); quantas chamadas ao agente, de que tipo e comando, com quantos bytes, quanto tempo e quantas falhas; quantas vezes o motor rodou e quanto levou.
-- **O pedido, só a forma:** como o job veio (no pedido, num arquivo ou na pasta do agente), se usou `basedOn`, `partial`, `closePrevious`, `publish` ou `until`, quantos patches e o tamanho em bytes.
-- **A sessão MCP:** quando abriu e fechou, o motivo, quantas chamadas teve e a família do cliente MCP (Claude Code, Codex, Cursor...).
+- **On every line:** the time, the identifier of your access, the name the owner gave it and a digest of the MCP session that does not allow recovering it.
+- **The call:** the tool (only from the server's tool list; any other name becomes `?`), the action chosen in it (from the tool's list), the platform (O11 or ODC), the order in the session, the duration, the interval since the previous answer and how many calls were running together.
+- **The result:** whether it succeeded, was refused, was left uncertain or failed; the code; the step where it stopped; and whether it was `entregue` (delivered), `entregue e publicado` (delivered and published) or `criado` (created).
+- **The answer:** how many problems of each code (by phase, how many were warnings, how many came with a ready fix and whether the list was cut), how many warnings (and how many severe), how many automatic fixes of each rule, the size, whether it came in pages and how the server read it.
+- **The time:** how long each phase took (queue, capture, compilation, Studio, verification, publication, environment, transfer, network and the server itself); how many calls to the agent, of which kind and command, with how many bytes, how much time and how many failures; how many times the engine ran and how long it took.
+- **The request, only its shape:** how the job came (in the request, in a file or in the agent folder), whether it used `basedOn`, `partial`, `closePrevious`, `publish` or `until`, how many patches and the size in bytes.
+- **The MCP session:** when it opened and closed, the reason, how many calls it had and the family of the MCP client (Claude Code, Codex, Cursor...).
 
-Nada do seu trabalho entra na auditoria nem no registro de qualidade: nenhum nome de módulo, tela, action ou entidade, nenhum job, expressão, mensagem, caminho de arquivo, endereço de ambiente ou texto seu. O dono vê esses números por cliente e somados de todos os clientes, para achar os erros mais comuns e o que deixa o SSAM lento.
+Nothing of your work goes into the audit or the quality record: no name of a module, screen, action or entity, no job, expression, message, file path, environment address or text of yours. The owner sees these numbers per customer and summed over all customers, to find the most common errors and what makes SSAM slow.
 
-**Por quanto tempo.** O dono escolhe por quantos dias guarda cada um desses registros. O padrão guarda o log por 56 dias e a auditoria e o registro de qualidade sem prazo. Os 56 dias valem com a limpeza semanal do servidor ligada; sem ela, o log fica até o dono apagá-lo. O registro da primeira máquina e os alertas de outra máquina não têm prazo: ficam até o dono apagá-los. As cópias de segurança do servidor levam os mesmos arquivos.
+**For how long.** The owner chooses for how many days each of these records is kept. The default keeps the log for 56 days and the audit and the quality record with no time limit. The 56 days hold with the server's weekly cleanup turned on; without it, the log stays until the owner deletes it. The first-machine record and the other-machine alerts have no time limit: they stay until the owner deletes them. The server's backups carry the same files.
 
-**O seu espaço no servidor** (`ws:`) guarda os arquivos do seu trabalho (jobs, capturas, recibos e jornais) e a fila de atritos do seu acesso: de cada chamada, a operação, a plataforma, o resultado, o código, o passo e o tempo, e o texto dos relatos que o seu cliente MCP grava com `ssam_friction`. Você e o dono veem esse espaço.
+**Your space on the server** (`ws:`) keeps the files of your work (jobs, captures, receipts and journals) and the friction queue of your access: for each call, the operation, the platform, the result, the code, the step and the time, and the text of the reports your MCP client writes with `ssam_friction`. You and the owner see this space.
 
-## O que você recebe do dono do servidor
+## What you get from the server owner
 
-| Item | Para quê |
+| Item | What for |
 |---|---|
-| `ssam-agent.zip` | o pacote do agente (código do agente, o Node com a licença dele, bridges dos Studios, `pack.json` com o sha256 de cada arquivo) |
-| endereço do servidor (`https://...`) | onde o agente e o cliente MCP se conectam |
-| token MCP (`ssam_...`) | vai na configuração do seu cliente MCP |
-| credencial do agente (`ssam_agent_...`) | vai no agente, pelo `setup` |
+| `ssam-agent.zip` | the agent pack (the agent code, Node with its license, the Studio bridges, this guide, `pack.json` with the sha256 of each file) |
+| the server address (`https://...`) | where the agent and the MCP client connect |
+| the MCP token (`ssam_...`) | goes in the configuration of your MCP client |
+| the agent credential (`ssam_agent_...`) | goes in the agent, through `setup` |
 
-O token e a credencial são diferentes e um não serve no lugar do outro. Cada um é mostrado ao dono uma vez só: guarde os
-dois num cofre de senhas, nunca num repositório ou num chat.
+The token and the credential are different, and neither works in place of the other. Each one is shown to the owner only
+once: keep both in a password vault, never in a repository or a chat.
 
-## Pré-requisitos
+## Prerequisites
 
-- Windows 10 ou 11.
-- Node: não precisa instalar. O pacote traz `agent\node\node.exe` (Node 24, com as opções `--use-env-proxy` e
-  `--use-system-ca`) e, ao lado, `agent\node\LICENSE`, a licença do Node, que acompanha o binário. O `ssam-agent.ps1`
-  usa esse Node. Só um pacote gerado sem Node (o dono avisa) pede o Node 24 instalado (o `doctor` confere as duas
-  opções).
-- .NET 10 runtime para o cliente de attach da bridge ODC (`ODC3.Bridge.Client`). Para O11, também o .NET 8 runtime ou
-  mais novo para o conector (`Anvil.Connect`).
-- ODC Studio e/ou Service Studio na MESMA versão do kernel do servidor (o `ssam_doctor` do seu cliente MCP mostra as duas
-  versões). O ODC Studio tem de estar no caminho oficial, `C:\Program Files\OutSystems\ODC Studio\ODC Studio` (o cliente de
-  attach só aceita esse).
-- Uma pasta para o agente **sem espaço** e **fora de `%LOCALAPPDATA%`**. O padrão é `%USERPROFILE%\SSAM-Agent`; se o seu
-  nome de usuário tem espaço, use `C:\SSAM-Agent`. (A bridge ODC divide os comandos por espaços; e processos de apps da
-  Store veem um `%LOCALAPPDATA%` diferente, então o Studio não acharia a bridge lá.)
+- Windows 10 or 11.
+- Node: no need to install it. The pack carries `agent\node\node.exe` (Node 24, with the options `--use-env-proxy` and
+  `--use-system-ca`) and, next to it, `agent\node\LICENSE`, the Node license, which goes with the binary.
+  `ssam-agent.ps1` uses this Node. Only a pack built without Node (the owner tells you) needs Node 24 installed (the
+  `doctor` checks the two options).
+- The .NET 10 runtime for the attach client of the ODC bridge (`ODC3.Bridge.Client`). For O11, also the .NET 8 runtime
+  or newer for the connector (`Anvil.Connect`).
+- ODC Studio and/or Service Studio in the SAME version as the server kernel (the `ssam_doctor` of your MCP client shows
+  both versions). The ODC Studio must be in the official path, `C:\Program Files\OutSystems\ODC Studio\ODC Studio` (the
+  attach client accepts only that one).
+- A folder for the agent **without spaces** and **outside `%LOCALAPPDATA%`**. The default is `%USERPROFILE%\SSAM-Agent`;
+  if your user name has a space, use `C:\SSAM-Agent`. (The ODC bridge splits its commands at spaces; and the processes
+  of Store apps see a different `%LOCALAPPDATA%`, so the Studio would not find the bridge there.)
 
-## Instalar
+## Install
 
 ```powershell
 Expand-Archive .\ssam-agent.zip -DestinationPath C:\SSAM-Agent
-C:\SSAM-Agent\agent\node\node.exe C:\SSAM-Agent\agent\ssam-agent.mjs setup --server https://ssam.exemplo.com --root C:\SSAM-Agent
+C:\SSAM-Agent\agent\node\node.exe C:\SSAM-Agent\agent\ssam-agent.mjs setup --server https://ssam.example.com --root C:\SSAM-Agent
 ```
 
-Nos comandos `node ...` deste guia, `node` é o `C:\SSAM-Agent\agent\node\node.exe` do pacote (ou o Node 24 instalado,
-num pacote sem Node).
+In the `node ...` commands of this guide, `node` is the pack's `C:\SSAM-Agent\agent\node\node.exe` (or the installed
+Node 24, in a pack without Node).
 
-- O `setup` pede a credencial do agente: cole e tecle Enter (ela não aparece na tela). Ou use
-  `--credential-file <arquivo>` (e apague o arquivo depois). A credencial nunca vai como argumento, nunca é mostrada e
-  fica em `private\credential`.
-- Antes de gravar a credencial, o `setup` restringe `private\` ao seu usuário:
-  `icacls <pasta>\private /inheritance:r /grant:r "<DOMÍNIO\usuário>:(OI)(CI)F"`.
-- O `setup` recusa uma pasta com espaço (peça `--root C:\SSAM-Agent`), um endereço `http://` que não seja da própria
-  máquina e uma credencial fora do formato `ssam_agent_...`.
-- `--o11-port <porta>` muda a porta local da bridge O11 no seu Service Studio (padrão 4516). Use quando outra
-  ferramenta já usa a 4516 nesta máquina.
-- Se o PowerShell bloquear scripts, rode os `.ps1` com `powershell -ExecutionPolicy Bypass -File <script> <ação>`.
+- `setup` asks for the agent credential: paste it and press Enter (it does not appear on screen). Or use
+  `--credential-file <file>` (and delete the file afterwards). The credential never goes as an argument, is never shown
+  and stays in `private\credential`.
+- Before it writes the credential, `setup` restricts `private\` to your user:
+  `icacls <folder>\private /inheritance:r /grant:r "<DOMAIN\user>:(OI)(CI)F"`.
+- `setup` refuses a folder with a space (pass `--root C:\SSAM-Agent`), an `http://` address that is not of the machine
+  itself and a credential outside the `ssam_agent_...` format.
+- `--o11-port <port>` changes the local port of the O11 bridge in your Service Studio (default 4516). Use it when another
+  tool already uses 4516 on this machine.
+- If PowerShell blocks scripts, run the `.ps1` files with `powershell -ExecutionPolicy Bypass -File <script> <action>`.
 
-## Iniciar, parar e conferir
+## Start, stop and check
 
 ```powershell
-C:\SSAM-Agent\agent\ssam-agent.ps1 start     # sobe em segundo plano e espera a conexão (até 30 s)
+C:\SSAM-Agent\agent\ssam-agent.ps1 start     # starts in the background and waits for the connection (up to 30 s)
 C:\SSAM-Agent\agent\ssam-agent.ps1 status
-C:\SSAM-Agent\agent\ssam-agent.ps1 stop      # parada limpa: avisa o servidor e sai
+C:\SSAM-Agent\agent\ssam-agent.ps1 stop      # clean stop: tells the server and exits
 node C:\SSAM-Agent\agent\ssam-agent.mjs doctor
 ```
 
-- Sem serviço do Windows e sem administrador. Pid, estado e log ficam em `private\` (`agent.log`, sem nenhum segredo).
-- O `start` só diz "conectado" quando o processo que ele iniciou se conectou. Se o agente parar, ele diz por quê:
+- No Windows service and no administrator. The pid, the state and the log stay in `private\` (`agent.log`, without any
+  secret).
+- `start` says "connected" only when the process it started has connected. If the agent stops, it says why:
 
-| Código | Motivo | O que fazer |
+| Code | Reason | What to do |
 |---|---|---|
-| 2 | credencial recusada, revogada, vencida ou trocada | peça uma credencial nova ao dono e rode o `setup` de novo |
-| 3 | outro agente com a mesma credencial assumiu a conta | deixe um agente só por conta |
-| 4 | o servidor não aceita esta versão do agente | peça o pacote atual ao dono |
+| 2 | credential refused, revoked, expired or replaced | ask the owner for a new credential and run `setup` again |
+| 3 | another agent with the same credential took over the account | keep only one agent per account |
+| 4 | the server does not accept this agent version | ask the owner for the current pack |
 
-- Caiu a rede ou o servidor reiniciou? O agente reconecta sozinho (1, 2, 4, 8, 16, 30 s) e continua de onde parou: um
-  passo já entregue nunca roda duas vezes.
-- Enquanto ele reconecta, as ferramentas respondem `AGENT_RECONNECTING` com `retryAfterSeconds`: o seu LLM repete a
-  mesma chamada depois desse tempo. Não é preciso reiniciar nada. Só `AGENT_NOT_CONNECTED` pede para iniciar o agente.
-- Desde o agente 0.2.0: um envio de mensagens desiste em 10 s (mais 1 s a cada 64 KiB) e vai de novo; o pong vai num envio
-  próprio; um stream sem resposta em 15 s é refeito na hora. Um envio preso não derruba mais o canal.
-- Desde o agente 0.2.1: uma troca de rede ou de IP (Wi-Fi, 4G, VPN) no meio de uma tarefa atrasa uma parte de arquivo
-  em cerca de 11 s (antes, de 20 a 50 s). Cada parte tem prazo próprio (10 s, mais 1 s a cada 64 KiB) e, sem resposta,
-  vai de novo numa conexão nova; conexões paradas há mais de 2 s não são reaproveitadas; uma conexão morta cai em cerca
-  de 15 s. Cada nova tentativa aparece em `private\agent.log` como `blob-retry`.
-- Desde o agente 0.3.0 (pacote com a bridge ODC `v96`): o Service Center pela sessão do Studio (`sc_http`) e a lista de
-  produtores de um módulo ODC (`reference-producers`). Com um pacote mais velho, essas ferramentas respondem
-  `STUDIO_BRIDGE_OUTDATED` ou `COMMAND_NOT_ALLOWED`: peça o pacote novo ao dono.
-- O agente 0.3.1 (pacote do 24º) junta os dois e responde ao teste de rede do `ssam_doctor {network:true}` (envios
-  descartáveis em conexões novas; nada da máquina é lido nem gravado).
-- Em primeiro plano, para ver erros na tela:
+- Network down or server restarted? The agent reconnects by itself (1, 2, 4, 8, 16, 30 s) and continues where it
+  stopped: a step already delivered never runs twice.
+- While it reconnects, the tools answer `AGENT_RECONNECTING` with `retryAfterSeconds`: your LLM repeats the same call
+  after that time. Nothing needs a restart. Only `AGENT_NOT_CONNECTED` asks you to start the agent.
+- Since agent 0.2.0: a send of messages gives up after 10 s (plus 1 s per 64 KiB) and goes again; the pong goes in a
+  send of its own; a stream without an answer in 15 s is redone at once. A stuck send no longer brings the channel down.
+- Since agent 0.2.1: a network or IP change (Wi-Fi, 4G, VPN) in the middle of a task delays a file part by about 11 s
+  (before, 20 to 50 s). Each part has its own deadline (10 s, plus 1 s per 64 KiB) and, without an answer, goes again on
+  a new connection; connections idle for more than 2 s are not reused; a dead connection drops in about 15 s. Each new
+  attempt appears in `private\agent.log` as `blob-retry`.
+- Since agent 0.3.0 (the pack with the ODC bridge `v96`): the Service Center through the Studio session (`sc_http`) and
+  the list of producers of an ODC module (`reference-producers`). With an older pack, these tools answer
+  `STUDIO_BRIDGE_OUTDATED` or `COMMAND_NOT_ALLOWED`: ask the owner for the new pack.
+- Agent 0.3.1 (the pack of the 24th release) joins the two and answers the network test of
+  `ssam_doctor {network:true}` (throwaway sends on new connections; nothing of the machine is read or written).
+- In the foreground, to see errors on screen:
   `node --use-env-proxy --use-system-ca C:\SSAM-Agent\agent\ssam-agent.mjs run --root C:\SSAM-Agent`.
-- O `doctor` confere as opções do Node, a pasta, a integridade do pacote (`pack.json`), a configuração, a credencial
-  (sem mostrar), os runtimes .NET, os Studios instalados e se o servidor responde.
+- `doctor` checks the Node options, the folder, the integrity of the pack (`pack.json`), the configuration, the
+  credential (without showing it), the .NET runtimes, the installed Studios and whether the server responds.
 
-## Configurar o cliente MCP
+## Configure the MCP client
 
-Guarde o token MCP numa variável do terminal (não num arquivo do repositório) e use o exemplo
-`docs\exemplos\mcp-cliente-hospedado.json` como `.mcp.json` do seu projeto, trocando `<host>`:
+Keep the MCP token in a terminal variable (not in a file of the repository) and use this as the `.mcp.json` of your
+project, replacing `<host>`:
 
 ```powershell
 $env:SSAM_TOKEN = "ssam_..."
@@ -147,149 +148,152 @@ $env:SSAM_TOKEN = "ssam_..."
 {"mcpServers":{"ssam":{"type":"http","url":"https://<host>/mcp","headers":{"Authorization":"Bearer ${SSAM_TOKEN}"}}}}
 ```
 
-Ou: `claude mcp add --transport http ssam https://<host>/mcp --header "Authorization: Bearer $env:SSAM_TOKEN"`.
+Or: `claude mcp add --transport http ssam https://<host>/mcp --header "Authorization: Bearer $env:SSAM_TOKEN"`.
 
-Depois, no cliente MCP: `ssam_doctor` mostra o agente conectado e as versões; `studio_attach` liga o ODC Studio aberto;
-`ssam_connect {lane:"o11"}` liga o Service Studio aberto. Sem o agente, as ferramentas que precisam da sua máquina
-respondem `AGENT_NOT_CONNECTED` e as que rodam só no servidor continuam funcionando.
+Then, in the MCP client: `ssam_doctor` shows the agent connected and the versions; `studio_attach` connects the open ODC
+Studio; `ssam_connect {lane:"o11"}` connects the open Service Studio. Without the agent, the tools that need your machine
+answer `AGENT_NOT_CONNECTED`, and the ones that run only on the server keep working.
 
-## O que o agente faz
+## What the agent does
 
-Só estes 10 pedidos. Qualquer outro é recusado sem rodar nada (`KIND_NOT_ALLOWED`); o servidor nunca manda código,
-script ou caminho de DLL.
+Only these 10 requests. Any other one is refused without running anything (`KIND_NOT_ALLOWED`); the server never sends
+code, scripts or DLL paths.
 
-| Pedido | O que faz na sua máquina |
+| Request | What it does on your machine |
 |---|---|
-| `studio.processes` | lista os processos `ODCStudio.exe` / `ServiceStudio.exe` e a versão de cada um |
-| `odc.pipe` | manda um comando da lista fechada para a bridge ODC do seu ODC Studio |
-| `odc.attach` | carrega no seu ODC Studio a bridge ODC DO PACOTE, com o cliente de attach do pacote |
-| `o11.bridge` | manda um método da lista fechada para a bridge O11 do seu Service Studio |
-| `o11.connect` | carrega no seu Service Studio a bridge O11 fina do pacote (binários prontos; nada é compilado aqui) |
-| `o11.selected` | confere se o Service Studio conectado ainda é o mesmo |
-| `file.put` / `file.get` / `file.list` | grava, lê e lista arquivos só nas pastas abaixo |
-| `file.sync` | grava de uma vez os vários arquivos de um passo (agente 0.2.0), com as mesmas regras do `file.put` |
+| `studio.processes` | lists the `ODCStudio.exe` / `ServiceStudio.exe` processes and the version of each one |
+| `odc.pipe` | sends a command of the closed list to the ODC bridge of your ODC Studio |
+| `odc.attach` | loads into your ODC Studio the ODC bridge OF THE PACK, with the attach client of the pack |
+| `o11.bridge` | sends a method of the closed list to the O11 bridge of your Service Studio |
+| `o11.connect` | loads into your Service Studio the thin O11 bridge of the pack (ready binaries; nothing is compiled here) |
+| `o11.selected` | checks whether the connected Service Studio is still the same one |
+| `file.put` / `file.get` / `file.list` | writes, reads and lists files only in the folders below |
+| `file.sync` | writes at once the several files of a step (agent 0.2.0), with the same rules as `file.put` |
 
-- Comandos ODC aceitos: `status`, `wait`, `authorize`, `open`, `snapshot`, `latest`, `check-base`, `preview`, `merge`,
+- Accepted ODC commands: `status`, `wait`, `authorize`, `open`, `snapshot`, `latest`, `check-base`, `preview`, `merge`,
   `publish`, `publish-status`, `publish-log`, `dismiss-dialog`, `close`, `module-info`, `assets`, `consumers`, `create`,
-  `create-app`, `templates`, `template-download`, `refresh-references`, `reference-snapshot`, `reference-producers` (os
-  produtores que o módulo aberto pode referenciar; só lê, bridge ODC `v96`), `data`, `data-insert`, `data-update`,
-  `data-delete`, `portal-call`, `portal-session`, `auth-status`, `stop`, `query-test` (o teste nativo de uma consulta SQL
-  ou Aggregate, bridge ODC `v45`; a captura que ele lê também fica na pasta do agente).
-- Métodos O11 aceitos (os 23 da bridge fina): `ping`, `bridge_manifest`, `get_active_module`, `list_open_modules`,
+  `create-app`, `templates`, `template-download`, `refresh-references`, `reference-snapshot`, `reference-producers` (the
+  producers the open module can reference; read only, ODC bridge `v96`), `data`, `data-insert`, `data-update`,
+  `data-delete`, `portal-call`, `portal-session`, `auth-status`, `stop`, `query-test` (the native test of an SQL query or
+  Aggregate, ODC bridge `v45`; the capture it reads also stays in the agent folder).
+- Accepted O11 methods (the 23 of the thin bridge): `ping`, `bridge_manifest`, `get_active_module`, `list_open_modules`,
   `get_errors`, `open_module`, `close_module`, `publish`, `windows`, `ui_alive`, `close_dialog`, `snapshot_module`,
-  `merge_from_oml`, `merge_status`, `environment_session`, `sc_api`, `sc_web`, `sc_http` (o Service Center pela sessão
-  do próprio Studio, sem janela), `studio_login` (só responde que falta a sessão do Studio; nunca abre o diálogo de
-  login), `sc_session`, `publish_log`, `refresh_references` (o Refresh References do próprio Studio; o Ctrl+Z desfaz),
-  `answer_dependencies_dialog` (responde Cancel ao diálogo "Incompatible or missing dependencies found"; depois o servidor
-  pede o Refresh References).
-- Nunca passam pelo agente: o transporte privado do Service Center (`sc_private_http`) e os comandos privados do Portal
-  (`portal-private-*`). Eles usam um cofre e um pipe locais, que não atravessam máquinas.
-- A bridge O11 do pacote é a bridge FINA: só as operações primitivas do Studio (abrir e fechar módulo, capturar o
-  módulo aberto, o merge nativo de um OML pronto, publicar, a sessão de ambiente, o Service Center, dados, diálogos).
-  Ela não leva o kernel do SSAM: toda a lógica roda no servidor. O agente só fala com essa bridge; se o Service Studio
-  já tiver outra bridge Anvil carregada (aberto por outro atalho), o `o11.connect` recusa com `ATTACH_FAILED` sem
-  carregar nada: feche e abra o Service Studio normalmente.
-- Antes de cada passo no Studio, o agente confere a versão do PROCESSO escolhido contra o kernel do servidor
-  (`STUDIO_VERSION_MISMATCH`): instalações lado a lado e a atualização automática do ODC Studio não passam. Quando o ODC
-  Studio se atualiza sozinho (o 1.7.28, em 12/10/2026), a faixa ODC fica recusada até o dono pôr no servidor o kernel
-  daquela versão; o pacote que você já tem continua aceito enquanto a bridge dele estiver em `odcBridgeAccepted`.
-- Depois do attach, o agente só usa a bridge O11 que for o arquivo do SEU pacote (sha256 do `pack.json`). Outra bridge
-  responde `BRIDGE_VERSION_MISMATCH`: nada mais é enviado a ela; reinicie o Service Studio.
-- Um pacote com o gancho de release (o dono avisa) traz `release.json`, `release.sig.jws` e a pasta `studio\o11\`. O
-  agente confere a assinatura do pacote antes do attach e grava um único arquivo de pedido em
-  `%USERPROFILE%\.ssam-hybrid\data\o11\runtime-connect\<pid>-<início>`; o gancho confere os arquivos de novo antes de
-  carregar a bridge. Um arquivo do pacote alterado recusa o attach.
-- Escritas do Service Center pela bridge O11 do pacote: sem `corporateHosts` no seu `%USERPROFILE%\.ssam-hybrid\config.json`,
-  todo ambiente conta como corporativo, e cada escrita precisa da sua instrução explícita para aquele ambiente.
-- A chave da bridge O11 é gerada na sua máquina (`private\authority\bridge.key`) e nunca sai dela.
+  `merge_from_oml`, `merge_status`, `environment_session`, `sc_api`, `sc_web`, `sc_http` (the Service Center through the
+  Studio's own session, without a window), `studio_login` (only answers that the Studio session is missing; it never
+  opens the login dialog), `sc_session`, `publish_log`, `refresh_references` (the Studio's own Refresh References; Ctrl+Z
+  undoes it), `answer_dependencies_dialog` (answers Cancel to the "Incompatible or missing dependencies found" dialog;
+  then the server asks for the Refresh References).
+- Never through the agent: the private transport of the Service Center (`sc_private_http`) and the private Portal
+  commands (`portal-private-*`). They use a local vault and a local pipe, which do not cross machines.
+- The O11 bridge of the pack is the THIN bridge: only the primitive operations of the Studio (open and close a module,
+  capture the open module, the native merge of a ready OML, publish, the environment session, the Service Center, data,
+  dialogs). It does not carry the SSAM kernel: all the logic runs on the server. The agent talks only to this bridge; if
+  the Service Studio already has another Anvil bridge loaded (opened by another shortcut), `o11.connect` refuses with
+  `ATTACH_FAILED` without loading anything: close the Service Studio and open it normally.
+- Before each step in the Studio, the agent checks the version of the chosen PROCESS against the server kernel
+  (`STUDIO_VERSION_MISMATCH`): side-by-side installations and the automatic update of the ODC Studio do not pass. When
+  the ODC Studio updates itself (1.7.28, on 2026-10-12), the ODC lane stays refused until the owner puts the kernel of
+  that version on the server; the pack you already have stays accepted while its bridge is in `odcBridgeAccepted`.
+- After the attach, the agent uses only the O11 bridge that is the file of YOUR pack (sha256 of `pack.json`). Another
+  bridge answers `BRIDGE_VERSION_MISMATCH`: nothing more is sent to it; restart the Service Studio.
+- A pack with the release hook (the owner tells you) carries `release.json`, `release.sig.jws` and the folder
+  `studio\o11\`. The agent checks the signature of the pack before the attach and writes a single request file in
+  `%USERPROFILE%\.ssam-hybrid\data\o11\runtime-connect\<pid>-<start>`; the hook checks the files again before it loads the
+  bridge. A changed pack file refuses the attach.
+- Service Center writes through the O11 bridge of the pack: without `corporateHosts` in your
+  `%USERPROFILE%\.ssam-hybrid\config.json`, every environment counts as corporate, and each write needs your explicit
+  instruction for that environment.
+- The key of the O11 bridge is generated on your machine (`private\authority\bridge.key`) and never leaves it.
 
-## O que o agente NUNCA faz
+## What the agent NEVER does
 
-- Abrir porta, aceitar conexão de fora ou rodar um LLM.
-- Executar outro programa, script ou comando que não esteja nas listas acima. `attach` pelo `odc.pipe`, `login`,
-  `export_*`, `find_element` e `get_flow_nodes` são recusados.
-- Ler ou gravar fora das pastas permitidas: caminhos com `..`, absolutos, UNC, fluxos alternativos (`:`), nomes de
-  dispositivo e links ou junções que escapam são recusados antes de qualquer acesso. A bridge recebe só caminhos dentro
-  da pasta do agente, inclusive os que estão dentro de um manifesto.
-- Mandar para o servidor a sua senha, os cookies ou os tokens do Studio, ou a credencial do agente.
-- Mostrar a credencial em tela ou log.
+- Open a port, accept a connection from outside or run an LLM.
+- Run another program, script or command that is not in the lists above. `attach` through `odc.pipe`, `login`,
+  `export_*`, `find_element` and `get_flow_nodes` are refused.
+- Read or write outside the allowed folders: paths with `..`, absolute paths, UNC paths, alternate streams (`:`), device
+  names, and links or junctions that escape are refused before any access. The bridge receives only paths inside the
+  agent folder, including the ones inside a manifest.
+- Send the server your password, the cookies or tokens of the Studio, or the agent credential.
+- Show the credential on screen or in a log.
 
-## Pastas
+## Folders
 
 ```
 C:\SSAM-Agent\
-  agent\        código do agente            bin\       bridge O11 fina, hook e Anvil.Connect (só O11)
-  agent\node\   node.exe e LICENSE (o Node do pacote e a licença dele)
-  odc\studio\   bridge ODC e cliente        odc\README.md  marcador da raiz da bridge ODC
-  odc\snapshots\  odc\journal\  odc\lab\    dados ODC (espelho do seu espaço no servidor)
-  o11\          dados O11 (espelho)         inbox\     arquivos que VOCÊ entrega ao servidor
-  private\      config.json, credential, authority\, o11-connection.json, agent.log (só o seu usuário)
-  pack.json     id, faixas, versões e sha256 de cada arquivo do pacote
-  studio\o11\   só no pacote com gancho de release: hook\Anvil.Hook.h1.dll e bridge\b1\ (a bridge fina)
-  release.json, release.sig.jws   só no pacote com gancho de release: a assinatura do dono sobre cada arquivo
+  agent\        agent code                  bin\       thin O11 bridge, hook and Anvil.Connect (O11 only)
+  agent\node\   node.exe and LICENSE (the Node of the pack and its license)
+  docs\         this guide (AGENTE-CLIENTE.md)
+  odc\studio\   ODC bridge and client       odc\README.md  marker of the root of the ODC bridge
+  odc\snapshots\  odc\journal\  odc\lab\    ODC data (mirror of your space on the server)
+  o11\          O11 data (mirror)           inbox\     files YOU deliver to the server
+  private\      config.json, credential, authority\, o11-connection.json, agent.log (only your user)
+  pack.json     id, lanes, versions and sha256 of each file of the pack
+  studio\o11\   only in the pack with the release hook: hook\Anvil.Hook.h1.dll and bridge\b1\ (the thin bridge)
+  release.json, release.sig.jws   only in the pack with the release hook: the owner's signature over each file
 ```
 
-| O servidor pode | Pastas |
+| The server may | Folders |
 |---|---|
-| gravar | `odc\snapshots`, `odc\journal`, `odc\lab`, `o11` |
-| ler | as mesmas e `inbox` |
+| write | `odc\snapshots`, `odc\journal`, `odc\lab`, `o11` |
+| read | the same ones and `inbox` |
 
-`agent\`, `bin\`, `studio\`, `private\`, `odc\studio\`, `odc\README.md`, `pack.json`, `release.json` e `release.sig.jws`
-nunca são lidos nem gravados pelo servidor.
+`agent\`, `bin\`, `docs\`, `studio\`, `private\`, `odc\studio\`, `odc\README.md`, `pack.json`, `release.json` and
+`release.sig.jws` are never read or written by the server.
 
-## Entregar um arquivo ao servidor
+## Deliver a file to the server
 
-Ponha o arquivo em `C:\SSAM-Agent\inbox\` e diga ao seu LLM o nome `agent:inbox/<arquivo>` (por exemplo
-`agent:inbox/Quotes.oml`). Os jobs não passam por lá: o LLM manda o job dentro da própria chamada (inline, em JSON
-compacto), direto ao servidor, sem subida pelo agente. Um job que já está no inbox ainda funciona.
-Um caminho absoluto dentro da pasta do agente
-(`C:\SSAM-Agent\inbox\job.json`) vale como o mesmo `agent:`; qualquer outro caminho é recusado com o lugar exato onde
-gravar. O `ssam_doctor` mostra a pasta (`agent.inbox`). O servidor só lê esse arquivo quando uma ferramenta pede. Os caminhos que as ferramentas
-devolvem aparecem como `ws:odc/...`, `ws:o11/...` ou `ws:inbox/...` (o seu espaço no servidor).
+Put the file in `C:\SSAM-Agent\inbox\` and tell your LLM the name `agent:inbox/<file>` (for example
+`agent:inbox/Quotes.oml`). Jobs do not go through there: the LLM sends the job inside the call itself (inline, in compact
+JSON), straight to the server, without an upload through the agent. A job that is already in the inbox still works.
+An absolute path inside the agent folder
+(`C:\SSAM-Agent\inbox\job.json`) counts as the same `agent:` path; any other path is refused with the exact place to
+write it. `ssam_doctor` shows the folder (`agent.inbox`). The server reads this file only when a tool asks for it. The
+paths the tools return appear as `ws:odc/...`, `ws:o11/...` or `ws:inbox/...` (your space on the server).
 
-## Teste de rede
+## Network test
 
-Entregas lentas ou travando? Peça ao seu LLM `ssam_doctor {network:true}`. Em uns 5 s o agente sobe alguns envios
-pequenos e dois de 1 MB, cada um numa conexão nova, e o servidor diz, por saída da sua internet, se as subidas passam.
-Exemplo: "uma das suas saídas de internet (177.26.87.x) perde pacotes nas subidas". Isso acontece com roteador de duas
-saídas em balanceamento, ou com 5G e celular ancorado. Os bytes do teste são aleatórios e descartados; nada do seu
-computador é lido.
+Slow or stuck deliveries? Ask your LLM for `ssam_doctor {network:true}`. In about 5 s the agent uploads a few small
+sends and two of 1 MB, each one on a new connection, and the server tells, per exit of your internet, whether the
+uploads go through. For example: one of your internet exits (177.26.87.x) loses packets on uploads. This happens with a
+router with two exits in load balancing, or with 5G and a tethered phone. The bytes of the test are random and
+discarded; nothing of your computer is read.
 
-## Proxy corporativo e certificados
+## Corporate proxy and certificates
 
-- Proxy: defina `HTTPS_PROXY` (e, se precisar, `NO_PROXY`) para o seu usuário, por exemplo
-  `setx HTTPS_PROXY http://proxy.empresa:8080`, abra um terminal novo e reinicie o agente. O `ssam-agent.ps1` sobe o Node
-  com `--use-env-proxy`, que faz o agente usar essas variáveis.
-- Se o proxy da empresa recusar as conexões do agente 0.2.1 e o agente 0.2.0 funcionava, defina `SSAM_AGENT_HTTP=fetch`
-  para o seu usuário (`setx SSAM_AGENT_HTTP fetch`), abra um terminal novo, reinicie o agente e avise o dono.
-- Certificado da empresa (inspeção TLS): instale a CA da empresa no repositório de certificados do Windows. O agente
-  sobe com `--use-system-ca`, que confia nesse repositório.
-- Rodando `node ... run` à mão, passe as duas opções você mesmo (exemplo na seção "Iniciar").
+- Proxy: set `HTTPS_PROXY` (and, if needed, `NO_PROXY`) for your user, for example
+  `setx HTTPS_PROXY http://proxy.company:8080`, open a new terminal and restart the agent. `ssam-agent.ps1` starts Node
+  with `--use-env-proxy`, which makes the agent use these variables.
+- If the company proxy refuses the connections of agent 0.2.1 and agent 0.2.0 worked, set `SSAM_AGENT_HTTP=fetch` for
+  your user (`setx SSAM_AGENT_HTTP fetch`), open a new terminal, restart the agent and tell the owner.
+- Company certificate (TLS inspection): install the company CA in the Windows certificate store. The agent starts with
+  `--use-system-ca`, which trusts that store.
+- When you run `node ... run` by hand, pass the two options yourself (example in the section "Start, stop and check").
 
-## Atualizar o agente (pacote novo)
+## Update the agent (new pack)
 
-Quando o dono manda um pacote novo (por exemplo, o da bridge ODC `v97`, compilada contra o ODC Studio 1.7.28):
+When the owner sends a new pack (for example, the one with the ODC bridge `v97`, compiled against ODC Studio 1.7.28):
 
 1. `C:\SSAM-Agent\agent\ssam-agent.ps1 stop`.
-2. Feche o ODC Studio (a bridge antiga fica carregada até ele fechar; a nova tem outro nome e outro pipe).
-3. Extraia o pacote novo POR CIMA da mesma pasta:
-   `Expand-Archive .\ssam-agent.zip -DestinationPath C:\SSAM-Agent -Force`. `private\` (configuração, credencial, chave),
-   `inbox\`, `odc\` e `o11\` ficam como estavam: o pacote não traz esses arquivos.
-4. `C:\SSAM-Agent\agent\ssam-agent.ps1 start` e `node C:\SSAM-Agent\agent\ssam-agent.mjs doctor`.
-5. Abra o ODC Studio normalmente e, no seu cliente MCP, chame `ssam_doctor`: `agent.agentVersion` mostra `0.2.0` e a
-   faixa ODC fica `ok`. Depois, `studio_attach` (ou `ssam_connect {lane:"odc"}`) carrega a bridge nova.
+2. Close the ODC Studio (the old bridge stays loaded until it closes; the new one has another name and another pipe).
+3. Extract the new pack OVER the same folder:
+   `Expand-Archive .\ssam-agent.zip -DestinationPath C:\SSAM-Agent -Force`. `private\` (configuration, credential, key),
+   `inbox\`, `odc\` and `o11\` stay as they were: the pack does not carry those files.
+4. `C:\SSAM-Agent\agent\ssam-agent.ps1 start` and `node C:\SSAM-Agent\agent\ssam-agent.mjs doctor`.
+5. Open the ODC Studio normally and, in your MCP client, call `ssam_doctor`: `agent.agentVersion` shows the version of
+   the new agent and the ODC lane is `ok`. Then `studio_attach` (or `ssam_connect {lane:"odc"}`) loads the new bridge.
 
-Não rode o `setup` de novo: a credencial e o endereço do servidor continuam os mesmos. Um pacote velho com o servidor novo
-responde `AGENT_PACK_MISMATCH` (o `ssam_doctor` mostra as duas versões).
+Do not run `setup` again: the credential and the server address stay the same. An old pack with the new server answers
+`AGENT_PACK_MISMATCH` (`ssam_doctor` shows both versions).
 
-## Revogação e troca de credencial
+## Revocation and credential change
 
-- O dono revogou o seu token (ou ele venceu): o agente recebe o aviso e para em até 1 segundo (código 2); as chamadas do
-  cliente MCP recebem 403. Nada mais roda na sua máquina.
-- O dono trocou a credencial do agente (`agent-rotate`): o agente para (código 2, "rotated"). Rode o `setup` de novo com a
-  credencial nova (o resto da configuração continua) e depois `start`.
-- Outro agente com a mesma credencial iniciou: o primeiro para (código 3) para não disputar com o segundo.
+- The owner revoked your token (or it expired): the agent gets the notice and stops within 1 second (code 2); the calls
+  of the MCP client get 403. Nothing else runs on your machine.
+- The owner replaced the agent credential (`agent-rotate`): the agent stops (code 2, "rotated"). Run `setup` again with
+  the new credential (the rest of the configuration stays) and then `start`.
+- Another agent with the same credential started: the first one stops (code 3) so as not to compete with the second.
 
-## Desinstalar
+## Uninstall
 
-`C:\SSAM-Agent\agent\ssam-agent.ps1 stop` e apague a pasta. Uma bridge já carregada fica no Studio aberto até ele fechar.
+`C:\SSAM-Agent\agent\ssam-agent.ps1 stop` and delete the folder. A bridge already loaded stays in the open Studio until
+it closes.

@@ -1,5 +1,5 @@
 {
- "description": "A outra recusa do move: nem tudo o que esta dentro de um pai tem ORDEM de autor. As screen actions de uma tela sao listadas pelo proprio Studio, nao por uma sequencia do modelo, e por isso nao ha ordem para mudar. A mensagem diz isso e lista as sequencias que aquele pai tem de facto, para o job saber o que pode reordenar. O caminho limpo (atributos, widgets, parametros de entrada e variaveis de tela) esta em tests/jobs/refactor-move.json.",
+ "description": "The other refusal of the move: not everything inside a parent has an author ORDER. The screen actions of a screen are listed by Studio itself, not by a sequence of the model, so there is no order to change. The message says that and lists the sequences the parent actually has, so the job knows what it can reorder. The clean path (attributes, widgets, input parameters and screen variables) is in tests/jobs/refactor-move.json.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectError": [

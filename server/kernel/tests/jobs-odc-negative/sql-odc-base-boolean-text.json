@@ -1,5 +1,5 @@
 {
- "description": "ODC: regras PostgreSQL decididas pelo tipo de um atributo da BASE. {WfCovTask}.[IsDone] e Boolean e e comparado com 1 (o bit do SQL Server aceitava; o PostgreSQL nao tem boolean = integer) e {WfCovTask}.[Title] e Text somado com '+' (o PostgreSQL concatena com || ou CONCAT). O job sozinho nao sabe os tipos: o preflight deixa os nomes em unresolvedSql e o CheckBase recusa contra a base carregada, antes da primeira mutacao. Roda em OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane.",
+ "description": "ODC: PostgreSQL rules decided by the type of an attribute of the BASE. {WfCovTask}.[IsDone] is Boolean and is compared with 1 (the SQL Server bit accepted it; PostgreSQL has no boolean = integer) and {WfCovTask}.[Title] is Text added with '+' (PostgreSQL concatenates with || or CONCAT). The job alone does not know the types: the preflight leaves the names in unresolvedSql and the CheckBase refuses against the loaded base, before the first mutation. Runs in OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane.",
  "base": "job:data-full-model",
  "expectValid": true,
  "expectError": [

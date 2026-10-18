@@ -2,6 +2,7 @@
 // the same texts alike. The texts are the friction report's real ones (match-other of the store): the SDK's input
 // validation, the debugger's debug_* reasons, the discovery index mismatch, a lost ODC bridge pipe, the doctor's ok:false,
 // a CLI exception line. I9: warnings/warningsTotal travel in the delivery answers. Pure functions, no Studio.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { shapeToolResult, withRefusalCode, compactDelivery, DELIVERY_FIELDS } from '../responses.mjs';
@@ -74,7 +75,7 @@ test('without a known text: the step the answer names, then the tool; uncertain 
   assert.equal(withRefusalCode('o11_deliver', coded), coded);
   const jsonRpc = { ok: false, error: { code: 'BRIDGE_TIMEOUT', message: 'x' } };
   assert.equal(withRefusalCode('o11_inspect', jsonRpc), jsonRpc);
-  const success = { ok: true, result: 'entregue' };
+  const success = { ok: true, result: 'delivered' };
   assert.equal(withRefusalCode('o11_deliver', success), success);
   assert.equal(refusalCode({ value: { ok: false, error: 'nothing known' } }), null, 'without a tool (the store): no invented code');
   for (const [tool, text] of REAL) assert.ok(CODE.test(refusalCode({ tool, value: { error: text } })), text);
@@ -121,11 +122,11 @@ test('debug_<x> becomes a code only in the answer of a debugger tool; elsewhere 
   for (const tool of ['odc_read', 'ssam_debugx', 'debugger', 'studio_debug', '', null]) assert.equal(isDebugTool(tool), false, String(tool));
 });
 
-test('warnings and warningsTotal travel in the delivery answer (I9), on "entregue" and on a refusal', () => {
+test('warnings and warningsTotal travel in the delivery answer (I9), on "delivered" and on a refusal', () => {
   assert.ok(DELIVERY_FIELDS.includes('warnings') && DELIVERY_FIELDS.includes('warningsTotal'));
   const warnings = Array.from({ length: 20 }, (_, i) => ({ id: 'UnusedVariable', path: 'Screen' + i + '/Var', detail: 'unused', fix: 'remova o elemento ou use-o' }));
-  const merged = compactDelivery('studio_deliver', { module: 'Quiz' }, { ok: true, merged: true, strictlyEqual: true, result: 'entregue', warnings, warningsTotal: 25, steps: [1] });
-  assert.equal(merged.result, 'entregue'); assert.equal(merged.warnings.length, 20); assert.equal(merged.warningsTotal, 25);
+  const merged = compactDelivery('studio_deliver', { module: 'Quiz' }, { ok: true, merged: true, strictlyEqual: true, result: 'delivered', warnings, warningsTotal: 25, steps: [1] });
+  assert.equal(merged.result, 'delivered'); assert.equal(merged.warnings.length, 20); assert.equal(merged.warningsTotal, 25);
   const refused = compactDelivery('studio_deliver', {}, { ok: false, code: 'PREFLIGHT_REFUSED', error: 'x', warnings: warnings.slice(0, 2) });
   assert.equal(refused.warnings.length, 2);
 });

@@ -2,6 +2,7 @@
 // (accounting, contract rules, the four layers kept apart) and through the PUBLIC discovery entry on both lanes
 // (selection, focus per role, evidence per role and lane, measured refusals, the Traditional context only on O11, the
 // widget -> event -> action binding, the hard byte budget, expansions). Index checks need the lane CLI and skip otherwise.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';
@@ -132,11 +133,34 @@ test('"input" is not read as "form" on either lane: a text input intent reaches 
   }
 });
 
-test('the composite form intent of the regression still keeps contracts, examples and dependencies inside the default budget', { skip: !odcCli && 'anvil-odc CLI not built', timeout: 240000 }, async () => {
-  const a = await discover({ lane: 'odc', intent: 'formulário com dropdown pesquisável, carregar dados e salvar', sources: odc });
+test('the composite form regression keeps contracts, examples and dependencies at its original engine budget, with the new default still bounded', { skip: !odcCli && 'anvil-odc CLI not built', timeout: 240000 }, async () => {
+  const request = { lane: 'odc', intent: 'formulário com dropdown pesquisável, carregar dados e salvar', sources: odc };
+  const first = await discover(request);
+  assert.equal(first.ok, true);
+  assert.equal(first.size.budgetBytes, DEFAULT_BUDGET_BYTES);
+  assert.equal(first.size.bytes, Buffer.byteLength(JSON.stringify(first), 'utf8'));
+  assert.ok(wireBytes(first, { budgetBytes: DEFAULT_BUDGET_BYTES }) <= DEFAULT_BUDGET_BYTES);
+  // The smaller default may compact dependency metadata; it must still keep the
+  // contracts/examples, dependency identities and exact executable recovery.
+  assert.ok(!first.size.truncated.some(t => ['contracts', 'examples'].includes(t.section)), JSON.stringify(first.size.truncated));
+  const cut = first.size.truncated.find(t => t.section === 'matches.dependencies');
+  if (cut) {
+    assert.equal(cut.call?.tool, 'ssam_discover');
+    assert.equal(cut.call.arguments.lane, request.lane);
+    assert.equal(cut.call.arguments.intent, request.intent);
+    assert.ok(Number.isInteger(cut.call.arguments.budgetBytes) && cut.call.arguments.budgetBytes > DEFAULT_BUDGET_BYTES);
+  }
+  // 40960 was this semantic regression's implicit engine budget before CX11.
+  // Keep its complete original assertion; B5 covers the shared MCP output ceiling.
+  const a = await discover({ ...request, budgetBytes: 40960 });
   assert.ok(!a.size.truncated.some(t => ['contracts', 'examples', 'matches.dependencies'].includes(t.section)), JSON.stringify(a.size.truncated));
   for (const id of ['ui.form', 'ui.dropdown-search']) assert.ok(direct(a).includes(id));
   assert.ok(!direct(a).includes('ui.input'), 'the value widgets do not answer a form intent that names no widget');
+  assert.deepEqual(direct(first), direct(a), 'the default budget keeps the same selected capabilities');
+  const dependencies = answer => answer.matches.filter(m => m.via === 'dependency').map(m => ({
+    id: m.id, level: m.level, route: m.route, requiredBy: m.requiredBy, conditions: m.conditions,
+  }));
+  assert.deepEqual(dependencies(first), dependencies(a), 'the default keeps dependency identities, evidence, routes and conditions');
 });
 
 test('the form pattern answers the same way on both lanes: a direct match that reaches the save and screen actions of front A as dependencies; O11 cites its own stamped job', { skip: (!odcCli || !o11Cli) && 'lane CLI not built', timeout: 240000 }, async () => {

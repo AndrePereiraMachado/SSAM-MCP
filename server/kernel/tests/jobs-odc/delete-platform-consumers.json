@@ -1,8 +1,8 @@
 {
- "description": "ODC: APAGAR, sem force, elementos cujos consumidores a plataforma mantem sozinha (cobertura testada, fase 2): o IArgument com que o no SQL passa o parametro que ele mesmo declara, a propriedade OnBeforeRequestCallback do cliente REST e a OnRequestCallback do REST exposto (o plugin limpa-as quando o callback sai), o IDecisionOutcomeNode de cada conector de uma Decision (a plataforma regenera o fluxo interno da decisao) e a DefaultScreen do modulo (o InsuranceApp nao tem tela padrao, a primeira tela criada headless fica com esse papel; o Studio apaga a tela e deixa so o aviso 'Unknown Default Screen', que o job resolve escolhendo a nova tela padrao). Antes todos recusavam o delete. Mesmo cenario na faixa O11: tests/jobs/delete-platform-consumers.json e tests/jobs/delete-default-screen.json.",
+ "description": "ODC: DELETE, without force, elements whose consumers the platform maintains on its own (tested coverage, phase 2): the IArgument with which the SQL node passes the parameter it declares itself, the OnBeforeRequestCallback property of the REST client and the OnRequestCallback of the exposed REST (the plugin clears them when the callback goes away), the IDecisionOutcomeNode of each connector of a Decision (the platform regenerates the decision's internal flow) and the module's DefaultScreen (InsuranceApp has no default screen, the first screen created headless takes that role; Studio deletes the screen and leaves only the warning 'Unknown Default Screen', which the job resolves by choosing the new default screen). Before, all of them refused the delete. Same scenario in the O11 lane: tests/jobs/delete-platform-consumers.json and tests/jobs/delete-default-screen.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / DelPlatQuery (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / DelPlatQuery (ServerAction)", "why": "ODC: an app (CrossDevice) does not expose a public server action (the live Studio gives an error); the action stays private and without a consumer in this proof job"}],
  "ops": [
   {"op": "spec", "data": {"structures": [{"name": "DelPlatRow", "attributes": [{"name": "Title", "type": "Text"}]}]}},
   {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "DelPlatQuery", "as": "$act"},
@@ -14,7 +14,7 @@
   {"op": "link", "from": "$s", "to": "$sql"},
   {"op": "link", "from": "$sql", "to": "$e"},
   {"op": "create", "parent": "$sql", "type": "ISQLInputParameter", "name": "Unused", "as": "$param"},
-  {"op": "usages", "target": "$param", "_why": "count 1, real 0: o IArgument do proprio no SQL, derived true"},
+  {"op": "usages", "target": "$param", "_why": "count 1, real 0: the IArgument of the SQL node itself, derived true"},
   {"op": "delete", "target": "$param"},
 
   {"op": "create", "parent": "@espace", "type": "IRestClient", "name": "DelPlatApi", "as": "$api"},
@@ -22,7 +22,7 @@
   {"op": "create", "parent": "$api", "type": "IRestAction", "name": "DelPlatGet", "as": "$get"},
   {"op": "set", "target": "$get", "prop": "URLPath", "value": "/items"},
   {"op": "create", "parent": "$api", "type": "IRestCallbackActionFlow", "name": "DelPlatCallback", "as": "$callback"},
-  {"op": "usages", "target": "$callback", "_why": "count 1, real 0: CustomProperty OnBeforeRequestCallback do proprio cliente, derived true"},
+  {"op": "usages", "target": "$callback", "_why": "count 1, real 0: CustomProperty OnBeforeRequestCallback of the client itself, derived true"},
   {"op": "delete", "target": "$callback"},
 
   {"op": "create", "parent": "@espace", "type": "IRestService", "name": "DelPlatRest", "as": "$svc"},
@@ -30,7 +30,7 @@
   {"op": "set", "target": "$post", "prop": "HTTPMethod", "value": "POST"},
   {"op": "link", "from": "$post/#IStartNode", "to": "$post/#IEndNode"},
   {"op": "create", "parent": "$svc", "type": "IRestServiceCallbackActionFlow", "name": "DelPlatOnRequest", "as": "$onRequest"},
-  {"op": "usages", "target": "$onRequest", "_why": "count 1, real 0: CustomProperty OnRequestCallback do proprio servico, derived true"},
+  {"op": "usages", "target": "$onRequest", "_why": "count 1, real 0: CustomProperty OnRequestCallback of the service itself, derived true"},
   {"op": "delete", "target": "$onRequest"},
 
   {"op": "create", "parent": "@espace", "type": "IProcess", "name": "DelPlatProcess", "as": "$proc"},
@@ -42,16 +42,16 @@
   {"op": "link", "from": "$ps", "to": "$dec"},
   {"op": "create", "parent": "$dec", "type": "IDecisionConnector", "name": "Approved", "args": {"target": "$pe"}, "as": "$yes"},
   {"op": "create", "parent": "$dec", "type": "IDecisionConnector", "name": "Rejected", "args": {"target": "$pe2"}, "as": "$no"},
-  {"op": "usages", "target": "$no", "_why": "count 1, real 0: o IDecisionOutcomeNode gerado para o conector, derived true"},
-  {"op": "delete", "target": "$no", "_why": "sem force: a plataforma refaz o fluxo da decisao so com Approved"},
-  {"op": "delete", "target": "$pe2", "_why": "o End do ramo que saiu ficou sem conector de entrada"},
+  {"op": "usages", "target": "$no", "_why": "count 1, real 0: the IDecisionOutcomeNode generated for the connector, derived true"},
+  {"op": "delete", "target": "$no", "_why": "without force: the platform rebuilds the decision flow with only Approved"},
+  {"op": "delete", "target": "$pe2", "_why": "the End of the branch that was removed was left without an incoming connector"},
 
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DelDefaultOld", "as": "$old"},
   {"op": "set", "target": "$old/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DelDefaultNew", "as": "$new"},
   {"op": "set", "target": "$new/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
-  {"op": "usages", "target": "$old", "_why": "count 1, real 0: o IESpace (DefaultScreen), derived true, caminho 'IESpace:InsuranceApp'"},
+  {"op": "usages", "target": "$old", "_why": "count 1, real 0: the IESpace (DefaultScreen), derived true, path 'IESpace:InsuranceApp'"},
   {"op": "delete", "target": "$old"},
-  {"op": "set", "target": "@espace", "prop": "DefaultScreen", "value": "$new", "_why": "sem isto fica o aviso 'Unknown Default Screen' no ESpace, num caminho de um nivel que o expectedMessages nao declara"}
+  {"op": "set", "target": "@espace", "prop": "DefaultScreen", "value": "$new", "_why": "without this the warning 'Unknown Default Screen' stays on the ESpace, at a one-level path that expectedMessages does not declare"}
  ]
 }

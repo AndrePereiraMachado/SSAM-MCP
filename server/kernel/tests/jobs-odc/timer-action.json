@@ -1,5 +1,5 @@
 {
- "description": "ODC (cobertura T): TIMER, o tipo que nunca tinha passado pela faixa ODC. Espelha o bloco de ITimer de tests/jobs/tickets-06-sla.json (Action + Description) e acrescenta o que so o ODC tem: CronSchedule, TimeoutInMinutes e o filho ScheduleConfiguration (ISchedule, com ScheduleItems tipados), que no SS11 nao existem - la o agendamento e so a string Schedule. A server action agendada le WfCovTask e conta as que estao por fazer.",
+ "description": "ODC (T coverage): TIMER, the type that had never passed through the ODC lane. Mirrors the ITimer block of tests/jobs/tickets-06-sla.json (Action + Description) and adds what only ODC has: CronSchedule, TimeoutInMinutes and the child ScheduleConfiguration (ISchedule, with typed ScheduleItems), which do not exist in SS11 - there the scheduling is only the string Schedule. The scheduled server action reads WfCovTask and counts those that are pending.",
  "base": "job:data-full-model",
  "expectValid": true,
  "expectedMessages": [],
@@ -25,12 +25,12 @@
   {"op": "create", "parent": "@espace", "type": "ITimer", "name": "WfCovOverdueSweep", "as": "$timer"},
   {"op": "set", "target": "$timer", "prop": "Action", "value": "IServerAction:WfCovTask_SweepOverdue"},
   {"op": "set", "target": "$timer", "prop": "Description", "value": "Cobertura T: varre tarefas vencidas de madrugada"},
-  {"op": "set", "target": "$timer", "prop": "CronSchedule", "value": "15 3 * * *", "_why": "cron de CINCO campos (minuto hora diaDoMes mes diaDaSemana); com seis campos o ODC recusa: 'Invalid cron expression provided'"},
+  {"op": "set", "target": "$timer", "prop": "CronSchedule", "value": "15 3 * * *", "_why": "FIVE-field cron (minute hour dayOfMonth month dayOfWeek); with six fields ODC refuses: 'Invalid cron expression provided'"},
   {"op": "set", "target": "$timer", "prop": "TimeoutInMinutes", "value": 20},
   {"op": "set", "target": "$timer", "prop": "Priority", "value": "Normal"},
 
-  {"op": "get", "target": "$timer", "_why": "prova Action, Description, CronSchedule e TimeoutInMinutes no mesmo objeto"},
-  {"op": "dump", "target": "$timer", "depth": 3, "_why": "prova o filho ScheduleConfiguration (ISchedule) com os ScheduleItems: a parte que o SS11 nao tem"},
-  {"op": "usages", "target": "IServerAction:WfCovTask_SweepOverdue", "_why": "prova que o timer conta como consumidor da action (por isso nao ha UnusedUserAction)"}
+  {"op": "get", "target": "$timer", "_why": "proves Action, Description, CronSchedule and TimeoutInMinutes on the same object"},
+  {"op": "dump", "target": "$timer", "depth": 3, "_why": "proves the child ScheduleConfiguration (ISchedule) with the ScheduleItems: the part that SS11 does not have"},
+  {"op": "usages", "target": "IServerAction:WfCovTask_SweepOverdue", "_why": "proves that the timer counts as a consumer of the action (so there is no UnusedUserAction)"}
  ]
 }

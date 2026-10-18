@@ -39,7 +39,7 @@ async function serve(t, deps) {
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
   t.after(async () => { await client.close(); await server.close(); });
   return args => client.callTool({ name: 'o11_deliver', arguments: args })
-    .then(reply => reply.structuredContent ?? JSON.parse(reply.content[0].text === 'entregue' ? '{"ok":true,"result":"entregue"}' : reply.content[0].text));
+    .then(reply => reply.structuredContent ?? JSON.parse(reply.content[0].text === 'delivered' ? '{"ok":true,"result":"delivered"}' : reply.content[0].text));
 }
 
 // The fake bridge: answers close_module and records it.
@@ -56,7 +56,7 @@ function setup(t, { state = {}, publish, extra = {} } = {}) {
   const published = [];
   const downloads = [];
   const deps = { root: box.root, env: box.env, lane: 'ss4', now: box.now, runAnvil, assertSelected: async () => {}, bridge,
-    lastPublication: async () => null, publish: async input => { published.push(input); return publish ?? { ok: true, result: 'publicado' }; },
+    lastPublication: async () => null, publish: async input => { published.push(input); return publish ?? { ok: true, result: 'published' }; },
     downloadPublished: async module => { downloads.push(module); const file = path.join(box.root, '.local', 'environment', 'download', 'x', module + '.oml'); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'oml'); return { ok: true, file, cached: true }; },
     ...extra };
   return { ...box, runAnvil, bridge, published, downloads, deps };
@@ -124,7 +124,7 @@ test('K1-g: without a publication the kernel closes the tab (--close-opened-tab)
 test('K1-g: with publish:true the tab the delivery opened is closed once after the publication; an already open tab never', async t => {
   const opened = setup(t, { state: { open: { opened: true, alreadyOpen: false } } });
   const value = await (await serve(t, opened.deps))({ module: 'Orders', job: opened.job('p.json', { ops: [{ op: 'get', target: 'X:Y' }] }), publish: true, authorize: WORDS });
-  assert.equal(value.ok, true); assert.equal(value.result, 'entregue e publicado');
+  assert.equal(value.ok, true); assert.equal(value.result, 'delivered and published');
   assert.equal(value.closedTab, true);
   const closes = opened.bridge.calls.filter(c => c.method === 'close_module');
   assert.equal(closes.length, 1);
@@ -145,6 +145,6 @@ test('K1-g: with publish:true the tab the delivery opened is closed once after t
 test('I8: the publication\'s own code reaches the answer (PUBLISH_BLOCKED_BY_DIALOG), the outcome code otherwise', async t => {
   const blocked = setup(t, { publish: { ok: false, outcome: 'failed', code: 'PUBLISH_BLOCKED_BY_DIALOG', error: 'Manage Dependencies is open in the Studio.' } });
   const value = await (await serve(t, blocked.deps))({ module: 'Orders', job: blocked.job('b.json', { ops: [{ op: 'get', target: 'X:Y' }] }), publish: true, authorize: WORDS });
-  assert.equal(value.result, 'entregue'); assert.equal(value.code, 'PUBLISH_BLOCKED_BY_DIALOG');
+  assert.equal(value.result, 'delivered'); assert.equal(value.code, 'PUBLISH_BLOCKED_BY_DIALOG');
   assert.equal(blocked.bridge.calls.filter(c => c.method === 'close_module').length, 0, 'the tab stays when the publication did not end');
 });

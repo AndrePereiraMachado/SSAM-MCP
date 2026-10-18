@@ -69,9 +69,49 @@ sintéticas do aceite).
 | `<os-opaque k kind name>` | tipo sem linha na tabela: intocável. Tabela (`TableRecords`, `HeaderCell`, `RowCell`) e `MobileWidget` mantêm os widgets das células dentro; Traditional Web (D2) esconde a subárvore inteira |
 
 O que não é fato da página (chaves, contabilidade, posição no canvas, valores derivados) não é escrito; a lista está em
-`ScreenHtml.Contract()["notFacts"]`. Propriedade no padrão não é escrita e ausente lê como o padrão
-(`Contract()["defaults"]`, medidos no corpus). Nada é descartado em silêncio: o que a leitura não sabe colocar vira
-problema do documento e conta contra o ponto fixo.
+`ScreenHtml.Contract()["notFacts"]`. Propriedade no padrão não é escrita e ausente lê como o padrão. Nada é descartado em
+silêncio: o que a leitura não sabe colocar vira problema do documento e conta contra o ponto fixo.
+
+O padrão é o do Studio instalado, nunca uma tabela (`ScreenDefaults`, desde o extractor 5; por fluxo de UI desde o 6). O kernel cria, numa cópia
+descartável do próprio módulo lido, um fluxo de UI novo e nele um elemento novo de cada tipo (tela, bloco, widgets, dados,
+partes do aggregate; de novo dentro de um Popup) pelo mesmo create do escritor e lê o que ele nasce (`StudioBornValues`).
+Fluxo que não aceita tela (library) mede num bloco. É padrão o que é configuração: booleano,
+membro de enumeração, número, expressão que é um literal Boolean (Visible `True`), texto escrito como `os-<Propriedade>`
+(Width `(fill parent)`, Gap `8px`) e a tag do elemento. Nome, classe e outras expressões (Style `"btn"`, Max Records
+`50`), texto que a tabela de elementos nomeia (ícone) e o texto do elemento nunca são padrão.
+
+The exception is an attribute of the language: what it means when it is left out is the language's, never the Studio's,
+so a Studio update never changes what a text means (`ScreenDefaults.LanguageDefault`, listed in `Contract(defaults)`):
+`mandatory` of an `<input>` (screen or block) and of a block `<event>` is `False`, `required` of an input widget is `False`,
+`enabled` is `True`, `size` of an `<i>` is `FontSize` and the join of an aggregate (`join=` of the short form, an `os-Join`
+without `os-JoinType`) is `Left`. Where the Studio gives a fresh element another value (ODC Studio 1.7.28.10873 and Service
+Studio 11.55.87 create inputs and block events mandatory, an Icon `Twotimes` and a Join `Inner`), the writer sets the
+language's value and the reading writes the attribute only when it holds another one (`mandatory="True"`, `size="Twotimes"`,
+`os-JoinType="Inner"`).
+
+O que um elemento novo nasce depende do Studio, **do módulo e do tema do fluxo de UI da página**: o tipo do módulo e o grid
+do tema decidem parte (página de um fluxo cujo tema não tem grid nasce `GridType No` e sem `MarginLeft Adaptive`; o Upload de
+um app Mobile nasce `Accept Image`). Por isso cada página lê com os padrões do **seu** fluxo, e a medida vale para um Studio e
+um contexto (`StudioDefaults.ContextOf`: todo booleano, enumeração e número que o Model API do módulo declara, o tipo entre
+eles, e os do tema das páginas do fluxo, o `Theme` do fluxo ou senão o tema padrão do módulo, e de cada tema em que ele se
+baseia, ou "sem tema"). Nada mais do fluxo entra: os testes medem cada fluxo do módulo nele mesmo e num fluxo novo do seu
+contexto, e nascem iguais. A medida é feita sempre no mesmo lugar: num fluxo novo da cópia, com o tema do contexto (o tema
+padrão: `Theme` vazio; outro tema: o mesmo da cópia, pela chave; tema que um job criou depois dos bytes: um tema novo da cópia
+com as configurações e a base dele). Nunca num fluxo do módulo: o Model API dá os fluxos numa ordem diferente a cada load. O
+contexto do fluxo novo é conferido com o pedido, fato a fato; se a cópia não o toma, sem padrões e o motivo. Assim o mesmo
+módulo lê sempre o mesmo texto, e o primeiro fluxo ou módulo medido nunca decide por outro contexto. A medida fica por
+identidade do Studio (plataforma, versão, receita e SHA-256 de cada assembly
+`OutSystems.*`/`ServiceStudio*` da pasta do Studio e das subpastas, plugins incluídos) e contexto, por usuário em
+`%USERPROFILE%\.ssam-hybrid\studio-defaults\<plataforma>\studio-defaults.<identidade>.<contexto>.json`
+(`SSAM_STUDIO_DEFAULTS_ROOT` troca a raiz): um Studio que se atualiza é medido de novo na primeira leitura de tela de cada
+contexto (segundos, uma vez). O job mede os contextos dos fluxos da base (e de um fluxo novo) antes do comando; um fluxo a
+que o job dá um tema próprio (o do importador de protótipo) é medido quando a primeira página dele é escrita. O hash de um
+assembly só é reaproveitado com o mesmo tamanho, datas de escrita e criação e a
+data de mudança do NTFS; processo cujo Studio carregado não é o do disco (MVID) mede para si e não grava.
+
+Módulo em que o Studio não cria página (serviço, agente): sem padrões. A leitura diz o motivo em cada documento (`defaults`)
+e as escritas (documento e edição) recusam com `HTML_STUDIO_DEFAULTS` e o motivo, antes de tocar o modelo. Nunca caem em
+"tudo vazio" em silêncio. `Contract(defaults)` lista os padrões medidos, o contexto e o motivo; sem Studio, só a regra.
 
 ## Nomes
 
@@ -227,11 +267,11 @@ Problemas: `EDIT_ELEMENT_UNKNOWN` (com os elementos que o job tem), `EDIT_TEXT_N
 
 ## Checagem estática (CX16)
 
-**Desligada por padrão desde a 4ª rodada (plano B, acordado com o dono):** a pré-checagem de UI só roda com
-`SSAM_UI_PRECHECK=1` (ou `on`, `true`). Desligada, toda chamada segue como antes do CX16. A revisão cx16-3 (M3) mostrou que,
-com o worker residente (o padrão), o `check-job` entra na mesma fila do apply. O paralelo vira série, e com um apply de mais
-de ~12 s o `check-job` estoura na fila e a recusa sai sem os problemas estáticos. A edição por elemento (`data.edits`,
-acima) não depende da pré-checagem e continua ligada. O que segue descreve a pré-checagem ligada.
+**Ligada por padrão de novo no fim da 4ª rodada** (o plano B, `e894f3ed`, a desligou até a correção da M3 do worker,
+`b6e8c45c`). `SSAM_UI_PRECHECK=0` (ou `off`, `false`) a desliga, e então toda chamada segue como antes do CX16. A revisão cx16-3 (M3) mostrou que,
+com o worker residente (o padrão), o `check-job` da 3ª rodada entrava na mesma fila do apply. O paralelo virava série, e com um apply de
+mais de ~12 s o `check-job` estourava na fila e a recusa saía sem os problemas estáticos. A edição por elemento (`data.edits`,
+acima) não depende da pré-checagem. A correção está no fim desta seção (4ª rodada).
 
 Antes de qualquer etapa de Studio (`o11_deliver`, relay do `studio_deliver`) e antes do apply (`ssam_job`, `o11_job`,
 `ssam_code check`), um job de telas ou blocos passa pelo `check-job` da faixa com o índice do módulo
@@ -274,9 +314,22 @@ veredito (o build rodou enquanto isso) e para ali — `{code:"PREFLIGHT_REFUSED"
 problems, static, nextBasedOn, continuation}`; quando toda correção é certa (`edit:{element, find, with}` em cada problema),
 a continuação é UM `ssam_code` com `basedOn {job, sha256}` e as edições; senão, a leitura do primeiro elemento. Um job
 headless e o relay ODC são o próprio caminho do apply: mesmo com `complete`, juntam. Se o apply aceita, os erros estáticos
-não eram prova: só o diário `ui-precheck.jsonl` os guarda. Aviso nunca para. Sem `SSAM_UI_PRECHECK=1` (o padrão desde a 4ª rodada) não há pré-checagem;
-com ela, `SSAM_UI_PRECHECK_STOP=error` volta à regra da 1ª rodada (qualquer erro recusa antes do apply, em série; opcional, nunca o
+não eram prova: só o diário `ui-precheck.jsonl` os guarda. Aviso nunca para. `SSAM_UI_PRECHECK=0` desliga a pré-checagem;
+com ela ligada, `SSAM_UI_PRECHECK_STOP=error` volta à regra da 1ª rodada (qualquer erro recusa antes do apply, em série; opcional, nunca o
 padrão).
+
+**4ª rodada (M3 da revisão cx16-3: o worker residente, que é o padrão).** O worker da faixa O11 executa um pedido por
+vez. O apply do `runJob`, o runner do ciclo e o slot 0 do build vão todos para ele. Por isso:
+- no modo paralelo, o `check-job` nunca entra nessa fila. Com o worker ligado, roda num processo próprio (`createAnvilRunner`,
+  frio); com `ANVIL_WORKER=0`, todo runner já é um processo próprio. O `check-job` ODC sempre roda frio. Em série
+  (`SSAM_UI_PRECHECK_STOP=error`), usa o runner da faixa;
+- uma resposta aceita ou incerta (`runJob`, `o11_deliver`, relay) nunca espera o `check-job`, porque o `joinPrecheck` não a
+  mudaria; a linha do diário é gravada quando ele termina;
+- no `o11_deliver`, o passo do Studio só espera o veredito quando o build não aceitou um candidato. Um veredito `complete`
+  quer dizer que o kernel recusa toda op inteira pela forma, o que um candidato aceito desmente. A parada cedo continua só
+  com `complete`, antes de qualquer escrita;
+- um `check-job` que estoura o tempo fica `undecided` com o motivo em palavras ("gave no answer within N ms", e, no worker,
+  que ele executa um pedido por vez), nunca "exit 1".
 
 ## Garantias
 
@@ -371,8 +424,9 @@ O op `logic` pode ser o texto de lógica (`ssam-flow/1`, `docs/TEXTO-LOGICA.md`)
 nome (`action Pedidos.Buscar`, `data action Pedidos.GetTotais`). A forma JSON (`{"actions": [{"name": "Buscar", "kind":
 "screen", "owner": "IMobileScreen:Pedidos", "steps": [...]}]}`) continua valendo.
 
-- `data.html` começando por `<screen` ou `<block` (comentários antes valem) é a forma documento. Sem `parent`. A forma
-  fragmento (`parent` + html) e a forma página (`data.screen` + manifesto) continuam iguais.
+- `data.html` starting with `<screen` or `<block` (comments before it are allowed) is the document form, without `parent`. The
+  fragment form (`parent` + html) and the page form (`data.screen` + manifest) remain. The class of a new widget (F2, below)
+  follows the rule in the fragment form, not in the page form.
 - O texto é o que `ssam_map view:"html"` lê: as mesmas tags, atributos, nomes e `os-<Propriedade>`. O contrato publicado está
   em `api --op html`, chave `document` (`ScreenDocument.Schema()`).
 - Uma tela ou bloco por op. O conteúdo vai no bloco de layout: `<Block name="LayoutTopMenu"><slot name="MainContent">`.
@@ -381,7 +435,10 @@ nome (`action Pedidos.Buscar`, `data action Pedidos.GetTotais`). A forma JSON (`
   inputs), para os eventos ligarem, e o op `logic` preenche o corpo no lugar, mantendo a chave e os inputs (o recibo diz
   `filledShell`). `data-actions="D"` vale com um texto `data action <Tela>.D` (ou um op `logic` de `kind` data), criado depois
   do documento.
-- Dados: `<input name type default>`, `<var name type default>` e `<aggregate>`. O aggregate tem a forma curta, que vira a
+- Dados: `<input name type default>`, `<var name type default>` e `<aggregate>`. An `<input>` without `mandatory` is not
+  mandatory, on a screen and on a block, and so is a block `<event>`, whatever the installed Studio gives a fresh one (ODC
+  Studio 1.7.28.10873 and Service Studio 11.55.87 create both mandatory): the writer sets Is Mandatory False, a mandatory one is
+  written `mandatory="True"`, and the reading writes `mandatory` only on a mandatory one (`ScreenDefaults.LanguageDefault`). O aggregate tem a forma curta, que vira a
   longa: `from="Pedido" join="StatusPedido on Pedido.StatusPedidoId = StatusPedido.Id" where="..." sort="Pedido.CriadoEm desc, Pedido.Numero" max="50"`.
   A forma longa da leitura (`os-AliasedSource`, `os-Join`, `os-Filter`, `os-Sort`) também é aceita. Entidade nova é sempre um
   `spec` antes; nome que não existe nunca cria entidade.
@@ -397,8 +454,19 @@ nome (`action Pedidos.Buscar`, `data action Pedidos.GetTotais`). A forma JSON (`
 O parser lê o texto e as regras sem módulo são verificadas. Depois o construtor cria tudo numa passada no Model API, com o pai
 na mão: raiz, dados, actions do job, widgets, alvos de label e eventos. Não há uma op por widget.
 
-Os nomes são resolvidos pelas regras da leitura: a própria tela, o módulo e as referências, as outras telas e os tipos. O que o
-texto não diz fica no padrão da tabela (`ScreenHtml.DefaultOf`), porque um widget novo nasce com valores próprios.
+The names are resolved by the rules of the reading: the screen itself, the module and its references, the other screens and the
+types. What the text does not say takes the default of the installed Studio (`ScreenDefaults`): a default the new widget already
+has (writing it changes nothing); anything else it is born with goes back to empty. One exception, the owner's decision D1 of
+2026-10-17 (F2, below): a new widget without `k` and without `class` keeps the class the Studio gives it (`form-control`,
+`popup-dialog`...) or its trimmed form (`btn`, `form`, `list`), said in `normalized` (`STYLE_STUDIO_CLASS_KEPT` /
+`STYLE_STUDIO_CLASS_TRIMMED`). The rule holds in these forms: the document, the edit of a reading (`html`, `edit` and `edits`)
+and the fragment into a `parent`. It does not hold in the page form (`data.screen` with a `data.html` that is not a document,
+no `basedOn`): there a new button keeps the class the Studio gives it, unsaid (`btn btn-primary` for the first button of the
+screen, `btn` for the others; that form refuses `<form>` and `<textarea>`). Outside the language, the native `create` verb and
+the scaffold of the `screen` op keep the class the Studio gives, and the prototype importer writes the prototype's class. In
+each of these forms an element with `k` keeps the class its text says and `class=""` is an empty class; the reading of a screen
+made in the Studio does not change. An attribute of the language left out takes the language's meaning instead (an `<input>`
+without `mandatory` is set Is Mandatory False, a `join=` is a left join).
 
 Documento recusado não deixa nada: a raiz é apagada e o op `logic` volta ao que o job dizia.
 
@@ -453,7 +521,7 @@ A sessão do `VisitaCerta_UI` (4 telas e um popup escritos à mão: 22 escritas,
 Cada defeito virou a sua família, corrigida por uma regra do motor, a mesma na forma documento e na forma edição, nas duas
 faixas, só sobre o que o texto escreve novo (elemento com `k` da leitura mantém o que tinha). Quando há uma leitura só, o
 motor escreve a forma nativa e lista em `normalized` (no relato do op e no da edição). Código: `ScreenHtmlNative.cs`,
-`ScreenHtml.Runs`, `ScreenHtml.DefaultOf(..., inPopup)` e `Verbs.NativeWidgets.cs`.
+`ScreenHtml.Runs`, `ScreenDefaults.DefaultOf(..., inPopup)` e `Verbs.NativeWidgets.cs`.
 
 - **`<svg>` inline vira elemento nativo.** Desenhado com `currentColor` ou com uma cor só (ícone): `<span>` com as classes do
   svg, `ssam-icon` e uma classe de máscara por desenho (`ssam-icon-svg-<hash>`, a máscara do importador: `mask:url("data:image/svg+xml,…")`
@@ -480,9 +548,9 @@ motor escreve a forma nativa e lista em `normalized` (no relato do op e no da ed
 - **Decimal em estilo inline.** O runtime transforma um valor numérico inline em inteiro (`opacity:0.7` saiu `opacity: 0`
   na página publicada, `font-size:11.5px` ficou). Valor que é número com fração (`opacity`, `line-height`, `flex`…) é
   escrito `calc(n)`: o mesmo valor para o CSS, que o runtime mantém (`STYLE_NUMBER`).
-- **Popup.** Todo evento de widget dentro de um Popup nasce com Transition `Fade` (a plataforma; no corpus não há evento
-  dentro de popup sem ele). Esse é o padrão ali: a leitura não escreve, a edição e o documento não estranham; um widget criado
-  ou movido para dentro (ou para fora) fica no padrão do lugar onde está.
+- **Popup.** Todo evento de widget dentro de um Popup nasce com a Transition que o Studio dá ali (`Fade` hoje; medido
+  dentro de um Popup novo, como os outros padrões). Esse é o padrão ali: a leitura não escreve, a edição e o documento não estranham; um widget
+  criado ou movido para dentro (ou para fora) fica no padrão do lugar onde está.
 - **Tema sem tema base.** Sem OutSystems UI, o span `.btn-animation` que todo clique de Button acrescenta não tem regra: não
   anima, nunca sai e, num botão flex com `gap`, cada clique o alarga. Todo tema que o job escreve (criado, `BaseTheme` ou
   `StyleSheet`, também o do importador) e que termina sem tema base recebe uma vez o CSS desses elementos, entre
@@ -523,7 +591,8 @@ forma documento; o módulo relido tem a construção nativa de cada uma e a leit
     O nome da linha (`n`) não sai como nome desconhecido: é o `HTML_FOREACH`.
   - `HTML_JSON`: `JSONSerialize`/`JSONDeserialize` em ligação (L6).
 - Também recusa: `HTML_RECORD_LITERAL` (record literal `{ A: x }` em expressão O11, que o parser do O11 não lê; o do ODC
-  lê), `HTML_ROOT_EXISTS` (a tela já existe), `HTML_KEY_FOREIGN`, `HTML_OPAQUE_TOUCHED` e `HTML_TRADITIONAL`.
+  lê), `HTML_ROOT_EXISTS` (a tela já existe), `HTML_KEY_FOREIGN`, `HTML_OPAQUE_TOUCHED`, `HTML_TRADITIONAL` e
+  `HTML_STUDIO_DEFAULTS` (o módulo não tem os padrões do Studio instalado; a mensagem diz por quê).
 - Elemento com `k` de uma leitura (`basedOn {capture, html}`) mantém o Visible, o JavaScript e o JSON que já tinha. Eles saem
   em `preserved[]` e nunca são recusados.
 - Num job parcial (`basedOn` + só o que mudou), o documento corrigido substitui o op do mesmo `<screen name>`
@@ -549,6 +618,72 @@ Testes:
   inteiro, com o piso de 95%, as causas conhecidas listadas em `corpus.json` (`recreation.known`) e a mediana do build. Sem
   as capturas, pulam com aviso.
 - Fachada: `platforms/odc/facade/tests/patch-por-nome.test.mjs` (identidade do documento num job parcial).
+
+### The native look of the document form (the DemoLATAM families, 2026-10-13/14)
+
+In the owner's DemoLATAM test, 15 pages came out with 14 visual defects in 7 families; 6 were born on the SSAM path. The
+document form fixes the families at compile time and warns about what belongs to the author, in one answer (`ScreenVisual*.cs`,
+`Verbs.ScreenDocument.Visual.cs`). The class (F2) is written on new elements only (no `k` of the reading), by one rule
+(`ScreenVisual.StudioClassOf`) in the document, the edit forms and the fragment (D1, 2026-10-17; not in the page form); the
+markers are decided on every widget the document compiles (review 3, below), and the recreation of the corpus changes nothing.
+The theme block belongs to the whole module, but each of its rules needs a marker the op writes on an element it created
+(`data-ssam-gap`, `data-ssam-page`, `data-ssam-rows`). So the other screens of the module (made in the Studio, imported or
+generated) keep their CSS (review 1, A1).
+
+The markers are the engine's (review 2, M4): one rule (`ScreenVisual.AuthorMarkers`) that the document form, the edit form
+(`html-edit`, also its module-free preflight) and the fragment form (`parent`) call. A marker the author writes (any case,
+`ext:` too) is `HTML_RESERVED_MARKER`, in the one refusal with every other problem, with the patch that removes it. An element
+with `k` may carry the marker its reading had (same name and value); a marker it was not read with is refused the same way, and
+the patch puts back the reading's value or removes it. A block never carries `data-ssam-page`, not even one copied with its `k`. The
+note `THEME_NATIVE_LAYOUT` measures what the block reaches: `otherRootsAffected` counts the other roots whose widgets carry a
+marker (or that place a block with the page marker), named in `otherRootsReached`. It is a sound bound read on the model: a root
+outside it carries no marker, and no rule of the block reaches it.
+
+The markers are derived state, never input (review 3, M6). The gap marker is the engine's decision on the parent of a link,
+button or form, made again whenever the element or its parent changes. The document form decides F1, F3 and F6 on every widget it
+compiles, with or without `k`: the marker the text of an element with `k` carries is not written as it is (a copy to another
+parent, a parent that lost its gap). The edit forms (`edit`, `html`, and the element edits) decide the gap marker again on every
+link, button and form of a screen of the op (its reading carries a marker): new, moved, or whose parent's space changed, also one
+the author dropped. A screen made in the Studio carries no marker and nothing is marked there. Each element with `k` whose marker
+is not the one of its text or of its reading is listed in `HTML_MARKER_DECIDED`, with why; the same parent gives the same decision.
+
+The block reaches a page only through the theme the page shows (review 3, M7): its flow's theme, else the module's default
+(`PageThemeOf`, the rule of the icon theme). The block goes there, and the `SpacingReader`, F1 and the checks read that theme and
+its bases of this module. A theme of another module (a producer's theme on the flow, or a default theme of another module) takes no
+block: no marker is written, `THEME_NATIVE_LAYOUT` says `written:false` and why, and a link in a gap parent says
+`GUTTER_ADDS_TO_GAP` (the gap and the runtime's gutter add up), never `GUTTER_ZEROED_IN_GAP` nor `PAGE_MARKED_FOR_LAYOUT`.
+
+A block has no page of its own (review 4, N1). It shows the themes of the screens that place it, directly or through another
+block (`RootThemeOf`, read on the model at every op). Its gap marker is decided on each of those themes: written when a theme of
+this module spaces the parent side by side, and the pages whose theme is of another module are named in the note
+(`pagesWithoutBlock`: there the marker has no effect). Two themes of this module that space the parent differently are
+`HTML_BLOCK_PAGES_DIVERGE`, in the one refusal: one marker cannot be right on both. A block that no screen places yet is decided on
+its own flow's theme, and the note says it (`unplaced`). A screen whose theme is of another module and that places a marked block
+names that block in `THEME_NATIVE_LAYOUT` `written:false` (`blocks`): its markers have no effect on that page. A change of the theme
+a page shows is decided again (review 4, N2): every edit of a page that carries markers (its own as the plan writes them, or a
+marked block it places) puts the block in every theme of this module the page shows now, said; where no theme the page shows
+carries the block, the edit removes the gap, page and rows markers, each in `HTML_MARKER_DECIDED`.
+
+| Family | What the engine does | Code |
+|---|---|---|
+| F2 default class | in the document, the edit of a reading (`html`/`edit`/`edits`) and the fragment into a `parent` (D1 of 2026-10-17; not the page form, where a new button keeps the class the Studio gives, unsaid), a new widget without `k` and without `class` keeps the class the Studio gives it (`form-control`, `dropdown`, `checkbox`, `radio-group`, `popup-dialog`). These lose the ornament or the emphasis: `form` without `card`, `list` without `list-group` and `btn` without `btn-primary`. Before, the reset wrote the empty expression and the runtime published `"form-control"` between quotes | `normalized` `STYLE_STUDIO_CLASS_KEPT` / `STYLE_STUDIO_CLASS_TRIMMED` |
+| F1 list in a table or grid | a new List of `thead`/`tbody`/`tfoot`/`ul`/`ol`, or whose element is a grid or flex box by the CSS, gets `disable-virtualization` (never twice) and the marker `data-ssam-rows` | `normalized` `LIST_RENDERS_ALL_ROWS` |
+| F3/F6 margin and layout | The theme the page shows carries `/* ssam:native-layout */` (version 3), and it acts on marked elements only: (1) the runtime's gutter is zeroed only on a new link, button or form after a neighbor whose parent already spaces its items side by side: a flex or grid parent whose column gap is not 0 (`column-gap`, or the second value of `gap`, the first when there is one; the declaration that wins by the cascade). `ScreenVisual.SpacingReader` is the one reading of it, per axis, over OutSystems UI's `display-*`, `gap-*`, `row-gap-*` and `column-gap-*` (a table taken from the fixture), the theme and the page. The rules without a condition decide; a `@media`/`@supports` under which the parent spaces its items otherwise is listed in the note's `conditions`. A row gap alone, `gap:16px 0` or `column-gap:0` keep the gutter, which is then the only spacing, as in the gen-screen's `display-flex` row of buttons (review 2, M5); (2) `min-width:0` goes to the `.layout` chain of a marked page: only a screen the op created carries the page marker, never a block (a block goes on pages the op did not create); (3) a marked table List becomes a row group. Every document says what it did, in every job | `normalized` `THEME_NATIVE_LAYOUT` (`otherRootsAffected` measured), `GUTTER_ZEROED_IN_GAP` (with `gaps`), `GUTTER_KEPT` (count = gutters; both with `conditions`), `GUTTER_ADDS_TO_GAP`, `PAGE_MARKED_FOR_LAYOUT`, `HTML_MARKER_DECIDED`; refusal `HTML_RESERVED_MARKER` |
+| F4 wrappers | warning: a selector that does not reach the runtime element (a wrapper in between, the span of `{{ }}`, a flex item that is the wrapper, a control OutSystems UI styles with a stronger selector, a checkbox drawn by a pseudo-element) | `HTML_SELECTOR_MISSES_RUNTIME` |
+| F5 tokens | warning: an OutSystems UI token declared outside `:root`; the patch adds the named part `brand-tokens` | `HTML_THEME_TOKEN_SCOPED` |
+| F7 joined text | warning: inline neighbors with no space, `}}` glued to a word | `HTML_TEXT_JOINED` |
+| F1 container | warning: a List that is the only child of a grid or flex box; the patch moves `list=` up to the container | `HTML_LIST_NOT_LAYOUT_CONTAINER` |
+
+The runtime DOM comes from `RuntimeDomTable` (O11 with evidence from the published DemoLATAM: `span.input-<type>`,
+`div.dropdown-container > select.dropdown-display`, `OSFillParent` on label/input/List; ODC `inferred`) and is part of the
+contract (`api --op html`, `document.runtime`). The check (`ScreenVisual.Check`) is static: the author's DOM, the predicted DOM
+and the CSS. Its warnings come one per family per job, after the data and owner-rule warnings and before `HTML_CLASS_NO_RULE`
+(the facade cuts at 10 and says `highWarningsTotal`), with examples, `subjects` and the patch (checked text edits) inside
+`suggestion`. On DemoLATAM: F2 49 → 0, table/grid Lists with sentinels 7 → 0, F4/F5/F7 found in the first answer and 0 after
+the patches (only the drawn checkbox stays, it has no single patch), a check median of 23 ms per root. Tests:
+`ScreenVisualFamilyTests`, `ScreenVisualPredictTests`, `ScreenVisualCheckTests`, `DemoLatamVisualTests`. What only the live
+proof decides: whether `disable-virtualization` removes the sentinels, the real order of the gutter margin against the block,
+390 px without scrolling, and ODC.
 
 ## Telas padrão de entidades (gen-screen/1): a op `screen` com `data.generate`
 

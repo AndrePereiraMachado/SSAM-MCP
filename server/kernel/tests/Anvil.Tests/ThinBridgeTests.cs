@@ -362,6 +362,25 @@ public sealed class ThinBridgeTests : IDisposable
         Assert.Equal(0, ModelHost.LoadedModules().Count);
     }
 
+    /// <summary>servidor/fase4-26 a7 (E1): the hosted kernel (the thin flavor) talks to the bridge of the SSAM agent pack, which
+    /// does not run the Studio's Manage Dependencies (refresh_references:add): the answer of a rolled-back merge names the agent
+    /// pack, never the local shortcut (reopening the Studio loads the same bridge). Locally the text is the product's.</summary>
+    [Fact]
+    public void TheRollbackAlignmentOfTheThinFlavorNamesTheAgentPackNeverTheLocalShortcut()
+    {
+        var alignment = new JsonObject { ["requires"] = Delivery.ManageDependenciesCapability, ["bridgeOffers"] = false,
+            ["add"] = new JsonArray(new JsonObject { ["producer"] = "ZZExt", ["kind"] = "Extension", ["elements"] = new JsonArray("ZZAction") }) };
+        Environment.SetEnvironmentVariable("ANVIL_BRIDGE_FLAVOR", "thin");
+        var hosted = Delivery.AlignmentText(alignment, "ZZExt", null);
+        Assert.Contains("agent package", hosted);
+        Assert.Contains("MANAGE_DEPENDENCIES_HOSTED_PENDING", hosted);
+        Assert.DoesNotContain("Service Studio (SSAM)", hosted);
+        Assert.DoesNotContain("next Service Studio opened", hosted);
+        Environment.SetEnvironmentVariable("ANVIL_BRIDGE_FLAVOR", null);
+        var local = Delivery.AlignmentText(alignment, "ZZExt", null);
+        Assert.Contains("Service Studio (SSAM)", local);
+        Assert.DoesNotContain("agent package", local);
+    }
     [Fact]
     public void TheSocketTimeoutIsTheLargerOfRequestedAndConfigured()
     {

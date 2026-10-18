@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createOdcNativeBrowserHost} from '../debug-odc-native-browser-host.mjs';
 import {odcMountPolicy} from '../debug-odc-browser-mount.mjs';

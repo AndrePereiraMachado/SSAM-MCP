@@ -1,18 +1,18 @@
 {
- "description": "DUAS instancias do MESMO bloco na MESMA tela, com handlers DIFERENTES, sobre job:block-events-reactive. Prova tres coisas que um so consumidor nao mostra: (a) cada IMobileBlockInstanceWidget tem o seu IEventHandler, com Handler apontando para screen actions distintas, e o evento passa a ter 2 consumidores IEventHandler + 1 ITriggerNode; (b) o handler NAO precisa dos nomes do contrato - RatingPicker2_OnRate chama-se Score/Label e a ligacao e feita pela EXPRESSAO do argumento, nao pelo nome (isso so vale na autoria visual da seccao 3.5); (c) a expressao do argumento corre num escopo SOMADO: ve os parametros do evento (Rating, Comment) E as variaveis da tela (LastComment), como 'Comment + \" / \" + LastComment' demonstra. De caminho, OnRate passa a IsMandatory true e o modulo continua valido porque as DUAS instancias tem handler - a metade contraria esta em tests/jobs/block-events-mandatory-reactive.json.",
+ "description": "TWO instances of the SAME block on the SAME screen, with DIFFERENT handlers, on top of job:block-events-reactive. It proves three things that a single consumer does not show: (a) each IMobileBlockInstanceWidget has its own IEventHandler, with Handler pointing to distinct screen actions, and the event now has 2 IEventHandler consumers + 1 ITriggerNode; (b) the handler does NOT need the contract names - RatingPicker2_OnRate is called Score/Label and the link is made by the EXPRESSION of the argument, not by name (that only holds in the visual authoring of section 3.5); (c) the argument expression runs in a SUMMED scope: it sees the event parameters (Rating, Comment) AND the screen variables (LastComment), as 'Comment + \" / \" + LastComment' demonstrates. Along the way, OnRate becomes IsMandatory true and the module stays valid because BOTH instances have a handler - the opposite half is in tests/jobs/block-events-mandatory-reactive.json.",
  "base": "job:block-events-reactive",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "estado antes: 1 IEventHandler + 1 ITriggerNode"},
-  {"op": "set", "target": "IBlockEvent:OnRate", "prop": "IsMandatory", "value": true, "_why": "1. obrigatorio: cada instancia passa a dever um handler"},
+  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "state before: 1 IEventHandler + 1 ITriggerNode"},
+  {"op": "set", "target": "IBlockEvent:OnRate", "prop": "IsMandatory", "value": true, "_why": "1. mandatory: each instance now owes a handler"},
 
-  {"op": "create", "parent": "IMobileScreen:RatingDemo", "type": "ILocalVariable", "name": "SecondScore", "as": "$v2", "_why": "2. o segundo consumidor guarda noutro sitio, para as duas instancias nao se confundirem"},
+  {"op": "create", "parent": "IMobileScreen:RatingDemo", "type": "ILocalVariable", "name": "SecondScore", "as": "$v2", "_why": "2. the second consumer stores elsewhere, so the two instances are not confused"},
   {"op": "set", "target": "$v2", "prop": "DataType", "value": "Integer"},
   {"op": "create", "parent": "IMobileScreen:RatingDemo", "type": "ILocalVariable", "name": "SecondLabel", "as": "$v3"},
   {"op": "set", "target": "$v3", "prop": "DataType", "value": "Text"},
 
-  {"op": "create", "parent": "IMobileScreen:RatingDemo", "type": "IScreenAction", "name": "RatingPicker2_OnRate", "as": "$h2", "_why": "3. handler DIFERENTE, com nomes de input que NAO sao os do contrato (Score/Label, nao Rating/Comment)"},
+  {"op": "create", "parent": "IMobileScreen:RatingDemo", "type": "IScreenAction", "name": "RatingPicker2_OnRate", "as": "$h2", "_why": "3. DIFFERENT handler, with input names that are NOT those of the contract (Score/Label, not Rating/Comment)"},
   {"op": "create", "parent": "$h2", "type": "IInputParameter", "name": "Score", "as": "$h2a"},
   {"op": "set", "target": "$h2a", "prop": "DataType", "value": "Integer"},
   {"op": "create", "parent": "$h2", "type": "IInputParameter", "name": "Label", "as": "$h2b"},
@@ -31,20 +31,20 @@
   {"op": "link", "from": "$h2As", "to": "$h29"},
   {"op": "layout", "target": "$h2"},
 
-  {"op": "create", "parent": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RatingPicker2", "as": "$i2", "source": "IMobileBlock:RatingPicker", "_why": "4. a segunda instancia do MESMO bloco, com o seu proprio input e o seu proprio handler"},
+  {"op": "create", "parent": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RatingPicker2", "as": "$i2", "source": "IMobileBlock:RatingPicker", "_why": "4. the second instance of the SAME block, with its own input and its own handler"},
   {"op": "set", "target": "$i2/Caption", "prop": "Value", "value": "\"E a limpeza do quarto?\""},
   {"op": "set", "target": "$i2/OnRate", "prop": "Handler", "value": "$h2"},
-  {"op": "set", "target": "$i2/OnRate/Score", "prop": "Value", "value": "Rating * 10", "_why": "escopo do EVENTO: Rating e o parametro do contrato, transformado antes de chegar ao handler"},
-  {"op": "set", "target": "$i2/OnRate/Label", "prop": "Value", "value": "Comment + \" / \" + LastComment", "_why": "o escopo SOMA: Comment vem do evento, LastComment e variavel da TELA - as duas na mesma expressao"},
+  {"op": "set", "target": "$i2/OnRate/Score", "prop": "Value", "value": "Rating * 10", "_why": "scope of the EVENT: Rating is the contract parameter, transformed before reaching the handler"},
+  {"op": "set", "target": "$i2/OnRate/Label", "prop": "Value", "value": "Comment + \" / \" + LastComment", "_why": "the scope SUMS: Comment comes from the event, LastComment is a SCREEN variable - both in the same expression"},
 
-  {"op": "create", "parent": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$echo2", "_why": "5. a tela mostra o que cada instancia produziu, separadamente"},
+  {"op": "create", "parent": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$echo2", "_why": "5. the screen shows what each instance produced, separately"},
   {"op": "set", "target": "$echo2", "prop": "Value", "value": "\"Limpeza: \" + IntegerToText(SecondScore) + \" (\" + SecondLabel + \")\""},
 
   {"op": "get", "target": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent/RatingPicker1/#IEventHandler", "_why": "instancia 1: Handler e Arguments 2"},
-  {"op": "get", "target": "$i2/#IEventHandler", "_why": "instancia 2: OUTRA chave de Handler, e Arguments 2 tambem - os dois IEventHandler sao objetos distintos"},
-  {"op": "get", "target": "IBlockEvent:OnRate", "_why": "um so contrato para as duas instancias"},
-  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "estado depois: 2 IEventHandler (um por instancia) + 1 ITriggerNode; o bloco nao ganhou disparo nenhum"},
-  {"op": "usages", "target": "IScreenAction:RatingPicker1_OnRate", "_why": "cada handler e usado por UMA instancia, nao pelas duas"},
+  {"op": "get", "target": "$i2/#IEventHandler", "_why": "instance 2: ANOTHER Handler key, and Arguments 2 as well - the two IEventHandler are distinct objects"},
+  {"op": "get", "target": "IBlockEvent:OnRate", "_why": "a single contract for both instances"},
+  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "state after: 2 IEventHandler (one per instance) + 1 ITriggerNode; the block gained no trigger"},
+  {"op": "usages", "target": "IScreenAction:RatingPicker1_OnRate", "_why": "each handler is used by ONE instance, not by both"},
   {"op": "usages", "target": "$h2"},
   {"op": "dump", "target": "IMobileScreen:RatingDemo", "depth": 7}
  ]

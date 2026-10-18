@@ -3,6 +3,7 @@
 // to have <=32 items" (inspect select of 40), "close.reason: Too big: expected string to have <=500 characters" (ssam_task
 // close with a long reason). Each becomes an adjustment reported in inputAdjusted; what cannot be adjusted answers
 // INPUT_INVALID with every violation and the corrected arguments, without running the tool. In-process McpServer, no Studio.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -155,7 +156,7 @@ test('normalizeArguments is pure and reports each adjustment and violation once'
   assert.deepEqual(n.adjusted, [{ path: '/max', from: 9000, to: 500, rule: 'clamp' }, { path: '/depth', from: 40, to: 12, rule: 'clamp' }]);
   assert.deepEqual(n.violations.map(v => v.path), ['/text', '/records'], 'text and records are never adjusted');
   assert.deepEqual(args, { max: 9000, depth: 40, text: 'abcdef', records: [1, 2, 3], query: { find: 'x' } }, 'the input is not mutated');
-  assert.equal(AS_SENT, '<como enviado>');
+  assert.equal(AS_SENT, '<as sent>');
   const ok = normalizeArguments(schema, { query: '' });
   assert.equal(ok.violations.length, 1); assert.match(ok.violations[0].message, /none of the accepted forms/);
 });

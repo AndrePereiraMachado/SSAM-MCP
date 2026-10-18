@@ -36,6 +36,7 @@
 // with it applies after the merge. The whole job generated is the new file, and its sha256 the next basedOn.
 // namedPatch: the numeric patch of a refusal written by name, checked by resolving it back (patchByName).
 import fs from 'node:fs';
+import { isProducerName } from './producer-names.mjs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { normalizeCodeOps } from './ssam-code.mjs';
@@ -550,7 +551,7 @@ function fixtureFrom(spec, dir) {
 // One reference of a job moved from baseDir to dir: as it was when it names the same file from both folders (or nothing
 // from baseDir: the kernel refuses it as it would have refused the base), else pinned to the file it named.
 function pinned(spec, baseDir, dir) {
-  if (typeof spec !== 'string' || !spec || BINDING.test(spec)) return spec;
+  if (typeof spec !== 'string' || !spec || BINDING.test(spec) || isProducerName(spec)) return spec;
   const job = spec.startsWith('job:');
   const from = job ? jobFileFrom(spec, baseDir) : fixtureFrom(spec, baseDir);
   if (!from) return spec;

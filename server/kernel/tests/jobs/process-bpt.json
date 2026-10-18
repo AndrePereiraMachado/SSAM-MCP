@@ -1,12 +1,12 @@
 {
- "description": "Processo BPT com atividades automaticas e fluxo ligado.",
+ "description": "BPT process with automatic activities and a linked flow.",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "ProcessMissingInboxDetail",
    "element": "Headless_CS (ESpace) / ApproveBooking (Process)",
-   "why": "Processo minimo sem tela de detalhe de Taskbox; o teste demonstra as atividades automaticas e os conectores."
+   "why": "Minimal process without a Taskbox detail screen; the test demonstrates the automatic activities and the connectors."
   }
  ],
  "ops": [

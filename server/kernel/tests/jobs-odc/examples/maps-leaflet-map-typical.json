@@ -1,5 +1,5 @@
 {
- "description": "LeafletMap do OutSystemsMaps com dados: centro e altura, um Marker por loja (List no AddOns_Placeholder) com Position vinda do registro e o OnClick do Marker guardando a loja.",
+ "description": "LeafletMap of OutSystemsMaps with data: center and height, one Marker per store (a List in the AddOns_Placeholder) with the Position from the record and the OnClick of the Marker keeping the store.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

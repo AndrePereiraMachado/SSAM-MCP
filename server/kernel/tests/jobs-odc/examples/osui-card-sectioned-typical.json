@@ -1,5 +1,5 @@
 {
- "description": "CardSectioned do OSUI por linha: foto externa no Image, nome no Title, preco no Content e um botao no Footer que abre o detalhe com o Id.",
+ "description": "CardSectioned of OSUI per row: an external photo in Image, the name in Title, the price in Content and a button in Footer that opens the detail with the Id.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

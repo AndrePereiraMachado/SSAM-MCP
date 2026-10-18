@@ -56,7 +56,7 @@ async function serve(t, deps) {
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
   t.after(async () => { await client.close(); await server.close(); });
   return args => client.callTool({ name: 'o11_deliver', arguments: args })
-    .then(reply => reply.content[0].text === 'entregue' ? { ok: true, result: 'entregue' } : reply.structuredContent ?? JSON.parse(reply.content[0].text));
+    .then(reply => reply.content[0].text === 'delivered' ? { ok: true, result: 'delivered' } : reply.structuredContent ?? JSON.parse(reply.content[0].text));
 }
 
 const argOf = (args, flag) => args[args.indexOf(flag) + 1];

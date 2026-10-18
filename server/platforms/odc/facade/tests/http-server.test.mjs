@@ -121,8 +121,8 @@ test('revoking a token answers 403 at once and closes its open sessions, live st
 });
 
 test('binds to loopback only; another address is refused unless allowed explicitly; a foreign Host header is 403', async () => {
-  await assert.rejects(startHttpServer({ createServer: fakeServer, dir: freshDir(), host: '0.0.0.0', port: 0 }), /Recusado.*TLS/s);
-  await assert.rejects(startHttpServer({ createServer: fakeServer, dir: freshDir(), host: '192.168.0.10', port: 0 }), /Recusado/);
+  await assert.rejects(startHttpServer({ createServer: fakeServer, dir: freshDir(), host: '0.0.0.0', port: 0 }), /Refused.*TLS/s);
+  await assert.rejects(startHttpServer({ createServer: fakeServer, dir: freshDir(), host: '192.168.0.10', port: 0 }), /Refused/);
   assert.equal(parseServeArguments([]).host, '127.0.0.1');
   assert.equal(parseServeArguments([]).port, 7300);
   assert.throws(() => parseServeArguments(['--port', 'x']), /Invalid port/);
@@ -232,8 +232,8 @@ test('--local-studios is the owner-only mode: refused with --public-host or --al
   assert.equal(parseServeArguments(['--allow-remote']).allowRemote, true, 'the hosted server may still bind elsewhere');
   assert.equal(parseServeArguments(['--log-file', 'x.log']).logFile, path.resolve('x.log'));
   // agents:false (the library default) is the owner-only mode at start too.
-  await assert.rejects(startHttpServer({ createServer: fakeServer, dir: freshDir(), port: 0, publicHosts: ['ssam.example.com'] }), /Recusado: --public-host/);
-  await assert.rejects(startHttpServer({ createServer: fakeServer, dir: freshDir(), port: 0, allowRemote: true }), /Recusado: --allow-remote/);
+  await assert.rejects(startHttpServer({ createServer: fakeServer, dir: freshDir(), port: 0, publicHosts: ['ssam.example.com'] }), /Refused: --public-host/);
+  await assert.rejects(startHttpServer({ createServer: fakeServer, dir: freshDir(), port: 0, allowRemote: true }), /Refused: --allow-remote/);
 });
 
 test('owner-only mode answers 403 FORWARDED_REFUSED to a request that came through a proxy; the hosted mode does not', async () => {

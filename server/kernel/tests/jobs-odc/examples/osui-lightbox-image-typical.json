@@ -1,5 +1,5 @@
 {
- "description": "LightboxImage do OSUI por linha: a foto do produto abre ampliada, com titulo, grupo comum (navegacao entre fotos) e zoom.",
+ "description": "LightboxImage of OSUI per row: the photo of the product opens enlarged, with a title, a common group (navigation between photos) and zoom.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

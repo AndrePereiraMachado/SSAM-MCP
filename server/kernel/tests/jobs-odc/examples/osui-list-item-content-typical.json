@@ -1,5 +1,5 @@
 {
- "description": "ListItemContent do OSUI por linha: icone no Left, nome no Title, e-mail no Content e um Link no Right que abre outra tela.",
+ "description": "ListItemContent of OSUI per row: an icon in Left, the name in Title, the e-mail in Content and a Link in Right that opens another screen.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

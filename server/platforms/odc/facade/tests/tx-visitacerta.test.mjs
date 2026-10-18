@@ -138,7 +138,7 @@ function applyLane(applyData) {
 }
 
 // Review of 2026-10-12: o11_deliver until=apply answered a VALIDATION_REFUSED with messages alone ("Job rejected by the
-// validation contract; nothing was merged."), no problems and no contract, and its continuation patched /ops/<i>/<campo>
+// validation contract; nothing was merged."), no problems and no contract, and its continuation patched /ops/<i>/<field>
 // blindly. It answers as a delivery does: the contract, every problem, the op they name.
 test('o11_deliver until=apply: a candidate the validation contract refuses names the contract and carries every problem and the op', async t => {
   const root = tmp();

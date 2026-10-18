@@ -1,5 +1,5 @@
 {
- "description": "Section (OutSystemsUI, Content) tipico; placeholders Title, Content com dados do aggregate de tarefas.",
+ "description": "Typical Section (OutSystemsUI, Content); placeholders Title, Content with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

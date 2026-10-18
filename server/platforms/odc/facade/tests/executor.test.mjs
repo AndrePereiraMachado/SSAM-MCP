@@ -159,7 +159,8 @@ test('hostedSpawnEnv is a closed list: the workspace, the relay, and nothing els
       assert.equal(env.ANVIL_BRIDGE_TIMEOUT_SECONDS, '600');
       assert.equal(env.TMPDIR, path.join(context.workspace, 'o11', 'tmp'));
       const allowed = new Set([...SPAWN_ALLOWED, 'TEMP', 'TMP', 'TMPDIR', 'ANVIL_AUTHORITY_DIR', 'ANVIL_BRIDGE_PORT', 'ANVIL_STUDIO_DIR', 'ANVIL_LANE',
-        'ANVIL_BRIDGE_FLAVOR', 'ANVIL_BRIDGE_TIMEOUT_SECONDS', 'ANVIL_BRIDGE_PROBE_MS', 'ANVIL_KEPT_READINGS']);
+        'ANVIL_BRIDGE_FLAVOR', 'ANVIL_BRIDGE_TIMEOUT_SECONDS', 'ANVIL_BRIDGE_PROBE_MS', 'ANVIL_KEPT_READINGS',
+    'SSAM_STUDIO_DEFAULTS_ROOT']); // a7 (SD): the customer's own folder of the Studio defaults
       assert.deepEqual(Object.keys(env).filter(k => !allowed.has(k)), []);
       // servidor/fase4-26: the CX14 probes off (A1) and kept readings of the job's own capture only (M2), set here.
       assert.equal(env.ANVIL_BRIDGE_PROBE_MS, '0'); assert.equal(env.ANVIL_KEPT_READINGS, 'own');

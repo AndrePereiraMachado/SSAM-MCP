@@ -1,5 +1,5 @@
 {
- "description": "OverflowMenu do OSUI: icone de tres pontos no TriggerContent, dois links no Menu, posicao do balao e o OnMenuToggle guardando se esta aberto.",
+ "description": "OverflowMenu of OSUI: a three-dot icon in TriggerContent, two links in Menu, the position of the balloon and OnMenuToggle keeping whether it is open.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

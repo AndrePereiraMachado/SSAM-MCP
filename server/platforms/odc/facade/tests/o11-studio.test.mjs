@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -359,7 +360,7 @@ test('publish-log returns the last 1-Click Publish as the Studio shows it: statu
       element: { name: 'GetInbox', key: 'act-1', kind: 'ServerAction', path: 'GetInbox (ServerAction)' }, id: 'SQLInvalid', shownAt: '13:00:09' });
     assert.deepEqual(value.continuation.arguments, { lane: 'o11', target: 'Horsie_CS', name: 'GetInbox' });
     assert.equal(value.continuation.tool, 'ssam_map');
-    assert.match(value.continuation.why, /falhou na etapa compile: Invalid SQL in 'GetInbox'.*Corrija em GetInbox.*o11_publish com as palavras do usuário/);
+    assert.match(value.continuation.why, /failed at stage compile: Invalid SQL in 'GetInbox'.*Fix it in GetInbox.*o11_publish with the user's words/);
     noShell(value);
     assert.deepEqual(h.sent('publish_log').map(r => r.params), [{ max: 60, module: 'Horsie_CS' }]);
     await h.call('publish-log', { max: 5 });
@@ -374,7 +375,7 @@ test('publish-log without an error points at the full log; without a publication
   try {
     const failed = await h.call('publish-log');
     assert.deepEqual(failed.continuation.arguments, { command: 'publish-log', args: { module: 'Horsie_CS' } });
-    assert.match(failed.continuation.why, /etapa deploy: Database upgrade failed/);
+    assert.match(failed.continuation.why, /stage deploy: Database upgrade failed/);
     assert.equal(failed.messages[0].extraInfo, 'table OSUSR_X_MATCH');
     const none = await h.call('publish-log', { module: 'Lib' });
     const { observes, elsewhere, ...rest } = none;
@@ -400,7 +401,7 @@ test('errors adds lastPublish: the short result of the last 1-Click Publish, wit
     assert.deepEqual(value.lastPublish, { found: true, status: 'failed', failedStage: 'compile', at: '13:00:09', triggeredBy: 'studio', errors: 1, warnings: 1,
       firstErrors: [{ stage: 'compile', text: "Invalid SQL in 'GetInbox'", detail: "Incorrect syntax near the keyword 'Match'.",
         element: { name: 'GetInbox', key: 'act-1', kind: 'ServerAction', path: 'GetInbox (ServerAction)' } }],
-      next: { tool: 'o11_studio', arguments: { command: 'publish-log', args: { module: 'Horsie_CS' } }, why: 'todas as mensagens da última publicação, com etapa e elemento' } });
+      next: { tool: 'o11_studio', arguments: { command: 'publish-log', args: { module: 'Horsie_CS' } }, why: 'every message of the last publication, with stage and element' } });
     assert.deepEqual(h.sent('publish_log').map(r => r.params), [{ max: 20 }]);
     h.state.publishLog = () => ({ found: false, module: 'Horsie_CS', reason: 'none yet' });
     assert.deepEqual((await h.call('errors')).lastPublish, { found: false, reason: 'none yet' });

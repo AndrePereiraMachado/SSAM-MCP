@@ -6,7 +6,11 @@ import { observeCli, observeInlineCli, observeMcp, lineChannel } from './frictio
 import { connectionEnvironment } from '../platforms/odc/facade/studio-session.mjs';
 // The identity of what the MCP child loads (C11); a layout without it (a copied launcher) never reloads.
 const identityModule = await import('../platforms/odc/facade/facade-identity.mjs').catch(() => null);
+// A copied/frozen launcher without the facade retains its original boundary behavior.
+const profileModule = identityModule === null ? null : await import('../platforms/odc/facade/server-profiles.mjs');
 const createIdentityReader = identityModule?.createIdentityReader ?? (() => ({ read: () => ({ facadeSha256: null, catalogSha256: null, launcherSha256: null }) }));
+// fix/no-internals round 5: the exposure rule of the facade (exposure.mjs), for the one answer this launcher gives itself.
+const exposureModule = identityModule === null ? null : await import('../platforms/odc/facade/exposure.mjs').catch(() => null);
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const layout = JSON.parse(fs.readFileSync(path.join(root, '.ssam-workspace.json'), 'utf8'));
@@ -23,6 +27,37 @@ export function environment(source = process.env) {
     // Optional "mcpLanes" in .ssam-workspace.json narrows the MCP server of this checkout to the listed lanes; unset serves both.
     ...(layout.mcpLanes ? { SSAM_MCP_LANES: layout.mcpLanes.join(',') } : {}) };
 }
+// The exposure of the server this launcher starts (SSAM_EXPOSURE, read by the facade's own exposureOf; a value it refuses is
+// a licensee, fail-closed). A layout without the facade knows only that a value other than owner was asked.
+export function launcherExposure(env = process.env) {
+  if (exposureModule) { try { return exposureModule.exposureOf(env); } catch { return 'licensee'; } }
+  return typeof env.SSAM_EXPOSURE === 'string' && env.SSAM_EXPOSURE.trim() && env.SSAM_EXPOSURE.trim() !== 'owner' ? 'licensee' : 'owner';
+}
+// ssam_friction is answered here (friction-boundary.mjs observeMcp), in this process, before the MCP child and its exit rule.
+// On `ssam mcp` its answer is held under the answer ceiling as every answer of the child is (fitResult, pageAnswer).
+// fix/no-internals round 5 (re-review round 4, LOW 2; D13 of the Integradora, 17/10): on a licensee's server an answer kept
+// for a later read names its origin {tool:"ssam_friction"} (reference-files.mjs writeAnswerOrigin), so ssam_evidence reads it
+// back as that answer (a kept answer without a record is refused there).
+// Round 5 (LOW 4): on a licensee's server the answer passes the same rule as every answer of the child (exposure.mjs, a state
+// report of SSAM: no folder of the server, a handle under the answers stays), on every MCP entry of this launcher. A layout
+// without the facade cannot apply it: there a licensee's launcher does not serve ssam_friction (frictionServed).
+// The owner's answer is the one of before.
+export function frictionAnswerShaper({ entry, args = [], env = process.env, answerRoot = path.join(root, layout.kernel) } = {}) {
+  const pages = identityModule !== null && entry === 'ssam' && args[0] === 'mcp';
+  const licensee = launcherExposure(env) === 'licensee';
+  const origin = licensee ? { tool: 'ssam_friction' } : null;
+  const page = async (callArgs, result) => {
+    const [{ fitResult }, { pageAnswer, maxAnswerBytes }] = await Promise.all([
+      import('../platforms/odc/facade/answer-size.mjs'), import('../platforms/odc/facade/ssam.mjs')]);
+    return pageAnswer(fitResult('ssam_friction', callArgs, result, { root: answerRoot, ...(origin ? { origin } : {}) }), { root: answerRoot, maxBytes: maxAnswerBytes(), ...(origin ? { origin } : {}) });
+  };
+  if (!licensee) return pages ? page : undefined;
+  if (!exposureModule) return undefined;
+  return async (callArgs, result) => exposureModule.exposedResult(pages ? await page(callArgs, result) : result,
+    { exposure: 'licensee', tool: 'ssam_friction', args: callArgs, handleRoots: [path.join(answerRoot, '.local')] });
+}
+/** Whether this launcher answers ssam_friction: never on a licensee's server it cannot apply the exposure rule to. */
+export const frictionServed = (env = process.env) => launcherExposure(env) === 'owner' || exposureModule !== null;
 export function launch(entry, args = process.argv.slice(2)) {
   if (args[0] === 'friction') {
     return import('./friction-cli.mjs').then(({main})=>main(args.slice(1),{root}))
@@ -78,6 +113,8 @@ export function launch(entry, args = process.argv.slice(2)) {
     let serverInputBlocked=false,clientOutputBlocked=false,relay;
     const requestFlow=()=>{if(serverInputBlocked||clientOutputBlocked)process.stdin.pause();else process.stdin.resume();};
     const observer = observeMcp({root,entry,args:forwarded,
+      includeFrictionTool: frictionServed() && (entry !== 'ssam' || args[0] !== 'mcp' || !profileModule || profileModule.profileServes(profileModule.parseMcpProfile(args.slice(1)), 'ssam_friction')),
+      shapeFrictionResult: frictionAnswerShaper({ entry, args }),
       toServer:chunk=>relay.toServer(chunk),
       toClient:chunk=>{if(!process.stdout.write(chunk)){clientOutputBlocked=true;relay.pauseOutput();requestFlow();}}});
     relay = createMcpRelay({

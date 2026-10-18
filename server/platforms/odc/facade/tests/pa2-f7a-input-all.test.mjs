@@ -30,7 +30,7 @@ function refusedArguments(schema) {
 }
 
 test('with relaxTool on every registration, every tool of createSsamServer answers a refused input with INPUT_INVALID', async t => {
-  const server = await createSsamServer({ deps: { relayTimeoutMs: 5000 } });
+  const server = await createSsamServer({ profile: 'all', deps: { relayTimeoutMs: 5000 } });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'pa2-f7a-input-all', version: '1.0.0' });
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);

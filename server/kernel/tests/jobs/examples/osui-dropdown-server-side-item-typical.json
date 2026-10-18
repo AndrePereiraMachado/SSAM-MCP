@@ -1,5 +1,5 @@
 {
- "description": "DropdownServerSideItem (OutSystemsUI, Advanced) tipico; inputs obrigatorios ItemId ligados a variaveis da tela; criado vazio e preenchido com conteudo proprio; placeholders DropdownItemContent com dados do aggregate de tarefas; eventos OnSelected, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "description": "Typical DropdownServerSideItem (OutSystemsUI, Advanced); required inputs ItemId bound to screen variables; created empty and filled with its own content; placeholders DropdownItemContent with data of the tasks aggregate; events OnSelected, Initialized handled by screen actions that keep the parameters in variables.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

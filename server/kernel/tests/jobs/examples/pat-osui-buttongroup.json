@@ -1,5 +1,5 @@
 {
- "description": "Button Group do OutSystems UI (no Reactive O11 e o widget nativo IButtonGroup): tres itens ligados a uma variavel Integer de periodo; OnChange refaz o aggregate de tarefas filtrado pelo periodo escolhido.",
+ "description": "Button Group of OutSystems UI (in O11 Reactive it is the native widget IButtonGroup): three items bound to an Integer period variable; OnChange runs the tasks aggregate again, filtered by the chosen period.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],
@@ -11,7 +11,7 @@
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
   {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "Task.DueDate <= DateTimeToDate(AddDays(CurrDate(), DaysAhead))"}},
   {"op": "logic", "data": {"actions": [
-   {"name": "PeriodChanged", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Novo periodo: refaz a consulta",
+   {"name": "PeriodChanged", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "New period: runs the query again",
     "steps": [{"node": "IRefreshDataNode", "as": "RefreshDueSoon", "properties": {"DataSource": "IScreenAggregate:GetTasksDueSoon"}}]}]}},
   {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IButtonGroup", "name": "PeriodGroup", "as": "$bg", "empty": true},
   {"op": "set", "target": "$bg", "prop": "Variable", "value": "DaysAhead"},

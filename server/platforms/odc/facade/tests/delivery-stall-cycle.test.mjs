@@ -39,7 +39,7 @@ test('a delivery that went on after a settled Refresh References is delivered an
   // CX14 N6: this test enshrined a delivered answer saying "The merge of this task was never sent" (round 3). The projection
   // keeps only what is true at the answer's end, whatever kernel wrote the note.
   const value=deliverOutcome({envelope:{ok:true,data:{...structuredClone(envelopes.delivered.data),settledBridgeOperations:settledRefresh(ROUND3_NOTE,{})}}},{trackId:'facade-task',work:work(),input:{module:'Probe'}});
-  assert.equal(value.ok,true);assert.equal(value.result,'entregue');assert.ok(value.settledUiOperations[0].note.includes('Ctrl+Z'));
+  assert.equal(value.ok,true);assert.equal(value.result,'delivered');assert.ok(value.settledUiOperations[0].note.includes('Ctrl+Z'));
   assert.ok(!/never sent|nothing was repeated/.test(value.settledUiOperations[0].note),value.settledUiOperations[0].note);
   const plain=deliverOutcome({envelope:{ok:true,data:{...structuredClone(envelopes.delivered.data),settledBridgeOperations:settled('close_module')}}},{trackId:'facade-task',work:work(),input:{module:'Probe'}});
   assert.equal(plain.settledUiOperations,undefined,'a settled tab close changes nothing in the module');
@@ -142,7 +142,7 @@ for (const kernel of ['e77fd91b','r5']) {
   });
   test(`N7 (${kernel} kernel) control: the next resume delivers; nothing claims nothing was repeated`,()=>{
     const value=answerOf(receipt('B_delivered'));
-    assert.equal(value.ok,true);assert.equal(value.result,'entregue');
+    assert.equal(value.ok,true);assert.equal(value.result,'delivered');
     assert.ok(!NOTHING.test(JSON.stringify(value)));
     assert.equal(value.settledUiOperations.length,2);assert.ok(ctrlZ(value));
   });

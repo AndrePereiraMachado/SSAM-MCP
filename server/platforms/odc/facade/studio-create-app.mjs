@@ -18,6 +18,7 @@ import { createAnvilRunner } from './anvil-cli.mjs';
 import { shapePublishLog } from './studio-publish-log.mjs';
 import { usesWorkspace, workspacePath } from './executor.mjs';
 import { runOdcOnWorker } from './anvil-worker.mjs';
+import { hashedWords, withoutWordEchoes, wordsGiven } from './destructive-operations.mjs';
 
 export const CREATE_APP_KINDS = ['reactive', 'mobile', 'library', 'mobile-library', 'agentic'];
 export const CREATE_APP_ACTIONS = ['templates', 'create'];
@@ -40,7 +41,8 @@ const TIMEOUTS = { kernel: 600000 };
 const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value.ok === false ? { isError: true } : {}) });
 const sha256 = text => createHash('sha256').update(text, 'utf8').digest('hex');
 const firstLine = text => String(text ?? '').split(/\r?\n/)[0].slice(0, 500);
-const refusal = (code, error, continuation, extra = {}) => ({ ok: false, code, error, ...extra, continuation });
+// CX15 r5 (N-1): a continuation rebuilt from the input (self({...input})) never gives the owner's words back.
+const refusal = (code, error, continuation, extra = {}) => ({ ok: false, code, error, ...extra, continuation: withoutWordEchoes(continuation) });
 const withoutKeys = (input, keys) => Object.fromEntries(Object.entries(input).filter(([k]) => !keys.includes(k)));
 // The words name the app as whole words, case-insensitive: "ZZ Criar Web2" does not name "ZZ Criar Web".
 export const namesWhole = (words, name) => new RegExp('(?<![\\p{L}\\p{N}_])' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+') + '(?![\\p{L}\\p{N}_])', 'iu').test(words);
@@ -64,7 +66,9 @@ export function validateCreateAppInput(input) {
     return null;
   }
   const missing = spec.required.filter(k => input[k] === undefined || (typeof input[k] === 'string' && !input[k].trim()));
-  if (missing.includes('authorize')) return refusal('WORDS_REQUIRED', 'create changes the tenant and needs the user\'s own words (authorize)',
+  // CX15 r7 (M-3): words that are a marker, a <template> or a sha256 of the server are no words (before the approval and the
+  // naming rule: a template that names the app never creates it).
+  if (missing.includes('authorize') || !wordsGiven(input.authorize)) return refusal('WORDS_REQUIRED', 'create changes the tenant and needs the user\'s own words (authorize)',
     { tool: 'studio_create_app', arguments: { ...input, authorize: "<the user's literal words, naming the app>" }, why: 'ask the user; never write the words yourself' });
   if (missing.length) return refusal('MISSING_FIELD', `create needs: ${missing.join(', ')}`, self({ ...input, ...Object.fromEntries(missing.map(k => [k, '<' + k + '>'])) }));
   if (!CREATE_APP_KINDS.includes(input.kind)) return refusal('BAD_VALUE', 'kind is one of ' + CREATE_APP_KINDS.join(', '), self({ ...input, kind: 'reactive' }));
@@ -279,7 +283,8 @@ export function createStudioCreateApp(deps = {}) {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const approval = authorizationContext(input.authorizationContext, input.authorize, { lane: 'odc', host: s.host, operation: 'create-app', targets: [input.name, module] });
     if (approval) fs.writeFileSync(path.join(evidence, 'authorization-context.json'), JSON.stringify(approval, null, 2));
-    const recorded = `${input.authorize.trim()} [recorded ${now().toISOString()} by studio_create_app]`;
+    // CX15 r5 (N-2): both fields keep sha256:<hex> of the words, never the words (the bridge only requires a nonempty text).
+    const recorded = `${hashedWords(input.authorize.trim())} [recorded ${now().toISOString()} by studio_create_app]`;
     manifest.createAuthorization = recorded;
     if (input.publish === true) manifest.publishAuthorization = recorded;
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));

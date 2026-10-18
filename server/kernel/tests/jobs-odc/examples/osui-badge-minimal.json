@@ -1,5 +1,5 @@
 {
- "description": "Badge do OSUI: o input obrigatorio Number.",
+ "description": "Badge of OSUI: the required input Number.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

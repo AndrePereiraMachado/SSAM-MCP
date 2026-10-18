@@ -1,5 +1,5 @@
 {
- "description": "Icon: um IIcon com o nome Phosphor e o Weight, que no ODC e obrigatorio para o icone resolver.",
+ "description": "Icon: an IIcon with the Phosphor name and the Weight, which on ODC is required for the icon to resolve.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

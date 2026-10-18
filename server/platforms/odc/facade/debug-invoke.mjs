@@ -1,3 +1,4 @@
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import * as z from 'zod/v4';
 import { debugSchema, sessionIdSchema } from './debug.mjs';
@@ -30,6 +31,8 @@ export const invokeSchema = z.object({
 }).strict().superRefine((v, raw) => {
   const ctx = { addIssue: issue => raw.addIssue({ ...issue, message: LEGACY + issue.message }) };
   const need = name => { if (!v[name]) ctx.addIssue({ code: 'custom', path: [name], message: name + ' is required for ' + v.op }); };
+  // CX15 r7 (M-1): the authorization (a run, a reload) is the owner's words (wordsGiven), never a marker, template or sha256.
+  if (v.authorization !== undefined && !wordsGiven(v.authorization)) ctx.addIssue({ code: 'custom', path: ['authorization'], message: 'WORDS_REQUIRED: the owner\'s own words, never a marker, a <template> or a sha256 of the server' });
   if (v.op === 'prepare') {
     for (const name of ['origin', 'snapshot', 'expectedSourceSha256', 'actionKey']) need(name);
     if ([v.tabId, v.requestFile, v.sourcePlanId].filter(Boolean).length !== 1) ctx.addIssue({ code: 'custom', path: ['requestFile'], message: 'Choose a private native request file, an existing sourcePlanId, or isolated-browser bootstrap tabId' });

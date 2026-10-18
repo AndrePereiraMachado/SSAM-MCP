@@ -9,9 +9,27 @@ namespace Anvil.Core;
 /// IdentityMismatch, NotActive, VersionIdChanged, SignatureHashChanged, SignatureUnavailable, ElementNotFound, WrongEnvironment.
 /// Requested elements the signature does not show are not one of these: they come all at once as the KernelRefusalException
 /// PRODUCER_SIGNATURE_MISSING, one problem per element with its cause (A25).</summary>
-public sealed class SignatureCaptureException(string code, string message) : InvalidOperationException(code + ": " + message)
+public sealed class SignatureCaptureException(string code, string message) : InvalidOperationException(code + ": " + message), ICodedError
 {
     public string Code { get; } = code;
+
+    /// <summary>fix/system-reference round 2 (M4): the producer names the referenceable catalog lists, for a producer it does
+    /// not list by the name asked (ProducerNotFound) or lists twice by its letters and digits (IdentityMismatch); null
+    /// otherwise.</summary>
+    public IReadOnlyList<string>? Available { get; init; }
+    /// <summary>The name the capture asked for, with <see cref="Available"/>.</summary>
+    public string? Requested { get; init; }
+
+    // The coded refusal of the CLI envelope and of the delivery task (Errors.FindCoded): only an unknown or ambiguous
+    // producer name, as the ODC lane answers it (PRODUCER_UNKNOWN / PRODUCER_AMBIGUOUS with the names it lists). Every other
+    // capture refusal keeps its envelope as before (an empty code is no code).
+    string ICodedError.Code => Available == null ? "" : Code == "ProducerNotFound" ? "PRODUCER_UNKNOWN" : "PRODUCER_AMBIGUOUS";
+    JsonArray? ICodedError.Problems => Available == null ? null : new JsonArray(new JsonObject {
+        ["op"] = null, ["pointer"] = null, ["code"] = ((ICodedError)this).Code, ["severity"] = "error", ["phase"] = "reference", ["message"] = Message,
+        ["fix"] = Code == "ProducerNotFound"
+            ? "name a producer the referenceable catalog lists (available), as the Studio lists it, e.g. \"(System)\" for the system producer"
+            : "name one of the producers in available exactly",
+        ["producer"] = Requested, ["available"] = new JsonArray(Available.Select(n => (JsonNode)n).ToArray()) });
 }
 
 public sealed record SignatureCaptureRequest(string Producer, IReadOnlyList<string> Elements, string OutPath,
@@ -234,10 +252,29 @@ public static class ProducerSignatureCapture
     private static ReferenceableSummary Identity(HeadlessSession session, string name, string? key, string? kind)
     {
         var catalog = session.ListReferenceable();
-        var matches = catalog.Where(r => key != null ? SameKey(r.Key, key) : string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase)).ToArray();
-        if (matches.Length == 0) throw new SignatureCaptureException("ProducerNotFound", $"{(string.IsNullOrWhiteSpace(name) ? "producer key " + key : name)} is not referenceable in {session.Host}");
+        // fix/system-reference round 2 (M4): a name is resolved by the rule of both lanes (JobSources.ResolveListedName: the
+        // same text, the same name without outer spaces and one pair of parentheses, then the same letters and digits), so
+        // "Tools" is the catalog's "(Tools)" and "OutSystems UI" its "OutSystemsUI". A name it does not list is ONE coded
+        // refusal with every name it lists; two producers it lists for the name are never guessed.
+        var names = catalog.Select(r => r.Name).Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToArray();
+        string[] listed = [];
+        if (key == null)
+        {
+            listed = JobSources.ResolveListedName(name, names, out var ambiguous) is { } one ? [one] : ambiguous;
+            if (listed.Length > 1)
+                throw new SignatureCaptureException("IdentityMismatch", $"{name} names {listed.Length} producers of the referenceable catalog ({string.Join(", ", listed)}); name one of them exactly or pass --key")
+                    { Available = listed, Requested = name };
+        }
+        var matches = catalog.Where(r => key != null ? SameKey(r.Key, key) : listed.Length == 1 && string.Equals(r.Name, listed[0], StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (matches.Length == 0)
+            throw key == null
+                ? new SignatureCaptureException("ProducerNotFound", $"{name} is not referenceable in {session.Host}. The referenceable catalog lists: "
+                    + string.Join(", ", names.Take(40)) + (names.Length > 40 ? $", ... ({names.Length} in all)" : "") + ".") { Available = names, Requested = name }
+                : new SignatureCaptureException("ProducerNotFound", $"{(string.IsNullOrWhiteSpace(name) ? "producer key " + key : name)} is not referenceable in {session.Host}");
         if (matches.Length > 1) throw new SignatureCaptureException("IdentityMismatch", $"{name} is ambiguous in the referenceable catalog; pass --key");
         var producer = matches[0];
+        if (key == null) name = producer.Name;
         // A producer named only by its key (K1-b: the owner of a foreign dependency) takes the catalog's name.
         if (key != null && string.IsNullOrWhiteSpace(name)) name = producer.Name;
         if (!string.Equals(producer.Name, name, StringComparison.OrdinalIgnoreCase))

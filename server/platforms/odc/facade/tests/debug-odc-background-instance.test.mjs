@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import { foreignImport, gatedTest } from './fixtures/debug-foreign-gate.mjs';
 // Port D7: timer-background pending in the consolidation; the tests that reach it skip by name (fixtures/debug-foreign-gate.mjs).
 const test = gatedTest();

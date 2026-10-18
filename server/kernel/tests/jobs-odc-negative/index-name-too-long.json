@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA de RENOMEAR um indice para um nome com mais de 28 caracteres: o ODC Studio trunca o nome em silencio (medido em 2026-09-23: UQ_WfCovMilestone_ProjectName ficava UQ_WfCovMilestone_ProjectNam). No `create` o kernel escreve o nome que o Studio guarda e relata em nameTruncations (D2, atritos 3); no `rename` o nome e escolha explicita do autor e o kernel recusa, nas duas faixas.",
+ "description": "ODC: the REFUSAL of RENAMING an index to a name with more than 28 characters: the ODC Studio truncates the name silently (measured on 2026-09-23: UQ_WfCovMilestone_ProjectName became UQ_WfCovMilestone_ProjectNam). On `create` the kernel writes the name the Studio keeps and reports it in nameTruncations (D2, frictions 3); on `rename` the name is an explicit choice of the author and the kernel refuses, in both lanes.",
  "base": "job:data-full-model",
  "expectValid": true,
  "expectError": [

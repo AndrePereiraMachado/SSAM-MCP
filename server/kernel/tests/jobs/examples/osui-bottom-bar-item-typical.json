@@ -1,5 +1,5 @@
 {
- "description": "BottomBarItem (OutSystemsUI, Navigation) tipico; placeholders Icon, Text com dados do aggregate de tarefas.",
+ "description": "Typical BottomBarItem (OutSystemsUI, Navigation); placeholders Icon, Text with data of the tasks aggregate.",
  "base": "job:ex-base-mobile",
  "expectValid": true,
  "expectedMessages": [],

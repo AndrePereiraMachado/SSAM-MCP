@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA de `duplicate` num destino incompativel (faixa O11): uma server action colada num UI flow. A colagem nativa recusaria sem dizer porque ('Condition is false'); o kernel recusa antes, diz que o UI flow nao aceita o tipo e qual pai serve.",
+ "description": "The REFUSAL of `duplicate` at an incompatible destination (O11 lane): a server action pasted into a UI flow. The native paste would refuse without saying why ('Condition is false'); the kernel refuses before, says that the UI flow does not accept the type and which parent serves.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectError": [

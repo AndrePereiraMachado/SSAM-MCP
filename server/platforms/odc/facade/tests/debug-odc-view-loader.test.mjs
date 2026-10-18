@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {inspectOdcNativeViewLoader} from '../debug-odc-view-loader.mjs';
 const entry='_osbundle-App__abc.js';

@@ -1,5 +1,5 @@
 {
- "description": "Licenses do OSUI com licencas proprias: um texto no placeholder CustomLicenses ao lado das licencas padrao.",
+ "description": "Licenses of OSUI with its own licenses: a text in the CustomLicenses placeholder beside the default licenses.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

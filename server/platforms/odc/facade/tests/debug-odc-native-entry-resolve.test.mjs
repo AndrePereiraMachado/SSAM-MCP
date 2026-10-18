@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveEntry, resolveOverride, compareEntries, entryKindOf, ENTRY_KIND_ORDER } from '../debug-odc-native-entry-resolve.mjs';

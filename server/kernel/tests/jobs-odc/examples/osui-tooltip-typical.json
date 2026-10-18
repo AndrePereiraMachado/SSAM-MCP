@@ -1,5 +1,5 @@
 {
- "description": "Tooltip do OSUI aberto por clique: icone de ajuda no Content, texto calculado no Tooltip, posicao e OnToggle guardando se esta aberto.",
+ "description": "Tooltip of OSUI opened by a click: a help icon in the Content, a computed text in the Tooltip, the position and OnToggle keeping whether it is open.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

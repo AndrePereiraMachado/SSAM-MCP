@@ -1,4 +1,5 @@
 // Wave 2 integration of the shared debugger entries (P11-P20): offline, fakes and temp folders only.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

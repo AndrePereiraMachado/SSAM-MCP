@@ -1,5 +1,5 @@
 {
- "description": "DropdownServerSide (OutSystemsUI, Advanced) tipico; criado vazio e preenchido com conteudo proprio; placeholders BalloonContent, BalloonFooter, BalloonSearchInput, BalloonSearchInputIcon, SelectedValues com dados do aggregate de tarefas; eventos OnToggle, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "description": "Typical DropdownServerSide (OutSystemsUI, Advanced); created empty and filled with its own content; placeholders BalloonContent, BalloonFooter, BalloonSearchInput, BalloonSearchInputIcon, SelectedValues with data of the tasks aggregate; events OnToggle, Initialized handled by screen actions that keep the parameters in variables.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

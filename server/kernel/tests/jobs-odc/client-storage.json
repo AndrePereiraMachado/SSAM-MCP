@@ -1,5 +1,5 @@
 {
- "description": "ODC (cobertura T): CLIENT ACTION e CLIENT ENTITY (local storage), dois tipos que nunca tinham passado pela faixa ODC. Espelha tests/jobs/local-storage-mobile.json (client entity com Id sem AutoNumber, client action que grava com CreateOrUpdate e aggregate de tela do lado do cliente) e junta o no de JavaScript de tests/jobs/client-js-reactive.json numa client action isolada (WfCovNormalizeTitle, decisao 6) que a client action chama. O InsuranceApp e CrossDevice, por isso a tela e IMobileScreen com o LayoutTopMenu do proprio modulo.",
+ "description": "ODC (T coverage): CLIENT ACTION and CLIENT ENTITY (local storage), two types that had never passed through the ODC lane. Mirrors tests/jobs/local-storage-mobile.json (client entity with Id without AutoNumber, client action that saves with CreateOrUpdate and client-side screen aggregate) and adds the JavaScript node of tests/jobs/client-js-reactive.json in an isolated client action (WfCovNormalizeTitle, decision 6) that the client action calls. The InsuranceApp is CrossDevice, so the screen is IMobileScreen with the module's own LayoutTopMenu.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -14,7 +14,7 @@
   {"op": "create", "parent": "$ce", "type": "IEntityAttribute", "name": "SavedOn", "as": "$savedOn"},
   {"op": "set", "target": "$savedOn", "prop": "DataType", "value": "Date Time"},
 
-  {"op": "create", "parent": "@espace", "type": "IClientAction", "name": "WfCovNormalizeTitle", "as": "$norm", "_why": "decisao 6: o JavaScript novo vive numa client action isolada e nomeada (so o script e a saida), chamada pela que grava"},
+  {"op": "create", "parent": "@espace", "type": "IClientAction", "name": "WfCovNormalizeTitle", "as": "$norm", "_why": "decision 6: the new JavaScript lives in an isolated, named client action (only the script and the output), called by the one that saves"},
   {"op": "create", "parent": "$norm", "type": "IInputParameter", "name": "Raw", "as": "$normIn"},
   {"op": "set", "target": "$normIn", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$norm", "type": "IOutputParameter", "name": "Clean", "as": "$normOut"},
@@ -59,7 +59,7 @@
   {"op": "set", "target": "$f2", "prop": "Value", "value": "CurrDateTime()"},
 
   {"op": "create", "parent": "$ca", "type": "IExecuteClientActionNode", "name": "StoreDraft", "as": "$store"},
-  {"op": "set", "target": "$store", "prop": "Action", "value": "IEntityActionSignature:CreateOrUpdateWfCovDraft", "_why": "gravar no local storage e a entity action da client entity, chamada por um IExecuteClientActionNode"},
+  {"op": "set", "target": "$store", "prop": "Action", "value": "IEntityActionSignature:CreateOrUpdateWfCovDraft", "_why": "saving to local storage is the entity action of the client entity, called by an IExecuteClientActionNode"},
   {"op": "set", "target": "$store/Source", "prop": "Value", "value": "Draft"},
   {"op": "create", "parent": "$ca", "type": "IEndNode", "as": "$c9"},
   {"op": "link", "from": "$c0", "to": "$normCall"},
@@ -73,7 +73,7 @@
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$scrTitle"},
   {"op": "set", "target": "$scrTitle", "prop": "Value", "value": "\"Drafts\""},
 
-  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetDrafts", "as": "$agg", "args": {"isClientSide": true}, "_why": "aggregate do lado do CLIENTE: e assim que a tela le o local storage"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetDrafts", "as": "$agg", "args": {"isClientSide": true}, "_why": "CLIENT-side aggregate: this is how the screen reads local storage"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IClientEntity:WfCovDraft"}},
 
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "NewTitle", "as": "$newTitle"},
@@ -100,9 +100,9 @@
   {"op": "layout", "target": "$act"},
   {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$act"},
 
-  {"op": "get", "target": "$ce", "_why": "prova a client entity e o seu IdentifierAttribute"},
-  {"op": "get", "target": "$id", "_why": "prova Id Long Integer SEM AutoNumber"},
-  {"op": "dump", "target": "$ca", "depth": 3, "_why": "prova o fluxo da client action: a chamada da client action do JavaScript, Assign e o CreateOrUpdate da client entity"},
-  {"op": "usages", "target": "$ca", "_why": "prova a screen action como consumidora da client action"}
+  {"op": "get", "target": "$ce", "_why": "proves the client entity and its IdentifierAttribute"},
+  {"op": "get", "target": "$id", "_why": "proves Id Long Integer WITHOUT AutoNumber"},
+  {"op": "dump", "target": "$ca", "depth": 3, "_why": "proves the flow of the client action: the call to the JavaScript client action, Assign and the CreateOrUpdate of the client entity"},
+  {"op": "usages", "target": "$ca", "_why": "proves the screen action as consumer of the client action"}
  ]
 }

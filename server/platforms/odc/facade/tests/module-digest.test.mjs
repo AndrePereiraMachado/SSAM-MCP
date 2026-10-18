@@ -2,6 +2,7 @@
 // lane, adapter and the hash of the bytes read now match; a miss asks the lane's kernel reader ({"digest":"ensure"},
 // mocked here); one page when the whole digest fits, else the overview first and the bodies after, with nothing dropped,
 // every cut said at both ends, every page inside the budget and every continuation pinned to the same capture.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

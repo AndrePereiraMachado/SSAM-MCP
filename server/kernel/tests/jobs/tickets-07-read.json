@@ -1,5 +1,5 @@
 {
- "description": "Tickets: leituras para telas e relatorios (get com permissoes, pesquisa, timeline, dashboard)",
+ "description": "Tickets: reads for screens and reports (get with permissions, search, timeline, dashboard)",
  "base": "job:tickets-06-sla",
  "expectValid": true,
  "expectedMessages": [],

@@ -2,6 +2,7 @@
 // the last publication, the leftovers the job declared to pass the gate, the roles of the screens it touched, the
 // standing grant used) on success and the preflight problems on a refusal; and once the change is delivered nothing
 // suggests delivering it again, whatever the publish of the same call said. Pure: no Studio, no CLI.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { compactDelivery, shapeToolResult, DELIVERY_FIELDS } from '../responses.mjs';
@@ -25,19 +26,20 @@ test('compactDelivery keeps exactly the shared fields on a delivered change, pub
     'highWarnings', 'warnings', 'warningsTotal', 'queue', 'equivalence', 'normalized', 'normalizedTotal', // I8 of the atritos 3 package
     'phases', // lane wp of the atritos 3 package: a delivery built outside the Studio lock
     'preview', // C04 (servidor/fase4): the structural preview of the delivered html (preview/fragment.mjs)
-    'removed', 'removedTotal']); // ssam_code (2026-10-12): what an action text or a screen edit removed
+    'removed', 'removedTotal', // ssam_code (2026-10-12): what an action text or a screen edit removed
+    'producerNotes', 'available', 'availableTotal']); // fix/system-reference (2026-10-15): a producer's Studio name, the producers offered
   const queue = { position: 1, waitedMs: 1200, holder: { tool: 'studio_deliver', pid: 4242, startedAt: '2026-10-06T13:38:00Z' } };
   assert.deepEqual(compactDelivery('studio_deliver', {}, { ok: true, merged: true, strictlyEqual: true, manifest: 'm.json', queue, steps: [1] }),
-    { ok: true, result: 'entregue', queue, manifest: 'm.json' });
-  const answer = { ok: true, result: 'entregue e publicado', merged: true, strictlyEqual: true, steps: [{ name: 'merge' }], totalSeconds: 9, evidence: 'lab/7', manifest: 'm.json', ...shared };
+    { ok: true, result: 'delivered', queue, manifest: 'm.json' });
+  const answer = { ok: true, result: 'delivered and published', merged: true, strictlyEqual: true, steps: [{ name: 'merge' }], totalSeconds: 9, evidence: 'lab/7', manifest: 'm.json', ...shared };
   // The manifest stays (atritos-a-publish.test.mjs); a published delivery names no further publication.
-  assert.deepEqual(compactDelivery('studio_deliver', {}, answer), { ok: true, result: 'entregue e publicado', ...shared, manifest: 'm.json' });
-  // Without publish:true there is no publish field and the result stays "entregue".
+  assert.deepEqual(compactDelivery('studio_deliver', {}, answer), { ok: true, result: 'delivered and published', ...shared, manifest: 'm.json' });
+  // Without publish:true there is no publish field and the result stays "delivered".
   const plain = compactDelivery('studio_deliver', {}, { ok: true, merge: { merged: true, strictlyEqual: true }, lastPublication: shared.lastPublication, screenRoles: shared.screenRoles, screenRolesTotal: 1 });
-  assert.deepEqual(plain, { ok: true, result: 'entregue', lastPublication: shared.lastPublication, screenRoles: shared.screenRoles, screenRolesTotal: 1 });
+  assert.deepEqual(plain, { ok: true, result: 'delivered', lastPublication: shared.lastPublication, screenRoles: shared.screenRoles, screenRolesTotal: 1 });
   // Through the MCP shaper the text carries the same fields.
   const shaped = shapeToolResult('studio_deliver', {}, { content: [{ type: 'text', text: JSON.stringify(answer) }], structuredContent: answer });
-  assert.deepEqual(JSON.parse(shaped.content[0].text), { ok: true, result: 'entregue e publicado', ...shared, manifest: 'm.json' });
+  assert.deepEqual(JSON.parse(shaped.content[0].text), { ok: true, result: 'delivered and published', ...shared, manifest: 'm.json' });
 });
 
 test('a preflight refusal keeps every problem; a failed publish of a delivered change keeps that it was delivered', () => {
@@ -51,10 +53,10 @@ test('a preflight refusal keeps every problem; a failed publish of a delivered c
   assert.equal(refused.code, 'PREFLIGHT_REFUSED'); assert.equal(refused.failed, 'preflight'); assert.equal(refused.steps, undefined);
   // The problems may come inside the raw refusal.
   assert.deepEqual(compactDelivery('studio_deliver', {}, { ok: false, error: 'x', refusal: { problems } }).problems, problems);
-  const publishFailed = { ok: false, result: 'entregue', code: 'PUBLISH_FAILED', error: 'cloud build failed', publish: { requested: true, outcome: 'failed', code: 'PUBLISH_FAILED', messages: [{ type: 'Error', text: 'SQL' }] },
+  const publishFailed = { ok: false, result: 'delivered', code: 'PUBLISH_FAILED', error: 'cloud build failed', publish: { requested: true, outcome: 'failed', code: 'PUBLISH_FAILED', messages: [{ type: 'Error', text: 'SQL' }] },
     continuation: { tool: 'studio_publish', arguments: { manifest: 'm.json', wait: true } }, steps: [] };
   const kept = compactDelivery('studio_deliver', {}, publishFailed);
-  assert.equal(kept.result, 'entregue'); assert.deepEqual(kept.publish, publishFailed.publish); assert.deepEqual(kept.continuation, publishFailed.continuation);
+  assert.equal(kept.result, 'delivered'); assert.deepEqual(kept.publish, publishFailed.publish); assert.deepEqual(kept.continuation, publishFailed.continuation);
   // The relay's refusal (lane C) keeps its stage next to code and outcome: friction records the step (I9).
   const relay = compactDelivery('studio_deliver', {}, { ok: false, code: 'TIMEOUT', stage: 'relay', tool: 'studio_deliver', outcome: 'uncertain', error: 'no answer',
     continuation: { tool: 'studio_status', arguments: {} } });
@@ -65,7 +67,7 @@ test('once delivered, no answer suggests delivering again: only the publish goes
   const input = { module: 'OfficePet_CS', job: 'j.json', authorize: 'pode entregar e publicar o OfficePet', publish: true };
   // The refusal code a redelivery used to follow, now with the delivery done and the publish refused.
   for (const value of [
-    { ok: false, result: 'entregue', code: 'VALIDATION_REFUSED', taskId: TASK, publish: { requested: true, outcome: 'refused' } },
+    { ok: false, result: 'delivered', code: 'VALIDATION_REFUSED', taskId: TASK, publish: { requested: true, outcome: 'refused' } },
     { ok: false, code: 'VALIDATION_REFUSED', taskId: TASK, publish: { requested: true, outcome: 'failed' } },
   ]) {
     const call = refusalContinuation('o11_deliver', input, value);
@@ -74,17 +76,17 @@ test('once delivered, no answer suggests delivering again: only the publish goes
   // `skipped`: the merge was not clean, nothing was delivered; the corrected delivery stays the continuation.
   const skipped = refusalContinuation('o11_deliver', input, { ok: false, code: 'VALIDATION_REFUSED', taskId: TASK, publish: { requested: true, outcome: 'skipped' } });
   assert.equal(skipped.tool, 'o11_deliver'); assert.equal(skipped.arguments.closePrevious, TASK);
-  const failed = addNextSteps('o11_deliver', input, { ok: false, result: 'entregue', code: 'PUBLISH_FAILED', error: 'publish failed', publish: { requested: true, outcome: 'failed' } });
+  const failed = addNextSteps('o11_deliver', input, { ok: false, result: 'delivered', code: 'PUBLISH_FAILED', error: 'publish failed', publish: { requested: true, outcome: 'failed' } });
   assert.deepEqual(failed.continuation.tool, 'o11_publish');
   assert.deepEqual(failed.continuation.arguments, { module: 'OfficePet_CS', authorize: WORDS_MARKER });
   assert.ok(!JSON.stringify(failed.continuation).includes(input.authorize), 'the user words never travel');
-  const uncertain = addNextSteps('o11_deliver', input, { ok: false, result: 'entregue', code: 'PUBLISH_UNCERTAIN', error: 'publish running', publish: { requested: true, outcome: 'uncertain' } });
+  const uncertain = addNextSteps('o11_deliver', input, { ok: false, result: 'delivered', code: 'PUBLISH_UNCERTAIN', error: 'publish running', publish: { requested: true, outcome: 'uncertain' } });
   assert.deepEqual(uncertain.continuation.arguments, { command: 'publish-log', args: { module: 'OfficePet_CS' } });
-  const odc = addNextSteps('studio_deliver', { module: 'QuizLiveWeb', pid: 42 }, { ok: false, result: 'entregue', code: 'PUBLISH_FAILED', manifest: 'm.json', error: 'x' });
+  const odc = addNextSteps('studio_deliver', { module: 'QuizLiveWeb', pid: 42 }, { ok: false, result: 'delivered', code: 'PUBLISH_FAILED', manifest: 'm.json', error: 'x' });
   assert.deepEqual(odc.continuation, { tool: 'studio_publish', arguments: { manifest: 'm.json', wait: true, pid: 42 }, why: odc.continuation.why });
   // A continuation the producer gave is kept; an exact success passes untouched.
-  const given = { ok: false, result: 'entregue', code: 'PUBLISH_FAILED', continuation: { tool: 'o11_publish', arguments: { module: 'X' } } };
+  const given = { ok: false, result: 'delivered', code: 'PUBLISH_FAILED', continuation: { tool: 'o11_publish', arguments: { module: 'X' } } };
   assert.equal(addNextSteps('o11_deliver', input, given), given);
-  const done = { ok: true, result: 'entregue e publicado', publish: { requested: true, outcome: 'published' } };
+  const done = { ok: true, result: 'delivered and published', publish: { requested: true, outcome: 'published' } };
   assert.equal(addNextSteps('o11_deliver', input, done), done);
 });

@@ -1,5 +1,6 @@
 // Wave 1 integration: the shared entries (server/client sessions, debug-run, the O11 runner,
 // the inspection CLI and ssam.mjs) wired to the package modules. Offline fakes only.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

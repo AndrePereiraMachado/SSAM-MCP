@@ -1,5 +1,5 @@
 {
-  "description": "op html (pagina inteira): binding visible vira IIfWidget nativo com o elemento no ramo True (tambem dentro de um <a>), e os filhos de <a>/<button> viram widgets filhos do Link/Button (card com div, icone <i> e bindings dentro de um link na lista; icone dentro de um botao). Faixa ODC: o mesmo job de tests/jobs/html-if-links-reactive.json sobre o InsuranceApp do tenant pessoal (o compilador e partilhado).",
+  "description": "op html (whole page): visible binding becomes a native IIfWidget with the element in the True branch (also inside an <a>), and the children of <a>/<button> become child widgets of the Link/Button (card with div, <i> icon and bindings inside a link in the list; icon inside a button). ODC lane: the same job as tests/jobs/html-if-links-reactive.json over the InsuranceApp of the personal tenant (the compiler is shared).",
   "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
   "expectedMessages": [],
   "expectValid": true,

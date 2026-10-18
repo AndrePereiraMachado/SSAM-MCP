@@ -1,5 +1,5 @@
 {
- "description": "Loja (parte 4 de 4): tela Catalog - filtro por categoria (Dropdown) e busca por nome, grade OSUI Gallery de cards ligada a uma data action, card clicavel que abre ProductDetail, e link com icone para o carrinho.",
+ "description": "Store (part 4 of 4): the Catalog screen - a category filter (Dropdown) and a search by name, an OSUI Gallery grid of cards bound to a data action, a clickable card that opens ProductDetail, and a link with an icon to the cart.",
  "base": "job:ecommerce-03-detail",
  "expectValid": true,
  "expectedMessages": [],
@@ -18,7 +18,7 @@
   {"op": "create", "parent": "$cats", "type": "ISort", "as": "$catSort"},
   {"op": "set", "target": "$catSort", "prop": "Attribute", "value": "Category.Order"},
 
-  {"op": "logic", "_why": "2. a data action le as variaveis da tela no filtro; os eventos dos filtros so pedem Refresh Data dela; o card chama OpenProduct", "data": {"actions": [
+  {"op": "logic", "_why": "2. the data action reads the screen variables in its filter; the events of the filters only ask for its Refresh Data; the card calls OpenProduct", "data": {"actions": [
    {"name": "GetCatalog", "kind": "data", "owner": "IMobileScreen:Catalog", "fetch": "AtStart",
     "outputs": [{"name": "Products", "type": "Product List"}],
     "steps": [
@@ -31,7 +31,7 @@
     "inputs": [{"name": "ProductId", "type": "Product Identifier"}],
     "steps": [{"node": "IDestinationNode", "as": "GoToDetail", "properties": {"Destination": "IMobileScreen:ProductDetail"}, "args": {"ProductId": "ProductId"}}]}]}},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Actions", "type": "ILink", "name": "CartLink", "as": "$cartLink", "_why": "3. topo: link com icone e texto para o carrinho"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Actions", "type": "ILink", "name": "CartLink", "as": "$cartLink", "_why": "3. top: a link with an icon and a text to the cart"},
   {"op": "delete", "target": "$cartLink/#ITextWidget"},
   {"op": "create", "parent": "$cartLink", "type": "IIcon", "name": "CartIcon", "as": "$cartIcon"},
   {"op": "set", "target": "$cartIcon", "prop": "Icon", "value": "shopping-cart"},
@@ -53,7 +53,7 @@
   {"op": "set", "target": "$in", "prop": "Prompt", "value": "\"Search products\""},
   {"op": "set", "target": "$in/OnChange", "prop": "Destination", "value": "IMobileScreen:Catalog/RefreshCatalog"},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ProductGallery", "source": "IMobileBlock:Gallery", "empty": true, "as": "$gal", "_why": "5. a grade: Gallery sem a List de exemplo, com a List da data action"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ProductGallery", "source": "IMobileBlock:Gallery", "empty": true, "as": "$gal", "_why": "5. the grid: a Gallery without the sample List, with the List of the data action"},
   {"op": "set", "target": "$gal/RowItemsDesktop", "prop": "Value", "value": "4"},
   {"op": "create", "parent": "$gal/Content", "type": "IList", "name": "ProductList", "as": "$list"},
   {"op": "set", "target": "$list", "prop": "Source", "value": "GetCatalog.Products"},

@@ -1,5 +1,5 @@
 {
- "description": "Tela Reactive com layout, aggregate e lista de entidades.",
+ "description": "Reactive screen with layout, aggregate and list of entities.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "ops": [

@@ -1,3 +1,4 @@
+import '../../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {main,parseArguments,compareRows,REGRESSION_THRESHOLDS} from './speed-ledger.mjs';
 test('CLI reports all argument problems together',()=>{assert.throws(()=>parseArguments(['measure','--since','bad','--until','bad','--nonsense']),e=>e.message.includes('--workspace')&&e.message.includes('--since')&&e.message.includes('--until')&&e.message.includes('--nonsense'));});

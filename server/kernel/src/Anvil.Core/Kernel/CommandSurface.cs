@@ -104,7 +104,7 @@ public static class CommandSurface
                     via = r["Via"]!.GetValue<string>(), status = r["Status"]!.GetValue<string>(), error = r["Error"]?.GetValue<string>() }).ToArray() };
         }).ToArray();
         return new { name, possibleParents = possibilities.Select(c => new { type = c!["Type"]!.GetValue<string>(), parent = c["Parent"]!.GetValue<string>(), via = c["Via"]!.GetValue<string>() }).ToArray(),
-            runtimes = results, library = "sem fixture, sem prova", noParent = "pai nao alcancavel ate profundidade 4 neste fixture; nao significa not-allowed" };
+            runtimes = results, library = "no fixture, no proof", noParent = "parent not reachable down to depth 4 in this fixture; it does not mean not-allowed" };
     }
 
     private static string Best(IEnumerable<string> statuses)
@@ -126,8 +126,47 @@ public static class CommandSurface
         return new string(kept.ToArray()).ToLowerInvariant();
     }
 
+    // The folded words of the Portuguese prose each suite job had before 16/10 (tests/jobs-search-aliases.json, written by
+    // platforms/odc/scripts/job-search-aliases.mjs): "jobs/<name>" -> words. Search only, never served; none: English only.
+    private static Dictionary<string, string> JobSearchAliases(string root)
+    {
+        var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
+        var file = Path.Combine(root, "tests", "jobs-search-aliases.json");
+        if (!File.Exists(file)) return aliases;
+        try
+        {
+            if (JsonNode.Parse(File.ReadAllText(file))?["jobs"] is JsonObject jobs)
+                foreach (var (key, value) in jobs)
+                    if (value?["words"]?.GetValue<string>() is { } words) aliases[key] = words;
+        }
+        catch (JsonException) { /* unreadable: English only */ }
+        return aliases;
+    }
+
+    // A job without its prose (the description, every op _why, the why of an expected message or of a lab flag), as text:
+    // what a recipe query matches besides the alias words (search-aliases.mjs withoutProse).
+    private static string WithoutProse(JsonNode job)
+    {
+        var copy = job.DeepClone();
+        Strip(copy, "");
+        return copy.ToJsonString(new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+
+        static void Strip(JsonNode? node, string at)
+        {
+            if (node is JsonObject o)
+                foreach (var key in o.Select(p => p.Key).ToList())
+                {
+                    if ((at.Length == 0 && key == "description") || key == "_why"
+                        || (key == "why" && (Regex.IsMatch(at, @"^/expectedMessages/\d+$") || at.EndsWith("/allowSoapWithoutImport", StringComparison.Ordinal)))) o.Remove(key);
+                    else Strip(o[key], at + "/" + key);
+                }
+            else if (node is JsonArray a)
+                for (var i = 0; i < a.Count; i++) Strip(a[i], at + "/" + i);
+        }
+    }
+
     /// <summary>
-    /// Proven job recipes by text. The curated table of AGENTS.md ("| Tarefa |") comes first, as before; a query of
+    /// Proven job recipes by text. The curated table of AGENTS.md ("| Task |") comes first, as before; a query of
     /// several words also reaches every job of the suite (tests/jobs) whose name, description or ops contain ALL the
     /// words, so "default screen" finds the jobs that set DefaultScreen and "screen roles" the ones that set the Roles of
     /// a screen (2026-10-05: both answered nothing, sessions dd2b79c0 and 62a884e8). An exact job name answers that job.
@@ -136,7 +175,8 @@ public static class CommandSurface
     {
         if (includeOps && (max == null || max <= 0)) throw new ArgumentException("recipe --ops requires --max <positive number>; output is bounded across all matches");
         var guide = File.ReadAllLines(Path.Combine(root, "AGENTS.md"));
-        var table = guide.SkipWhile(l => !l.StartsWith("| Tarefa |", StringComparison.Ordinal)).Skip(2).TakeWhile(l => l.StartsWith('|'));
+        // The header is English since 16/10 ("| Task |"); the Portuguese one of the guide before ("| Tarefa |") is read too.
+        var table = guide.SkipWhile(l => !l.StartsWith("| Task |", StringComparison.Ordinal) && !l.StartsWith("| Tarefa |", StringComparison.Ordinal)).Skip(2).TakeWhile(l => l.StartsWith('|'));
         var entries = new Dictionary<string, (string Path, List<string> Rows)>(StringComparer.Ordinal);
         foreach (var row in table)
             foreach (Match match in Regex.Matches(row, @"(?<![\w.-])([a-z][a-z0-9-]*)\.json\b"))
@@ -156,6 +196,9 @@ public static class CommandSurface
                 var name = Path.GetFileNameWithoutExtension(file);
                 if (!entries.ContainsKey(name)) entries[name] = (file, new List<string>());
             }
+        // The words of the Portuguese prose a suite job had before 16/10 (tests/jobs-search-aliases.json, search only, never
+        // served): a Portuguese query keeps finding the jobs it found when the prose was Portuguese.
+        var aliases = JobSearchAliases(root);
         var result = new List<object>();
         var remaining = max ?? 0;
         foreach (var entry in entries.OrderBy(e => curated.Contains(e.Key) ? 0 : 1).ThenBy(e => e.Key, StringComparer.Ordinal))
@@ -165,11 +208,14 @@ public static class CommandSurface
             var job = JsonNode.Parse(text)!;
             var description = job["description"]?.GetValue<string>() ?? "";
             var head = entry.Key + " " + description + " " + string.Join(" ", entry.Value.Rows);
-            var phrase = head.Contains(query, StringComparison.OrdinalIgnoreCase);
+            // A job with an alias is matched on the text it had before 16/10 (its Portuguese prose and table rows, then the
+            // rest of the job without its prose), so the English prose never changes what a query finds.
+            var hasAlias = aliases.TryGetValue("jobs/" + entry.Key, out var alias);
+            var phrase = hasAlias ? Fold(entry.Key + " " + alias).Contains(Fold(query), StringComparison.Ordinal) : head.Contains(query, StringComparison.OrdinalIgnoreCase);
             if (!curated.Contains(entry.Key) && entry.Key != query && string.IsNullOrWhiteSpace(description)) continue;
             if (!phrase)
             {
-                var folded = Fold(head + " " + text);
+                var folded = Fold(hasAlias ? entry.Key + " " + alias + " " + WithoutProse(job) : head + " " + text);
                 if (words.Length == 0 || !words.All(w => folded.Contains(w, StringComparison.Ordinal))) continue;
             }
             var ops = JobRunner.CollectOps(job, Path.GetDirectoryName(entry.Value.Path)!);

@@ -1,5 +1,5 @@
 {
- "description": "RangeSlider do OSUI como filtro de preco maximo: o OnValueChange grava o valor e faz Refresh Data dos produtos ate esse preco.",
+ "description": "RangeSlider of OSUI as a maximum price filter: OnValueChange saves the value and does a Refresh Data of the products up to that price.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

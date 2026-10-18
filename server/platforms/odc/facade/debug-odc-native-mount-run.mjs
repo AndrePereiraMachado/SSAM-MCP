@@ -15,6 +15,7 @@
 // owned page (never a Studio or the user's browser), after the lifecycle settles.
 // The native debugger observes what that original code does. A handled
 // lifecycle exception through the SDK error page is a known native failure.
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -92,7 +93,7 @@ export function odcChromeExecutable(env = process.env) {
 export async function runOdcNativeMount(input, prepared, readers, services = {}) {
   // Refusals that need no live state come before the lock and any download.
   if (services.requireClientInspection !== true) fail('client_inspection_required');
-  if (typeof input.words !== 'string' || !input.words.trim()) fail('explicit_authorization_required');
+  if (!wordsGiven(input.words)) fail('explicit_authorization_required'); // CX15 r7: one predicate
   // Screen inputs exist only as the URL query of an authorized navigation target
   // (one navigation per scenario) or of the initial deep link (one scenario).
   const navigation = prepared.mount?.navigation, route = prepared.mount?.route, deepLink = route?.default === false;
@@ -169,8 +170,9 @@ export async function runOdcNativeMount(input, prepared, readers, services = {})
     try { fs.writeFileSync(fd, JSON.stringify({ operationId, sessionId, kind: 'authorized-mount' })); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
     fs.mkdirSync(dir, { recursive: true });
     const authorizationFile = path.join(dir, 'authorization.json');
+    // CX15 r5 (N-3): the file keeps wordsSha256 of the user's words, never the words (authorizationSha256 = sha of the file).
     fs.writeFileSync(authorizationFile, JSON.stringify({ schema: 'ssam-odc-mount-authorization/1', policy: odcMountPolicy, operationId,
-      words: input.words, tenant: binding.tenant, module: binding.module, moduleKey: binding.moduleKey, runtimeUrl: binding.runtimeUrl,
+      wordsSha256: sha(String(input.words)), tenant: binding.tenant, module: binding.module, moduleKey: binding.moduleKey, runtimeUrl: binding.runtimeUrl,
       environmentKey: binding.environmentKey, revision: binding.revision, screenKey, sourceSha256: readers.sourceContract.sha256.toLowerCase(),
       route: report.route, ...(authorizedNavigation ? { navigation: authorizedNavigation } : {}), ...(interactions ? { interactions } : {}),
       at: new Date().toISOString() }), { flag: 'wx', flush: true });

@@ -1,5 +1,5 @@
 {
- "description": "Checkbox por linha: cada tarefa da List tem um Checkbox ligado ao IsDone do registro, e o OnChange grava a linha no servidor passando o indice.",
+ "description": "A Checkbox per row: each task of the List has a Checkbox bound to the IsDone of the record, and OnChange saves the row on the server passing the index.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -29,7 +29,7 @@
   {"op": "set", "target": "$list", "prop": "Source", "value": "GetTasks.List"},
   {"op": "create", "parent": "$list", "type": "IContainer", "name": "TaskRow", "as": "$row"},
   {"op": "create", "parent": "$row", "type": "ICheckbox", "name": "DoneCheckbox", "as": "$cb"},
-  {"op": "set", "target": "$cb", "prop": "Variable", "value": "GetTasks.List.Current.Task.IsDone", "_why": "o Checkbox escreve direto no registro da linha"},
+  {"op": "set", "target": "$cb", "prop": "Variable", "value": "GetTasks.List.Current.Task.IsDone", "_why": "the Checkbox writes straight to the record of the row"},
   {"op": "set", "target": "$cb/OnChange", "prop": "Destination", "value": "IMobileScreen:TaskChecklist/DoneChanged"},
   {"op": "set", "target": "$cb/OnChange/RowIndex", "prop": "Value", "value": "GetTasks.List.CurrentRowNumber"},
   {"op": "create", "parent": "$row", "type": "IExpression", "as": "$title"},

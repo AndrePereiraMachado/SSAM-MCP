@@ -1,5 +1,6 @@
 // ODC Workflow starts through an ORIGINAL published Global Event producer.
 // Event emission, service frames and Workflow instance completion are separate.
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -181,7 +182,7 @@ export function runOdcWorkflowEvent(input, prepared, readers, services = {}) {
 
 export async function runOdcOriginalBackground(input, prepared, readers, services = {}) {
   if (input.contextMode !== 'native-background' || input.launch?.contextMode !== 'app-user' ||
-      typeof input.words !== 'string' || !input.words.trim()) fail('explicit_authorization_required');
+      !wordsGiven(input.words)) fail('explicit_authorization_required'); // CX15 r7: one predicate
   if (!['workflow-event', 'timer-original-wake'].includes(prepared.adapter?.kind) || !prepared.emission || prepared.emission.scenarios.length !== 1)
     fail('original_emitter_entry_unavailable');
   const workflow = prepared.adapter.kind === 'workflow-event', answeredState = workflow ? 'emitted' : 'scheduled';
@@ -194,7 +195,8 @@ export async function runOdcOriginalBackground(input, prepared, readers, service
   const report = { schema: 'ssam-odc-native-run/1', operationId, sessionId, lane: 'odc', execution: 'native-entry',
     binding, contextMode: 'native-background', state: 'preparing', entry: prepared.entry, adapter: prepared.adapter,
     startedAt: new Date().toISOString(), receiptPath: path.join(directory, 'receipt.json'), results: [],
-    authorization: { words: input.words, scope: workflow ? 'original-event-emission' : 'original-timer-wake', replayAllowed: false },
+    // CX15 r5 (N-3): the receipt (and its latest copy) keeps wordsSha256 of the words, never the words.
+    authorization: { wordsSha256: sha(input.words), scope: workflow ? 'original-event-emission' : 'original-timer-wake', replayAllowed: false },
     tracePlan: trace, ...unproved, ...(workflow ? {} : { wakeOwnershipProved: false }) };
   const save = () => { write(report.receiptPath, report); write(latest, report); };
   const debug = services.debug ?? headlessDebug;

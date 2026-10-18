@@ -1,5 +1,5 @@
 {
- "description": "WS4 T7 (ODC): o mesmo job html-visual-alert sobre o InsuranceApp do tenant pessoal. O fragmento HTML vira widgets nativos dentro de uma tela que ja existe; variaveis e acao sao nativas e o fragmento so as liga pelo nome. O tema do modulo e InsuranceApp.",
+ "description": "WS4 T7 (ODC): the same html-visual-alert job over the InsuranceApp of the personal tenant. The HTML fragment becomes native widgets inside a screen that already exists; variables and action are native and the fragment only binds them by name. The module theme is InsuranceApp.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { graphFromReadings, buildO11CallGraph, resolveO11Entry } from '../debug-o11-entry-graph.mjs';

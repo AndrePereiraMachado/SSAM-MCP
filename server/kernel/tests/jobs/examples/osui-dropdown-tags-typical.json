@@ -1,5 +1,5 @@
 {
- "description": "DropdownTags (OutSystemsUI, Interaction) tipico; inputs obrigatorios OptionsList ligados a variaveis da tela; eventos Initialized, OnChanged tratados por screen actions que guardam os parametros em variaveis.",
+ "description": "Typical DropdownTags (OutSystemsUI, Interaction); required inputs OptionsList bound to screen variables; events Initialized, OnChanged handled by screen actions that keep the parameters in variables.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

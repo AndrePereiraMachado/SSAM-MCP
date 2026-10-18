@@ -1,3 +1,4 @@
+import { originalProfile } from '../../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import os from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -170,11 +171,11 @@ test('file discovery finds Claude sibling subagents and CLI writes valid Markdow
 });
 
 const realEnabled = process.env.BENCH_REAL_TRANSCRIPTS === '1';
-const realDir = path.join(os.homedir(), '.codex', 'sessions', '2026', '10', '13');
+const realDir = path.join(originalProfile.home, '.codex', 'sessions', '2026', '10', '13');
 const realMainName = 'rollout-2026-10-13T11-57-13-01a135c4-8333-7190-b72c-bb2c32460f1d.jsonl';
-const realMain = [path.join(realDir,realMainName),path.join(os.homedir(),'.codex','archived_sessions',realMainName)].find(f=>fs.existsSync(f)) ?? path.join(realDir,realMainName);
+const realMain = [path.join(realDir,realMainName),path.join(originalProfile.home,'.codex','archived_sessions',realMainName)].find(f=>fs.existsSync(f)) ?? path.join(realDir,realMainName);
 const realOther = path.join(realDir, 'rollout-2026-10-13T12-00-43-01a135c7-b752-7dc2-9d59-d5ad9229fd1b.jsonl');
-const realClaude = path.join(os.homedir(), '.claude', 'projects', 'C--Users-'+path.basename(os.homedir())+'-SSAM-Hybrid-proto', '7427c081-1701-4dd3-a1a7-c966a91e7d8d.jsonl');
+const realClaude = path.join(originalProfile.home, '.claude', 'projects', 'C--Users-'+path.basename(originalProfile.home)+'-SSAM-Hybrid-proto', '7427c081-1701-4dd3-a1a7-c966a91e7d8d.jsonl');
 const gated = file => !realEnabled ? 'set BENCH_REAL_TRANSCRIPTS=1 to read local transcripts' : !fs.existsSync(file) ? 'local transcript not present' : false;
 const window = (name, start, end) => ({ name, start: `2026-10-13T${start}Z`, end: `2026-10-13T${end}Z` });
 

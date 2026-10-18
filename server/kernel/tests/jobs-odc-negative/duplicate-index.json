@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA de `duplicate` sobre um indice (a copia nativa falhava com \"The clipboard objects cannot be pasted into this target: Condition is false\"); desde o lote de dados da fase 3 o kernel recusa antes, com a alternativa.",
+ "description": "ODC: the REFUSAL of `duplicate` on an index (the native copy failed with \"The clipboard objects cannot be pasted into this target: Condition is false\"); since the phase 3 data lot the kernel refuses beforehand, with the alternative.",
  "base": "job:data-full-model",
  "expectValid": true,
  "expectError": [

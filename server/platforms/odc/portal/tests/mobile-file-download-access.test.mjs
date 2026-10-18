@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import path from 'node:path';import os from 'node:os';import crypto from 'node:crypto';
 import {OdcAccess} from '../runtime/access.mjs';import {MOBILE_FILE_DOWNLOAD} from '../runtime/private-mobile-download.mjs';import {MOBILE_FILE_SAVE,MOBILE_FILE_UPLOAD,MOBILE_FILE_CONVERT} from '../runtime/mobile-binary-upload.mjs';
 const uuid=()=>crypto.randomUUID(),host='personal-test.outsystems.dev';

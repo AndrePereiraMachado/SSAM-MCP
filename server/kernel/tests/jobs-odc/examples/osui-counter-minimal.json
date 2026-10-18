@@ -1,5 +1,5 @@
 {
- "description": "Counter do OSUI: a instancia com o numero no Content.",
+ "description": "Counter of OSUI: the instance with the number in the Content.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

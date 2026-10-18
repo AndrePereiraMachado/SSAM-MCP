@@ -187,3 +187,15 @@ Prova real e regressões: [payload de integração](proofs/2026-10-14-o11-integr
 - Ambiente O11 com SSO: `kernel/docs/proofs/2026-09-25-o11-connected-environment.md`.
 - URLs de apps e telas: `docs/URLS-APPS.md`.
 - Credenciais do Service Center e do Portal (janela privada, cofre, perfis por host, revogar, trava corporativa): `docs/SC-PORTAL-USO.md`.
+
+## Perfis MCP de app e debug
+
+O padrão de `ssam mcp` é `app`: as ferramentas de app e o teste nativo de SQL/Aggregate ficam disponíveis, sem carregar os esquemas de debug. `ssam mcp --profile debug` serve as seis `ssam_debug*`, doctor e evidence; `--profile all` reúne tudo para desenvolvimento. `SSAM_MCP_PROFILE` seleciona o padrão do processo; um `--profile` explícito tem precedência. Um valor inválido é erro de uso. O perfil debug não agenda aquecimento dos índices.
+
+O arquivo isolado `debug.mcp.json` aponta para a entrada da raiz com `mcp --profile debug`. No Claude Code, acrescente esse arquivo com `--mcp-config` à sessão que já usa o servidor de app; não adicione debug ao `.mcp.json`. O gerador `scripts/configure-mcp.mjs` aceita `--debug` para regenerar apenas essa configuração separada e segue a regra de nome dos worktrees. Testes do gerador usam root/folders temporários, sem escrever configurações do usuário.
+
+O arquivo versionado usa a chave canônica `ssam-debug`. Seu fallback `SSAM_ROOT` exige uma release que implemente `server-profiles.mjs` e `mcp --profile debug`: uma release antiga pode ignorar o argumento e iniciar outro servidor completo de app. Atualize a release ou aponte `SSAM_ROOT` para uma raiz com perfis antes de reconectar. O JSON sozinho não valida nem atualiza essa raiz. A prova de superfície do debugger usa `mcp --profile all`, pois seus hooks e as ferramentas de debug compartilham a conexão.
+
+No Codex, crie uma entrada adicional `mcp_servers.ssam-debug` no TOML com command do Node e args apontando para a entrada `facade/ssam.mjs`, `mcp`, `--profile`, `debug`. O discover do servidor de app informa `server:"ssam-debug"` e como habilitar quando a intenção precisa de debug. As continuações podem chamar ferramentas do servidor de app; os dois perfis usam a mesma raiz, sem conflito de identidade.
+
+As listagens curtas são aplicadas em uma borda única e os originais ficam em `ssam_reference kind:"tool"`. Mudou uma descrição original: revise o texto manual e o sourceSha256 em TOOL_LISTING; os testes falham e o runtime mantém o original até a revisão. Execute `contexto-fixo.mjs --profile app|debug|all` e as suítes context-budget para verificar instruções, lista, perfis, pacotes, recibos, teto e preservação do conteúdo.

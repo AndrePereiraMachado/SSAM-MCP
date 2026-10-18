@@ -1,5 +1,5 @@
 {
- "description": "MouseEvents do OSUI: o Start guarda o ponto inicial e o End guarda o deslocamento do arraste sobre um Container.",
+ "description": "MouseEvents of OSUI: Start keeps the starting point and End keeps the offset of the drag over a Container.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

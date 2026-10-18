@@ -6,7 +6,7 @@ import { after } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { shapeToolResult } from '../../responses.mjs';
 import { fitResult } from '../../answer-size.mjs';
-import { pageAnswer } from '../../ssam.mjs';
+import { pageAnswer, MAX_ANSWER_BYTES } from '../../ssam.mjs';
 
 const repository = fileURLToPath(new URL('../../../../../', import.meta.url));
 const base = path.join(repository, '.local');
@@ -14,7 +14,7 @@ fs.mkdirSync(base, { recursive: true });
 const root = fs.mkdtempSync(path.join(base, 'answer-wire-'));
 after(() => fs.rmSync(root, { recursive: true, force: true }));
 
-export function wireBytes(value, { maxBytes = 40960, ...args } = {}) {
+export function wireBytes(value, { maxBytes = MAX_ANSWER_BYTES, ...args } = {}) {
   args = { lane: value.lane, intent: value.intent, budgetBytes: value.size?.budgetBytes,
     ...(value.expansions ? { expand: Object.keys(value.expansions).join(',') } : {}), ...args };
   const input = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value };

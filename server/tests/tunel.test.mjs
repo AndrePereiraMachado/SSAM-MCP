@@ -1,6 +1,7 @@
 // scripts/tunel.mjs (the owner's quick tunnel, docs/FASE2-AGENTE.md 9.1): argument handling, the exact commands, the URL
 // read from cloudflared's log, the client configuration with a token placeholder, and start/stop/status over fakes.
 // Nothing here starts a server, a tunnel or any process: every effect goes through the fake deps.
+import '../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';

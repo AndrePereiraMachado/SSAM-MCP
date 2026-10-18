@@ -1,5 +1,6 @@
 // Publish errors of the ODC Studio, offline: the bridge is a fake whose answers have the shape of the v35 bridge's
 // publish-log (PublishLogCommands.cs) and of its publish --wait refusal (publishLog). No Studio, pipe or tenant.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { publishRefusal, publishWithLog, shapePublishLog, studioPublishLog } from '../studio-publish-log.mjs';
@@ -27,7 +28,7 @@ test('publish-log: a failed publication answers every message and the read of th
   assert.equal(out.lastPublish.messages.length, 2);
   assert.deepEqual(out.continuation.tool, 'studio_inspect');
   assert.deepEqual(out.continuation.arguments, { target: 'GameStore', path: '@' + KEY, depth: 3 });
-  assert.match(out.continuation.why, /compilation.*Invalid SQL in 'GetTopSellers'.*GetTopSellers \(ServerAction\).*studio_deliver.*palavras do usuário/s);
+  assert.match(out.continuation.why, /compilation.*Invalid SQL in 'GetTopSellers'.*GetTopSellers \(ServerAction\).*studio_deliver.*the user's words/s);
   // The publication key the Studio polled gives the same messages from the Portal, with stepId and time.
   assert.deepEqual(out.serverLog.arguments, { kind: 'publish', operationKey: '9d7c2f8e-5d2b-4f7e-9a51-0b6f3c1a2e44', messages: true });
   assert.equal(out.serverLog.tool, 'odc_operation_status');
@@ -39,7 +40,7 @@ test('publish-log: element by name only -> ssam_map; no element -> ssam_discover
   const bare = failedLog(); bare.lastPublish.messages = [{ type: 'error', text: 'Generation failed', detail: null, stage: 'unknown', element: null, code: null }];
   const discover = shapePublishLog(bare).continuation;
   assert.equal(discover.tool, 'ssam_discover');
-  assert.deepEqual(discover.arguments, { intent: 'corrigir erro de publicação ODC: Generation failed', lane: 'odc' });
+  assert.deepEqual(discover.arguments, { intent: 'fix ODC publication error: Generation failed', lane: 'odc' });
   const ok = shapePublishLog(failedLog({ state: 'CompletedWithSuccessNotOpenedInBrowser', failed: false, succeeded: true, messages: [], counts: { errors: 0, warnings: 0, infos: 0 } }));
   assert.equal(ok.continuation, undefined);
 });

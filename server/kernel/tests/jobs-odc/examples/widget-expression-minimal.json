@@ -1,5 +1,5 @@
 {
- "description": "Expression: um IExpression no Title do layout com Value literal entre aspas.",
+ "description": "Expression: an IExpression in the Title of the layout with a literal Value between quotes.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -7,6 +7,6 @@
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ExpressionDemo", "as": "$scr"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
-  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Today: \" + FormatDateTime(CurrDate(), \"yyyy-MM-dd\")", "_why": "Value e uma expressao OutSystems, nunca JavaScript"}
+  {"op": "set", "target": "$title", "prop": "Value", "value": "\"Today: \" + FormatDateTime(CurrDate(), \"yyyy-MM-dd\")", "_why": "Value is an OutSystems expression, never JavaScript"}
  ]
 }

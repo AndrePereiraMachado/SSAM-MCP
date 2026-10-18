@@ -3,6 +3,7 @@
 // prototype's JavaScript on the server machine. One switch, HOSTED_PROTOTYPE_OP in hosted/policy.mjs ('refuse' in 24.0),
 // lets it through when set to 'allow' (its data.source then confined like every path of a job, item 1). A fake link,
 // context and executor; no hub, agent or Studio.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -13,6 +14,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { wrapHostedTool, namesPrototype, HOSTED_PROTOTYPE_OP, PROTOTYPE_TOOLS } from '../hosted/policy.mjs';
 import { createSsamServer } from '../ssam.mjs';
 import { fakeAgentLink, hostedDirs, cleanupHostedDirs } from './fixtures/fake-agent-link.mjs';
+import { portuguese } from './fixtures/portuguese.mjs';
 
 test.after(cleanupHostedDirs);
 const TOOLS = ['o11_deliver', 'studio_deliver', 'ssam_job', 'o11_job'];
@@ -45,7 +47,7 @@ const refusedAsPrototype = (result, name) => {
   assert.equal(value.policy, 'HOSTED_PROTOTYPE_OP', name + ': the answer names the switch');
   assert.equal(value.outcome, 'not-sent');
   assert.match(value.error, /only in local use for now/, name + ': English');
-  assert.match(value.error, /só funciona no uso local/, name + ': pt-BR');
+  assert.deepEqual(portuguese(value.error), [], name + ': English only, no pt-BR half (owner rule of 2026-10-15)');
   assert.equal(value.continuation.tool, 'ssam_discover');
   assert.ok(!JSON.stringify(value.continuation).includes('"prototype"'), 'the continuation never leads back to the prototype op');
 };

@@ -50,8 +50,8 @@ public class SurfaceTests
         var runtimes = result["runtimes"]!.AsArray();
         Assert.StartsWith("created", runtimes.Single(r => r!["runtime"]!.ToString() == "Service")!["status"]!.ToString());
         Assert.All(runtimes.Where(r => r!["runtime"]!.ToString() != "Service"), r => Assert.Equal("not-allowed", r!["status"]!.ToString()));
-        Assert.Contains("sem prova", result["library"]!.ToString());
-        Assert.Contains("nao significa not-allowed", result["noParent"]!.ToString());
+        Assert.Contains("no proof", result["library"]!.ToString());
+        Assert.Contains("it does not mean not-allowed", result["noParent"]!.ToString());
     }
 
     [Fact]

@@ -2,6 +2,7 @@
 // (view "report"), linked to the last operations of the same session; the reads return it. Real case: the owner's notes
 // (ButtonGroup missing from the html fragment, the session fell back to native create) and the Cardápio session, where
 // "isso é uma friccao use ssam friction" ended in the CLI because the MCP tool only read. Synthetic queue folders.
+import '../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

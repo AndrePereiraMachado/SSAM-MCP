@@ -1,5 +1,5 @@
 {
- "description": "HTML Element com atributo e dados: um section com aria-label (propriedade estendida), um h3 fixo e um p que mostra o primeiro produto do aggregate.",
+ "description": "An HTML Element with an attribute and data: a section with aria-label (an extended property), a fixed h3 and a p that shows the first product of the aggregate.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -12,7 +12,7 @@
 
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IAdvancedHtml", "name": "HighlightSection", "as": "$section"},
   {"op": "set", "target": "$section", "prop": "Tag", "value": "section"},
-  {"op": "create", "parent": "$section", "type": "IExtendedProperty", "as": "$aria", "_why": "um atributo HTML e uma propriedade estendida: Property = nome, Value = expressao"},
+  {"op": "create", "parent": "$section", "type": "IExtendedProperty", "as": "$aria", "_why": "an HTML attribute is an extended property: Property = name, Value = expression"},
   {"op": "set", "target": "$aria", "prop": "Property", "value": "aria-label"},
   {"op": "set", "target": "$aria", "prop": "Value", "value": "\"Product of the day\""},
   {"op": "create", "parent": "$section/Content", "type": "IAdvancedHtml", "name": "HighlightTitle", "as": "$h3"},

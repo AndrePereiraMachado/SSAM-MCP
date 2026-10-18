@@ -53,7 +53,7 @@ public sealed class LogicRecursionTests
         if (defect == "wrong-kind") logic["actions"]![1]!["kind"] = "client";
         // atritos 2 (A07): every problem of the spec comes out at once, so the defect is one of them (the resolver of this
         // test knows no exception either).
-        var expected = defect switch { "missing-target" => "'Missing' nao existe", "missing-type" => "'type' e obrigatorio", _ => "cannot be called by a server" };
+        var expected = defect switch { "missing-target" => "'Missing' does not exist", "missing-type" => "'type' is required", _ => "cannot be called by a server" };
         Assert.Contains(expected, Assert.ThrowsAny<InvalidOperationException>(() => LogicExpander.Expand(logic, _ => null)).Message);
     }
 

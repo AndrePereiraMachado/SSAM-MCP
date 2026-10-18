@@ -77,7 +77,7 @@ const GRAMMAR = {
   ],
   'ssam-html/1': () => [
     '<screen name="<Screen>" [roles="<Role>"] [actions="<A>, <B>"] [data-actions="<D>"]> ... </screen>   or   <block name="<Block>"> ... </block>',
-    '<input name type default/> (screen input), <var name type default/>, <aggregate name from="<Entity>" [join="<Other> on <condition>"] [where="<condition>"] [sort="<Entity>.<Attr> desc"] max="50"/>',
+    '<input name type default/> (screen input), <var name type default/>, <aggregate name from="<Entity>" [join="<Other> on <condition>" (a left join)] [where="<condition>"] [sort="<Entity>.<Attr> desc"] max="50"/>; <event name/> in a block; an <input> or <event> without mandatory is optional, mandatory="True" makes it mandatory',
     'content inside the layout block: <Block name="LayoutTopMenu"><slot name="Title">...</slot><slot name="MainContent">...</slot></Block>',
     'widgets: div, form, a, button, input, textarea, select, switch, label, img, i, upload, popup; <div list="<Source>"> repeats with <Source>.Current; <div if="<condition>"> + <div else>; {{ <expression> }}; os-<Property>="<value>"',
     'events: onclick="<Action>(<Param> = <expression>)"; each screen action named in actions="..." is declared by a flow text "action <Screen>.<Name>" in a logic op after the html op',
@@ -111,6 +111,7 @@ const RULES = {
     'D1/D2: data by <aggregate> or a data action (filter, sort, join and max in the aggregate), never JavaScript or JSON.',
     'Reuse the app\'s blocks and the OutSystems UI classes first; a table first, no ornament (no card or icon tiles unless asked).',
     'Several screens: one html op per screen in the same job; navigation between them resolves by name.',
+    'Style the runtime box, not the bare tag (api --op html: document.runtime); a visual warning brings its checked patch.',
   ],
   common: [
     'One delivery: a refusal comes ONCE with every problem of every text and the checked patch; apply it as it is (patch + basedOn), never the whole job again.',

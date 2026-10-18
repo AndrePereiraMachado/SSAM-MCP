@@ -1,12 +1,12 @@
 {
- "description": "Base dos exemplos O11: tela vazia Showcase (LayoutTopMenu) e dados de apoio (static Priority e entidade Task). Os exemplos minimal e typical de widgets partem daqui com base job:ex-base.",
+ "description": "Base of the O11 examples: an empty Showcase screen (LayoutTopMenu) and supporting data (static Priority and entity Task). The minimal and typical widget examples start from here with base job:ex-base.",
  "base": "reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
   {"op": "spec", "data": {
    "static": [{"name": "Priority", "records": [{"name": "Low"}, {"name": "Medium"}, {"name": "High"}]}],
-   "entities": [{"name": "Task", "description": "Tarefa de exemplo", "attributes": [
+   "entities": [{"name": "Task", "description": "Example task", "attributes": [
     {"name": "Title", "type": "Text", "mandatory": true, "length": 100},
     {"name": "Notes", "type": "Text", "length": 500},
     {"name": "DueDate", "type": "Date"},

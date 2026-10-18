@@ -1,5 +1,5 @@
 {
- "description": "DonutChart do OutSystemsCharts com dados: uma data action soma o total por regiao (aggregate com Group e Sum) e monta os DataPoint; o OnDataPointClick guarda a regiao clicada.",
+ "description": "DonutChart of OutSystemsCharts with data: a data action sums the total per region (an aggregate with Group and Sum) and builds the DataPoint; OnDataPointClick keeps the clicked region.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

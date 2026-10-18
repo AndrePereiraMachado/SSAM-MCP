@@ -1,5 +1,5 @@
 {
- "description": "SQL preflight contra a base: o atributo Name (Text) da base comparado com um parametro novo declarado Integer. O Studio aceita; o banco converte implicitamente e falha em tempo de execucao. Recusado antes do apply.",
+ "description": "SQL preflight against the database: the attribute Name (Text) of the base compared with a new parameter declared Integer. The Studio accepts it; the database converts implicitly and fails at runtime. Refused before the apply.",
  "base": "job:sql-input-output",
  "expectError": ["op #3 (SQL IServerAction:Product_Search/SearchProducts, line 2): {Product}.[Name] is Text but @Code is declared Integer"],
  "ops": [

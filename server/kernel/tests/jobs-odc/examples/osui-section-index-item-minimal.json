@@ -1,5 +1,5 @@
 {
- "description": "SectionIndexItem do OSUI: um item com ScrollToWidgetId (obrigatorio) apontando um Container da tela.",
+ "description": "SectionIndexItem of OSUI: one item with ScrollToWidgetId (required) pointing to a Container of the screen.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

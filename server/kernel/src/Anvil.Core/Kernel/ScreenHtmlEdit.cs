@@ -70,6 +70,9 @@ public static class ScreenHtmlEdit
                     // What a new element (no k) writes new, without the reading: an element with its k is judged against the reading
                     // by the plan at apply (what it already had is kept), which says these again with their patches.
                     if (node.Get("k") != null) continue;
+                    // CX17 review 2, M4: a marker of the engine on a new element (the one rule of the three text forms).
+                    foreach (var (attribute, value, _) in Anvil.Core.ScreenVisual.AuthorMarkers(node, null))
+                        Add(pointer, Anvil.Core.ScreenVisual.ReservedMarker, Anvil.Core.ScreenVisual.ReservedMarkerMessage(attribute, value, false, false), Anvil.Core.ScreenVisual.ReservedMarkerFix(attribute, null) + " (the plan's patch)");
                     foreach (var (attribute, value) in node.Attributes) {
                         if (Anvil.Core.ScreenDocument.ScriptAttribute(attribute, value) != null
                             || (attribute.StartsWith("on", StringComparison.Ordinal) || attribute.StartsWith("html:on", StringComparison.Ordinal)) && !attribute.Contains('.') && !ScreenHtml.TryCall(value, out _, out _) && !Anvil.Core.ScreenDocument.ParseCall(value, out _, out _))
@@ -92,7 +95,7 @@ public static class ScreenHtmlEdit
         KeyTwice = "HTML_KEY_TWICE", OpaqueTouched = "HTML_OPAQUE_TOUCHED", Visible = "HTML_VISIBLE", Script = "HTML_SCRIPT", Json = "HTML_JSON",
         NameUnknown = "HTML_NAME_UNKNOWN", NameTaken = "HTML_NAME_TAKEN", DeleteInUse = "HTML_DELETE_IN_USE", SlotUnknown = "HTML_SLOT_UNKNOWN",
         ActionsListed = "HTML_ACTIONS_LISTED", DataNew = "HTML_DATA_NEW", KindChanged = "HTML_KIND_CHANGED", BaseChanged = "HTML_BASE_CHANGED",
-        NotApplied = "HTML_EDIT_NOT_APPLIED", ForEach = "HTML_FOREACH";
+        NotApplied = "HTML_EDIT_NOT_APPLIED", ForEach = "HTML_FOREACH", DefaultsMissing = "HTML_STUDIO_DEFAULTS";
 
     // <div if k="..."> followed by its <div else>: the two halves of one If, sent together.
     internal static bool IsIfElse(ScreenHtml.Node first, ScreenHtml.Node second) =>

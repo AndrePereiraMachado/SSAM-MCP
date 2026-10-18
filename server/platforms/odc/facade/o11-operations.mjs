@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { run } from './lanes.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { serviceCenterTool } from './service-center/index.mjs';
-import { DESTRUCTIVE_SUFFIX } from './destructive-operations.mjs';
+import { DESTRUCTIVE_SUFFIX, wordsGiven } from './destructive-operations.mjs';
 import { anvilRoot, o11Lane } from './workspace.mjs';
 import { producerCacheDir, recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
 
@@ -71,7 +71,7 @@ export function serviceCenterArguments(input, kind = 'read') {
   if (!actions.includes(input.action)) throw new Error('Unknown Service Center action');
   const deletes = deleteActions.includes(input.action);
   const pageDelete = ['solution-delete', 'db-connection-delete'].includes(input.action);
-  if (input.action === 'discard' && (!input.operationId || !input.words?.trim()))
+  if (input.action === 'discard' && (!input.operationId || !wordsGiven(input.words))) // CX15 r7 (M-3): one predicate
     throw new Error('discard needs the operationId of the receipt and the user\'s own words naming its target');
   if (input.authorizationContext && !deletes && !['solution-delete','db-connection-create','db-connection-test','db-connection-delete','extension-publish'].includes(input.action))
     throw new Error('authorizationContext applies to exact deletions, scoped database connections and new standalone extension fixtures only');
@@ -79,9 +79,9 @@ export function serviceCenterArguments(input, kind = 'read') {
     throw new Error('confirmationToken and ownerRequest apply to deletes only (delete, its aliases, solution-delete, db-connection-delete)');
   // A delete's selection may come with a token: the engine refuses it with every other problem (SELECTION_ONLY_IN_PREVIEW).
   if (deletes) {
-    if (input.execute === true && !input.words?.trim() && !input.confirmationToken) throw new Error('Execution requires the user\'s own authorization words (they name every target)');
+    if (input.execute === true && !wordsGiven(input.words) && !input.confirmationToken) throw new Error('Execution requires the user\'s own authorization words (they name every target)');
   } else {
-    if (input.execute && !pageDelete && (!input.operationId || !input.words?.trim())) throw new Error('Execution requires operationId and the user\'s own authorization words');
+    if (input.execute && !pageDelete && (!input.operationId || !wordsGiven(input.words))) throw new Error('Execution requires operationId and the user\'s own authorization words');
     if (['applications', 'modules', 'extensions', 'prefix', 'prefixKind', 'maxDeletes'].some(k => input[k] !== undefined && !(k === 'applications' && ['application-dependency-graph','application-relationships'].includes(input.action))))
       throw new Error('applications, modules, extensions, prefix, prefixKind and maxDeletes apply to delete only');
   }
@@ -212,7 +212,7 @@ export const isSignatureFile = file => {
 export function inspectSignature(file, { offset = 0, limit = 100 } = {}) {
   const base = { lane: 'o11', verb: 'dependencies', action: 'inspect', file };
   const refuse = (code, error) => ({ ok: false, ...base, code, error,
-    continuation: { tool: 'o11_dependencies', arguments: { action: 'capture', producer: '<producer>' }, why: 'captura de novo a assinatura atestada do producer' } });
+    continuation: { tool: 'o11_dependencies', arguments: { action: 'capture', producer: '<producer>' }, why: 'captures the attested signature of the producer again' } });
   let envelope;
   try { envelope = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, '')); }
   catch (error) { return refuse(error?.code === 'ENOENT' ? 'SIGNATURE_NOT_FOUND' : 'SIGNATURE_INVALID', error?.code === 'ENOENT' ? 'No producer signature at ' + file : 'The file is not a producer signature envelope: ' + error.message); }
@@ -341,7 +341,7 @@ export function registerO11Operations(server, fromJsonSchema, deps = {}) {
     if (action === 'capture' && out === undefined && (producer || key)) {
       try { defaulted = defaultSignatureOut({ producer, key, elements }, { local: laneLocal() }); fs.mkdirSync(path.dirname(defaulted), { recursive: true }); out = defaulted; }
       catch (error) { return reply({ ok: false, lane: 'o11', verb: 'dependencies', code: 'CAPTURE_FOLDER_UNAVAILABLE', error: 'The default capture folder cannot be written: ' + error.message,
-        continuation: { tool: 'o11_dependencies', arguments: { action, ...(producer ? { producer } : { key }), ...(elements ? { elements } : {}), out: '<absolute path>.avsig' }, why: 'capture para um arquivo .avsig num caminho absoluto que dê para gravar' } }); }
+        continuation: { tool: 'o11_dependencies', arguments: { action, ...(producer ? { producer } : { key }), ...(elements ? { elements } : {}), out: '<absolute path>.avsig' }, why: 'capture to an .avsig file at an absolute path that can be written' } }); }
     }
     // The native CLI's option reader consumes the following token, not shell text.
     const args = [action];

@@ -1,5 +1,5 @@
 {
- "description": "Regressao: no ODC um atributo de entidade nasce com um IRecordAttributeValue (o valor do registo de exemplo, que o SS11 chama SampleRecord). Ele e mantido e limpo pelo proprio Studio, logo conta como uso DERIVADO: apagar um atributo sem consumidor de autoria tem de passar SEM force. Sem essa regra, nenhum atributo de entidade podia ser apagado na faixa ODC.",
+ "description": "Regression: in ODC an entity attribute is born with an IRecordAttributeValue (the value of the sample record, which SS11 calls SampleRecord). It is maintained and cleared by Studio itself, so it counts as DERIVED use: deleting an attribute without an author consumer must pass WITHOUT force. Without that rule, no entity attribute could be deleted in the ODC lane.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "ops": [
@@ -13,9 +13,9 @@
   {"op": "create", "parent": "$e", "type": "IEntityAttribute", "name": "Solto", "as": "$a"},
   {"op": "set", "target": "$a", "prop": "DataType", "value": "Text"},
 
-  {"op": "usages", "target": "$a", "_why": "so o valor do registo de exemplo, que e derivado"},
-  {"op": "delete", "target": "$a", "_why": "sem consumidor de autoria: passa sem force"},
-  {"op": "usages", "target": "$nome", "_why": "o atributo que fica continua com o seu proprio valor derivado"},
+  {"op": "usages", "target": "$a", "_why": "only the sample record value, which is derived"},
+  {"op": "delete", "target": "$a", "_why": "without an author consumer: passes without force"},
+  {"op": "usages", "target": "$nome", "_why": "the attribute that remains keeps its own derived value"},
   {"op": "find", "name": "WfDelProbe"}
  ]
 }

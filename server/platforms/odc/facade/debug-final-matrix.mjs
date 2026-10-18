@@ -149,7 +149,8 @@ export function odcProfile(name, value, ctx = {}) {
     let authorization = null;
     if (!auth) failed.push('authorization.missing');
     else {
-      authorization = { path: auth.rel, sha256: sha(auth.bytes), wordsSha256: str(auth.value?.words) ? sha(auth.value.words) : null };
+      // CX15 r5 (N-3): the authorization file keeps wordsSha256 (a file of before, with words, is hashed here).
+      authorization = { path: auth.rel, sha256: sha(auth.bytes), wordsSha256: /^[0-9a-f]{64}$/.test(String(auth.value?.wordsSha256 ?? '')) ? auth.value.wordsSha256 : str(auth.value?.words) ? sha(auth.value.words) : null };
       if (authorization.sha256 !== value?.authorizationSha256) failed.push('authorization.sha256');
       if (auth.value?.schema !== 'ssam-odc-mount-authorization/1' || auth.value?.operationId !== value?.operationId) failed.push('authorization.binding');
       if (!authorization.wordsSha256) failed.push('authorization.words');

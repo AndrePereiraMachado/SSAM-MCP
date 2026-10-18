@@ -1,5 +1,5 @@
 {
- "description": "Bloqueado headless: referenciar uma External Library precisa da assinatura capturada na sessao viva (studio_deliver com bridge reference-snapshot); sem captura o kernel recusa o produtor.",
+ "description": "Blocked headless: referencing an External Library needs the signature captured in the live session (studio_deliver with the bridge reference-snapshot); without a capture the kernel refuses the producer.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectError": ["producer SSAMTextTools not bound"],
  "ops": [

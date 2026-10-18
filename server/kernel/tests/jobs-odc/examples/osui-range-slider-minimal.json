@@ -1,5 +1,5 @@
 {
- "description": "RangeSlider do OSUI: os tres inputs obrigatorios e o evento obrigatorio OnValueChange guardando o valor.",
+ "description": "RangeSlider of OSUI: the three required inputs and the required event OnValueChange keeping the value.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

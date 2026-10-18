@@ -1,5 +1,5 @@
 {
- "description": "APAGAR, sem force, a tela padrao do modulo (cobertura testada, fase 2). O reactive-ui nao tem DefaultScreen, por isso a primeira tela criada headless fica com esse papel e o proprio modulo passa a cita-la. O delete recusava com um consumidor de caminho vazio (o ESpace); o Studio apaga e deixa so o aviso 'Unknown Default Screen'. Agora a DefaultScreen nao recusa: o usages mostra o IESpace com derived true e caminho 'IESpace:<modulo>'. O aviso fica no ESpace, num caminho de um nivel que o expectedMessages nao declara, por isso o job escolhe a nova tela padrao logo a seguir e o Verify fica sem mensagens novas.",
+ "description": "DELETE, without force, the default screen of the module (tested coverage, phase 2). The reactive-ui has no DefaultScreen, so the first screen created headless takes that role and the module itself starts to cite it. The delete used to refuse with a consumer with an empty path (the ESpace); the Studio deletes and leaves only the warning 'Unknown Default Screen'. Now the DefaultScreen does not refuse: the usages shows the IESpace with derived true and path 'IESpace:<module>'. The warning stays on the ESpace, in a one-level path that expectedMessages does not declare, so the job picks the new default screen right afterwards and Verify has no new messages.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -9,8 +9,8 @@
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "DelDefaultNew", "as": "$new"},
   {"op": "set", "target": "$new/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "usages", "target": "$old", "_why": "count 1, real 0: o IESpace (DefaultScreen), derived true"},
-  {"op": "delete", "target": "$old", "_why": "sem force: brokenConsumers 0"},
-  {"op": "set", "target": "@espace", "prop": "DefaultScreen", "value": "$new", "_why": "sem isto fica o aviso InvalidOptionalPropertyValue_PropertyIn_WithPrevious ('Unknown Default Screen') no ESpace"},
+  {"op": "delete", "target": "$old", "_why": "without force: brokenConsumers 0"},
+  {"op": "set", "target": "@espace", "prop": "DefaultScreen", "value": "$new", "_why": "without this, the warning InvalidOptionalPropertyValue_PropertyIn_WithPrevious ('Unknown Default Screen') stays on the ESpace"},
   {"op": "find", "name": "DelDefaultOld", "_why": "lista vazia"}
  ]
 }

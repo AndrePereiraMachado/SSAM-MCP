@@ -1,5 +1,5 @@
 {
- "description": "ScrollableArea do OSUI: a instancia com um texto no Content.",
+ "description": "ScrollableArea of OSUI: the instance with a text in the Content.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,5 +1,5 @@
 {
- "description": "Preparation minima (Traditional): a tela Web le os dados na IPreparation (Start, aggregate, End e layout) e a pagina mostra o total lido.",
+ "description": "Minimal Preparation (Traditional): the Web screen reads the data in the IPreparation (Start, aggregate, End and layout) and the page shows the total read.",
  "base": "traditional-ui.oml",
  "expectValid": true,
  "expectedMessages": [],

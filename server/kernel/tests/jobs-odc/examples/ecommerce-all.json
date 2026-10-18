@@ -1,5 +1,5 @@
 {
- "description": "Loja inteira numa transacao: o job composto junta as quatro partes (dados, carrinho, detalhe, catalogo) sobre o fixture, como uma entrega de um merge so.",
+ "description": "The whole store in one transaction: the composite job joins the four parts (data, cart, detail, catalog) over the fixture, as a delivery of one single merge.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

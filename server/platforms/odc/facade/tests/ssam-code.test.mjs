@@ -38,12 +38,12 @@ test('grammar: a card per part with the syntax and a from-scratch example; no mo
     assert.equal(g.ok, true); assert.equal(g.card.part, part); assert.ok(g.card.rules.length >= 3, part);
     assert.equal(g.card.read.tool, 'ssam_code'); assert.equal(g.card.write.arguments.action, 'write');
   }
-  assert.match(EXAMPLE_DDL, /create entity Visita label Titulo \(/);
-  assert.match(EXAMPLE_DDL, /references Cliente on delete Protect/); assert.match(EXAMPLE_DDL, /create unique index UQ_Visita_Titulo on Visita \(Titulo\);/);
-  assert.match(EXAMPLE_DDL, /create static entity StatusVisita[\s\S]*values[\s\S]*Agendada \(Id = 1/); assert.match(EXAMPLE_DDL, /type ResumoVisitas = \{/);
+  assert.match(EXAMPLE_DDL, /create entity Visit label VisitTitle \(/);
+  assert.match(EXAMPLE_DDL, /references Customer on delete Protect/); assert.match(EXAMPLE_DDL, /create unique index UQ_Visit_VisitTitle on Visit \(VisitTitle\);/);
+  assert.match(EXAMPLE_DDL, /create static entity VisitStatus[\s\S]*values[\s\S]*Planned \(Id = 1/); assert.match(EXAMPLE_DDL, /type VisitTotals = \{/);
   assert.match(EXAMPLE_DDL, /Decimal\(18,2\)/); assert.match(EXAMPLE_DDL, /Boolean required default False/); assert.match(EXAMPLE_DDL, /Date Time default CurrDateTime\(\)/);
-  assert.match(EXAMPLE_LOGIC[0], /^server action ConcluirVisita$/m); for (const w of ['aggregate FROM', 'if ', 'assign', 'raise ', 'out Concluidas']) assert.ok(EXAMPLE_LOGIC[0].includes(w), w);
-  assert.match(EXAMPLE_HTML, /<var name="Filtro"/); assert.match(EXAMPLE_HTML, /list="GetVisitas.List"/); assert.match(EXAMPLE_HTML, /onclick="Concluir\(/);
+  assert.match(EXAMPLE_LOGIC[0], /^server action CompleteVisit$/m); for (const w of ['aggregate FROM', 'if ', 'assign', 'raise ', 'out CompletedCount']) assert.ok(EXAMPLE_LOGIC[0].includes(w), w);
+  assert.match(EXAMPLE_HTML, /<var name="Filter"/); assert.match(EXAMPLE_HTML, /list="GetVisits.List"/); assert.match(EXAMPLE_HTML, /onclick="Complete\(/);
   const all = grammarCard(null, 'odc');
   assert.deepEqual(all.parts.map(c => c.part), CODE_PARTS);
   // The first example is the one an empty or service (_CS) module takes: data and a server action, no screen, no role.
@@ -59,6 +59,10 @@ test('grammar: a card per part with the syntax and a from-scratch example; no mo
   assert.ok(grammarCard('html', 'odc').card.rules.some(r => /BEFORE the change of an existing screen/.test(r)));
   assert.ok(grammarCard('html', 'odc').card.rules.some(r => /no argument on<event>="Destination"/.test(r)));
   assert.ok(grammarCard('html', 'odc').card.rules.some(r => /owners default to the screen/.test(r)));
+  // An <input> (and a block <event>) written without mandatory is optional, whatever the Studio gives a fresh one: the card says
+  // how a mandatory one is written (review odc-defaults-4, R4-2).
+  for (const lane of ['odc', 'o11'])
+    assert.ok(grammarCard('html', lane).card.rules.some(r => /<input name type>/.test(r) && /without mandatory is optional/.test(r) && /mandatory="True"/.test(r)), lane);
 });
 
 test('write logic: a changed action is sent whole; a gap in its ids is refused unless removes says so', () => {
@@ -132,7 +136,7 @@ test('write odc: owners are the edited screen, the screens of the screen actions
   assert.deepEqual(data.arguments.owners, ['Visitas', 'GetTotais']);
   const both = writeCall({ lane: 'odc', part: 'html', module: 'VisitaCerta', element: 'Visitas', text: ['<button onclick="Cancelar">Cancelar</button>'], basedOn, also: [{ part: 'logic', text: 'action Visitas.Cancelar\n  end\n' }] });
   assert.deepEqual(both.arguments.owners, ['Visitas', 'Cancelar']);
-  assert.deepEqual(ownersOf('ddl', EXAMPLE_DDL), ['Cliente', 'Visita', 'StatusVisita', 'ResumoVisitas', 'VisitaLinha']);
+  assert.deepEqual(ownersOf('ddl', EXAMPLE_DDL), ['Customer', 'Visit', 'VisitStatus', 'VisitTotals', 'VisitRow']);
   assert.deepEqual(ownersOf('html', ['<div/>'], 'MainFlow/Visitas'), ['Visitas']); assert.deepEqual(ownersOf('html', ['<div/>'], 'MobileScreen:Visitas'), ['Visitas']);
   // Given owners are kept.
   assert.deepEqual(writeCall({ lane: 'odc', part: 'html', module: 'M', element: 'S', text: ['<div/>'], basedOn, owners: ['S', 'Other'] }).arguments.owners, ['S', 'Other']);
@@ -146,7 +150,7 @@ test('write odc: a correction (patch + basedOn) carries owners and changes from 
   const basedOn = { job, sha256: 'a'.repeat(64) };
   const fix = writeCall({ lane: 'odc', part: 'ddl', module: 'VisitaCerta', patch: [{ op: 'replace', path: '/ops/0/data/ddl', value: 'x' }], basedOn });
   assert.equal(fix.tool, 'studio_deliver');
-  assert.deepEqual(fix.arguments.owners, ['Cliente', 'Visita', 'StatusVisita', 'ResumoVisitas', 'VisitaLinha', 'Visitas', 'Cancelar']);
+  assert.deepEqual(fix.arguments.owners, ['Customer', 'Visit', 'VisitStatus', 'VisitTotals', 'VisitRow', 'Visitas', 'Cancelar']);
   assert.equal(fix.arguments.changes.length, 3); assert.match(fix.arguments.feature, /correction/);
   assert.deepEqual(fix.arguments.patch, [{ op: 'replace', path: '/ops/0/data/ddl', value: 'x' }]); assert.deepEqual(fix.arguments.basedOn, basedOn);
   const given = writeCall({ lane: 'odc', part: 'ddl', module: 'M', patch: [], basedOn, owners: ['A'], changes: ['c'] });
@@ -184,7 +188,7 @@ test('refusals of a write speak ssam_code: grammar continuation, ssam_code read,
   // Not a text refusal, a success: as they came.
   const other = { ok: false, code: 'STUDIO_NOT_CONNECTED', error: 'no Studio' };
   assert.equal(codeAnswer(other, { lane: 'odc', part: 'ddl' }), other);
-  const done = { ok: true, result: 'entregue' };
+  const done = { ok: true, result: 'delivered' };
   assert.equal(codeAnswer(done, { lane: 'odc', part: 'ddl' }), done);
 });
 
@@ -233,13 +237,13 @@ test('write: the op the kernel takes for each part, the lane delivery and its op
   assert.deepEqual(logic.arguments.job.ops[0].data.flow, [{ text: 'server action X @k\n  end @n1\n', basedOn: 'sha1' }, 'server action Y\n  end\n']);
   assert.deepEqual(logic.arguments.owners, ['X', 'Y']); assert.match(logic.arguments.feature, /^ssam_code logic: X, Y$/);
   const doc = writeCall({ lane: 'odc', part: 'html', module: 'Shop', text: EXAMPLE_HTML });
-  assert.deepEqual(doc.arguments.job.ops[0], { op: 'html', data: { html: EXAMPLE_HTML } }); assert.deepEqual(doc.arguments.owners, ['Visitas']);
+  assert.deepEqual(doc.arguments.job.ops[0], { op: 'html', data: { html: EXAMPLE_HTML } }); assert.deepEqual(doc.arguments.owners, ['Visits']);
   const edit = writeCall({ lane: 'o11', part: 'html', module: 'Shop', element: 'Home', text: '<div k="w3" class="x"/>', basedOn: { capture: 'c', html: 'h' } });
   assert.deepEqual(edit.arguments.job.ops[0], { op: 'html', data: { screen: 'Home', basedOn: { capture: 'c', html: 'h' }, edit: ['<div k="w3" class="x"/>'] } });
   // The whole example in one write: setup ops first, then ddl, html, logic.
   const ex = writeCall(exampleCall('odc').arguments);
   assert.deepEqual(ex.arguments.job.ops.map(o => o.op), ['create', 'create', 'spec', 'html', 'logic']);
-  assert.ok(ex.arguments.owners.includes('Visita') && ex.arguments.owners.includes('ConcluirVisita') && ex.arguments.owners.includes('Visitas'));
+  assert.ok(ex.arguments.owners.includes('Visit') && ex.arguments.owners.includes('CompleteVisit') && ex.arguments.owners.includes('Visits'));
   // A correction: patch + basedOn {job, sha256} go to the delivery as they are.
   const fix = writeCall({ lane: 'o11', part: 'ddl', module: 'Shop', patch: [{ op: 'replace', path: '/ops/0/data/ddl', value: 'x' }], basedOn: { job: 'C:\\j.json', sha256: 'a'.repeat(64) } });
   assert.deepEqual(fix.arguments.basedOn, { job: 'C:\\j.json', sha256: 'a'.repeat(64) }); assert.equal(fix.arguments.job, undefined);
@@ -248,7 +252,7 @@ test('write: the op the kernel takes for each part, the lane delivery and its op
     const r = writeCall({ lane: 'odc', ...bad });
     assert.equal(r.refusal?.code, 'INPUT_INVALID', JSON.stringify(bad)); assert.equal(r.refusal.continuation.arguments.action, 'grammar');
   }
-  assert.deepEqual(namesOf('ddl', EXAMPLE_DDL), ['Cliente', 'Visita', 'StatusVisita', 'ResumoVisitas', 'VisitaLinha']);
+  assert.deepEqual(namesOf('ddl', EXAMPLE_DDL), ['Customer', 'Visit', 'VisitStatus', 'VisitTotals', 'VisitRow']);
 });
 
 test('aliases: job op "ddl" and logic data.text in their kernel form; ssam_map view "logic"; ssam_reference parts', t => {
@@ -300,7 +304,7 @@ test('read: ssam_map continuations become ssam_code calls; an empty module reads
 });
 
 // A fake ODC lane server: studio_deliver records what reached it (the relay of ssam.mjs writes inline jobs to files).
-async function liveServer(t, { answer = () => ({ ok: true, result: 'entregue' }), codeMap = async input => ({ ok: true, count: 0, entries: [], echo: input }) } = {}) {
+async function liveServer(t, { answer = () => ({ ok: true, result: 'delivered' }), codeMap = async input => ({ ok: true, count: 0, entries: [], echo: input }) } = {}) {
   const root = tmp(t); const seen = [];
   const odcFacade = async () => {
     const fake = new McpServer({ name: 'fake-odc', version: '0.0.1' });
@@ -331,7 +335,7 @@ test('live: ssam_code is listed for both lanes; write goes through the studio_de
   assert.equal(grammar.card.example, EXAMPLE_DDL);
   const w = valueOf(await client.callTool({ name: 'ssam_code', arguments: { lane: 'odc', action: 'write', part: 'ddl', module: 'VisitaCerta_CS', text: EXAMPLE_DDL } }));
   assert.equal(w.ok, true, JSON.stringify(w));
-  assert.equal(seen.length, 1); assert.equal(seen[0].module, 'VisitaCerta_CS'); assert.deepEqual(seen[0].owners, ['Cliente', 'Visita', 'StatusVisita', 'ResumoVisitas', 'VisitaLinha']);
+  assert.equal(seen.length, 1); assert.equal(seen[0].module, 'VisitaCerta_CS'); assert.deepEqual(seen[0].owners, ['Customer', 'Visit', 'VisitStatus', 'VisitTotals', 'VisitRow']);
   assert.deepEqual(JSON.parse(fs.readFileSync(seen[0].job, 'utf8')), { ops: [{ op: 'spec', data: { ddl: EXAMPLE_DDL } }] });
   // studio_deliver itself with the job op alias "ddl": the relay writes the kernel form.
   await client.callTool({ name: 'studio_deliver', arguments: { feature: 'f', module: 'M', owners: ['A'], changes: ['c'], job: { ops: [{ op: 'ddl', data: { text: 'create entity A ();' } }] } } });
@@ -453,14 +457,14 @@ for (const lane of ['o11', 'odc']) {
     const ddlFile = path.join(dir, 'm.ddl'); const flowFile = path.join(dir, 'a.flow'); const htmlFile = path.join(dir, 's.html');
     cliOk(lane, ['ddl', '--oml', out, '--out', ddlFile], env);
     cliOk(lane, ['flow', '--oml', out, '--out', flowFile], env);
-    cliOk(lane, ['html-read', '--oml', out, '--path', 'Visitas', '--out', htmlFile], env);
+    cliOk(lane, ['html-read', '--oml', out, '--path', 'Visits', '--out', htmlFile], env);
     const ddlRead = bare(fs.readFileSync(ddlFile, 'utf8').replace(/\r\n/g, '\n'));
     // The UI example: the service data plus a client variable with its default (one line, no ';').
     for (const block of EXAMPLE_DDL_UI.split('\n\n')) assert.ok(ddlRead.includes(block.trim()), 'ddl block read back as written:\n' + block);
     const htmlRead = bare(fs.readFileSync(htmlFile, 'utf8').replace(/\r\n/g, '\n'));
-    for (const line of ['<var name="Filtro" type="Text"/>', '<div list="GetVisitas.List">', '{{ GetVisitas.List.Current.Visita.Titulo }}', 'onclick="Concluir(VisitaId = GetVisitas.List.Current.Visita.Id)"',
+    for (const line of ['<var name="Filter" type="Text"/>', '<div list="GetVisits.List">', '{{ GetVisits.List.Current.Visit.VisitTitle }}', 'onclick="Complete(VisitId = GetVisits.List.Current.Visit.Id)"',
       // The popup from scratch: its variable, its open and close buttons, the Transition of an event inside it.
-      '<popup show="MostrarResumo">', '</popup>'])
+      '<popup show="ShowSummary">', '</popup>'])
       assert.ok(htmlRead.includes(line), 'html: ' + line);
     // Every exact form a card names is read back as the card writes it (ddl, html; logic below).
     for (const [name, form] of Object.entries(CODE_FORMS_EXACT.ddl)) assert.ok(ddlRead.includes(form), `ddl form "${name}" read back: ${form}`);
@@ -471,14 +475,14 @@ for (const lane of ['o11', 'odc']) {
     // ssam_code read over the result (the real moduleMap, from the store the CLIs wrote; no reader process).
     const noReader = async () => { throw new Error('no reader: the store must serve'); };
     const map = input => moduleMap(input, { env, read: noReader });
-    const action = await codeRead({ lane, part: 'logic', target: out, element: 'ConcluirVisita' }, { map });
+    const action = await codeRead({ lane, part: 'logic', target: out, element: 'CompleteVisit' }, { map });
     assert.equal(action.ok, true, JSON.stringify(action).slice(0, 1500));
     assert.equal(bare(action.text.replace(/\r\n/g, '\n')).trim(), EXAMPLE_LOGIC[0].trim(), 'the server action reads back as written');
     assert.equal(action.continuations.list.tool, 'ssam_code');
-    const viaAlias = await moduleMap({ lane, target: out, view: 'logic', element: 'ConcluirVisita' }, { env, read: noReader });
+    const viaAlias = await moduleMap({ lane, target: out, view: 'logic', element: 'CompleteVisit' }, { env, read: noReader });
     assert.equal(viaAlias.text, action.text, 'ssam_map view logic = view flow');
-    const data = await codeRead({ lane, part: 'ddl', target: out, element: 'Visita' }, { map });
-    assert.equal(data.ok, true); assert.match(data.text, /create entity Visita label Titulo/); assert.equal(data.empty, undefined);
+    const data = await codeRead({ lane, part: 'ddl', target: out, element: 'Visit' }, { map });
+    assert.equal(data.ok, true); assert.match(data.text, /create entity Visit label VisitTitle/); assert.equal(data.empty, undefined);
     // An empty module: its data reads as an empty document with the grammar, never an error.
     const emptyDdl = path.join(dir, 'e.ddl');
     cliOk(lane, ['ddl', '--oml', EMPTY[lane], '--out', emptyDdl], env);

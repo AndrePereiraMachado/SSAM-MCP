@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA do create de um Button Group Item fora de um Button Group. A plataforma ODC ja recusava ('A Button Group Item must be placed inside a Button Group widget'); o kernel recusa antes, com o mesmo texto e o como fazer, igual nas duas faixas (no O11 o Verify nativo caia fora de qualquer op). Dentro do Content do grupo o create funciona: tests/jobs-coverage/odc/cov-nrwidgets-buttongroupitem-life.json. Cobertura testada, fase 2.",
+ "description": "ODC: the REFUSAL of the create of a Button Group Item outside a Button Group. The ODC platform already refused ('A Button Group Item must be placed inside a Button Group widget'); the kernel refuses first, with the same text and the how-to, the same in both lanes (in O11 the native Verify fell outside any op). Inside the Content of the group the create works: tests/jobs-coverage/odc/cov-nrwidgets-buttongroupitem-life.json. Tested coverage, phase 2.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectError": [

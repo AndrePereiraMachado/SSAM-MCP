@@ -1,5 +1,5 @@
 {
- "description": "OverflowMenu do OSUI: a instancia com empty (o menu de exemplo traz links sem destino).",
+ "description": "OverflowMenu of OSUI: the instance with empty (the sample menu brings links without a target).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

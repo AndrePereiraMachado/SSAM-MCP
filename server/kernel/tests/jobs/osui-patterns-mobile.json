@@ -1,17 +1,17 @@
 {
- "description": "Tela Mobile com padroes do OutSystems UI (Tabs, TabsHeaderItem, TabsContentItem, Accordion, AccordionItem, Card) montada so com a referencia gerada em docs/ui/OutSystemsUI",
+ "description": "Mobile screen with OutSystems UI patterns (Tabs, TabsHeaderItem, TabsContentItem, Accordion, AccordionItem, Card) built only with the reference generated in docs/ui/OutSystemsUI",
  "base": "tests/fixtures/mobile-ui.oml",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "UnusedElement",
    "element": "Tabs1_OnTabChange (ScreenAction) / TabsId (InputParameter)",
-   "why": "Parametros obrigatorios do contrato OnTabChange; o handler de demonstracao nao usa esses valores."
+   "why": "Mandatory parameters of the OnTabChange contract; the demo handler does not use these values."
   },
   {
    "id": "UnusedElement",
    "element": "Tabs1_OnTabChange (ScreenAction) / ActiveTab (InputParameter)",
-   "why": "Parametros obrigatorios do contrato OnTabChange; o handler de demonstracao nao usa esses valores."
+   "why": "Mandatory parameters of the OnTabChange contract; the demo handler does not use these values."
   }
  ],
  "ops": [

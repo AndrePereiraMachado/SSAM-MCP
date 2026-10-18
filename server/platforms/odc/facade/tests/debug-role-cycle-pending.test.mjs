@@ -4,6 +4,7 @@
 // sign-in, no role read or write) instead of answering ok:true and failing later on a raw module import; the three
 // debug tool descriptions say roleCycle is unavailable. An injected roleCycleAccess (tests, other hosts) needs no file.
 // Offline; fakes only. The refusal tests run only while the file is pending; when it lands they skip by name.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

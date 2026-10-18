@@ -139,7 +139,7 @@ Sem mudança: `ssam_evidence`, `ssam_task`, `ssam_connect`, `ssam_doctor`.
   expected sha256", "failed ssam_job/o11_job ... answers with `discovery`", a ordem de autenticação do Portal, "ssam_connect
   (no lane) attaches every Studio already open in one call", `ssam_app_url`, "Start EVERY SSAM request here, model change
   or not.", "Start with ssam_map", `publish:true publishes in the same call after a clean merge`, `PUBLISH_FAILED`,
-  `fromEvidence:true`, `"publicado"`, `TrueChange`, `never repeated`, e os campos de modo (`resume`, `publish`, `close`,
+  `fromEvidence:true`, `"published"`, `TrueChange`, `never repeated`, e os campos de modo (`resume`, `publish`, `close`,
   `patch`, `consumers`) citados na descrição.
 - `kernel/AGENTS.md` inteiro: alimenta `ssam_reference {kind:"recipe"}` e os `GuideTests` (C#). Ganhou só uma linha no topo.
 - Ferramentas de debug, Service Center, ambiente O11, dados e Portal: sem mudança. Só carregam quando usadas, e os testes
@@ -176,3 +176,80 @@ do discover frio.
 Também rodei `platforms/odc/tests/*.test.mjs`, `tests/workspace.test.mjs` e `tests/setup-dev.test.mjs`: 3 falhas, em
 nada que este pacote toca (a lista `MCP_TOOLS` tem 80 nomes e o teste espera 79; `guides/o11.md` cita ferramentas fora
 do §4.2; `git` fora do PATH).
+
+## CX11 — orçamento por família (13–14/10/2026)
+
+Comparação offline com a base `55a9b647`, pelo mesmo `contexto-fixo.mjs`. O servidor de app usa o perfil `app`; `debug` serve as seis ferramentas de debug, `ssam_doctor` e `ssam_evidence`; `all` reúne os dois conjuntos. A lista operacional inclui `ssam_friction`, adicionada pelo lançador da raiz.
+
+| Medida | Antes | CX11 |
+| --- | ---: | ---: |
+| Instrução principal (caracteres) | 4.939 | 1.903 |
+| Instrução ODC (caracteres) | 5.365 | 1.902 |
+| Ferramentas no servidor de app | 92 | 86 |
+| Lista completa recebida pelo cliente (B) | 295.687 | 128.709 |
+| As mesmas 15 centrais de 55a9b647 (B) | 59.403 | 28.363 |
+| Select anunciado na instrução (B) | 59.403 | 3.734 |
+| As seis ferramentas de debug na lista de app (B) | 93.570 | 0 |
+| Ferramentas de app acima do limite próprio | 35 | 0 |
+
+A tabela acima registra a head `09060df0`, anterior à revisão. Naquela head, a lista caiu para 128.709 B e o select continha só doctor, connect e discover. Essa escolha e as descrições vazias foram corrigidas abaixo; a tabela histórica não representa o estado atual.
+
+A instrução curta mantém entrega única, recusa com patch/basedOn, fila, autorização e links. Todas as regras continuam em `ssam_reference {lane,kind:"rules",query:"session"}`. Cada texto compacto tem revisão e hash da fonte; `ssam_reference {lane,kind:"tool",query:"<tool>"}` devolve a definição original completa. Estrutura, tipos, enums, required, defaults e metadados da ferramenta são preservados na listagem.
+
+A medida por ferramenta serializa `{name,description,input_schema}`; o limite é `max(2560, structure + 1024)`. `structure` mantém `description:""` externo e remove apenas descriptions de nós de esquema, preservando propriedades chamadas description e os dados de default/enum/const. Os perfis com hooks também são testados.
+
+`context-budget.mjs` centraliza os limites: instruções de até 2.000 caracteres, pacote padrão de 8.192 B, expansão máxima de 28.672 B e resposta de até 30.720 B. Pacotes preservam envelope e next; cada corte tem recuperação exata somente da parte ausente. Definições originais e deltas não são reescritos como instruções de terminal. Avisos HIGH permanecem completos e deixam de aparecer também em warnings, com contagem conservada.
+
+Não há memória de contexto no servidor. Repetir uma chamada, compartilhar conexão ou compactar a conversa não permite retirar contratos já entregues; a métrica R7 compara seis chamadas por faixa antes e depois. O corpus real é congelado no primeiro replay e reutilizado com `--corpus`.
+
+### Correção A1–A7 (14/10/2026)
+
+O select voltou às 15 ferramentas, pois cabe com as regras essenciais: instrução app/all de 1.837 caracteres; debug de 651; ODC isolado de 1.776, priorizando regras ODC e nomeando somente ferramentas disponíveis (na correção 2, 1.999, derivada de `SESSION_RULES`; ver abaixo). A lista operacional app tem 86 ferramentas e 131.928 B; o grupo de 15 ocupa 29.080 B. Carregar as 15 em vez das três acrescenta 25.233 B (24,64 KiB) de esquemas por sessão em clientes que adiam esquemas. Nenhuma ferramenta app ultrapassava seu limite; na correção 2 sete ferramentas passam do limite calculado por regras devolvidas, com o custo declarado byte a byte (ver abaixo). O teste "hooks=true" não ligava os hooks até a correção 2.
+
+As 221 descrições de parâmetro preenchidas só com espaço foram eliminadas: 79 receberam frases curtas e 142 viraram omissão com motivo. Autorização da entrega O11, until só quando pedido, reconciliação, formatos de edits/removes/part, reveal, IDs exatos, binários e palavras de autorização ficam visíveis. **Errata (correção 2):** a afirmação de que as 142 omissões consolidavam a regra no texto da ferramenta ou no esquema, e de que a privacidade ficava visível, não conferia: 92 originais omitidos tinham regra, e vários a perdiam (por exemplo, `credentialTarget` sem "never a credential", `authorizationContext` do Service Center, `captureProducers`, `expectedEnvironment`, `closePrevious`, `replace`). A guarda aceitava qualquer motivo não vazio. Descrições de caminhos compartilhados do SDK são projetadas independentemente; a definição original continua intacta no detalhe. Ausência de descrição exige exceção explícita revisada, e espaços vazios são recusados na projeção.
+
+Recuperações do pacote e continuações de orçamento insuficiente conservam limit e app. O teste específico usa limite 12, app sintético e nove/dez matches nas duas faixas; aplica os deltas e compara a seção integral. Nenhum Studio ou CLI é necessário para essas provas novas.
+
+Rodadas têm custo: no R5 atual, 20 intenções com orçamento padrão de 8.192 B exigem 84 chamadas (20 iniciais + 64 recuperações), somando 582.879 B. Cada subagente faz de três a cinco chamadas para obter tudo. Com 28.672 B explícitos, o mesmo conjunto usa 22 chamadas e 426.778 B. A execução medida é sequencial; paralelismo é apenas um limite causal teórico. O índice nativo foi reutilizado como fixture congelada, sem reconstruir nem atualizar suas provas históricas.
+
+As seis chamadas do R7 são fixas por construção e não demonstram ausência de rodadas extras. O W8 agora também executa recuperação real de um contrato grande, páginas de evidência e ramos continuation.more. Preservar as assertions antigas de C07/composite com 40.960 B no motor não prova resposta única pelo MCP, que limita o pedido a 28.672 B. A leitura de 452 linhas passou de uma para duas páginas. O relatório de correção registra esses custos sem atribuir economia de chamadas ao fluxo fixo.
+
+### Correção 2: regras de parâmetro e instrução ODC (15/10/2026)
+
+Nenhuma omissão de descrição pode apagar regra, e o orçamento nunca paga com segurança (`platforms/odc/facade/tool-listing-guard.mjs`):
+
+- Toda omissão tem motivo de lista fechada (`name-and-type`, `stated-in-tool-text`, `carried-by-schema`, `same-text-as`). Quando o original tem regra (default, formato ou exemplo, privacidade, autorização, efeito destrutivo, only/never/must/absolute, refuse/required/exact/bare/verbatim), a omissão traz evidência servida que carrega cada tipo: o trecho literal da descrição curta que nomeia o parâmetro, a palavra-chave do esquema ou um irmão com o mesmo texto original.
+- Cláusulas protegidas por parâmetro (efeito destrutivo, credencial, formato de autorização e de host/tenant) ficam numa lista fechada (`PROTECTED_PARAMETER_CLAUSES`) e nunca saem da listagem servida: no texto do parâmetro ou no texto da ferramenta que o nomeia.
+- Ferramenta com omissão cita `ssam_reference kind tool`; as cláusulas de ferramenta tiradas em 179021dd voltaram (`PROTECTED_TOOL_CLAUSES`).
+- Uma projeção em que a guarda acha regra perdida não é servida: vale o texto original. O teste percorre app, all, debug e app com hooks (o ODC isolado serve os originais). **Errata (correção 3):** na correção 2 a guarda só checava palavra-portadora e só nas omissões; a correção 3 abaixo a prendeu ao sentido do original.
+
+Resultado: 137 omissões (95 com evidência no texto da ferramenta, 39 sem regra no original, 2 com irmão idêntico, 1 pelo `enum`) e 5 textos de parâmetro devolvidos; 107 parâmetros com cláusulas protegidas. Sete ferramentas passam do limite calculado para manter as regras, com o custo declarado em `TOOL_LISTING_OVERRUN_BYTES`: Service Center read 582 B, write 1.356 B, `o11_deliver` 279 B, `odc_write` 285 B, `odc_external_db_connection` 86 B, `odc_external_library` 71 B e `ssam_code` 330 B, total 2.989 B. A lista app vai de 130.254 para 133.962 B (lançador da raiz: 131.928 para 135.636 B); o grupo de 15 vai de 29.080 para 29.818 B.
+
+A instrução do `.\odc mcp` isolado (`createFacadeServer`) voltou a mandar começar por `ssam_discover` e tem a regra geral de autorização. Ela é derivada de `SESSION_RULES`: cada regra traz sua forma ODC (`odc`) e as cláusulas que ela mantém literalmente (`keeps`), na ordem de `ODC_INSTRUCTION_RULES`, com 1.999 caracteres. As demais regras chegam pela descrição de ferramentas que esse servidor serve (`ODC_RULES_IN_TOOLS`: `ssam_map`, `ssam_app_url`, `ssam_discover`, `studio_deliver`, `studio_assets`, `studio_merge`, `studio_wait`, `studio_attach`). A única parte que nenhum texto servido carrega é "never changes installation, handles credentials or synthesizes input" da regra `native-bridge`. A forma ODC de `queue` não diz "writes to one Studio queue", porque esse servidor não aplica a fila de escrita (só o `ssam.mjs` aplica). Regras de ferramentas ou mecanismos só do servidor `ssam` (`ssam_reference`, `ssam_code`, `ssam_evidence`, `ssam_job`/`o11_job`, fila de escrita, resposta "entregue") deixaram de ser marcadas para o ODC isolado.
+
+### Correção 3: sentido, não palavra (15/10/2026)
+
+A guarda (`tool-listing-guard.mjs`) prende cada regra servida ao original:
+
+- Cada cláusula protegida de parâmetro leva `review` = sha256 de [frases do original que a detecção achou, cláusula]. Mudar a cláusula, ou a frase do original, é problema até a revisão recalcular o hash.
+- A palavra-portadora só conta fora do nome do parâmetro (`credentialTarget`, `replace`, `host`, `tenant`...). Um default exige o mesmo valor do original e dizer que é o default (na correção 3, só em parte; ver a correção 4).
+- As cláusulas de ferramenta vêm das frases da descrição original com credential/secret/password, delete, authoriz/words/grant, never ou only when: 97 frases, cada uma com cláusulas servidas e `review` (`PROTECTED_TOOL_CLAUSES`). A lista escrita à mão ficou só para as cláusulas restauradas e os ponteiros (`REQUIRED_TOOL_CLAUSES`).
+- `RULE_KINDS` vale para todo texto de parâmetro projetado, encurtado ou omitido. Os 82 textos encurtados (ponteiros) que perdiam tipo de regra foram corrigidos; nenhuma exceção (`SHORTENED_PARAMETER_EVIDENCE` vazio).
+- Parâmetro com nome de credencial nunca é servido sem sentido: `odc_external_db_connection.credential` ganhou descrição em `odc-access.mjs` ("Vault entry name SSAM/ODC3/<tenant>/DB/<credential> (default: connection name); never the account or password") e `ssam_debug_invoke.debug.credentials` (o mesmo campo de `ssam_debug`) em `debug.mjs`.
+
+A guarda continua heurística: palavras, valores, frases presas e hashes de revisão. O que ela não detecta, ela não recusa; o texto integral segue em `ssam_reference {kind:"tool"}`. Onze ferramentas passam do limite calculado, com o custo declarado em `TOOL_LISTING_OVERRUN_BYTES` (5.117 B no total).
+
+### Correção 4: default preso ao valor e revisão de todo texto (15/10/2026)
+
+- O valor de um default só conta junto do seu marcador: "default[s] (is|to|:|=)? <v>", "<v> (default)", "<v> by default" ou "<parâmetro>=<v>" (também "<a>/<parâmetro>/<b>=<v>"). Um "=" solto em outro lugar do texto deixa de contar.
+- Todo texto projetado do `TOOL_LISTING` (descrição de ferramenta, texto de parâmetro encurtado ou omissão) leva review = sha256 de [original, servido] em `TOOL_LISTING_REVIEWS`: 344 textos. Texto mudado sem review válido é problema e serve o original. Os hashes não são servidos: a listagem tem os mesmos bytes da correção 3 em todos os perfis.
+- Isso fecha as cláusulas nominais: mesmo uma cláusula presa que não carregue o tipo da frase (68 de 120 e 45 de 97) não muda de sentido sem revisão, porque o texto servido inteiro também está preso.
+- A guarda segue heurística no sentido: o hash obriga a revisão humana, mas quem recalcula o hash assume a mudança, que fica visível no diff.
+
+### Integração sobre o CX15 e reprojeção (15/10/2026)
+
+- O CX15 mudou os originais de 14 ferramentas projetadas; com o `sourceSha256` velho elas voltavam ao texto inteiro. Foram reprojetadas contra os textos do CX15: as frases de `DESTRUCTIVE_SUFFIX`, `WORDS_RULE`, `AFTER_INTERRUPTION`, `ODC_EXECUTION_UUID` e a limpeza de fixture própria ficam presas, cada uma, a uma cláusula servida (duas chamadas, lista exata com contagem, palavras do dono copiadas inteiras, `ssam_task` após interrupção, `operationId` da prévia). `tests/destructive-served-texts.test.mjs` confere isso na listagem SERVIDA (app e all).
+- Os parâmetros novos `confirmationToken` e `ownerRequest` são servidos inteiros: um nome com "token" é credencial para a guarda, e encurtá-lo exigiria uma cláusula de credencial que o original não diz. O custo fica em `TOOL_LISTING_OVERRUN_BYTES` (o11_data: 1.850 B, as duas cópias do texto do CX15).
+- A instrução do ODC isolado leva a regra de duas chamadas na forma `odc` de `odc-writes` (duas chamadas, palavras com a contagem, `ssam_task {id}` primeiro); a prévia sem `confirmationToken` e o `operationId` da prévia ficam nas descrições das ferramentas destrutivas, declaradas em `ODC_CLAUSES_IN_TOOLS`. Para caber em 2.000 caracteres, as formas `odc` de `tools`, `discover`, `refusal`, `odc-deliver`, `odc-create` e `odc-gates` foram encurtadas sem perder cláusula (`keeps`).
+- **Reprojeção depois de outra junção** (minutos): `node platforms/odc/scripts/tool-listing-reproject.mjs [--since <originais.json>]` lista (a) as ferramentas cujo `sourceSha256` não bate com o texto atual e as que passam do limite, e (b) para cada uma, o que a guarda ainda pede se só o hash for recalculado: cada frase nova que precisa de cláusula, cada cláusula cuja frase sumiu e cada texto ou cláusula protegida a rever, com o original ao lado do servido. `--save <originais.json>` grava os originais de uma head (`--root <checkout>` lê outro checkout) para o `--since` mostrar frase a frase o que mudou. O hash impresso só vale depois de ler os dois textos.
+- Ressalva (N15 da revisão 5): num default em prosa ("Default: the only Studio session, else the configured default"), o "valor" que a guarda prende é a primeira palavra depois do marcador ("only", "name"). Esses defaults só ficam presos pelo hash de revisão do texto, não pelo conteúdo; os defaults numéricos e literais ficam presos pelo valor.

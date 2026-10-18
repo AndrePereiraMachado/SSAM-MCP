@@ -15,14 +15,24 @@ namespace Anvil.Reading;
 // kernels and free of Studio types: it reads only through ModelReader, like the module index and the digest.
 // The same capture gives the same text and the same htmlSha256. Fixed point: Compare(document, Parse(document.Html)) has no
 // difference; every authored property of every node it prints is a fact of the comparison (absent = the default of the
-// table, so an omitted value is never a lost one).
+// installed Studio, ScreenDefaults, so an omitted value is never a lost one).
 public static class ScreenHtml
 {
     public const string Schema = "ssam-html/1";
     // The version of what Read writes; raise it on every change of the text.
+    // 8: an <i> reads size only when it is not FontSize, and a join of an aggregate os-JoinType only when it is not Left
+    // (ScreenDefaults.LanguageDefault: both Studios create an Icon Twotimes and a Join Inner; 7 read them at those).
+    // 7: a named boolean attribute of the language left out means what the language says, whatever the Studio gives a fresh element
+    // (ScreenDefaults.LanguageDefault): an <input> or a block <event> reads mandatory only when it is mandatory (6 wrote
+    // mandatory="False" on every optional one: ODC Studio 1.7.28.10873 and Service Studio 11.55.87 create them mandatory).
+    // 6: each page reads with the defaults of its UI flow (the module and the theme of the flow), measured in a fresh flow: a
+    // page of a flow with a theme of its own (the prototype importer's) never prints the grid the Studio gives it there, and the
+    // same module reads the same text on every load (5 measured in "the first flow" of a load).
+    // 5: the defaults are the installed Studio's (ScreenDefaults: measured, never a table), so a property the Studio adds or
+    // whose default it changes reads at its default (Gap, GridColumns and GridRows of ODC Studio 1.7.28.10873).
     // 4: an event inside a Popup is at the Popup's own default (Transition Fade, the platform's); an expression whose text holds
     // a brace pair of a binding is written whole ({{ text }}), so the decoder never reads it as a binding.
-    public const int Extractor = 4;
+    public const int Extractor = 8;
 
     public static ScreenHtmlModule<T> Module<T>(T module, ModelReader<T> reader) where T : class => new(module, reader);
 
@@ -67,268 +77,13 @@ public static class ScreenHtml
         "Widgets", "Content",
         // The theme a screen or block shows: its flow's or its module's (the theme is set there, not on the screen).
         "ThemeBeingUsed" };
-    // The defaults of the table: a property at its default is not written, and an absent one reads as its default. Per
-    // kind, measured on the corpus of the plan (section 4: the dominant value of each property when it is a platform default:
-    // empty, True, False, (fill parent), Adaptive or an enum member, in at least 60% of the widgets of that kind). A kind of
-    // the table falls back to the type (empty; False for a boolean); a kind outside it also to Global. Listed in the schema.
-    internal static readonly Dictionary<(string Kind, string Property), string> KindDefaults = new() {
-        [("AdvancedHtml", "AlignItems")] = "Stretch",
-        [("AdvancedHtml", "AlignSelf")] = "Auto",
-        [("AdvancedHtml", "FlexDirection")] = "Row",
-        [("AdvancedHtml", "FlexWrap")] = "NoWrap",
-        [("AdvancedHtml", "Flexible")] = "Shrink",
-        [("AdvancedHtml", "JustifyContent")] = "Start",
-        [("AdvancedHtml", "Visible")] = "True",
-        [("AdvancedHtml", "WidgetGridType")] = "None",
-        [("AdvancedHtml", "Width")] = "(fill parent)",
-        [("BuiltinEvent", "BuiltInValidations")] = "None",
-        [("BuiltinEvent", "Transition")] = "Inherited",
-        [("ButtonGroupItem", "AlignItems")] = "Stretch",
-        [("ButtonGroupItem", "AlignSelf")] = "Auto",
-        [("ButtonGroupItem", "Enabled")] = "True",
-        [("ButtonGroupItem", "FlexDirection")] = "Row",
-        [("ButtonGroupItem", "FlexWrap")] = "NoWrap",
-        [("ButtonGroupItem", "Flexible")] = "Shrink",
-        [("ButtonGroupItem", "JustifyContent")] = "Start",
-        [("ButtonGroupItem", "Visible")] = "True",
-        [("ButtonGroupItem", "WidgetGridType")] = "None",
-        [("ButtonGroup", "AlignItems")] = "Stretch",
-        [("ButtonGroup", "AlignSelf")] = "Auto",
-        [("ButtonGroup", "FlexDirection")] = "Row",
-        [("ButtonGroup", "FlexWrap")] = "NoWrap",
-        [("ButtonGroup", "Flexible")] = "Shrink",
-        [("ButtonGroup", "JustifyContent")] = "Start",
-        [("ButtonGroup", "Visible")] = "True",
-        [("ButtonGroup", "WidgetGridType")] = "None",
-        [("Button", "AlignItems")] = "Stretch",
-        [("Button", "AlignSelf")] = "Auto",
-        [("Button", "Enabled")] = "True",
-        [("Button", "FlexDirection")] = "Row",
-        [("Button", "FlexWrap")] = "NoWrap",
-        [("Button", "Flexible")] = "Shrink",
-        [("Button", "JustifyContent")] = "Start",
-        [("Button", "MarginLeft")] = "Adaptive",
-        [("Button", "Visible")] = "True",
-        [("Button", "WidgetGridType")] = "None",
-        [("Checkbox", "AlignSelf")] = "Auto",
-        [("Checkbox", "Enabled")] = "True",
-        [("Checkbox", "Flexible")] = "Shrink",
-        [("Checkbox", "MarginLeft")] = "Adaptive",
-        [("Checkbox", "Visible")] = "True",
-        [("Container", "Align")] = "Default",
-        [("Container", "AlignItems")] = "Stretch",
-        [("Container", "AlignSelf")] = "Auto",
-        [("Container", "FlexDirection")] = "Row",
-        [("Container", "FlexWrap")] = "NoWrap",
-        [("Container", "Flexible")] = "Shrink",
-        [("Container", "JustifyContent")] = "Start",
-        [("Container", "Visible")] = "True",
-        [("Container", "WidgetGridType")] = "None",
-        [("Container", "Width")] = "(fill parent)",
-        [("Dropdown", "AlignItems")] = "Stretch",
-        [("Dropdown", "AlignSelf")] = "Auto",
-        [("Dropdown", "DropdownMode")] = "Text",
-        [("Dropdown", "Enabled")] = "True",
-        [("Dropdown", "FlexDirection")] = "Row",
-        [("Dropdown", "FlexWrap")] = "NoWrap",
-        [("Dropdown", "Flexible")] = "Shrink",
-        [("Dropdown", "JustifyContent")] = "Start",
-        [("Dropdown", "Mandatory")] = "False",
-        [("Dropdown", "MarginLeft")] = "Adaptive",
-        [("Dropdown", "Visible")] = "True",
-        [("Dropdown", "WidgetGridType")] = "None",
-        [("Expression", "AlignSelf")] = "Auto",
-        [("Expression", "Flexible")] = "Shrink",
-        [("Expression", "MarginLeft")] = "Adaptive",
-        [("Expression", "Visible")] = "True",
-        [("Form", "AlignItems")] = "Stretch",
-        [("Form", "AlignSelf")] = "Auto",
-        [("Form", "FlexDirection")] = "Row",
-        [("Form", "FlexWrap")] = "NoWrap",
-        [("Form", "Flexible")] = "Shrink",
-        [("Form", "JustifyContent")] = "Start",
-        [("Form", "MarginLeft")] = "Adaptive",
-        [("Form", "Visible")] = "True",
-        [("Form", "WidgetGridType")] = "None",
-        [("HeaderCell", "AlignItems")] = "Stretch",
-        [("HeaderCell", "AlignSelf")] = "Auto",
-        [("HeaderCell", "FlexDirection")] = "Row",
-        [("HeaderCell", "FlexWrap")] = "NoWrap",
-        [("HeaderCell", "Flexible")] = "Shrink",
-        [("HeaderCell", "JustifyContent")] = "Start",
-        [("HeaderCell", "Visible")] = "True",
-        [("HeaderCell", "WidgetGridType")] = "None",
-        [("HeaderCell", "Width")] = "(fill parent)",
-        [("Icon", "AlignSelf")] = "Auto",
-        [("Icon", "Flexible")] = "Shrink",
-        [("Icon", "IconSize")] = "FontSize",
-        [("Icon", "MarginLeft")] = "Adaptive",
-        [("Icon", "Visible")] = "True",
-        [("Icon", "Width")] = "(fill parent)",
-        [("Image", "AlignSelf")] = "Auto",
-        [("Image", "Flexible")] = "Shrink",
-        [("Image", "MarginLeft")] = "Adaptive",
-        [("Image", "Type")] = "Static",
-        [("Image", "Visible")] = "True",
-        [("Input", "AlignSelf")] = "Auto",
-        [("Input", "Enabled")] = "True",
-        [("Input", "Flexible")] = "Shrink",
-        [("Input", "InputType")] = "Text",
-        [("Input", "Mandatory")] = "False",
-        [("Input", "Visible")] = "True",
-        [("Input", "Width")] = "(fill parent)",
-        [("Join", "JoinType")] = "Left",
-        [("Label", "AlignItems")] = "Stretch",
-        [("Label", "AlignSelf")] = "Auto",
-        [("Label", "FlexDirection")] = "Row",
-        [("Label", "FlexWrap")] = "NoWrap",
-        [("Label", "Flexible")] = "Shrink",
-        [("Label", "JustifyContent")] = "Start",
-        [("Label", "Visible")] = "True",
-        [("Label", "WidgetGridType")] = "None",
-        [("Label", "Width")] = "(fill parent)",
-        [("Link", "AlignItems")] = "Stretch",
-        [("Link", "AlignSelf")] = "Auto",
-        [("Link", "Enabled")] = "True",
-        [("Link", "FlexDirection")] = "Row",
-        [("Link", "FlexWrap")] = "NoWrap",
-        [("Link", "Flexible")] = "Shrink",
-        [("Link", "JustifyContent")] = "Start",
-        [("Link", "MarginLeft")] = "Adaptive",
-        [("Link", "Visible")] = "True",
-        [("Link", "WidgetGridType")] = "None",
-        [("ListItem", "AlignItems")] = "Stretch",
-        [("ListItem", "AlignSelf")] = "Auto",
-        [("ListItem", "FlexDirection")] = "Row",
-        [("ListItem", "FlexWrap")] = "NoWrap",
-        [("ListItem", "Flexible")] = "Shrink",
-        [("ListItem", "JustifyContent")] = "Start",
-        [("ListItem", "TriggerActionOnFullSwipeLeft")] = "True",
-        [("ListItem", "TriggerActionOnFullSwipeRight")] = "True",
-        [("ListItem", "Visible")] = "True",
-        [("ListItem", "WidgetGridType")] = "None",
-        [("ListItem", "Width")] = "(fill parent)",
-        [("List", "AlignItems")] = "Stretch",
-        [("List", "AlignSelf")] = "Auto",
-        [("List", "AnimateItems")] = "True",
-        [("List", "FlexDirection")] = "Row",
-        [("List", "FlexWrap")] = "NoWrap",
-        [("List", "Flexible")] = "Shrink",
-        [("List", "JustifyContent")] = "Start",
-        [("List", "Mode")] = "Default",
-        [("List", "Visible")] = "True",
-        [("List", "WidgetGridType")] = "None",
-        [("List", "Width")] = "(fill parent)",
-        [("MobileBlock", "GridType")] = "Fluid",
-        [("MobileScreen", "GridType")] = "Fluid",
-        [("MobileScreen", "URLStructure")] = "QueryString",
-        [("PlaceholderWidget", "Align")] = "Null",
-        [("PlaceholderWidget", "AlignItems")] = "Stretch",
-        [("PlaceholderWidget", "AlignSelf")] = "Auto",
-        [("PlaceholderWidget", "FlexDirection")] = "Row",
-        [("PlaceholderWidget", "FlexWrap")] = "NoWrap",
-        [("PlaceholderWidget", "Flexible")] = "Shrink",
-        [("PlaceholderWidget", "JustifyContent")] = "Start",
-        [("PlaceholderWidget", "WidgetGridType")] = "None",
-        [("PlaceholderWidget", "Width")] = "(fill parent)",
-        [("Popup", "AlignItems")] = "Stretch",
-        [("Popup", "AlignSelf")] = "Auto",
-        [("Popup", "FlexDirection")] = "Row",
-        [("Popup", "FlexWrap")] = "NoWrap",
-        [("Popup", "Flexible")] = "Shrink",
-        [("Popup", "JustifyContent")] = "Start",
-        [("Popup", "Visible")] = "True",
-        [("Popup", "WidgetGridType")] = "None",
-        [("Popup", "Width")] = "(fill parent)",
-        [("RadioButton", "AlignItems")] = "Stretch",
-        [("RadioButton", "AlignSelf")] = "Auto",
-        [("RadioButton", "Enabled")] = "True",
-        [("RadioButton", "FlexDirection")] = "Row",
-        [("RadioButton", "FlexWrap")] = "NoWrap",
-        [("RadioButton", "Flexible")] = "Shrink",
-        [("RadioButton", "JustifyContent")] = "Start",
-        [("RadioButton", "Visible")] = "True",
-        [("RadioButton", "WidgetGridType")] = "None",
-        [("RadioGroup", "AlignItems")] = "Stretch",
-        [("RadioGroup", "AlignSelf")] = "Auto",
-        [("RadioGroup", "FlexDirection")] = "Row",
-        [("RadioGroup", "FlexWrap")] = "NoWrap",
-        [("RadioGroup", "Flexible")] = "Shrink",
-        [("RadioGroup", "JustifyContent")] = "Start",
-        [("RadioGroup", "Mandatory")] = "False",
-        [("RadioGroup", "Visible")] = "True",
-        [("RadioGroup", "WidgetGridType")] = "None",
-        [("RadioGroup", "Width")] = "(fill parent)",
-        [("RowCell", "AlignItems")] = "Stretch",
-        [("RowCell", "AlignSelf")] = "Auto",
-        [("RowCell", "FlexDirection")] = "Row",
-        [("RowCell", "FlexWrap")] = "NoWrap",
-        [("RowCell", "Flexible")] = "Shrink",
-        [("RowCell", "JustifyContent")] = "Start",
-        [("RowCell", "Visible")] = "True",
-        [("RowCell", "WidgetGridType")] = "None",
-        [("RowCell", "Width")] = "(fill parent)",
-        [("ScreenAggregate", "CacheInMinutes")] = "",
-        [("ScreenAggregate", "Fetch")] = "AtStart",
-        [("Sort", "SortDirection")] = "Ascending",
-        [("Switch", "Enabled")] = "True",
-        [("Switch", "MarginLeft")] = "Adaptive",
-        [("Switch", "Visible")] = "True",
-        [("TableRecords", "AlignSelf")] = "Auto",
-        [("TableRecords", "Flexible")] = "Shrink",
-        [("TableRecords", "ShowHeader")] = "True",
-        [("TableRecords", "Visible")] = "True",
-        [("TableRecords", "Width")] = "(fill parent)",
-        [("TextArea", "AlignSelf")] = "Auto",
-        [("TextArea", "Enabled")] = "True",
-        [("TextArea", "Flexible")] = "Shrink",
-        [("TextArea", "Mandatory")] = "False",
-        [("TextArea", "TextLines")] = "3",
-        [("TextArea", "Visible")] = "True",
-        [("TextArea", "Width")] = "(fill parent)",
-        [("UILifeCycleEvent", "BuiltInValidations")] = "None",
-        [("UILifeCycleEvent", "Transition")] = "Inherited",
-        [("Upload", "AlignItems")] = "Stretch",
-        [("Upload", "AlignSelf")] = "Auto",
-        [("Upload", "FlexDirection")] = "Row",
-        [("Upload", "FlexWrap")] = "NoWrap",
-        [("Upload", "Flexible")] = "Shrink",
-        [("Upload", "JustifyContent")] = "Start",
-        [("Upload", "Mandatory")] = "False",
-        [("Upload", "Visible")] = "True",
-        [("Upload", "WidgetGridType")] = "None",
-        [("Upload", "Width")] = "(fill parent)",
-        [("List", "Tag")] = "div",
-        // An input or a text area takes the length of a Text variable: 50 and 500 in 97% and 92% of the corpus.
-        [("Input", "MaxLength")] = "50",
-        [("TextArea", "MaxLength")] = "500",
-        [("Icon", "Weight")] = "regular",
-        [("Content", "Name")] = "content",
-    };
-    private static readonly HashSet<string> KnownKinds = new(KindDefaults.Keys.Select(k => k.Kind), StringComparer.Ordinal);
-    internal static readonly Dictionary<string, string> Global = new(StringComparer.Ordinal) {
-        ["Visible"] = "True", ["Enabled"] = "True", ["Mandatory"] = "False", ["BuiltInValidations"] = "None", ["Transition"] = "Inherited",
-        ["AlignItems"] = "Stretch", ["AlignSelf"] = "Auto", ["FlexDirection"] = "Row", ["FlexWrap"] = "NoWrap", ["Flexible"] = "Shrink",
-        ["JustifyContent"] = "Start", ["WidgetGridType"] = "None",
-    };
-    internal static string DefaultOf(string kind, string property, char type) =>
-        KindDefaults.TryGetValue((kind, property), out var value) ? value
-        : !KnownKinds.Contains(kind) && Global.TryGetValue(property, out value) ? value
-        : type == 'b' ? "False" : "";
+    // The defaults: a property at its default is not written, and an absent one reads as its default. They are the installed
+    // Studio's (ScreenDefaults, measured by the reader's adapter), never a list here: a Studio update that adds a property or
+    // changes a default changes the reading with it.
 
-    /// <summary>The default of a property where the element sits: the Transition of an event of a widget inside a Popup is the
-    /// platform's own there (Fade: every widget event the Service Studio creates inside a Popup gets it; the corpus has no event
-    /// inside a Popup without it); anywhere else, the table's (<see cref="DefaultOf(string, string, char)"/>).</summary>
-    internal static string DefaultOf(string kind, string property, char type, bool inPopup) =>
-        inPopup && property == "Transition" && IsEventKind(kind) ? PopupTransition : DefaultOf(kind, property, type);
-
-    internal const string PopupTransition = "Fade";
-
-    // The events that carry a Transition (a widget's native events and the lifecycle ones): every kind the table names with it.
-    private static bool IsEventKind(string kind) => kind is "BuiltinEvent" or "UILifeCycleEvent" || kind.EndsWith("Event", StringComparison.Ordinal);
-
-    // The machine-readable contract of the reading: tables, defaults and what is not a fact.
-    public static JsonObject Contract()
+    // The machine-readable contract of the reading: tables, defaults and what is not a fact. The defaults are those of the
+    // Studio the reading was made with (ScreenDefaults), with the rule that chooses them; without a Studio, only the rule.
+    public static JsonObject Contract(ScreenDefaults? measured = null)
     {
         var tags = new JsonObject();
         foreach (var (kind, tag) in WidgetTags.OrderBy(t => t.Key, StringComparer.Ordinal)) tags[kind] = tag;
@@ -337,10 +92,21 @@ public static class ScreenHtml
         foreach (var (kind, map) in ScreenHtmlTables.Named.OrderBy(t => t.Key, StringComparer.Ordinal)) named[kind] = new JsonObject(map.Select(p => KeyValuePair.Create(p.Key, (JsonNode?)p.Value)));
         named["*widget"] = new JsonObject(ScreenHtmlTables.CommonNamed.Select(p => KeyValuePair.Create(p.Key, (JsonNode?)p.Value)));
         named["*data"] = new JsonObject(ScreenHtmlTables.DataNamed.Select(p => KeyValuePair.Create(p.Key, (JsonNode?)p.Value)));
-        var defaults = new JsonObject();
-        foreach (var group in KindDefaults.GroupBy(d => d.Key.Kind).OrderBy(g => g.Key, StringComparer.Ordinal))
-            defaults[group.Key] = new JsonObject(group.OrderBy(d => d.Key.Property, StringComparer.Ordinal).Select(d => KeyValuePair.Create(d.Key.Property, (JsonNode?)d.Value)));
-        defaults["*other kinds"] = new JsonObject(Global.OrderBy(d => d.Key, StringComparer.Ordinal).Select(d => KeyValuePair.Create(d.Key, (JsonNode?)d.Value)));
+        var defaults = new JsonObject {
+            ["rule"] = "the installed Studio's: what a fresh element of the kind is born with when the Studio creates it in a module like the one read (the kind of module and the grid of its theme decide part of it; inside a Popup, what it is born with there), its settings only (a boolean, an enumeration member or a number; a Boolean literal of an expression; a text written as os-<Property>); any other property is at its default only when empty (\"\"; False for a boolean)",
+            ["studio"] = measured?.Identity ?? "",
+            ["language"] = ScreenDefaults.LanguageRule,
+        };
+        if (measured is { Context.Length: > 0 }) defaults["context"] = measured.Context;
+        if (measured is { Note.Length: > 0 }) defaults["note"] = measured.Note;
+        // Each value as a text means it: the Studio's, or the language's for an attribute of the language (ScreenDefaults.LanguageDefault).
+        if (measured != null)
+            foreach (var key in measured.Kinds) {
+                var popup = key.EndsWith(ScreenDefaults.PopupSuffix, StringComparison.Ordinal);
+                var kind = popup ? key[..^ScreenDefaults.PopupSuffix.Length] : key;
+                defaults[key] = new JsonObject(measured.Of(key)!.OrderBy(p => p.Key, StringComparer.Ordinal)
+                    .Select(p => KeyValuePair.Create(p.Key, (JsonNode?)measured.DefaultOf(kind, p.Key, p.Value[0], popup))));
+            }
         return new JsonObject {
             ["schema"] = Schema, ["extractor"] = Extractor, ["elements"] = tags, ["named"] = named,
             ["opaque"] = new JsonArray(OpaqueKinds.Order(StringComparer.Ordinal).Select(k => (JsonNode)k).ToArray()),
@@ -355,8 +121,8 @@ public static class ScreenHtml
                 ["@<Event>"] = "a block event handler: Handler(Param = expression, ...)",
                 [":<Input>"] = "an argument of a block instance",
                 ["<attribute>"] = "an extended property: a plain string literal bare, else {{ expression }}; ext:<name> when the name is taken; literal text with bindings (\"Total {{ N }}\") is their concatenation",
-                ["runs"] = "one text or {{ expression }} per line; a line with text and bindings (\"Hoje · {{ X }}\", \"{{ N }} dias\") is one Expression, their concatenation (\"Hoje · \" + X), read back as {{ \"Hoje · \" + X }}; the whitespace beside an inline element on the same line is part of the run (\"por <b>menor</b> para\" keeps \"por \" and \" para\"); <text>exact</text> keeps spaces, line breaks and literal braces",
-                ["popup"] = "an event of a widget inside a Popup is at the Popup's Transition (Fade, the platform's): written only when it is another",
+                ["runs"] = "one text or {{ expression }} per line; a line with text and bindings (\"Today · {{ X }}\", \"{{ N }} days\") is one Expression, their concatenation (\"Today · \" + X), read back as {{ \"Today · \" + X }}; the whitespace beside an inline element on the same line is part of the run (\"by <b>lowest</b> to\" keeps \"by \" and \" to\"); <text>exact</text> keeps spaces, line breaks and literal braces",
+                ["popup"] = "an element inside a Popup is at what the Studio gives it there (the Transition of an event inside a Popup is the Popup's, Fade): written only when it is another",
                 ["if"] = "<div if=\"Condition\" k> True branch </div><div else> False branch </div> (else only when not empty)",
                 ["slot"] = "<slot name=\"Placeholder\"> the content of a placeholder of a block instance",
                 ["names"] = "a reference is Name, Owner.Name, Kind:Name or @key: the first one that names only it from this screen",
@@ -826,6 +592,9 @@ public sealed class ScreenHtmlDocument
     public double ReadMs { get; init; }
     // Read errors and nodes the reading could not place (each one also counts against the fixed point).
     public IReadOnlyList<string> Problems { get; init; } = [];
+    // Why the reading has no defaults of the installed Studio ("" when it has them, or has no Studio): every property is then
+    // written, and a writer refuses with this (ScreenDefaults.Note).
+    public string DefaultsNote { get; init; } = "";
     internal ScreenHtmlCanon Canon { get; init; } = new();
     internal Func<ScreenHtml.Node, ScreenHtmlCanon>? Decoder { get; init; }
     // The module, root, names and shapes of the reading (ScreenHtmlModule<T>.ReadingState): what an edit of this text (C2,
@@ -839,6 +608,7 @@ public sealed class ScreenHtmlDocument
             ["html"] = Html };
         if (withKeys) json["keys"] = new JsonObject(Keys.Select(k => KeyValuePair.Create(k.Key, (JsonNode?)k.Value)));
         if (Problems.Count > 0) json["problems"] = new JsonArray(Problems.Select(p => (JsonNode)p).ToArray());
+        if (DefaultsNote.Length > 0) json["defaults"] = "no defaults of the installed Studio, every property is written: " + DefaultsNote;
         return json;
     }
 
@@ -888,4 +658,131 @@ internal sealed class ScreenHtmlCanon
         return ops;
     }
     private static string Clip(string token) => token.Length > 60 ? token[..60] + "…" : token;
+}
+
+/// <summary>
+/// The defaults of the reading (ssam-html/1): a property at its default is not written, and an absent one reads as its
+/// default. They are the installed Studio's, never listed here: what a fresh element of each kind is born with when the
+/// Studio creates it, its settings only (StudioBornValues measures them in a disposable module: a boolean, an enumeration
+/// member or a number; an expression that is a Boolean literal; a text the Studio keeps nothing for), kept once per Studio
+/// identity (StudioDefaults: the IDE version and the hashes of its assemblies) and context (the module and the theme of the UI
+/// flow a page is in: the kind of module and the grid of that theme decide part of what a fresh element is born with, so each
+/// page reads with the defaults of its flow; StudioBornValues measures in a fresh flow of a copy of the module given that
+/// theme). A Studio update that adds a property or changes a default changes them with it. Inside a Popup an element takes what it is born with there (the Transition of an
+/// event inside a Popup is the Popup's). A property without a measured default, and every property of a reader without a
+/// Studio (<see cref="None"/>), is at its default only when it holds the empty value of its type ("" ; False for a boolean).
+/// An attribute of the language is the exception: left out, it means what the language says (<see cref="LanguageDefault"/>: an
+/// &lt;input&gt; without mandatory is optional, a join without a type is a left join), whatever the Studio gives a fresh element.
+/// </summary>
+public sealed class ScreenDefaults
+{
+    public const string PopupSuffix = "@popup";
+    public static readonly ScreenDefaults None = new("", new Dictionary<string, IReadOnlyDictionary<string, string>>());
+
+    // Kind (or Kind@popup) -> property -> "type:text".
+    private readonly Dictionary<string, Dictionary<string, string>> kinds;
+
+    /// <summary>Where they come from: the Studio identity they were measured on ("" when none was measured).</summary>
+    public string Identity { get; }
+
+    /// <summary>The context they were measured in (StudioDefaults.ContextOf: the settings of the module and of the theme of the
+    /// UI flow, the kind of module and the grid among them): "" for a reader without a Studio.</summary>
+    public string Context { get; private init; } = "";
+
+    /// <summary>Why no Studio was measured ("" when one was): the reading says it with every document and the writers refuse
+    /// with it (a module where the Studio creates no page, a Studio that could not be read). "" also for a reader without a
+    /// Studio (<see cref="None"/>), which has no defaults to say anything about.</summary>
+    public string Note { get; private init; } = "";
+
+    /// <summary>Whether a Studio was measured for these defaults.</summary>
+    public bool Measured => Identity.Length > 0;
+
+    /// <summary>No measurement, and why: every property is then at its default only when empty.</summary>
+    public static ScreenDefaults Unmeasured(string why, string context = "") => new("", new Dictionary<string, IReadOnlyDictionary<string, string>>()) { Note = why, Context = context };
+
+    public ScreenDefaults(string identity, IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> measured)
+    {
+        Identity = identity;
+        kinds = measured.ToDictionary(k => k.Key, k => k.Value.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal), StringComparer.Ordinal);
+    }
+
+    public IEnumerable<string> Kinds => kinds.Keys.Order(StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, string>? Of(string kind) => kinds.TryGetValue(kind, out var map) ? map : null;
+
+    /// <summary>The default of a property where the element sits: for an attribute of the language, what the language
+    /// says it means when left out (<see cref="LanguageDefault"/>); inside a Popup what the kind is born with there (when the
+    /// Studio was measured there), anywhere else what it is born with on a page; else the empty value of its type.</summary>
+    public string DefaultOf(string kind, string property, char type, bool inPopup = false)
+    {
+        if (Measured && LanguageDefault(kind, property) is { } meaning) return meaning;
+        if (inPopup && kinds.TryGetValue(kind + PopupSuffix, out var popup)) return popup.TryGetValue(property, out var p) ? p[2..] : Empty(type);
+        return kinds.TryGetValue(kind, out var page) && page.TryGetValue(property, out var v) ? v[2..] : Empty(type);
+    }
+
+    private static string Empty(char type) => type == 'b' ? "False" : "";
+
+    /// <summary>What an attribute of the language means when a text leaves it out, whatever the installed Studio gives a fresh
+    /// element (null for any other property: its default is the Studio's). The owner's rule: a Studio update never changes what
+    /// a text means. ODC Studio 1.7.28.10873 and Service Studio 11.55.87 create a screen or block input and a block event
+    /// mandatory; an &lt;input&gt; or &lt;event&gt; without mandatory stays optional (the writer sets Is Mandatory False and the
+    /// reading writes mandatory="True" only on a mandatory one). The same holds for the other named booleans: an input widget
+    /// without required is not required, and without enabled is enabled. Both Studios also create an Icon twice the font size
+    /// and the Join of an aggregate inner: an &lt;i icon&gt; without size keeps the font size around it (FontSize, as HtmlVisual
+    /// writes an &lt;i&gt;) and a join without a type (join= of the short form, an os-Join without os-JoinType) is a left join,
+    /// as the language wrote both before the Studio's defaults were measured (the screen generator's joins to the label of a
+    /// reference rely on it: an inner one hides the rows whose reference is empty). Used whenever a Studio was measured
+    /// (<see cref="Measured"/>); without one, every value is written anyway.</summary>
+    public static string? LanguageDefault(string kind, string property) => property switch {
+        "IsMandatory" when kind is "InputParameter" or "BlockEvent" => "False",
+        "Mandatory" when ScreenHtmlTables.Named.TryGetValue(kind, out var named) && named.GetValueOrDefault("Mandatory") == "required" => "False",
+        "Enabled" when ScreenHtmlTables.Named.TryGetValue(kind, out var named) && named.GetValueOrDefault("Enabled") == "enabled" => "True",
+        "IconSize" when kind == "Icon" => "FontSize",
+        "JoinType" when kind == "Join" => "Left",
+        _ => null,
+    };
+
+    /// <summary>The rule of <see cref="LanguageDefault"/>, as the contract of the reading says it.</summary>
+    public const string LanguageRule = "an attribute of the language left out means what the language says, whatever the Studio gives a fresh element: mandatory of <input> (screen or block) and of a block <event> False (write mandatory=\"True\" for a mandatory one), required False, enabled True, size of <i> FontSize, the join of an aggregate (join=, os-Join without os-JoinType) Left";
+
+    /// <summary>The defaults among what the Studio gives a fresh element of each kind (kind or kind@popup -> property ->
+    /// "type:text", with the role of each kind): its settings (<see cref="IsSetting"/>).</summary>
+    public static ScreenDefaults FromBorn(string identity, IReadOnlyDictionary<string, SortedDictionary<string, string>> born, IReadOnlyDictionary<string, string> roles, string context = "")
+    {
+        var kinds = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
+        foreach (var (key, facts) in born) {
+            var kind = key.EndsWith(PopupSuffix, StringComparison.Ordinal) ? key[..^PopupSuffix.Length] : key;
+            var role = roles.TryGetValue(key, out var r) ? r : "";
+            kinds[key] = facts.Where(f => IsSetting(kind, role, f.Key, f.Value)).ToDictionary(f => f.Key, f => f.Value, StringComparer.Ordinal);
+        }
+        return new ScreenDefaults(identity, kinds) { Context = context };
+    }
+
+    /// <summary>Whether a value an element is born with is a setting of the page, the only values that are defaults: a boolean,
+    /// an enumeration member or a number; an expression that is a Boolean literal (Visible True); a text the reading writes as
+    /// os-&lt;Property&gt; (a layout value such as a Width of (fill parent) or a Gap of 8px). The rest is the developer's, the
+    /// same text a fresh element shows to be replaced: a name, a class or any other expression (Style "btn", Max Records 50),
+    /// a text the element table names (an icon) and the text and value of the element itself (a fresh text says "text"). The
+    /// tag of an element is a setting: a List is born a div, and its Tag is required.</summary>
+    public static bool IsSetting(string kind, string role, string property, string fact) => fact[0] switch {
+        'b' or 'v' => true,
+        'e' => fact[2..] is "True" or "False",
+        't' => fact.Length == 2 || property is not ("Text" or "Value")
+            && ScreenHtmlTables.AttributeOf(kind, property, role == "widget" ? ScreenHtmlModuleMode.Widget : ScreenHtmlModuleMode.Data, false).StartsWith("os-", StringComparison.Ordinal),
+        _ => false,
+    };
+
+    public JsonObject ToJson()
+    {
+        var json = new JsonObject();
+        foreach (var kind in Kinds) json[kind] = new JsonObject(kinds[kind].OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => KeyValuePair.Create(p.Key, (JsonNode?)p.Value)));
+        return new JsonObject { ["identity"] = Identity, ["context"] = Context, ["kinds"] = json };
+    }
+
+    public static ScreenDefaults FromJson(JsonObject json)
+    {
+        var kinds = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
+        foreach (var (kind, map) in json["kinds"]!.AsObject())
+            kinds[kind] = map!.AsObject().ToDictionary(p => p.Key, p => p.Value!.GetValue<string>(), StringComparer.Ordinal);
+        return new ScreenDefaults(json["identity"]?.GetValue<string>() ?? "", kinds) { Context = json["context"]?.GetValue<string>() ?? "" };
+    }
 }

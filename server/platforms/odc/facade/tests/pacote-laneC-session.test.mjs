@@ -14,8 +14,7 @@ import { Client } from '@modelcontextprotocol/client';
 import * as m_ssam from '../ssam.mjs';
 const { createSsamServer, moduleReservations } = m_ssam; // a namespace: at the base each test fails on its own rule, not at import
 
-const CORE = ['ssam_doctor', 'ssam_connect', 'ssam_discover', 'ssam_map', 'ssam_code', 'ssam_reference', 'ssam_evidence', 'ssam_task', 'o11_inspect', 'o11_deliver',
-  'o11_publish', 'o11_studio', 'studio_deliver', 'studio_inspect', 'studio_status'];
+const CORE = ["ssam_doctor","ssam_connect","ssam_discover","ssam_map","ssam_code","ssam_reference","ssam_evidence","ssam_task","o11_inspect","o11_deliver","o11_publish","o11_studio","studio_deliver","studio_inspect","studio_status"];
 
 test('the instructions load every core tool schema in one ToolSearch select', async t => {
   const server = await createSsamServer({ o11: false, odc: false });
@@ -27,7 +26,7 @@ test('the instructions load every core tool schema in one ToolSearch select', as
   const select = /"select:([^"]+)"/.exec(instructions)?.[1];
   assert.ok(select, 'one select: query');
   assert.deepEqual(select.split(',').map(n => n.replace(/^mcp__ssam__/, '')), CORE);
-  assert.match(instructions, /ssam_connect \(no lane\) attaches every Studio already open in one call/);
+  assert.match(instructions, /ssam_connect without lane attaches all open Studios/);
 });
 
 const durable = payload => { const text = JSON.stringify(payload); return JSON.stringify({ format: 1, sha256: createHash('sha256').update(text).digest('hex'), payload: text }); };
@@ -49,7 +48,7 @@ test('the doctor lists the active reservations with their real path, MSIX copies
   const file = path.join(reservations, 'a'.repeat(64) + '.json');
   assert.deepEqual(explicit.active, [{ file, owner: 'task-1', moduleKey: 'k1', environment: 'dev.example.test',
     since: '2026-10-05T10:00:00Z', state: 'orphan', reason: explicit.active[0].reason,
-    next: { tool: 'ssam_doctor', arguments: { lane: 'o11', release: { reservation: file, authorize: '<palavras do usuário>' } }, why: explicit.active[0].next.why } }]);
+    next: { tool: 'ssam_doctor', arguments: { lane: 'o11', release: { reservation: file, authorize: "<the user's own words>" } }, why: explicit.active[0].next.why } }]);
   assert.equal(explicit.virtualization, undefined, 'an authority outside %LOCALAPPDATA% is the same inside and outside a package');
   // The default authority under %LOCALAPPDATA%: the packaged copies are listed with their own reservations.
   const local = path.join(root, 'Local');

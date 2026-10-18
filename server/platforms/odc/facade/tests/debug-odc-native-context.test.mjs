@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { nativeInputBindings, prepareOdcNativeContext } from '../debug-odc-native-context.mjs';

@@ -1,8 +1,9 @@
-// The customer's privacy section (docs/AGENTE-CLIENTE.md "Privacidade"; privacy review of 2026-10-12, finding 2) states
+// The customer's privacy section (docs/AGENTE-CLIENTE.md "Privacy", English since 2026-10-15; privacy review of 2026-10-12, finding 2) states
 // exactly what the server records: every field a quality line can carry has its words there (a field added to the contract
 // without them fails here), retention as the owner configures it, who sees it (the owner only), the closed list of codes
 // and the server.log facts of the agent's connection and of the first machine. In the SSAM-MCP server box the guide lives in
 // the agent box (../agent/docs); without either copy the test skips.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -14,7 +15,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const GUIDE = [path.join(ROOT, 'docs', 'AGENTE-CLIENTE.md'), path.join(ROOT, '..', 'agent', 'docs', 'AGENTE-CLIENTE.md')].find(f => fs.existsSync(f));
 const sectionOf = text => {
   const t = text.replace(/\r\n/g, '\n');
-  const start = t.indexOf('## Privacidade: o que o servidor registra sobre o seu acesso\n');
+  const start = t.indexOf('## Privacy: what the server records about your access\n');
   const end = t.indexOf('\n## ', start + 1);
   assert.ok(start >= 0, 'the privacy section');
   return t.slice(start, end < 0 ? undefined : end).replace(/\s+/g, ' ');
@@ -23,23 +24,23 @@ const sectionOf = text => {
 // The words of each field of a quality line in the section (format fields of the line itself excluded).
 const FORMAT = new Set(['schema', 'kind', 'trunc']);
 const WORDS = {
-  time: /Em toda linha:\*\* a hora/, token: /identificador do seu acesso/, customer: /o nome que o dono deu a ele/, session: /resumo da sessão MCP que não permite recuperá-la/,
-  call: /a ordem na sessão/, tool: /A chamada:\*\* a ferramenta/, op: /a ação escolhida nela \(da lista da ferramenta\)/, lane: /a plataforma \(O11 ou ODC\)/,
-  ms: /a duração/, gapMs: /o intervalo desde a resposta anterior/, inFlight: /quantas chamadas corriam juntas/,
-  ok: /se deu certo/, class: /foi recusado, ficou incerto ou falhou/, code: /o código; o passo/, step: /o passo em que parou/,
-  deliv: /`entregue`, `entregue e publicado` ou `criado`/,
-  'problems.n': /quantos problemas de cada código/, 'problems.err': /quantos problemas de cada código/, 'problems.byCode': /quantos problemas de cada código/,
-  'problems.warn': /quantos eram avisos/, 'problems.withPatch': /quantos vieram com correção pronta/, 'problems.byPhase': /\(por fase/, 'problems.cut': /se a lista foi cortada/,
-  'norm.n': /quantas correções automáticas de cada regra/, 'norm.byRule': /quantas correções automáticas de cada regra/,
-  'warn.n': /quantos avisos/, 'warn.high': /e quantos graves/,
-  t: /quanto levou cada fase \(fila, captura, compilação, Studio, verificação, publicação, ambiente, transferência, rede e o próprio servidor\)/,
-  'agent.n': /quantas chamadas ao agente/, 'agent.top': /de que tipo e comando/, 'agent.bytes': /com quantos bytes/, 'agent.failed': /quantas falhas/,
-  'agent.shared': /quanto tempo e quantas falhas/, 'agent.approx': /quanto tempo e quantas falhas/,
-  'kernel.runs': /quantas vezes o motor rodou/, 'kernel.cold': /quantas vezes o motor rodou/, 'kernel.worker': /quantas vezes o motor rodou/, 'kernel.ms': /o motor rodou e quanto levou/,
-  'args.job': /como o job veio/, 'args.basedOn': /`basedOn`/, 'args.partial': /`partial`/, 'args.closePrevious': /`closePrevious`/, 'args.publish': /`publish`/,
-  'args.until': /`until`/, 'args.patch': /quantos patches/, 'args.bytes': /o tamanho em bytes/,
-  'answer.chars': /o tamanho, se veio em páginas/, 'answer.paged': /se veio em páginas/, 'answer.scan': /como o servidor a leu/,
-  event: /quando abriu e fechou/, client: /a família do cliente MCP/, reason: /quando abriu e fechou, o motivo/, calls: /quantas chamadas teve/, openMs: /quando abriu e fechou/,
+  time: /On every line:\*\* the time/, token: /identifier of your access/, customer: /the name the owner gave it/, session: /digest of the MCP session that does not allow recovering it/,
+  call: /the order in the session/, tool: /The call:\*\* the tool/, op: /the action chosen in it \(from the tool's list\)/, lane: /the platform \(O11 or ODC\)/,
+  ms: /the duration/, gapMs: /the interval since the previous answer/, inFlight: /how many calls were running together/,
+  ok: /whether it succeeded/, class: /was refused, was left uncertain or failed/, code: /the code; the step/, step: /the step where it stopped/,
+  deliv: /`entregue` \(delivered\), `entregue e publicado` \(delivered and published\) or `criado` \(created\)/,
+  'problems.n': /how many problems of each code/, 'problems.err': /how many problems of each code/, 'problems.byCode': /how many problems of each code/,
+  'problems.warn': /how many were warnings/, 'problems.withPatch': /how many came with a ready fix/, 'problems.byPhase': /\(by phase/, 'problems.cut': /whether the list was cut/,
+  'norm.n': /how many automatic fixes of each rule/, 'norm.byRule': /how many automatic fixes of each rule/,
+  'warn.n': /how many warnings/, 'warn.high': /and how many severe/,
+  t: /how long each phase took \(queue, capture, compilation, Studio, verification, publication, environment, transfer, network and the server itself\)/,
+  'agent.n': /how many calls to the agent/, 'agent.top': /of which kind and command/, 'agent.bytes': /with how many bytes/, 'agent.failed': /how many failures/,
+  'agent.shared': /how much time and how many failures/, 'agent.approx': /how much time and how many failures/,
+  'kernel.runs': /how many times the engine ran/, 'kernel.cold': /how many times the engine ran/, 'kernel.worker': /how many times the engine ran/, 'kernel.ms': /the engine ran and how long it took/,
+  'args.job': /how the job came/, 'args.basedOn': /`basedOn`/, 'args.partial': /`partial`/, 'args.closePrevious': /`closePrevious`/, 'args.publish': /`publish`/,
+  'args.until': /`until`/, 'args.patch': /how many patches/, 'args.bytes': /the size in bytes/,
+  'answer.chars': /the size, whether it came in pages/, 'answer.paged': /whether it came in pages/, 'answer.scan': /how the server read it/,
+  event: /when it opened and closed/, client: /the family of the MCP client/, reason: /when it opened and closed, the reason/, calls: /how many calls it had/, openMs: /when it opened and closed/,
 };
 // Every field the contract keeps, from a line that fills them all (and the session lines).
 function fieldsOfContract() {
@@ -66,20 +67,20 @@ test('the privacy section names every field of the quality record, by category',
     assert.ok(Object.hasOwn(WORDS, field), 'a field of the contract the privacy section does not describe yet: ' + field);
     assert.match(section, WORDS[field], field);
   }
-  assert.match(section, new RegExp('Um valor fora da lista vira um marcador fixo, como `' + CODE_UNLISTED + '`, e só é contado'));
-  assert.match(section, /Nada do seu trabalho entra na auditoria nem no registro de qualidade: nenhum nome de módulo, tela, action ou entidade, nenhum job, expressão, mensagem, caminho de arquivo, endereço de ambiente ou texto seu/);
+  assert.match(section, new RegExp('A value outside the list becomes a fixed marker, such as `' + CODE_UNLISTED + '`, and is only counted'));
+  assert.match(section, /Nothing of your work goes into the audit or the quality record: no name of a module, screen, action or entity, no job, expression, message, file path, environment address or text of yours/);
 });
 
 test('the privacy section says who sees the records, how long they stay and the server.log facts of the agent', { skip: !GUIDE && 'docs/AGENTE-CLIENTE.md is in the agent box' }, () => {
   const section = sectionOf(fs.readFileSync(GUIDE, 'utf8'));
-  assert.match(section, /Só o dono do servidor vê o log, a auditoria e o registro de qualidade/);
+  assert.match(section, /Only the server owner sees the log, the audit and the quality record/);
   // retention as configured (rotate-logs.sh: LOG_KEEP_DAYS 56, AUDIT_KEEP_DAYS and QUALITY_KEEP_DAYS 0 = keep all), never "the same as the audit"
-  assert.match(section, /O dono escolhe por quantos dias guarda cada um desses registros\. O padrão guarda o log por 56 dias e a auditoria e o registro de qualidade sem prazo\./);
-  assert.doesNotMatch(section, /mesma retenção da auditoria/);
+  assert.match(section, /The owner chooses for how many days each of these records is kept\. The default keeps the log for 56 days and the audit and the quality record with no time limit\./);
+  assert.doesNotMatch(section, /same retention as the audit/);
   // agent-connected and agent-machine-pinned (agent-hub.mjs hello): the machine name, the Windows user and the IP, plainly
-  assert.match(section, /Quando o agente conecta:\*\* o IP, a versão do agente, o nome do computador, o seu usuário do Windows e um identificador da máquina/);
-  assert.match(section, /Na primeira conexão do agente, o servidor guarda o nome do computador, o seu usuário do Windows, o identificador, a hora e o IP/);
-  assert.match(section, /Quando o seu cliente MCP abre uma sessão:\*\* o nome que o dono deu ao seu acesso, o número da sessão MCP, o IP de onde você conecta, o nome e a versão do cliente MCP/);
+  assert.match(section, /When the agent connects:\*\* the IP, the agent version, the computer name, your Windows user and a machine identifier/);
+  assert.match(section, /On the agent's first connection, the server keeps the computer name, your Windows user, the identifier, the time and the IP/);
+  assert.match(section, /When your MCP client opens a session:\*\* the name the owner gave your access, the MCP session number, the IP you connect from, the name and version of the MCP client/);
   // what the customer's workspace keeps, including the free text of ssam_friction reports
-  assert.match(section, /o texto dos relatos que o seu cliente MCP grava com `ssam_friction`/);
+  assert.match(section, /the text of the reports your MCP client writes with `ssam_friction`/);
 });

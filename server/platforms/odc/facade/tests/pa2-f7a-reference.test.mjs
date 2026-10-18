@@ -2,6 +2,7 @@
 // "unknown op 'reference'; allowed: logic, spec, ..." (a job verb asked as op), "api query does not take: find",
 // "recipe --ops requires --max" and check-delivery asking for an absolute path the session had to build from a taskId.
 // The facade runs a fake CLI (argv checked); when this worktree's own O11 CLI is built, `api --op <verb>` is also asked of it.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

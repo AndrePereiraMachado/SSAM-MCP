@@ -1,5 +1,5 @@
 {
- "description": "MonthPicker do OSUI: o Input de exemplo ligado a uma variavel Text e o evento obrigatorio OnSelected guardando mes e ano.",
+ "description": "MonthPicker of OSUI: the sample Input bound to a Text variable and the required event OnSelected keeping the month and the year.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';
@@ -136,7 +137,7 @@ test('execution classification: current only with a complete, matching stamp; ev
   // The same job text with the other line endings (a checkout with another autocrlf): current, and said; any other
   // text stays historical.
   const eol = classifyExecutions([{ ...stamped('a', { stamp: { jobSha256: 'jlf' } }), sha256: 'jcrlf', sha256Eol: ['jlf'] }], currentIdentity())[0];
-  assert.equal(eol.executed.current, true, JSON.stringify(eol.executed.mismatches)); assert.match(eol.executed.jobIdentity, /modulo line endings/);
+  assert.equal(eol.executed.current, true, JSON.stringify(eol.executed.mismatches)); assert.match(eol.executed.jobIdentity, /up to line endings/);
   reason([{ ...stamped('a', { stamp: { jobSha256: 'jother' } }), sha256: 'jcrlf', sha256Eol: ['jlf'] }], currentIdentity(), /jobSha256: result jother vs current jcrlf/);
   reason([stamped('a', { baseSha256: 'c'.repeat(64) })], currentIdentity(), /baseSha256: the fixture the job declares changed/);
   reason([stamped('a', { stamp: { base: 'tests/fixtures/odc/other.oml' } })], currentIdentity(), /base: stamped/);
@@ -787,7 +788,8 @@ test('a composite intent returns capabilities, whole contracts, example excerpts
 // verifies the defect is fixed (the capability, its contracts and the list/aggregate bindings come in one answer). It
 // does not measure any time reduction.
 test('the list-with-sort-and-join intent reaches logic.aggregate with bindings and declared contract expansions', { skip: !cliBuilt && 'anvil-odc CLI not built', timeout: 120000 }, async () => {
-  const answer = await discover({ lane: 'odc', intent: 'tela de listagem de apolices: static entity PolicyStatus, entidade Policy com FK, tela WfPolicies com um aggregate das apolices ordenado por Number e uma lista com Number e Label do status, clique navega para WfPolicyDetail com input PolicyId', sources });
+  // Keep the original engine budget explicit: this test checks the one-answer semantic contract, not MCP's output ceiling.
+  const answer = await discover({ lane: 'odc', intent: 'tela de listagem de apolices: static entity PolicyStatus, entidade Policy com FK, tela WfPolicies com um aggregate das apolices ordenado por Number e uma lista com Number e Label do status, clique navega para WfPolicyDetail com input PolicyId', sources, budgetBytes: 40960 });
   assert.equal(answer.ok, true);
   const direct = answer.matches.filter(m => m.via === 'match').map(m => m.id);
   for (const id of ['logic.aggregate', 'ui.list', 'data.static', 'ui.screen']) assert.ok(direct.includes(id), id + ' not a direct match: ' + direct.join(','));
@@ -859,7 +861,8 @@ test('answers respect the byte budget, keep contracts and examples of a composit
 // ---- application context through the real reader over the fixture (read-only; never contacts the Studio)
 test('with a capture, the composite answer carries the signatures the intent names and an element expansion reads one signature', { skip: (!cliBuilt || !fs.existsSync(fixture)) && 'CLI or fixture missing', timeout: 240000 }, async () => {
   const { inspect } = await import('../lib.mjs');
-  const answer = await discover({ lane: 'odc', intent: 'formulário com dropdown pesquisável, carregar dados e salvar', app: fixture, sources, inspect });
+  // Preserve the original engine budget for capture/signature semantics; B5 covers the shared MCP ceiling.
+  const answer = await discover({ lane: 'odc', intent: 'formulário com dropdown pesquisável, carregar dados e salvar', app: fixture, sources, inspect, budgetBytes: 40960 });
   assert.equal(answer.ok, true);
   const c = answer.context;
   assert.equal(c.ok, true, JSON.stringify(c).slice(0, 400));

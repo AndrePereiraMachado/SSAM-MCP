@@ -1,5 +1,5 @@
 {
- "description": "DatePicker do OSUI: formato da data, botao Hoje, e o OnSelected grava a data e recarrega as entregas desse dia.",
+ "description": "DatePicker of OSUI: the date format, the Today button, and OnSelected saves the date and reloads the deliveries of that day.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

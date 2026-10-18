@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA do delete de uma ENTIDADE de servidor com consumidores. WfCovProject e citada pela FK WfCovTask.ProjectId, que se liga ao tipo identificador (filho da entidade): o delete olha os consumidores dos filhos e nomeia a FK. Antes so o registo anonimo `WfCovProject Record` recusava o delete e escondia a FK; ele ja nao conta enquanto ninguem o usar. O usages direto continua sem a FK (use scope:subtree). Lote de dados, fase 3; cobertura testada, fase 2.",
+ "description": "ODC: the REFUSAL of the delete of a server ENTITY with consumers. WfCovProject is cited by the FK WfCovTask.ProjectId, which is bound to the identifier type (a child of the entity): the delete looks at the children's consumers and names the FK. Before, only the anonymous record `WfCovProject Record` refused the delete and hid the FK; it no longer counts as long as nobody uses it. The direct usages still shows no FK (use scope:subtree). Data batch, phase 3; tested coverage, phase 2.",
  "base": "job:data-full-model",
  "expectValid": true,
  "expectError": [

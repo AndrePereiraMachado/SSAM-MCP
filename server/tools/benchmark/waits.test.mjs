@@ -1,3 +1,4 @@
+import { originalProfile } from '../../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -12,7 +13,7 @@ import { selectRecordedSources } from './measure/recorded-sources.mjs';
 const ts=n=>new Date(n*1000).toISOString();
 test('exec yields and waits still running are distinct counters',()=>{const calls=[{tool:'exec',start:0,end:1,output:'Script running with cell ID a'},{tool:'wait',start:2,end:3,output:'Script running with cell ID a'},{tool:'wait',start:4,end:5,output:'Script completed'},{tool:'read',start:6,end:7,output:'Script running with cell ID documentation'}];const result=measurePolling([],calls);assert.equal(result.execYields,1);assert.equal(result.waitStillRunning,1);assert.equal(result.waitCalls,2);assert.equal(result.waitCalls,result.execYields+result.waitStillRunning);});
 test('fixed recorded rollouts compare unchanged polling sources independently',{skip:process.env.BENCH_REAL_TRANSCRIPTS!=='1'||!fs.existsSync('C:/t/lacunas/esperas-rede/longas-1213.json')},async t=>{
- const savedFile='C:/t/lacunas/esperas-rede/longas-1213.json',expected=JSON.parse(fs.readFileSync(savedFile,'utf8')),home=path.join(os.homedir(),'.codex');
+ const savedFile='C:/t/lacunas/esperas-rede/longas-1213.json',expected=JSON.parse(fs.readFileSync(savedFile,'utf8')),home=path.join(originalProfile.home,'.codex');
  const walk=dir=>fs.existsSync(dir)?fs.readdirSync(dir,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?walk(path.join(dir,entry.name)):entry.name.endsWith('.jsonl')?[path.join(dir,entry.name)]:[]):[];
  const files=walk(path.join(home,'archived_sessions')).concat(walk(path.join(home,'sessions'))),sum={execYields:0,waitStillRunning:0,waitCalls:0};let changed=0;
  for(const entry of expected.sessions)await t.test(entry.file,st=>{

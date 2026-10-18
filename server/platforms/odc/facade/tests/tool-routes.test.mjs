@@ -2,6 +2,7 @@
 // is routed, no route is stale, every enum is classified, every arguments template fits the live schema, no template
 // carries a real secret or authorization, no string sends the model to a shell, and the curated intents of the data
 // route to their own tool and verb (oracle). In-process server, listTools only: no Studio, no tool call.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -22,7 +23,7 @@ const data = JSON.parse(fs.readFileSync(TOOLS_FILE, 'utf8'));
 process.env.SSAM_APP_HOOK_TOOLS = '1';
 
 async function liveTools() {
-  const server = await createSsamServer();
+  const server = await createSsamServer({ profile: 'all' });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'tool-routes-test', version: '1.0.0' });
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);

@@ -10,7 +10,7 @@ import { anvilRoot } from './workspace.mjs';
 import { usesWorkspace, workspacePath } from './executor.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { listOperations, readOperation, readPreviewState, summarizeOperation } from './destructive-operations.mjs';
-import { callScope, stopTask, isLiveTask, stopOperation } from './call-deadline.mjs';
+import { callScope, stopTask, isLiveTask, stopOperation, runsHere, folderKey } from './call-deadline.mjs';
 import { WORDS_MARKER } from './next-steps.mjs';
 import { WORDS as ENGLISH_WORDS_MARKER } from './continuations.mjs';
 
@@ -25,6 +25,10 @@ const WORDS = /^(authorize|authorization|words|password|passwd|secret|token|acce
 export const scrub = value => Array.isArray(value) ? value.map(scrub)
   : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).filter(([k]) => !WORDS.test(k)).map(([k, v]) => [k, scrub(v)]))
   : value;
+
+// CT-1: the start of this server process, random at module load. Every record this process writes names it next to its
+// pid (processStartId), and so does the call index entry of the record.
+export const PROCESS_START_ID = randomUUID();
 
 const indexFile = (dir, kind, key) => path.join(dir, '.index', kind, key + '.json');
 const callKey = (tool, hash) => createHash('sha256').update(tool + '\0' + hash).digest('hex');
@@ -63,7 +67,7 @@ export const reservesCall = task => !!task && !task.closedAt && task.isWrite !==
 function updateIndexes(dir, task) {
   if (task.tool && task.call?.argsSha256) {
     const file = indexFile(dir, 'calls', callKey(task.tool, task.call.argsSha256));
-    if (reservesCall(task)) atomicJson(file, { id: task.id });
+    if (reservesCall(task)) atomicJson(file, { id: task.id, ...(task.processStartId ? { processStartId: task.processStartId } : {}) });
     else if (readIndex(file)?.id === task.id) { try { fs.unlinkSync(file); } catch {} }
   }
   if (KERNEL_ID.test(String(task.result?.taskId))) {
@@ -114,7 +118,8 @@ function write(dir, task) {
 // A shared task record is updated atomically; nested trackers never discard the call's final answer.
 export function mergeTask(dir, fields) {
   const existing = readTask(fields.id, { dir }) ?? {};
-  const task = scrub({ ...existing, ...fields });
+  // A merge that writes this process's pid also writes its start (CT-1); one that writes no pid keeps the record's own.
+  const task = scrub({ ...existing, ...fields, ...(fields.pid === process.pid ? { processStartId: PROCESS_START_ID } : {}) });
   for (const key of ['result', 'callResult']) if (task[key] != null) task[key] = briefResult(task[key]);
   delete task.orphaned;
   write(dir, task);
@@ -123,12 +128,27 @@ export function mergeTask(dir, fields) {
 }
 
 const alive = pid => { try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; } };
-// A running task whose server process is gone never finished here: it says so instead of staying "running" forever.
-const live = task => task.state === 'running' && Number.isInteger(task.pid) && task.pid !== process.pid && !alive(task.pid) ? { ...task, orphaned: true } : task;
+// The trackTask bodies this process runs now, by folder and id (a trackTask may run outside any call deadline).
+const trackedHere = new Set();
+const trackedKey = (dir, id) => folderKey(dir) + '|' + String(id).toLowerCase();
+// CT-1 (servidor/fase4-26): ONE rule says whether a running record still runs, for every reader (readTask and the listing,
+// closeFacadeTask, the ssam_task close, the identical-call guard, continueTask). A record of another pid runs while that
+// process lives. A record of this pid runs only while this process runs its handler (a live call of a deadline, a
+// trackTask body). So one with another start id (a restart that got the same pid: pid 7 in every
+// start of the image), one of an older release without the id, or one whose handler ended here without its final write,
+// is orphaned: it never finished, ssam_task says so and its explicit close works (continueTask already answered
+// TASK_ORPHANED for it; now every reader agrees).
+export function orphanedTask(task, dir) {
+  if (task?.state !== 'running' || !Number.isInteger(task.pid)) return false;
+  if (task.pid !== process.pid) return !alive(task.pid);
+  if (task.processStartId != null && task.processStartId !== PROCESS_START_ID) return true;
+  return !runsHere(task.id, dir) && !trackedHere.has(trackedKey(dir, task.id));
+}
+const live = (task, dir) => orphanedTask(task, dir) ? { ...task, orphaned: true } : task;
 
 export function readTask(id, { dir = tasksDir() } = {}) {
   if (!UUID.test(String(id))) return null;
-  try { return live(JSON.parse(fs.readFileSync(path.join(dir, String(id).toLowerCase() + '.json'), 'utf8'))); }
+  try { return live(JSON.parse(fs.readFileSync(path.join(dir, String(id).toLowerCase() + '.json'), 'utf8')), dir); }
   catch { return null; }
 }
 
@@ -189,12 +209,17 @@ export async function trackTask({ tool, summary = {}, dir = tasksDir(), now = ()
   id ??= inherited ? context.id : randomUUID();
   const task = { id, tool: inherited ? context.tool : tool, summary: scrub(summary), ...(context ? { call: context.call } : {}), pid: process.pid, startedAt: now().toISOString(), state: 'running',
     ...(context && !inherited ? { callTask: context.id } : {}) };
-  mergeTask(dir, task);
-  let value;
-  try { value = await fn(task); } catch (error) { value = { ok: false, error: error.message }; }
-  try { mergeTask(dir, { ...task, ...(inherited ? { state: 'running' } : { state: stateOf(value), endedAt: now().toISOString() }), result: briefResult(value) }); }
-  catch { /* the answer matters more than its record; the running record stays as evidence */ }
-  return value;
+  // CT-1: while its body runs here, its running record is never read orphaned.
+  const key = trackedKey(dir, id);
+  trackedHere.add(key);
+  try {
+    mergeTask(dir, task);
+    let value;
+    try { value = await fn(task); } catch (error) { value = { ok: false, error: error.message }; }
+    try { mergeTask(dir, { ...task, ...(inherited ? { state: 'running' } : { state: stateOf(value), endedAt: now().toISOString() }), result: briefResult(value) }); }
+    catch { /* the answer matters more than its record; the running record stays as evidence */ }
+    return value;
+  } finally { trackedHere.delete(key); }
 }
 
 const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value.ok === false ? { isError: true } : {}) });
@@ -210,9 +235,9 @@ export function kernelWorkFolders(root = anvilRoot) {
   return [...new Set(folders)];
 }
 const KERNEL_NEXT = {
-  refused: id => ({ tool: 'ssam_task', arguments: { id, close: { reason: '<motivo>' } }, why: 'a entrega terminou recusada: fecha a tarefa no kernel e libera o módulo' }),
-  uncertain: id => ({ tool: 'o11_deliver', arguments: { resume: id }, why: 'a escrita desta tarefa não foi confirmada: o resume reconcilia a mesma tarefa e nunca repete o merge' }),
-  unsettled: id => ({ tool: 'o11_deliver', arguments: { resume: id }, why: 'enquanto a entrega roda, ela responde sozinha (o resume espera a vez dela na fila do Studio); se ela parou sem resposta, o resume reconcilia a mesma tarefa' }),
+  refused: id => ({ tool: 'ssam_task', arguments: { id, close: { reason: '<reason>' } }, why: 'the delivery ended refused: this closes the task in the kernel and frees the module' }),
+  uncertain: id => ({ tool: 'o11_deliver', arguments: { resume: id }, why: 'the write of this task was not confirmed: resume reconciles the same task and never repeats the merge' }),
+  unsettled: id => ({ tool: 'o11_deliver', arguments: { resume: id }, why: 'while the delivery runs, it answers by itself (resume waits for its turn in the Studio queue); if it stopped without an answer, resume reconciles the same task' }),
 };
 export async function kernelTaskAnswer(id, { root = anvilRoot, works, findTask, closeStateOf } = {}) {
   const cycle = findTask && closeStateOf ? null : await import('./o11-cycle.mjs');
@@ -225,18 +250,18 @@ export async function kernelTaskAnswer(id, { root = anvilRoot, works, findTask, 
     const closeState = closing(state);
     const next = KERNEL_NEXT[closeState]?.(id);
     return { ok: true, kernelTask: { id, writeState: state.writeState ?? null, stage: state.stage ?? null, updatedAt: state.updatedAt ?? null, closeState },
-      ...(next ? { continuation: next } : { note: 'a tarefa já terminou (' + closeState + '); uma reserva que ela deixou é liberada por ssam_doctor {lane:"o11", release}' }) };
+      ...(next ? { continuation: next } : { note: 'the task already ended (' + closeState + '); a reservation it left is released by ssam_doctor {lane:"o11", release}' }) };
   }
   return null;
 }
 
 // The close of an uncertain delivery (C15): the kernel closes it only with the proof that nothing was applied (the live
 // module captured now has exactly the bytes of the task's base snapshot) and never when the live module differs.
-export const CLOSE_WITH_PROOF_WHY = 'Fecha a entrega incerta só com a prova de que nada foi aplicado (o módulo vivo igual à base capturada); '
-  + 'com o módulo diferente ela continua incerta e nada é repetido. reason: o motivo, em uma linha.';
-const closeContinuation = id => ({ tool: 'ssam_task', arguments: { id, close: { reason: '<motivo>' } }, why: CLOSE_WITH_PROOF_WHY });
-const facadeCloseContinuation = id => ({ tool: 'ssam_task', arguments: { id, close: { reason: '<motivo>' } },
-  why: 'Depois de reconciliar o resultado incerto, feche explicitamente esta tarefa de fachada com o motivo; só então uma nova escrita pode executar.' });
+export const CLOSE_WITH_PROOF_WHY = 'Closes the uncertain delivery only with the proof that nothing was applied (the live module equal to the captured base); '
+  + 'with a different module it stays uncertain and nothing is repeated. reason: the reason, in one line.';
+const closeContinuation = id => ({ tool: 'ssam_task', arguments: { id, close: { reason: '<reason>' } }, why: CLOSE_WITH_PROOF_WHY });
+const facadeCloseContinuation = id => ({ tool: 'ssam_task', arguments: { id, close: { reason: '<reason>' } },
+  why: 'After reconciling the uncertain result, close this facade task explicitly with the reason; only then a new write can run.' });
 
 // The CX15 record of a destructive operation by its operationId or previewId (with its items), or the state of a preview.
 function destructiveRecordOf(id, root) {
@@ -256,7 +281,7 @@ export function registerSsamTask(server, deps = {}) {
       + 'orphaned:true means the server that ran it stopped before it ended. Reading never repeats anything. '
       + 'close {reason} with id closes that delivery task in the kernel and frees its module: a refused one, or an uncertain one only with '
       + 'the proof that nothing was applied (the live module equals the base the task captured); never when the live module differs. Destructive operations (deletes, previewed then confirmed): without id, `destructive` lists the 10 most recent with their counts and names; id = the operationId or the previewId of a preview gives item by item what was deleted, uncertain or not started: read it before telling the owner anything after an interruption, CANCELLED or "rejected" (also after SC_LOCAL_FAILURE or any other local failure). '
-      + 'Cancelar a espera não para a obra. stop:true with a live facade id, or with the operationId/previewId of a destructive execution running in this server, aborts its handler before the next send. A facade UUID without a kernel taskId closes its finished uncertain or orphaned record after explicit reconciliation; a live running handler cannot close. A destructive record is never closed here: close with its operationId refuses and answers the record.',
+      + 'Cancelling the wait does not stop the work. stop:true with a live facade id, or with the operationId/previewId of a destructive execution running in this server, aborts its handler before the next send. A facade UUID without a kernel taskId closes its finished uncertain or orphaned record after explicit reconciliation; a live running handler cannot close. A destructive record is never closed here: close with its operationId refuses and answers the record.',
     inputSchema: z.object({
       id: z.string().regex(/^[0-9a-fA-F-]{32,36}$/).optional().describe('UUID or delivery taskId (32 hex)'),
       stop: z.literal(true).optional(),

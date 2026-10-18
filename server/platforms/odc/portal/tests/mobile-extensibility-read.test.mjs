@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import crypto from 'node:crypto';import {mobileExtensibilityReadInput} from '../runtime/mobile-extensibility-read.mjs';
 test('native mobile reads replace supplied prerequisites with freshly scoped stage and revision',async()=>{
  const raw={inputParameters:{},clientVariables:{},screenVariables:{appid:crypto.randomUUID(),stageid:crypto.randomUUID(),ActivePortfolioKey:crypto.randomUUID(),id:crypto.randomUUID(),GetLatestDeployedAppVersion:{fabricated:true}}};

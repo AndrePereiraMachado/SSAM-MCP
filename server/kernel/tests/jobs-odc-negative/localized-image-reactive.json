@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA da imagem localizada. O locale nasce (IESpace.GetOrCreateLocale, `create ILocale` com args.culture) e a imagem tambem (binario em base64), mas IImage.CreateLocalizedImage e recusado pela propria plataforma: imagens localizadas so existem no runtime Traditional Web do O11 (o mesmo create passa em tests/jobs/image-localized.json e e recusado igual em Reactive e Mobile). Limite da plataforma, nao do kernel.",
+ "description": "ODC: the REFUSAL of the localized image. The locale is born (IESpace.GetOrCreateLocale, `create ILocale` with args.culture) and so is the image (binary in base64), but IImage.CreateLocalizedImage is refused by the platform itself: localized images only exist in the Traditional Web runtime of O11 (the same create passes in tests/jobs/image-localized.json and is refused the same in Reactive and Mobile). Platform limit, not the kernel's.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectError": [

@@ -4,6 +4,7 @@
 // role's qualified native type alone: a record proof never promotes the entity, a structure proof never promotes the
 // attribute, an ODC result never proves O11, a historical result never reads as current, an observed behaviour with
 // integrity not verified is never applicability. Pure checks always run; index checks need the lane CLI built.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

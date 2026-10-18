@@ -1,5 +1,5 @@
 {
- "description": "TimePicker (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; evento obrigatorio OnSelected ligado a uma screen action vazia; o Input de exemplo do placeholder Timepicker ligado a uma variavel Time.",
+ "description": "Minimal TimePicker (OutSystemsUI, Interaction): an instance as the Studio creates it when the block is dragged; the required event OnSelected bound to an empty screen action; the sample Input of the Timepicker placeholder bound to a Time variable.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

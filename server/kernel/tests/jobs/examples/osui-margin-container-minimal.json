@@ -1,5 +1,5 @@
 {
- "description": "MarginContainer (OutSystemsUI, Utilities) minimo: instancia como o Studio cria ao arrastar o bloco.",
+ "description": "Minimal MarginContainer (OutSystemsUI, Utilities): an instance as the Studio creates it when the block is dragged.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

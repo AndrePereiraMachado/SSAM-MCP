@@ -43,7 +43,7 @@ public static class VerifyHints
         if (id.StartsWith("Unused", StringComparison.Ordinal)) return UnusedFix;
         return null;
     }
-    public const string UnusedFix = "Remova o elemento ou use-o.";
+    public const string UnusedFix = "Remove the element or use it.";
 
     /// <summary>A03, I9: the non-blocking warnings of a list of verdicts (the apply's K1 verdicts, or the live contract's
     /// entries), each {id, path, key?, detail (one line, at most 200 characters), fix}. Only verdicts "nonblocking"; key is the

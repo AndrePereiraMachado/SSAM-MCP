@@ -1,5 +1,5 @@
 {
- "description": "ActionSheet (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios IsOpen com valores simples.",
+ "description": "Minimal ActionSheet (OutSystemsUI, Interaction): an instance as the Studio creates it when the block is dragged; required inputs IsOpen with simple values.",
  "base": "job:ex-base-mobile",
  "expectValid": true,
  "expectedMessages": [],

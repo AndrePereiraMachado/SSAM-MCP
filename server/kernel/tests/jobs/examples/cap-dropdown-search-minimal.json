@@ -1,5 +1,5 @@
 {
- "description": "DropdownSearch (OutSystemsUI) minimo: instancia com a lista de opcoes ligada a uma variavel DropdownOption List e o evento obrigatorio OnChanged ligado a uma screen action.",
+ "description": "Minimal DropdownSearch (OutSystemsUI): an instance with the options list bound to a DropdownOption List variable and the required OnChanged event bound to a screen action.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

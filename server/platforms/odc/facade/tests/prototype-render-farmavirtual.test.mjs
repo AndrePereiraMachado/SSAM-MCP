@@ -1,4 +1,5 @@
 // Prototype capture (docs/PROTOTIPO-NATIVO.md 2, 7.1 tests 1-8 and 12) over the owner's FarmaVirtual prototype.
+import './fixtures/isolated-profile.mjs';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

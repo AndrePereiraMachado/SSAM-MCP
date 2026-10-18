@@ -1,5 +1,5 @@
 {
- "description": "Search do OSUI: Input ligado a SearchText com Prompt e OnChange, que faz Refresh Data do aggregate filtrado por like.",
+ "description": "Search of OSUI: an Input bound to SearchText with a Prompt and an OnChange, which does a Refresh Data of the aggregate filtered by like.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

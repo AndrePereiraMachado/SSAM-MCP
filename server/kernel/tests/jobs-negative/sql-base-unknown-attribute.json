@@ -1,5 +1,5 @@
 {
- "description": "SQL preflight contra a base: [Nome] nao e atributo da entidade Product da base. Recusado com op, linha, motivo e a lista dos atributos existentes.",
+ "description": "SQL preflight against the database: [Nome] is not an attribute of the entity Product of the base. Refused with op, line, reason and the list of existing attributes.",
  "base": "job:sql-input-output",
  "expectError": ["op #0 (SQL IServerAction:Product_Search/SearchProducts, line 1): [Nome] is not an attribute of {Product}; attributes: Id, Name, Price"],
  "ops": [

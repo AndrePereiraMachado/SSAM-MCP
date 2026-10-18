@@ -82,7 +82,7 @@ public static class OperationDialogPolicy
         // it, so the operation answers at once instead of waiting for the bound (UiGate.Heavy) with no text.
         if (read.Presenter)
             return new(string.IsNullOrWhiteSpace(read.Type) ? ModalPresenter : read.Type!, false, null, text, buttons,
-                Ask(read, text, buttons, "Aplique ou feche esse editor no Studio; depois retome a entrega."));
+                Ask(read, text, buttons, "Apply or close that editor in the Studio; then resume the delivery."));
         var kind = DialogPolicy.ClassifyWindow(read.Title, read.Texts.Concat(read.WebText is { } w ? [w] : []));
         if (kind == DialogPolicy.Progress && buttons.Count == 0) return new(DialogPolicy.Progress, false, null, text, buttons, null, Transient: true);
         if (ErrorTitles.Any(t => title.Equals(t, StringComparison.OrdinalIgnoreCase)) || IsErrorReport(all))
@@ -90,16 +90,16 @@ public static class OperationDialogPolicy
         if ((read.Type ?? "").Contains("DialogWindow", StringComparison.Ordinal) && all.Contains(DependenciesText, StringComparison.OrdinalIgnoreCase))
             return new(Dependencies, true, "close", text, buttons, null);
         if (kind == DialogPolicy.Recovery)
-            return new(DialogPolicy.Recovery, false, null, text, buttons, Ask(read, text, buttons, "Escolha Open ou Discard no Studio."));
+            return new(DialogPolicy.Recovery, false, null, text, buttons, Ask(read, text, buttons, "Choose Open or Discard in the Studio."));
         if (SignInWords.Any(s => Contains(all, s)))
-            return new(SignIn, false, null, text, buttons, Ask(read, text, buttons, "Entre no Studio. O SSAM nunca digita senha."));
+            return new(SignIn, false, null, text, buttons, Ask(read, text, buttons, "Sign in to the Studio. SSAM never types a password."));
         if (ConsentWords.Any(s => Contains(all, s)))
-            return new(Consent, false, null, text, buttons, Ask(read, text, buttons, "Responda no Studio."));
+            return new(Consent, false, null, text, buttons, Ask(read, text, buttons, "Answer it in the Studio."));
         if (read.Web && read.WebText == null)
-            return new(Unreadable, false, null, text, buttons, Ask(read, text, buttons, "O SSAM não conseguiu ler o texto. Leia e responda no Studio."));
+            return new(Unreadable, false, null, text, buttons, Ask(read, text, buttons, "SSAM could not read the text. Read it and answer in the Studio."));
         if (!read.Web && buttons.Count > 0 && buttons.All(b => Dismissive.Contains(b, StringComparer.OrdinalIgnoreCase)))
             return new(DialogPolicy.MessageBox, true, "close", text, buttons, null);
-        return new(Question, false, null, text, buttons, Ask(read, text, buttons, buttons.Count > 0 ? "Escolha no Studio: " + string.Join(" | ", buttons) + "." : "Responda no Studio."));
+        return new(Question, false, null, text, buttons, Ask(read, text, buttons, buttons.Count > 0 ? "Choose in the Studio: " + string.Join(" | ", buttons) + "." : "Answer it in the Studio."));
     }
 
     // An error report of the Studio without its title: the crash page names the error and offers to report it.
@@ -109,7 +109,7 @@ public static class OperationDialogPolicy
     private static bool Contains(string text, string word) => text.Contains(word, StringComparison.OrdinalIgnoreCase);
 
     private static string Ask(DialogRead read, string text, IReadOnlyList<string> buttons, string what)
-        => "O Studio abriu \"" + (string.IsNullOrWhiteSpace(read.Title) ? "um diálogo" : read.Title!.Trim()) + "\" durante a entrega"
+        => "The Studio opened \"" + (string.IsNullOrWhiteSpace(read.Title) ? "a dialog" : read.Title!.Trim()) + "\" during the delivery"
            + (text.Length > 0 ? ": " + (text.Length > 300 ? text[..300] + "..." : text) : "") + ". " + what;
 
     /// <summary>fam-deps (finding 1): whether a dialog entry an operation closed is an error the Studio reported (its crash
@@ -260,7 +260,7 @@ public sealed class DialogSweep(IStudioDialogSurface surface, ISet<string>? skip
             {
                 var unclosed = entry.DeepClone().AsObject();
                 unclosed["answer"] = null;
-                unclosed["question"] = "O Studio abriu \"" + (read.Title ?? "um diálogo") + "\" durante a entrega e o SSAM não conseguiu fechá-lo. Feche-o no Studio.";
+                unclosed["question"] = "The Studio opened \"" + (read.Title ?? "a dialog") + "\" during the delivery and SSAM could not close it. Close it in the Studio.";
                 waiting[id] = unclosed; blocked ??= unclosed;
             }
         }

@@ -1,5 +1,5 @@
 {
- "description": "Pagina inteira por HTML (op html com data): uma tela About nasce de um fragmento estatico com titulo, paragrafo e CSS proprio, sem bindings.",
+ "description": "A whole page by HTML (op html with data): an About screen is born from a static fragment with a title, a paragraph and its own CSS, without bindings.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

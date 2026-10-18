@@ -15,7 +15,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { createSsamServer } from '../ssam.mjs';
 import { createFacadeServer } from '../mcp.mjs';
 import { run } from '../lanes.mjs';
-import { DESTRUCTIVE_BRIDGE_COMMANDS, OWNER_REPLY, readOperation, readPreview, wordsSha256 } from '../destructive-operations.mjs';
+import { DESTRUCTIVE_BRIDGE_COMMANDS, OWNER_REPLY, WORDS_ECHO, readOperation, readPreview, wordsSha256 } from '../destructive-operations.mjs';
 import { DATA_PREVIEW_MAX_ROWS, cliDataDelete, studioDataDelete } from '../data-delete-gate.mjs';
 
 // No Studio process, vault entry or prompt is ever touched (lib.mjs offline()).
@@ -216,12 +216,23 @@ test('o11_data batch with mixed writes: the preview sends nothing (not even the 
   assert.equal(calls.length, 1); assert.deepEqual(calls[0].request, { operation: 'read', entity: 'Customer', ids: ['4'] }, 'only the read of the delete\'s ids');
   assert.equal(ops('insert').length, 0); assert.equal(ops('delete').length, 0);
   const request = preview.continuation.arguments.request;
-  assert.equal(request.authorization, batch.authorization, 'the batch words stay for the insert');
+  // CX15 r6 (M-1, the r5 conversion made honest): the continuation never gives the words back: the marker is in their place
+  // and the step says the owner must fill it (askOwner). Replayed as it is, nothing runs (below).
+  assert.equal(request.authorization, WORDS_ECHO, 'the batch words are the marker for the insert');
   assert.deepEqual(request.batch[0], batch.batch[0], 'the insert is unchanged: it needs no token');
   assert.deepEqual(request.batch[1], { step: 'gone', operation: 'delete', entity: 'Customer', operationId: preview.operationId, confirmationToken: preview.confirmationToken,
     authorization: OWNER_REPLY });
   now.advance(6000);
   request.batch[1].authorization = 'sim, apaga o 1 registro de Customer';
+  // The continuation replayed as it is (only the owner's reply for the delete filled): WORDS_REQUIRED, nothing sent.
+  const sentBefore = calls.length;
+  const replayed = await call(structuredClone(request));
+  assert.equal(replayed.code, 'WORDS_REQUIRED', JSON.stringify(replayed).slice(0, 300)); assert.equal(calls.length, sentBefore, 'nothing reached the kernel');
+  assert.equal(ops('insert').length, 0); assert.equal(ops('delete').length, 0);
+  assert.match(preview.continuation.why, /; request\/authorization: the owner's own words in place of the marker$/ /* CX15 r7 (L-8, converted): English */);
+  assert.deepEqual(preview.continuation.askOwner?.fields, ['request/authorization']);
+  // With the owner's words where the marker is, it runs and the kernel gets their sha256.
+  request.authorization = batch.authorization;
   const done = await call(request);
   assert.equal(done.ok, true, JSON.stringify(done));
   const sent = calls.at(-1).request;

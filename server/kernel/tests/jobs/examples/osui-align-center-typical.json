@@ -1,5 +1,5 @@
 {
- "description": "AlignCenter (OutSystemsUI, Utilities) tipico; placeholders Content com dados do aggregate de tarefas.",
+ "description": "Typical AlignCenter (OutSystemsUI, Utilities); placeholders Content with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

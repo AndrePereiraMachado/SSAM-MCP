@@ -1,6 +1,7 @@
 // Port D7 (review B1): while portal/runtime/timer-background.mjs is pending, ssam_debug_run ODC Workflow events,
 // original Timer launches and Portal Timer wakes refuse with the registry's typed code before any live read, watch or
 // wake, instead of failing with a raw module error. Offline; synthetic model only. Runs only while the file is pending.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { debugRun, nativeEntrySchema } from '../debug-run.mjs';

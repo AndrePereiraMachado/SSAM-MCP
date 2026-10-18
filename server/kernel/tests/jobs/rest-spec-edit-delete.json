@@ -1,5 +1,5 @@
 {
- "description": "Op rest editando e apagando: sobre o rest-consume-call, o chamador sai primeiro (delete cru), o metodo antigo sai pelo remove e um metodo novo com query string entra no mesmo cliente reaproveitando a estrutura de resposta; depois o mesmo metodo e redeclarado com outro caminho e a descricao do cliente muda (atualizacao no lugar, mesma chave).",
+ "description": "Rest op editing and deleting: on top of rest-consume-call, the caller leaves first (raw delete), the old method leaves through remove and a new method with a query string enters the same client reusing the response structure; then the same method is redeclared with another path and the description of the client changes (in-place update, same key).",
  "base": "job:rest-consume-call",
  "expectValid": true,
  "ops": [

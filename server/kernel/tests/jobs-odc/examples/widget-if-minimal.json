@@ -1,5 +1,5 @@
 {
- "description": "If widget: Condition sobre uma variavel Boolean e um texto em cada ramo (TrueBranch e FalseBranch nascem com o If).",
+ "description": "If widget: a Condition on a Boolean variable and a text in each branch (TrueBranch and FalseBranch are born with the If).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

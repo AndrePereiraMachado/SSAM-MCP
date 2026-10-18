@@ -10,6 +10,7 @@
 // was sent). This file builds the argv, keeps the words as a sha256 in <lane.local>/journal/o11_access.jsonl and reads
 // the outcome: every delivery delivered -> "entregue"; verifier errors -> the errors; an unconfirmed write -> uncertain,
 // never repeated, with the MCP call that reconciles it. No Python, no shell, no sleep: each call waits for its process.
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -21,6 +22,7 @@ import { assertSelectedO11 } from './studio-connect.mjs';
 import { readConnection } from './studio-session.mjs';
 import { trackTask, tasksDir } from './ssam-task.mjs';
 import { clean, closeState, contractRefusal, deliveryOutcome, findKernelTask, validationMessages, WORDS_MARKER } from './o11-cycle.mjs';
+import { RESULT } from './result-values.mjs';
 
 const ACTIONS = ['plan', 'apply', 'verify', 'users'];
 const ARGUMENTS = ['action', 'manifestPath', 'words', 'operationId'];
@@ -30,14 +32,14 @@ const USER_FIELDS = ['id', 'username', 'name', 'email', 'isActive', 'roles'];
 export const USERS_MAX = 100;
 const OPERATION_ID = /^[0-9a-fA-F]{32}$/; // kernel Guid "N", the name of the receipt
 const APPLY_SCHEMA = 'ssam-access-apply/1';
-const DELIVERED = Object.freeze({ ok: true, result: 'entregue' });
+const DELIVERED = Object.freeze({ ok: true, result: RESULT.delivered });
 const mutating = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false };
 const reply = (value, text = JSON.stringify(value)) => ({ content: [{ type: 'text', text }], structuredContent: value, ...(value?.ok === false ? { isError: true } : {}) });
 const sha256 = data => createHash('sha256').update(data).digest('hex');
 const isFile = file => { try { return fs.statSync(file).isFile(); } catch { return false; } };
 const refusal = (code, error, continuation, extra = {}) => ({ ok: false, code, error, ...extra, ...(continuation ? { continuation } : {}) });
 // Blank words, or a placeholder such as the continuation marker, are not the user's words.
-const wordsGiven = words => typeof words === 'string' && words.trim() !== '' && !/^<[^>]*>$/.test(words.trim());
+// CX15 r7 (L-7): the one predicate of destructive-operations.mjs (imported above).
 
 // ---- continuations: always an MCP call, never a command line. The marker stands for the user's words.
 const planAgain = input => ({ tool: 'o11_access', arguments: { action: 'plan', manifestPath: input.manifestPath },
@@ -51,7 +53,7 @@ const sameOperation = (input, operationId) => ({ tool: 'o11_access', arguments: 
 const resumeWith = taskId => ({ tool: 'o11_deliver', arguments: { resume: taskId, authorize: WORDS_MARKER },
   why: 'Resumes the same kernel delivery task: it reconciles through merge_status and never repeats the merge. authorize: the user\'s words in place of the marker.' });
 const closeHolder = taskId => ({ tool: 'o11_deliver', arguments: { close: { taskId, reason: 'superseded by a new o11_access apply' }, authorize: WORDS_MARKER },
-  why: 'A refused delivery still holds the module: close it ("fechada"), then plan and apply again with the user\'s words.' });
+  why: 'A refused delivery still holds the module: close it ("closed"), then plan and apply again with the user\'s words.' });
 const connect = why => ({ tool: 'ssam_connect', arguments: { lane: 'o11' }, why });
 const doctor = why => ({ tool: 'ssam_doctor', arguments: { lane: 'o11' }, why });
 
@@ -379,7 +381,7 @@ export function registerO11Access(server, deps = {}) {
       + 'DemoLoginUsernames/OpsDemoLoginUsernames) and proves one private job per owner module with check-job and apply. '
       + 'apply (the user\'s own words, verbatim; only their SHA-256 is kept) EXECUTES the successful plan: one delivery per owner module '
       + 'on the Service Studio selected on the O11 lane, each bound to the manifest environment (it stops before any merge on another '
-      + 'environment); a receipt with hashes only. All delivered: the answer is only "entregue". Verifier errors come back and nothing more '
+      + 'environment); a receipt with hashes only. All delivered: the answer is only "delivered". Verifier errors come back and nothing more '
       + 'is delivered. outcome "uncertain" is never repeated: follow continuation. operationId (apply only) reconciles an earlier apply. '
       + 'Never publishes (the user publishes in Service Studio) and never creates accounts. verify: phase 2, not implemented. '
       + 'users {host?, email?, username?, role?, max?} (no words, read-only): users and their role names through the Studio\'s own login '

@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA do delete de um ATRIBUTO DE STRUCTURE com consumidor real: ProductSummary.Name e escrito pela expressao 'Summary.Name' do Assign SetSummary da server action publica Product_GetById (base job:producer-public). Sem force, o delete tem de ser recusado E a mensagem tem de nomear o consumidor pelo caminho (a IExpression dentro do IAssignment) e oferecer as duas saidas: remover os usos ou passar force. O caminho limpo - apagar um atributo de structure SEM consumidores, brokenConsumers 0 - esta em tests/jobs/structure-refactor.json (op 4a).",
+ "description": "THE REFUSAL of the delete of a STRUCTURE ATTRIBUTE with a real consumer: ProductSummary.Name is written by the expression 'Summary.Name' of the Assign SetSummary of the public server action Product_GetById (base job:producer-public). Without force, the delete must be refused AND the message must name the consumer by path (the IExpression inside the IAssignment) and offer the two ways out: remove the usages or pass force. The clean path - deleting a structure attribute WITHOUT consumers, brokenConsumers 0 - is in tests/jobs/structure-refactor.json (op 4a).",
  "base": "job:producer-public",
  "expectValid": true,
  "expectError": [
@@ -8,7 +8,7 @@
   "pass \"force\": true to break them"
  ],
  "ops": [
-  {"op": "usages", "target": "IStructure:ProductSummary/Name", "max": 20, "_why": "count 1, real 1: a IExpression '#Variable' com o texto 'Summary.Name', no Assign da action herdada. E este o consumidor que a recusa nomeia."},
-  {"op": "delete", "target": "IStructure:ProductSummary/Name", "_why": "sem force: recusado com 'delete: refused, IStructureAttribute 'Name' is used by 1 consumer(s): IServerAction:Product_GetById/IAssignNode/IAssignment/IExpression (list them with usages, fix or remove those usages, or pass \"force\": true to break them)'."}
+  {"op": "usages", "target": "IStructure:ProductSummary/Name", "max": 20, "_why": "count 1, real 1: the IExpression '#Variable' with the text 'Summary.Name', in the Assign of the inherited action. This is the consumer that the refusal names."},
+  {"op": "delete", "target": "IStructure:ProductSummary/Name", "_why": "without force: refused with 'delete: refused, IStructureAttribute 'Name' is used by 1 consumer(s): IServerAction:Product_GetById/IAssignNode/IAssignment/IExpression (list them with usages, fix or remove those usages, or pass \"force\": true to break them)'."}
  ]
 }

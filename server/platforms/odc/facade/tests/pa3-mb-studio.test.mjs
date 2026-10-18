@@ -2,6 +2,7 @@
 // Dependencies presenter of another tab is seen), a publication the bridge stopped behind a dialog answers
 // PUBLISH_BLOCKED_BY_DIALOG with the next call, and outdated references are refreshed before the publication. C22:
 // close-module closes a tab through the bridge's guard; status names the windows. Fake bridges on loopback ports only.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

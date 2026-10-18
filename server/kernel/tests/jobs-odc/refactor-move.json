@@ -1,5 +1,5 @@
 {
- "description": "O espelho de tests/jobs/refactor-move.json na faixa ODC: reordenar atributos de uma entidade, widgets dentro de um container, parametros de entrada e variaveis de tela, e posicionar um no de fluxo. Cada move devolve a ORDEM que ficou. Prova que o verbo se comporta igual nas duas faixas, apesar de o IObject do ODC ter metodos de mover no proprio objeto que o kernel nao usa (usa os da sequencia, como no O11). A recusa de um irmao de outro pai esta em tests/jobs-odc-negative/move-foreign-sibling.json.",
+ "description": "The mirror of tests/jobs/refactor-move.json in the ODC lane: reorder attributes of an entity, widgets inside a container, input parameters and screen variables, and position a flow node. Each move returns the ORDER that resulted. It proves the verb behaves the same in both lanes, even though the ODC IObject has move methods on the object itself that the kernel does not use (it uses those of the sequence, as in O11). The refusal of a sibling from another parent is in tests/jobs-odc-negative/move-foreign-sibling.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "ops": [
@@ -13,7 +13,7 @@
 
   {"op": "dump", "target": "$WfMoveNotice", "depth": 2},
   {"op": "move", "target": "$WfMoveNotice.Rank", "after": "$WfMoveNotice.Title", "_why": "Id, Title, Rank, Body"},
-  {"op": "move", "target": "$WfMoveNotice.Body", "first": true, "_why": "Body passa a frente do proprio Id: a API deixa nas duas faixas"},
+  {"op": "move", "target": "$WfMoveNotice.Body", "first": true, "_why": "Body moves ahead of Id itself: the API allows it in both lanes"},
   {"op": "move", "target": "$WfMoveNotice.Body", "last": true},
   {"op": "dump", "target": "$WfMoveNotice", "depth": 2},
 
@@ -31,7 +31,7 @@
   {"op": "move", "target": "$c3", "first": true, "_why": "Tres, Um, Dois"},
   {"op": "move", "target": "$c3", "after": "$c1", "_why": "Um, Tres, Dois -- o after decisivo"},
   {"op": "move", "target": "$c1", "before": "$c2", "_why": "Tres, Um, Dois"},
-  {"op": "move", "target": "$c2", "last": true, "_why": "last e idempotente quando ja esta no fim"},
+  {"op": "move", "target": "$c2", "last": true, "_why": "last is idempotent when it is already at the end"},
   {"op": "dump", "target": "$box", "depth": 2},
 
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Zebra", "as": "$v1"},
@@ -64,7 +64,7 @@
   {"op": "set", "target": "$btnB/OnClick/Nome", "prop": "Value", "value": "\"ola\""},
   {"op": "set", "target": "$btnB/OnClick/Quantos", "prop": "Value", "value": "1"},
 
-  {"op": "move", "target": "$p2", "first": true, "_why": "a ORDEM dos parametros de entrada e a ordem que quem chama ve"},
+  {"op": "move", "target": "$p2", "first": true, "_why": "the ORDER of the input parameters is the order the caller sees"},
   {"op": "move", "target": "$v2", "first": true, "_why": "Abelha, Zebra"},
   {"op": "dump", "target": "$beta", "depth": 1},
   {"op": "dump", "target": "$scr", "depth": 1},

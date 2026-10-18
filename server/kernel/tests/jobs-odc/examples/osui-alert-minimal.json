@@ -1,5 +1,5 @@
 {
- "description": "Alert do OSUI: a instancia com a mensagem no placeholder MessageText.",
+ "description": "Alert of OSUI: the instance with the message in the MessageText placeholder.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

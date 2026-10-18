@@ -56,11 +56,11 @@ internal static class Program
     private static int _served;
 
     private const string Usage = """
-usage: anvil-odc <comando> [--flags]
+usage: anvil-odc <command> [--flags]
   headless: apply | check-job | create-blank | create-app | inspect | references | verify-catalog | merge-order | api | external-library
-  sessao:   status | snapshot | merge | deliver | refresh | publish
+  session:  status | snapshot | merge | deliver | refresh | publish
   worker:   serve [--port 4547] | ping | gc
-  detalhe em docs/lanes.md e src/Anvil.Core.Odc/Adapters.ODC/README.md
+  details in docs/lanes.md and src/Anvil.Core.Odc/Adapters.ODC/README.md
 """;
 
     private static int Main(string[] args)
@@ -71,7 +71,7 @@ usage: anvil-odc <comando> [--flags]
         try
         {
             var data = Dispatch(args[0], args);
-            if (data == null) { Console.Error.WriteLine("comando desconhecido: " + args[0] + Environment.NewLine + Usage); return 2; }
+            if (data == null) { Console.Error.WriteLine("unknown command: " + args[0] + Environment.NewLine + Usage); return 2; }
             var envelope = Envelope(args[0], data, sw.ElapsedMilliseconds);
             Emit(envelope);
             return envelope["ok"]!.GetValue<bool>() ? 0 : 1;
@@ -187,7 +187,7 @@ usage: anvil-odc <comando> [--flags]
     private static object CreateBlank(string[] args)
     {
         var outPath = Path.GetFullPath(Need(args, "--out"));
-        if (File.Exists(outPath)) throw new IOException("a saida ja existe (create-blank nunca sobrescreve): " + outPath);
+        if (File.Exists(outPath)) throw new IOException("the output already exists (create-blank never overwrites): " + outPath);
         var connections = args.Select((a, i) => (a, i)).Where(x => x.a == "--connection" && x.i + 1 < args.Length).Select(x => args[x.i + 1]).ToList();
         var created = OdcBlankModule.Create(Host(args), Need(args, "--kind"), Need(args, "--name"), outPath, connections);
         Log($"{created["name"]} ({created["kind"]}): {created["objects"]} objects, isValid={created["isValid"]}, {created["bytes"]} bytes");
@@ -215,7 +215,7 @@ usage: anvil-odc <comando> [--flags]
         var basePath = Path.GetFullPath(Need(args, "--base"));
         var candidatePath = Path.GetFullPath(Need(args, "--candidate"));
         var outPath = Path.GetFullPath(Need(args, "--out"));
-        if (File.Exists(outPath)) throw new IOException("a saida ja existe (merge-order nunca sobrescreve): " + outPath);
+        if (File.Exists(outPath)) throw new IOException("the output already exists (merge-order never overwrites): " + outPath);
         var host = Host(args);
         var plan = new MergePlanner(_ => host).Plan(basePath, candidatePath, outPath);
         plan["firstPassSha256"] = plan["firstPass"] == null ? null
@@ -535,7 +535,7 @@ usage: anvil-odc <comando> [--flags]
         // A autorizacao e o texto que o dono escreveu; sem ele o comando recusa aqui, antes do bridge.
         var authorization = Opt(args, "--authorization");
         if (string.IsNullOrWhiteSpace(authorization))
-            return new JsonObject { ["ok"] = false, ["error"] = "publish exige --authorization \"<texto escrito pelo dono>\"; nunca e inventado" };
+            return new JsonObject { ["ok"] = false, ["error"] = "publish needs --authorization \"<text written by the owner>\"; it is never invented" };
         return new PublisherOdc(new BridgeClientOdc()).Publish(Need(args, "--manifest"), authorization).ToJson();
     }
 
@@ -578,7 +578,7 @@ usage: anvil-odc <comando> [--flags]
                 var sw = Stopwatch.StartNew(); var command = argv[0];
                 try
                 {
-                    if (command == "serve") throw new InvalidOperationException("serve nao e comando de worker");
+                    if (command == "serve") throw new InvalidOperationException("serve is not a worker command");
                     var data = Dispatch(command, argv);
                     return data == null ? ErrorEnvelope(command, new ArgumentException("comando desconhecido: " + command), sw.ElapsedMilliseconds)
                         : Envelope(command, data, sw.ElapsedMilliseconds);

@@ -1,5 +1,5 @@
 {
- "description": "ChatMessage (OutSystemsUI, Content) tipico; inputs obrigatorios MessageStatus ligados a variaveis da tela; placeholders Image, Content com dados do aggregate de tarefas.",
+ "description": "Typical ChatMessage (OutSystemsUI, Content); required inputs MessageStatus bound to screen variables; placeholders Image, Content with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

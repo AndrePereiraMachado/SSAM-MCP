@@ -58,7 +58,7 @@ public class LogicSpecTests
     {
         var bad = JsonNode.Parse("""{"actions":[{"name":"A","steps":[{"assign":{"X":"1"},"call":"Y","as":"Z"}]}]}""")!.AsObject();
         var ex = Assert.Throws<InvalidOperationException>(() => LogicExpander.Expand(bad));
-        Assert.Contains("UMA forma", ex.Message);
+        Assert.Contains("exactly ONE form", ex.Message);
         Assert.Contains("assign, call", ex.Message);
     }
 
@@ -67,7 +67,7 @@ public class LogicSpecTests
     {
         var spec = JsonNode.Parse("""{"actions":[{"name":"A","steps":[{"get":"Nope","as":"GetNope"}]}]}""")!.AsObject();
         var ex = Assert.Throws<InvalidOperationException>(() => LogicExpander.Expand(spec, _ => null));
-        Assert.Contains("'Nope' nao existe", ex.Message);
+        Assert.Contains("'Nope' does not exist", ex.Message);
     }
 
     [Fact]

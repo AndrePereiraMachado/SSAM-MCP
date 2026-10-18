@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA do create de um Button Group Item fora de um Button Group. O O11 aceitava e o Verify nativo caia com NullReferenceException fora de qualquer op (ButtonGroupItemDescriptor.GetVariableTypeFromParent); o ODC recusa no create. O kernel recusa nas duas faixas com o texto do ODC e diz como fazer. Dentro do grupo (ou do Content dele) o create funciona: tests/jobs/widgets-reactive.json. Cobertura testada, fase 2.",
+ "description": "The REFUSAL of the create of a Button Group Item outside a Button Group. O11 accepted it and the native Verify fell with NullReferenceException outside any op (ButtonGroupItemDescriptor.GetVariableTypeFromParent); ODC refuses at the create. The kernel refuses in both lanes with the ODC text and says how to do it. Inside the group (or its Content) the create works: tests/jobs/widgets-reactive.json. Tested coverage, phase 2.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectError": [

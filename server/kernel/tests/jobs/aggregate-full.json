@@ -1,12 +1,12 @@
 {
- "description": "Aggregate com join, filtro, ordenacao e group by Count. A ordenacao de um aggregate agrupado e por um atributo do GROUP BY (Order.CustomerName): o sort vive antes do agrupamento e o SQL so ordena linhas agrupadas pelo que o GROUP BY da (CompileCheck, AGGREGATE_SORT_NOT_ATTRIBUTE).",
+ "description": "Aggregate with join, filter, sort and group by Count. The sort of a grouped aggregate is by an attribute of the GROUP BY (Order.CustomerName): the sort lives before the grouping and the SQL only sorts grouped rows by what the GROUP BY gives (CompileCheck, AGGREGATE_SORT_NOT_ATTRIBUTE).",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "UnusedUserAction",
    "element": "Headless_CS (ESpace) / Order_Report (ServerAction)",
-   "why": "Action privada isolada para provar joins e agregacoes; este fixture nao tem um chamador."
+   "why": "Isolated private action to prove joins and aggregations; this fixture has no caller."
   }
  ],
  "ops": [

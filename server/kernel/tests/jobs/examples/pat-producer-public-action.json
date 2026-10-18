@@ -1,5 +1,5 @@
 {
- "description": "Produtor (modulo Service): entidade Supplier publica, structure publica SupplierSummary e server action publica Supplier_GetSummary. E o lado produtor de pat-consumer-reference-action.",
+ "description": "Producer (a Service module): the public entity Supplier, the public structure SupplierSummary and the public server action Supplier_GetSummary. It is the producer side of pat-consumer-reference-action.",
  "base": "blank-service.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -13,7 +13,7 @@
     {"name": "Title", "type": "Text"},
     {"name": "IsTopRated", "type": "Boolean"}]}]}},
   {"op": "logic", "data": {"actions": [
-   {"name": "Supplier_GetSummary", "kind": "server", "public": true, "description": "Resumo de um fornecedor para outros modulos",
+   {"name": "Supplier_GetSummary", "kind": "server", "public": true, "description": "Summary of a supplier for other modules",
     "inputs": [{"name": "SupplierId", "type": "Supplier Identifier"}],
     "outputs": [{"name": "Summary", "type": "SupplierSummary"}],
     "steps": [

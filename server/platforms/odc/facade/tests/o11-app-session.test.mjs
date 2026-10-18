@@ -2,6 +2,7 @@
 // ported (marked "py:"), the Python answers recorded once in fixtures/appsession-python-parity.json (schemas, the
 // contract review text, the host stdin and 21 hook runs), and what only this process can do: the contract
 // acceptance by elicitation on both protocol eras. Fakes only: no dotnet, no Studio, ephemeral ports.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -350,7 +351,7 @@ test('a host that prints no JSON makes the session unavailable', async () => {
     e => e.code === 'HOST_UNAVAILABLE' && e.message === 'Hybrid host did not return valid JSON; the controlled app session is unavailable');
 });
 
-// ---- continue: the prepared lane's environment, "entregue", and errors alone
+// ---- continue: the prepared lane's environment, "delivered", and errors alone
 
 function continueSession({ status, deliver }) {
   const { root, env } = sandbox();
@@ -360,13 +361,13 @@ function continueSession({ status, deliver }) {
   return { root, env, host, runners, deps: { runAnvil: host, createRunner, root, env } };
 }
 
-test('continue: delivered without error answers only "entregue", after a resume in the prepared lane', async () => {
+test('continue: delivered without error answers only "delivered", after a resume in the prepared lane', async () => {
   const s = continueSession({ deliver: () => ({ ok: true, data: { delivered: true } }),
     status: { taskId: 'task', state: 'complete', result: { scope: 'accepted module contract', delivered: true, error: null, dataProof: { accepted: true, count: 3 } } } });
   const mcp = await connect(s.deps);
   try {
     const result = await mcp.client.callTool({ name: 'continue', arguments: { task_id: 'task' } });
-    assert.deepEqual(result.content, [{ type: 'text', text: 'entregue' }]);
+    assert.deepEqual(result.content, [{ type: 'text', text: 'delivered' }]);
     assert.deepEqual(result.structuredContent, { delivered: true }); assert.equal(result.isError, undefined);
   } finally { await mcp.close(); }
   assert.deepEqual(s.host.host().map(c => c.action), ['authorize', 'prepare', 'status']);

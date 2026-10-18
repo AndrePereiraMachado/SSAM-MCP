@@ -1,5 +1,5 @@
 {
- "description": "LineChart do OutSystemsCharts: DataPointList (obrigatorio) com uma lista literal de DataPoint; os add-ons de eixo e legenda nascem com a instancia.",
+ "description": "LineChart of OutSystemsCharts: DataPointList (required) with a literal list of DataPoint; the axis and legend add-ons are born with the instance.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

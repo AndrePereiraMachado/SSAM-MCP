@@ -1,5 +1,5 @@
 {
- "description": "Submenu do OSUI: titulo no Menu, dois links no Items e o OnToggle guardando se esta aberto.",
+ "description": "Submenu of OSUI: a title in Menu, two links in Items and OnToggle keeping whether it is open.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,5 +1,5 @@
 {
- "description": "Button Group que filtra: os itens valem registros de uma static entity, o terceiro item de exemplo sai, e o OnChange faz Refresh Data da lista filtrada pela escolha.",
+ "description": "A Button Group that filters: the items are records of a static entity, the third sample item goes out, and OnChange does a Refresh Data of the list filtered by the choice.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -14,7 +14,7 @@
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "StateFilter", "as": "$state"},
   {"op": "set", "target": "$state", "prop": "DataType", "value": "TicketState Identifier"},
   {"op": "set", "target": "$state", "prop": "DefaultValue", "value": "Entities.TicketState.Open"},
-  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "LoadTickets", "as": "$agg", "_why": "nome fora do padrao Get<Entidade>s: o padrao e renomeado sozinho quando ganha filtro"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "LoadTickets", "as": "$agg", "_why": "a name outside the Get<Entity>s pattern: the default one is renamed by itself when it gets a filter"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Ticket"}},
   {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "Ticket.StateId = StateFilter"}},
   {"op": "logic", "data": {"actions": [

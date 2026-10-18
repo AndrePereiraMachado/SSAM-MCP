@@ -31,108 +31,108 @@ export const partOfView = view => PART_OF_VIEW[view] ?? null;
 
 // ---- grammar: the from-scratch examples (one module, both lanes; the logic and html examples use the ddl example's data)
 export const EXAMPLE_DDL = `/// A customer.
-create entity Cliente label Nome (
+create entity Customer label CustomerName (
   Id Long Integer identifier auto required,
-  Nome Text(120) required,
-  Ativo Boolean required default True
+  CustomerName Text(120) required,
+  IsActive Boolean required default True
 );
 
 /// A visit to a customer.
-create entity Visita label Titulo (
+create entity Visit label VisitTitle (
   Id Long Integer identifier auto required,
-  ClienteId Cliente Identifier required references Cliente on delete Protect,
-  StatusVisitaId StatusVisita Identifier required references StatusVisita on delete Protect,
-  Titulo Text(120) required,
-  Valor Decimal(18,2) default 0,
-  Concluida Boolean required default False,
-  CriadaEm Date Time default CurrDateTime()
+  CustomerId Customer Identifier required references Customer on delete Protect,
+  VisitStatusId VisitStatus Identifier required references VisitStatus on delete Protect,
+  VisitTitle Text(120) required,
+  Amount Decimal(18,2) default 0,
+  IsDone Boolean required default False,
+  CreatedOn Date Time default CurrDateTime()
 );
-create unique index UQ_Visita_Titulo on Visita (Titulo);
+create unique index UQ_Visit_VisitTitle on Visit (VisitTitle);
 
 /// The states of a visit.
-create static entity StatusVisita (
+create static entity VisitStatus (
   Id Integer identifier required,
   Label Text(50) required,
   Order Integer required
 )
 values
-  Agendada (Id = 1, Label = "Agendada", Order = 1),
-  Realizada (Id = 2, Label = "Realizada", Order = 2);
+  Planned (Id = 1, Label = "Planned", Order = 1),
+  Visited (Id = 2, Label = "Visited", Order = 2);
 
 /// Totals of the visits of a customer.
-type ResumoVisitas = {
+type VisitTotals = {
   Total: Integer;
-  ValorTotal: Decimal(18,2);
+  TotalAmount: Decimal(18,2);
 }
 
 /// A visit with the customer's name.
-type VisitaLinha = {
-  Titulo: Text(120);
-  Cliente: Text(120);
+type VisitRow = {
+  VisitTitle: Text(120);
+  CustomerName: Text(120);
 }
 `;
 
 // The data a module with a UI flow adds to the example: a client variable with its default (one line, no ';'). A service
 // (_CS) module has no client variables, so the service example leaves it out.
 export const EXAMPLE_DDL_UI_EXTRA = `/// The visit filter the user typed last, kept in the browser.
-client variable UltimoFiltro: Text = "todas"
+client variable LastFilter: Text = "all"
 `;
 export const EXAMPLE_DDL_UI = EXAMPLE_DDL + '\n' + EXAMPLE_DDL_UI_EXTRA;
 
 export const EXAMPLE_LOGIC = [`/// Marks a visit as done and returns how many visits are done.
-server action ConcluirVisita
-  in VisitaId: Visita Identifier
-  out Concluidas: Long Integer
-  local Visita: Visita
-  GetVisita = aggregate FROM Visita WHERE (Visita.Id = VisitaId) MAX 1
-  if GetVisita.List.Empty:  # Visit exists?
-    raise VisitaNaoEncontrada("Visita não encontrada")
+server action CompleteVisit
+  in VisitId: Visit Identifier
+  out CompletedCount: Long Integer
+  local TheVisit: Visit
+  GetVisit = aggregate FROM Visit WHERE (Visit.Id = VisitId) MAX 1
+  if GetVisit.List.Empty:  # Visit exists?
+    raise VisitNotFound("Visit not found")
   assign
-    Visita = GetVisita.List.Current.Visita
-    Visita.Concluida = True
-    Visita.StatusVisitaId = Entities.StatusVisita.Realizada
-  UpdateVisita(Source=Visita)
-  assign Concluidas = GetVisita.Count
+    TheVisit = GetVisit.List.Current.Visit
+    TheVisit.IsDone = True
+    TheVisit.VisitStatusId = Entities.VisitStatus.Visited
+  UpdateVisit(Source=TheVisit)
+  assign CompletedCount = GetVisit.Count
   end
-`, `action Visitas.Concluir
-  in VisitaId: Visita Identifier
-  ConcluirVisita(VisitaId)
-  refresh GetVisitas
+`, `action Visits.Complete
+  in VisitId: Visit Identifier
+  CompleteVisit(VisitId)
+  refresh GetVisits
   end
 `, `/// Opens the summary popup.
-action Visitas.AbrirResumo
-  assign MostrarResumo = True
+action Visits.OpenSummary
+  assign ShowSummary = True
   end
 `, `/// Closes the summary popup.
-action Visitas.FecharResumo
-  assign MostrarResumo = False
+action Visits.CloseSummary
+  assign ShowSummary = False
   end
 `, `/// Lists a page of a customer's visits with the customer's name.
-server action ListarVisitasDoCliente
-  in ClienteId: Cliente Identifier
+server action ListCustomerVisits
+  in CustomerId: Customer Identifier
   in StartIndex?: Integer = 0
   in MaxRecords?: Integer = 50
-  out Linhas: VisitaLinha List
+  out Rows: VisitRow List
   out Total: Integer
-  GetPagina = aggregate FROM Cliente, Visita JOIN Inner Visita~Cliente ON Visita.ClienteId = Cliente.Id WHERE (Visita.ClienteId = ClienteId) SORT Visita.CriadaEm desc MAX MaxRecords START StartIndex
-  (System).ListAppendAll(List=Linhas, SourceList=GetPagina.List mapTo { Titulo: Visita.Titulo, Cliente: Cliente.Nome })
-  GetTotal = sql -> ResumoVisitas max 1
-    in Cliente: Cliente Identifier = ClienteId
-    in Minimo: Decimal = 0
-    | SELECT COUNT(*), SUM({Visita}.[Valor]) FROM {Visita} WHERE {Visita}.[ClienteId] = @Cliente AND {Visita}.[Valor] >= @Minimo
-  assign Total = GetTotal.List.Current.ResumoVisitas.Total
+  GetPage = aggregate FROM Customer, Visit JOIN Inner Visit~Customer ON Visit.CustomerId = Customer.Id WHERE (Visit.CustomerId = CustomerId) SORT Visit.CreatedOn desc MAX MaxRecords START StartIndex
+  (System).ListAppendAll(List=Rows, SourceList=GetPage.List mapTo { VisitTitle: Visit.VisitTitle, CustomerName: Customer.CustomerName })
+  GetTotal = sql -> VisitTotals max 1
+    in TheCustomer: Customer Identifier = CustomerId
+    in Minimum: Decimal = 0
+    | SELECT COUNT(*), SUM({Visit}.[Amount]) FROM {Visit} WHERE {Visit}.[CustomerId] = @TheCustomer AND {Visit}.[Amount] >= @Minimum
+  assign Total = GetTotal.List.Current.VisitTotals.Total
   end
   on exception All Exceptions:
     @{Name="AllExceptions"}
-    raise VisitaNaoEncontrada("Falha ao listar as visitas")
-  on exception VisitaNaoEncontrada abort log:
-    @{Name="VisitaNaoEncontrada"}
-    raise VisitaNaoEncontrada("Visita não encontrada")
+    raise VisitNotFound("Failed to list the visits")
+  on exception VisitNotFound abort log:
+    @{Name="VisitNotFound"}
+    raise VisitNotFound("Visit not found")
 `, `/// Lists visits as rows using a whole-list assignment.
-server action ListarLinhasDeVisita
-  out Linhas: VisitaLinha List
-  GetVisitas = aggregate FROM Cliente, Visita JOIN Inner Visita~Cliente ON Visita.ClienteId = Cliente.Id SORT Visita.CriadaEm desc MAX 50
-  assign Linhas = GetVisitas.List mapTo { Titulo: Visita.Titulo, Cliente: Cliente.Nome }
+server action ListVisitRows
+  out Rows: VisitRow List
+  GetVisits = aggregate FROM Customer, Visit JOIN Inner Visit~Customer ON Visit.CustomerId = Customer.Id SORT Visit.CreatedOn desc MAX 50
+  assign Rows = GetVisits.List mapTo { VisitTitle: Visit.VisitTitle, CustomerName: Customer.CustomerName }
   end
 `];
 
@@ -147,23 +147,23 @@ export function exampleLogicTexts(lane = 'odc') {
 // A popup (modal) from scratch: a Boolean variable shows it, one screen action opens it and one closes it. The events
 // inside a popup are at Transition Fade, the platform's default there: the kernel writes it and the reader omits it, so the
 // example writes the event as it reads back (CODE_FORMS_EXACT.html['event in a popup']), without the default.
-export const EXAMPLE_HTML = `<screen name="Visitas" roles="Visitante" actions="Concluir, AbrirResumo, FecharResumo">
-<var name="Filtro" type="Text"/>
-<var name="MostrarResumo" type="Boolean" default="False"/>
-<aggregate name="GetVisitas" from="Visita" sort="Visita.CriadaEm desc" max="50"/>
-<div class="visitas">
- <input bind="Filtro" class="form-control"/>
- <button class="btn" onclick="AbrirResumo">Resumo</button>
- <div list="GetVisitas.List">
-  <div class="visita">
-   {{ GetVisitas.List.Current.Visita.Titulo }}
-   <button class="btn btn-primary" onclick="Concluir(VisitaId = GetVisitas.List.Current.Visita.Id)">Concluir</button>
+export const EXAMPLE_HTML = `<screen name="Visits" roles="Visitor" actions="Complete, OpenSummary, CloseSummary">
+<var name="Filter" type="Text"/>
+<var name="ShowSummary" type="Boolean" default="False"/>
+<aggregate name="GetVisits" from="Visit" sort="Visit.CreatedOn desc" max="50"/>
+<div class="visits">
+ <input bind="Filter" class="form-control"/>
+ <button class="btn" onclick="OpenSummary">Summary</button>
+ <div list="GetVisits.List">
+  <div class="visit">
+   {{ GetVisits.List.Current.Visit.VisitTitle }}
+   <button class="btn btn-primary" onclick="Complete(VisitId = GetVisits.List.Current.Visit.Id)">Complete</button>
   </div>
  </div>
- <popup show="MostrarResumo">
-  <div class="resumo">
-   Resumo das visitas
-   <button class="btn" onclick="FecharResumo">Fechar</button>
+ <popup show="ShowSummary">
+  <div class="summary">
+   Summary of the visits
+   <button class="btn" onclick="CloseSummary">Close</button>
   </div>
  </popup>
 </div>
@@ -178,37 +178,37 @@ export { ENTITY_ACTIONS_OP, ENTITY_ACTIONS_CARD, entityActionsCall };
 // examples from scratch and read them back): what the cards name as "the form", never a paraphrase.
 export const CODE_FORMS_EXACT = {
   ddl: {
-    'client variable': 'client variable UltimoFiltro: Text = "todas"',
-    'entity attribute default': 'Concluida Boolean required default False',
-    'static record': 'Agendada (Id = 1, Label = "Agendada", Order = 1)',
+    'client variable': 'client variable LastFilter: Text = "all"',
+    'entity attribute default': 'IsDone Boolean required default False',
+    'static record': 'Planned (Id = 1, Label = "Planned", Order = 1)',
   },
   logic: {
-    'assign, several': 'assign\n    Visita = GetVisita.List.Current.Visita\n    Visita.Concluida = True',
-    'branch end': 'if GetVisita.List.Empty:  # Visit exists?\n    raise VisitaNaoEncontrada("Visita não encontrada")',
-    'screen action': 'action Visitas.AbrirResumo\n  assign MostrarResumo = True\n  end',
+    'assign, several': 'assign\n    TheVisit = GetVisit.List.Current.Visit\n    TheVisit.IsDone = True',
+    'branch end': 'if GetVisit.List.Empty:  # Visit exists?\n    raise VisitNotFound("Visit not found")',
+    'screen action': 'action Visits.OpenSummary\n  assign ShowSummary = True\n  end',
     pagination: 'MAX MaxRecords START StartIndex',
-    join: 'FROM Cliente, Visita JOIN Inner Visita~Cliente ON Visita.ClienteId = Cliente.Id',
-    'sql parameter': 'in Cliente: Cliente Identifier = ClienteId',
-    'sql typed parameter': 'in Minimo: Decimal = 0',
-    'sql result': 'GetTotal = sql -> ResumoVisitas max 1',
-    'exception handler': 'on exception VisitaNaoEncontrada abort log:',
+    join: 'FROM Customer, Visit JOIN Inner Visit~Customer ON Visit.CustomerId = Customer.Id',
+    'sql parameter': 'in TheCustomer: Customer Identifier = CustomerId',
+    'sql typed parameter': 'in Minimum: Decimal = 0',
+    'sql result': 'GetTotal = sql -> VisitTotals max 1',
+    'exception handler': 'on exception VisitNotFound abort log:',
     'exception handler without flags': 'on exception All Exceptions:',
-    'list append mapping': '(System).ListAppendAll(List=Linhas, SourceList=GetPagina.List mapTo { Titulo: Visita.Titulo, Cliente: Cliente.Nome })',
-    'list assignment mapping': 'assign Linhas = GetVisitas.List mapTo { Titulo: Visita.Titulo, Cliente: Cliente.Nome }',
+    'list append mapping': '(System).ListAppendAll(List=Rows, SourceList=GetPage.List mapTo { VisitTitle: Visit.VisitTitle, CustomerName: Customer.CustomerName })',
+    'list assignment mapping': 'assign Rows = GetVisits.List mapTo { VisitTitle: Visit.VisitTitle, CustomerName: Customer.CustomerName }',
   },
   html: {
-    popup: '<popup show="MostrarResumo">',
-    'popup variable': '<var name="MostrarResumo" type="Boolean" default="False"/>',
-    'event in a popup': '<button class="btn" onclick="FecharResumo">Fechar</button>',
-    'event without arguments': '<button class="btn" onclick="AbrirResumo">Resumo</button>',
+    popup: '<popup show="ShowSummary">',
+    'popup variable': '<var name="ShowSummary" type="Boolean" default="False"/>',
+    'event in a popup': '<button class="btn" onclick="CloseSummary">Close</button>',
+    'event without arguments': '<button class="btn" onclick="OpenSummary">Summary</button>',
   },
 };
 
 // What the examples use and no text creates: a user exception (raised by the logic example) and a role (of the screen).
 // Raw ops of the same job, before the texts (ssam_code write {ops}).
 export const EXAMPLE_SETUP_OPS = [
-  { op: 'create', parent: '@espace', type: 'IUserException', name: 'VisitaNaoEncontrada' },
-  { op: 'create', parent: '@espace', type: 'IRole', name: 'Visitante' },
+  { op: 'create', parent: '@espace', type: 'IUserException', name: 'VisitNotFound' },
+  { op: 'create', parent: '@espace', type: 'IRole', name: 'Visitor' },
 ];
 
 // A screen (html) and a screen action need a module with a Reactive or Mobile UI flow: an empty module, or a service
@@ -264,7 +264,7 @@ const RULES = {
   html: [
     'Needs a UI flow: ' + UI_FLOW_NEEDED + '.',
     GENERATE_SCREENS_RULE,
-    'A new screen: <screen name="S" roles="Role" actions="A, B" [data-actions="D"] [title=\'"Title"\']> with <input name type>, <var name type default>, <aggregate name from sort where max> and the widgets; a block: <block name>.',
+    'A new screen: <screen name="S" roles="Role" actions="A, B" [data-actions="D"] [title=\'"Title"\']> with <input name type>, <var name type default>, <aggregate name from sort where max> and the widgets; a block: <block name>. An <input name type> (or a block <event name>) without mandatory is optional; mandatory="True" makes it mandatory.',
     'Widgets: div, form, a, button, input, textarea, select, switch, label, img, i icon, popup, placeholder, upload, {{ expr }} (expression), plain text; <x list="Source.List"> repeats x; <div if="cond"> ... <div else> ... is an If; <Block name="B" :Input="expr" @Event="Handler(...)"><slot name="Content">...</slot></Block> is a block instance.',
     'Events: on<event>="Destination(Param = expr, ...)", and with no argument on<event>="Destination" (ssam_code writes "Destination()" so); bind="Variable" on inputs; class="a b" or class="{{ expr }}"; any other authored property: os-<Property>="value"; a property of an event: os-on<event>.<Property>="value" on an element whose on<event> is set.',
     'A popup (modal) is <popup show="Var"> ... </popup>, never a <div if> over the page: Var is a Boolean screen variable (' + CODE_FORMS_EXACT.html['popup variable'] + '), a screen action opens it (assign Var = True) and one closes it (assign Var = False). The Studio gives events inside a popup Transition Fade by default: write the event as read, ' + CODE_FORMS_EXACT.html['event in a popup'] + ', and os-onclick.Transition only for another transition. The example below has one.',
@@ -305,10 +305,10 @@ export function grammarCard(part, lane = 'odc') {
     // The exact forms (each one is in an example the tests apply and read back on both lanes).
     forms: CODE_FORMS_EXACT[part],
     ...(part === 'ddl' ? { exampleWithUi: EXAMPLE_DDL_UI_EXTRA, exampleWithUiWhy: 'what a module with a UI flow adds: a client variable with its default (a service module has none)' } : {}),
-    ...(part === 'logic' ? { uses: 'the data of the ddl example and the exception VisitaNaoEncontrada (setup op); the screen actions Visitas.Concluir, AbrirResumo and FecharResumo need the screen of the html example',
+    ...(part === 'logic' ? { uses: 'the data of the ddl example and the exception VisitNotFound (setup op); the screen actions Visits.Complete, OpenSummary and CloseSummary need the screen of the html example',
       ...(offered('entity-actions') ? { generate: { why: 'the standard actions of every entity, generated from the module (no text to write)', card: ENTITY_ACTIONS_CARD, call: entityActionsCall(lane) } } : {}),
       ...(approvedGenerators().length ? { generators: approvedGenerators().map(g => ({ ...generatorCard(g, lane), write: { tool: CODE_TOOL, arguments: { lane, action: 'write', module: '<Module>', ops: [JSON.parse(g.example)] } } })) } : {}) } : {}),
-    ...(part === 'html' ? { uses: 'the data of the ddl example, the role Visitante (setup op) and the screen actions Concluir, AbrirResumo and FecharResumo of the logic example', needs: UI_FLOW_NEEDED,
+    ...(part === 'html' ? { uses: 'the data of the ddl example, the role Visitor (setup op) and the screen actions Complete, OpenSummary and CloseSummary of the logic example', needs: UI_FLOW_NEEDED,
       ...(offered('gen-screen') ? { standardScreens: { why: 'list, detail and form screens of entities: generated from the module, nothing to write', call: generateScreensCall(lane) } } : {}) } : {}),
     read: { tool: CODE_TOOL, arguments: { lane, action: 'read', part, target: '<Module or capture.oml>', ...(part === 'ddl' ? {} : { element: part === 'html' ? '<Screen>' : '<Action>' }) } },
     write: { tool: CODE_TOOL, arguments: { lane, action: 'write', part, module: '<Module>', text: '<code>' } } };
@@ -699,7 +699,7 @@ const readJobFile = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^�
 
 // Delivery options each lane's tool takes, passed through as they are.
 const O11_OPTIONS = ['checks', 'until', 'producers', 'captureProducers', 'expectedEnvironment', 'closePrevious', 'publish', 'authorize', 'resume'];
-const ODC_OPTIONS = ['feature', 'owners', 'changes', 'output', 'until', 'publish', 'authorize', 'producer', 'tenant', 'pid'];
+const ODC_OPTIONS = ['feature', 'owners', 'changes', 'output', 'until', 'publish', 'authorize', 'producer', 'producers', 'tenant', 'pid'];
 
 // An html edit of an existing screen in this write (by screen name), or null.
 const isHtmlEdit = p => p?.part === 'html' && (p.edits != null || Array.isArray(p.text) || p.basedOn != null || !DOCUMENT_TEXT.test(lines(p.text)));

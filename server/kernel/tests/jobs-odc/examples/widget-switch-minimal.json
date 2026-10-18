@@ -1,5 +1,5 @@
 {
- "description": "Switch: um ISwitch ligado a uma variavel Boolean da tela.",
+ "description": "Switch: an ISwitch bound to a Boolean variable of the screen.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

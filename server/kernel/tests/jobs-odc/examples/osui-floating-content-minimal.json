@@ -1,5 +1,5 @@
 {
- "description": "FloatingContent do OSUI: o input obrigatorio Position (static entity do OSUI) e um texto no Content.",
+ "description": "FloatingContent of OSUI: the required input Position (a static entity of OSUI) and a text in the Content.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

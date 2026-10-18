@@ -13,6 +13,7 @@
 // Answers are short (2 KB by default): lists page with offset/next, big values shrink by depth and string length,
 // a long string pages by characters. Parsed files are cached by (real path, mtime, size).
 import fs from 'node:fs';
+import { EXPANSION_DEFAULT_BYTES } from './context-budget.mjs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import * as z from 'zod/v4';
@@ -21,7 +22,7 @@ import { usesWorkspace, workspacePath } from './executor.mjs';
 import { ssamPathRoots } from './evidence-roots.mjs';
 
 export const DEFAULT_BUDGET = 2000;
-const MIN_BUDGET = 400, MAX_BUDGET = 65536, DEFAULT_MAX = 50, MAX_ITEMS = 1000, PAGE_TARGET = 10;
+const MIN_BUDGET = 400, MAX_BUDGET = EXPANSION_DEFAULT_BYTES, DEFAULT_MAX = 50, MAX_ITEMS = 1000, PAGE_TARGET = 10;
 export const MAX_FILE_BYTES = 96 * 1024 * 1024;
 const CACHE_BYTES = 160 * 1024 * 1024;
 const REDACTED = '[redacted]';
@@ -240,8 +241,22 @@ function inside(root, p) {
   return rel !== '' && rel.split(/[\\/]/)[0] !== '..' && !path.isAbsolute(rel);
 }
 
-export function createEvidenceReader({ roots = evidenceRoots(), maxBytes = MAX_FILE_BYTES, cacheBytes = CACHE_BYTES } = {}) {
+// present {originOf(real) -> origin | null, apply(doc, origin) -> doc} (fix/no-internals round 4, a licensee's server): a
+// file that holds a tool's answer (a reference document, a kept answer) is read as that tool's answer is shown, BEFORE any
+// reading, as secrets are redacted: a pointer, a table, a projection, a count, a filter and the example of a refusal only
+// ever see the presented document. Without present (the owner's server) every file is read as it is.
+// Round 5 (re-review round 4, LOW 2; D13): present.unknown(real) -> true for an answer SSAM kept whose origin is not known (its
+// record missing or not valid): it is refused (ANSWER_ORIGIN_UNKNOWN) before anything is read, never read as a run's evidence.
+export function createEvidenceReader({ roots = evidenceRoots(), maxBytes = MAX_FILE_BYTES, cacheBytes = CACHE_BYTES, present = null } = {}) {
   const cache = new Map(); let cachedBytes = 0;
+  // The presented document is cached with the parsed one (the same real path, mtime and size), per origin.
+  const presented = (loaded, real) => {
+    const origin = present ? present.originOf(real) : null;
+    if (!origin) return loaded.doc;
+    const key = JSON.stringify(origin);
+    if (loaded.presentedKey !== key) { loaded.presented = present.apply(loaded.doc, origin); loaded.presentedKey = key; }
+    return loaded.presented;
+  };
   const lexicalRoots = roots.map(r => path.resolve(r));
   const realRoots = () => lexicalRoots.map(r => { try { return fs.realpathSync.native(r); } catch { return null; } }).filter(Boolean);
   const outside = () => refusal('OUTSIDE_ROOTS', 'only JSON/JSONL written by SSAM under the lane folders is read',
@@ -316,14 +331,19 @@ export function createEvidenceReader({ roots = evidenceRoots(), maxBytes = MAX_F
   function read(input = {}) {
     const located = locate(input.file);
     if (located.ok === false) return located;
+    if (present?.unknown?.(located.real)) return refusal('ANSWER_ORIGIN_UNKNOWN', 'this answer file has no valid record of the tool that answered it, so this server does not read it back; nothing was read',
+      again({ file: '<a path an SSAM tool returned in this session>' }, 'repeat the call that returned this path: its new answer is kept with the record of the tool that answered'));
     const loaded = load(located);
     if (loaded.error) return refusal('INVALID_JSON', loaded.error, again({ file: input.file }, 'the file is not complete JSON yet; read it again when the tool that writes it has finished'));
     const budget = Math.min(MAX_BUDGET, Math.max(MIN_BUDGET, input.budgetBytes ?? DEFAULT_BUDGET));
     const meta = { ...(loaded.envelope ? { envelope: loaded.envelope } : {}), ...(loaded.redacted ? { redacted: loaded.redacted } : {}), ...(loaded.bad ? { badLines: loaded.bad } : {}) };
     const fit = value => finish({ ok: true, ...value, ...meta }, budget);
+    let doc;
+    try { doc = presented(loaded, located.real); }
+    catch { return refusal('READ_FAILED', 'the file could not be read as the answer it holds', again({ file: '<an evidence path>' }, 'another evidence path')); }
 
     const baseKeys = parsePath(input.pointer);
-    const base = resolve(loaded.doc, baseKeys);
+    const base = resolve(doc, baseKeys);
     if (!base.found) {
       const parent = base.parent;
       const keys = Array.isArray(parent) ? 'array of ' + parent.length : isObject(parent) ? Object.keys(parent).slice(0, 40) : typeof parent;
@@ -538,7 +558,7 @@ function finish(answer, budget) {
 const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value.ok === false ? { isError: true } : {}) });
 
 export function registerSsamEvidence(server, deps = {}) {
-  const reader = deps.reader ?? createEvidenceReader({ ...(deps.roots ? { roots: deps.roots } : {}), ...(deps.maxBytes ? { maxBytes: deps.maxBytes } : {}) });
+  const reader = deps.reader ?? createEvidenceReader({ ...(deps.roots ? { roots: deps.roots } : {}), ...(deps.maxBytes ? { maxBytes: deps.maxBytes } : {}), ...(deps.present ? { present: deps.present } : {}) });
   const pathSpec = z.string().max(500);
   server.registerTool('ssam_evidence', {
     title: 'Read SSAM evidence (JSON/JSONL) without scripts',
@@ -551,7 +571,7 @@ export function registerSsamEvidence(server, deps = {}) {
       + '(op = != ~ contains !~ > >= < <=; several clauses all match; no field = the item itself or any text in it; a bare field '
       + '"error" keeps the items where it exists and is not false/null/empty, "!error" the others), fields to '
       + 'project, groupBy field for counts, offset (negative = from the end: offset:-20 is a journal tail), max (0 = only total); '
-      + 'table:true returns the rows as one table {columns, rows} (hundreds of rows in one call, budgetBytes up to 65536). A paged answer already carries its large arrays as tables (paged.tables) and the one call for what is missing. '
+      + 'table:true returns the rows as one table {columns, rows} (hundreds of rows in one call, budgetBytes up to ' + MAX_BUDGET + '). A paged answer already carries its large arrays as tables (paged.tables) and the one call for what is missing. '
       + 'A kernel envelope {format, sha256, payload} (task.json, receipts) is read as its payload (envelope: verified). '
       + 'Secrets (password, token, secret, authorization, cookie, authorize words) come back as [redacted].',
     inputSchema: z.object({

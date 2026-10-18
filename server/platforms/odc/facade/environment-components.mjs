@@ -113,7 +113,7 @@ export function candidates(cache, needs, { max = 6 } = {}) {
 export async function environmentComponents(input = {}, deps = {}) {
   const lane = input.lane ?? 'o11';
   const needs = input.needs?.length ? input.needs : componentNeeds(input.intent);
-  const call = { tool: 'ssam_discover', arguments: { lane, intent: '<what the app needs: pdf, excel, email, zip, image...> no ambiente' } };
+  const call = { tool: 'ssam_discover', arguments: { lane, intent: '<what the app needs: pdf, excel, email, zip, image...> in the environment' } };
   if (!needs.length) return { ok: false, schema: COMPONENTS_SCHEMA, lane, code: 'NO_NEED', error: 'the intent names no capability the platform lacks (pdf, excel, email, file, zip, image, barcode, crypto, word, sms)', call };
   if (lane !== 'o11') return { ok: false, schema: COMPONENTS_SCHEMA, lane, needs, code: 'LANE', error: 'the listing of installed components is O11 only (ODC: odc_external_library and the Forge of the tenant)', call };
   const root = deps.root;
@@ -171,7 +171,7 @@ export async function environmentComponents(input = {}, deps = {}) {
     const shown = (selected.length ? [...selected, ...actions.filter(a => !selected.includes(a))] : actions).slice(0, 12);
     return { name: c.producer.name, kind: c.producer.kind, ...(c.producer.system ? { system: true } : {}), need: c.need, matched: c.matched,
       ...(entry ? { actions: shown.map(a => a.signature ?? a.name), ...(actions.length > shown.length ? { actionsTotal: actions.length } : {}), ...(entry.source === 'list' ? { signatures: 'names only (o11_dependencies list); the inputs and outputs: ssam_map {lane:"o11", target:"' + c.producer.name + '", view:"digest"}' } : {}) }
-        : { actions: null, read: { tool: 'ssam_discover', arguments: { lane, intent: needs.join(' ') + ' no ambiente' }, why: 'its actions are read on the next call (at most ' + (input.maxLive ?? 4) + ' producers per call)' } }),
+        : { actions: null, read: { tool: 'ssam_discover', arguments: { lane, intent: needs.join(' ') + ' in the environment' }, why: 'its actions are read on the next call (at most ' + (input.maxLive ?? 4) + ' producers per call)' } }),
       reference: { op: 'reference', producer: c.producer.name, elements: (shown.length ? shown : [{ name: '<Action>' }]).slice(0, 3).map(a => 'IServerActionSignature:' + a.name) } };
   });
   const platform = needs.map(id => NEEDS.find(n => n.id === id)).filter(n => n?.platform).map(n => ({ need: n.id, note: n.platform }));

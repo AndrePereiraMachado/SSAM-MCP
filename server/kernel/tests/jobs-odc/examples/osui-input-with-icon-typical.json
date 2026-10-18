@@ -1,5 +1,5 @@
 {
- "description": "InputWithIcon do OSUI como busca: icone de lupa no Icon, Input ligado a SearchText e OnChange com Refresh Data da lista filtrada.",
+ "description": "InputWithIcon of OSUI as a search: a magnifier icon in Icon, an Input bound to SearchText and OnChange with a Refresh Data of the filtered list.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

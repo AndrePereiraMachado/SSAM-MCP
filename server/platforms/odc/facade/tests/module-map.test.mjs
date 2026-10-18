@@ -2,6 +2,7 @@
 // hash of the bytes read now match; a miss asks the lane reader ({"index":"ensure"}, mocked here); filters, detail
 // hiding, paging, the byte budget and the continuations of both lanes. The warm-up spawns a detached helper with its
 // own reader cache root and never waits for it.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

@@ -1,5 +1,5 @@
 {
- "description": "Swipe actions com logica: a acao da direita apaga o contato da linha (server action com o Id) e a da esquerda marca como favorito; as duas recarregam a lista.",
+ "description": "Swipe actions with logic: the right action deletes the contact of the row (a server action with the Id) and the left one marks it as a favorite; both reload the list.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -36,12 +36,12 @@
   {"op": "create", "parent": "$item/Content", "type": "IExpression", "as": "$name"},
   {"op": "set", "target": "$name", "prop": "Value", "value": "GetContacts.List.Current.Contact.FullName + If(GetContacts.List.Current.Contact.IsFavorite, \" *\", \"\")"},
 
-  {"op": "set", "target": "$item/RightActions/#IListItemAction/#ITextWidget", "prop": "Text", "value": "Delete", "_why": "a acao da direita ja nasce com o item"},
+  {"op": "set", "target": "$item/RightActions/#IListItemAction/#ITextWidget", "prop": "Text", "value": "Delete", "_why": "the right action is already born with the item"},
   {"op": "set", "target": "$item/RightActions/#IListItemAction", "prop": "Style", "value": "\"background-red\""},
   {"op": "set", "target": "$item/RightActions/#IListItemAction/OnClick", "prop": "Destination", "value": "IMobileScreen:ManageContacts/RemoveContact"},
   {"op": "set", "target": "$item/RightActions/#IListItemAction/OnClick/ContactId", "prop": "Value", "value": "GetContacts.List.Current.Contact.Id"},
 
-  {"op": "create", "parent": "$item/LeftActions", "type": "IListItemAction", "name": "FavoriteAction", "as": "$fav", "_why": "a acao da esquerda e criada pelo job"},
+  {"op": "create", "parent": "$item/LeftActions", "type": "IListItemAction", "name": "FavoriteAction", "as": "$fav", "_why": "the left action is created by the job"},
   {"op": "set", "target": "$fav/#ITextWidget", "prop": "Text", "value": "Favorite"},
   {"op": "set", "target": "$fav/OnClick", "prop": "Destination", "value": "IMobileScreen:ManageContacts/FavoriteContact"},
   {"op": "set", "target": "$fav/OnClick/ContactId", "prop": "Value", "value": "GetContacts.List.Current.Contact.Id"},

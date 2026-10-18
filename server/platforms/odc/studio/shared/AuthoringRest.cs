@@ -21,7 +21,7 @@ using R = ServiceStudio.Plugin.REST;
 // Enum.Parse -- que resolve hoje e continua a resolver se o produto lhes mudar o namespace.
 internal static partial class Authoring {
     public static R.IRestClient RestClient(IESpace space, string name, string baseUrl, string description) {
-        Require(!Walk(space).OfType<R.IRestClient>().Any(c => c.Name == name), "REST client ja existe: " + name);
+        Require(!Walk(space).OfType<R.IRestClient>().Any(c => c.Name == name), "REST client already exists: " + name);
         var client = space.CreateIntegration<R.IRestClient>(name);
         client.BaseURL = baseUrl;
         client.Description = description;
@@ -77,8 +77,8 @@ internal static partial class Authoring {
         var type = current.GetType();
         if (!Enum.TryParse(type, name, ignoreCase: true, out var value) || value == null)
             throw new InvalidOperationException(
-                ModelPath.Describe(target) + ": '" + name + "' nao e um valor de " + type.Name
-                + ". Valores: " + string.Join(", ", Enum.GetNames(type)));
+                ModelPath.Describe(target) + ": '" + name + "' is not a value of " + type.Name
+                + ". Values: " + string.Join(", ", Enum.GetNames(type)));
         Set(target, property, value);
     }
 }

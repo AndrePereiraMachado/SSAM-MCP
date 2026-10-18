@@ -1,5 +1,5 @@
 {
- "description": "O layout automatico (depois das ops, fora de qualquer uma) com conectores que ele nao pode seguir (cobertura testada, fase 2). (1) O duplicate de um Switch: o getter da condicao copiada caia com NullReferenceException (SwitchCondition.TargetNode, O11) e o job abortava sem indice de op. (2) Um comentario de processo ligado ao End: IActionConnector.Target caia com InvalidCastException ('to type IActionNode'). O layout ignora alvo nulo e conector cujo alvo nao e no de logica; o resto do desenho fica igual. Verify sem mensagens novas.",
+ "description": "The automatic layout (after the ops, outside any of them) with connectors it cannot follow (tested coverage, phase 2). (1) The duplicate of a Switch: the getter of the copied condition crashed with NullReferenceException (SwitchCondition.TargetNode, O11) and the job aborted without an op index. (2) A process comment linked to the End: IActionConnector.Target crashed with InvalidCastException ('to type IActionNode'). The layout ignores a null target and a connector whose target is not a logic node; the rest of the drawing stays the same. Verify with no new messages.",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "expectedMessages": [],

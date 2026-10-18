@@ -1,5 +1,5 @@
 {
- "description": "ButtonLoading do OSUI: IsLoading obrigatorio e o Button de exemplo do placeholder com OnClick.",
+ "description": "ButtonLoading of OSUI: the required IsLoading and the sample Button of the placeholder with an OnClick.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -10,6 +10,6 @@
   {"op": "set", "target": "$vIsBusy", "prop": "DataType", "value": "Boolean"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "ButtonLoading1", "source": "IMobileBlock:ButtonLoading", "as": "$bl"},
   {"op": "set", "target": "$bl/IsLoading", "prop": "Value", "value": "IsBusy"},
-  {"op": "set", "target": "$bl/Button/#IButton/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile", "_why": "o bloco traz um Button de exemplo sem OnClick"}
+  {"op": "set", "target": "$bl/Button/#IButton/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile", "_why": "the block brings a sample Button without an OnClick"}
  ]
 }

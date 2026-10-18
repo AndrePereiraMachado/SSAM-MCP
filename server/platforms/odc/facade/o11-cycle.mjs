@@ -42,6 +42,7 @@
 //   plus differencesTotal) and the ssam_evidence continuation on the task's result.json.
 // - A28: a module held by a task of another SSAM root (MODULE_RESERVED_FOREIGN), or by a task this root does not have,
 //   continues with ssam_doctor {lane:"o11"}, never with resume or ssam_task.
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -55,7 +56,7 @@ import { kernelReading } from './kernel-reading.mjs';
 import { assertSelectedO11 } from './studio-connect.mjs';
 import { readConnection } from './studio-session.mjs';
 import { trackTask, registerSsamTask, tasksDir } from './ssam-task.mjs';
-import { seamFields } from './executor.mjs';
+import { hostedContext, seamFields } from './executor.mjs';
 import { o11Studio, lastPublicationOf, readInventory } from './o11-studio.mjs';
 import { resolvePatchedJob, failedOpOf, jobShapeOf, PATCH_MAX_OPS, nextBasedOnOf, withNamedPatches } from './job-patch.mjs';
 import { resolveOpenModule } from './studio-module.mjs';
@@ -75,6 +76,11 @@ import { stallRecovery } from './studio-recovery.mjs';
 import { cleanStall } from './bridge-stall.mjs';
 // F5: what a delivery reused of its producer signatures, in every answer (producer-signatures.mjs).
 import { producerSignaturesOf } from './producer-signatures.mjs';
+// fix/system-reference: one rule for a producer's name ((System) and System are one producer, bound as System).
+import { bindingKeyOf, listedKeyOf, slotKeyOf, captureEntryOf, sameProducer, producersNamed, o11UnknownProducer, separatorKeyProblems, producerTextsOf } from './producer-names.mjs';
+// fix/unpublished-library (family OF): the O11 lane's PRODUCER_SIGNATURE_MISSING of elements the producer's open model has
+// public answers as the ODC lane does: ONE PRODUCER_NOT_PUBLISHED with the publication, then the same delivery.
+import { o11ProducerModel, unpublishedRefusal, parseElement, requestedElements, classify, elementFix, WORDS as PUBLISH_WORDS } from './producer-publication.mjs';
 // The prototype importer (docs/PROTOTIPO-NATIVO.md, lane surface): the capture before anything, the rebuild of 1.4.1, the
 // receipt and the seed after a clean publication.
 import { expandJobFile, capturePrototype, buildWithDegradation, buildProblems, journalTo, kernelPrototypeReport, findNativeDom,
@@ -83,16 +89,17 @@ import { seedPrototypeData, o11DataWriter } from './prototype-seed.mjs';
 import { prototypeAppUrl, prototypeScreenLinks } from './next-steps.mjs';
 // prazos B: a referenced producer open and unmodified in the same Studio is bound by a capture of its tab (no environment call).
 import { openProducerBindings } from './o11-open-producer.mjs';
+import { RESULT, resultIs } from './result-values.mjs';
 
 const readOnly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const mutating = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false };
 const reply = (value, text = JSON.stringify(value)) => ({ content: [{ type: 'text', text }], structuredContent: value, ...(value?.ok === false ? { isError: true } : {}) });
 const sha256 = data => createHash('sha256').update(data).digest('hex');
 const isFile = file => { try { return fs.statSync(file).isFile(); } catch { return false; } };
-const DELIVERED = Object.freeze({ ok: true, result: 'entregue' });
-const CLOSED = Object.freeze({ ok: true, result: 'fechada' });
+const DELIVERED = Object.freeze({ ok: true, result: RESULT.delivered });
+const CLOSED = Object.freeze({ ok: true, result: RESULT.closed });
 // Stands for the user's words in a continuation; never accepted as words.
-export const WORDS_MARKER = '<palavras do usuário>';
+export const WORDS_MARKER = "<the user's own words>"; // the one marker of next-steps.mjs and continuations.mjs
 const SUPERSEDED = 'superseded by a corrected job';
 
 class Refusal extends Error { constructor(code, message, continuation, extra = {}) { super(message); this.code = code; this.continuation = continuation; this.extra = extra; } }
@@ -129,6 +136,78 @@ export function signatureChangesOf(state) {
   const list = (Array.isArray(state?.referenceSignatureChanges) ? state.referenceSignatureChanges : []).filter(c => c && typeof c === 'object');
   return list.slice(0, 10).map(c => ({ producer: c.producer ?? null, key: c.key ?? null, baseHash: c.baseHash ?? null, candidateHash: c.candidateHash ?? null,
     namedByJob: c.namedByJob === true }));
+}
+
+// fix-ext-refs: the kernel's alignment of a rollback (Delivery.Alignment): what the Studio's own Manage Dependencies must
+// do, by producer, the capability it needs and whether the loaded bridge offers it.
+// servidor/fase4-26 (a7, E1): hosted, the customer's Service Studio runs the O11 bridge of the SSAM agent package, which does
+// not run the Studio's Manage Dependencies (refresh_references:add) yet: reopening the Studio loads the same bridge, so the
+// hosted answer names the agent package, and the producers as OML when every one is an eSpace module (never for an Extension).
+export function manageDependenciesHostedWhy(alignment) {
+  const modules = alignment.add.length > 0 && alignment.add.every(a => (a.kind ?? 'eSpace').toLowerCase() === 'espace');
+  return 'The O11 bridge of the SSAM agent package does not run the Studio\'s own Manage Dependencies yet (capability ' + alignment.requires
+    + '; hosted, MANAGE_DEPENDENCIES_HOSTED_PENDING): reopening the Service Studio loads the same bridge. '
+    + (modules ? 'Deliver the job again with ' + alignment.add.map(a => a.producer).join(', ') + ' as OML (producers), so the candidate carries the signature the module has. '
+      : 'A delivery adds the elements of a new Extension or system producer version only with a new agent package. ')
+    + 'Nothing was merged';
+}
+export function alignmentOf(alignment) {
+  const add = (Array.isArray(alignment?.add) ? alignment.add : []).filter(a => a && typeof a === 'object' && typeof a.producer === 'string').slice(0, 32)
+    .map(a => ({ producer: a.producer, ...(a.producer_key ? { key: a.producer_key } : a.key ? { key: a.key } : {}), ...(a.kind ? { kind: a.kind } : {}),
+      elements: (Array.isArray(a.elements) ? a.elements : []).filter(e => typeof e === 'string').slice(0, 200) }));
+  return { requires: typeof alignment?.requires === 'string' ? alignment.requires : 'refresh_references:add', bridgeOffers: alignment?.bridgeOffers === true, add };
+}
+
+// fix-ext-refs, review round 3 (F1, F2, F3): every Studio write the delivery made outside its merge, as the kernel records
+// it (Delivery.RecordStudioWrite, the task's studioWrites: the Manage Dependencies, the Refresh References before the merge
+// and its fallback, the Refresh References after the dependencies dialog, the alignment after a rollback), in every
+// o11_deliver answer, short: {command, stage, outcome (changed, pending, ended, unknown, failed), added N, elements (first 5),
+// producers (with the signature before and after), waitsFor, error, fallback, undo}. answer-size.mjs protects it: the size
+// policy never drops it. A record that changed nothing is no news and is left out; the kernel's receipt keeps every record.
+const WRITE_OUTCOMES = new Set(['changed', 'pending', 'ended', 'unknown']);
+const shortHash = h => typeof h === 'string' && h.length > 8 ? h.slice(0, 8) : String(h ?? 'none');
+export function studioWritesOf(state) {
+  const list = (Array.isArray(state?.studioWrites) ? state.studioWrites : []).filter(r => r && typeof r === 'object' && (WRITE_OUTCOMES.has(r.outcome) || r.outcome === 'failed'));
+  return list.slice(-6).map(r => {
+    const added = (Array.isArray(r.added) ? r.added : []).filter(a => a && typeof a === 'object' && typeof a.element === 'string');
+    const requested = (Array.isArray(r.requested) ? r.requested : []).flatMap(q => Array.isArray(q?.elements) ? q.elements : []).filter(e => typeof e === 'string').map(e => e.replace(/^[^:]*:/, ''));
+    const elements = r.outcome === 'changed' ? added.map(a => a.element) : ['pending', 'ended', 'unknown'].includes(r.outcome) ? requested : [];
+    const moved = (Array.isArray(r.moved) ? r.moved : []).filter(m => m && typeof m === 'object' && m.producer).map(m => m.producer + ' ' + shortHash(m.before) + ' -> ' + shortHash(m.after));
+    const names = (Array.isArray(r.refreshed) && r.refreshed.length ? r.refreshed : Array.isArray(r.producers) ? r.producers : []).filter(p => typeof p === 'string');
+    // A record whose end a later run saw (ended, or unknown with endedBy): the signature that run found.
+    const now = ['ended', 'unknown'].includes(r.outcome) ? (Array.isArray(r.observed?.at) ? r.observed.at : []).filter(x => x?.producer && x.hash).map(x => x.producer + ' now at ' + shortHash(x.hash)) : [];
+    const producers = moved.length ? moved : now.length ? now : names;
+    return { command: typeof r.command === 'string' ? r.command : 'Refresh References', stage: r.stage ?? null, outcome: r.outcome,
+      ...(r.command === 'Manage Dependencies' && r.outcome === 'changed' ? { added: added.length } : {}),
+      ...(elements.length ? { elements: elements.slice(0, 5), ...(elements.length > 5 ? { elementsTotal: elements.length } : {}) } : {}),
+      ...(producers.length ? { producers: producers.slice(0, 5) } : {}),
+      ...(r.blockedBy?.title ? { waitsFor: r.blockedBy.title } : {}), ...(r.stalled === true ? { stalled: true } : {}),
+      // Review round 4 (N1, N2): the evidence that a command of an earlier run ended (idle proof, the same command answering),
+      // and the error of an unknown outcome.
+      ...(r.endedBy ? { endedBy: r.endedBy } : {}),
+      ...(['failed', 'unknown'].includes(r.outcome) ? { error: clean(r.error ?? 'no cause reported', 160) } : {}), ...(r.fallback ? { fallback: r.fallback } : {}),
+      ...(WRITE_OUTCOMES.has(r.outcome) ? { undo: 'Ctrl+Z in Service Studio undoes it' } : {}) };
+  });
+}
+export function referencesAddedOf(state) {
+  const writes = studioWritesOf(state);
+  const total = (Array.isArray(state?.studioWrites) ? state.studioWrites : []).filter(r => r && typeof r === 'object' && (WRITE_OUTCOMES.has(r.outcome) || r.outcome === 'failed')).length;
+  return writes.length ? { studioWrites: writes, ...(total > writes.length ? { studioWritesTotal: total } : {}) } : {};
+}
+// Whether a Studio write of this task outside the merge changed the module, or may have changed it.
+export const wroteBeforeMerge = state => studioWritesOf(state).some(w => WRITE_OUTCOMES.has(w.outcome));
+// The sentence a continuation says about those writes: which Studio commands, at which stage, and the undo; empty when none.
+export function wroteText(state) {
+  const writes = studioWritesOf(state).filter(w => WRITE_OUTCOMES.has(w.outcome));
+  if (!writes.length) return '';
+  const names = [...new Set(writes.map(w => 'the Studio\'s ' + w.command + ' (' + (w.stage ?? 'before-merge') + ')'))];
+  // Review round 4 (N1, N2): a write whose outcome no run observed (pending, unknown without the evidence of its end) is
+  // never said to have changed the module for sure, and it may still change it.
+  const open = writes.some(w => w.outcome === 'pending' || (w.outcome === 'unknown' && !w.endedBy));
+  const unsure = writes.some(w => w.outcome === 'unknown' || w.outcome === 'ended');
+  const said = open ? ' may have changed the module outside the merge and may still change it' + (writes.some(w => w.outcome === 'pending' && w.waitsFor) ? ' after the person answers' : '')
+    : unsure && !writes.some(w => w.outcome === 'changed') ? ' may have changed the module outside the merge' : ' changed the module outside the merge';
+  return names.join(' and ') + said + ' (studioWrites); Ctrl+Z in Service Studio undoes it';
 }
 
 // Kernel and bridge texts may carry a shell hint (ssam connect ..., dotnet build ...). The model gets continuations,
@@ -211,7 +290,6 @@ async function inspect(input, ctx) {
 }
 
 // ---- o11_deliver
-const BINDING = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const ops = z.array(z.record(z.string(), z.unknown())).min(1);
 const TASK_ID = /^[0-9a-fA-F]{32}$/;
 const SHA = /^[a-fA-F0-9]{64}$/;
@@ -248,20 +326,27 @@ const deliverSchema = z.object({
 // CaptureOwners). producers:"published" (the text, not a map) binds nothing by hand: every producer the job references is
 // captured (autoCaptures).
 export const PUBLISHED = 'published';
-const captureOf = name => (name.toLowerCase() === 'system' ? name + '=(System)' : name);
-export function producerArgs(producers = {}, captures = []) {
+const captureOf = name => captureEntryOf(name) ?? name;
+// names (fix/a5-lows, B10): the job's producer names (producer-names.mjs producerTextsOf); a binding name with / or \ that no
+// op of the job writes exactly is refused, every such name in ONE refusal (separatorKeyProblems); without names, every such
+// name is refused; names: null only where the delivery already checked them against its job.
+export function producerArgs(producers = {}, captures = [], { names } = {}) {
   const args = [];
   const bound = producers === PUBLISHED ? {} : producers ?? {};
+  const separated = names === null ? [] : separatorKeyProblems(Object.keys(bound), names);
+  if (separated.length) throw new Refusal('PRODUCER_INVALID', separated.map(p => p.error).join(' ') + ' Nothing was captured or applied.', undefined, { problems: separated.map(({ at, key, ops }) => ({ at, key, ...(ops ? { ops } : {}) })) });
   for (const [name, file] of Object.entries(bound)) {
-    if (!BINDING.test(name)) throw new Refusal('PRODUCER_INVALID', 'Invalid producer binding name: ' + name);
+    // Round 3 (H1-R): a name with / or \ binds by the key of its letters (the kernel checks the capture names it exactly).
+    const key = slotKeyOf(name);
+    if (key == null) throw new Refusal('PRODUCER_INVALID', 'Invalid producer binding name: ' + name);
     if (file === PUBLISHED) { args.push('--capture-producer', captureOf(name)); continue; }
     if (!path.isAbsolute(file)) throw new Refusal('PRODUCER_INVALID', 'Producer ' + name + ' needs an absolute path or "published"');
-    args.push('--producer', name + '=' + file);
+    args.push('--producer', key + '=' + file);
   }
   for (const entry of captures ?? []) {
     const [name, producer] = String(entry).split(/=(.*)/s);
-    if (!BINDING.test(name) || producer === '') throw new Refusal('PRODUCER_INVALID', 'Invalid captureProducers entry: ' + entry);
-    if (Object.hasOwn(bound, name)) throw new Refusal('PRODUCER_INVALID', 'Producer ' + name + ' is both bound and captured');
+    if ((producer === undefined ? listedKeyOf(name) : bindingKeyOf(name)) == null || producer === '') throw new Refusal('PRODUCER_INVALID', 'Invalid captureProducers entry: ' + entry);
+    if (Object.keys(bound).some(k => sameProducer(k, name))) throw new Refusal('PRODUCER_INVALID', 'Producer ' + name + ' is both bound and captured');
     args.push('--capture-producer', String(entry));
   }
   return args;
@@ -276,7 +361,7 @@ export function deliverArguments(input, { work, port }) {
   if (input.resume) return ['deliver', '--resume', input.resume, '--work', work, '--port', String(port),
     ...(input.expectedEnvironment ? ['--expected-environment', input.expectedEnvironment] : []), ...close];
   return ['deliver', '--module', input.module, '--job', input.job, ...(input.checks?.length ? ['--checks', input.checks.join(',')] : []),
-    ...producerArgs(input.producers, input.captureProducers), ...(input.expectedEnvironment ? ['--expected-environment', input.expectedEnvironment] : []),
+    ...producerArgs(input.producers, input.captureProducers, { names: null }), ...(input.expectedEnvironment ? ['--expected-environment', input.expectedEnvironment] : []),
     '--work', work, '--port', String(port), ...close];
 }
 // `deliver --close <taskId> --reason <text> --work W --port P` (kernel DeliveryTask.CloseKnownFailure).
@@ -299,7 +384,7 @@ function resolveJob(input, lane) {
     ...(input.captureProducers?.length ? { captureProducers: input.captureProducers } : {}),
     ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}),
     ...(input.until === 'apply' ? { until: 'apply' } : {}), ...(input.closePrevious ? { closePrevious: input.closePrevious } : {}), authorize: WORDS_MARKER },
-    why: 'The job file changed after that refusal: send it as it is now, or the whole corrected job; a patch applies only to the content the refusal named. authorize: as palavras do usuário no lugar do marcador.' } : undefined;
+    why: 'The job file changed after that refusal: send it as it is now, or the whole corrected job; a patch applies only to the content the refusal named. authorize: the user\'s words in place of the marker.' } : undefined;
   throw new Refusal(resolved.code, resolved.error, next, { ...(resolved.at != null ? { at: resolved.at } : {}), ...(resolved.candidates ? { candidates: resolved.candidates } : {}) });
 }
 // Every refusal of a delivery that ran a job names that job, so the next call patches it (jobShape 'array': its patch
@@ -318,8 +403,8 @@ function withJob(value, resolved) {
 // ("entregue", "entregue e publicado") also says what the job created or changed (job-summary.mjs: each action with its
 // inputs and outputs, each entity and structure with its attribute count), so no map of the module follows it.
 function withJobDone(value, resolved) {
-  if ((value?.ok !== true && value?.result !== 'entregue') || !resolved?.path) return value;
-  const delivered = value?.result === 'entregue' || value?.result === 'entregue e publicado';
+  if ((value?.ok !== true && !resultIs(value?.result, 'delivered')) || !resolved?.path) return value;
+  const delivered = resultIs(value?.result, 'delivered', 'deliveredAndPublished');
   let summary = null;
   if (delivered && value.summary == null) { try { summary = jobSummary(JSON.parse(fs.readFileSync(resolved.path, 'utf8').replace(/^﻿/, ''))); } catch { summary = null; } }
   return { ...value, ...nextBasedOnOf(resolved.path, resolved.sha256), ...(resolved.partial ? { partial: resolved.partial } : {}), ...(summary ? { summary } : {}), ...notesOf(value, resolved) };
@@ -426,7 +511,7 @@ const basedOnDelivered = (input, record, hash = input.basedOn?.sha256) => refusa
     ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}),
     ...(input.until === 'apply' ? { until: 'apply' } : {}), ...(input.closePrevious ? { closePrevious: input.closePrevious } : {}),
     ...(input.publish === true ? { publish: true } : {}), authorize: WORDS_MARKER },
-    why: 'Um job entregue já está no módulo: a próxima mudança é um job novo só com ela, sem basedOn, sobre o módulo como está agora (ssam_map lê as @key do que foi criado). authorize: as palavras do usuário no lugar do marcador.' },
+    why: 'A delivered job is already in the module: the next change is a new job with only that change, without basedOn, over the module as it is now (ssam_map reads the @keys of what was created). authorize: the user\'s words in place of the marker.' },
   { delivered: { ...(record.delivered?.job ? { job: record.delivered.job } : {}), ...(record.delivered?.sha256 ? { sha256: record.delivered.sha256 } : {}),
     module: record.module ?? null, at: record.at ?? null, ...(record.taskId ? { taskId: record.taskId } : {}) } });
 
@@ -484,7 +569,7 @@ const closeAndDeliver = (input, job, holder) => ({ tool: 'o11_deliver', argument
   ...(input.checks?.length ? { checks: input.checks } : {}), ...(input.producers ? { producers: input.producers } : {}),
   ...(input.captureProducers?.length ? { captureProducers: input.captureProducers } : {}),
   ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}), closePrevious: holder, authorize: WORDS_MARKER },
-  why: 'A tarefa anterior foi recusada; feche e entregue o job corrigido (ele vale sobre o módulo como está agora no Studio). authorize: as palavras do usuário no lugar do marcador.' });
+  why: 'The previous task was refused; close it and deliver the corrected job (it applies over the module as it is now in the Studio). authorize: the user\'s words in place of the marker.' });
 
 // prazos B: ENVIRONMENT_CALL_CUT (kernel EnvironmentCut.cs). cut, short: what the Studio was reading, from which host, the
 // environment operation running, the cause (timeout | connection) and how long; cutBy is always the Service Studio.
@@ -512,15 +597,15 @@ export function cutError(cut, fallback) {
 // Studio (then it is bound from its tab and no environment call is made). The refused task is closed in the same call.
 export function cutContinuation(input, job, holder, cut) {
   const c = cutOf(cut) ?? {};
-  const host = c.host ?? 'o ambiente';
+  const host = c.host ?? 'the environment';
   const producer = c.producer && !/^the producer with key /.test(c.producer) ? c.producer : null;
   return { tool: 'o11_deliver', arguments: { module: input.module, job, ...(input.checks?.length ? { checks: input.checks } : {}),
     ...(input.producers ? { producers: input.producers } : {}), ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}),
     ...(holder ? { closePrevious: holder } : {}), authorize: WORDS_MARKER },
-    why: 'Nada foi gravado. Quem cortou foi o cliente do próprio Service Studio na chamada a ' + host + ' (rede do PC até a OutSystems, fora do SSAM). '
-      + 'Não repita às cegas: entregue de novo quando o PC voltar a falar com ' + host
-      + (producer ? ', ou com ' + producer + ' aberto e sem alterações neste Studio (a entrega usa a aba e não chama o ambiente)' : '')
-      + '. authorize: as palavras do usuário no lugar do marcador.' };
+    why: 'Nothing was written. The Service Studio\'s own client cut its call to ' + host + ' (the network from the PC to OutSystems, outside SSAM). '
+      + 'Do not repeat it blindly: deliver again when the PC reaches ' + host + ' again'
+      + (producer ? ', or with ' + producer + ' open and unmodified in this Studio (the delivery uses its tab and makes no environment call)' : '')
+      + '. authorize: the user\'s words in place of the marker.' };
 }
 
 export function closeOutcome(run, id, work) {
@@ -609,6 +694,8 @@ export function deliveryFields(state) {
     ...warningFields(taskWarnings(state)),
     // MB2: the dependencies dialogs the delivery answered (Cancel) and the Refresh References of every producer after each.
     ...referencesRefreshedOf(state),
+    // Review A1: what the Studio's Manage Dependencies added to the module before the merge, with the undo.
+    ...referencesAddedOf(state),
     // lentidao 2026-10-12: the kernel's JobNormalizer rewrites of this job (apply receipt), never silent.
     ...normalizationsOf(state?.apply),
     // fam-deps review (finding 1): the dialogs the bridge closed for this delivery.
@@ -636,9 +723,111 @@ export function dataProofOf(state, max = 20) {
 // The task's own receipt (DeliveryTask.Save writes <task folder>/result.json): where every difference stays.
 const resultFileOf = (state, work) => path.join(typeof state?.work === 'string' && state.work ? state.work : path.join(work ?? '.', 'deliver', String(state?.taskId ?? '')), 'result.json');
 export const dataProofContinuation = (state, work) => ({ tool: 'ssam_evidence', arguments: { file: resultFileOf(state, work), pointer: '/dataProof/differences' },
-  why: 'O merge ficou no Studio para revisão (Ctrl+Z desfaz) e nada foi publicado: todas as diferenças entre os dados entregues e a tarefa estão neste recibo; corrija o job e entregue com closePrevious.' });
+  why: 'The merge stayed in the Studio for review (Ctrl+Z undoes it) and nothing was published: every difference between the delivered data and the task is in this receipt; fix the job and deliver with closePrevious.' });
 
-export function deliverOutcome(run, { trackId, work, job, taskId, since, input = {}, pendingContext }) {
+// fix/unpublished-library (family OF, the O11 lane): the open model of each producer a PRODUCER_SIGNATURE_MISSING names for
+// an element its published signature lacks (cause absent or unpublished), read before the answer is shaped: the module
+// open in a Service Studio tab (module-map.mjs moduleDigest; a closed module is its published OML, no evidence). null when
+// the refusal is another one. digestOf(name) -> {ok, digest, capturedBy}.
+const UNPUBLISHED_CAUSES = new Set(['absent', 'unpublished']);
+// Round 2 (review C:\t\revisoes\unpublished-lib, A3): the open model of a module name, read only from a Service Studio tab.
+// module-map.mjs moduleDigest says how it captured it (capturedBy); without download (o11.download null) a closed module is
+// never fetched as its published OML only to be discarded: captureO11Module answers MODULE_NOT_OPEN, nothing downloaded.
+export const o11OpenModelDigest = async (name, deps = {}) => (await import('./module-map.mjs'))
+  .moduleDigest({ lane: 'o11', target: name }, { ...deps, o11: { ...(deps.o11 ?? {}), download: null } });
+// consumer: the module of the delivery; its open model says which producers it already references (the module section's
+// reference blocks of its digest), so the sequence refreshes those after the publication (review C:\t\revisoes\system-ref-2,
+// OF (a)); unread, no refresh step is claimed.
+export async function o11ProducerModels(run, { digestOf, consumer = null } = {}) {
+  const state = run?.envelope?.data && typeof run.envelope.data === 'object' ? run.envelope.data : run?.envelope;
+  if (state?.code !== 'PRODUCER_SIGNATURE_MISSING' || state.writeState === 'applied' || !Array.isArray(state.problems)) return null;
+  const producers = [...new Set(state.problems.filter(p => UNPUBLISHED_CAUSES.has(p?.cause) && typeof p.producer === 'string' && p.producer).map(p => p.producer))];
+  if (!producers.length) return null;
+  const read = digestOf ?? (name => o11OpenModelDigest(name));
+  const models = {};
+  for (const producer of producers) {
+    try { models[producer] = await o11ProducerModel({ producer }, { digestOf: read }); } catch (error) { models[producer] = { ok: false, reason: error.message }; }
+  }
+  let references = null;
+  if (typeof consumer === 'string' && consumer && Object.values(models).some(m => m?.ok === true)) {
+    try {
+      const own = await read(consumer);
+      if (own?.ok === true && own.capturedBy !== 'published-oml' && own.digest)
+        references = (own.digest.sections ?? []).filter(s => s?.id === 'module').flatMap(s => s.blocks ?? []).filter(b => b?.kind === 'Reference').map(b => String(b.name));
+    } catch { references = null; }
+  }
+  for (const [producer, model] of Object.entries(models)) if (model?.ok === true) model.referenced = references ? references.some(r => r.toLowerCase() === producer.toLowerCase()) : null;
+  return models;
+}
+// The refusal when every element the kernel names (cause absent or unpublished) is public in its producer's open model, and
+// the kernel names nothing else: PRODUCER_NOT_PUBLISHED with o11_publish of each producer, then the same o11_deliver. null
+// otherwise (the kernel's own refusal stays: its fix already says to publish first).
+// Round 2 (review C:\t\revisoes\unpublished-lib, A4): the open module is matched as the kernel matches the signature
+// (NativeDependencyReader.FindTop: name, Flow/Name or @key, ordinal). An element the open module has only under another
+// spelling is no unpublished element: the kernel's refusal stays, and when the kernel's fix does not name the right
+// spelling already ("use ..."), that problem's fix names it ({spelling: problems}, the kernel's problems with those fixes).
+// Round 3 (N3): whether the kernel's fix is its same-name "use <Kind>:<Name>" naming one of the right spellings ("Type:Name"):
+// each element token after "use " (joined by " or ") is split at its first ":", its name compared whole and ordinal, and its
+// kind by family (IServerActionSignature and IServerAction are one family). A list ("use one of: ...") names no same-name
+// element: the kernel builds it from other names (NameSuggestions.Closest).
+const ELEMENT_LIST = /\buse ((?:[A-Za-z][A-Za-z0-9_]*:[^\s,;()]+)(?: or [A-Za-z][A-Za-z0-9_]*:[^\s,;()]+)*)(?=$|[\s,;()])/;
+export function kernelNamesSpelling(fix, spellings) {
+  const found = ELEMENT_LIST.exec(String(fix ?? ''));
+  if (!found) return false;
+  const named = found[1].split(' or ').map(token => parseElement(token)).filter(Boolean);
+  return (spellings ?? []).some(s => {
+    const right = parseElement(s);
+    return !!right && named.some(n => n.name === right.name && (!n.family || !right.family ? n.type === right.type : n.family.kind === right.family.kind));
+  });
+}
+function o11Unpublished(state, { producerModels, input, job, holder }) {
+  const problems = Array.isArray(state.problems) ? state.problems.filter(p => p?.severity !== 'warning') : [];
+  if (!problems.length || problems.some(p => !UNPUBLISHED_CAUSES.has(p?.cause) || typeof p.producer !== 'string')) return null;
+  const document = jobDocumentOf(job);
+  const entries = [], spelled = new Map();
+  let allPublic = true;
+  for (const producer of [...new Set(problems.map(p => p.producer))]) {
+    const model = producerModels?.[producer];
+    if (model?.ok !== true) { allPublic = false; continue; }
+    const asked = document ? requestedElements(document, name => sameProducer(name, producer)) : [];
+    const own = problems.filter(p => p.producer === producer);
+    const missing = own.map(p => {
+      const element = parseElement(p.element) ?? { text: String(p.element ?? ''), type: '', name: String(p.element ?? ''), family: null };
+      const site = asked.find(a => a.text === element.text) ?? null;
+      return { ...element, op: site?.op ?? null, pointer: site?.pointer ?? null };
+    });
+    const classified = classify(missing, model.surface, { lane: 'o11' });
+    classified.forEach((m, i) => { if (m.open === 'spelling') spelled.set(own[i], m); });
+    if (!classified.every(m => m.open === 'public')) { allPublic = false; continue; }
+    entries.push({ key: producer, producer, missing: classified, ops: [], noPublicElements: false, revision: null, referenced: model.referenced ?? null,
+      evidence: { source: model.source, file: model.file ?? null, sha256: model.sha256 ?? null, capturedAt: model.capturedAt ?? null } });
+  }
+  if (!allPublic) {
+    if (!spelled.size) return null;
+    // The kernel's fix already names the spelling ("use IServerActionSignature:GetQuotes"): kept as it is.
+    // Round 3 (review C:\t\revisoes\unpublished-lib-2, N3): only the kernel's own same-name fix counts, read token by token:
+    // "use <Kind>:<Name>[ or <Kind>:<Name>...]" (NativeDependencyReader.Missing), where one <Name> is the whole right name and
+    // its <Kind> is of the same family. ":GetQuotes" inside ":GetQuotesByState" ("use one of: ...") is another element.
+    const names = (fix, m) => kernelNamesSpelling(fix, m.spellings);
+    return { spelling: state.problems.map(p => (spelled.has(p) && !names(p.fix, spelled.get(p))
+      ? { ...p, fix: elementFix('o11', spelled.get(p), p.producer), kernelFix: p.fix ?? null, spellings: spelled.get(p).spellings } : p)) };
+  }
+  if (!entries.length || !input.module || !job) return null;
+  const refusal = unpublishedRefusal({ lane: 'o11', module: input.module, entries,
+    publish: e => ({ tool: 'o11_publish', arguments: { module: e.producer, authorize: PUBLISH_WORDS },
+      why: 'Publishes ' + e.producer + ', whose module open in Service Studio has what this job references (a write: the person\'s own words in authorize, never automatic; or the person publishes it in the Studio).' }),
+    // The Studio's own Manage Dependencies brings the reference the module already has to the revision just published.
+    refresh: e => ({ tool: 'o11_studio', arguments: { command: 'refresh-references', args: { module: input.module, producers: [e.producer], published: true } },
+      why: input.module + ' already references ' + e.producer + ': the Studio\'s own Manage Dependencies brings that reference to the revision just published (it writes to the module: the person confirms it first; Ctrl+Z undoes it).' }),
+    deliver: { tool: 'o11_deliver', arguments: { module: input.module, job, ...(input.checks?.length ? { checks: input.checks } : {}),
+      ...(input.producers != null ? { producers: input.producers } : {}),
+      ...(input.captureProducers?.length ? { captureProducers: input.captureProducers } : {}), ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}),
+      ...(holder ? { closePrevious: holder } : {}), authorize: PUBLISH_WORDS },
+      why: 'The same delivery' + (holder ? ', after closing this refused task' : '') + ': it captures the published producer again; the job is unchanged. authorize: the person\'s own words in place of the marker.' } });
+  return { code: refusal.code, error: refusal.error, problems: refusal.problems, unpublished: refusal.producers, sequence: refusal.sequence, continuation: refusal.continuation };
+}
+
+export function deliverOutcome(run, { trackId, work, job, taskId, since, input = {}, pendingContext, producerModels = null }) {
   let state = run?.envelope?.data;
   // The CLI's own refusal of the job (Program.ErrorEnvelope with code and problems): nothing reached the Studio. The single
   // refusal (PREFLIGHT_REFUSED) or one of the apply alone with its own code and problems (primeira-certa A7).
@@ -671,19 +860,24 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
   // CX14 N2: a Studio UI call of this task that stopped and then ended, when it may have changed the module (a Refresh
   // References): named with Ctrl+Z in every answer, never "nothing reached the module".
   const settledUi = settledUiOf(state);
+  // Review A1 (fix-ext-refs round 2): the Studio's Manage Dependencies of this task wrote the module outside the merge:
+  // declared in every answer below, with what it added, the signatures before and after, and the undo.
+  const added = referencesAddedOf(state);
+  const wroteSaid = wroteText(state);
+  const wrote = wroteSaid.length > 0;
   if (outcome === 'delivered') { const fields = { ...deliveryFields(state), ...tab, ...signatures, ...settledUi }; return Object.keys(fields).length ? { ...DELIVERED, ...fields } : DELIVERED; }
   const base = { stage: state.stage ?? null, taskId: state.taskId ?? taskId ?? null };
   // CX14 N7: every answer of a task with a settled Refresh References names it with Ctrl+Z (settledUi), these included.
-  if (state.code === 'PREFLIGHT_REFUSED') return { ...preflightRefusal(state, base, 'PREFLIGHT_REFUSED', job ?? state.request?.JobPath ?? state.request?.jobPath), ...signatures, ...settledUi };
+  if (state.code === 'PREFLIGHT_REFUSED') return { ...preflightRefusal(state, base, 'PREFLIGHT_REFUSED', job ?? state.request?.JobPath ?? state.request?.jobPath), ...signatures, ...added, ...settledUi };
   // fam-deps (family D): the Studio opened a dialog during the merge that only the person answers (recovery, sign-in, a
   // question with choices). The bridge read it and answered in seconds; the merge waits for the person in the Studio. One
   // question with the exact text, never "outcome unknown"; after the answer the same task is resumed, nothing is repeated.
   // CX14 N7: unless this call sent a UI call again after its proof: then only the merge is never repeated.
   if (state.code === 'STUDIO_DIALOG_PENDING') return { ok: false, outcome: 'blocked', code: 'STUDIO_DIALOG_PENDING', ...base, writeState: state.writeState,
     question: state.question ?? state.blockedBy?.question ?? null, dialog: dialogOf(state.blockedBy), error: clean(state.error ?? '', 600), ...dialogsOf(state),
-    continuation: base.taskId ? { ...resumeWith(base.taskId), why: 'Depois que a pessoa responder o diálogo no Studio: retoma a mesma entrega ('
-        + (resentAfterIdle(state) ? 'o merge não é repetido' : 'nada é repetido') + ').' }
-      : { tool: 'ssam_task', arguments: { id: trackId }, why: 'Reads what this delivery left recorded; never repeat it.' }, ...settledUi };
+    continuation: base.taskId ? { ...resumeWith(base.taskId), why: 'After the person answers the dialog in the Studio: resumes the same delivery ('
+        + (resentAfterIdle(state) ? 'the merge is not repeated' : 'nothing is repeated') + ').' + (wrote ? ' Meanwhile ' + wroteSaid + '.' : '') }
+      : { tool: 'ssam_task', arguments: { id: trackId }, why: 'Reads what this delivery left recorded; never repeat it.' }, ...added, ...settledUi };
   // CX14 R1: the pre-probe refused a call before sending it. That says nothing was sent only for a task whose write was
   // never sent (the kernel's writeState not-sent): then the answer is that refusal. An unknown or applied write keeps its
   // own answer below (uncertain, or the refusal with merged, failures, Ctrl+Z, contract) plus stalled and recovery. The
@@ -691,8 +885,8 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
   if (state.code === 'STUDIO_ERROR_DIALOG_OPEN' && outcome === 'refused' && state.writeState === 'not-sent' && state.stalled?.method !== 'close_module') {
     const recovery=stallRecovery(state.stalled,base.taskId?resumeWith(base.taskId):{tool:'ssam_task',arguments:{id:trackId},why:'Read the existing delivery.'});
     return {ok:false,outcome:'refused',code:state.code,...base,writeState:state.writeState,
-      error:clean(state.error??(resentAfterIdle(state)?'A Studio error report is open; the call it stopped was not sent.':'A Studio error report is open; nothing was sent.'),400),
-      ...(state.stalled?{stalled:state.stalled}:{}),recovery,continuation:recovery[0],...settledUi};
+      error:clean(state.error??(resentAfterIdle(state)?'A Studio error report is open; the call it stopped was not sent.':wrote?'A Studio error report is open; the merge was not sent, but '+wroteSaid+'.':'A Studio error report is open; nothing was sent.'),400),
+      ...(state.stalled?{stalled:state.stalled}:{}),recovery,continuation:recovery[0],...added,...settledUi};
   }
   if (outcome === 'uncertain') {
     // CX14 N1: the pending operation ran in the Studio recorded with it. When the connected Studio is another one (a
@@ -705,7 +899,7 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
     const here = changed ? unsettledHere(state, pendingContext?.record) : [];
     const shownStall = changed ? (stalledHere(state, pendingContext?.record) ? state.stalled : null) : state.stalled;
     const next=changed && !here.length && TASK_ID.test(String(base.taskId ?? ''))
-      ? {tool:'ssam_task',arguments:{id:base.taskId,close:{reason:'The Studio that ran the merge is gone; close with the hash proof.'}},why:'O Studio que rodou o merge (pid '+changed.operation.pid+') não existe mais e a fila dele morreu com ele: o fechamento prova pelo hash que nada foi aplicado, sem repetir nada.'}
+      ? {tool:'ssam_task',arguments:{id:base.taskId,close:{reason:'The Studio that ran the merge is gone; close with the hash proof.'}},why:'The Studio that ran the merge (pid '+changed.operation.pid+') no longer exists and its queue died with it: the close proves by the hash that nothing was applied, without repeating anything.'}
       : state.pendingOperationRecovery?.idleProven
       ? {tool:'ssam_task',arguments:{id:base.taskId,close:{reason:'Close the task using its recorded not-sent or hash proof after the pending UI operation ended.'}},why:'The UI operation ended; close with the recorded proof instead of repeating an uncertain UI write.'}
       : base.taskId?resumeWith(base.taskId):{tool:'ssam_task',arguments:{id:trackId},why:'Reads what this delivery left recorded; never repeat it.'};
@@ -720,7 +914,7 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
       error:said+repeatedOf(state,said)+(!changed?'':here.length?' The merge ran in a Studio that is gone (pid '+changed.operation.pid+'), but this task\'s '+here[0].method+' stopped in the connected Studio and may still run there: it stays fenced until two reads prove the Studio idle; resume then, and the close proves by hash that the merge was not applied.'
         :' The Studio that ran it is gone (pid '+changed.operation.pid+'); the connected Studio cannot be running it, so it is not fenced: close the task with the hash proof.'),...dialogsOf(state),...studioErrorOf(state),
       ...(changed?{studioChanged:changed}:{}),...(shownStall?{stalled:shownStall}:{}),...(state.pendingBridgeOperation?{pendingBridgeOperation:pendingOperationOfAnswer(state.pendingBridgeOperation)}:{}),...settledUi,
-      ...(state.pendingUiProof?{pendingUiProof:state.pendingUiProof}:{}),...(state.pendingOperationRecovery?{pendingOperationRecovery:state.pendingOperationRecovery}:{}),recovery,continuation:recovery[0]};
+      ...(state.pendingUiProof?{pendingUiProof:state.pendingUiProof}:{}),...(state.pendingOperationRecovery?{pendingOperationRecovery:state.pendingOperationRecovery}:{}),recovery,continuation:recovery[0],...added};
   }
   const { messages, omitted } = validationMessages(state);
   const failures = (state.failures ?? []).map(f => ({ stage: f?.stage ?? null, error: clean(f?.error, 300) }));
@@ -732,7 +926,7 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
   const holder = /resume task ([0-9a-f]{32})/i.exec(String(state.error ?? ''))?.[1];
   const holderState = holder ? findKernelTask(work, { taskId: holder }) : null;
   const foreign = state.code === 'MODULE_RESERVED_FOREIGN' || (holder && !holderState);
-  const next = foreign ? doctor('O módulo está reservado por uma entrega de outra raiz do SSAM, ou por uma tarefa que esta raiz não tem: o doctor mostra a reserva e a libera com as palavras do usuário.')
+  const next = foreign ? doctor('The module is reserved by a delivery of another SSAM root, or by a task this root does not have: the doctor shows the reservation and releases it with the user\'s words.')
     : holder && (closeState(holderState) === 'refused' && input.module && job ? closeAndDeliver(input, job, holder) : resumeWith(holder));
   // After a merge the first failure carries the kernel's own sentence: the merge stays for review in the Studio. A merge
   // order delivery is two native merges, so two undo steps (the bridge's receipt counts them).
@@ -754,12 +948,12 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
   const repair = order?.repair && input.module ? { tool: 'o11_deliver', arguments: { module: input.module, job: order.repair,
     ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}), ...(holds ? { closePrevious: base.taskId } : {}), authorize: WORDS_MARKER },
     why: 'Delivers the repair job the kernel computed (set DefaultValue on each element by key) over the module as it is now'
-      + (holds ? ', after closing this refused task' : '') + '. authorize: as palavras do usuário no lugar do marcador.' } : null;
+      + (holds ? ', after closing this refused task' : '') + '. authorize: the user\'s words in place of the marker.' } : null;
   // The Studio runs a bridge older than the merge order this delivery needs: nothing was merged; the current bridge loads
   // with the next Service Studio opened, and the same task then resumes.
   if (state.code === 'BRIDGE_OUTDATED' && !merged) return { ok: false, outcome: 'refused', code: 'BRIDGE_OUTDATED', ...base, error,
     continuation: doctor('Shows the O11 bridge version; the current bridge loads with the next Service Studio opened. Then resume this task'
-      + (base.taskId ? ' (o11_deliver {resume:"' + base.taskId + '"})' : '') + '; nothing was merged.'), ...settledUi };
+      + (base.taskId ? ' (o11_deliver {resume:"' + base.taskId + '"})' : '') + '; nothing was merged' + (wrote ? ', but ' + wroteSaid : '') + '.'), ...added, ...settledUi };
   // A merge the Studio rolled back (C15, proven by the bridge or by the kernel's hash proof): nothing applied, the task is
   // closed and the module is free, so the corrected job is simply delivered again.
   // fam-deps R7/R8: the receipt names the producer signatures the merge had to select and the stage that failed. Review
@@ -768,12 +962,31 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
   // kernel's error carries the other fix (the producers as OML), never a loop of the same refusal.
   const signatureChanges = signatureChangesOf(state);
   const sameJobAgain = state.sameJobAgain === true;
+  // fix-ext-refs: the kernel names what the Studio's own Manage Dependencies must do (alignment: each producer with the
+  // elements the job uses) and whether the loaded bridge runs it. Never an OML for an Extension, never a person's click.
+  const alignment = !sameJobAgain && state.alignment && typeof state.alignment === 'object' && Array.isArray(state.alignment.add) ? alignmentOf(state.alignment) : null;
+  if (state.code === 'MERGE_ROLLED_BACK' && alignment) return { ok: false, outcome: 'refused', code: 'MERGE_ROLLED_BACK', ...base, failed: 'merge', error: clean(state.error ?? error, 900),
+    closed: true, ...(signatureChanges.length ? { signatureChanges } : {}), ...(state.merge?.stage ? { failedStage: state.merge.stage } : {}), sameJobAgain, alignment, ...dialogsOf(state),
+    continuation: alignment.bridgeOffers && input.module
+      ? { tool: 'o11_studio', arguments: { command: 'refresh-references', args: { module: input.module, producers: alignment.add.map(a => a.producer),
+          add: alignment.add.map(a => ({ producer: a.producer, elements: a.elements })), published: true } },
+        why: 'The Studio\'s own Manage Dependencies adds the elements the job uses and brings each producer to its published signature (an Extension\'s signature comes from its extension reference, never from an OML); it answers what the Studio refuses, each with its fix. Then deliver the same job again. Ctrl+Z undoes it; nothing is published.' + (wrote ? ' Meanwhile ' + wroteSaid + '.' : '') }
+      : { tool: 'ssam_doctor', arguments: { lane: 'o11' },
+        why: (hostedContext() ? manageDependenciesHostedWhy(alignment) : 'The Service Studio runs a bridge without the Studio\'s own Manage Dependencies (capability ' + alignment.requires + '): the current bridge loads with the next Service Studio opened (the "Service Studio (SSAM)" shortcut). Then deliver the same job again: the delivery adds the elements through the Studio itself. Nothing was merged')
+          + (wrote ? ', but ' + wroteSaid : '') + '.' },
+    ...added, ...settledUi };
+  // Review A1: the continuation names the command the kernel ran after the rollback and, in English, never says that nothing
+  // was applied when the Studio's Manage Dependencies changed the module.
+  const ranAfter = typeof state.afterRollback?.command === 'string' ? state.afterRollback.command : 'Refresh References';
   if (state.code === 'MERGE_ROLLED_BACK') return { ok: false, outcome: 'refused', code: 'MERGE_ROLLED_BACK', ...base, failed: 'merge', error: clean(state.error ?? error, 600),
     closed: true, ...(signatureChanges.length ? { signatureChanges } : {}), ...(state.merge?.stage ? { failedStage: state.merge.stage } : {}), sameJobAgain, ...dialogsOf(state),
     ...(input.module && job ? { continuation: { tool: 'o11_deliver', arguments: { module: input.module, job, authorize: WORDS_MARKER },
-      why: (sameJobAgain ? 'O módulo já tem as assinaturas que o merge precisava (o SSAM atualizou as referências agora). Entregue o mesmo job de novo, como nova entrega. '
-        : signatureChanges.length ? 'O mesmo job falharia igual. Siga a correção do erro: entregue com esses produtores como OML (producers). '
-        : 'Nada foi aplicado e o módulo está livre: entregue o job corrigido como uma nova entrega. ') + 'authorize: as palavras do usuário no lugar do marcador.' } } : {}), ...settledUi };
+      why: (sameJobAgain ? 'The module now holds the signatures the merge needed: after the rollback the kernel ran the Studio\'s ' + ranAfter + ' of those producers'
+          + (ranAfter === 'Manage Dependencies' ? ' (studioWrites, with what it added; Ctrl+Z in Service Studio undoes it)' : ' (Ctrl+Z in Service Studio undoes it)')
+          + '. Deliver the same job again as a new delivery. '
+        : signatureChanges.length ? 'The same job would roll back the same way. Follow the fix in the error: deliver with these producers as OML (producers). '
+        : 'Nothing was merged and the module is free' + (wrote ? ', but ' + wroteSaid : '') + ': deliver the corrected job as a new delivery. ')
+        + 'authorize: the user\'s words in place of the marker.' } } : {}), ...added, ...settledUi };
   // prazos B: a read of the environment that the Service Studio's own client cut (ENVIRONMENT_CALL_CUT: its WCF
   // SendTimeout, a connection that never answered). Nothing was written; the answer says what was cut and when a new
   // delivery helps, never "repeat": the same delivery repeats the same environment calls.
@@ -782,7 +995,7 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
       repeated: /asked twice/.test(String(state.error ?? '')), cutBy: 'service-studio', writeState: 'not-sent' } : null);
     return { ok: false, outcome: 'refused', code: ENVIRONMENT_CALL_CUT, ...base,
       writeState: state.writeState ?? 'not-sent', error: cutError(cut, error), ...(cut ? { cut: cutOf(cut) } : {}), retry: 'after-network',
-      ...(input.module && job ? { continuation: cutContinuation(input, job, holds ? base.taskId : null, cut) } : {}), ...settledUi };
+      ...(input.module && job ? { continuation: cutContinuation(input, job, holds ? base.taskId : null, cut) } : {}), ...added, ...settledUi };
   }
   // The kernel's own code (VERIFY_UNAVAILABLE, SIGNATURE_PREVIEW_REFUSED, ...) names the refusal; otherwise the class of it.
   // CX14 R1: STUDIO_ERROR_DIALOG_OPEN on a task whose write was sent (a round-1 receipt) names a later call, never this refusal.
@@ -793,14 +1006,46 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
   const evidence = state.code === 'DATA_PROOF_DIFFERS' ? dataProofContinuation(state, work) : null;
   // MB2: the refresh after the dependencies dialog failed: the kernel names the module and the next call.
   const refreshNext = state.code === 'REFERENCES_REFRESH_FAILED' && state.referencesRefreshFailed?.next?.tool ? state.referencesRefreshFailed.next : null;
-  // F5: a producer republished since its capture (seen right before the merge): nothing was written, its captures were
-  // dropped, and the same delivery again captures the new version.
+  // F5: a producer republished since its capture (seen right before the merge): nothing was merged, its captures were
+  // dropped, and the same delivery again captures the new version. Review A1: a Manage Dependencies that wrote the module
+  // before is said, in English.
   const changedNext = state.code === 'PRODUCER_CHANGED' && !merged && input.module && job ? { ...closeAndDeliver(input, job, holds ? base.taskId : null),
-    why: 'Um produtor foi publicado de novo desde a captura; nada foi gravado. A mesma entrega de novo captura a versão nova. authorize: as palavras do usuário no lugar do marcador.' } : null;
+    why: 'A producer was published again since its capture; nothing was merged' + (wrote ? ', but ' + wroteSaid : '')
+      + '. The same delivery again captures the new version. authorize: the user\'s words in place of the marker.' } : null;
   if (changedNext && !holds) delete changedNext.arguments.closePrevious;
+  // Round 2 (M4): a producer the referenceable catalog does not list by that name: ONE refusal with every name it lists and
+  // the same delivery with that capture bound to a listed name (producer-names.mjs o11UnknownProducer), as on ODC.
+  if ((state.code === 'PRODUCER_UNKNOWN' || state.code === 'PRODUCER_AMBIGUOUS') && !merged) {
+    const jobFile = job ?? state.request?.JobPath ?? state.request?.jobPath;
+    let captures = [...(input.captureProducers ?? [])];
+    try { if (jobFile && (input.producers === PUBLISHED || input.allPublished)) captures = [...captures, ...autoCaptures(jobFile, input)]; } catch { /* the kernel's names stay */ }
+    const unknown = o11UnknownProducer(state.problems, { captures, call: input.module && jobFile ? { tool: 'o11_deliver', arguments: { module: input.module, job: jobFile,
+      ...(holds ? { closePrevious: base.taskId } : {}), ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}),
+      ...(input.producers != null ? { producers: input.producers } : {}), ...(input.captureProducers ? { captureProducers: input.captureProducers } : {}),
+      // Round 3 (B5): this continuation is new text, so its marker is in English (the lane's older ones keep WORDS_MARKER).
+      ...(input.until && input.until !== 'merge' ? { until: input.until } : {}), authorize: '<the user\'s own words>' } } : null });
+    if (unknown) {
+      if (unknown.continuation) unknown.continuation.why += ' authorize: the person\'s own words in place of the marker.';
+      return { ok: false, outcome: 'refused', ...base, error, ...unknown, ...settledUi };
+    }
+  }
+  // fix/unpublished-library (family OF): every element the producer's published signature lacks is public in its open model:
+  // ONE refusal with the publication of each producer, then the same delivery (o11Unpublished); never a changed job.
+  if (state.code === 'PRODUCER_SIGNATURE_MISSING' && !merged && producerModels) {
+    const unpublished = o11Unpublished(state, { producerModels, input, job: job ?? state.request?.JobPath ?? state.request?.jobPath, holder: holds ? base.taskId : null });
+    // Round 2 (A4): a spelling problem keeps the kernel's refusal, with the right spelling in its fix.
+    if (unpublished?.spelling) state = { ...state, problems: unpublished.spelling };
+    else if (unpublished) return { ok: false, outcome: 'refused', ...base, ...unpublished, ...signatures, ...added, ...settledUi };
+  }
   // CX14 N2 (declared): the R3 close continuation ("nothing of this task reached the module") is gone: after idle the kernel
   // goes on in the same resume, and a settled Refresh References is named with Ctrl+Z (settledUiOperations).
-  const continuation = next ?? evidence ?? refreshNext ?? changedNext ?? repair;
+  // Review round 4 (N2): a Studio command of this task got no answer that says what it did and may still run (the kernel's
+  // fence, pendingBridgeOperation.outcomeUnknown): the next call is the resume, which proves the Studio idle first and never
+  // sends it again blind; never a manual refresh while it may still run.
+  const unknownNext = !merged && state.pendingBridgeOperation?.outcomeUnknown && TASK_ID.test(String(base.taskId ?? '')) ? { ...resumeWith(base.taskId),
+    why: 'The Studio\'s ' + (state.pendingBridgeOperation.command ?? 'Refresh References') + ' of this task got no answer that says what it did: the resume first proves the Studio idle (two reads) and never sends it again blind. Meanwhile '
+      + (wroteSaid || 'it may have changed the module outside the merge and may still change it; Ctrl+Z in Service Studio undoes it') + '.' } : null;
+  const continuation = next ?? unknownNext ?? evidence ?? refreshNext ?? changedNext ?? repair;
   // (d) A refusal of the validation contract names the part that refused (the Verify, the expectations, the data contract)
   // and always carries its problems: the kernel's, or one per new Verify error and uncovered message.
   const contract = !merged && !kernelCode && invalid && state.apply ? validationContract(state.apply) : null;
@@ -822,7 +1067,7 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
     // fam-deps review (finding 1): the dialogs the bridge closed and the Studio error the kernel proved, never only in the receipt.
     ...dialogsOf(state), ...studioErrorOf(state), ...tab, ...signatures, ...(continuation ? { continuation } : {}),
     // CX14 R1: a call of this task that the Studio stopped adds what blocked it and how to recover; the refusal stays.
-    ...(state.stalled ? { stalled: state.stalled, recovery: stallRecovery(state.stalled, continuation ?? null) } : {}), ...settledUi };
+    ...(state.stalled ? { stalled: state.stalled, recovery: stallRecovery(state.stalled, continuation ?? null) } : {}), ...added, ...settledUi };
 }
 
 // CX14 N2: the settled Studio UI calls of a task that may have changed the module (the kernel's note: a Refresh References,
@@ -882,11 +1127,11 @@ export function resentAfterIdle(state) {
   return names === null || names.length > 0;
 }
 // CX14 N7: the kernel's texts of such a call (error, failures, the tab close's reason), as the kernel of this round writes
-// them: "nothing was repeated" (any case) becomes "the merge was not repeated", "nada é/foi repetido" "o merge não é/foi
-// repetido". A receipt of an earlier kernel (e77fd91b) still has them. Every other text is kept as it is.
+// them: "nothing was repeated" (any case) becomes "the merge was not repeated"; the Portuguese "nada é/foi repetido" of a
+// receipt of an earlier kernel (e77fd91b) becomes the same English text. Every other text is kept as it is.
 const notRepeatedText = text => typeof text !== 'string' ? text
   : text.replace(/\b(nothing) (was|is) repeated\b/gi, (_, word, verb) => (word[0] === 'N' ? 'The' : 'the') + ' merge ' + verb.toLowerCase() + ' not repeated')
-    .replace(/\b(nada) (é|foi) repetido\b/gi, (_, word, verb) => (word[0] === 'N' ? 'O' : 'o') + ' merge não ' + verb.toLowerCase() + ' repetido');
+    .replace(/\b(nada) (é|foi) repetido\b/gi, (_, word, verb) => (word[0] === 'N' ? 'The' : 'the') + ' merge ' + (verb.toLowerCase() === 'é' ? 'is' : 'was') + ' not repeated');
 export function withoutFalseRepetition(state) {
   if (!resentAfterIdle(state)) return state;
   return { ...state, error: notRepeatedText(state.error),
@@ -990,7 +1235,7 @@ async function applyOnly(input, job, ctx, task, proto = null) {
     if (captured?.key && active?.key && captured.key !== active.key) return refusal('ACTIVE_MODULE_CHANGED', 'The active module changed during the snapshot; nothing was applied.', doctor('Shows the module open in the selected Studio.'));
     const folder = path.join(lane.work, 'apply', task.id);
     const applyOnce = file => ctx.runAnvil(['apply', '--job', file, '--base', snapshot, '--out', path.join(folder, 'candidate.oml'), '--work', path.join(folder, 'model'),
-      ...producerArgs(input.producers), ...(input[BASED_ON] ? ['--based-on', input[BASED_ON]] : [])], { timeoutMs: ctx.applyTimeoutMs });
+      ...producerArgs(input.producers, [], { names: null }), ...(input[BASED_ON] ? ['--based-on', input[BASED_ON]] : [])], { timeoutMs: ctx.applyTimeoutMs });
     let run;
     if (proto) {
       const begin = Date.now();
@@ -1133,13 +1378,23 @@ export function referencedProducers(jobFile) {
   const ops = Array.isArray(document) ? document : Array.isArray(document?.ops) ? document.ops : [];
   // a prototype op's data.bind names its producer as a reference op does (docs/PROTOTIPO-NATIVO.md 2.12)
   const named = ops.map(op => (op?.op === 'reference' ? op.producer : op?.op === 'prototype' ? op?.data?.bind?.producer : null));
-  return [...new Set(named.filter(name => BINDING.test(String(name ?? ''))))];
+  // fix/system-reference: one per binding key, as the job first writes it ((System) and System are one producer).
+  return producersNamed(named).map(p => p.written[0]);
 }
 export function autoCaptures(jobFile, input = {}) {
-  const bound = new Set(Object.keys(input.producers ?? {}).map(n => n.toLowerCase()));
-  const captured = new Set((input.captureProducers ?? []).map(entry => String(entry).split('=')[0].trim().toLowerCase()));
-  return referencedProducers(jobFile).filter(name => !bound.has(name.toLowerCase()) && !captured.has(name.toLowerCase()))
-    .map(name => name.toLowerCase() === 'system' ? name + '=(System)' : name);
+  const taken = [...Object.keys(input.producers === PUBLISHED ? {} : input.producers ?? {}), ...(input.captureProducers ?? []).map(entry => String(entry).split('=')[0].trim())];
+  // Round 3 (M5): one slot written in two texts ("Flood Utils", "Flood-Utils") may be two producers of the catalog that share
+  // their letters; the kernel binds by the slot's key and cannot bind them apart, and the facade has no catalog to tell:
+  // ONE refusal naming both texts, never one capture bound to both.
+  let document = null;
+  try { document = JSON.parse(fs.readFileSync(jobFile, 'utf8').replace(/^﻿/, '')); } catch { document = null; }
+  const ops = Array.isArray(document) ? document : Array.isArray(document?.ops) ? document.ops : [];
+  const groups = producersNamed(ops.map(op => (op?.op === 'reference' ? op.producer : op?.op === 'prototype' ? op?.data?.bind?.producer : null)));
+  const twins = groups.find(g => g.spellings.length > 1 && !taken.some(t => sameProducer(t, g.written[0])));
+  if (twins) throw new Refusal('PRODUCER_AMBIGUOUS', 'The job names the producer slot ' + twins.key + ' in ' + twins.spellings.length + ' texts ("' + twins.written.join('", "')
+    + '"): they may be different producers of the referenceable catalog that share their letters and digits, and the kernel binds one producer per key. '
+    + 'Write the producer one way, exactly as the catalog lists it, or deliver two such producers in separate jobs. Nothing was captured or applied.', undefined, { candidates: twins.written });
+  return referencedProducers(jobFile).filter(name => !taken.some(t => sameProducer(t, name))).map(name => captureEntryOf(name) ?? name);
 }
 
 // ---- C32: the published CSS of a block is regenerated only when a widget of the block changes, so a job made only of
@@ -1214,7 +1469,7 @@ async function styleSheetTouch(resolved, input, ctx, lane) {
 
 // ---- C08: the publication after a clean merge (o11-publish.mjs createO11Publish; loaded on demand, it imports this file).
 const publishContinuation = module => ({ tool: 'o11_publish', arguments: { module, authorize: WORDS_MARKER },
-  why: 'A entrega já está no Studio; publique só o módulo (nunca repita a entrega). authorize: as palavras do usuário no lugar do marcador.' });
+  why: 'The delivery is already in the Studio; publish only the module (never repeat the delivery). authorize: the user\'s words in place of the marker.' });
 // Pure: the section 3.2 PublishOutcome of an o11_publish answer.
 export function publishField(value) {
   const outcome = value?.ok === true ? 'published' : value?.outcome === 'uncertain' ? 'uncertain' : value?.outcome === 'failed' || value?.code === 'PUBLISH_FAILED' ? 'failed' : 'refused';
@@ -1231,8 +1486,8 @@ async function publishAfter(delivered, input, { words, authorization }, ctx, sig
     ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment.trim().toLowerCase() } : {}) }, { signal });
   const publish = publishField(value);
   const base = { ...delivered, ...(value?.lastPublication ? { lastPublication: value.lastPublication } : {}) };
-  if (value?.ok === true) return { ...base, ok: true, result: 'entregue e publicado', publish };
-  return { ...base, ok: false, result: 'entregue', code: publish.code ?? (publish.outcome === 'uncertain' ? 'PUBLISH_UNCERTAIN' : 'PUBLISH_FAILED'), failed: 'publish',
+  if (value?.ok === true) return { ...base, ok: true, result: RESULT.deliveredAndPublished, publish };
+  return { ...base, ok: false, result: RESULT.delivered, code: publish.code ?? (publish.outcome === 'uncertain' ? 'PUBLISH_UNCERTAIN' : 'PUBLISH_FAILED'), failed: 'publish',
     ...(publish.outcome === 'uncertain' ? { outcome: 'uncertain' } : {}), publish, continuation: publishContinuation(input.module) };
 }
 
@@ -1249,7 +1504,7 @@ export async function closeOpenedTab(module, state, ctx) {
     // UI freeze of 2026-10-08: the tab still finishing the publication (MODULE_BUSY) or a UI thread that did not answer
     // (UI_BUSY) keeps the tab; nothing was closed and the delivery's answer stands. The tab is closed later, when idle.
     const busy = ['MODULE_BUSY', 'UI_BUSY'].includes(error?.code) ? { code: error.code,
-      next: { tool: 'o11_studio', arguments: { command: 'close-module', args: { name: module } }, why: 'depois de o11_studio wait idle; a aba ainda termina o trabalho da publicação' } } : {};
+      next: { tool: 'o11_studio', arguments: { command: 'close-module', args: { name: module } }, why: 'after o11_studio wait idle; the tab is still finishing the work of the publication' } } : {};
     return { closed: false, reason: clean(error?.message ?? String(error), 200), ...busy };
   }
 }
@@ -1259,7 +1514,7 @@ export function themeReferenced(jobFile, binding) {
   let document;
   try { document = JSON.parse(fs.readFileSync(jobFile, 'utf8').replace(/^﻿/, '')); } catch { return false; }
   const ops = Array.isArray(document) ? document : Array.isArray(document?.ops) ? document.ops : [];
-  return ops.some(op => op?.op === 'reference' && String(op.producer ?? '').toLowerCase() === String(binding).toLowerCase()
+  return ops.some(op => op?.op === 'reference' && (sameProducer(op.producer, binding) || String(op.producer ?? '').toLowerCase() === String(binding).toLowerCase())
     && (Array.isArray(op.elements) ? op.elements : []).some(e => THEME_ELEMENT.test(String(e))));
 }
 
@@ -1273,7 +1528,8 @@ async function deliver(input, ctx, { signal } = {}) {
   const words = resolvedWords.words;
   const authorization = resolvedWords.authorization ?? null;
   // Blank words, or a placeholder such as the continuation marker, are not the user's words.
-  if (!words.trim() || /^<[^>]*>$/.test(words.trim())) return refusal('WORDS_REQUIRED', 'o11_deliver needs the user\'s own words in authorize, verbatim (or a standing grant of this module for deliver).',
+  if (!wordsGiven(words)) return refusal('WORDS_REQUIRED', // CX15 r7 (L-7): one predicate
+    'o11_deliver needs the user\'s own words in authorize, verbatim (or a standing grant of this module for deliver).',
     { tool: 'o11_deliver', arguments: input.close ? { close: input.close } : input.resume ? { resume: input.resume } : { module: input.module }, why: 'Ask the user to authorize this delivery and pass their exact words in authorize.' });
   const answer = await deliverWith(input, { words, authorization }, ctx, lane, signal);
   return authorization && answer && typeof answer === 'object' ? { ...answer, authorization } : answer;
@@ -1310,7 +1566,8 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
         throw new Refusal('MODULE_AND_JOB_REQUIRED', 'o11_deliver needs module and job, or module with patch and basedOn (or resume with the taskId of an earlier delivery).');
       // K1-d: producers "published" alone: every producer the job references is "published" (bound once the job is read).
       if (input.producers === PUBLISHED) { const { producers: _all, ...rest } = input; input = { ...rest, allPublished: true }; }
-      producerArgs(input.producers, input.captureProducers);
+      // the shape only; a name with / or \ is checked against the job once it is resolved (below, B10)
+      producerArgs(input.producers, input.captureProducers, { names: null });
       if (until === 'apply' && input.captureProducers?.length) throw new Refusal('CAPTURE_NEEDS_DELIVER', 'until=apply binds producer files only; capture the producer first and pass it in producers.',
         { tool: 'o11_dependencies', arguments: { action: 'capture', producer: String(input.captureProducers[0]).split('=').at(-1) }, why: 'Captures an attested .avsig of the producer for the producers binding.' });
     }
@@ -1343,11 +1600,18 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
       if (expanded?.refusal) return withJob(expanded.refusal, resolved);
       if (expanded?.path) { proto = { ...expanded.expansion, original: resolved, measure: ctx.measureFidelity }; resolved = { ...resolved, path: expanded.path, sha256: expanded.sha256 }; }
     }
+    // fix/a5-lows (B10): a producers name with / or \ binds only the ops the job writes with exactly that text; checked once the
+    // job is known, before the Studio or the CLI is touched (ONE refusal with every such name).
+    if (!input.resume && resolved?.path && input.producers && typeof input.producers === 'object') {
+      let document = null;
+      try { document = JSON.parse(fs.readFileSync(resolved.path, 'utf8').replace(/^﻿/, '')); } catch { /* the kernel reports an unreadable job */ }
+      producerArgs(input.producers, input.captureProducers, { names: producerTextsOf(document) });
+    }
     // K1-d: a "published" producer whose theme the job references is bound by its published OML (a signature never imports
     // a theme, cause theme), downloaded once per version (o11_environment cache, K1-c); the others are captured by the kernel.
     if (!input.resume && input.allPublished) {
       const { allPublished: _all, ...rest } = input;
-      const referenced = referencedProducers(resolved.path).filter(name => !(rest.captureProducers ?? []).some(c => String(c).split('=')[0].trim().toLowerCase() === name.toLowerCase()));
+      const referenced = referencedProducers(resolved.path).filter(name => !(rest.captureProducers ?? []).some(c => sameProducer(String(c).split('=')[0].trim(), name)));
       input = { ...rest, ...(referenced.length ? { producers: Object.fromEntries(referenced.map(name => [name, PUBLISHED])) } : {}) };
     }
     if (!input.resume && input.producers && typeof input.producers === 'object') {
@@ -1444,9 +1708,12 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
         if (built?.manifest) proto.kernelData = readCandidateResult(built.manifest);
       } else built = await buildBeforeApply({ input: runInput, job, ctx, lane, task, signal });
       if (built?.answer) return built.answer;
-      if (built?.refused) return deliverOutcome(built.refused, { trackId: task.id, work: lane.work, job: deliverJob, taskId: null, since, input });
+      if (built?.refused) return deliverOutcome(built.refused, { trackId: task.id, work: lane.work, job: deliverJob, taskId: null, since, input,
+        producerModels: await o11ProducerModels(built.refused, { digestOf: ctx.producerDigest, consumer: input.module }) });
       // CX16 r3 (M3): the Studio step waits for the precheck that ran alongside the build; static.complete stops it here.
-      { const stop = await precheckGate(); if (stop) return stop; }
+      // CX16 r4: only when the build did not accept a candidate. complete means the kernel refuses every op whole by its
+      // shape (or the job does not read), which a candidate the build accepted disproves: there the Studio step never waits.
+      if (!built?.args) { const stop = await precheckGate(); if (stop) return stop; }
       const deliverOnce = async (file, previous) => {
         // The refused task of the first try still holds the module: closed first (never an uncertain one).
         const held = previous?.outcome?.taskId;
@@ -1459,7 +1726,8 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
         kernelState = run?.envelope?.data && typeof run.envelope.data === 'object' ? run.envelope.data : null;
         afterApply(run, built, lane);
         if (proto) proto.deliverMs = Date.now() - begin;
-        return { run, outcome: deliverOutcome(run, { trackId: task.id, work: lane.work, job: file, taskId: input.resume, since, input, pendingContext:pendingContextFor(ctx,task,kernelState??findKernelTask(lane.work,{taskId:input.resume,job:file,since})) }) };
+        const producerModels = await o11ProducerModels(run, { digestOf: ctx.producerDigest, consumer: input.module });
+        return { run, outcome: deliverOutcome(run, { trackId: task.id, work: lane.work, job: file, taskId: input.resume, since, input, pendingContext:pendingContextFor(ctx,task,kernelState??findKernelTask(lane.work,{taskId:input.resume,job:file,since})), producerModels }) };
       };
       // Without a build phase (the module not open in a tab) the delivery builds itself: its refusal on a generated item
       // closes the refused task and delivers the degraded job once.
@@ -1479,7 +1747,12 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
     if (value === CLOSED) return value;
     // prazos B: the producers bound from their Studio tab, named in the answer (their references came from there).
     if (fromStudio.length && value && typeof value === 'object') value = { ...value, producersFromStudio: fromStudio };
-    if (precheck && !stoppedByPrecheck) { const pre = await precheck; if (pre?.carry) value = (await import('./ui-precheck.mjs')).joinPrecheck(value, pre); }
+    // CX16 r4 (M3): an accepted or uncertain delivery never waits for check-job (joinPrecheck would not change it).
+    if (precheck && !stoppedByPrecheck) {
+      const ui = await import('./ui-precheck.mjs');
+      if (!ui.waitsForPrecheck(value)) ui.settleLater(precheck, value);
+      else { const pre = await precheck; if (pre?.carry) value = ui.joinPrecheck(value, pre); }
+    }
     // data.bind (docs/PROTOTIPO-NATIVO.md 2.12): the proposals of PROTOTYPE_BINDING_REQUIRED as one strict patch and the corrected call
     if (proto && value?.code === 'PROTOTYPE_BINDING_REQUIRED') value = { ...value, ...bindingCorrection(value.problems, readJobDocument(named?.path)) };
     if (proto && value?.ok === true) value = await prototypeAnswer(value, proto, { kernelState, module: input.module ?? null });
@@ -1507,7 +1780,7 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
     }
     if (proto?.receipt && value && typeof value === 'object') value = { ...value, prototype: proto.receipt };
     // G16: the job is in the module now (a failed publication too: the delivery stands); it is never a base again.
-    if (value?.result === 'entregue' || value?.result === 'entregue e publicado') recordDelivered(lane, named, { module, taskId: kernelState?.taskId, at: ctx.now().toISOString() });
+    if (resultIs(value?.result, 'delivered', 'deliveredAndPublished')) recordDelivered(lane, named, { module, taskId: kernelState?.taskId, at: ctx.now().toISOString() });
     return withJobDone(value, named);
   } catch (error) {
     if (error instanceof Refusal) return withJob(refusal(error.code, error.message, error.continuation
@@ -1579,6 +1852,9 @@ export function registerO11Cycle(server, deps = {}) {
     // Lane wp: the build pool (build-pool.mjs sharedBuildPool when absent), the runner of a slot (its resident worker),
     // and the customer whose builds share the pool fairly (else SSAM_CUSTOMER, else the lane root).
     buildPool: deps.buildPool ?? null, buildRunner: deps.buildRunner ?? null, customer: deps.customer ?? null,
+    // CX16 r4 (M3): the runner of the UI precheck's check-job alongside the build (ui-precheck.mjs checkRunnerOf: with the
+    // worker on, a process of its own, never the worker the build and the delivery use); tests replace it.
+    checkRunner: deps.checkRunner ?? null,
     grants: deps.grants ?? standingGrants, grantsFile: deps.grantsFile,
     // Integration documents and destructive words (integration-documents.mjs, I6); exposedMethods(service, module) may
     // replace the capture-and-read of the current exposed methods.
@@ -1624,7 +1900,7 @@ export function registerO11Cycle(server, deps = {}) {
     description: 'Delivers a job to the module open in the Service Studio selected on the O11 lane: EVERY change of the request for this module in ONE job and one call (separate jobs only for different modules, never one action or step per call); deliver directly, with no separate proof (o11_job/ssam_job) '
       + 'or until=apply step first. It captures the module as it is now in the Studio, validates the candidate headless (TrueChange) '
       + 'before the native merge, merges once, then checks the new messages and the named checks. '
-      + 'Delivered: "entregue" with summary (each action with its inputs and outputs, each entity and structure with its attribute count: no map of the module is needed after it), plus leftovers, warnings, screenRoles and lastPublication when there is something to say; only errors and security warnings refuse. '
+      + 'Delivered: "delivered" with summary (each action with its inputs and outputs, each entity and structure with its attribute count: no map of the module is needed after it), plus leftovers, warnings, screenRoles and lastPublication when there is something to say; only errors and security warnings refuse. '
       + 'A refused job comes back ONCE, before any Studio write, with every problem of every phase over the live module (the job alone, the base, the apply, the Verify of '
       + 'the candidate): problems[] with phase, op, pointer, code, message, fix and the patch of each certain fix (identical ones grouped with their pointers), verifyRan, '
       + 'stage, taskId, job, jobSha256 and nextBasedOn (failedOp when the kernel names the op); nothing is delivered. Correct all of them in ONE call, never by rewriting '
@@ -1632,10 +1908,10 @@ export function registerO11Cycle(server, deps = {}) {
       + '= nextBasedOn (or {taskId}), or job with only the changed or new actions/entities plus basedOn (a partial job: same name replaces, new name is added; removal only by patch). '
       + 'Every answer names nextBasedOn {job, sha256} of the job it used. '
       + 'outcome "uncertain" is never repeated: follow continuation (resume reconciles the same task). A refused task that still holds the '
-      + 'module: deliver the corrected job with closePrevious, or close {taskId, reason} alone ("fechada"); an uncertain task is never closed '
+      + 'module: deliver the corrected job with closePrevious, or close {taskId, reason} alone ("closed"); an uncertain task is never closed '
       + 'here (ssam_task {id, close} closes it only with the proof that nothing was applied). '
-      + 'publish:true publishes the same module right after a clean merge (the o11_publish flow, same words or grant): "entregue e publicado"; '
-      + 'a failed publication answers result "entregue" with PUBLISH_FAILED|PUBLISH_UNCERTAIN and the o11_publish continuation, never a new delivery. '
+      + 'publish:true publishes the same module right after a clean merge (the o11_publish flow, same words or grant): "delivered and published"; '
+      + 'a failed publication answers result "delivered" with PUBLISH_FAILED|PUBLISH_UNCERTAIN and the o11_publish continuation, never a new delivery. '
       + 'Without publish nothing is published. Without authorize a standing grant (ssam_grant) of the module for deliver is used. Producers named by '
       + 'reference ops are captured read-only by name. Blocks until the CLI ends; ssam_task reads the task meanwhile. ' + PROTOTYPE_DELIVER_TEXT + ' ' + CODE_JOB_TEXT,
     inputSchema: deliverSchema, annotations: mutating,

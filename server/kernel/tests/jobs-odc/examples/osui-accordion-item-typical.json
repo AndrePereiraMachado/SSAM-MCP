@@ -1,5 +1,5 @@
 {
- "description": "AccordionItem do OSUI aberto de inicio, com icone PlusMinus a esquerda, desabilitado por variavel e OnToggle guardando o estado.",
+ "description": "AccordionItem of OSUI open from the start, with the PlusMinus icon on the left, disabled by a variable and OnToggle keeping the state.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

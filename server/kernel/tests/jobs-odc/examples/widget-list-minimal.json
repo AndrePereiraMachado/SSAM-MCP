@@ -1,5 +1,5 @@
 {
- "description": "List: um IList com Source no aggregate da tela e uma Expression por linha (List.Current).",
+ "description": "List: an IList with the Source on the aggregate of the screen and one Expression per row (List.Current).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -10,8 +10,8 @@
   {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$agg"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ProductList", "as": "$list"},
-  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List", "_why": "sem Source o Verify da RequiredPropertyValue"},
-  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$name", "_why": "o job escreve na List; no ODC o filho fica dentro do IContent dela"},
+  {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List", "_why": "without a Source the Verify gives RequiredPropertyValue"},
+  {"op": "create", "parent": "$list", "type": "IExpression", "as": "$name", "_why": "the job writes in the List; on ODC the child stays inside its IContent"},
   {"op": "set", "target": "$name", "prop": "Value", "value": "GetProducts.List.Current.Product.Name"}
  ]
 }

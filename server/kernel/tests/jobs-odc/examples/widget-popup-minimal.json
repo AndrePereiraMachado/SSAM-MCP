@@ -1,5 +1,5 @@
 {
- "description": "Popup: um IPopup aberto por uma variavel Boolean (ShowPopup) com um texto no Content.",
+ "description": "Popup: an IPopup opened by a Boolean variable (ShowPopup) with a text in the Content.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -9,7 +9,7 @@
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "IsPopupOpen", "as": "$open"},
   {"op": "set", "target": "$open", "prop": "DataType", "value": "Boolean"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IPopup", "name": "InfoPopup", "as": "$pop"},
-  {"op": "set", "target": "$pop", "prop": "ShowPopup", "value": "IsPopupOpen", "_why": "ShowPopup e obrigatorio: a expressao que abre o popup"},
+  {"op": "set", "target": "$pop", "prop": "ShowPopup", "value": "IsPopupOpen", "_why": "ShowPopup is required: the expression that opens the popup"},
   {"op": "create", "parent": "$pop/Content", "type": "IExpression", "as": "$text"},
   {"op": "set", "target": "$text", "prop": "Value", "value": "\"Free shipping on orders over $50\""}
  ]

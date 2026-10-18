@@ -17,6 +17,7 @@ import { o11LaneOf } from './o11-lane.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
 import { hostedContext, seamFields, usesWorkspace, workspacePath } from './executor.mjs';
 import { GUIDE_FILES, guideSections, guideText } from './runtime-guides.mjs';
+import { rulesAliasText, alignedAliases, jobSearchText, withoutProse } from './search-aliases.mjs';
 import { closest } from './tool-input.mjs';
 import { refusalFields } from './refusal-problems.mjs';
 import { resolvePatchedJob, jobIdentity, withNamedPatches } from './job-patch.mjs';
@@ -38,10 +39,10 @@ export const HOSTED_DECLARED_BASE_REASON = 'hosted SSAM server: the base this jo
   + 'your workspace), so only the job was read and the base check, the apply and the Verify did not run; studio_deliver (ODC) and o11_deliver (O11) '
   + 'check every phase over your live module, once, before any change';
 
-export const REFERENCE_KINDS = ['api', 'functions', 'ui-block', 'types', 'where-can', 'recipe', 'check-job', 'check-delivery', 'verify-message', 'example', 'rules'];
+export const REFERENCE_KINDS = ['api', 'functions', 'ui-block', 'types', 'where-can', 'recipe', 'check-job', 'check-delivery', 'verify-message', 'example', 'rules', 'tool'];
 // recipe and example on ODC are answered here from the suite files (no CLI): the ODC CLI has no recipe, and a session
 // that asked for one got KIND_NOT_IN_LANE (62a884e8, 2026-10-04 22:09). rules is the same text on both lanes.
-const ODC_KINDS = ['api', 'check-job', 'verify-message', 'recipe', 'example', 'rules'];
+const ODC_KINDS = ['api', 'check-job', 'verify-message', 'recipe', 'example', 'rules', 'tool'];
 const FILE_KINDS = ['example'];
 const UNCACHED = ['check-job', 'check-delivery'];
 // The ops `api --op` answers on both CLIs, each with the line an unknown op's candidate carries: CommandSurface.OperationNames
@@ -359,7 +360,9 @@ function exampleAnswer(root, lane, query, sized) {
         description = job.description ?? '';
       }
       if (e.kind === 'matrix') description = `coverage matrix of the ${lane} proven examples (${MATRIX_DOCS[lane]})`;
-      const text = fold(e.id + ' ' + description);
+      // F7 (review english-junction round 2): matched on the description the job had before the translation when it has one
+      // (search-aliases.mjs jobSearchText, the rule of every job search); the answer serves the English one.
+      const text = fold(e.id + ' ' + (e.kind === 'job' || e.kind === 'example' ? jobSearchText(root, e.id, 'description', description) : description));
       if (words.length && words.every(w => text.includes(w))) matches.push({ id: e.id, kind: e.kind, ...(description ? { description: description.slice(0, 300) } : {}) });
     }
     return { ok: true, lane, kind: 'example', find: q.find, count: matches.length, matches: matches.slice(0, FIND_CAP), ...(matches.length > FIND_CAP ? { more: matches.length - FIND_CAP } : {}),
@@ -388,7 +391,7 @@ function exampleAnswer(root, lane, query, sized) {
 }
 // ODC recipe: the suite jobs (tests/jobs-odc) whose name, description or ops hold every word, curated nothing; the same
 // fields as the O11 answer of the CLI (name, path, description, opCount, ops?).
-function odcRecipe(root, query) {
+export function odcRecipe(root, query) {
   const q = typeof query === 'string' ? { find: query } : query ?? {};
   const extra = Object.keys(q).filter(k => !['find', 'ops', 'max'].includes(k));
   if (extra.length) return unknownFields('odc', 'recipe', q, ['find', 'ops', 'max'], extra);
@@ -403,7 +406,11 @@ function odcRecipe(root, query) {
     try { text = fs.readFileSync(path.join(dir, f), 'utf8').replace(/^﻿/, ''); job = JSON.parse(text); } catch { continue; }
     const exact = name === q.find.trim();
     if (!exact && !jobOffered(job, q.find)) continue;
-    if (!exact && !(words.length && words.every(w => fold(name + ' ' + (job.description ?? '') + ' ' + text).includes(w)))) continue;
+    // Matched on the text the job had before 16/10, its Portuguese prose (search-aliases.mjs: search only) with the rest of
+    // the job, so the English prose never changes what a query finds; a job with no alias on its own text.
+    const alias = jobSearchText(root, 'jobs-odc/' + name, 'words', null);
+    const searched = alias != null ? name + ' ' + alias + ' ' + JSON.stringify(withoutProse(job)) : name + ' ' + (job.description ?? '') + ' ' + text;
+    if (!exact && !(words.length && words.every(w => fold(searched).includes(w)))) continue;
     const ops = Array.isArray(job.ops) ? job.ops : [];
     const take = Math.min(remaining, ops.length); remaining -= take;
     definitions.push({ name, path: 'tests/jobs-odc/' + f, description: job.description ?? '', opCount: ops.length, ...(q.ops === true ? { ops: ops.slice(0, take).map(({ _why, ...op }) => op), truncated: take < ops.length } : {}) });
@@ -414,31 +421,38 @@ function odcRecipe(root, query) {
 
 // ---- the owner's rules (kind rules): the files the team reads, served whole or by section, never the CLI. An app
 // session never reads a file (AGENTS.md), and one had to ask the user for an exception to read the team rules
-// (2026-10-06). doc "time" is docs/CONHECIMENTO-DO-TIME.md (its "## N." sections; a "### " lesson by the words of its
-// heading); doc "padroes" the 35 rules of OutSystems padrões. Same text on both lanes.
-const RULE_DOCS = { time: 'rules', padroes: 'padroes' };
+// (2026-10-06). doc "team" is docs/CONHECIMENTO-DO-TIME.md (its "## N." sections; a "### " lesson by the words of its
+// heading); doc "standards" the 35 rules of the OutSystems standards. Same text on both lanes. The Portuguese doc names
+// of the releases before 15/10/2026 ("time", "padroes") stay accepted as declared aliases (DOC_ALIASES); the answer
+// names the English doc.
+const RULE_DOCS = { team: 'rules', standards: 'standards', session: 'session' };
+const DOC_ALIASES = { time: 'team', padroes: 'standards' };
 const WHOLE = new Set(['all', 'tudo', 'todas', 'time', 'team', 'equipe']);
 const subsections = section => guideSections(section.text, 3).map(s => ({ section: section.id, title: s.title, text: s.text }));
 export function rulesAnswer(lane, query, { read = guideText } = {}) {
   const raw = typeof query === 'string' ? query.trim() : null;
-  const q = raw !== null ? (fold(raw) === 'padroes' ? { doc: 'padroes' } : WHOLE.has(fold(raw)) ? {} : { section: raw }) : query ?? {};
+  const q = raw !== null ? (['standards', 'padroes', 'session'].includes(fold(raw)) ? { doc: fold(raw) } : WHOLE.has(fold(raw)) ? {} : { section: raw }) : query ?? {};
   const extra = Object.keys(q).filter(k => !['doc', 'section'].includes(k));
-  if (extra.length) return unknownFields(lane, 'rules', q, ['doc', 'section'], extra, 'query: "all", a section ("1"), words of a heading or of the text, "padroes", or {doc, section}');
-  const doc = q.doc ?? 'time';
-  if (!Object.hasOwn(RULE_DOCS, doc)) return refusal('BAD_VALUE', 'doc is "time" (the team rules) or "padroes" (the 35 rules)', again(lane, 'rules', 'all', 'the whole team rules'));
+  if (extra.length) return unknownFields(lane, 'rules', q, ['doc', 'section'], extra, 'query: "all", a section ("1"), words of a heading or of the text, "standards", or {doc, section}');
+  const doc = (typeof q.doc === 'string' && Object.hasOwn(DOC_ALIASES, q.doc) ? DOC_ALIASES[q.doc] : q.doc) ?? 'team';
+  if (!Object.hasOwn(RULE_DOCS, doc)) return refusal('BAD_VALUE', 'doc is "team" (the team rules), "standards" (35 rules), or "session" (all session rules)', again(lane, 'rules', 'all', 'the whole team rules'));
   if (q.section !== undefined && !plain(q.section)) return refusal('BAD_VALUE', 'section: plain text', again(lane, 'rules', 'all', 'the whole document lists its sections'));
   const topic = RULE_DOCS[doc];
   const text = read(topic);
   const sections = guideSections(text);
   const index = sections.map(s => ({ id: s.id, title: s.title }));
-  const source = GUIDE_FILES[topic];
+  const source = GUIDE_FILES[topic] ?? 'generated:SESSION_RULES';
   if (q.section === undefined) return { ok: true, lane, kind: 'rules', doc, source, sections: index, text };
   const wanted = String(q.section).trim();
   const words = exampleWords(wanted);
-  const hit = s => s.id === wanted || (words.length > 0 && words.every(w => fold(s.title).includes(w)));
-  const found = sections.filter(hit);
+  // F2 (review english-junction): the words of the request also meet the Portuguese heading and text the release 8689de53
+  // served at the same place (search-aliases.mjs), search only: what is found and answered is the English unit.
+  const alias = alignedAliases(sections, rulesAliasText(topic), guideSections);
+  const says = text => words.length > 0 && words.every(w => fold(text).includes(w));
+  const hit = (s, a) => s.id === wanted || says(s.title) || (a != null && says(a.title));
+  const found = sections.filter((s, i) => hit(s, alias?.[i]));
   if (found.length) return { ok: true, lane, kind: 'rules', doc, source, sections: index, section: found.map(s => ({ id: s.id, title: s.title })), text: found.map(s => s.text).join('\n') };
-  const lessons = sections.flatMap(subsections).filter(hit);
+  const lessons = sections.flatMap((s, i) => subsections(s).map((l, j) => ({ l, a: alias?.[i]?.lessons?.[j] }))).filter(x => hit(x.l, x.a)).map(x => x.l);
   if (lessons.length) return { ok: true, lane, kind: 'rules', doc, source, sections: index, section: lessons.map(s => ({ id: s.section, title: s.title })), text: lessons.map(s => s.text).join('\n') };
   // G10 (call 66 of the FarmaVirtual session, 2026-10-10: "HTML" refused, while the lesson "Protótipo aprovado: portar 1:1"
   // says "a op `html`"): words that no heading has are looked up in the text, each section's own text (before its first
@@ -446,13 +460,65 @@ export function rulesAnswer(lane, query, { read = guideText } = {}) {
   // A number is a section id: one that no section has is refused, never looked up in the text ("10" and "2026" found the
   // dates of two lessons).
   if (/^\d+$/.test(wanted))
-    return refusal('RULES_SECTION_NOT_FOUND', `${source} has no section ${wanted} (sections: ${index.map(s => s.id).join(', ')})`, again(lane, 'rules', doc === 'time' ? 'all' : 'padroes', 'the whole document, with every section'), { sections: index });
-  const units = sections.flatMap(s => {
+    return refusal('RULES_SECTION_NOT_FOUND', `${source} has no section ${wanted} (sections: ${index.map(s => s.id).join(', ')})`, again(lane, 'rules', doc === 'team' ? 'all' : 'standards', 'the whole document, with every section'), { sections: index });
+  const units = sections.flatMap((s, i) => {
     const first = s.text.search(/^### /m);
-    return [{ section: s.id, title: s.title, text: first < 0 ? s.text : s.text.slice(0, first).replace(/\s+$/, '') + '\n' }, ...subsections(s)];
-  }).filter(s => words.length > 0 && words.every(w => fold(s.text).includes(w)));
+    const a = alias?.[i];
+    return [{ section: s.id, title: s.title, text: first < 0 ? s.text : s.text.slice(0, first).replace(/\s+$/, '') + '\n', alias: a?.own ?? null },
+      ...subsections(s).map((l, j) => ({ ...l, alias: a?.lessons?.[j]?.text ?? null }))];
+  }).filter(s => says(s.text) || (s.alias != null && says(s.alias))).map(({ alias: _alias, ...s }) => s);
   if (units.length) return { ok: true, lane, kind: 'rules', doc, source, sections: index, matchedIn: 'text', section: units.map(s => ({ id: s.section, title: s.title })), text: units.map(s => s.text).join('\n') };
-  return refusal('RULES_SECTION_NOT_FOUND', `no heading or text of ${source} has "${wanted}"`, again(lane, 'rules', doc === 'time' ? 'all' : 'padroes', 'the whole document, with every section'), { sections: index });
+  return refusal('RULES_SECTION_NOT_FOUND', `no heading or text of ${source} has "${wanted}"`, again(lane, 'rules', doc === 'team' ? 'all' : 'standards', 'the whole document, with every section'), { sections: index });
+}
+
+// ---- the reference a licensee is served (fix/no-internals, 17/10/2026): usage reference only, by the part asked.
+// - documents: the team rules by section (a whole-document request answers its list of sections, each with its size and
+//   its call), the standards and the session rules (usage rules a model writes by) whole; every other kind as before;
+// - the coverage matrix of the proven examples (levels, counts, what is pending) is not served: an example is asked by id
+//   or by what it shows ({find});
+// - one answer holds at most callBytes of rules text: a larger section answers its first lessons and names each other one
+//   with its call;
+// - the bytes a token is served per day (ssam.mjs, served-bytes.mjs) are limited in the hub, not here.
+// The owner's server answers as before.
+export const LICENSEE_REFERENCE = Object.freeze({ byPart: Object.freeze(['team']), callBytes: 16384, dayBytes: 262144 });
+// Round 2 (review MEDIUM 4): the matrix whatever form its id takes: the id as the resolver reads it (backslashes, a
+// prefix, .json, any case) and the file it resolves to.
+const MATRIX_NAME = /^(?:matriz|matrix|coverage-matrix)$/;
+const isMatrixId = id => MATRIX_NAME.test(String(id).trim().replaceAll('\\', '/').toLowerCase().replace(/\.json$/, '').split('/').filter(Boolean).at(-1) ?? '');
+export function licenseeReferenceRefusal(lane, kind, query, { root = null } = {}) {
+  const id = typeof query === 'string' ? query : typeof query?.id === 'string' ? query.id : null;
+  if (kind === 'example' && id !== null && (isMatrixId(id) || (root && resolveExample(root, lane, id)?.kind === 'matrix')))
+    return refusal('REFERENCE_NOT_SERVED', 'The coverage matrix of the proven examples is not served here. Ask an example by id, or by what it shows.',
+      again(lane, 'example', { find: '<widget, pattern or capability>' }, 'the proven examples whose name or description hold every word'));
+  return null;
+}
+export function licenseeReferenceAnswer(lane, kind, query, answer, { callBytes = LICENSEE_REFERENCE.callBytes } = {}) {
+  // a find never lists the matrix
+  if (kind === 'example' && answer?.ok === true && Array.isArray(answer.matches) && answer.matches.some(m => m?.kind === 'matrix' || isMatrixId(m?.id ?? ''))) {
+    const matches = answer.matches.filter(m => m?.kind !== 'matrix' && !isMatrixId(m?.id ?? ''));
+    return { ...answer, count: matches.length, matches, continuation: { ...answer.continuation, arguments: { lane, kind: 'example', query: { id: matches[0]?.id ?? '<id>' } } } };
+  }
+  if (kind !== 'rules' || answer?.ok !== true || typeof answer.text !== 'string') return answer;
+  const bytes = text => Buffer.byteLength(text, 'utf8');
+  const doc = answer.doc;
+  const sectionCall = title => again(lane, 'rules', { doc, section: title }, 'this part of the ' + doc + ' rules');
+  if (answer.section === undefined && LICENSEE_REFERENCE.byPart.includes(doc)) {
+    const sections = guideSections(answer.text).map(s => ({ id: s.id, title: s.title, bytes: bytes(s.text), call: sectionCall(s.id) }));
+    return { ok: true, lane, kind, doc, byPart: true, sections, note: 'The ' + doc + ' rules are answered one section at a time: call the section the task needs.' };
+  }
+  if (bytes(answer.text) <= callBytes) return answer;
+  // Lessons (### headings) as units, else paragraphs; the first ones that fit, then each other one with its call.
+  const lessons = answer.text.split(/(?=^### )/m);
+  const units = lessons.length > 1 ? lessons : answer.text.split(/(?<=\n)\s*\n/);
+  let text = ''; const rest = [];
+  for (const unit of units) {
+    if (!rest.length && bytes(text + unit) <= callBytes) { text += unit; continue; }
+    const title = /^### (.+)$/m.exec(unit)?.[1]?.trim();
+    rest.push(title ? { title, call: sectionCall(title) } : { bytes: bytes(unit) });
+  }
+  const named = rest.filter(r => r.title);
+  return { ...answer, text, cut: { bytes: bytes(answer.text) - bytes(text), parts: named.length ? named : undefined,
+    note: named.length ? 'Each other lesson of this section answers by its call.' : 'The rest of this section answers to the words of the part you need: {doc, section:"<words>"}.' } };
 }
 
 // ---- functions with several names (2026-10-12: "GetUserId CurrDateTime AddMinutes ..." in one query answered notFound for
@@ -722,6 +788,12 @@ export function registerSsamReference(server, deps = {}) {
   }
 
   async function reference({ lane, kind, query }) {
+    if (kind === 'tool') {
+      if (typeof query !== 'string' || !query.trim()) return refusal('BAD_VALUE', 'tool query is the exact tool name', again(lane, 'tool', '<tool>', 'the complete original tool description and schema'));
+      const definition = await deps.toolDetails?.(query.trim());
+      return definition ? { ok: true, lane, kind, schemaVersion: 'ssam-tool-definition/1', query: query.trim(), definition }
+        : refusal('TOOL_NOT_AVAILABLE', 'This server does not serve ' + query.trim(), { tool: 'ssam_doctor', arguments: {}, why: 'Confirm the server profile; connect ssam for app tools or ssam-debug for debugging.' });
+    }
     // The code parts of ssam_code (ddl, logic, html; also flow and the ssam-* form names): their grammar card, from any kind.
     const part = codePartOf(kind, query);
     if (part) return { ...grammarCard(part === 'all' ? null : part, lane), kind, query,
@@ -829,7 +901,7 @@ export function registerSsamReference(server, deps = {}) {
 
   server.registerTool('ssam_reference', {
     title: 'Kernel references: Model API, functions, UI blocks, types, recipes, proven examples, Verify messages, job and delivery checks, team rules',
-    description: 'Read-only lookups answered by the lane\'s own CLI; prefer them to reading kernel source code or docs. query is text or an object per kind: api "IForEachNode" | {name, catalog?} | '
+    description: 'tool query <tool>: the exact original tool description and input schema; rules query session: every session rule. Read-only lookups answered by the lane\'s own CLI; prefer them to reading kernel source code or docs. query is text or an object per kind: api "IForEachNode" | {name, catalog?} | '
       + '{op, name?} (a grammar such as logic, or a job verb such as create: its line; name: that key of it, else the ops that have it) | {op:"native", type}; functions "Name" | "Name1 Name2 ..." (up to 40 names in ONE call: each signature, and the closest names of a name that does not exist) | {name}|{names:[...]}|{find}; ui-block "Block" | {catalog?, name}|{catalog?, find} (catalog: '
       + 'library name such as OutSystemsUI, default OutSystemsUI); types {assembly, filter, max?}; where-can "IInterface"; recipe "text" | '
       + '{find, ops?, max?} (ops without max: 20); verify-message "Id" | {name}|{find}; check-job: absolute path or the job object itself (stored under '
@@ -837,8 +909,8 @@ export function registerSsamReference(server, deps = {}) {
       + 'a job that names its base is checked over it, every phase at once as a delivery refuses (problems[] with phase, '
       + 'pointer, fix, patch, patchByName; verifyRan), one without base is read alone (verifyRan:false); check-delivery: {taskId} of an o11_deliver answer, or the absolute path of its result.json; an unknown query field answers the closest valid form; example "<id>" | {id}|{find}: a whole proven '
       + 'example by id (a job of the lane suite, e.g. "timer-action", or an html source, e.g. "html/visual/block-event.html"); '
-      + 'rules "all" | "<section number, words of a heading or of the text>" | "padroes" | {doc?: "time"|"padroes", section?}: the team rules to read '
-      + 'before generating or changing modules (how to work, standards, platform lessons; padroes: the 35 OutSystems padrões rules), '
+      + 'rules "all" | "<section number, words of a heading or of the text>" | "standards" | {doc?: "team"|"standards", section?}: the team rules to read '
+      + 'before generating or changing modules (how to work, standards, platform lessons; standards: the 35 OutSystems standards rules), '
       + 'the same text on both lanes. Lane odc answers api (a name is described by op native), check-job, verify-message, recipe, '
       + 'example and rules. Static answers are cached for the session. The module as code (ssam_code: parts ddl, logic, html): '
       + 'api {op:"ddl"|"flow"|"ssam-html"|"code"} or a query naming ssam_code, ssam-text or the DDL answers the ssam_code grammar card '
@@ -850,7 +922,12 @@ export function registerSsamReference(server, deps = {}) {
     }).strict(),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async input => {
-    try { return reply(await reference(input)); }
+    try {
+      if (deps.exposure !== 'licensee') return reply(await reference(input));
+      // fix/no-internals: a licensee is served usage reference only, by part (licenseeReferenceAnswer above).
+      const refused = licenseeReferenceRefusal(input.lane, input.kind, input.query, { root });
+      return reply(refused ?? licenseeReferenceAnswer(input.lane, input.kind, input.query, await reference(input), { callBytes: deps.callBytes }));
+    }
     catch (error) { return reply({ ok: false, ...seamFields(error), error: firstLine(error.message) }); }
   });
 }

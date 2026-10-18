@@ -9,6 +9,7 @@
 //     that is not an array is refused, and a basedOn {taskId} whose job the gate cannot read is refused;
 //   - control: the explicit patch is still checked (the same ops are refused), and a legitimate one reaches the handler.
 // A fake link, context and executor; no hub, agent, kernel or Studio.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

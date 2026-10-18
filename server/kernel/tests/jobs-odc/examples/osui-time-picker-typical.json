@@ -1,5 +1,5 @@
 {
- "description": "TimePicker do OSUI: formato 24h, hora inicial e o OnSelected grava a hora e mostra a janela de retirada.",
+ "description": "TimePicker of OSUI: the 24h format, a starting time and OnSelected saves the time and shows the pickup window.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {assetHash} from '../debug-odc-native-assets.mjs';
 import {odcDocumentStyles,acquireOdcDocumentStyles,pinnedOdcDocumentStyles} from '../debug-odc-browser-styles.mjs';

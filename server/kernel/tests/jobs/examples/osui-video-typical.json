@@ -1,5 +1,5 @@
 {
- "description": "Video (OutSystemsUI, Interaction) tipico; inputs obrigatorios URL ligados a variaveis da tela; eventos StateChanged, Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "description": "Typical Video (OutSystemsUI, Interaction); required inputs URL bound to screen variables; events StateChanged, Initialized handled by screen actions that keep the parameters in variables.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

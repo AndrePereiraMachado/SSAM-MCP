@@ -26,6 +26,7 @@ public static partial class ScreenDocument
     public const string OpaqueTouched = "HTML_OPAQUE_TOUCHED";
     public const string RootExists = "HTML_ROOT_EXISTS";
     public const string Traditional = "HTML_TRADITIONAL";
+    public const string DefaultsMissing = "HTML_STUDIO_DEFAULTS";
 
     private static readonly Regex Leading = new(@"^\s*(?:<!--.*?-->\s*)*<(screen|block)[\s/>]", RegexOptions.Singleline | RegexOptions.Compiled);
 
@@ -38,7 +39,7 @@ public static partial class ScreenDocument
     {
         ["form"] = "data.html that starts with <screen name=\"...\"> or <block name=\"...\">: one whole new screen or block in ssam-html/1, the text ssam_map view html reads; no parent",
         ["root"] = "<screen name flow? title roles actions data-actions description os-*> or <block name ...>; flow defaults to the module's one UI flow (or MainFlow); the content goes inside the layout block: <Block name=\"LayoutTopMenu\"><slot name=\"MainContent\">...</slot></Block>",
-        ["data"] = "<input name type default/>, <var name type default/>, <aggregate name from=\"Entity\" join=\"Other on <condition>; ...\" where=\"<condition>\" sort=\"Entity.Attr desc, ...\" max=\"50\"/> (or the long form the reading writes: os-AliasedSource, os-Join, os-Filter, os-Sort), <event name> in a block; types by name (Text, Pedido Identifier, Pedido List)",
+        ["data"] = "<input name type default/>, <var name type default/>, <aggregate name from=\"Entity\" join=\"Other on <condition>; ...\" where=\"<condition>\" sort=\"Entity.Attr desc, ...\" max=\"50\"/> (or the long form the reading writes: os-AliasedSource, os-Join, os-Filter, os-Sort), <event name> in a block; types by name (Text, Order Identifier, Order List); an <input> or <event> without mandatory is optional, whatever the Studio gives a fresh one: mandatory=\"True\" makes it mandatory; a join is a left join (os-JoinType for another)",
         ["widgets"] = "the reading's table (ScreenHtml.Contract().elements): div, form, a, button, input, textarea, select (empty, options, value, label), radio-group, switch, button-group/button-group-item, label (for), img (src), i (icon), upload, popup, <x list=\"Source\">, <div if> + <div else>, <Block name :Input @Event> + <slot name>, {{ expression }}, text; any other tag of the platform is an HTML Element; os-<Property> for any other property",
         ["events"] = "on<event>=\"Destination(Param = expression, ...)\" or Destination(expression, ...) by position over its inputs: onclick, onchange, onready... and HTML events (onblur, onkeypress) of an HTML Element or a Container; @Event on a <Block>; os-on<event>.<Property>",
         ["actions"] = "actions=\"A, B\" names the screen actions; a logic op of the same job, after this op, declares each one (a flow text \"action <Name>.A\", or kind screen with owner IMobileScreen:<Name>): born before the content so the events bind, filled in place; data-actions=\"D\" with \"data action <Name>.D\" (or kind data)",
@@ -47,6 +48,8 @@ public static partial class ScreenDocument
         ["bindings"] = "a line of text with bindings (\"Hoje · {{ X }}\", \"{{ N }} dias\") is one Expression, their concatenation (\"Hoje · \" + X), read back as {{ \"Hoje · \" + X }}; an attribute the same (class=\"a {{ X }}\"); a {{ that never closes, a }} with no {{ and {{ }} are refused (literal braces go in <text>)",
         ["checks"] = "before the op answers, the model it wrote is read again: the style sheet is the CSS of the document, no text keeps {{ or }}, no new Expression is empty (else nothing is written, one refusal); a class no rule defines (the page's CSS, the module themes, OutSystems UI) is the warning HTML_CLASS_NO_RULE, with the patch that puts another document's <style> in the theme when it has them",
         ["native"] = "what has one native reading is written in it and listed in normalized: an inline <svg> in currentColor or one color (nothing written is the SVG's black, #000) is a span.ssam-icon with its mask class (the rule in the page's style sheet; the svg and span selectors widened to it), any other svg (two colors, currentColor beside a color: noted, it is black in an image) the External image of its markup, a <use> of an element of the page copied in; <img src> with a URL with its scheme, a data URL or an absolute path is the External image of that Url, a file name (logo.png) the module image of its base name, a {{ }} by its type (Binary Data: Type Binary with that content; a text: External); style with a binding on a widget is the attribute style (ext:style); a constant binding in a property that takes a literal is the literal; an inline number with a fraction is calc(n) (the runtime keeps it); the whitespace beside an inline element on its line is kept; an event inside a Popup is at the Popup's Transition (Fade)",
+        // CX17: the DOM the runtime publishes per tag, generated from the runtime table and the class decisions (ScreenVisual).
+        ["runtime"] = ScreenVisual.RuntimeContract(MessageExpectations.Lane),
         ["refusals"] = new JsonObject
         {
             [StyleUnplaced] = "a <style> that cannot go to the style sheet as written (media, an unknown scope, another attribute): media gets the patch that moves its CSS to data.css as its @media block",
@@ -72,6 +75,8 @@ public static partial class ScreenDocument
             [KeyForeign] = "k on an element that is not of the reading basedOn names",
             [OpaqueTouched] = "<os-opaque> outside a reading",
             [Traditional] = "a Traditional Web flow (D2)",
+            [ScreenVisual.ReservedMarker] = "data-ssam-gap, data-ssam-page or data-ssam-rows (any case, ext: too) on an element: the markers of the theme's native layout block are written only by the html op, on the elements it creates; the patch removes it (an element with k may carry the one its reading had, and the engine decides its markers again where it is now, HTML_MARKER_DECIDED; a block never carries data-ssam-page)",
+            [ScreenVisual.BlockPagesDiverge] = "a link, button or form of a block whose pages show themes of this module that space its parent differently (one gap, the other none): one marker of the native layout block cannot be right on both; give the parent its space in the block's own <style>",
         },
         ["kept"] = "an element with k of a reading (basedOn {capture, html}) keeps its Visible, JavaScript and JSON: listed in preserved[], never refused",
         ["once"] = "every problem of the document comes in one refusal, each with its line and column",
@@ -251,9 +256,16 @@ public static partial class ScreenDocument
     internal static bool VisibleInAnotherCase(string name) => name != "os-Visible" && name.Equals("os-Visible", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The checks of one element that need no module: the rules on what is new. <paramref name="read"/>: the element
-    /// carries the k of the reading the document is based on (it exists, so what it has is kept and listed).</summary>
-    internal static IEnumerable<Problem> RuleProblems(ScreenHtml.Node node, bool read, Action<string, string>? keep)
+    /// carries the k of the reading the document is based on (it exists, so what it has is kept and listed).
+    /// <paramref name="readNode"/>: that element as the reading wrote it, when the reading's text is at hand (else the element is
+    /// its own reading). <paramref name="block"/>: the document is a block.</summary>
+    internal static IEnumerable<Problem> RuleProblems(ScreenHtml.Node node, bool read, Action<string, string>? keep, ScreenHtml.Node? readNode = null, bool block = false)
     {
+        // Review 2, M4: the markers of the native layout block are the engine's (ScreenVisual.AuthorMarkers, the one rule of the
+        // three text forms); an element of the reading keeps the one it was read with.
+        foreach (var (attribute, value, restore) in ScreenVisual.AuthorMarkers(node, read ? readNode ?? node : null, block))
+            yield return new(ScreenVisual.ReservedMarker, node.Line, node.Column, ScreenVisual.ReservedMarkerMessage(attribute, value, block, read),
+                ScreenVisual.ReservedMarkerFix(attribute, restore), Correct: restore != null ? new SetAttribute(attribute, restore) : new RemoveAttribute(attribute));
         if (node.Tag == "script")
         {
             yield return new(Script, node.Line, node.Column, $"<script> is not compiled (L5: no new JavaScript in a page)",
@@ -402,7 +414,7 @@ public static partial class ScreenDocument
                 if (top.Get("name") is not { Length: > 0 } name || !ScreenHtml.IsIdentifier(name))
                     problems.Add(new(Invalid, top.Line, top.Column, $"<{top.Tag}> needs name=\"<Name>\" (letters, digits and _)", null));
                 foreach (var node in Descendants(top))
-                    problems.AddRange(RuleProblems(node, node.Get("k") != null, null));
+                    problems.AddRange(RuleProblems(node, node.Get("k") != null, null, block: top.Tag == "block"));
                 problems.AddRange(FidelityProblems(top, css, null));
             }
         }
@@ -513,7 +525,7 @@ public static partial class ScreenDocument
         var allowed = problems.Where(p => p.Correction == null).Select(p => p.Code + "\u0001" + p.Message).ToList();
         var top = document.Children.FirstOrDefault(c => !c.IsText && c.Tag is "screen" or "block");
         var fidelity = top == null ? [] : FidelityProblems(top, css, null);
-        return Descendants(document).SelectMany(node => RuleProblems(node, node.Get("k") != null, null)).Concat(fidelity).Where(p => p.Correction != null)
+        return Descendants(document).SelectMany(node => RuleProblems(node, node.Get("k") != null, null, block: top?.Tag == "block")).Concat(fidelity).Where(p => p.Correction != null)
             .All(p => allowed.Remove(p.Code + "\u0001" + p.Message));
     }
 

@@ -1,6 +1,7 @@
 // External Library pieces of the portal runtime (lane extlib), pure and offline: the uploaders (the PUT never carries
 // an Authorization, a redirect is never followed, no URL ever comes back), the bridge's portal-upload answers mapped to
 // the receipt states, the plan-versus-generation comparison, the breaking changes, the tag and the derived step UUIDs.
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

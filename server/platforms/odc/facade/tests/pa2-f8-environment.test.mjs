@@ -4,12 +4,14 @@
 // modules with BLANK_UI_MODULE before the CLI, and the receipt lists the template, LayoutBlank and Content per module.
 // I7: downloadModule, the published OML of one module for F4's reads, in <lane.local>/environment/download/<time>.
 // The CLI is always a fake; nothing live.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { registerO11Environment, downloadModule, validateEnvironmentInput, BLANK_UI_KINDS } from '../o11-environment.mjs';
 import { fakeAnvil } from './fixtures/fake-anvil.mjs';
+import { WORDS_ECHO } from '../destructive-operations.mjs';
 import { envelopes, tempKernel, linked, outOf } from './fixtures/o11env-kernel.mjs';
 
 const WORDS = 'Sim, pode criar o app Cardapio';
@@ -40,7 +42,15 @@ test('A16: blank:true with a Reactive, Traditional or Mobile module is BLANK_UI_
     assert.deepEqual(value.modules, input.modules.filter(m => BLANK_UI_KINDS.includes(m.kind)).map(m => m.name));
     // The continuation is the same call without blank.
     const { blank, ...same } = input;
-    assert.deepEqual(value.continuation, { tool: 'o11_environment', arguments: same, why: 'omit blank: UI modules come from the application template' });
+    // CX15 r6 (M-1, the r5 conversion made honest): the continuation is the same call with the words marker in authorize, and
+    // it says the owner must fill it; replayed as it is it never runs (WORDS_REQUIRED, the CLI never called).
+    assert.deepEqual(value.continuation.arguments, { ...same, authorize: WORDS_ECHO });
+    const replayed = await h.call('o11_environment', value.continuation.arguments);
+    assert.equal(replayed.code, 'WORDS_REQUIRED', JSON.stringify(replayed).slice(0, 300)); assert.equal(h.run.calls.length, 0, 'the replay reached nothing');
+    assert.deepEqual(value.continuation, { tool: 'o11_environment', arguments: { ...same, authorize: WORDS_ECHO },
+      // CX15 r7 (L-8, converted): the texts in English, the suffix after '; '.
+      why: 'omit blank: UI modules come from the application template; authorize: the owner\'s own words in place of the marker',
+      askOwner: { fields: ['authorize'], say: 'ask the owner for his own words, verbatim; the server never repeats them' } });
     assert.match(value.error, /Service and Library/);
   }
   assert.equal(h.run.calls.length, 0, 'nothing reached the CLI');

@@ -9,6 +9,7 @@
 //     action capability, with the unproven branch insertion stated rather than claimed;
 //  3. one --expand of logic.flow recovers operations+native+evidence at the default expansion budget.
 // Needs the lane CLIs built (the index is built from them); skips otherwise.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';

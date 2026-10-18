@@ -1,5 +1,5 @@
 {
- "description": "Spec de LOGICA (op logic): as 4 service actions do app de tickets escritas de forma declarativa (call + assign), mais uma server action que usa todas as formas de passo: get com where/sort, if com raise, foreach com assign e save, assign final. E o mesmo resultado de tickets-08-services.json (escrito verbo a verbo) com 1/5 do texto.",
+ "description": "LOGIC spec (logic op): the 4 service actions of the tickets app written declaratively (call + assign), plus a server action that uses every step form: get with where/sort, if with raise, foreach with assign and save, final assign. It is the same result as tickets-08-services.json (written verb by verb) with 1/5 of the text.",
  "base": "job:tickets-07-read",
  "expectValid": true,
  "ops": [

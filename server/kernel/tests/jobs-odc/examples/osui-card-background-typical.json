@@ -1,5 +1,5 @@
 {
- "description": "CardBackground do OSUI: cor de fundo, altura minima, imagem externa no BackgroundImage e texto do destaque ligado a uma variavel.",
+ "description": "CardBackground of OSUI: background color, minimum height, an external image in BackgroundImage and the highlight text bound to a variable.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {prepareTimerWake, timerWakeInput} from '../runtime/portal-timer.mjs';

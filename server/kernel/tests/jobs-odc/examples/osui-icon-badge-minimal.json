@@ -1,5 +1,5 @@
 {
- "description": "IconBadge do OSUI: o input obrigatorio Number e um icone no placeholder Icon.",
+ "description": "IconBadge of OSUI: the required input Number and an icon in the Icon placeholder.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

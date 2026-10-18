@@ -1,17 +1,17 @@
 {
- "description": "Sessao fria H: refatoracao sobre screen-form-reactive. usages de Contact e Email; rename Email->EmailAddress e Contact_Save->Contact_Upsert; delete seguro de Phone (widget primeiro, atributo depois); novo atributo IsActive (Boolean, default True) + Switch na tela ContactDetail; get/dump para confirmar tela e action validas (escrito por uma LLM sem contexto na sessao fria H, rodada 2, 2026-09-04)",
+ "description": "Cold session H: refactor over screen-form-reactive. usages of Contact and Email; rename Email->EmailAddress and Contact_Save->Contact_Upsert; safe delete of Phone (widget first, attribute afterwards); new attribute IsActive (Boolean, default True) + Switch on the ContactDetail screen; get/dump to confirm the screen and the action are valid (written by an LLM without context in cold session H, round 2, 2026-09-04)",
  "base": "job:screen-form-reactive",
  "expectValid": true,
  "ops": [
   {
    "op": "usages",
    "target": "IServerEntity:Contact",
-   "_why": "(1) quem usa a entidade Contact, antes"
+   "_why": "(1) who uses the entity Contact, before"
   },
   {
    "op": "usages",
    "target": "IServerEntity:Contact/Email",
-   "_why": "(1) quem usa o atributo Email, antes"
+   "_why": "(1) who uses the attribute Email, before"
   },
   {
    "op": "rename",
@@ -21,7 +21,7 @@
   {
    "op": "usages",
    "target": "IServerEntity:Contact/EmailAddress",
-   "_why": "(2) confirmar que os usos seguiram o rename"
+   "_why": "(2) confirm that the usages followed the rename"
   },
   {
    "op": "rename",
@@ -31,17 +31,17 @@
   {
    "op": "get",
    "target": "IScreenAction:Save/Contact_Upsert",
-   "_why": "(2) o Execute da screen action aponta para a action renomeada"
+   "_why": "(2) the Execute of the screen action points to the renamed action"
   },
   {
    "op": "usages",
    "target": "IServerEntity:Contact/Phone",
-   "_why": "(3) ver quem usa Phone antes de apagar"
+   "_why": "(3) see who uses Phone before deleting"
   },
   {
    "op": "delete",
    "target": "IMobileScreen:ContactDetail/#IMobileBlockInstanceWidget/MainContent/ContactForm/Phone_Input",
-   "_why": "(3) primeiro o consumidor (input da tela), depois o atributo"
+   "_why": "(3) first the consumer (screen input), then the attribute"
   },
   {
    "op": "delete",
@@ -82,7 +82,7 @@
   {
    "op": "usages",
    "target": "IServerEntity:Contact",
-   "_why": "(1)/(5) quem usa a entidade Contact, depois"
+   "_why": "(1)/(5) who uses the entity Contact, after"
   },
   {
    "op": "usages",

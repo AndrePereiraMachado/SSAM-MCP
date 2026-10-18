@@ -1,10 +1,11 @@
 // hosted/evidence.mjs (docs/O11-BRIDGE-FINA.md 7.2): the set of ODC suite jobs that run on a customer capture (a fixture
 // of fixtures.excluded in scripts/release/client-content.json; the lane runs on the anonymized insurance-reactive-r8.oml) (directly, through job:<name>, or with no declared base) or whose text names a client of
 // scripts/release/client-content.json, over a temporary catalog and over the real one, and the scrub of a hosted
-// answer: their evidence leaves lists, becomes null as a field value, the capture's name becomes '<fixture omitida>',
+// answer: their evidence leaves lists, becomes null as a field value, the capture's name becomes '<fixture omitted>',
 // hostedEvidenceOmitted counts what left, a discover answer stops offering the examples taken out and, with clientText,
 // loses every client name. The real discover answers of several intents, scrubbed, carry no client text. No Studio, no
 // server.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -144,7 +145,7 @@ test('scrubEvidence without evidence adds nothing; a text-only answer only gets 
   assert.deepEqual(list.structuredContent, ['other'], 'a list answer is cleaned; the count goes only on an object');
 });
 
-test('scrubEvidence with clientText: every client name of the list becomes <cliente omitido> (texts, keys, prose); without it the customer data stays', () => {
+test('scrubEvidence with clientText: every client name of the list becomes <customer omitted> (texts, keys, prose); without it the customer data stays', () => {
   const jobs = new Set();
   const answer = { ok: true, limits: [{ text: 'A real FloodQuotes DEV login read four role claims' }, { title: 'Download de assets ODC por bridge (tenant unimedpoa)' }],
     note: 'base tests/fixtures/odc/wrightflood-personal-r8.oml; medido no WrightFlood e no Wright-Flood', byHost: { 'personal-nv0s5uly.outsystems.dev': 1 } };

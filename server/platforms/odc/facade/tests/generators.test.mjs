@@ -4,6 +4,7 @@
 // The gate (owner rule 2026-10-13, "a generator only enters if it passes an independent BLIND TEST"): each generator has its
 // state in GENERATOR_APPROVAL; only an approved one is offered (packet, text section, grammar, catalog). The offers below
 // run under withGeneratorStates (all approved); the pending tests read the declared table.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

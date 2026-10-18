@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {readOdcControllerDispatchSource} from '../debug-odc-controller-dispatch-source.mjs';
 const controller={baseMember:'BaseModuleController',overriddenDispatch:[],baseImport:{file:'_oschunk-SDK.js',exported:'I'}};

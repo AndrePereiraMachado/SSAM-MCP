@@ -19,6 +19,7 @@
 // <ws>/state/grants/standing-grants.json, outside the area tools read back (state/ is internal). One customer's grant never
 // authorizes another customer or the owner, and the owner's grants never authorize a customer. A served process without a
 // hosted context fails closed (HOSTED_CONTEXT_LOST) instead of reading the owner's file.
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -33,7 +34,7 @@ const sha256 = text => createHash('sha256').update(String(text), 'utf8').digest(
 const iso = now => (typeof now === 'function' ? now() : now ?? new Date()).toISOString();
 const squash = name => String(name ?? '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 const sameName = (a, b) => squash(a) !== '' && squash(a) === squash(b);
-const placeholder = words => /^<[^>]*>$/.test(String(words ?? '').trim());
+const placeholder = words => !wordsGiven(words); // CX15 r7 (L-7): one predicate
 
 export function grantsFile(root = workspaceRoot) {
   return usesWorkspace(root, workspaceRoot) ? workspacePath('state', 'grants', 'standing-grants.json') : path.join(root, '.local', 'grants', 'standing-grants.json');
@@ -77,7 +78,7 @@ export function addGrant({ lane, app, modules = '*', verbs = GRANT_VERBS, words 
   if (!scope) return invalid('modules is "*" or a non-empty list of module names');
   const granted = Array.isArray(verbs) && verbs.length ? [...new Set(verbs)] : null;
   if (!granted || granted.some(v => !GRANT_VERBS.includes(v))) return invalid('verbs is a non-empty list of ' + GRANT_VERBS.join(', '));
-  if (typeof words !== 'string' || !words.trim() || placeholder(words)) return invalid('words: the user\'s own words, verbatim');
+  if (!wordsGiven(words)) return invalid('words: the user\'s own words, verbatim');
   if (!namesApp(words, app)) return { ok: false, code: 'GRANT_WORDS_MUST_NAME_APP', error: 'The user\'s words must name the app "' + app.trim() + '" as written.' };
   const target = fileOf({ file });
   const document = read(target);

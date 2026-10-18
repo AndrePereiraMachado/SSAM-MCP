@@ -1,5 +1,5 @@
 {
- "description": "Hire: 65 entidades de recrutamento e 46 static entities; dados, FKs, defaults e auditoria. Sem actions ou publicação.",
+ "description": "Hire: 65 recruitment entities and 46 static entities; data, FKs, defaults and audit. No actions or publishing.",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "expectedMessages": [],

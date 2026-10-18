@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';import fs from 'node:fs';import path from 'node:path';import {createHash} from 'node:crypto';
 import {installOdcBrowserAssets,odcDocumentRoute,planOdcBrowserAssets} from '../debug-odc-native-browser-assets.mjs';

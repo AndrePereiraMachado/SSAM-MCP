@@ -39,7 +39,7 @@ export function outcomes(value) {
     if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1); return; }
     if (typeof v !== 'object') return;
     if (v.outcome === 'refused') found.push({ kind: 'refused', code: v.code ?? 'UNKNOWN', problems: [...new Set([...(String(v.error ?? '').matchAll(/\[([A-Z][A-Z0-9_]*)\]/g))].map(x => x[1]).concat((v.problems ?? []).map(x => x.code).filter(Boolean)))] });
-    if (v.ok === true && ['entregue', 'entregue e publicado', 'delivered'].includes(v.outcome ?? v.result)) found.push({ kind: 'accepted' });
+    if (v.ok === true && ['entregue', 'entregue e publicado', 'delivered', 'delivered and published'].includes(v.outcome ?? v.result)) found.push({ kind: 'accepted' });
     for (const [key, x] of Object.entries(v)) if (!['error', 'problems'].includes(key)) walk(x, depth + 1);
   }
   walk(value); return found;

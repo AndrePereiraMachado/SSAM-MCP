@@ -79,7 +79,7 @@ function shapes(root){
     {name:'o11_data corrected request.authorization',tool:'o11_data',config:write,handler:async()=>inputInvalidAnswer('o11_data',[{path:'/request/entity',message:'synthetic'}],{request:{op:'insert',entity:'<entity>',authorization:WORDS_MARKER}},{fixed:true}),args:{request:{op:'insert'}}},
     {name:'o11_extension repeat.words and continuation words',tool:'o11_extension',config:write,handler:async()=>reply({ok:false,code:'WORDS_REQUIRED',error:'synthetic',repeat:{action:'publish',host:'h',specFile:'C:/x.json',words:"<the user's words naming SynthExt>"},continuation:{tool:'o11_extension',arguments:{action:'publish',host:'h',spec:'<this spec, changed>',words:"<the user's words naming SynthExt>"},why:'synthetic'}}),args:{action:'publish',host:'h',specFile:'C:/x.json'}},
     {name:'debugger needs.words and credentials.outcome',tool:'ssam_debug_run',config:write,handler:async()=>reply({ok:true,state:'prepared',needs:{loginWindow:false,words:true},credentials:{outcome:'not-requested'}}),args:{op:'prepare',target:'synthetic'}},
-    {name:'delivery authorization field',tool:'studio_deliver',config:write,handler:async()=>reply({ok:true,result:'entregue',authorization:{kind:'standing-grant',grant:'synthetic-grant-id'}}),args:{module:'Synth',job:'C:/j.json'}},
+    {name:'delivery authorization field',tool:'studio_deliver',config:write,handler:async()=>reply({ok:true,result:'delivered',authorization:{kind:'standing-grant',grant:'synthetic-grant-id'}}),args:{module:'Synth',job:'C:/j.json'}},
     {name:'o11_deliver authorize marker',tool:'o11_deliver',config:write,handler:async()=>reply({ok:false,code:'WORDS_REQUIRED',continuation:{tool:'o11_deliver',arguments:{module:'M',authorize:WORDS_MARKER}}}),args:{module:'M'}},
   ];
 }
@@ -153,11 +153,11 @@ for(const mode of ['live','reloaded'])test(`R4-3 the delivered confirmation of a
   const initial=await call('o11_deliver',b.original);seen.push(initial);
   assert.equal(initial.outcome,'uncertain');assert.deepEqual(initial.publish,{requested:true,outcome:'skipped'});
   const before=await call('o11_deliver',b.original);seen.push(before);assert.equal(before.continuation.arguments.resume,KID);
-  const resumed=await call('o11_deliver',{resume:KID,authorize:'synthetic-confirmation'});assert.equal(resumed.result,'entregue');
+  const resumed=await call('o11_deliver',{resume:KID,authorize:'synthetic-confirmation'});assert.equal(resumed.result,'delivered');
   if(mode==='reloaded')call=b.server();
   const after=await call('o11_deliver',b.original);seen.push(after);
   assert.equal(after.ok,false,'the original call asked for a publication that never ran');
-  assert.equal(after.result,'entregue');assert.equal(after.failed,'publish');
+  assert.equal(after.result,'delivered');assert.equal(after.failed,'publish');
   assert.deepEqual(after.publish,{requested:true,outcome:'skipped'});
   assert.deepEqual(after.continuation?.tool,'o11_publish');
   assert.deepEqual(after.continuation?.arguments,{module:'SyntheticInvoices',authorize:WORDS_MARKER});
@@ -173,6 +173,6 @@ test('R4-3 control: a confirmation of a call without publish stays ok:true and o
   const b=cycle(t);const call=b.server();const original={...b.original};delete original.publish;
   await call('o11_deliver',original);await call('o11_deliver',{resume:KID,authorize:'synthetic-confirmation'});
   const after=await call('o11_deliver',original);
-  assert.equal(after.ok,true);assert.equal(after.code,'TASK_DELIVERED');assert.equal(after.result,'entregue');
+  assert.equal(after.ok,true);assert.equal(after.code,'TASK_DELIVERED');assert.equal(after.result,'delivered');
   assert.deepEqual(after.lastPublication,{at:'2026-10-01T09:00:00.000Z',version:7});assert.equal(b.counts.publishes,0);
 });

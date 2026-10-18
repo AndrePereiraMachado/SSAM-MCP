@@ -1,5 +1,5 @@
 {
- "description": "A recusa do move com `into` quando um consumidor nao pode seguir o objeto: a variavel local Used e lida por um Assign da sua action; noutra action ela fica fora de alcance desse Assign. O move nativo deixaria a referencia a apontar para nada; o verbo confere cada consumidor depois do move, recusa e o job inteiro nao entra. O caminho limpo esta em tests/jobs/refactor-reparent.json.",
+ "description": "The refusal of the move with `into` when a consumer cannot follow the object: the local variable Used is read by an Assign of its action; in another action it is out of reach of that Assign. The native move would leave the reference pointing to nothing; the verb checks each consumer after the move, refuses, and the whole job does not enter. The clean path is in tests/jobs/refactor-reparent.json.",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "expectError": [

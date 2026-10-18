@@ -1,3 +1,4 @@
+import { sessionGuide } from './server-instructions.mjs';
 // Runtime guides: the documentation the model needs at run time, as MCP resources `ssam://guide/<topic>` (plan §7.2 Z,
 // DESIGN-ADENDO §3.5). They speak only of MCP tools. Lane J registers them; this module only exports them.
 //
@@ -32,17 +33,18 @@ export const GUIDE_FILES = Object.freeze({
   o11: 'platforms/odc/facade/guides/o11.md',
   odc: 'platforms/odc/facade/guides/odc.md',
   rules: 'docs/CONHECIMENTO-DO-TIME.md',
-  padroes: 'kernel/scripts/outsystems_padroes/RULES.md',
+  standards: 'kernel/scripts/outsystems_padroes/RULES.md',
 });
 
 const guide = (topic, title, description) => Object.freeze({ topic, name: 'ssam-guide-' + topic, uri: 'ssam://guide/' + topic, title, description, mimeType: 'text/markdown' });
 export const GUIDES = Object.freeze([
+  guide('session', 'SSAM guide: all session rules', 'Every session rule, including rules beyond the short server instructions.'),
   guide('lifecycle', 'SSAM guide: install, license, setup, connect, update', 'First run, license states, words and secrets, connect, update, and the few steps the person does outside the MCP.'),
   guide('o11', 'SSAM guide: the O11 lane', 'Service Studio: connect, read by @key, prove and deliver a job, dialogs, environment, data, Service Center.'),
   guide('odc', 'SSAM guide: the ODC lane', 'ODC Studio and the ODC APIs: connect, read, deliver, publish with the person\'s words, Portal and public APIs.'),
   guide('refusals', 'SSAM guide: refusals and their next call', 'Every refusal code of the server with the MCP call that follows it.'),
   guide('rules', 'SSAM guide: team rules and platform lessons', 'The owner\'s rules before generating or changing an O11 or ODC module: how to work, implementation standards, lessons of the platform.'),
-  guide('padroes', 'SSAM guide: the 35 OutSystems padrões rules', 'Logic, lists, data, server, UI, names, state and architecture rules every generated module follows (O11 and ODC; AR1 only O11).'),
+  guide('standards', 'SSAM guide: the 35 OutSystems standards rules', 'Logic, lists, data, server, UI, names, state and architecture rules every generated module follows (O11 and ODC; AR1 only O11).'),
 ]);
 
 // The numbered sections of a markdown text: each heading of the level (2: "## ") with everything up to the next one, as
@@ -66,7 +68,11 @@ function refusalsGuide() {
     '| code | next call | why |', '|---|---|---|', ...rows, ''].join('\n');
 }
 
+// The Portuguese topic of the releases before 15/10/2026 ("padroes") is a declared alias of "standards".
+const TOPIC_ALIASES = Object.freeze({ padroes: 'standards' });
 export function guideText(topic, opts) {
+  if (Object.hasOwn(TOPIC_ALIASES, topic)) topic = TOPIC_ALIASES[topic];
+  if (topic === 'session') return sessionGuide();
   if (topic === 'refusals') return refusalsGuide();
   if (!Object.hasOwn(GUIDE_FILES, topic)) throw new Error('Unknown SSAM guide: ' + topic + '; guides: ' + GUIDES.map(g => g.topic).join(', '));
   if (BUNDLED) {

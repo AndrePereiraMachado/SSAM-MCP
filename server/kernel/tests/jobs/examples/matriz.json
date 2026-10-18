@@ -3,11 +3,11 @@
  "lane": "o11",
  "generatedAt": "2026-10-07",
  "legend": {
-  "pending": "linhas sem job: state todo (a fazer) ou not-applicable (o minimo ja e o uso tipico)",
+  "pending": "rows without a job: state todo (to do) or not-applicable (the minimal one is already the typical use)",
   "kind": "widget | pattern | capability",
   "level": "minimal | typical | rich",
-  "status": "proven-existing (job da suite tests/jobs) | new (job em tests/jobs/examples) | blocked (notes traz a recusa ou o motivo)",
-  "job": "caminho relativo a kernel/tests/jobs, sem .json"
+  "status": "proven-existing (a job of the suite tests/jobs) | new (a job in tests/jobs/examples) | blocked (notes brings the refusal or the reason)",
+  "job": "path relative to kernel/tests/jobs, without .json"
  },
  "summary": {
   "capability": {
@@ -146,7 +146,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/cap-client-variable-typical",
-   "notes": "Client variable lida e escrita pela tela (Client.X)."
+   "notes": "A client variable read and written by the screen (Client.X)."
   },
   {
    "id": "logic.expression",
@@ -250,7 +250,7 @@
    "level": "minimal",
    "status": "new",
    "job": "examples/cap-preparation-minimal",
-   "notes": "Preparation de tela Traditional com um aggregate."
+   "notes": "Preparation of a Traditional screen with an aggregate."
   },
   {
    "id": "logic.preparation",
@@ -258,7 +258,7 @@
    "level": "typical",
    "status": "proven-existing",
    "job": "screen-crud-traditional",
-   "notes": "Prova da suite: preparation com input e aggregate filtrado num CRUD."
+   "notes": "Proof of the suite: a preparation with an input and a filtered aggregate in a CRUD."
   },
   {
    "id": "logic.variable",
@@ -522,7 +522,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/pat-form-validation-save",
-   "notes": "Exemplo tipico novo deste pacote."
+   "notes": "New typical example of this package."
   },
   {
    "id": "ui.dropdown-search",
@@ -530,7 +530,7 @@
    "level": "minimal",
    "status": "new",
    "job": "examples/cap-dropdown-search-minimal",
-   "notes": "Bloco DropdownSearch com OptionsList e OnChanged; tipico monta as opcoes de uma static no OnAfterFetch."
+   "notes": "DropdownSearch block with OptionsList and OnChanged; the typical one builds the options of a static in OnAfterFetch."
   },
   {
    "id": "ui.dropdown-search",
@@ -538,7 +538,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/cap-dropdown-search-typical",
-   "notes": "Bloco DropdownSearch com OptionsList e OnChanged; tipico monta as opcoes de uma static no OnAfterFetch."
+   "notes": "DropdownSearch block with OptionsList and OnChanged; the typical one builds the options of a static in OnAfterFetch."
   },
   {
    "id": "ui.html-visual",
@@ -746,7 +746,7 @@
    "level": "minimal",
    "status": "blocked",
    "job": null,
-   "notes": "Sem rota de job: o11_extension publica pelo Service Center do ambiente (rede e sessao do Studio). Consumir exige a assinatura .avsig capturada ao vivo."
+   "notes": "No job route: o11_extension publishes through the Service Center of the environment (network and Studio session). Consuming needs the .avsig signature captured live."
   },
   {
    "id": "integration.dotnet-extension-o11",
@@ -754,7 +754,7 @@
    "level": "typical",
    "status": "blocked",
    "job": null,
-   "notes": "Sem rota de job: o11_extension publica pelo Service Center do ambiente (rede e sessao do Studio). Consumir exige a assinatura .avsig capturada ao vivo."
+   "notes": "No job route: o11_extension publishes through the Service Center of the environment (network and Studio session). Consuming needs the .avsig signature captured live."
   },
   {
    "id": "read.discover",
@@ -762,7 +762,7 @@
    "level": "minimal",
    "status": "blocked",
    "job": null,
-   "notes": "Ferramenta (ssam_discover), nao e mudanca de modulo: nao ha job que a exercite."
+   "notes": "A tool (ssam_discover), not a module change: no job exercises it."
   },
   {
    "id": "read.discover",
@@ -770,7 +770,7 @@
    "level": "typical",
    "status": "blocked",
    "job": null,
-   "notes": "Ferramenta (ssam_discover), nao e mudanca de modulo: nao ha job que a exercite."
+   "notes": "A tool (ssam_discover), not a module change: no job exercises it."
   },
   {
    "id": "read.inspect",
@@ -778,7 +778,7 @@
    "level": "minimal",
    "status": "new",
    "job": "examples/cap-read-inspect-minimal",
-   "notes": "Prova os verbos de leitura do kernel (find, get, dump, usages) num job; ssam_map/o11_inspect sao a rota viva sobre a captura."
+   "notes": "Proves the read verbs of the kernel (find, get, dump, usages) in a job; ssam_map/o11_inspect are the live route over the capture."
   },
   {
    "id": "read.inspect",
@@ -786,7 +786,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/cap-read-inspect-typical",
-   "notes": "Prova os verbos de leitura do kernel (find, get, dump, usages) num job; ssam_map/o11_inspect sao a rota viva sobre a captura."
+   "notes": "Proves the read verbs of the kernel (find, get, dump, usages) in a job; ssam_map/o11_inspect are the live route over the capture."
   },
   {
    "id": "deliver.job",
@@ -794,7 +794,7 @@
    "level": "minimal",
    "status": "new",
    "job": "examples/cap-deliver-job-minimal",
-   "notes": "Forma minima de job e job composto (jobs) numa transacao; a entrega viva continua o11_deliver."
+   "notes": "Minimal form of a job and a composite job (jobs) in one transaction; the live delivery stays o11_deliver."
   },
   {
    "id": "deliver.job",
@@ -802,7 +802,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/cap-deliver-job-typical",
-   "notes": "Forma minima de job e job composto (jobs) numa transacao; a entrega viva continua o11_deliver."
+   "notes": "Minimal form of a job and a composite job (jobs) in one transaction; the live delivery stays o11_deliver."
   },
   {
    "id": "data.records",
@@ -810,7 +810,7 @@
    "level": "minimal",
    "status": "blocked",
    "job": null,
-   "notes": "Dados do ambiente (o11_data, Edit Data pelo Studio logado): nao e mudanca de modulo nem roda headless."
+   "notes": "Environment data (o11_data, Edit Data through the signed-in Studio): not a module change and it does not run headless."
   },
   {
    "id": "data.records",
@@ -818,7 +818,7 @@
    "level": "typical",
    "status": "blocked",
    "job": null,
-   "notes": "Dados do ambiente (o11_data, Edit Data pelo Studio logado): nao e mudanca de modulo nem roda headless."
+   "notes": "Environment data (o11_data, Edit Data through the signed-in Studio): not a module change and it does not run headless."
   },
   {
    "id": "ops.debugger",
@@ -826,7 +826,7 @@
    "level": "minimal",
    "status": "blocked",
    "job": null,
-   "notes": "Depurador sobre o runtime publicado (ssam_debug): exige ambiente vivo."
+   "notes": "Debugger over the published runtime (ssam_debug): needs a live environment."
   },
   {
    "id": "ops.debugger",
@@ -834,7 +834,7 @@
    "level": "typical",
    "status": "blocked",
    "job": null,
-   "notes": "Depurador sobre o runtime publicado (ssam_debug): exige ambiente vivo."
+   "notes": "Debugger over the published runtime (ssam_debug): needs a live environment."
   },
   {
    "id": "ops.environment",
@@ -842,7 +842,7 @@
    "level": "minimal",
    "status": "blocked",
    "job": null,
-   "notes": "Verificacao do ambiente (ssam_doctor): ferramenta operacional, sem job."
+   "notes": "Environment check (ssam_doctor): an operational tool, without a job."
   },
   {
    "id": "ops.environment",
@@ -850,7 +850,7 @@
    "level": "typical",
    "status": "blocked",
    "job": null,
-   "notes": "Verificacao do ambiente (ssam_doctor): ferramenta operacional, sem job."
+   "notes": "Environment check (ssam_doctor): an operational tool, without a job."
   },
   {
    "id": "diagnostic.troubleshoot",
@@ -858,7 +858,7 @@
    "level": "minimal",
    "status": "new",
    "job": "examples/cap-diagnostic-minimal",
-   "notes": "Contrato expectedMessages: aviso declarado (matched) e erro reproduzido com expectValid false."
+   "notes": "expectedMessages contract: a declared warning (matched) and an error reproduced with expectValid false."
   },
   {
    "id": "diagnostic.troubleshoot",
@@ -866,7 +866,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/cap-diagnostic-typical",
-   "notes": "Contrato expectedMessages: aviso declarado (matched) e erro reproduzido com expectValid false."
+   "notes": "expectedMessages contract: a declared warning (matched) and an error reproduced with expectValid false."
   },
   {
    "id": "process.bpt",
@@ -898,7 +898,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/pat-consumer-reference-action",
-   "notes": "Exemplo tipico novo deste pacote."
+   "notes": "New typical example of this package."
   },
   {
    "id": "integration.rest-consume",
@@ -922,7 +922,7 @@
    "level": "minimal",
    "status": "blocked",
    "job": null,
-   "notes": "Recusa do kernel sem Studio: INTEGRATION_IMPORT_NEEDS_STUDIO (/data/openapi: \"the OpenAPI import of getOrder runs in the Service Studio (the O11 importer needs its workspace)\"). So o11_deliver com a bridge importa."
+   "notes": "Kernel refusal without a Studio: INTEGRATION_IMPORT_NEEDS_STUDIO (/data/openapi: \"the OpenAPI import of getOrder runs in the Service Studio (the O11 importer needs its workspace)\"). Only o11_deliver with the bridge imports it."
   },
   {
    "id": "integration.rest-import",
@@ -930,7 +930,7 @@
    "level": "typical",
    "status": "blocked",
    "job": null,
-   "notes": "Recusa do kernel sem Studio: INTEGRATION_IMPORT_NEEDS_STUDIO (/data/openapi: \"the OpenAPI import of getOrder runs in the Service Studio (the O11 importer needs its workspace)\"). So o11_deliver com a bridge importa."
+   "notes": "Kernel refusal without a Studio: INTEGRATION_IMPORT_NEEDS_STUDIO (/data/openapi: \"the OpenAPI import of getOrder runs in the Service Studio (the O11 importer needs its workspace)\"). Only o11_deliver with the bridge imports it."
   },
   {
    "id": "integration.rest-expose",
@@ -962,7 +962,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/pat-role-check-screen",
-   "notes": "Exemplo tipico novo deste pacote."
+   "notes": "New typical example of this package."
   },
   {
    "id": "integration.soap",
@@ -970,7 +970,7 @@
    "level": "minimal",
    "status": "blocked",
    "job": null,
-   "notes": "Recusa do kernel sem Studio: INTEGRATION_IMPORT_NEEDS_STUDIO (/data/methods: \"Add must be imported from the WSDL, which the Service Studio's own importer does\"). So o11_deliver com a bridge importa."
+   "notes": "Kernel refusal without a Studio: INTEGRATION_IMPORT_NEEDS_STUDIO (/data/methods: \"Add must be imported from the WSDL, which the Service Studio's own importer does\"). Only o11_deliver with the bridge imports it."
   },
   {
    "id": "integration.soap",
@@ -978,7 +978,7 @@
    "level": "typical",
    "status": "blocked",
    "job": null,
-   "notes": "Recusa do kernel sem Studio: INTEGRATION_IMPORT_NEEDS_STUDIO (/data/methods: \"Add must be imported from the WSDL, which the Service Studio's own importer does\"). So o11_deliver com a bridge importa."
+   "notes": "Kernel refusal without a Studio: INTEGRATION_IMPORT_NEEDS_STUDIO (/data/methods: \"Add must be imported from the WSDL, which the Service Studio's own importer does\"). Only o11_deliver with the bridge imports it."
   },
   {
    "id": "timer.schedule",
@@ -994,7 +994,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/pat-timer-typical",
-   "notes": "Exemplo tipico novo deste pacote."
+   "notes": "New typical example of this package."
   },
   {
    "id": "ui.widget.container",
@@ -2338,7 +2338,7 @@
    "level": "minimal",
    "status": "new",
    "job": "examples/osui-bottom-bar-item-minimal",
-   "notes": "Navigation/BottomBarItem (modulo Mobile: ex-base-mobile)"
+   "notes": "Navigation/BottomBarItem (Mobile module: ex-base-mobile)"
   },
   {
    "id": "osui.BottomBarItem",
@@ -2346,7 +2346,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/osui-bottom-bar-item-typical",
-   "notes": "Navigation/BottomBarItem (modulo Mobile: ex-base-mobile)"
+   "notes": "Navigation/BottomBarItem (Mobile module: ex-base-mobile)"
   },
   {
    "id": "osui.SectionIndexItem",
@@ -2690,7 +2690,7 @@
    "level": "minimal",
    "status": "new",
    "job": "examples/osui-action-sheet-minimal",
-   "notes": "Interaction/ActionSheet (modulo Mobile: ex-base-mobile)"
+   "notes": "Interaction/ActionSheet (Mobile module: ex-base-mobile)"
   },
   {
    "id": "osui.ActionSheet",
@@ -2698,7 +2698,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/osui-action-sheet-typical",
-   "notes": "Interaction/ActionSheet (modulo Mobile: ex-base-mobile)"
+   "notes": "Interaction/ActionSheet (Mobile module: ex-base-mobile)"
   },
   {
    "id": "osui.Sidebar",
@@ -2786,7 +2786,7 @@
    "level": "minimal",
    "status": "new",
    "job": "examples/osui-bottom-sheet-minimal",
-   "notes": "Interaction/BottomSheet (modulo Mobile: ex-base-mobile)"
+   "notes": "Interaction/BottomSheet (Mobile module: ex-base-mobile)"
   },
   {
    "id": "osui.BottomSheet",
@@ -2794,7 +2794,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/osui-bottom-sheet-typical",
-   "notes": "Interaction/BottomSheet (modulo Mobile: ex-base-mobile)"
+   "notes": "Interaction/BottomSheet (Mobile module: ex-base-mobile)"
   },
   {
    "id": "osui.FloatingActions",
@@ -2954,7 +2954,7 @@
    "level": "minimal",
    "status": "blocked",
    "job": null,
-   "notes": "Utilities/SwipeEvents: nenhum fixture referencia o bloco (reactive-ui e mobile-ui); exige reference ao produtor OutSystemsUI, que nao esta versionado."
+   "notes": "Utilities/SwipeEvents: no fixture references the block (reactive-ui and mobile-ui); it needs a reference to the OutSystemsUI producer, which is not versioned."
   },
   {
    "id": "osui.SwipeEvents",
@@ -2962,7 +2962,7 @@
    "level": "typical",
    "status": "blocked",
    "job": null,
-   "notes": "Utilities/SwipeEvents: nenhum fixture referencia o bloco (reactive-ui e mobile-ui); exige reference ao produtor OutSystemsUI, que nao esta versionado."
+   "notes": "Utilities/SwipeEvents: no fixture references the block (reactive-ui and mobile-ui); it needs a reference to the OutSystemsUI producer, which is not versioned."
   },
   {
    "id": "osui.MarginContainer",
@@ -3042,7 +3042,7 @@
    "level": "minimal",
    "status": "proven-existing",
    "job": "screen-list-reactive",
-   "notes": "Lista com pesquisa, filtro por static, Table e Pagination (sessões reais de clientes)."
+   "notes": "A list with a search, a filter by a static, a Table and Pagination (real customer sessions)."
   },
   {
    "id": "pattern.list-filter-pagination",
@@ -3050,7 +3050,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/pat-list-filter-pagination",
-   "notes": "Lista com pesquisa, filtro por static, Table e Pagination (sessões reais de clientes)."
+   "notes": "A list with a search, a filter by a static, a Table and Pagination (real customer sessions)."
   },
   {
    "id": "pattern.form-validation-save",
@@ -3058,7 +3058,7 @@
    "level": "minimal",
    "status": "proven-existing",
    "job": "screen-form-reactive",
-   "notes": "Form com validacao no cliente e no servidor; create/update com o record como expressao."
+   "notes": "A form with validation on the client and on the server; create/update with the record as an expression."
   },
   {
    "id": "pattern.form-validation-save",
@@ -3066,7 +3066,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/pat-form-validation-save",
-   "notes": "Form com validacao no cliente e no servidor; create/update com o record como expressao."
+   "notes": "A form with validation on the client and on the server; create/update with the record as an expression."
   },
   {
    "id": "pattern.master-detail",
@@ -3074,7 +3074,7 @@
    "level": "minimal",
    "status": "proven-existing",
    "job": "consume-reference-screens",
-   "notes": "Mestre-detalhe numa tela (Columns2, Link com argumento, Refresh Data)."
+   "notes": "Master-detail on one screen (Columns2, a Link with an argument, Refresh Data)."
   },
   {
    "id": "pattern.master-detail",
@@ -3082,7 +3082,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/pat-master-detail",
-   "notes": "Mestre-detalhe numa tela (Columns2, Link com argumento, Refresh Data)."
+   "notes": "Master-detail on one screen (Columns2, a Link with an argument, Refresh Data)."
   },
   {
    "id": "pattern.producer-public-action",
@@ -3090,7 +3090,7 @@
    "level": "minimal",
    "status": "proven-existing",
    "job": "producer-public",
-   "notes": "Produtor com entidade, structure e server action publicas."
+   "notes": "A producer with a public entity, structure and server action."
   },
   {
    "id": "pattern.producer-public-action",
@@ -3098,7 +3098,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/pat-producer-public-action",
-   "notes": "Produtor com entidade, structure e server action publicas."
+   "notes": "A producer with a public entity, structure and server action."
   },
   {
    "id": "pattern.consumer-reference-action",
@@ -3106,7 +3106,7 @@
    "level": "minimal",
    "status": "proven-existing",
    "job": "consume-reference",
-   "notes": "Op reference + chamada da action do produtor; ao vivo producer = nome do modulo e captureProducers."
+   "notes": "A reference op + a call of the producer's action; live, producer = the module name and captureProducers."
   },
   {
    "id": "pattern.consumer-reference-action",
@@ -3114,7 +3114,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/pat-consumer-reference-action",
-   "notes": "Op reference + chamada da action do produtor; ao vivo producer = nome do modulo e captureProducers."
+   "notes": "A reference op + a call of the producer's action; live, producer = the module name and captureProducers."
   },
   {
    "id": "pattern.static-dropdown",
@@ -3122,7 +3122,7 @@
    "level": "minimal",
    "status": "proven-existing",
    "job": "static-entity",
-   "notes": "Static com registros num Dropdown e Entities.X.Y no OnInitialize."
+   "notes": "A static with records in a Dropdown and Entities.X.Y in OnInitialize."
   },
   {
    "id": "pattern.static-dropdown",
@@ -3130,7 +3130,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/pat-static-dropdown",
-   "notes": "Static com registros num Dropdown e Entities.X.Y no OnInitialize."
+   "notes": "A static with records in a Dropdown and Entities.X.Y in OnInitialize."
   },
   {
    "id": "pattern.timer",
@@ -3138,7 +3138,7 @@
    "level": "minimal",
    "status": "proven-existing",
    "job": "pacote-laneE-timer-schedule",
-   "notes": "Timer com Schedule e action que trabalha em lote."
+   "notes": "A timer with a Schedule and an action that works in batches."
   },
   {
    "id": "pattern.timer",
@@ -3146,7 +3146,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/pat-timer-typical",
-   "notes": "Timer com Schedule e action que trabalha em lote."
+   "notes": "A timer with a Schedule and an action that works in batches."
   },
   {
    "id": "pattern.role-check-screen",
@@ -3154,7 +3154,7 @@
    "level": "minimal",
    "status": "proven-existing",
    "job": "security-config-reactive",
-   "notes": "Roles da tela, CheckXRole no OnInitialize e no servidor; If no lugar de Visible."
+   "notes": "Roles of the screen, CheckXRole in OnInitialize and on the server; If instead of Visible."
   },
   {
    "id": "pattern.role-check-screen",
@@ -3162,7 +3162,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/pat-role-check-screen",
-   "notes": "Roles da tela, CheckXRole no OnInitialize e no servidor; If no lugar de Visible."
+   "notes": "Roles of the screen, CheckXRole in OnInitialize and on the server; If instead of Visible."
   },
   {
    "id": "pattern.osui-buttongroup",
@@ -3170,7 +3170,7 @@
    "level": "minimal",
    "status": "proven-existing",
    "job": "gallery-native-reactive",
-   "notes": "Button Group (widget nativo no Reactive O11) com OnChange."
+   "notes": "Button Group (a native widget in O11 Reactive) with OnChange."
   },
   {
    "id": "pattern.osui-buttongroup",
@@ -3178,7 +3178,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/pat-osui-buttongroup",
-   "notes": "Button Group (widget nativo no Reactive O11) com OnChange."
+   "notes": "Button Group (a native widget in O11 Reactive) with OnChange."
   },
   {
    "id": "pattern.osui-tabs",
@@ -3186,7 +3186,7 @@
    "level": "minimal",
    "status": "proven-existing",
    "job": "osui-patterns",
-   "notes": "Tabs com aba ativa em variavel e OnTabChange."
+   "notes": "Tabs with the active tab in a variable and OnTabChange."
   },
   {
    "id": "pattern.osui-tabs",
@@ -3194,7 +3194,7 @@
    "level": "typical",
    "status": "new",
    "job": "examples/pat-osui-tabs",
-   "notes": "Tabs com aba ativa em variavel e OnTabChange."
+   "notes": "Tabs with the active tab in a variable and OnTabChange."
   },
   {
    "id": "pattern.anonymous-screen",
@@ -3202,7 +3202,7 @@
    "level": "minimal",
    "status": "new",
    "job": "examples/pat-anonymous-screen",
-   "notes": "Roles declarados uma vez por tela: [Anonymous, Registered] ou [Registered]."
+   "notes": "Roles declared once per screen: [Anonymous, Registered] or [Registered]."
   },
   {
    "id": "pattern.base-showcase",
@@ -3210,7 +3210,7 @@
    "level": "minimal",
    "status": "new",
    "job": "examples/ex-base",
-   "notes": "Base dos exemplos de widget: tela Showcase e dados Task/Priority."
+   "notes": "Base of the widget examples: the Showcase screen and the Task/Priority data."
   },
   {
    "id": "pattern.base-showcase-mobile",
@@ -3218,7 +3218,7 @@
    "level": "minimal",
    "status": "new",
    "job": "examples/ex-base-mobile",
-   "notes": "Base mobile dos exemplos (ActionSheet, BottomSheet, BottomBarItem)."
+   "notes": "Mobile base of the examples (ActionSheet, BottomSheet, BottomBarItem)."
   },
   {
    "id": "pattern.backoffice-crud",
@@ -3226,7 +3226,7 @@
    "level": "rich",
    "status": "new",
    "job": "examples/crud-all",
-   "notes": "CRUD back-office numa transacao (um merge): as cinco partes abaixo."
+   "notes": "Back-office CRUD in one transaction (one merge): the five parts below."
   },
   {
    "id": "pattern.backoffice-crud.01-data",
@@ -3250,7 +3250,7 @@
    "level": "rich",
    "status": "new",
    "job": "examples/crud-03-screens",
-   "notes": "Parte 03 (telas), base job: da parte anterior."
+   "notes": "Part 03 (screens), base job: of the previous part."
   },
   {
    "id": "pattern.backoffice-crud.04-edit",
@@ -3266,7 +3266,7 @@
    "level": "rich",
    "status": "new",
    "job": "examples/crud-05-list",
-   "notes": "Parte 05 (lista e apagar com confirmacao), base job: da parte anterior."
+   "notes": "Part 05 (list and delete with a confirmation), base job: of the previous part."
   }
  ],
  "pending": [
@@ -3275,175 +3275,175 @@
    "kind": "capability",
    "level": "minimal",
    "state": "todo",
-   "notes": "So a prova rica (cat-b-app-events); exemplo minimo ainda nao escrito."
+   "notes": "Only the rich proof (cat-b-app-events); a minimal example is not written yet."
   },
   {
    "id": "ui.flow-comment",
    "kind": "capability",
    "level": "typical",
    "state": "not-applicable",
-   "notes": "Comentario do fluxo nao tem dado nem evento: o minimo ja e o uso tipico."
+   "notes": "A flow comment has no data and no event: the minimal one is already the typical use."
   },
   {
    "id": "ui.widget.text",
    "kind": "widget",
    "level": "typical",
    "state": "not-applicable",
-   "notes": "Texto estatico (nasce no Button/Link): nao tem dado nem evento."
+   "notes": "Static text (born in the Button/Link): it has no data and no event."
   },
   {
    "id": "ui.web.cell",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "ICellWidget (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "ICellWidget (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.checkbox",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "ICheckBoxWidget (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "ICheckBoxWidget (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.combobox",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "IComboBoxWidget (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "IComboBoxWidget (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.radiobutton",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "IRadioButtonWidget (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "IRadioButtonWidget (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.inputpassword",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "IInputPasswordWidget (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "IInputPasswordWidget (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.inputfilename",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "IInputFilenameWidget (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "IInputFilenameWidget (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.listrecords",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "IListRecordsWidget (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "IListRecordsWidget (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.editrecord",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "IEditRecordWidget (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "IEditRecordWidget (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.showrecord",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "IShowRecordWidget (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "IShowRecordWidget (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.table",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "ITableWidget (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "ITableWidget (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.row",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "IRowWidget (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "IRowWidget (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.text",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "ITextWidget (Web) (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "ITextWidget (Web) (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.if",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "IIfWidget (Web) (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "IIfWidget (Web) (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.editabletable",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "IEditableTable (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "IEditableTable (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.editabletablecell",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "IEditableTableCell (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "IEditableTableCell (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.form",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "IForm (Web) (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "IForm (Web) (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.label",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "ILabel (Web) (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "ILabel (Web) (Traditional): typical example not written yet."
   },
   {
    "id": "ui.web.blockinstance",
    "kind": "widget",
    "level": "typical",
    "state": "todo",
-   "notes": "IWebBlockInstanceWidget (Traditional): exemplo tipico ainda nao escrito."
+   "notes": "IWebBlockInstanceWidget (Traditional): typical example not written yet."
   },
   {
    "id": "osui.SectionGroup",
    "kind": "pattern",
    "level": "typical",
    "state": "not-applicable",
-   "notes": "Content/SectionGroup: sem input obrigatorio, evento ou placeholder vazio; o minimo ja e o uso tipico."
+   "notes": "Content/SectionGroup: no required input, event or empty placeholder; the minimal one is already the typical use."
   },
   {
    "id": "osui.UserAvatar",
    "kind": "pattern",
    "level": "typical",
    "state": "not-applicable",
-   "notes": "Content/UserAvatar: sem input obrigatorio, evento ou placeholder vazio; o minimo ja e o uso tipico."
+   "notes": "Content/UserAvatar: no required input, event or empty placeholder; the minimal one is already the typical use."
   },
   {
    "id": "osui.Separator",
    "kind": "pattern",
    "level": "typical",
    "state": "not-applicable",
-   "notes": "Utilities/Separator: sem input obrigatorio, evento ou placeholder vazio; o minimo ja e o uso tipico."
+   "notes": "Utilities/Separator: no required input, event or empty placeholder; the minimal one is already the typical use."
   },
   {
    "id": "osui.AppFeedbackHelp",
    "kind": "pattern",
    "level": "typical",
    "state": "not-applicable",
-   "notes": "AppFeedback/AppFeedbackHelp: sem input obrigatorio, evento ou placeholder vazio; o minimo ja e o uso tipico."
+   "notes": "AppFeedback/AppFeedbackHelp: no required input, event or empty placeholder; the minimal one is already the typical use."
   }
  ]
 }

@@ -1,5 +1,5 @@
 {
- "description": "Rating do OSUI editavel: valor numa variavel, escala de 5, tamanho, e o OnSelect grava a nota escolhida.",
+ "description": "Editable Rating of OSUI: the value in a variable, a scale of 5, a size, and OnSelect saves the chosen rating.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,5 +1,5 @@
 {
- "description": "ProviderLoginButton do OSUI: dois botoes (Google e Apple), so icone no segundo, forma arredondada e o OnClick de cada um guardando o provedor escolhido.",
+ "description": "ProviderLoginButton of OSUI: two buttons (Google and Apple), icon only on the second, a rounded shape and the OnClick of each keeping the chosen provider.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

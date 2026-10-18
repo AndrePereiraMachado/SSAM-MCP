@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {inspectOdcModelInputs} from '../debug-odc-model-inputs.mjs';
 const fields=[{attribute:'seedIn',jsonName:'Seed'},{attribute:'_seedInDataFetchStatus',jsonName:'_seedInDataFetchStatus'}];

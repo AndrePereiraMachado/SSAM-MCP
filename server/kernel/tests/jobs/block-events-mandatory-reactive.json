@@ -1,26 +1,26 @@
 {
- "description": "A resposta a pergunta 'evento obrigatorio sem handler e recusa ou aviso?': nao e nem uma nem outra coisa - o KERNEL nao recusa (ok=True, os ops todos aplicam, nada de 'refused') e o VERIFY nao avisa: da ERRO e o modulo fica invalido (isValid=False). Sobre job:block-events-reactive, OnRate passa a IsMandatory true e nascem DUAS instancias novas sem handler: saem DOIS erros EventHandlerRequiredAction, um por instancia, cada um no caminho do seu IEventHandler - a obrigatoriedade cobra-se por INSTANCIA, nao por bloco, e a instancia ja existente (RatingPicker1) continua limpa. Note ainda que a instancia sem handler JA conta como consumidor do evento: o `usages` da 4 (3 IEventHandler + 1 ITriggerNode), porque o IEventHandler nasce com a instancia mesmo vazio - por isso o delete do evento e recusado mesmo quando ninguem ligou handler nenhum (tests/jobs-negative/delete-block-event-in-use.json). O caminho certo esta em tests/jobs/block-events-two-instances-reactive.json: mesmo IsMandatory true, um handler por instancia, modulo valido.",
+ "description": "The answer to the question 'mandatory event without a handler: refusal or warning?': it is neither - the KERNEL does not refuse (ok=True, all the ops apply, no 'refused') and the VERIFY does not warn: it gives an ERROR and the module becomes invalid (isValid=False). Over job:block-events-reactive, OnRate becomes IsMandatory true and TWO new instances without a handler are born: TWO EventHandlerRequiredAction errors come out, one per instance, each on the path of its IEventHandler - the mandatoriness is charged per INSTANCE, not per block, and the already existing instance (RatingPicker1) stays clean. Note also that the instance without a handler ALREADY counts as a consumer of the event: the `usages` gives 4 (3 IEventHandler + 1 ITriggerNode), because the IEventHandler is born with the instance even if empty - that is why the delete of the event is refused even when nobody linked any handler (tests/jobs-negative/delete-block-event-in-use.json). The right path is in tests/jobs/block-events-two-instances-reactive.json: same IsMandatory true, one handler per instance, valid module.",
  "base": "job:block-events-reactive",
  "expectValid": false,
  "expectedMessages": [
-  {"id": "EventHandlerRequiredAction", "element": "RatingPicker2 (MobileBlockInstanceWidget) / EventHandler", "why": "E ESTE o resultado que o job existe para provar: com IsMandatory true, a instancia nova sem handler produz um erro (nao um aviso) no seu proprio IEventHandler. Calar isto seria apagar a prova."},
-  {"id": "EventHandlerRequiredAction", "element": "RatingPicker3 (MobileBlockInstanceWidget) / EventHandler", "why": "A segunda mensagem e a prova de que a cobranca e por INSTANCIA e nao por bloco nem por evento: duas instancias sem handler dao dois erros, com caminhos diferentes."}
+  {"id": "EventHandlerRequiredAction", "element": "RatingPicker2 (MobileBlockInstanceWidget) / EventHandler", "why": "THIS is the result the job exists to prove: with IsMandatory true, the new instance without a handler produces an error (not a warning) on its own IEventHandler. Silencing this would be erasing the proof."},
+  {"id": "EventHandlerRequiredAction", "element": "RatingPicker3 (MobileBlockInstanceWidget) / EventHandler", "why": "The second message is the proof that the charge is per INSTANCE and not per block nor per event: two instances without a handler give two errors, with different paths."}
  ],
  "ops": [
-  {"op": "get", "target": "IBlockEvent:OnRate", "_why": "antes: o evento e opcional e tem um consumidor com handler"},
+  {"op": "get", "target": "IBlockEvent:OnRate", "_why": "before: the event is optional and has one consumer with a handler"},
   {"op": "usages", "target": "IBlockEvent:OnRate"},
 
-  {"op": "set", "target": "IBlockEvent:OnRate", "prop": "IsMandatory", "value": true, "_why": "1. tornar obrigatorio - repare que a instancia ANTIGA, que ja tem handler, nao e afetada"},
+  {"op": "set", "target": "IBlockEvent:OnRate", "prop": "IsMandatory", "value": true, "_why": "1. make it mandatory - note that the OLD instance, which already has a handler, is not affected"},
 
-  {"op": "create", "parent": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RatingPicker2", "as": "$i2", "source": "IMobileBlock:RatingPicker", "_why": "2. instancia nova SEM handler: o kernel aceita sem dizer nada"},
+  {"op": "create", "parent": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RatingPicker2", "as": "$i2", "source": "IMobileBlock:RatingPicker", "_why": "2. new instance WITHOUT a handler: the kernel accepts it without saying anything"},
   {"op": "set", "target": "$i2/Caption", "prop": "Value", "value": "\"Segunda instancia, sem handler\""},
-  {"op": "create", "parent": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RatingPicker3", "as": "$i3", "source": "IMobileBlock:RatingPicker", "_why": "3. a terceira serve so para provar que a cobranca e por instancia: sao dois erros, nao um"},
+  {"op": "create", "parent": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RatingPicker3", "as": "$i3", "source": "IMobileBlock:RatingPicker", "_why": "3. the third serves only to prove that the charge is per instance: there are two errors, not one"},
   {"op": "set", "target": "$i3/Caption", "prop": "Value", "value": "\"Terceira instancia, tambem sem handler\""},
 
-  {"op": "get", "target": "$i2", "_why": "EventHandlers 1 mesmo sem handler ligado: o objeto IEventHandler nasce com a instancia, com o Handler por preencher"},
+  {"op": "get", "target": "$i2", "_why": "EventHandlers 1 even with no handler linked: the IEventHandler object is born with the instance, with the Handler left to fill"},
   {"op": "get", "target": "$i2/#IEventHandler"},
-  {"op": "get", "target": "IBlockEvent:OnRate", "_why": "depois: IsMandatory True"},
-  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "4 consumidores: as duas instancias vazias contam tanto quanto a que tem handler"},
+  {"op": "get", "target": "IBlockEvent:OnRate", "_why": "after: IsMandatory True"},
+  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "4 consumers: the two empty instances count as much as the one that has a handler"},
   {"op": "dump", "target": "IMobileScreen:RatingDemo", "depth": 6}
  ]
 }

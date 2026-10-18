@@ -469,7 +469,7 @@ test('failed cached assembly refuses every listed tool including doctor with its
       assert.equal(answer.structuredContent?.code, 'MCP_ASSEMBLY_FAILED', tool.name);
       assert.equal(answer.structuredContent.ok, false);
       assert.equal(answer.structuredContent.cause, 'fake dynamic import failed');
-      assert.match(answer.structuredContent.next, /reinicie este servidor MCP/);
+      assert.match(answer.structuredContent.next, /restart this MCP server/);
       assert.deepEqual(JSON.parse(answer.content[0].text), answer.structuredContent);
     }
   }

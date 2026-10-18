@@ -1,5 +1,5 @@
 {
- "description": "SectionGroup do OSUI: a instancia com uma Section no placeholder Sections.",
+ "description": "SectionGroup of OSUI: the instance with one Section in the Sections placeholder.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

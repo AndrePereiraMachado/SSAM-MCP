@@ -1,5 +1,5 @@
 {
- "description": "DropdownServerSideItem do OSUI: ItemId obrigatorio, o evento obrigatorio OnSelected e o texto do item, com empty (o exemplo cita um GetData inexistente).",
+ "description": "DropdownServerSideItem of OSUI: the required ItemId, the required event OnSelected and the text of the item, with empty (the sample cites a GetData that does not exist).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,5 +1,5 @@
 {
- "description": "Op html visual (WS4): uma lista sobre um aggregate que ja existe na tela. O fragmento nao cria dados: o alias da linha (as=\"Row\") e o registro corrente da fonte, e {{ Row.User.Name }} vira a expressao nativa.",
+ "description": "Visual html op (WS4): a list over an aggregate that already exists on the screen. The fragment creates no data: the row alias (as=\"Row\") is the current record of the source, and {{ Row.User.Name }} becomes the native expression.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],

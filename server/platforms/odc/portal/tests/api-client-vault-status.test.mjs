@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import crypto from 'node:crypto';
 import {apiClientVaultStatus} from '../runtime/api-client-vault-status.mjs';
 import {windowsApiClientFixtureStatus,apiClientPowerShell,apiClientCredentialHelper} from '../runtime/api-client-credential.mjs';

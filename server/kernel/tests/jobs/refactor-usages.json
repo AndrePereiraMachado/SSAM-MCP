@@ -1,5 +1,5 @@
 {
- "description": "Refatoracao: usages de entidade/atributo, rename de atributo usado em aggregate, expressoes e argumentos (propaga por chave), delete seguro",
+ "description": "Refactor: usages of entity/attribute, rename of an attribute used in aggregate, expressions and arguments (propagates by key), safe delete",
  "base": "job:screen-form-reactive",
  "expectValid": true,
  "ops": [
@@ -33,7 +33,7 @@
   {
    "op": "delete",
    "target": "IMobileScreen:ContactDetail/#IMobileBlockInstanceWidget/MainContent/ContactForm/Phone_Input",
-   "_why": "primeiro o consumidor (widget), depois o atributo"
+   "_why": "first the consumer (widget), then the attribute"
   },
   {
    "op": "delete",

@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA do verbo rename num registo de static entity quando o nome novo ja e de outro registo. O IStaticEntityRecord do ODC nao publica Name: o nome do registo e a propriedade Identifier (o setter chama SetName), e e por ela que o rename escreve (desde 2026-10-03; antes recusava com \"IStaticEntityRecord 'UnderReview' has no Name\"). Como no set Identifier, o kernel confere AbstractObject.NameClash antes de escrever, porque SetName sufixaria em SILENCIO (Received -> Received2). O caminho positivo esta em tests/jobs-odc/rename-name-property.json; o mesmo via set Identifier em tests/jobs-odc/static-entity-lifecycle.json e set-identifier-clash.json.",
+ "description": "ODC: the REFUSAL of the rename verb on a static entity record when the new name already belongs to another record. The ODC IStaticEntityRecord does not publish Name: the record name is the property Identifier (the setter calls SetName), and that is what rename writes (since 2026-10-03; before it refused with \"IStaticEntityRecord 'UnderReview' has no Name\"). As in set Identifier, the kernel checks AbstractObject.NameClash before writing, because SetName would add a suffix SILENTLY (Received -> Received2). The positive path is in tests/jobs-odc/rename-name-property.json; the same via set Identifier in tests/jobs-odc/static-entity-lifecycle.json and set-identifier-clash.json.",
  "base": "job:static-entity",
  "expectValid": true,
  "expectError": [
@@ -8,7 +8,7 @@
   "pick another name"
  ],
  "ops": [
-  {"op": "get", "target": "IStaticEntity:WfClaimStage/Received", "_why": "o nome que ja existe no scope: Received."},
-  {"op": "rename", "target": "IStaticEntity:WfClaimStage/UnderReview", "name": "Received", "_why": "recusado: o rename escreve Identifier, e Received ja e de outro registo da WfClaimStage."}
+  {"op": "get", "target": "IStaticEntity:WfClaimStage/Received", "_why": "the name that already exists in the scope: Received."},
+  {"op": "rename", "target": "IStaticEntity:WfClaimStage/UnderReview", "name": "Received", "_why": "refused: rename writes Identifier, and Received already belongs to another record of the WfClaimStage."}
  ]
 }

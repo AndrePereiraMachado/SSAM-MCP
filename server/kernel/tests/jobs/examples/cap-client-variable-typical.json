@@ -6,12 +6,12 @@
  "ops": [
   {"op": "create", "parent": "@espace", "type": "IClientVariable", "name": "LastTaskSearch", "as": "$cv"},
   {"op": "set", "target": "$cv", "prop": "DataType", "value": "Text"},
-  {"op": "set", "target": "$cv", "prop": "Description", "value": "Ultima pesquisa de tarefas do usuario neste navegador"},
+  {"op": "set", "target": "$cv", "prop": "Description", "value": "The user's last task search in this browser"},
   {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetSearchedTasks", "as": "$agg"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
   {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "Task.Title like \"%\" + Client.LastTaskSearch + \"%\""}},
   {"op": "logic", "data": {"actions": [
-   {"name": "SearchChanged", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Refaz a consulta com a pesquisa guardada",
+   {"name": "SearchChanged", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Runs the query again with the saved search",
     "steps": [{"node": "IRefreshDataNode", "as": "RefreshSearched", "properties": {"DataSource": "IScreenAggregate:GetSearchedTasks"}}]}]}},
   {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IInput", "name": "RememberedSearch", "as": "$in"},
   {"op": "set", "target": "$in", "prop": "Variable", "value": "Client.LastTaskSearch"},

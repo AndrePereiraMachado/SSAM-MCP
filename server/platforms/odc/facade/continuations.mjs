@@ -4,7 +4,8 @@
 // mirrors the ones it needs as C# constants (lane S, kernel/src/Anvil.Core/Kernel/McpContinuations.cs).
 //
 // Pure data and two small functions: no I/O, no clock, no state. Nothing here is release-only, so the checkout may use
-// it as it is. Texts (`why`) are pt-BR, short, for the model and the person; arguments use the tool's own names.
+// it as it is. Texts (`why`) are English (owner rule 15/10/2026: every text SSAM emits is English), short, for the
+// model and the person; arguments use the tool's own names.
 //
 // Placeholders: an argument value written `<...>` (e.g. lane "<lane>", host "<host>", path "@<key>") is filled by
 // continuationFor(code, values) with values[<argument name>]. WORDS stands for the user's own authorization words and
@@ -58,9 +59,9 @@ export const MCP_TOOLS = Object.freeze([
   'ssam_debug',
 ]);
 
-const PROMPT = 'a ferramenta abre a janela privada do Windows; a pessoa digita lá, nunca no chat; depois repita a chamada';
-const NOT_IN_RELEASE = 'componente ausente do release; a sessão nunca compila: reinstale ou atualize (ssam_update)';
-const ASK_PERSON = 'peça à pessoa para responder o diálogo no Studio; esta chamada espera ele fechar e então repita';
+const PROMPT = 'the tool opens the private Windows prompt; the person types there, never in the chat; then repeat the call';
+const NOT_IN_RELEASE = 'component missing from the release; the session never compiles: reinstall or update (ssam_update)';
+const ASK_PERSON = 'ask the person to answer the dialog in the Studio; this call waits for it to close, then repeat';
 const c = (tool, args, why) => ({ tool, arguments: args, why });
 const noDialogs = why => c('o11_studio', { command: 'wait', args: { condition: 'no-dialogs' } }, why);
 const prompt = (kind, why = PROMPT) => c('ssam_credentials', { action: 'prompt', kind, host: '<host>' }, why);
@@ -68,154 +69,157 @@ const prompt = (kind, why = PROMPT) => c('ssam_credentials', { action: 'prompt',
 // code -> {tool, arguments, why}. Comments name the text each code replaces (file:line of the base).
 const TABLE = {
   // ---- license (LICENCA.md §7; the .NET parts answer license_<state>, the facade turns it into LICENSE_<STATE>)
-  LICENSE_NOT_ACTIVATED: c('ssam_license', { action: 'activate' }, 'o SSAM ainda não foi ativado nesta máquina; a ferramenta abre a janela privada do Windows e a pessoa digita o código lá, nunca no chat'),
-  ACTIVATION_PROMPT_OPENED: c('ssam_license', { action: 'status' }, 'a pessoa digita o código de ativação na janela privada, nunca no chat; depois confira o estado'),
-  LICENSE_EXPIRING: c('ssam_license', { action: 'renew' }, 'renovação pendente; renove agora'),
-  LICENSE_GRACE: c('ssam_license', { action: 'renew' }, 'sem contato com o servidor de licença; o SSAM para no fim da carência; renove'),
-  LICENSE_EXPIRED: c('ssam_license', { action: 'renew' }, 'a licença venceu sem renovação; conecte-se à internet e renove; nenhum dado nem Studio foi alterado'),
-  LICENSE_REVOKED: c('ssam_license', { action: 'status' }, 'a licença foi revogada pelo publicador; nenhum dado nem Studio foi alterado; renovar volta a valer se o publicador reativar'),
-  LICENSE_CLOCK_INVALID: c('ssam_license', { action: 'renew' }, 'o relógio do Windows está atrás da última hora conhecida, ou o estado da licença foi apagado; acerte o relógio e renove online'),
-  LICENSE_INSTALLATION_MISMATCH: c('ssam_license', { action: 'activate' }, 'esta licença pertence a outra instalação; ative com um código novo'),
-  LICENSE_RELEASE_TOO_OLD: c('ssam_update', { action: 'install', source: { packagePath: '<packagePath>' }, authorize: WORDS }, 'esta versão do SSAM não é mais aceita; instale a versão nova (o pacote vem do publicador)'),
-  RELEASE_TOO_OLD: c('ssam_update', { action: 'install', source: { packagePath: '<packagePath>' }, authorize: WORDS }, 'esta versão do SSAM não é mais aceita; instale a versão nova (o pacote vem do publicador)'),
-  LICENSE_UNAVAILABLE: c('ssam_doctor', { checks: ['license'] }, 'o estado da licença não pôde ser lido; o doctor mostra a licença e a janela de ativação'),
+  LICENSE_NOT_ACTIVATED: c('ssam_license', { action: 'activate' }, 'SSAM is not activated on this machine yet; the tool opens the private Windows prompt and the person types the code there, never in the chat'),
+  ACTIVATION_PROMPT_OPENED: c('ssam_license', { action: 'status' }, 'the person types the activation code in the private prompt, never in the chat; then check the state'),
+  LICENSE_EXPIRING: c('ssam_license', { action: 'renew' }, 'renewal pending; renew now'),
+  LICENSE_GRACE: c('ssam_license', { action: 'renew' }, 'no contact with the license server; SSAM stops at the end of the grace period; renew'),
+  LICENSE_EXPIRED: c('ssam_license', { action: 'renew' }, 'the license expired without renewal; connect to the internet and renew; no data and no Studio was changed'),
+  LICENSE_REVOKED: c('ssam_license', { action: 'status' }, 'the publisher revoked the license; no data and no Studio was changed; renewing makes it valid again if the publisher reactivates it'),
+  LICENSE_CLOCK_INVALID: c('ssam_license', { action: 'renew' }, 'the Windows clock is behind the last known time, or the license state was deleted; fix the clock and renew online'),
+  LICENSE_INSTALLATION_MISMATCH: c('ssam_license', { action: 'activate' }, 'this license belongs to another installation; activate with a new code'),
+  LICENSE_RELEASE_TOO_OLD: c('ssam_update', { action: 'install', source: { packagePath: '<packagePath>' }, authorize: WORDS }, 'this SSAM version is no longer accepted; install the new version (the package comes from the publisher)'),
+  RELEASE_TOO_OLD: c('ssam_update', { action: 'install', source: { packagePath: '<packagePath>' }, authorize: WORDS }, 'this SSAM version is no longer accepted; install the new version (the package comes from the publisher)'),
+  LICENSE_UNAVAILABLE: c('ssam_doctor', { checks: ['license'] }, 'the license state could not be read; the doctor shows the license and the activation prompt'),
 
   // ---- setup (ssam_setup, J)
-  SETUP_REQUIRED: c('ssam_setup', { action: 'plan' }, 'mostra Studios, portas livres, tenants e o registro em cada cliente; aplicar pede as palavras do usuário'),
-  SETUP_ENTRY_EXISTS: c('ssam_setup', { action: 'plan' }, 'já existe uma entrada com esse nome apontando para outro lugar; sobrescrever só com replace:true e as palavras do usuário'),
-  PORT_IN_USE: c('ssam_setup', { action: 'plan' }, 'testa cada porta da faixa do config.json e diz qual está ocupada'),
-  AUTHORITY_MISSING: c('ssam_doctor', { checks: ['authority'] }, 'confere a pasta de autoridade e a chave da bridge, sem tocar no Studio'),
+  SETUP_REQUIRED: c('ssam_setup', { action: 'plan' }, 'shows Studios, free ports, tenants and the registration in each client; applying needs the user\'s words'),
+  SETUP_ENTRY_EXISTS: c('ssam_setup', { action: 'plan' }, 'an entry with that name already points elsewhere; overwrite only with replace:true and the user\'s words'),
+  PORT_IN_USE: c('ssam_setup', { action: 'plan' }, 'tests each port of the config.json range and says which one is in use'),
+  AUTHORITY_MISSING: c('ssam_doctor', { checks: ['authority'] }, 'checks the authority folder and the bridge key, without touching the Studio'),
 
   // ---- connection (ssam.mjs:52, studio-connect.mjs:116,150-151, lib.mjs:448,452, BridgeClientOdc.cs:48-49)
-  STUDIO_NOT_OPEN: c('ssam_status', {}, 'abra o Studio normalmente (menu Iniciar) e entre; ssam_status mostra os Studios abertos de cada faixa'),
-  STUDIO_NOT_CONNECTED: c('ssam_connect', { lane: '<lane>' }, 'conecta o Studio aberto nesta faixa, sem salvar, publicar nem reiniciar'),
-  STUDIO_SESSION_CHANGED: c('ssam_connect', { lane: 'o11' }, 'o Studio selecionado não está mais conectado; conecte o Studio aberto agora'),
-  STUDIO_NOT_SIGNED_IN: c('hybrid_tenants', {}, 'a pessoa entra no tenant pelo próprio ODC Studio; hybrid_tenants mostra a sessão de cada tenant'),
-  SEVERAL_STUDIOS: c('ssam_connect', { lane: '<lane>', pid: '<pid>' }, 'há mais de um Studio aberto; ssam_status lista os pids; escolha um'),
-  ODC_STUDIO_NOT_RUNNING: c('studio_attach', {}, 'abra o ODC Studio normalmente e entre no tenant; depois esta chamada anexa a bridge'),
-  ODC_SEVERAL_STUDIOS: c('studio_attach', { pid: '<pid>' }, 'há mais de um ODC Studio aberto; ssam_status lista os pids; escolha um'),
-  BRIDGE_NOT_RESPONDING: c('ssam_doctor', { lane: '<lane>', checks: ['studios', 'ports'] }, 'a bridge carregada não responde; outra DLL não é anexada por cima; o doctor junta os recibos sem tocar no Studio'),
-  LEGACY_BRIDGE_LOADED: c('ssam_connect', { lane: '<lane>', coexistLegacy: true, authorize: WORDS }, 'o Studio já tem uma bridge de checkout; prefira outro Studio; seguir ao lado dela só depois do aviso de risco e com as palavras do usuário'),
-  STUDIO_BUSY: c('studio_wait', { condition: 'idle' }, 'o ODC Studio estava ocupado; nada foi enviado; espere e repita'),
-  O11_STUDIO_BUSY: c('o11_studio', { command: 'wait', args: { condition: 'idle' } }, 'o Service Studio estava ocupado; nada foi enviado; espere e repita'),
-  STUDIO_REQUIRED: c('ssam_connect', { lane: 'odc' }, 'um segredo só passa pela janela do Portal dentro do ODC Studio, lido pela bridge; conecte o ODC Studio e repita'),
+  STUDIO_NOT_OPEN: c('ssam_status', {}, 'open the Studio as usual (Start menu) and sign in; ssam_status shows the open Studios of each lane'),
+  STUDIO_NOT_CONNECTED: c('ssam_connect', { lane: '<lane>' }, 'connects the Studio open on this lane, without saving, publishing or restarting'),
+  STUDIO_SESSION_CHANGED: c('ssam_connect', { lane: 'o11' }, 'the selected Studio is no longer connected; connect the Studio that is open now'),
+  STUDIO_NOT_SIGNED_IN: c('hybrid_tenants', {}, 'the person signs in to the tenant in the ODC Studio itself; hybrid_tenants shows the session of each tenant'),
+  SEVERAL_STUDIOS: c('ssam_connect', { lane: '<lane>', pid: '<pid>' }, 'more than one Studio is open; ssam_status lists the pids; pick one'),
+  ODC_STUDIO_NOT_RUNNING: c('studio_attach', {}, 'open the ODC Studio as usual and sign in to the tenant; then this call attaches the bridge'),
+  ODC_SEVERAL_STUDIOS: c('studio_attach', { pid: '<pid>' }, 'more than one ODC Studio is open; ssam_status lists the pids; pick one'),
+  BRIDGE_NOT_RESPONDING: c('ssam_doctor', { lane: '<lane>', checks: ['studios', 'ports'] }, 'the loaded bridge does not answer; no other DLL is attached over it; the doctor gathers the receipts without touching the Studio'),
+  LEGACY_BRIDGE_LOADED: c('ssam_connect', { lane: '<lane>', coexistLegacy: true, authorize: WORDS }, 'the Studio already has a checkout bridge; prefer another Studio; go on beside it only after the risk warning and with the user\'s words'),
+  STUDIO_BUSY: c('studio_wait', { condition: 'idle' }, 'the ODC Studio was busy; nothing was sent; wait and repeat'),
+  O11_STUDIO_BUSY: c('o11_studio', { command: 'wait', args: { condition: 'idle' } }, 'the Service Studio was busy; nothing was sent; wait and repeat'),
+  STUDIO_REQUIRED: c('ssam_connect', { lane: 'odc' }, 'a secret only passes through the Portal window inside the ODC Studio, read by the bridge; connect the ODC Studio and repeat'),
 
   // ---- credentials (ScSecrets.cs:134, lib.mjs:372,468, odc3-context.mjs:20, debug.mjs:9,43, portal/runtime/access.mjs)
   CREDENTIAL_MISSING: prompt('<kind>'),
-  O11_SC_SECRET_NOT_FOUND: prompt('o11-service-center', PROMPT + '; nada foi enviado'),
+  O11_SC_SECRET_NOT_FOUND: prompt('o11-service-center', PROMPT + '; nothing was sent'),
   ODC_API_CLIENT_MISSING: prompt('odc-api-client'),
   ODC_PORTAL_CREDENTIAL_MISSING: prompt('odc-portal'),
-  O11_DEBUGGER_CREDENTIAL_MISSING: prompt('o11-debugger', 'o depurador usa a sessão do Studio ou o cofre; ' + PROMPT),
-  SECRET_IN_ARGUMENTS: c('ssam_credentials', { action: 'prompt', kind: '<kind>', host: '<host>' }, 'segredo nunca é argumento de ferramenta; guarde-o pela janela privada e passe só o nome da entrada'),
-  CREDENTIAL_PROMPT_OPENED: c('ssam_credentials', { action: 'status', kind: '<kind>', host: '<host>' }, 'a janela privada está aberta; a pessoa digita lá, nunca no chat; confira e repita a chamada'),
+  O11_DEBUGGER_CREDENTIAL_MISSING: prompt('o11-debugger', 'the debugger uses the Studio session or the vault; ' + PROMPT),
+  SECRET_IN_ARGUMENTS: c('ssam_credentials', { action: 'prompt', kind: '<kind>', host: '<host>' }, 'a secret is never a tool argument; store it through the private prompt and pass only the entry name'),
+  CREDENTIAL_PROMPT_OPENED: c('ssam_credentials', { action: 'status', kind: '<kind>', host: '<host>' }, 'the private prompt is open; the person types there, never in the chat; check and repeat the call'),
   // F8 (A13, 2026-10-06): the call waits for the prompt within SSAM_PROMPT_WAIT_MS and, past it, is the continuation itself.
-  CREDENTIAL_PROMPT_PENDING: c(SAME_TOOL, { '<arguments>': '<the same>' }, 'uma janela privada do Windows está aberta; a pessoa digita lá, nunca no chat; repita a mesma chamada, que retoma de onde parou'),
-  CREDENTIAL_PROMPT_WINDOW_UNAVAILABLE: c('odc_portal_login', { action: 'focus', tenant: '<tenant>' }, 'recupere a janela privada; só uma confirmação de visibilidade permite dizer que ela abriu'),
-  CREDENTIAL_PROMPT_UNAVAILABLE: c('odc_portal_login', { action: 'focus', tenant: '<tenant>' }, 'o processo privado não confirmou uma janela; tente recuperar pelo gerenciador do próprio prompt'),
-  CREDENTIAL_FOCUS_DENIED: c('odc_portal_login', { action: 'focus', tenant: '<tenant>' }, 'o Windows não confirmou o foco da janela privada; não afirme que ela está na frente'),
-  CREDENTIAL_PROMPT_CANCELLED: c('odc_portal_login', { action: 'prompt', tenant: '<tenant>' }, 'a janela foi cancelada; reabra somente quando a pessoa pedir para continuar'),
-  AUTH_NOT_CONFIGURED: c('ssam_doctor', { checks: ['vault'] }, 'sem sessão do Studio, sem credencial guardada, e a janela privada não abriu; o doctor mostra o cofre e a janela'),
-  PORTAL_VAULT_UNAVAILABLE: c('ssam_doctor', { checks: ['vault'] }, 'o cofre do Windows não pôde ser lido; o doctor mostra o motivo'),
-  API_CLIENT_VAULT_UNAVAILABLE: c('ssam_doctor', { checks: ['vault'] }, 'o cofre do Windows não pôde ser lido; o doctor mostra o motivo'),
-  PORTAL_AUTH_REQUIRED: c('odc_portal_login', { tenant: '<tenant>' }, 'autentique pela sessão nativa compatível ou pelo perfil privado salvo; autenticação que exige outro provedor ou interação será informada explicitamente'),
-  WEB_SIGN_IN_REQUIRED: c('odc_portal_login', { tenant: '<tenant>' }, 'confira a autenticação do Portal; sem credencial guardada, a ferramenta abre e verifica sua própria janela privada'),
-  O11_STUDIO_OPERATION_UNAVAILABLE: c('o11_environment', { action: 'inventory', host: '<host>' }, 'esta operação não tem caminho pela sessão do Studio conectado; o11_environment só oferece as ações que têm (inventory, download, create-app...)'),
+  CREDENTIAL_PROMPT_PENDING: c(SAME_TOOL, { '<arguments>': '<the same>' }, 'a private Windows prompt is open; the person types there, never in the chat; repeat the same call, which resumes where it stopped'),
+  CREDENTIAL_PROMPT_WINDOW_UNAVAILABLE: c('odc_portal_login', { action: 'focus', tenant: '<tenant>' }, 'recover the private prompt; only a visibility confirmation allows saying it opened'),
+  CREDENTIAL_PROMPT_UNAVAILABLE: c('odc_portal_login', { action: 'focus', tenant: '<tenant>' }, 'the private process did not confirm a window; try to recover it through the prompt\'s own manager'),
+  CREDENTIAL_FOCUS_DENIED: c('odc_portal_login', { action: 'focus', tenant: '<tenant>' }, 'Windows did not confirm the focus of the private prompt; do not claim it is in front'),
+  CREDENTIAL_PROMPT_CANCELLED: c('odc_portal_login', { action: 'prompt', tenant: '<tenant>' }, 'the prompt was cancelled; reopen it only when the person asks to continue'),
+  AUTH_NOT_CONFIGURED: c('ssam_doctor', { checks: ['vault'] }, 'no Studio session, no stored credential, and the private prompt did not open; the doctor shows the vault and the prompt'),
+  PORTAL_VAULT_UNAVAILABLE: c('ssam_doctor', { checks: ['vault'] }, 'the Windows vault could not be read; the doctor shows why'),
+  API_CLIENT_VAULT_UNAVAILABLE: c('ssam_doctor', { checks: ['vault'] }, 'the Windows vault could not be read; the doctor shows why'),
+  PORTAL_AUTH_REQUIRED: c('odc_portal_login', { tenant: '<tenant>' }, 'authenticate through the compatible native session or the saved private profile; authentication that needs another provider or interaction is reported explicitly'),
+  WEB_SIGN_IN_REQUIRED: c('odc_portal_login', { tenant: '<tenant>' }, 'check the Portal authentication; without a stored credential, the tool opens and verifies its own private prompt'),
+  O11_STUDIO_OPERATION_UNAVAILABLE: c('o11_environment', { action: 'inventory', host: '<host>' }, 'this operation has no path through the connected Studio session; o11_environment offers only the actions that have one (inventory, download, create-app...)'),
 
   // ---- update (ssam_update, J)
-  UPDATE_AVAILABLE: c('ssam_update', { action: 'check' }, 'há versão nova; confira antes de instalar'),
-  RECONNECT_REQUIRED: c('ssam_status', {}, 'a pessoa reconecta o cliente (/mcp no Claude Code, ou reinicia o Claude Desktop); depois confira a versão'),
-  UPDATE_PACKAGE_INVALID: c('ssam_doctor', { checks: ['signatures'] }, 'o pacote não confere (assinatura, hashes ou minRelease); nada foi instalado'),
-  RELEASE_IN_USE: c('ssam_update', { action: 'prune', dryRun: true }, 'um processo vivo ou um registro de conexão usa esse release; o dryRun mostra o que fica'),
-  RELEASE_INTEGRITY: c('ssam_doctor', { checks: ['install', 'signatures'] }, 'arquivos do release mudaram ou faltam; reinstale ou atualize'),
-  SMART_APP_CONTROL_BLOCKED: c('ssam_doctor', { checks: ['signatures'] }, 'o Windows bloqueou um binário sem assinatura; o doctor mostra o estado do Smart App Control'),
-  TASK_RUNNING: c(SAME_TOOL, { continueTask: '<taskId>' }, 'a mesma ferramenta espera até 25 s pelo resultado; nunca repita a chamada original nem durma'),
-  TASK_NOT_FOUND: c('ssam_task', {}, 'lista os registros das tarefas desta raiz'),
-  TASK_TOOL_MISMATCH: c(SAME_TOOL, { continueTask: '<taskId>' }, 'continue pela ferramenta que iniciou esta tarefa'),
-  TASK_ORPHANED: c('ssam_doctor', { lane: '<lane>' }, 'reconcilie o estado da faixa; nunca repita uma escrita incerta'),
-  TASK_ANSWER_UNAVAILABLE: c('ssam_task', { id: '<taskId>' }, 'leia o registro e reconcilie o resultado guardado'),
+  UPDATE_AVAILABLE: c('ssam_update', { action: 'check' }, 'a new version is available; check it before installing'),
+  RECONNECT_REQUIRED: c('ssam_status', {}, 'the person reconnects the client (/mcp in Claude Code, or restart Claude Desktop); then check the version'),
+  UPDATE_PACKAGE_INVALID: c('ssam_doctor', { checks: ['signatures'] }, 'the package does not match (signature, hashes or minRelease); nothing was installed'),
+  RELEASE_IN_USE: c('ssam_update', { action: 'prune', dryRun: true }, 'a live process or a connection record uses that release; the dryRun shows what stays'),
+  RELEASE_INTEGRITY: c('ssam_doctor', { checks: ['install', 'signatures'] }, 'release files changed or are missing; reinstall or update'),
+  SMART_APP_CONTROL_BLOCKED: c('ssam_doctor', { checks: ['signatures'] }, 'Windows blocked an unsigned binary; the doctor shows the Smart App Control state'),
+  TASK_RUNNING: c(SAME_TOOL, { continueTask: '<taskId>' }, 'the same tool waits up to 25 s for the result; never repeat the original call nor sleep'),
+  TASK_NOT_FOUND: c('ssam_task', {}, 'lists the task records of this root'),
+  TASK_TOOL_MISMATCH: c(SAME_TOOL, { continueTask: '<taskId>' }, 'continue through the tool that started this task'),
+  TASK_ORPHANED: c('ssam_doctor', { lane: '<lane>' }, 'reconcile the state of the lane; never repeat an uncertain write'),
+  TASK_ANSWER_UNAVAILABLE: c('ssam_task', { id: '<taskId>' }, 'read the record and reconcile the stored result'),
 
   // ---- compat (the static check before every attach)
-  INCOMPATIBLE_STUDIO: c('ssam_doctor', { lane: '<lane>', checks: ['compat'] }, 'checagem estática, sem tocar no Studio; nada foi enviado; a resposta lista membros e versões'),
-  STUDIO_CHANGED: c('ssam_connect', { lane: '<lane>', dryRun: true }, 'o Studio mudou de versão; o dryRun só checa e não envia nada ao Studio'),
-  CAPABILITY_UNAVAILABLE: c('ssam_doctor', { lane: '<lane>', checks: ['compat'] }, 'o selftest marcou esta capacidade como indisponível neste Studio'),
-  FEATURE_NOT_IN_RELEASE: c('ssam_discover', { intent: '<intent>', lane: 'odc' }, 'esta feature do builder não vem no release; descubra a operação de job equivalente'),
+  INCOMPATIBLE_STUDIO: c('ssam_doctor', { lane: '<lane>', checks: ['compat'] }, 'static check, without touching the Studio; nothing was sent; the answer lists members and versions'),
+  STUDIO_CHANGED: c('ssam_connect', { lane: '<lane>', dryRun: true }, 'the Studio changed version; the dryRun only checks and sends nothing to the Studio'),
+  CAPABILITY_UNAVAILABLE: c('ssam_doctor', { lane: '<lane>', checks: ['compat'] }, 'the selftest marked this capability as unavailable in this Studio'),
+  FEATURE_NOT_IN_RELEASE: c('ssam_discover', { intent: '<intent>', lane: 'odc' }, 'this builder feature is not in the release; discover the equivalent job operation'),
 
   // ---- dialogs (DialogPolicy.cs:54-58, MergeHandler.cs:74; D-DONOS-4: a web dialog goes back to the person)
-  DIALOG_OPEN: c('o11_studio', { command: 'dismiss-dialog', args: { title: '<dialog title>' } }, 'fecha só janela com dono, pelo título, como o X (Cancelar), se a pessoa concordar; diálogo web: peça à pessoa para responder no Studio e repita'),
-  DIALOG_RECOVERY: noDialogs('diálogo de recuperação (Open | Discard): a pessoa escolhe no Studio; esta chamada espera ele fechar e então repita'),
-  DIALOG_MANAGE_DEPENDENCIES: noDialogs('diálogo de referências: a pessoa escolhe no Studio (Manage Dependencies e Apply atualiza; Cancel abre sem atualizar); nunca reinicie o Studio por isso'),
-  DIALOG_MERGE_EDITOR: noDialogs('um editor de merge está aberto: a pessoa termina ou cancela no Studio; nunca reinicie o Studio por isso'),
-  DIALOG_WEB: noDialogs('diálogo web que a bridge não lê: ' + ASK_PERSON),
-  ODC_DIALOG_OPEN: c('studio_dismiss_dialog', { caption: '<caption>', action: '<action>' }, 'só quando a pessoa já decidiu; diálogos só informativos a bridge fecha sozinha'),
+  DIALOG_OPEN: c('o11_studio', { command: 'dismiss-dialog', args: { title: '<dialog title>' } }, 'closes only a window with an owner, by its title, like the X (Cancel), if the person agrees; a web dialog: ask the person to answer it in the Studio and repeat'),
+  DIALOG_RECOVERY: noDialogs('recovery dialog (Open | Discard): the person chooses in the Studio; this call waits for it to close, then repeat'),
+  DIALOG_MANAGE_DEPENDENCIES: noDialogs('references dialog: the person chooses in the Studio (Manage Dependencies and Apply updates; Cancel opens without updating); never restart the Studio for it'),
+  DIALOG_MERGE_EDITOR: noDialogs('a merge editor is open: the person finishes or cancels it in the Studio; never restart the Studio for it'),
+  DIALOG_WEB: noDialogs('web dialog the bridge does not read: ' + ASK_PERSON),
+  ODC_DIALOG_OPEN: c('studio_dismiss_dialog', { caption: '<caption>', action: '<action>' }, 'only when the person has already decided; the bridge closes informational dialogs by itself'),
 
   // ---- missing component (ssam.mjs:51, lib.mjs:73,122,174,444, kernel-delivery.mjs:18,41, discovery.mjs:582,
   //      BridgeClientOdc.cs:58): in a release nothing is built on the person's machine
   COMPONENT_MISSING: c('ssam_doctor', { lane: '<lane>' }, NOT_IN_RELEASE),
   ODC_BRIDGE_CLIENT_MISSING: c('ssam_doctor', { lane: 'odc' }, NOT_IN_RELEASE),
-  WORKER_UNAVAILABLE: c('ssam_doctor', { lane: '<lane>', checks: ['workers'] }, 'o worker da faixa não respondeu; o doctor mostra o estado dos workers'),
+  WORKER_UNAVAILABLE: c('ssam_doctor', { lane: '<lane>', checks: ['workers'] }, 'the lane worker did not answer; the doctor shows the state of the workers'),
 
   // ---- O11 by MCP instead of the CLI (ssam.mjs:142-143,264,284, discovery.mjs:80-81, module-map.mjs:292,
   //      lanes.mjs:66-69, FunctionCatalog.cs:129, ExpressionCheck.cs:66, Verbs.cs:536,549,1056, DataPreflight.cs:49,
   //      ReferenceRefresher.cs:128, NativeReferenceSnapshot.cs:104, the internal-routes verb of the ODC CLI)
-  O11_INSPECT_BY_KEY: c('o11_inspect', { oml: '<capture.oml>', path: '@<key>', expectedSourceSha256: '<sha256>' }, 'lê a subárvore, as propriedades e os usos do elemento pela @key da mesma captura'),
-  O11_DELIVER: c('o11_deliver', { module: '<module>', job: '<job.json>', checks: ['<check>'], authorize: WORDS }, 'entrega por merge no Service Studio; nunca publica'),
-  O11_PUBLISH_BY_PERSON: c('o11_studio', { command: 'status' }, 'publicar no O11 fica com a pessoa, no Service Studio, depois do merge; o status mostra o módulo aberto'),
-  RUN_JOB: c('ssam_job', { lane: '<lane>', job: '<job.json>' }, 'aplica o job a uma fixture e devolve ok/isValid e as mensagens; não entrega nada ao Studio; só quando a pessoa pede uma prova headless: para mudar o módulo, entregue direto (studio_deliver / o11_deliver valida dentro da chamada)'),
+  O11_INSPECT_BY_KEY: c('o11_inspect', { oml: '<capture.oml>', path: '@<key>', expectedSourceSha256: '<sha256>' }, 'reads the subtree, the properties and the usages of the element by the @key of the same capture'),
+  O11_DELIVER: c('o11_deliver', { module: '<module>', job: '<job.json>', checks: ['<check>'], authorize: WORDS }, 'delivers by merge in the Service Studio; never publishes'),
+  O11_PUBLISH_BY_PERSON: c('o11_studio', { command: 'status' }, 'publishing on O11 stays with the person, in the Service Studio, after the merge; the status shows the open module'),
+  RUN_JOB: c('ssam_job', { lane: '<lane>', job: '<job.json>' }, 'applies the job to a fixture and returns ok/isValid and the messages; delivers nothing to the Studio; only when the person asks for a headless proof: to change the module, deliver directly (studio_deliver / o11_deliver validates inside the call)'),
   // A module name that is no module open in the ODC Studio (studio-module.mjs resolveOpenModule): nothing was sent.
   // O11 (F4, A29): continuationFor(code, {lane:'o11'}) answers o11_environment {action:"download", module} (LANE_TABLE).
-  MODULE_NOT_OPEN: c('studio_open', { module: '<module>' }, 'o módulo não está aberto no ODC Studio; abre pela organização e repita a chamada com os mesmos argumentos (no O11: o11_environment {action:"download", module})'),
-  FUNCTIONS_LOOKUP: c('ssam_reference', { lane: 'o11', kind: 'functions', query: '<name>' }, 'catálogo de funções embutidas da faixa'),
-  API_CONTRACT: c('ssam_reference', { lane: '<lane>', kind: 'api', query: '<Interface>' }, 'contrato da Model API e das ops do kernel da faixa'),
-  O11_PRODUCER_CAPTURE: c('ssam_job', { lane: 'o11', job: '<job.json>', captureProducers: ['<Producer>'] }, 'a assinatura do produtor não é uma captura atestada do servidor O11; o runner a captura só leitura, pelo Studio logado, e a liga ao job'),
-  ODC_PORTAL_ROUTES: c('odc_portal_routes', { tenant: '<tenant>', module: '<module>' }, 'rotas internas do Portal de um módulo'),
+  MODULE_NOT_OPEN: c('studio_open', { module: '<module>' }, 'the module is not open in the ODC Studio; this opens it from the organization; then repeat the call with the same arguments (on O11: o11_environment {action:"download", module})'),
+  FUNCTIONS_LOOKUP: c('ssam_reference', { lane: 'o11', kind: 'functions', query: '<name>' }, 'built-in function catalog of the lane'),
+  API_CONTRACT: c('ssam_reference', { lane: '<lane>', kind: 'api', query: '<Interface>' }, 'contract of the Model API and of the kernel ops of the lane'),
+  O11_PRODUCER_CAPTURE: c('ssam_job', { lane: 'o11', job: '<job.json>', captureProducers: ['<Producer>'] }, 'the producer signature is not an attested capture of the O11 server; the runner captures it read-only, through the signed-in Studio, and binds it to the job'),
+  ODC_PORTAL_ROUTES: c('odc_portal_routes', { tenant: '<tenant>', module: '<module>' }, 'internal Portal routes of a module'),
 
   // ---- the refusal codes of the 2026-10-06 package (docs/PACOTE-ATRITOS-2.md section 5.3). Each lane puts the code and
   //      its continuation on its own answers; this table is the catalog (and the refusals guide).
-  INPUT_INVALID: c(SAME_TOOL, { '<arguments>': '<corrected>' }, 'a mesma ferramenta com os argumentos de corrected (cada violação traz path, message e accepted); nada foi executado'),
-  DISCOVERY_INDEX_INVALID: c('ssam_doctor', {}, 'o índice do discover não confere com as fontes desta release; o doctor mostra a release e o índice'),
-  DATA_PROOF_DIFFERS: c('ssam_evidence', { file: '<task>/result.json', pointer: '/dataProof/differences' }, 'os dados entregues diferem do job; cada diferença traz elemento, propriedade, esperado e atual'),
-  PRODUCER_SIGNATURE_MISSING: c('o11_dependencies', { action: 'list', producer: '<producer>' }, 'lista os elementos públicos do produtor; cada ausente diz a causa (privado, não publicado, tema ou ausente) e o fix'),
-  STUDIO_WRITE_QUEUE_TIMEOUT: c('o11_studio', { command: 'status' }, 'a escrita esperou a vez na fila do Studio além do limite; leia o estado (no ODC: studio_status) antes de repetir'),
-  SYSTEM_MODULE_NOT_OPENABLE: c('ssam_map', { lane: 'o11', target: '<module>' }, 'Users, OutSystemsUI e System não abrem como módulo; o mapa lê o OML publicado sem abrir aba'),
-  DOCTOR_LANE_UNUSABLE: c('ssam_connect', { lane: '<lane>' }, 'a faixa pedida não está usável; conecta o Studio já aberto dela, sem salvar, publicar nem reiniciar'),
-  RELEASE_CHANGED: c('ssam_doctor', {}, 'a release mudou sob esta sessão; reinicie este servidor MCP (Claude Code: /mcp e reconnect; Codex: reinicie a sessão)'),
-  WRONG_SERVER: c('ssam_doctor', {}, 'este servidor MCP não é o da pasta da sessão; o doctor mostra a raiz de cada um'),
-  TOOL_CATALOG_STALE: c('ssam_doctor', {}, 'o catálogo de ferramentas mudou desde o início do servidor; reinicie o servidor MCP'),
-  MODULE_RESERVED: c('ssam_task', { id: '<id>' }, 'uma entrega anterior desta raiz ainda segura o módulo; leia a tarefa para retomar ou fechar'),
-  MODULE_RESERVED_FOREIGN: c('ssam_doctor', { lane: 'o11' }, 'o módulo está reservado por outra raiz do SSAM; o doctor mostra a reserva e como liberá-la com as palavras do usuário'),
-  BLANK_UI_MODULE: c('o11_environment', { action: '<action>' }, 'repita a mesma chamada sem blank: blank vale só para módulos Service e Library'),
+  INPUT_INVALID: c(SAME_TOOL, { '<arguments>': '<corrected>' }, 'the same tool with the arguments of corrected (each violation has path, message and accepted); nothing ran'),
+  DISCOVERY_INDEX_INVALID: c('ssam_doctor', {}, 'the discover index does not match the sources of this release; the doctor shows the release and the index'),
+  DATA_PROOF_DIFFERS: c('ssam_evidence', { file: '<task>/result.json', pointer: '/dataProof/differences' }, 'the delivered data differ from the job; each difference has element, property, expected and actual'),
+  PRODUCER_SIGNATURE_MISSING: c('o11_dependencies', { action: 'list', producer: '<producer>' }, 'lists the public elements of the producer; each missing one says the cause (private, not published, theme or missing) and the fix'),
+  STUDIO_WRITE_QUEUE_TIMEOUT: c('o11_studio', { command: 'status' }, 'the write waited for its turn in the Studio queue past the limit; read the state (on ODC: studio_status) before repeating'),
+  SYSTEM_MODULE_NOT_OPENABLE: c('ssam_map', { lane: 'o11', target: '<module>' }, 'Users, OutSystemsUI and System do not open as modules; the map reads the published OML without opening a tab'),
+  DOCTOR_LANE_UNUSABLE: c('ssam_connect', { lane: '<lane>' }, 'the requested lane is not usable; this connects its already open Studio, without saving, publishing or restarting'),
+  RELEASE_CHANGED: c('ssam_doctor', {}, 'the release changed under this session; restart this MCP server (Claude Code: /mcp and reconnect; Codex: restart the session)'),
+  WRONG_SERVER: c('ssam_doctor', {}, 'this MCP server is not the one of the session folder; the doctor shows the root of each'),
+  TOOL_CATALOG_STALE: c('ssam_doctor', {}, 'the tool catalog changed since the server started; restart the MCP server'),
+  MODULE_RESERVED: c('ssam_task', { id: '<id>' }, 'an earlier delivery of this root still holds the module; read the task to resume or close it'),
+  MODULE_RESERVED_FOREIGN: c('ssam_doctor', { lane: 'o11' }, 'the module is reserved by another SSAM root; the doctor shows the reservation and how to release it with the user\'s words'),
+  BLANK_UI_MODULE: c('o11_environment', { action: '<action>' }, 'repeat the same call without blank: blank applies only to Service and Library modules'),
 
   // ---- the refusal codes of the atritos 3 package (docs/PACOTE-ATRITOS-3.md section 5.3), registered here outside
   //      KERNEL_CODES (no C# mirror); each lane puts the code and its continuation on its own answers.
-  PUBLISH_BLOCKED_BY_DIALOG: c('o11_studio', { command: 'refresh-references', args: { module: '<module>' } }, 'o publish parou num diálogo do Studio; com Manage Dependencies, refresh-references atualiza as referências; com outro diálogo, o11_studio {command:"status"} mostra qual é'),
-  EVIDENCE_FILTER_INVALID: c('ssam_evidence', { file: '<file>', where: '<example>' }, 'a mesma leitura com a cláusula de exemplo, montada dos campos que as linhas do arquivo têm'),
-  STUDIO_WINDOWLESS: c('ssam_connect', { lane: 'o11' }, 'este Service Studio não tem janela principal: o SSAM o ignora e o Studio com janela é o da faixa; o SSAM nunca fecha nem encerra um Studio'),
-  DUPLICATE_MCP_ENTRY: c('ssam_doctor', {}, 'duas entradas MCP apontam para o mesmo servidor SSAM; use uma só (uma entrada MCP por servidor)'),
-  PATH_OUTSIDE_WORKSPACE: c(SAME_TOOL, { '<arguments>': '<the same, with the job inline or agent:inbox/name>' }, 'job: repita a mesma chamada com o próprio job inline (JSON compacto); outro arquivo do usuário: grave no inbox do agente com a ferramenta Write (UTF-8) e repita com agent:inbox/<nome>'),
+  PUBLISH_BLOCKED_BY_DIALOG: c('o11_studio', { command: 'refresh-references', args: { module: '<module>' } }, 'the publish stopped at a Studio dialog; with Manage Dependencies, refresh-references updates the references; with another dialog, o11_studio {command:"status"} shows which one'),
+  EVIDENCE_FILTER_INVALID: c('ssam_evidence', { file: '<file>', where: '<example>' }, 'the same read with the example clause, built from the fields the rows of the file have'),
+  STUDIO_WINDOWLESS: c('ssam_connect', { lane: 'o11' }, 'this Service Studio has no main window: SSAM ignores it and the Studio with a window is the one of the lane; SSAM never closes nor ends a Studio'),
+  DUPLICATE_MCP_ENTRY: c('ssam_doctor', {}, 'two MCP entries point to the same SSAM server; use only one (one MCP entry per server)'),
+  PATH_OUTSIDE_WORKSPACE: c(SAME_TOOL, { '<arguments>': '<the same, with the job inline or agent:inbox/name>' }, 'job: repeat the same call with the job itself inline (compact JSON); another file of the user: write it to the agent inbox with the Write tool (UTF-8) and repeat with agent:inbox/<name>'),
 
   // ---- lane wp of the atritos 3 package (the build pool, studio-write-lock.mjs and build-pool.mjs): a delivery whose
   //      module guard or build worker did not come within the queue limit; nothing of it ran.
-  BUILD_QUEUE_TIMEOUT: c('ssam_doctor', {}, 'a entrega esperou outra entrega do mesmo módulo, ou um worker de build, além do limite; nada dela rodou: o doctor mostra a faixa, e a mesma entrega pode ser repetida'),
+  BUILD_QUEUE_TIMEOUT: c('ssam_doctor', {}, 'the delivery waited for another delivery of the same module, or for a build worker, past the limit; none of it ran: the doctor shows the lane, and the same delivery may be repeated'),
 
   // ---- the O11 tab codes (o11-studio.mjs close-module, o11_publish/snapshot/refresh-references by key; lane mb2 and the
   //      16th release) and the dependencies-dialog refresh of lane mb2 (o11-studio.mjs, Delivery.ReferencesRefreshFailedCode).
-  MODULE_TAB_NOT_CLOSABLE: c('o11_publish', { module: '<module>' }, 'a aba tem mudanças não salvas, ainda abre ou tem uma operação pendente; nada foi fechado: o publish salva o módulo (com as palavras do usuário), depois feche a aba'),
-  MODULE_TAB_AMBIGUOUS: c('o11_studio', { command: 'status' }, 'duas abas do Studio têm esse nome; o status mostra as abas com a key de cada uma: passe moduleKey'),
-  REFERENCES_REFRESH_FAILED: c('o11_studio', { command: 'refresh-references', args: { module: '<module>' } }, 'o diálogo de dependências foi respondido (Cancel), mas o refresh das referências falhou; repita o refresh do módulo e depois a mesma chamada'),
+  MODULE_TAB_NOT_CLOSABLE: c('o11_publish', { module: '<module>' }, 'the tab has unsaved changes, is still opening or has a pending operation; nothing was closed: the publish saves the module (with the user\'s words), then close the tab'),
+  MODULE_TAB_AMBIGUOUS: c('o11_studio', { command: 'status' }, 'two Studio tabs have that name; the status shows the tabs with the key of each: pass moduleKey'),
+  REFERENCES_REFRESH_FAILED: c('o11_studio', { command: 'refresh-references', args: { module: '<module>' } }, 'the dependencies dialog was answered (Cancel), but the references refresh failed; repeat the refresh of the module and then the same call'),
 
   // ---- F5, the family rule of producer signatures (producer-signatures.mjs, Delivery.ProducerChangedCode): a producer
   //      published again since the capture a delivery reused, seen right before the merge; nothing was written.
-  PRODUCER_CHANGED: c('o11_deliver', { module: '<module>', job: '<job.json>', authorize: WORDS }, 'um produtor foi publicado de novo desde a captura; nada foi gravado: a mesma entrega de novo (com closePrevious da tarefa recusada) captura a versão nova; no ODC, a mesma studio_deliver'),
+  PRODUCER_CHANGED: c('o11_deliver', { module: '<module>', job: '<job.json>', authorize: WORDS }, 'a producer was published again since the capture; nothing was written: the same delivery again (with closePrevious of the refused task) captures the new version; on ODC, the same studio_deliver'),
+  // fix-ext-refs (Delivery.ReferencesNotAddedCode, ManageDependencies.Code): the Studio's own Manage Dependencies refused the
+  // producer elements a delivery needs; nothing was applied and every problem carries its fix.
+  REFERENCES_NOT_ADDED: c('o11_dependencies', { action: 'list', producer: '<producer>' }, 'The Studio\'s Manage Dependencies added nothing and the module is unchanged: list what the producer publishes, follow the fix of each problem (publish the producer with the element public, or name it by its original key), then deliver the same job again'),
 };
 
 // The same code answered by the other lane with another call: continuationFor(code, {lane}) prefers these.
 const LANE_TABLE = {
   o11: {
     // module-map.mjs / o11-studio.mjs (A29): a closed O11 module is read from its published OML, never opened.
-    MODULE_NOT_OPEN: c('o11_environment', { action: 'download', module: '<module>' }, 'o módulo não está aberto no Service Studio; baixa o OML publicado sem abrir aba'),
+    MODULE_NOT_OPEN: c('o11_environment', { action: 'download', module: '<module>' }, 'the module is not open in the Service Studio; this downloads the published OML without opening a tab'),
   },
   odc: {
-    STUDIO_WRITE_QUEUE_TIMEOUT: c('studio_status', {}, 'a escrita esperou a vez na fila do ODC Studio além do limite; veja o comando em curso antes de repetir'),
+    STUDIO_WRITE_QUEUE_TIMEOUT: c('studio_status', {}, 'the write waited for its turn in the ODC Studio queue past the limit; see the running command before repeating'),
   },
 };
 
@@ -237,7 +241,7 @@ export const BUILD_POOL_CODES = Object.freeze(['BUILD_QUEUE_TIMEOUT']);
 // The O11 tab and dependencies-dialog codes (lane mb2 and the 16th release), outside the contract's section 5.3.
 export const O11_TAB_CODES = Object.freeze(['MODULE_TAB_NOT_CLOSABLE', 'MODULE_TAB_AMBIGUOUS', 'REFERENCES_REFRESH_FAILED']);
 // F5: the producer signature codes (no C# mirror needed: the facade answers the continuation).
-export const PRODUCER_SIGNATURE_CODES = Object.freeze(['PRODUCER_CHANGED']);
+export const PRODUCER_SIGNATURE_CODES = Object.freeze(['PRODUCER_CHANGED', 'REFERENCES_NOT_ADDED']);
 
 // The codes the kernel answers itself (lane S mirrors them in McpContinuations.cs): DialogPolicy.Hint (Recovery,
 // ManageDependencies, MergeEditor, WebDialog, default) and MergeHandler.cs:74 (B); ScSecrets.cs:134;

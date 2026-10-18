@@ -87,8 +87,8 @@ public sealed class MessageExpectationTests
         JobRunner.ValidateJob(job);
         var problem = Assert.Single(JobPreflight.Check(job)["problems"]!.AsArray().OfType<JsonObject>(), p => p["code"]!.GetValue<string>() == "EXPECTED_MESSAGES_INVALID");
         Assert.Equal("/" + removed, problem["pointer"]!.GetValue<string>());
-        Assert.Contains("campo removido", problem["message"]!.GetValue<string>());
-        Assert.Contains("campo removido", Assert.Throws<ArgumentException>(() => MessageExpectations.Read(JsonNode.Parse(File.ReadAllText(job))!, job)).Message);
+        Assert.Contains("field removed", problem["message"]!.GetValue<string>());
+        Assert.Contains("field removed", Assert.Throws<ArgumentException>(() => MessageExpectations.Read(JsonNode.Parse(File.ReadAllText(job))!, job)).Message);
     }
 
     /// <summary>Each lane declares the ids of its own verifier: an ODC-only warning (UnusedGlobalEvent) is refused by
@@ -153,6 +153,8 @@ public sealed class MessageExpectationTests
         Assert.Equal("nonblocking", verdict["verdict"]!.GetValue<string>());
         Assert.Equal("UnusedUserAction", verdict["id"]!.GetValue<string>());
         Assert.True(File.Exists(output));
+        // The kernel says it in English since 16/10 (MessageExpectations.cs); the Portuguese form of the releases before too.
+        Assert.DoesNotContain("fix it or declare it in expectedMessages with why", result["policyMessages"]!.ToJsonString());
         Assert.DoesNotContain("corrija ou declare em expectedMessages com why", result["policyMessages"]!.ToJsonString());
     }
 

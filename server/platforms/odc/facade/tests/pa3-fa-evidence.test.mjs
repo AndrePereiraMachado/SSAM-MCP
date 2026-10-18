@@ -2,6 +2,7 @@
 // (2026-10-06) wrote `kind ~ Container|Button`, `"key"` and `"path ~ Header2"` and got total 0 with ok:true each time.
 // Quotes around the clause or the field are taken off, | alternates in = ~ !~, a malformed clause is refused with the
 // grammar and an example built from the rows, and a valid filter that keeps 0 of N rows says what the rows hold.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

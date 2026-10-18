@@ -1,5 +1,5 @@
 {
- "description": "Sessao fria E: REST consumido GET frankfurter (FxApi, GetLatest com query from/to, resposta em structures aninhadas Amount/Base/Date/Rates.USD) + server action publica Fx_GetUsdRate que devolve Rate = Rates.USD (escrito por uma LLM sem contexto na sessao fria E de 2026-09-04, passou a primeira)",
+ "description": "Cold session E: REST consumed GET frankfurter (FxApi, GetLatest with query from/to, response in nested structures Amount/Base/Date/Rates.USD) + public server action Fx_GetUsdRate that returns Rate = Rates.USD (written by an LLM with no context in the cold session E of 2026-09-04, passed the first time)",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "ops": [

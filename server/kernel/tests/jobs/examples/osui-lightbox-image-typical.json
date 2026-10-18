@@ -1,5 +1,5 @@
 {
- "description": "LightboxImage (OutSystemsUI, Interaction) tipico; a Image de exemplo passa a External com Url; eventos Initialized tratados por screen actions que guardam os parametros em variaveis.",
+ "description": "Typical LightboxImage (OutSystemsUI, Interaction); the sample Image becomes External with a Url; events Initialized handled by screen actions that keep the parameters in variables.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

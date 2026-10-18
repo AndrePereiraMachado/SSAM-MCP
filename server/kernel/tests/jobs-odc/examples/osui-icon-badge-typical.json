@@ -1,5 +1,5 @@
 {
- "description": "IconBadge do OSUI com dados: o numero de avisos nao lidos vem do Count de um aggregate filtrado e a cor fica leve.",
+ "description": "IconBadge of OSUI with data: the number of unread notices comes from the Count of a filtered aggregate and the color is light.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

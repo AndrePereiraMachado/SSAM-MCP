@@ -1,5 +1,5 @@
 {
- "description": "CRUD back-office completo numa transacao (um merge na entrega): as cinco partes crud-01 a crud-05 concatenadas por jobs, sobre o mesmo modulo. Nenhum aviso sobra: os chamadores e o uso do input chegam nas partes seguintes.",
+ "description": "Complete back-office CRUD in one transaction (one merge on delivery): the five parts crud-01 to crud-05 concatenated by jobs, over the same module. No warning is left: the callers and the use of the input arrive in the next parts.",
  "base": "reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';
 import {customSearchConnectionPlan,customSearchSaveInput} from '../runtime/custom-search-connection-plan.mjs';
 import {customSearchConnectionApproval,CUSTOM_SEARCH_TEST,CUSTOM_SEARCH_SAVE} from '../runtime/custom-search-connection-approval.mjs';

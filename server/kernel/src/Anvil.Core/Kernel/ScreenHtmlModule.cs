@@ -25,6 +25,23 @@ public sealed partial class ScreenHtmlModule<T> where T : class
     private readonly object gate = new();
     public string ModuleName { get; }
     public double LoadMs { get; }
+    // The defaults of the reading: the installed Studio's for the UI flow a page is in (ScreenDefaults, from the reader's adapter:
+    // what a fresh element is born with depends on the module and on the theme of its flow), asked once per flow, when a page of
+    // it is read or a writer starts (a module without screens is never asked by a reading); null: a new UI flow. The same
+    // module read again after a change keeps them.
+    private readonly Dictionary<T, ScreenDefaults> defaultsByFlow;
+    private ScreenDefaults? newFlowDefaults;
+    internal ScreenDefaults DefaultsIn(T? flow)
+    {
+        lock (gate) {
+            if (flow == null) return newFlowDefaults ??= r.DefaultsOf(module, null) ?? ScreenDefaults.None;
+            if (!defaultsByFlow.TryGetValue(flow, out var known)) defaultsByFlow[flow] = known = r.DefaultsOf(module, flow) ?? ScreenDefaults.None;
+            return known;
+        }
+    }
+    // The defaults of a screen or block: those of the UI flow it is in.
+    internal ScreenDefaults DefaultsOfRoot(int rootIndex) =>
+        DefaultsIn(rootIndex >= 0 && parent[rootIndex] is var p and >= 0 && role[p] == "flow" ? nodes[p] : null);
 
     internal ScreenHtmlModule(T module, ModelReader<T> reader) : this(module, reader, null, -1) { }
 
@@ -35,6 +52,8 @@ public sealed partial class ScreenHtmlModule<T> where T : class
     {
         var sw = Stopwatch.StartNew();
         this.module = module; r = reader;
+        defaultsByFlow = previous != null ? new(previous.defaultsByFlow, ReferenceEqualityComparer.Instance) : new(ReferenceEqualityComparer.Instance);
+        newFlowDefaults = previous?.newFlowDefaults;
         ModuleName = r.DisplayOf(module);
         // One walk in the order of ModelReader.Walk (depth first, children in model order, a node once), reading the
         // children of each node once: the reads of every screen use them (childrenOf) instead of asking the model again.
@@ -145,7 +164,7 @@ public sealed partial class ScreenHtmlModule<T> where T : class
                 Keys = writer.Keys, Widgets = writer.WidgetCount, OpaqueWidgets = writer.OpaqueCount, Elements = writer.ElementCount,
                 ReadMs = sw.Elapsed.TotalMilliseconds, Problems = writer.Canon.Problems.ToList(), Canon = writer.Canon,
                 Decoder = parsed => { lock (gate) return new Decoder(this, scope, shapes).Run(parsed); },
-                State = new ReadingState(this, index, scope, shapes),
+                State = new ReadingState(this, index, scope, shapes), DefaultsNote = DefaultsOfRoot(index).Note,
             };
         }
     }
@@ -449,9 +468,9 @@ public sealed partial class ScreenHtmlModule<T> where T : class
         return string.Join("\u0001", parts);
     }
 
-    private static bool IsDefault(string kd, Fact f) => f.Text == ScreenHtml.DefaultOf(kd, f.Name, f.Type);
-    // The same where the element sits: an event of a widget inside a Popup has the Popup's Transition as its default.
-    private static bool IsDefault(string kd, Fact f, bool inPopup) => f.Text == ScreenHtml.DefaultOf(kd, f.Name, f.Type, inPopup);
+    // A fact at the default of its property where the element sits (inside a Popup: what the Studio gives it there, such as
+    // the Popup's Transition of an event).
+    private static bool IsDefault(ScreenDefaults defaults, string kd, Fact f, bool inPopup = false) => f.Text == defaults.DefaultOf(kd, f.Name, f.Type, inPopup);
 
     // Whether a node of the walk is a Popup or sits inside one (up to its screen or block).
     internal bool InPopup(int i)
@@ -489,6 +508,9 @@ public sealed partial class ScreenHtmlModule<T> where T : class
         public readonly Dictionary<string, Shape> Shapes = new(StringComparer.Ordinal);
         public readonly Scope Scope = new(rootIndex);
         public int WidgetCount, OpaqueCount, ElementCount;
+        // The defaults of the page: those of the UI flow it is in (ScreenHtmlModule.DefaultsOfRoot).
+        private ScreenDefaults? defaults;
+        private bool IsDefault(string kd, Fact f, bool inPopup = false) => ScreenHtmlModule<T>.IsDefault(defaults ??= m.DefaultsOfRoot(rootIndex), kd, f, inPopup);
         private int next;
         private string Next() => "w" + (++next).ToString(CultureInfo.InvariantCulture);
         private List<string> Problems => Canon.Problems;

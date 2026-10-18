@@ -1,3 +1,5 @@
+import './fixtures/isolated-profile.mjs';
+import { sessionText } from './fixtures/session-rules.mjs';
 // Atritos 2, lane F7b, A09 and A10: the identity of the MCP server ({name, root, release, startedAt}, server-identity.mjs) is
 // in every doctor answer; once the release under a running server changes, every tool answers RELEASE_CHANGED before any
 // action (except ssam_doctor, ssam_evidence and the ssam_task read); the doctor answers WRONG_SERVER when the session's SSAM
@@ -55,7 +57,7 @@ test('the release changed under the server: a write answers RELEASE_CHANGED befo
   assert.equal(ran, 0, 'nothing ran');
   assert.equal(job.isError, true);
   assert.deepEqual(job.structuredContent.release.changed, ['head']);
-  assert.match(job.structuredContent.next, /reinicie este servidor MCP \(Claude Code: \/mcp e reconnect; Codex: reinicie a sessão\)/);
+  assert.match(job.structuredContent.next, /restart this MCP server \(Claude Code: \/mcp and reconnect; Codex: restart the session\)/);
   assert.deepEqual([job.structuredContent.continuation.tool, job.structuredContent.continuation.arguments], ['ssam_doctor', {}]);
   const close = await call('ssam_task', { id: 'f'.repeat(32), close: { reason: 'x' } });
   assert.equal(close.structuredContent?.code, 'RELEASE_CHANGED');
@@ -91,7 +93,7 @@ test('the catalog changed on disk: the doctor answers TOOL_CATALOG_STALE, other 
   const doctor = (await call('ssam_doctor', {})).structuredContent;
   assert.equal(doctor.code, 'TOOL_CATALOG_STALE', JSON.stringify(doctor));
   assert.equal(doctor.ok, false);
-  assert.match(doctor.next, /reinicie este servidor MCP/);
+  assert.match(doctor.next, /restart this MCP server/);
 });
 
 test('WRONG_SERVER: the session works in another SSAM root (the cwd the client launched the server with, or its MCP roots)', async t => {
@@ -195,12 +197,12 @@ test('the instructions and AGENTS.md no longer fix the mcp__ssam__ prefix to a s
   const client = new Client({ name: 'pa2-f7b-instructions', version: '1' });
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
   t.after(async () => { await client.close(); await server.close(); });
-  const instructions = client.getInstructions();
+  const instructions = sessionText(client);
   assert.doesNotMatch(instructions, /registered as "ssam"/);
-  assert.match(instructions, /\(mcp__<name>__: the prefix your client gave this server\)/);
-  assert.match(instructions, /WRITES to the same Studio wait their turn in a queue \(STUDIO_WRITE_QUEUE_TIMEOUT only after a bounded wait\)/);
+  assert.match(instructions, /replace ssam with your server prefix/);
+  assert.match(instructions, /writes to one Studio queue.*STUDIO_WRITE_QUEUE_TIMEOUT only follows a bounded wait/);
   const agents = fs.readFileSync(path.join(repo, 'AGENTS.md'), 'utf8');
   assert.match(agents, /servidor MCP desta pasta \(`ssam_doctor` mostra a raiz dele\)/);
-  assert.match(agents, /troque `ssam` pelo nome deste servidor no seu cliente/);
-  assert.doesNotMatch(agents, /servidor MCP `ssam`\./);
+  assert.doesNotMatch(agents, /ToolSearch|select:/);
+  assert.doesNotMatch(agents, /servidor MCP `ssam`\.|MCP server `ssam`\.|`ssam` MCP server\./);
 });

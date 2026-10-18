@@ -1,2 +1,3 @@
+import '../../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 test('N8 privacy tests contain only synthetic source examples',()=>{const source=fs.readFileSync(new URL('./privacy.test.mjs',import.meta.url),'utf8');const actual=process.env.USERNAME??'';if(actual)assert.equal(source.toLowerCase().includes(actual.toLowerCase()),false,'personal identifier literal in privacy tests');const oldProject=['SSAM','Hybrid','novo'].join('-');assert.equal(source.includes(oldProject),false,'real source example in privacy tests');});

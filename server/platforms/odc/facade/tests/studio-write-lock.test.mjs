@@ -168,8 +168,8 @@ test('key: O11 lane plus pid/port of the connection record; ODC pid when given; 
 test('in process: a second write on the same Studio waits its turn and runs after the first; reads and other Studios run at once', async () => {
   const deps = depsFor(tmp());
   const gate = deferred(); const order = [];
-  const first = withStudioWriteLock({ tool: 'studio_merge', args: { manifest: 'm' }, lane: 'odc', deps }, async () => { order.push('merge'); await gate.promise; order.push('merge done'); return { ok: true, result: 'entregue' }; });
-  const second = withStudioWriteLock({ tool: 'studio_publish', args: { manifest: 'm', authorize: WORDS }, lane: 'odc', deps }, async () => { order.push('publish'); return { ok: true, result: 'publicado' }; });
+  const first = withStudioWriteLock({ tool: 'studio_merge', args: { manifest: 'm' }, lane: 'odc', deps }, async () => { order.push('merge'); await gate.promise; order.push('merge done'); return { ok: true, result: 'delivered' }; });
+  const second = withStudioWriteLock({ tool: 'studio_publish', args: { manifest: 'm', authorize: WORDS }, lane: 'odc', deps }, async () => { order.push('publish'); return { ok: true, result: 'published' }; });
   await new Promise(resolve => setTimeout(resolve, 60));
   assert.deepEqual(order, ['merge'], 'the second write waits; nothing refuses it');
   // the lock file and the queue entry carry no arguments
@@ -189,10 +189,10 @@ test('in process: a second write on the same Studio waits its turn and runs afte
   // another lane has its own Studio
   assert.equal(await withStudioWriteLock({ tool: 'o11_publish', args: { module: 'M', authorize: WORDS }, lane: 'o11', deps }, async () => 'o11'), 'o11');
   gate.resolve();
-  assert.deepEqual(await first, { ok: true, result: 'entregue' }, 'the first write answers its own result untouched');
+  assert.deepEqual(await first, { ok: true, result: 'delivered' }, 'the first write answers its own result untouched');
   const published = await second;
   assert.deepEqual(order, ['merge', 'merge done', 'publish']);
-  assert.equal(published.result, 'publicado');
+  assert.equal(published.result, 'published');
   assert.deepEqual([published.queue.position, published.queue.holder.tool, published.queue.holder.pid], [1, 'studio_merge', process.pid]);
   assert.ok(published.queue.waitedMs >= 0);
   assert.equal(JSON.stringify(published).includes('palavras'), false);
@@ -219,7 +219,7 @@ test('in process: many simultaneous writes on one Studio run one at a time, in t
 test('in process: the select of an open module never switches the tab under a running delivery: it waits for it', async () => {
   const deps = depsFor(tmp());
   const gate = deferred(); let opened = false;
-  const delivery = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'A', job: [{ op: 'x' }], authorize: WORDS }, deps }, async () => { await gate.promise; return 'entregue'; });
+  const delivery = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'A', job: [{ op: 'x' }], authorize: WORDS }, deps }, async () => { await gate.promise; return 'delivered'; });
   // write:true is the select a capture needs (module-map.mjs captureO11Module): it waits behind the delivery.
   const open = withStudioWriteLock({ tool: 'o11_inspect', args: { module: 'B' }, write: true, queue: 'o11-capture', deps }, async () => { opened = true; return { ok: true }; });
   await new Promise(resolve => setTimeout(resolve, 60));
@@ -227,7 +227,7 @@ test('in process: the select of an open module never switches the tab under a ru
   // the capture of an open tab and a capture file are reads and run at once
   assert.equal(await withStudioWriteLock({ tool: 'o11_inspect', args: { module: 'B' }, deps }, async () => 'lido por chave'), 'lido por chave');
   assert.equal(await withStudioWriteLock({ tool: 'o11_inspect', args: { oml: 'C:\\b.oml' }, deps }, async () => 'lido'), 'lido');
-  gate.resolve(); assert.equal(await delivery, 'entregue');
+  gate.resolve(); assert.equal(await delivery, 'delivered');
   const after = await open;
   assert.equal(opened, true); assert.equal(after.queue.holder.tool, 'o11_deliver');
   assert.deepEqual(lockFiles(o11Locks(deps)), []);
@@ -278,14 +278,14 @@ test('an exception in the write releases the lock', async () => {
   await assert.rejects(withStudioWriteLock({ tool: 'o11_publish', args: { module: 'M' }, deps }, async () => { throw new Error('falhou'); }), /falhou/);
   await assert.rejects(withStudioWriteLock({ tool: 'o11_publish', args: { module: 'M' }, deps }, () => { throw new Error('sincrono'); }), /sincrono/);
   assert.deepEqual(lockFiles(o11Locks(deps)), []);
-  assert.equal(await withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'M' }, deps }, async () => 'entregue'), 'entregue');
+  assert.equal(await withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'M' }, deps }, async () => 'delivered'), 'delivered');
 });
 
 test('stale locks: dead owner, too old, damaged and old, own pid not held here; a fresh damaged file or a live owner holds', async () => {
   const deps = depsFor(tmp()); const dir = o11Locks(deps); const file = path.join(dir, 'o11-ss4.lock');
   const base = { schema: 'ssam-studio-write-lock/1', tool: 'o11_publish', lane: 'o11-ss4', studio: null, token: 'old' };
   // queueMs 0: a held Studio answers the queue timeout at once instead of waiting
-  const run = (extra = {}) => withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'M' }, deps: { ...deps, queueMs: 0, ...extra } }, async () => 'entregue');
+  const run = (extra = {}) => withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'M' }, deps: { ...deps, queueMs: 0, ...extra } }, async () => 'delivered');
   const BUSY_CODE = QUEUE_TIMEOUT_CODE;
   const dead = { alive: pid => pid !== 999999 };
   // live foreign owner (the test runner process), recent: busy
@@ -293,18 +293,18 @@ test('stale locks: dead owner, too old, damaged and old, own pid not held here; 
   assert.equal((await run()).code, BUSY_CODE);
   // the same owner, older than the deadline: recovered
   writeLock(file, { ...base, pid: process.ppid, startedAt: new Date(Date.now() - STALE_MS - 60000).toISOString() });
-  assert.equal(await run(), 'entregue');
+  assert.equal(await run(), 'delivered');
   // dead owner (injected): recovered
   writeLock(file, { ...base, pid: 999999, startedAt: new Date().toISOString() });
-  assert.equal(await run(dead), 'entregue');
+  assert.equal(await run(dead), 'delivered');
   // this process's pid without being held here (a leftover): recovered
   writeLock(file, { ...base, pid: process.pid, startedAt: new Date().toISOString() });
-  assert.equal(await run(), 'entregue');
+  assert.equal(await run(), 'delivered');
   // damaged and fresh: a creation in flight, busy with an unknown holder; damaged and old: recovered
   writeLock(file, '');
   assert.deepEqual((await run()).holder, { tool: null, pid: null, startedAt: null, heldMs: 0, state: 'running' });
   const old = new Date(Date.now() - 120000); fs.utimesSync(file, old, old);
-  assert.equal(await run(), 'entregue');
+  assert.equal(await run(), 'delivered');
   // another process is breaking it right now (fresh breaker): busy, file untouched; an old breaker is cleared
   writeLock(file, { ...base, pid: 999999, startedAt: new Date().toISOString() });
   writeLock(file + '.break', '1');
@@ -312,9 +312,9 @@ test('stale locks: dead owner, too old, damaged and old, own pid not held here; 
   assert.ok(fs.existsSync(file));
   fs.utimesSync(file + '.break', old, old);
   // the old breaker is removed on this call, and the queue's next look at the lock recovers the stale file in the same call
-  assert.equal(await run(dead), 'entregue');
+  assert.equal(await run(dead), 'delivered');
   assert.equal(fs.existsSync(file + '.break'), false);
-  assert.equal(await run(dead), 'entregue');
+  assert.equal(await run(dead), 'delivered');
   assert.deepEqual(lockFiles(dir), []);
 });
 
@@ -331,7 +331,7 @@ test('over MCP: parallel calls from one client; one merge runs, the second waits
   const entered = deferred(); const gate = deferred(); let merges = 0;
   const text = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value });
   server.registerTool('studio_merge', { inputSchema: z.object({ manifest: z.string() }).strict() },
-    async () => { merges++; entered.resolve(); await gate.promise; return text({ ok: true, result: 'entregue' }); });
+    async () => { merges++; entered.resolve(); await gate.promise; return text({ ok: true, result: 'delivered' }); });
   server.registerTool('studio_status', { inputSchema: z.object({}).strict() }, async () => text({ ok: true, busy: true }));
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'lock-test-client', version: '1.0.0' });
@@ -345,10 +345,10 @@ test('over MCP: parallel calls from one client; one merge runs, the second waits
   await new Promise(resolve => setTimeout(resolve, 50));
   assert.equal(merges, 1, 'the second merge waits its turn');
   gate.resolve();
-  assert.deepEqual((await first).structuredContent, { ok: true, result: 'entregue' });
+  assert.deepEqual((await first).structuredContent, { ok: true, result: 'delivered' });
   const after = await second;
   assert.notEqual(after.isError, true);
-  assert.equal(after.structuredContent.result, 'entregue');
+  assert.equal(after.structuredContent.result, 'delivered');
   assert.deepEqual([after.structuredContent.queue.position, after.structuredContent.queue.holder.tool], [1, 'studio_merge']);
   assert.deepEqual(JSON.parse(after.content[0].text), after.structuredContent, 'the text says the same');
   assert.deepEqual(lockFiles(odcLocks(deps)), []); assert.deepEqual(queueFiles(odcLocks(deps)), []);
@@ -372,7 +372,7 @@ const value = await withStudioWriteLock({ tool: 'studio_merge', args: { manifest
   process.stdout.write('held\\n');
   if (process.env.LOCK_MODE === 'exit') process.exit(0);
   await new Promise(resolve => process.stdin.once('data', resolve));
-  return { ok: true, result: 'entregue' };
+  return { ok: true, result: 'delivered' };
 });
 process.stdout.write(JSON.stringify(value) + '\\n');
 process.stdin.destroy();
@@ -396,7 +396,7 @@ test('across processes: a write waits while a child holds the lock and runs once
   const h = holder(deps, 'wait');
   await h.held;
   let ran = false;
-  const waiting = withStudioWriteLock({ tool: 'studio_publish', args: { authorize: WORDS }, lane: 'odc', deps }, async () => { ran = true; return { ok: true, result: 'publicado' }; });
+  const waiting = withStudioWriteLock({ tool: 'studio_publish', args: { authorize: WORDS }, lane: 'odc', deps }, async () => { ran = true; return { ok: true, result: 'published' }; });
   const record = JSON.parse(fs.readFileSync(path.join(odcLocks(deps), 'odc.lock'), 'utf8'));
   assert.equal(record.pid, h.child.pid);
   assert.equal(JSON.stringify(record).includes('segredo'), false);
@@ -406,9 +406,9 @@ test('across processes: a write waits while a child holds the lock and runs once
   assert.equal(queueFiles(odcLocks(deps)).length, 1);
   h.child.stdin.write('go\n');
   assert.equal(await h.exited, 0, h.io.err);
-  assert.match(h.io.out, /"result":"entregue"/);
+  assert.match(h.io.out, /"result":"delivered"/);
   const value = await waiting;
-  assert.equal(value.result, 'publicado');
+  assert.equal(value.result, 'published');
   assert.deepEqual([value.queue.position, value.queue.holder.tool, value.queue.holder.pid], [1, 'studio_merge', h.child.pid]);
   assert.deepEqual(lockFiles(odcLocks(deps)), []); assert.deepEqual(queueFiles(odcLocks(deps)), []);
 });
@@ -420,7 +420,7 @@ test('across processes: a holder killed hard leaves a stale file that the next w
   h.child.kill();
   await h.exited;
   assert.deepEqual(lockFiles(odcLocks(deps)), ['odc.lock'], 'no finally ran in the killed process');
-  assert.equal(await withStudioWriteLock({ tool: 'studio_merge', args: {}, lane: 'odc', deps }, async () => 'entregue'), 'entregue');
+  assert.equal(await withStudioWriteLock({ tool: 'studio_merge', args: {}, lane: 'odc', deps }, async () => 'delivered'), 'delivered');
   assert.deepEqual(lockFiles(odcLocks(deps)), []);
 });
 

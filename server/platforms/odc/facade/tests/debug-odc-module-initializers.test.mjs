@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {inspectOdcModuleInitializers} from '../debug-odc-module-initializers.mjs';
 const inspect=source=>inspectOdcModuleInitializers(source,'_oschunk-APP.js');

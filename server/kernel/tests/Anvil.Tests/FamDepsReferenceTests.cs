@@ -258,7 +258,7 @@ public sealed class FamDepsReferenceTests
         {
             var (work, job) = JobWork("blocked");
             var dialog = new JsonObject { ["kind"] = "Recovery", ["title"] = "Recover module", ["text"] = "Open | Discard", ["certain"] = false,
-                ["question"] = "O Studio abriu \"Recover module\" durante a entrega: Open | Discard. Escolha Open ou Discard no Studio." };
+                ["question"] = "The Studio opened \"Recover module\" during the delivery: Open | Discard. Choose Open or Discard in the Studio." };
             var bridge = new Stub { Merge = _ => new JsonObject { ["operationId"] = "x", ["merged"] = null, ["blocked"] = true, ["outcome"] = "running", ["blockedBy"] = dialog.DeepClone() } };
             var result = Delivery.Run(bridge, new DeliveryRequest("VisitaCerta_UI", job, work, [], CaptureProducers: ["VisitaCerta_CS"]),
                 (_, _, _) => throw new Exception("producer-aware apply expected"), producerAuthority: new Authority(),
@@ -495,7 +495,7 @@ public sealed class FamDepsReferenceTests
             // Finding 8: the Refresh References the delivery runs has the merge's dialog rule; a dialog only the person answers
             // ends the delivery with STUDIO_DIALOG_PENDING and the question; the closed error report is kept in the result.
             var (work, job) = JobWork("refresh-blocked");
-            var question = "O Studio abriu \"Sign in\" durante a entrega: Sign in to lab.example. Entre no Studio. O SSAM nunca digita senha.";
+            var question = "The Studio opened \"Sign in\" during the delivery: Sign in to lab.example. Sign in to the Studio. SSAM never types a password.";
             var bridge = new Stub { Capabilities = ["refresh_references"], RefreshAnswer = _ => new JsonObject { ["module"] = "VisitaCerta_UI", ["changed"] = null,
                 ["blocked"] = true, ["blockedBy"] = new JsonObject { ["kind"] = OperationDialogPolicy.SignIn, ["title"] = "Sign in", ["question"] = question },
                 ["dialogsBefore"] = new JsonArray(ClosedCrashReport()) } };

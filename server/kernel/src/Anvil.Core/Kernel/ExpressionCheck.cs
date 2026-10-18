@@ -61,9 +61,9 @@ public static class ExpressionCheck
                 if (Keywords.Contains(name) || FunctionCatalog.Names.Contains(name) || scope.Contains(name)) continue;
                 if (!seen.Add(name + "@" + (o.ObjectKey?.ToString() ?? text))) continue;
                 var closest = FunctionCatalog.Closest(name, scope);
-                hints.Add($"Hint UnknownFunction: '{name}(' nao existe (nem built-in, nem funcao deste modulo ou referenciada)" +
-                          (closest.Count > 0 ? $"; parecidas: {string.Join(", ", closest)}" : "") +
-                          $"; catalogo: docs/functions.md ou `anvil functions --find {name}` @ {ModelHost.PathOf(o)}");
+                hints.Add($"Hint UnknownFunction: '{name}(' does not exist (neither a built-in, nor a function of this module or referenced)" +
+                          (closest.Count > 0 ? $"; closest: {string.Join(", ", closest)}" : "") +
+                          $"; catalog: docs/functions.md or `anvil functions --find {name}` @ {ModelHost.PathOf(o)}");
                 if (hints.Count >= max) return hints;
             }
         }

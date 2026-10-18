@@ -2,11 +2,14 @@
 // republish. A publication receipt proves a publication, not the disappearance
 // of an unknown remote debug session. This module never removes a guard/marker,
 // starts/stops a debugger, invokes an application, or changes a prior receipt.
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { assertLockNotRetained } from './debug-retained-locks.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+// CX15 r5 (N-3): an authorization binds the user's words by wordsSha256 (or, from before, by the words).
+const boundWords = a => /^[0-9a-f]{64}$/.test(String(a?.wordsSha256 ?? '')) || wordsGiven(a?.words); // CX15 r7: one predicate
 const fail = code => { throw new Error('debug_o11_republish_reconcile_' + code); };
 const OLD = Object.freeze({ operationId: '4c7016f0a51445108b185fdcd0109586',
   host: 'personal-2qqw9srv.outsystemscloud.com', module: 'Headless_UI', moduleKey: 'Mif02PxcH0K7KiABEHTwMg',
@@ -55,7 +58,7 @@ export function inspectO11RepublishNeutralization(input, { read = pinned, now = 
       !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(request.operationId ?? '')) fail('publication_request_mismatch');
   if (authorization.operationId !== request.operationId || authorization.host !== request.host || authorization.moduleKey !== request.moduleKey ||
       authorization.candidateSha256 !== request.candidateSha256 || authorization.baseVersionId !== request.baseVersionId ||
-      authorization.scope !== 'ssam-debug-republish-published' || typeof authorization.words !== 'string' || !authorization.words.trim()) fail('publication_authorization_mismatch');
+      authorization.scope !== 'ssam-debug-republish-published' || !boundWords(authorization)) fail('publication_authorization_mismatch');
   if (receipt.operationId !== request.operationId || receipt.host !== request.host || receipt.module !== request.module ||
       receipt.moduleKey !== request.moduleKey || receipt.applicationKey !== request.applicationKey ||
       receipt.candidateSha256 !== request.candidateSha256 || receipt.baseVersionId !== request.baseVersionId ||

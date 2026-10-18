@@ -61,6 +61,9 @@ public static class RuntimeDomTable
     private const string ClientCss = "two client stylesheets of kernel/tests/html: approval (.av-badges>.OSBlockWidget), mass casualty ([data-block*=\"MC_\"])";
     private const string Stage0 = "stage 0 (docs/PROTOTIPO-NATIVO.md 4.2): no published instance read yet";
     private const string Competitor = "neutralization the official MCP run needed: C:\\Users\\andre\\.codex\\native-farmavirtual (visual-audit.txt items 5 and 13)";
+    // CX17: outerHTML read in the browser on the published DemoLATAM_UI (O11 11.55.92), 2026-10-14, Codex session 01a13844, reduced
+    // to the structure (tags, data-* attributes, runtime classes; no text, id, value or app class).
+    private const string DemoLatam = "outerHTML read in the browser, DemoLATAM_UI published, 2026-10-14, Codex session 01a13844";
 
     private static RuntimeDomRow[] Common(RuntimeStatus proven) =>
     [
@@ -75,23 +78,34 @@ public static class RuntimeDomTable
             [new RuntimeWrapper("span", None, NoClasses)], proven, proven == RuntimeStatus.Evidence ? Rollout + ": <span><input data-checkbox=\"\" class=\"\" type=\"checkbox\" id=\"Input161\"></span>" : Stage0),
         new("IMobileBlockInstanceWidget", "div", A(("class", "OSBlockWidget"), ("data-block", "")), "none", NoRuntimeClasses, NoWrappers, proven,
             proven == RuntimeStatus.Evidence ? ClientCss + ": div.OSBlockWidget[data-block]" : Stage0, Transparent: true),
+        // CX17 (DemoLATAM, 2026-10-14): the input inside its span.input-<type> (text, number, search seen; the class per type is
+        // the predictor's, ScreenVisual), the dropdown's select inside div.dropdown-container[data-dropdown] (id <Name>-container),
+        // the label and the List with OSFillParent (Width (fill parent)), the List's position relative and its two sentinels.
+        new("IInput", "input", A(("data-input", "")), "name",
+            [new RuntimeClass("OSFillParent", "Width", "(fill parent)", null, null, proven, proven == RuntimeStatus.Evidence ? DemoLatam + ": <input data-input class=\"&quot;form-control&quot; OSFillParent\">" : Stage0)],
+            [new RuntimeWrapper("span", None, NoClasses)], proven,
+            proven == RuntimeStatus.Evidence ? DemoLatam + ": <span class=\"input-search\"><input data-input class=\"&quot;form-control&quot; OSFillParent\" type=\"search\"></span> (input-text: type text, input-number: type number)" : Stage0),
+        new("IDropdown", "select", A(("class", "dropdown-display")), "name", NoRuntimeClasses,
+            [new RuntimeWrapper("div", A(("data-dropdown", "")), ["dropdown-container"])], proven,
+            proven == RuntimeStatus.Evidence ? DemoLatam + ": <div class=\"dropdown-container\" data-dropdown=\"\" id=\"<Name>-container\"><select class=\"dropdown-display &quot;dropdown&quot;\" id=\"<Name>\">" : Stage0 + "; visual-audit.txt item 4 (wrapper and a second arrow)"),
+        new("ILabel", "label", A(("data-label", "")), "name",
+            [new RuntimeClass("OSFillParent", "Width", "(fill parent)", null, null, proven, proven == RuntimeStatus.Evidence ? DemoLatam + ": <label data-label class=\"OSFillParent\">" : Stage0)],
+            NoWrappers, proven, proven == RuntimeStatus.Evidence ? DemoLatam + ": <label data-label class=\"OSFillParent\"><span><input data-checkbox type=\"checkbox\"></span> text</label>" : Stage0),
+        new("IList", "{Tag}", A(("data-list", "")), "name",
+            [new RuntimeClass("OSFillParent", "Width", "(fill parent)", null, null, proven, proven == RuntimeStatus.Evidence ? DemoLatam + ": <div data-list class=\"&quot;list list-group&quot; OSFillParent\" style=\"position: relative;\">" : Stage0)],
+            NoWrappers, proven, proven == RuntimeStatus.Evidence ? DemoLatam + ": <tbody data-list class=\"&quot;list list-group&quot; OSFillParent\" style=\"position: relative;\"><script style=\"display: flex; height: 0px; width: 100%;\"></script>…<script …></script></tbody> (Mode = Custom with Tag)" : Stage0 + "; Mode = Custom with Tag"),
         // Inferred until stage 0 (4.2): the widgets with no published instance read yet.
         new("IIfWidget", null, None, "none", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0 + "; an If renders only the branch"),
         new("IExpression", "span", A(("data-expression", "")), "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0),
         new("IButton", "button", A(("data-button", ""), ("type", "button")), "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0),
-        new("IInput", "input", A(("data-input", "")), "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0),
         new("ITextArea", "textarea", A(("data-textarea", "")), "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0),
-        new("IDropdown", "select", A(("data-dropdown", "")), "name", NoRuntimeClasses,
-            [new RuntimeWrapper("div", A(("data-dropdown-wrapper", "")), NoClasses)], RuntimeStatus.Inferred, Stage0 + "; visual-audit.txt item 4 (wrapper and a second arrow)"),
         new("IForm", "form", A(("data-form", ""), ("novalidate", "")), "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0),
-        new("IList", "{Tag}", A(("data-list", "")), "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0 + "; Mode = Custom with Tag"),
         new("IPopup", null, None, "none", NoRuntimeClasses,
             [new RuntimeWrapper("div", None, ["popup-backdrop"], "backdrop"), new RuntimeWrapper("div", A(("data-popup", ""), ("role", "dialog")), ["popup-dialog"], "box")],
             RuntimeStatus.Inferred, Stage0),
         new("IPlaceholderWidget", "div", A(("data-placeholder", "")), "none", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0, Transparent: true),
         new("IPlaceholderContentWidget", null, None, "none", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0),
         new("IImage", "img", A(("data-image", "")), "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0),
-        new("ILabel", "label", A(("data-label", "")), "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0),
         new("IRadioGroup", "div", A(("data-radio-group", "")), "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0),
         new("IRadioButton", "input", A(("data-radio-button", ""), ("type", "radio")), "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0),
     ];

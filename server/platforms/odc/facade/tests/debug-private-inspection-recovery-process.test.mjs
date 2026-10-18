@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {randomUUID} from 'node:crypto';
 import {recoverExpiredClientInspectionAsync} from '../debug-private-inspection-recovery-process.mjs';
 const target={sessionId:'a'.repeat(48),lane:'o11',runtimeUrl:'https://fixture.example/App/',moduleKey:'B'.repeat(22)};

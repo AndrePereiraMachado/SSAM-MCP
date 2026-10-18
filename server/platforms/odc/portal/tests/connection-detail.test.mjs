@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { connectionDetailInput, projectConnectionDetail, projectConnectionTestStatus } from '../runtime/connection-detail.mjs';

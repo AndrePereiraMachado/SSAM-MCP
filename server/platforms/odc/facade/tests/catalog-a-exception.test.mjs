@@ -6,6 +6,7 @@
 // the ones loaded in each lane runtime, words of other fronts (events, timers, REST, roles, client variables) do not
 // select it, and every answer fits the 12000-byte budget. Needs the lane CLIs built (the index is built from them);
 // skips otherwise.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';

@@ -176,7 +176,7 @@ test('an inline job becomes a file under the lane jobs folder and that file is w
   const { call, close } = await serve(box.deps); t.after(close);
   const job = { ops: [{ op: 'set', target: 'ServerAction:SaveOrder', prop: 'Description', value: 'Saves' }] };
   const result = await call('o11_deliver', { module: 'Orders', job, authorize: WORDS });
-  assert.equal(result.structuredContent.result, 'entregue');
+  assert.equal(result.structuredContent.result, 'delivered');
   assert.equal(result.structuredContent.normalizations, undefined, 'a job in the kernel form is taken as it is');
   const inline = path.join(box.local, 'jobs', 'inline');
   const files = fs.readdirSync(inline);
@@ -189,15 +189,15 @@ test('an inline job becomes a file under the lane jobs folder and that file is w
   assert.equal(fs.readdirSync(inline).length, 2);
   // an op shape with one meaning (property for prop) is written in the kernel form and said so
   const shaped = await call('o11_deliver', { module: 'Orders', job: { ops: [{ op: 'set', target: 'ServerAction:SaveOrder', property: 'Description', value: 'Saves' }] }, authorize: WORDS });
-  assert.equal(shaped.structuredContent.result, 'entregue', JSON.stringify(shaped.structuredContent));
+  assert.equal(shaped.structuredContent.result, 'delivered', JSON.stringify(shaped.structuredContent));
   assert.deepEqual(shaped.structuredContent.normalizations, [{ rule: 'job-op', at: '/ops/0', note: 'set: property is prop' }]);
   const written = fs.readdirSync(inline).map(f => path.join(inline, f)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
   assert.deepEqual(JSON.parse(fs.readFileSync(written, 'utf8')), job);
 });
 
-// 2026-10-12 (production test): after "entregue" the session read the whole module digest again (31 KB) to confirm the
+// 2026-10-12 (production test): after "delivered" the session read the whole module digest again (31 KB) to confirm the
 // names and signatures it had just written. The delivered answer now says what the job created.
-test('a delivery answers "entregue" with the summary of its job: each action with its inputs and outputs, each entity with its attributes', async t => {
+test('a delivery answers "delivered" with the summary of its job: each action with its inputs and outputs, each entity with its attributes', async t => {
   const box = setup(t);
   const { call, close } = await serve(box.deps); t.after(close);
   const job = { ops: [
@@ -205,11 +205,11 @@ test('a delivery answers "entregue" with the summary of its job: each action wit
     { op: 'logic', data: { actions: [{ name: 'Pedido_Get', inputs: [{ name: 'PedidoId', type: 'Pedido Identifier' }], outputs: [{ name: 'Pedido', type: 'Pedido' }], steps: [] }] } },
   ] };
   const result = await call('o11_deliver', { module: 'Orders', job, authorize: WORDS });
-  assert.equal(result.structuredContent.result, 'entregue');
+  assert.equal(result.structuredContent.result, 'delivered');
   assert.deepEqual(result.structuredContent.summary, { ops: 2, actions: ['Pedido_Get(PedidoId: Pedido Identifier) -> (Pedido: Pedido)'], entities: [{ name: 'Pedido', attributes: 2 }] });
   // A job that only reads names nothing: no summary.
   const read = await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS });
-  assert.equal(read.structuredContent.result, 'entregue'); assert.equal(read.structuredContent.summary, undefined);
+  assert.equal(read.structuredContent.result, 'delivered'); assert.equal(read.structuredContent.summary, undefined);
 });
 
 test('deliver gets the exact argv: module, job, checks, producers, captures, environment, lane work and connection port', async t => {
@@ -231,12 +231,12 @@ test('deliver gets the exact argv: module, job, checks, producers, captures, env
   assert.equal(box.runAnvil.calls.length, 1);
 });
 
-test('a delivered task answers "entregue" and the job it used, ready for the next basedOn (nextBasedOn)', async t => {
+test('a delivered task answers "delivered" and the job it used, ready for the next basedOn (nextBasedOn)', async t => {
   const box = setup(t);
   const { call, close } = await serve(box.deps); t.after(close);
   const result = await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS });
   assert.equal(result.isError, undefined);
-  const value = { ok: true, result: 'entregue', nextBasedOn: { job: box.job, sha256: sha256(fs.readFileSync(box.job)) } };
+  const value = { ok: true, result: 'delivered', nextBasedOn: { job: box.job, sha256: sha256(fs.readFileSync(box.job)) } };
   assert.deepEqual(result.structuredContent, value);
   assert.deepEqual(result.content, [{ type: 'text', text: JSON.stringify(value) }]);
 });
@@ -245,7 +245,7 @@ test('validation errors come back with stage and taskId, and nothing is delivere
   const box = setup(t, { handlers: { deliver: (() => { const queue = [envelopes.refusedBeforeMerge, envelopes.refusedAfterMerge]; return () => queue.shift(); })() } });
   const { call, close } = await serve(box.deps); t.after(close);
   const before = await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS });
-  assert.equal(before.isError, true); assert.notEqual(before.content[0].text, 'entregue');
+  assert.equal(before.isError, true); assert.notEqual(before.content[0].text, 'delivered');
   const b = before.structuredContent;
   assert.equal(b.outcome, 'refused'); assert.equal(b.code, 'VALIDATION_REFUSED'); assert.equal(b.stage, 'apply');
   assert.equal(b.taskId, '1a2b3c4d5e6f708192a3b4c5d6e7f809'); assert.equal(b.merged, undefined);
@@ -447,7 +447,7 @@ test('a module label with spaces reaches the one open module with the same lette
   const box = setup(t, { deps: { bridge: o11Bridge({ port: bridge.port, authorization: 'TESTKEY' }) } });
   const { call, close } = await serve(box.deps); t.after(close);
   const delivered = await call('o11_deliver', { module: 'Orders CS', job: box.job, authorize: WORDS });
-  assert.equal(delivered.structuredContent.result, 'entregue');
+  assert.equal(delivered.structuredContent.result, 'delivered');
   assert.deepEqual(box.runAnvil.calls[0].args.slice(0, 3), ['deliver', '--module', 'Orders_CS']);
   // Besides the name, a delivered module reads only its last publication (section 3.2 lastPublication, publish_log).
   const studio = () => bridge.seen.map(r => r.method).filter(m => m !== 'publish_log');
@@ -467,7 +467,7 @@ test('resume becomes deliver --resume <id> --work --port and keeps the task requ
   const id = '3c4d5e6f708192a3b4c5d6e7f8091a2b';
   const { call, close } = await serve(box.deps); t.after(close);
   const resumed = await call('o11_deliver', { resume: id, authorize: WORDS });
-  assert.equal(resumed.structuredContent.result, 'entregue');
+  assert.equal(resumed.structuredContent.result, 'delivered');
   assert.deepEqual(box.runAnvil.calls[0].args, ['deliver', '--resume', id, '--work', box.work, '--port', '45999', '--close-opened-tab']);
   const replaced = (await call('o11_deliver', { resume: id, job: box.job, authorize: WORDS })).structuredContent;
   assert.equal(replaced.code, 'RESUME_FIXED');
@@ -488,7 +488,7 @@ test('ssam_task lists and reads the deliveries, by task id or by kernel taskId',
   assert.equal(list.ok, true); assert.equal(list.tasks.length, 2);
   assert.deepEqual(list.tasks.map(task => task.state), ['failed', 'ok'], 'newest first');
   for (const task of list.tasks) { assert.equal(task.tool, 'o11_deliver'); assert.equal(task.summary.module, 'Orders'); assert.ok(task.endedAt); }
-  assert.equal(list.tasks[1].result.result, 'entregue');
+  assert.equal(list.tasks[1].result.result, 'delivered');
   const one = (await call('ssam_task', { id: list.tasks[0].id })).structuredContent;
   assert.equal(one.task.result.code, 'VALIDATION_REFUSED'); assert.equal(one.task.summary.jobSha256, sha256(fs.readFileSync(box.job)));
   const byKernel = (await call('ssam_task', { id: '1a2b3c4d5e6f708192a3b4c5d6e7f809' })).structuredContent;
@@ -528,13 +528,13 @@ const closing = refusedId => args => {
   return { ok: true, command: 'deliver', elapsedMs: 5, data: { taskId: id, ...refusedAfterMerge, closed: true, closedReason: args[args.indexOf('--reason') + 1] } };
 };
 
-test('close alone closes a refused task and answers only "fechada"; never an uncertain one', async t => {
+test('close alone closes a refused task and answers only "closed"; never an uncertain one', async t => {
   const box = setup(t, { handlers: { deliver: closing('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') } });
   writeKernelTask(box.work, REFUSED_ID, refusedAfterMerge);
   const { call, close } = await serve(box.deps); t.after(close);
   const closed = await call('o11_deliver', { close: { taskId: REFUSED_ID, reason: 'job corrigido' }, authorize: WORDS });
   assert.equal(closed.isError, undefined, closed.content[0].text);
-  assert.deepEqual(closed.content, [{ type: 'text', text: 'fechada' }]); assert.deepEqual(closed.structuredContent, { ok: true, result: 'fechada' });
+  assert.deepEqual(closed.content, [{ type: 'text', text: 'closed' }]); assert.deepEqual(closed.structuredContent, { ok: true, result: 'closed' });
   assert.deepEqual(box.runAnvil.calls[0].args, ['deliver', '--close', REFUSED_ID, '--reason', 'job corrigido', '--work', box.work, '--port', '45999']);
   assert.equal(box.selected.length, 1);
 
@@ -550,7 +550,7 @@ test('close alone closes a refused task and answers only "fechada"; never an unc
   assert.match(refused.error, /Select the original module/);
   const alreadyId = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
   writeKernelTask(box.work, alreadyId, { ...refusedAfterMerge, closed: true });
-  assert.equal((await call('o11_deliver', { close: { taskId: alreadyId, reason: 'x' }, authorize: WORDS })).content[0].text, 'fechada');
+  assert.equal((await call('o11_deliver', { close: { taskId: alreadyId, reason: 'x' }, authorize: WORDS })).content[0].text, 'closed');
   assert.equal((await call('o11_deliver', { close: { taskId: 'cccccccccccccccccccccccccccccccc', reason: 'x' }, authorize: WORDS })).structuredContent.code, 'CLOSE_TASK_NOT_FOUND');
   assert.equal((await call('o11_deliver', { close: { taskId: REFUSED_ID, reason: 'x' }, module: 'Orders', authorize: WORDS })).structuredContent.code, 'CLOSE_ALONE');
   assert.equal((await call('o11_deliver', { close: { taskId: REFUSED_ID, reason: 'x' }, authorize: '  ' })).structuredContent.code, 'WORDS_REQUIRED');
@@ -564,7 +564,7 @@ test('closePrevious closes the refused task first, then delivers the corrected j
   writeKernelTask(box.work, REFUSED_ID, refusedAfterMerge);
   const { call, close } = await serve(box.deps); t.after(close);
   const result = await call('o11_deliver', { module: 'Orders', job: box.job, checks: ['SaveOrder'], closePrevious: REFUSED_ID, authorize: WORDS });
-  assert.equal(result.structuredContent.result, 'entregue');
+  assert.equal(result.structuredContent.result, 'delivered');
   assert.deepEqual(box.runAnvil.calls.map(c => c.args), [
     ['deliver', '--close', REFUSED_ID, '--reason', 'superseded by a corrected job', '--work', box.work, '--port', '45999'],
     ['deliver', '--module', 'Orders', '--job', box.job, '--checks', 'SaveOrder', '--work', box.work, '--port', '45999', '--close-opened-tab']]);
@@ -573,7 +573,7 @@ test('closePrevious closes the refused task first, then delivers the corrected j
   // a refused task that never reached the module holds nothing: no close, only the delivery
   const early = 'dddddddddddddddddddddddddddddddd';
   writeKernelTask(box.work, early, { writeState: 'not-sent', stage: 'open', error: 'open_module is blocked: dialog' });
-  assert.equal((await call('o11_deliver', { module: 'Orders', job: box.job, closePrevious: early, authorize: WORDS })).structuredContent.result, 'entregue');
+  assert.equal((await call('o11_deliver', { module: 'Orders', job: box.job, closePrevious: early, authorize: WORDS })).structuredContent.result, 'delivered');
   assert.deepEqual(box.runAnvil.calls.slice(2).map(c => c.args[1]), ['--module']);
 });
 
@@ -604,7 +604,7 @@ test('a module held by a refused task answers with the close-and-deliver continu
   const next = held.structuredContent.continuation;
   assert.equal(next.tool, 'o11_deliver');
   assert.deepEqual(next.arguments, { module: 'Orders', job: box.job, checks: ['SaveOrder'], closePrevious: HELD, authorize: WORDS_MARKER });
-  assert.match(next.why, /recusada; feche e entregue o job corrigido/);
+  assert.match(next.why, /refused; close it and deliver the corrected job/);
   assert.ok(!held.content[0].text.includes(WORDS));
   // the marker is never taken for the user's words
   const marker = (await call('o11_deliver', next.arguments)).structuredContent;
@@ -673,7 +673,7 @@ test('refused, then corrected with a patch in one call: deliver gets a new file 
   const { call, close } = await serve(box.deps); t.after(close);
   const refused = (await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS })).structuredContent;
   const patched = await call('o11_deliver', { module: 'Orders', patch: RENAME, basedOn: { job: refused.job, sha256: refused.jobSha256 }, checks: ['SaveOrder2'], authorize: WORDS });
-  assert.equal(patched.structuredContent.result, 'entregue');
+  assert.equal(patched.structuredContent.result, 'delivered');
   const first = jobUsed(box.runAnvil.calls[1]);
   assert.equal(path.dirname(first), INLINE(box)); assert.notEqual(first, box.job);
   assert.deepEqual(box.runAnvil.calls[1].args, ['deliver', '--module', 'Orders', '--job', first, '--checks', 'SaveOrder2', '--work', box.work, '--port', '45999', '--close-opened-tab']);
@@ -698,7 +698,7 @@ test('closePrevious + patch on basedOn.taskId: the refused task is closed first,
   writeKernelTask(box.work, REFUSED_ID, { ...refusedAfterMerge, request: { Module: 'Orders', JobPath: box.job }, sources: [{ path: box.job, sha256: sha256(fs.readFileSync(box.job)) }] });
   const { call, close } = await serve(box.deps); t.after(close);
   const result = await call('o11_deliver', { patch: RENAME, basedOn: { taskId: REFUSED_ID }, closePrevious: REFUSED_ID, authorize: WORDS });
-  assert.equal(result.structuredContent.result, 'entregue', result.content[0].text);
+  assert.equal(result.structuredContent.result, 'delivered', result.content[0].text);
   const used = jobUsed(box.runAnvil.calls[1]);
   assert.deepEqual(box.runAnvil.calls.map(c => c.args), [
     ['deliver', '--close', REFUSED_ID, '--reason', 'superseded by a corrected job', '--work', box.work, '--port', '45999'],
@@ -776,7 +776,7 @@ test('failedOp only when the kernel names an op of this job', async t => {
 test('a delivered integration job answers its integration reports, at most 10 plus integrationTotal (contract I7)', () => {
   const integration = Array.from({ length: 12 }, (_, i) => ({ op: 'rest', client: { name: 'Api' + i, key: 'k' + i, created: true }, imported: [], skipped: [], updated: [], removed: [], consumersBroken: [], warnings: [] }));
   const value = deliverOutcome({ envelope: { data: { delivered: true, integration } } }, { trackId: 't', work: os.tmpdir(), job: null });
-  assert.equal(value.ok, true); assert.equal(value.result, 'entregue');
+  assert.equal(value.ok, true); assert.equal(value.result, 'delivered');
   assert.deepEqual(value.integration, integration.slice(0, 10)); assert.equal(value.integrationTotal, 12);
   // A job without integration ops answers no integration field.
   assert.equal(deliverOutcome({ envelope: { data: { delivered: true } } }, { trackId: 't', work: os.tmpdir(), job: null }).integration, undefined);

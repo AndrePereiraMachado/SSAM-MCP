@@ -208,7 +208,7 @@
     }
    ]
   },
-  "message": "SSAM Hybrid — confira esta alteração do contrato do módulo já fixado. A aceitação fixa este conteúdo, módulo, ambiente e faixa; correções técnicas posteriores não mudam esses requisitos. Este contrato cobre dados e o fluxo declarado das actions; não comprova sozinho toda a intenção de negócio.\n\n{\n  \"module\": \"Pedidos\",\n  \"lane\": \"ss5\",\n  \"environment\": \"fixture.test\",\n  \"data\": {\n    \"entities\": [\n      {\n        \"name\": \"Pedido\",\n        \"attributes\": [\n          {\n            \"name\": \"Descrição\",\n            \"type\": \"Text\",\n            \"length\": 50\n          }\n        ]\n      }\n    ]\n  },\n  \"logic\": {},\n  \"roles\": [],\n  \"expectedMessages\": [\n    {\n      \"text\": \"ação \\\"inválida\\\"\",\n      \"level\": \"warning\"\n    }\n  ]\n}"
+  "message": "SSAM Hybrid — check this change of the module contract already fixed. The acceptance fixes this content, module, environment and lane; later technical corrections do not change these requirements. This contract covers the data and the declared flow of the actions; on its own it does not prove the whole business intent.\n\n{\n  \"module\": \"Pedidos\",\n  \"lane\": \"ss5\",\n  \"environment\": \"fixture.test\",\n  \"data\": {\n    \"entities\": [\n      {\n        \"name\": \"Pedido\",\n        \"attributes\": [\n          {\n            \"name\": \"Descrição\",\n            \"type\": \"Text\",\n            \"length\": 50\n          }\n        ]\n      }\n    ]\n  },\n  \"logic\": {},\n  \"roles\": [],\n  \"expectedMessages\": [\n    {\n      \"text\": \"ação \\\"inválida\\\"\",\n      \"level\": \"warning\"\n    }\n  ]\n}"
  },
  "hostInput": {
   "payload": {

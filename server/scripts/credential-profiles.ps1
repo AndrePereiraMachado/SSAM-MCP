@@ -64,20 +64,20 @@ try {
  Add-Type -AssemblyName System.Windows.Forms
  Add-Type -AssemblyName System.Drawing
  $form=New-Object System.Windows.Forms.Form
- $form.Text='SSAM — credenciais'; $form.Size=New-Object System.Drawing.Size(550,300)
+ $form.Text='SSAM — credentials'; $form.Size=New-Object System.Drawing.Size(550,300)
  $form.StartPosition='CenterScreen';$form.FormBorderStyle='FixedDialog';$form.MaximizeBox=$false;$form.MinimizeBox=$false
  $label=New-Object System.Windows.Forms.Label
- $label.Text="$Lane — $HostName`r`nEscolha um perfil ou adicione uma credencial. Os valores ficam no Vault do Windows."
+ $label.Text="$Lane — $HostName`r`nChoose a profile or add a credential. The values stay in the Windows Vault."
  $label.Location=New-Object System.Drawing.Point(15,15);$label.Size=New-Object System.Drawing.Size(510,45);$form.Controls.Add($label)
  $choice=New-Object System.Windows.Forms.ComboBox
  $choice.DropDownStyle='DropDownList';$choice.Location=New-Object System.Drawing.Point(15,65);$choice.Width=505
  foreach($p in $profiles){[void]$choice.Items.Add($p.principal+' — '+$p.target.Split('/')[-1])}
- [void]$choice.Items.Add('Adicionar nova credencial');$choice.SelectedIndex=$profiles.Count;$form.Controls.Add($choice)
+ [void]$choice.Items.Add('Add a new credential');$choice.SelectedIndex=$profiles.Count;$form.Controls.Add($choice)
  $user=New-Object System.Windows.Forms.TextBox;$user.Location=New-Object System.Drawing.Point(15,105);$user.Width=505;$user.Text=$Principal;$user.ReadOnly=[bool]$Principal;$form.Controls.Add($user)
  $password=New-Object System.Windows.Forms.TextBox;$password.Location=New-Object System.Drawing.Point(15,145);$password.Width=505;$password.UseSystemPasswordChar=$true;$form.Controls.Add($password)
- $hint=New-Object System.Windows.Forms.Label;$hint.Text='Usuário acima; senha abaixo. Nada é enviado ao chat.';$hint.Location=New-Object System.Drawing.Point(15,178);$hint.Size=New-Object System.Drawing.Size(500,22);$form.Controls.Add($hint)
- $ok=New-Object System.Windows.Forms.Button;$ok.Text='Usar / Guardar';$ok.Location=New-Object System.Drawing.Point(285,215);$ok.Width=120;$form.Controls.Add($ok)
- $cancel=New-Object System.Windows.Forms.Button;$cancel.Text='Cancelar';$cancel.Location=New-Object System.Drawing.Point(410,215);$cancel.DialogResult='Cancel';$form.Controls.Add($cancel);$form.CancelButton=$cancel
+ $hint=New-Object System.Windows.Forms.Label;$hint.Text='User above; password below. Nothing is sent to the chat.';$hint.Location=New-Object System.Drawing.Point(15,178);$hint.Size=New-Object System.Drawing.Size(500,22);$form.Controls.Add($hint)
+ $ok=New-Object System.Windows.Forms.Button;$ok.Text='Use / Save';$ok.Location=New-Object System.Drawing.Point(285,215);$ok.Width=120;$form.Controls.Add($ok)
+ $cancel=New-Object System.Windows.Forms.Button;$cancel.Text='Cancel';$cancel.Location=New-Object System.Drawing.Point(410,215);$cancel.DialogResult='Cancel';$form.Controls.Add($cancel);$form.CancelButton=$cancel
  $choice.Add_SelectedIndexChanged({$adding=$choice.SelectedIndex -eq $profiles.Count;$user.Enabled=$adding;$password.Enabled=$adding})
  $script:chosen=$null
  $ok.Add_Click({
@@ -85,7 +85,7 @@ try {
    if($choice.SelectedIndex -lt $profiles.Count){$script:chosen=$profiles[$choice.SelectedIndex]}
    else {
     $login=$user.Text.Trim().ToLowerInvariant()
-    if(!$login -or !$password.Text -or ($Principal -and $login -ne $Principal)){throw 'Informe usuário e senha do contexto indicado.'}
+    if(!$login -or !$password.Text -or ($Principal -and $login -ne $Principal)){throw 'Enter the user and password of the context shown.'}
     $sha=[Security.Cryptography.SHA256]::Create()
     try{$hash=([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($login)))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
     $target=$baseTarget+'/Profiles/'+$hash+'/'+[Guid]::NewGuid().ToString()
@@ -93,13 +93,13 @@ try {
     try {
      $record=New-Object SsamProfileVault+Credential;$record.Type=1;$record.TargetName=$target;$record.UserName=$login;$record.Persist=2
      $record.CredentialBlob=$pointer;$record.CredentialBlobSize=[Text.Encoding]::Unicode.GetByteCount($password.Text)
-     if($record.CredentialBlobSize -gt 2560){throw 'Credencial excede o tamanho permitido.'}
-     if(![SsamProfileVault]::Write([ref]$record,0)){throw 'Não foi possível guardar a credencial.'}
+     if($record.CredentialBlobSize -gt 2560){throw 'The credential exceeds the allowed size.'}
+     if(![SsamProfileVault]::Write([ref]$record,0)){throw 'The credential could not be saved.'}
     }finally{[Runtime.InteropServices.Marshal]::ZeroFreeCoTaskMemUnicode($pointer);$password.Clear()}
     $script:chosen=@{target=$target;principal=$login}
    }
    $form.DialogResult='OK';$form.Close()
-  }catch{[void][System.Windows.Forms.MessageBox]::Show('Não foi possível usar este perfil. Confira os campos.','SSAM')}
+  }catch{[void][System.Windows.Forms.MessageBox]::Show('This profile could not be used. Check the fields.','SSAM')}
  })
  $form.Add_Shown({
   # Start-Process hides the console; its STARTUPINFO can also hide the first form.

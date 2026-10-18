@@ -1,5 +1,5 @@
 {
- "description": "ProgressBar do OSUI: o input obrigatorio Progress.",
+ "description": "ProgressBar of OSUI: the required input Progress.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

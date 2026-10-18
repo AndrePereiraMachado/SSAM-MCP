@@ -1,5 +1,5 @@
 {
- "description": "Bloqueado: IEditableTable e widget de Traditional Web (IWebWidget); numa tela Reactive do ODC o placeholder nao o cria. Use ITableRecords com Inputs nas celulas.",
+ "description": "Blocked: IEditableTable is a Traditional Web widget (IWebWidget); on an ODC Reactive screen the placeholder does not create it. Use ITableRecords with Inputs in the cells.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectError": ["cannot create IEditableTable (no Create method in the API)"],
  "ops": [

@@ -1,5 +1,5 @@
 {
- "description": "Container tipico: uma linha por tarefa numa List, alinhada a esquerda, com a classe CSS calculada pelos dados (Style com If sobre Task.Done), sem usar Visible.",
+ "description": "Typical Container: one line per task in a List, aligned to the left, with the CSS class computed from the data (Style with an If on Task.Done), without using Visible.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

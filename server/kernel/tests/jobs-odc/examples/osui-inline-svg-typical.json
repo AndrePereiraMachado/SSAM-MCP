@@ -1,5 +1,5 @@
 {
- "description": "InlineSVG do OSUI com SVG montado por expressao: a cor do circulo depende de uma variavel.",
+ "description": "InlineSVG of OSUI with an SVG built by an expression: the color of the circle depends on a variable.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,5 +1,5 @@
 {
- "description": "Notification (OutSystemsUI, Interaction) tipico; placeholders Content com dados do aggregate de tarefas; eventos Initialized, OnToggle tratados por screen actions que guardam os parametros em variaveis.",
+ "description": "Typical Notification (OutSystemsUI, Interaction); placeholders Content with data of the tasks aggregate; events Initialized, OnToggle handled by screen actions that keep the parameters in variables.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

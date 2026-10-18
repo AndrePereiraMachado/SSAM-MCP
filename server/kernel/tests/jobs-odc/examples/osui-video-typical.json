@@ -1,5 +1,5 @@
 {
- "description": "Video do OSUI: URL vinda de uma variavel, controles, tamanho, e o StateChanged guardando o estado do player.",
+ "description": "Video of OSUI: the URL from a variable, controls, size, and StateChanged keeping the state of the player.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

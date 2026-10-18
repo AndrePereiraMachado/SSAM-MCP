@@ -1,5 +1,5 @@
 {
- "description": "WizardItem (OutSystemsUI, Navigation) minimo: instancia como o Studio cria ao arrastar o bloco; dentro de um Wizard vazio (placeholder Content); inputs obrigatorios Status com valores simples.",
+ "description": "Minimal WizardItem (OutSystemsUI, Navigation): an instance as the Studio creates it when the block is dragged; inside an empty Wizard (placeholder Content); required inputs Status with simple values.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

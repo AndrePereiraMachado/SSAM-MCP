@@ -1,9 +1,9 @@
 {
- "description": "CRUD back-office, parte 3 de 5 (telas): cria ProductList e ProductEdit (input ProductId opcional) antes do conteudo, para que as navegacoes de um lado para o outro existam; as duas so para o role ProductManager (Roles declarado uma vez por tela).",
+ "description": "Back-office CRUD, part 3 of 5 (screens): creates ProductList and ProductEdit (optional input ProductId) before the content, so that the navigations from one to the other exist; both only for the role ProductManager (Roles declared once per screen).",
  "base": "job:crud-02-logic",
  "expectValid": true,
  "expectedMessages": [
-  {"id": "UnusedElement", "element": "ProductEdit (MobileScreen) / ProductId (InputParameter)", "why": "O input e lido pelo aggregate da parte 4; no crud-all nao ha aviso."}
+  {"id": "UnusedElement", "element": "ProductEdit (MobileScreen) / ProductId (InputParameter)", "why": "The input is read by the aggregate of part 4; in crud-all there is no warning."}
  ],
  "ops": [
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductList", "as": "$list"},

@@ -1,9 +1,10 @@
+import { createHash } from 'node:crypto';
 // The work packet: ssam_discover {intent, lane, app, packet:true} (W1, 2026-10-10). SSAM does not control how a client
 // (Claude, Codex, a customer's model) opens and briefs its agents, and an agent without a good brief reads the docs and the
 // module again (measured: 1,428 repeated doc reads, 29-82 reads per agent before its first write). The points SSAM does
 // control are the server instructions, the tool descriptions, the answers and the refusals; so the brief comes from SSAM,
 // in one call any agent makes: this packet. It is deterministic (the same intent, lane, capture and sources give the same
-// bytes: no timings, cache states or dates), fits budgetBytes (default the answer ceiling less the shaper's room, 38912)
+// bytes: no timings, cache states or dates), fits budgetBytes (default PACKET_DEFAULT_BYTES)
 // and has a declared order with declared cuts:
 //   module        the elements of the capture the intent names, from its module digest (ssam-digest/1, ModuleDigest.cs and
 //                 module-digest.mjs): entities, static entities, structures and the signature of each action; the body of
@@ -36,20 +37,23 @@
 import { tokens, normalize } from './catalog.mjs';
 import { indexLine, FOLD_RECORDS } from './module-digest.mjs';
 import { guideText, guideSections } from './runtime-guides.mjs';
+import { techInEnglish } from './search-aliases.mjs';
 import { generatorFor, generatorCall, generatorCard } from './generators.mjs';
 import { isScreenIntent, screenWords } from './osui-catalog.mjs';
 import { functionNames } from './builtin-functions.mjs';
 import { coveredBy } from './text-packet.mjs';
 import { fitComponents } from './environment-components.mjs';
 import { planSize, PLAN_MIN_ITEMS } from './code-plan.mjs';
+import { hostedContext } from './executor.mjs';
 
 export const PACKET_SCHEMA = 'ssam-packet/1';
 export const PACKET_ORDER = ['module', 'text', 'environment', 'capabilities', 'example', 'rules', 'next'];
 // The most of the budget the text section takes (its richest level that fits), and the environment section.
 export const TEXT_SHARE = 0.4;
 export const ENVIRONMENT_SHARE = 0.16;
-// The answer ceiling of ssam.mjs (MAX_ANSWER_BYTES 40960) less the room its shaper keeps (budgetCeiling, 2048 bytes).
-export const PACKET_BUDGET = 38912;
+// The answer ceiling of ssam.mjs (MAX_ANSWER_BYTES) less the room its shaper keeps (budgetCeiling, 2048 bytes).
+import { PACKET_MAX_BYTES, PACKET_DEFAULT_BYTES, RECOVERY_PART_BYTES } from './context-budget.mjs';
+export const PACKET_BUDGET = PACKET_MAX_BYTES;
 // The share of the room each section starts with; without a module its share goes to the others in proportion.
 export const SHARES = { module: 0.44, capabilities: 0.26, example: 0.17, rules: 0.13 };
 // Room kept for the cuts and the size field, whatever the sections hold.
@@ -351,11 +355,11 @@ const STRONG_MATCH = 7;
 const CATEGORY_TOPICS = { logic: ['logic'], ui: ['ui'], data: ['data'], integration: ['integration'], security: ['security'], process: ['timer'], refactor: ['logic'], delivery: ['publish'] };
 // The lessons of docs/CONHECIMENTO-DO-TIME.md by the start of their heading (normalized).
 export const LESSON_TOPICS = [
-  ['acesso a dados', ['data', 'logic', 'list']], ['prototipo aprovado', ['ui']], ['css', ['ui']], ['lista: refresh parcial', ['ui', 'list']],
-  ['o11: republicar os consumidores', ['publish']], ['odc: o que o studio recusa', ['logic', 'data']], ['o11: agenda de timer', ['timer']],
-  ['odc (client) e o11 (server): lambda', ['list', 'logic']], ['o11: entidade com', ['data']], ['o11: nunca redeclare', ['logic', 'publish']],
-  ['merge direto de oml', ['merge']], ['jobs em arquivo', ['job']], ['subagentes', ['agent']], ['mudanca de fachada', []], ['varios agentes', ['agent']],
-  ['expectedmessages', ['job']], ['regra de escopo', ['job']], ['todo codigo gerado segue', []],
+  ['data access', ['data', 'logic', 'list']], ['approved prototype', ['ui']], ['css', ['ui']], ['list: partial refresh', ['ui', 'list']],
+  ['o11: republish the consumers', ['publish']], ['odc: what the studio refuses', ['logic', 'data']], ['o11: timer schedule', ['timer']],
+  ['odc (client) and o11 (server): list action lambda', ['list', 'logic']], ['o11: an entity with', ['data']], ['o11: never redeclare', ['logic', 'publish']],
+  ['direct oml merge', ['merge']], ['jobs in a file', ['job']], ['subagents', ['agent']], ['facade change', []], ['several agents', ['agent']],
+  ['expectedmessages', ['job']], ['scope rule', ['job']], ['all generated code follows', []],
 ];
 const RULES_MAX = 16;
 export const PADROES_TOPICS = {
@@ -388,16 +392,16 @@ export function ruleUnits(read = guideText) {
     for (const m of head.matchAll(/^- ([\s\S]*?)(?=\r?\n- |\s*$(?![\s\S]))/gm)) {
       const text = m[1].replace(/\s*\r?\n\s*/g, ' ').trim();
       const title = (/^\*\*(.+?)\*\*/.exec(text)?.[1] ?? text.split(/[:.]/)[0]).replace(/[.:]$/, '').trim();
-      units.push({ from: 'time', id: s.id, title, text: text.replace(/\*\*/g, ''), topics: LESSON_TOPICS.find(([start]) => normalize(title).startsWith(start))?.[1] ?? [] });
+      units.push({ from: 'team', id: s.id, title, text: text.replace(/\*\*/g, ''), topics: LESSON_TOPICS.find(([start]) => normalize(title).startsWith(start))?.[1] ?? [] });
     }
     for (const l of guideSections(s.text, 3)) {
       const lane = /^O11\b/.test(l.title) && !/ODC/.test(l.title) ? 'o11' : /^ODC\b/.test(l.title) && !/O11/.test(l.title) ? 'odc' : null;
-      units.push({ from: 'time', id: s.id, title: l.title, ...(lane ? { lane } : {}), text: l.text.replace(/^### .*\r?\n/, '').trim(), topics: lessonTopics(l.title) });
+      units.push({ from: 'team', id: s.id, title: l.title, ...(lane ? { lane } : {}), text: l.text.replace(/^### .*\r?\n/, '').trim(), topics: lessonTopics(l.title) });
     }
   }
-  for (const m of read('padroes').matchAll(/^\| ([A-Z]{1,2}\d+) \| (.+?) \| (.+?) \| (.+?) \| (.+?) \|\s*$/gm)) {
+  for (const m of read('standards').matchAll(/^\| ([A-Z]{1,2}\d+) \| (.+?) \| (.+?) \| (.+?) \| (.+?) \|\s*$/gm)) {
     if (!PADROES_TOPICS[m[1]]) continue;
-    units.push({ from: 'padroes', id: m[1], text: m[2].trim(), ...(/só O11/.test(m[5]) ? { lane: 'o11' } : /só ODC/.test(m[5]) ? { lane: 'odc' } : {}), topics: PADROES_TOPICS[m[1]] });
+    units.push({ from: 'standards', id: m[1], text: m[2].trim(), ...(/só O11|O11 only/.test(m[5]) ? { lane: 'o11' } : /só ODC|ODC only/.test(m[5]) ? { lane: 'odc' } : {}), topics: PADROES_TOPICS[m[1]] });
   }
   return units;
 }
@@ -405,9 +409,10 @@ const RULE_CHARS = 1400, RULE_TEXT_CHARS = 360;
 export function rulesSection(input, cap, { lane, read = guideText } = {}) {
   const { intent = '', matches = [], categories = new Map() } = input;
   const topics = intentTopics(intent, matches, categories);
-  const tech = [...new Set(plain(intent).filter(w => TECH.has(w)))];
+  // F2 (review english-junction): the Portuguese technique words in English, the language of the rules (search-aliases.mjs).
+  const tech = [...new Set(plain(intent).filter(w => TECH.has(w)).map(techInEnglish))];
   const all = { tool: 'ssam_reference', arguments: { lane, kind: 'rules', query: 'all' } };
-  const padroes = { tool: 'ssam_reference', arguments: { lane, kind: 'rules', query: 'padroes' } };
+  const padroes = { tool: 'ssam_reference', arguments: { lane, kind: 'rules', query: 'standards' } };
   let units; try { units = ruleUnits(read); } catch (error) { return { value: { error: clip(error.message, 300), all, padroes }, cut: null }; }
   // A shared topic weighs more the fewer rules have it (1 + ln(rules / rules with the topic)): "exception" or "naming"
   // says more about a rule than "logic", which most rules share. A technique word the rule holds adds 3.
@@ -425,7 +430,7 @@ export function rulesSection(input, cap, { lane, read = guideText } = {}) {
   let used = bytes(value) + bytes(all) + bytes(padroes) + 24; let left = 0;
   for (const { u } of scored) {
     // With a text section a lesson keeps its first lines (its JSON examples are the JSON form the text replaces).
-    const item = u.from === 'padroes' ? { from: 'padroes', id: u.id, rule: u.text, ...(u.lane ? { lane: u.lane } : {}) } : { from: 'time', section: u.id, title: u.title, rule: clip(u.text, input.textForms?.length ? RULE_TEXT_CHARS : RULE_CHARS) };
+    const item = u.from === 'standards' ? { from: 'standards', id: u.id, rule: u.text, ...(u.lane ? { lane: u.lane } : {}) } : { from: 'team', section: u.id, title: u.title, rule: clip(u.text, input.textForms?.length ? RULE_TEXT_CHARS : RULE_CHARS) };
     const add = bytes(item) + 1;
     if (value.items.length >= RULES_MAX || used + add > cap) { left++; continue; }
     value.items.push(item); used += add;
@@ -457,20 +462,23 @@ export function nextSection({ lane, intent = '', module = null, operations = nul
     ? { tool: 'o11_deliver', arguments: { module: name, job: { ops }, authorize: '<the user\'s own words, or none with a standing grant>' } }
     : { tool: 'studio_deliver', arguments: { feature: '<Feature>', module: name, job: { ops }, owners: ['<Owner>'], changes: ['<Change>'] } };
   // A data, action or screen intent is written as code (ssam_code, the same delivery underneath); the JSON ops stay the way
-  // for what the code forms do not write.
-  const code = codeOfRoute(textRoute, lane, name);
+  // for what the code forms do not write. servidor/fase4-26 a7 (K1): ssam_code is unavailable on the hosted server
+  // (hosted/tools.json, SSAM_CODE_HOSTED_PENDING), so a hosted packet never sends its work there: its delivery is the JSON
+  // job of the lane's delivery tool, with no plan and no code card (the text forms are read with ssam_map views).
+  const hosted = hostedContext() !== null;
+  const code = hosted ? null : codeOfRoute(textRoute, lane, name);
   // A generator writes the whole family the intent asks for (a REST API from its URLs, the standard actions of the entities;
   // 2026-10-13): its one op is the job and its card next.generator, the same way for each (generators.mjs generatorFor).
   const generator = generatorFor(intent);
   const deliver = generator ? generatorCall(generator, lane, name) : code ? code.write : json;
-  const summary = 'without errors it answers "entregue" with a summary of what it created (each action with its inputs and outputs): no map of the module after it';
+  const summary = 'without errors it answers "delivered" with a summary of what it created (each action with its inputs and outputs): no map of the module after it';
   // Six or more elements written by hand are split by ssam_code plan; a generator writes its whole family in one op, so a
   // generated intent never asks for a plan.
-  const planned = generator ? 0 : planSize(intent, module?.digest);
+  const planned = generator || hosted ? 0 : planSize(intent, module?.digest);
   return { work: WORK_RULE,
     ...(generator ? { generator: { ...generatorCard(generator, lane, name), why: generator.why } } : {}),
     ...(planned >= PLAN_MIN_ITEMS ? { plan: { tool: 'ssam_code', arguments: { lane, action: 'plan', module: name, items: '<one per element: kind, name, intent, signature>' }, why: `${planned} elements: ssam_code splits them into parallel batches with prompts, context and checks; launch what it returns, then send its final write` } } : {}),
-    deliver: { ...deliver, batch: BATCH_RULE, parallel: PARALLEL_RULE, why: generator ? `one call: the ${generator.op} op is the job (put the other changes of this module in the same job); ${summary}` : code ? `one call: ssam_code writes the ${code.form} text through ${json.tool} (it captures the live module, validates and merges; ${summary})` : `one call: it captures the live module, validates and merges; ${summary}` },
+    deliver: { ...deliver, batch: BATCH_RULE, ...(hosted ? {} : { parallel: PARALLEL_RULE }), why: generator ? `one call: the ${generator.op} op is the job (put the other changes of this module in the same job); ${summary}` : code ? `one call: ssam_code writes the ${code.form} text through ${json.tool} (it captures the live module, validates and merges; ${summary})` : `one call: it captures the live module, validates and merges; ${summary}` },
     ...(code ? { code: { id: code.id, form: code.form, part: code.part, grammar: code.grammar, read: code.read, json: { tool: json.tool, why: 'the JSON ops, for what the code forms do not write' } } } : {}),
     fix: { how: 'a refusal comes once with every problem of every phase (problems[]: phase, pointer, fix, patch when certain, also by name in patchByName) and names its job in nextBasedOn {job, sha256}: correct all of them in one call with patch (paths by name: actions/<Action>/steps/<as>/...) + basedOn, or with only the changed actions as a partial job + basedOn; never resend the whole job' + (lane === 'o11' ? '; on O11 also closePrevious with the refused taskId' : ''),
       arguments: { patch: ['<the patches returned (patchByName) plus your fixes>'], basedOn: { job: '<nextBasedOn.job>', sha256: '<nextBasedOn.sha256>' } } },
@@ -482,73 +490,155 @@ export function nextSection({ lane, intent = '', module = null, operations = nul
 // ---- the packet
 // input: {lane, intent, app, basis, matches, unavailable, categories (id -> category), slices (pointers, 'full'|'compact')
 // -> contract slices, steps, proven, example, exampleFor, module (moduleDigest's answer, or null without app), operations}.
-export function workPacket(input, { budgetBytes = PACKET_BUDGET, read = guideText } = {}) {
+// A section continuation replays deterministic sizing, not the complete packet response.
+// Syntax: packet:<section>:<originalBudget>:<sourceHash>:<offset>:<count>.
+// The source hash covers the index, module capture and complete section, so a changed
+// app/contract/rule/component cannot silently supply a delta against a stale packet.
+const pointerToken = s => String(s).replace(/~/g, '~0').replace(/\//g, '~1');
+export function packetMissing(full, kept, path = '') {
+  if (JSON.stringify(full) === JSON.stringify(kept)) return [];
+  const object = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+  if (Array.isArray(full) && !Array.isArray(kept)) return [{ op: kept === undefined ? 'add' : 'replace', path, value: [] }, ...packetMissing(full, [], path)];
+  if (object(full) && !object(kept)) return [{ op: kept === undefined ? 'add' : 'replace', path, value: {} }, ...packetMissing(full, {}, path)];
+  // A long scalar is paged by character offset inside its section, preserving every
+  // character. Each fragment is independently retrievable below the answer ceiling.
+  if (typeof full === 'string' && bytes(full) > RECOVERY_PART_BYTES) {
+    const parts = [{ op: kept === undefined ? 'add' : 'replace', path, value: '' }];
+    let offset = 0;
+    while (offset < full.length) {
+      let end = Math.min(full.length, offset + Math.floor(RECOVERY_PART_BYTES / 6));
+      if (end < full.length && /[\uD800-\uDBFF]/.test(full[end - 1])) end--;
+      parts.push({ op: 'text', path, offset, value: full.slice(offset, end) }); offset = end;
+    }
+    return parts;
+  }
+  if (Array.isArray(full) && Array.isArray(kept)) {
+    const changes = [];
+    for (let i = 0; i < full.length; i++) changes.push(...packetMissing(full[i], kept[i], path + '/' + i));
+    for (let i = kept.length - 1; i >= full.length; i--) changes.push({ op: 'remove', path: path + '/' + i });
+    return changes;
+  }
+  if (object(full) && object(kept)) {
+    return [...Object.keys(full).flatMap(k => packetMissing(full[k], kept[k], path + '/' + pointerToken(k))),
+      ...Object.keys(kept).filter(k => !Object.hasOwn(full, k)).map(k => ({ op: 'remove', path: path + '/' + pointerToken(k) }))];
+  }
+  return [{ op: kept === undefined ? 'add' : 'replace', path, value: full }];
+}
+export function packetRecovery(spec) {
+  if (!String(spec ?? '').startsWith('packet:')) return null;
+  const m = /^packet:(module|text|environment|capabilities|example|rules):(\d+):([a-f0-9]{64}):(\d+):(\d+)$/.exec(spec);
+  if (!m || ![m[2], m[4], m[5]].every(n => Number.isSafeInteger(Number(n))) || Number(m[2]) < 1 || Number(m[2]) > PACKET_MAX_BYTES || Number(m[5]) < 1) return { invalid: true };
+  return { section: m[1], budgetBytes: Number(m[2]), sha256: m[3], offset: Number(m[4]), count: Number(m[5]) };
+}
+const sectionHash = (input, section, full, missing) => createHash('sha256').update(JSON.stringify({ basis: input.basis ?? null,
+  source: input.module?.sourceSha256 ?? null, section, full, missing })).digest('hex');
+const measured = value => {
+  for (let i = 0; i < 8; i++) { const n = bytes(value); if (value.size.bytes === n) break; value.size.bytes = n; }
+  return value;
+};
+export function workPacket(input, { budgetBytes = PACKET_DEFAULT_BYTES, read = guideText, recover = null } = {}) {
+  budgetBytes = Math.min(recover?.budgetBytes ?? budgetBytes, PACKET_MAX_BYTES);
   const { lane, intent } = input;
-  // The text section (text-packet.mjs packetTextSection: {value, levels, covers}), at its richest level within TEXT_SHARE
-  // of the budget; a section with no level that fits is left out and named in cuts (its call is ssam_discover expand).
   const textLevels = input.text?.levels ?? [];
   const text = textLevels.find(l => bytes(l) <= budgetBytes * TEXT_SHARE) ?? null;
-  const textCut = input.text && text !== textLevels[0]
-    ? { section: 'text', left: text ? { level: textLevels.indexOf(text) } : { text: input.text.value.id }, recover: { tool: 'ssam_discover', arguments: { lane, intent, packet: true, budgetBytes: PACKET_BUDGET } } } : null;
   const textForms = text ? input.text.covers : [];
   input = { ...input, textForms, textWhy: text ? input.text.value.why ?? [] : [] };
-  // The environment section (environment-components.mjs): the installed extensions and Forge components for the needs the
-  // intent names, at its richest level within ENVIRONMENT_SHARE of the budget; a refusal (no listing) as it is.
   const components = !input.environment ? null : input.environment.ok === false ? input.environment
-    : fitComponents(input.environment, budgetBytes * ENVIRONMENT_SHARE) ?? { ok: true, schema: input.environment.schema, needs: input.environment.needs, components: input.environment.components.length,
-      note: 'reduced by budget', recover: { tool: 'ssam_discover', arguments: { lane, intent: input.environment.needs.join(' ') + ' no ambiente' } } };
-  // F6 (producer-signatures.mjs packetProducers): the producer signatures the workspace already captured that the intent
-  // needs, each with its reference op, in the environment section (what the environment gives this request).
+    : fitComponents(input.environment, budgetBytes * ENVIRONMENT_SHARE) ?? null;
   const producers = input.producers?.producers?.length ? input.producers : null;
-  const environment = producers ? { ...(components ?? { ok: true }), producers } : components;
+  const environmentFull = producers ? { ...(input.environment ?? { ok: true }), producers } : input.environment ?? null;
+  const environment = producers && bytes(producers) <= budgetBytes * ENVIRONMENT_SHARE
+    ? { ...(components ?? { ok: true }), producers } : components;
   const next = nextSection(input);
   const screens = isScreenIntent(intent, input.matches ?? []);
-  const envelope = { ok: true, schemaVersion: PACKET_SCHEMA, lane, intent, ...(input.app ? { app: input.app } : {}), basis: input.basis ?? null,
-    packet: { order: PACKET_ORDER, rule: ORDER_RULE }, module: null, text, environment, capabilities: null, example: null, rules: null, next, cuts: [],
-    size: { bytes: 99999999, budgetBytes, status: 'reduced' } };
-  const room = budgetBytes - bytes(envelope) - CUTS_ROOM;
-  const withModule = !!input.module && input.module.ok !== false;
-  const shares = withModule ? SHARES : Object.fromEntries(Object.entries(SHARES).filter(([k]) => k !== 'module').map(([k, v]) => [k, v / (1 - SHARES.module)]));
   const build = {
     module: cap => moduleSection(input.module ?? null, intent, cap, { lane, screens }),
     capabilities: cap => capabilitiesSection(input, cap, { lane, screens: screenWords(intent).length > 0 }),
     example: cap => exampleSection(input, cap, { lane }),
     rules: cap => rulesSection(input, cap, { lane, read }),
   };
-  // `shrink` takes bytes off the last sections when the whole is still above the budget (never expected; kept so the
-  // budget holds whatever the measures).
-  const assemble = shrink => {
-    const out = structuredClone(envelope); const cuts = [];
-    let carry = 0;
-    for (const id of ['module', 'capabilities', 'example', 'rules']) {
-      const cap = Math.max(256, Math.floor(Math.max(0, room) * (shares[id] ?? 0)) + carry - (shrink[id] ?? 0));
-      const { value, cut } = build[id](cap);
-      out[id] = value; if (cut) cuts.push(cut);
-      carry = Math.max(0, cap - bytes(value));
+  // Compare the JSON values the MCP client actually receives (undefined is absent).
+  const json = value => JSON.parse(JSON.stringify(value));
+  const full = json({ module: build.module(Infinity).value, text: input.text?.value ?? null, environment: environmentFull,
+    capabilities: build.capabilities(Infinity).value, example: build.example(Infinity).value, rules: build.rules(Infinity).value });
+  const envelope = { ok: true, schemaVersion: PACKET_SCHEMA, lane, intent, ...(input.app ? { app: input.app } : {}), basis: input.basis ?? null,
+    packet: { order: PACKET_ORDER, rule: ORDER_RULE }, module: null, text, environment, capabilities: null, example: null, rules: null, next, cuts: [],
+    size: { bytes: 0, budgetBytes, status: 'reduced' } };
+  const withModule = !!input.module && input.module.ok !== false;
+  const shares = withModule ? SHARES : Object.fromEntries(Object.entries(SHARES).filter(([k]) => k !== 'module').map(([k, v]) => [k, v / (1 - SHARES.module)]));
+  const sectionChanges = out => Object.fromEntries(Object.keys(full).map(section => [section, packetMissing(full[section], out[section])]));
+  // Each cut is one bounded unit. Its call returns exactly that unit, without
+  // rebuilding next/envelope in the response or repeating any other section.
+  const chunksOf = changes => {
+    const chunks = []; let items = [], offset = 0;
+    for (const change of changes) {
+      if (items.length && bytes([...items, change]) > RECOVERY_PART_BYTES) { chunks.push({ offset, items }); offset += items.length; items = []; }
+      items.push(change);
     }
-    if (textCut) cuts.push(textCut);
-    out.cuts = cuts.sort((a, b) => PACKET_ORDER.indexOf(a.section) - PACKET_ORDER.indexOf(b.section));
-    out.size = { bytes: 0, budgetBytes, status: cuts.length ? 'reduced' : 'within' };
-    for (let i = 0, m = bytes(out); i < 6 && out.size.bytes !== m; i++) { out.size.bytes = m; m = bytes(out); }
-    return out;
+    if (items.length) chunks.push({ offset, items });
+    return chunks;
   };
-  const shrink = {};
-  let packet = assemble(shrink);
-  for (let round = 0; packet.size.bytes > budgetBytes && round < 12; round++) {
-    const over = packet.size.bytes - budgetBytes + 64;
+  const leftOf = (section, kept) => {
+    const whole = full[section];
+    if (section === 'module') return Object.fromEntries(GROUPS.map(g => [g, (whole?.[g]?.length ?? 0) - (kept?.[g]?.length ?? 0)]).filter(([, n]) => n > 0));
+    if (section === 'example') return { ops: (whole?.ops?.length ?? 0) - (kept?.ops?.length ?? 0) };
+    if (section === 'rules') return { rules: Math.max(0, (whole?.items?.length ?? 0) - (kept?.items?.length ?? 0)) };
+    if (section === 'capabilities' && JSON.stringify(whole?.functions) !== JSON.stringify(kept?.functions)) return { functions: 'signatures' };
+    return {};
+  };
+  const cutsOf = (changes, out) => Object.entries(changes).flatMap(([section, missing]) => chunksOf(missing).map(({ offset, items }) => ({
+    section, left: { ...leftOf(section, out[section]), changes: items.length }, recover: { tool: 'ssam_discover', arguments: { lane, intent, ...(input.app ? { app: input.app } : {}), ...(input.limit != null ? { limit: input.limit } : {}),
+      packet: true, expand: `packet:${section}:${budgetBytes}:${sectionHash(input, section, full[section], missing)}:${offset}:${items.length}`, budgetBytes: PACKET_MAX_BYTES } } })));
+  const room = budgetBytes - bytes(envelope) - CUTS_ROOM;
+  const assemble = shrink => {
+    const out = structuredClone(envelope); let carry = 0;
+    for (const id of ['module', 'capabilities', 'example', 'rules']) {
+      const cap = Math.max(0, Math.floor(Math.max(0, room) * (shares[id] ?? 0)) + carry - (shrink[id] ?? 0));
+      out[id] = cap === 0 ? null : json(build[id](cap).value);
+      carry = Math.max(0, cap - bytes(out[id]));
+    }
+    const changes = sectionChanges(out);
+    out.cuts = cutsOf(changes, out);
+    out.size.status = out.cuts.length ? 'reduced' : 'within';
+    return measured(out);
+  };
+  const shrink = {}; let packet = assemble(shrink);
+  for (let round = 0; packet.size.bytes > budgetBytes && round < 32; round++) {
     const id = ['rules', 'example', 'capabilities', 'module'][round % 4];
-    shrink[id] = (shrink[id] ?? 0) + over;
+    shrink[id] = (shrink[id] ?? 0) + packet.size.bytes - budgetBytes + 64;
     packet = assemble(shrink);
   }
-  // The room a later section left (a whole example smaller than its share, rules held at RULES_MAX) goes back to the first
-  // section with a cut, in the declared order, once per section (2026-10-12: logic.server-action was cut while 3 KB of
-  // the budget stayed unused). A pass that would pass the budget is not kept.
+  // Even a large text/environment section is optional; the full next/envelope are
+  // reserved. Null is explicit, with the exact missing value in its own cut.
+  for (const id of ['environment', 'text']) if (packet.size.bytes > budgetBytes && envelope[id] !== null) {
+    envelope[id] = null; packet = assemble(shrink);
+  }
   for (const id of ['module', 'capabilities', 'example', 'rules']) {
     const left = budgetBytes - packet.size.bytes - 64;
     if (left < 256 || !packet.cuts.some(c => c.section === id)) continue;
     const tried = { ...shrink, [id]: (shrink[id] ?? 0) - left };
     const again = assemble(tried);
     if (again.size.bytes <= budgetBytes) { Object.assign(shrink, tried); packet = again; }
+  }
+  if (recover) {
+    const changes = sectionChanges(packet)[recover.section];
+    const sha256 = sectionHash(input, recover.section, full[recover.section], changes);
+    if (sha256 !== recover.sha256) return { ok: false, code: 'PACKET_SOURCE_CHANGED', section: recover.section,
+      error: 'the packet source changed; start a new packet for this intent and app' };
+    if (recover.offset + recover.count > changes.length) return { ok: false, code: 'PACKET_RECOVERY_INVALID', section: recover.section,
+      error: 'the recovery range is outside this section' };
+    const missing = changes.slice(recover.offset, recover.offset + recover.count);
+    return { ok: true, schemaVersion: 'ssam-packet-part/1', section: recover.section, sourceSha256: sha256, missing };
+  }
+  if (packet.size.bytes > budgetBytes) {
+    const minimalBytes = packet.size.bytes + 64;
+    const answer = { ok: false, code: minimalBytes > PACKET_MAX_BYTES ? 'PACKET_ENVELOPE_TOO_LARGE' : 'PACKET_BUDGET_TOO_SMALL', budgetBytes, minimalBytes, maxBytes: PACKET_MAX_BYTES,
+      reason: 'next and the envelope must stay whole' };
+    const continuation = { tool: 'ssam_discover', arguments: { lane, intent, ...(input.app ? { app: input.app } : {}), ...(input.limit != null ? { limit: input.limit } : {}), packet: true, budgetBytes: minimalBytes } };
+    if (minimalBytes <= PACKET_MAX_BYTES && bytes({ ...answer, continuation }) <= budgetBytes) answer.continuation = continuation;
+    const error = 'next and the packet envelope must stay whole; request budgetBytes at least minimalBytes';
+    if (bytes({ ...answer, error }) <= budgetBytes) answer.error = error;
+    return answer;
   }
   return packet;
 }

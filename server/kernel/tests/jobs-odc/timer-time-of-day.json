@@ -1,5 +1,5 @@
 {
- "description": "ODC: o ciclo de um item de agenda ITimeOfDay de um timer (create, get, set, duplicate, move) com o Interval que a plataforma usa nele: Any. A hora de um ITimeOfDay e o seu Hour/Minute (o Schedule do timer escreve-os); o Studio nunca lhe muda o Interval. Com AtOrOn/Every/Between o item fica sem Values e a ordenacao que o Schedule refaz a cada filho criado ou alterado (SortScheduleItemsComparer) caia em NullReferenceException assim que havia dois, sem indice de op (o achado da fase 1). O kernel agora recusa esse set com a explicacao: tests/jobs-odc-negative/timeofday-interval-atoron.json.",
+ "description": "ODC: the life cycle of an ITimeOfDay agenda item of a timer (create, get, set, duplicate, move) with the Interval the platform uses on it: Any. The time of an ITimeOfDay is its Hour/Minute (the timer's Schedule writes them); Studio never changes its Interval. With AtOrOn/Every/Between the item is left without Values and the ordering that the Schedule redoes at each child created or changed (SortScheduleItemsComparer) fell into NullReferenceException as soon as there were two, with no op index (the phase 1 finding). The kernel now refuses that set with the explanation: tests/jobs-odc-negative/timeofday-interval-atoron.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "ops": [
@@ -12,7 +12,7 @@
   {"op": "create", "parent": "$timer/ScheduleConfiguration", "type": "ITimeOfDay", "as": "$time"},
   {"op": "get", "target": "$time", "_why": "Interval Any"},
   {"op": "set", "target": "$time", "prop": "Interval", "value": "Any"},
-  {"op": "duplicate", "target": "$time", "as": "$copy", "_why": "dois itens Any: a ordenacao do Schedule compara-os sem tocar em Values"},
+  {"op": "duplicate", "target": "$time", "as": "$copy", "_why": "two Any items: the Schedule ordering compares them without touching Values"},
   {"op": "move", "target": "$copy", "first": true},
   {"op": "get", "target": "$timer/ScheduleConfiguration"}
  ]

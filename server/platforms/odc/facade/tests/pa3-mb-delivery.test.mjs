@@ -1,4 +1,5 @@
 // Package 3, lane mb: the ODC delivery (C02 B2 and item 4, C16 G-3, C31). Fakes only: no Studio, no worker process.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -138,7 +139,7 @@ test('an uncertain merge whose evidence shows the merge ran is merged: never "re
   assert.match(result.error, /already integrated/);
   assert.equal(result.continuation.tool, 'ssam_evidence');
   assert.equal(result.continuation.arguments.file, path.join(result.evidence, 'deliver-result.json'));
-  assert.match(result.continuation.why, /Já integrado; não repita/);
+  assert.match(result.continuation.why, /Already integrated; do not repeat/);
   assert.notEqual(result.continuation.tool, 'studio_deliver');
 });
 
@@ -154,7 +155,7 @@ test('a merge the bridge proved equal but for the Studio\'s known rewrites is de
     { element: 'MainFlow/Carrinho/I2', rule: 'IconConversion', local: 'shopping-cart/fill', candidate: 'cart-plus/regular' }];
   const f = delivery(t, { merge: { ok: true, merged: true, strictlyEqual: false, equivalence: 'normalized', normalized, normalizedTotal: 2 } });
   const result = await deliverKernel(f.input, f.deps);
-  assert.equal(result.ok, true, result.error); assert.equal(result.result, 'entregue');
+  assert.equal(result.ok, true, result.error); assert.equal(result.result, 'delivered');
   assert.equal(result.equivalence, 'normalized'); assert.deepEqual(result.normalized, normalized);
   // Without the bridge's normalized proof, strictlyEqual:false stays uncertain.
   const g = delivery(t, { merge: { ok: true, merged: true, strictlyEqual: false } });

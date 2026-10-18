@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {qualifyOdcClientVariableResolution} from '../debug-odc-client-variable-resolution.mjs';
 const file='_oschunk-SDK.js',source=`var cache={};function register(key,factory){cache[key]=factory()}function resolve(key){return cache[key]}function remove(key){delete cache[key]}

@@ -1,5 +1,5 @@
 {
- "description": "Linha de carrinho com botoes - e + : a screen action chama a server action, grava a quantidade nova em GetCartItems.List[Linha] e o resumo devolvido pelo servidor, sem Refresh Data da lista.",
+ "description": "A cart line with - and + buttons: the screen action calls the server action, writes the new quantity to GetCartItems.List[Line] and the summary returned by the server, without a Refresh Data of the list.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -13,7 +13,7 @@
     {"name": "ItemCount", "type": "Integer"},
     {"name": "Total", "type": "Currency"}]}]}},
 
-  {"op": "logic", "_why": "1. servidor: o resumo e a troca de quantidade; a troca devolve a quantidade nova E o resumo, para a tela nao reler a lista", "data": {"actions": [
+  {"op": "logic", "_why": "1. server: the summary and the quantity change; the change returns the new quantity AND the summary, so the screen does not read the list again", "data": {"actions": [
    {"name": "Cart_GetSummary", "kind": "server",
     "outputs": [{"name": "Summary", "type": "CartSummary"}],
     "steps": [
@@ -33,7 +33,7 @@
      {"call": "Cart_GetSummary", "as": "Recalculate"},
      {"assign": {"NewQuantity": "Line.Quantity", "Summary": "Recalculate.Summary"}, "as": "SetOutputs"}]}]}},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Cart", "as": "$scr", "_why": "2. a tela: a lista do carrinho e o resumo"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "Cart", "as": "$scr", "_why": "2. the screen: the cart list and the summary"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetCartItems", "as": "$agg"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:CartItem"}},
@@ -48,7 +48,7 @@
      {"call": "Cart_ChangeQuantity", "as": "Change", "args": {"CartItemId": "GetCartItems.List[RowIndex].CartItem.Id", "Delta": "Delta"}},
      {"assign": {"GetCartItems.List[RowIndex].CartItem.Quantity": "Change.NewQuantity", "LoadSummary.Summary": "Change.Summary"}, "as": "ApplyResult"}]}]}},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "CartLines", "as": "$list", "_why": "3. a linha: nome, - quantidade +"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "CartLines", "as": "$list", "_why": "3. the line: name, - quantity +"},
   {"op": "set", "target": "$list", "prop": "Source", "value": "GetCartItems.List"},
   {"op": "create", "parent": "$list", "type": "IContainer", "name": "CartLine", "as": "$line"},
   {"op": "set", "target": "$line", "prop": "Style", "value": "\"display-flex align-items-center\""},
@@ -57,7 +57,7 @@
   {"op": "create", "parent": "$line", "type": "IButton", "name": "MinusButton", "as": "$minus"},
   {"op": "set", "target": "$minus/#ITextWidget", "prop": "Text", "value": "-"},
   {"op": "set", "target": "$minus/OnClick", "prop": "Destination", "value": "IMobileScreen:Cart/ChangeQuantity"},
-  {"op": "set", "target": "$minus/OnClick/RowIndex", "prop": "Value", "value": "GetCartItems.List.CurrentRowNumber", "_why": "o indice da linha clicada; a screen action le e escreve List[RowIndex]"},
+  {"op": "set", "target": "$minus/OnClick/RowIndex", "prop": "Value", "value": "GetCartItems.List.CurrentRowNumber", "_why": "the index of the clicked row; the screen action reads and writes List[RowIndex]"},
   {"op": "set", "target": "$minus/OnClick/Delta", "prop": "Value", "value": "-1"},
   {"op": "create", "parent": "$line", "type": "IExpression", "as": "$qty"},
   {"op": "set", "target": "$qty", "prop": "Value", "value": "GetCartItems.List.Current.CartItem.Quantity"},
@@ -67,7 +67,7 @@
   {"op": "set", "target": "$plus/OnClick/RowIndex", "prop": "Value", "value": "GetCartItems.List.CurrentRowNumber"},
   {"op": "set", "target": "$plus/OnClick/Delta", "prop": "Value", "value": "1"},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "CartSummaryBox", "as": "$sum", "_why": "4. o resumo le a saida da data action, que a screen action atualiza"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "CartSummaryBox", "as": "$sum", "_why": "4. the summary reads the output of the data action, which the screen action updates"},
   {"op": "create", "parent": "$sum", "type": "IExpression", "as": "$count"},
   {"op": "set", "target": "$count", "prop": "Value", "value": "\"Items: \" + LoadSummary.Summary.ItemCount"},
   {"op": "create", "parent": "$sum", "type": "IExpression", "as": "$total"},

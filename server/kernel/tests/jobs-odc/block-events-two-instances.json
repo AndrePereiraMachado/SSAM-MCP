@@ -1,16 +1,16 @@
 {
- "description": "ODC: DUAS instancias do MESMO bloco na MESMA tela, com handlers diferentes, ligadas pela autoria VISUAL da seccao 3.5 - dois `<Block name=\"WfRatingPicker\" @OnRate=\"...\">` no mesmo fragmento, cada um com o seu handler. Prova a diferenca entre as duas formas de ligar o mesmo evento: na autoria visual a ligacao e por NOME (cada parametro do evento entra no input de mesmo nome do handler, por isso WfStayRated e WfCleaningRated TEM de declarar Rating e Comment), enquanto no `set` nativo o argumento e uma EXPRESSAO e pode remapear - a terceira instancia, WfRemapPicker, criada a mao, manda 'Rating * 10' para um input chamado Score e 'Comment + \" / \" + StayComment' para um chamado Label, misturando o escopo do evento com o da tela. As tres instancias, o mesmo contrato: o `usages` do evento fecha com 3 IEventHandler + 1 ITriggerNode. Equivalente ODC de tests/jobs/block-events-two-instances-reactive.json; a instancia unica esta em tests/jobs-odc/block-events.json.",
+ "description": "ODC: TWO instances of the SAME block on the SAME screen, with different handlers, linked through the VISUAL authoring of section 3.5 - two `<Block name=\"WfRatingPicker\" @OnRate=\"...\">` in the same fragment, each with its own handler. It proves the difference between the two ways of linking the same event: in visual authoring the link is by NAME (each event parameter goes into the handler input of the same name, so WfStayRated and WfCleaningRated MUST declare Rating and Comment), whereas in the native `set` the argument is an EXPRESSION and can remap - the third instance, WfRemapPicker, created by hand, sends 'Rating * 10' to an input called Score and 'Comment + \" / \" + StayComment' to one called Label, mixing the event scope with the screen's. The three instances, the same contract: the `usages` of the event closes with 3 IEventHandler + 1 ITriggerNode. ODC equivalent of tests/jobs/block-events-two-instances-reactive.json; the single instance is in tests/jobs-odc/block-events.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfRatingPicker", "as": "$blk", "_why": "1. o bloco produtor, um so para as tres instancias"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfRatingPicker", "as": "$blk", "_why": "1. the producer block, a single one for the three instances"},
   {"op": "create", "parent": "$blk", "type": "IInputParameter", "name": "Caption", "as": "$blkIn"},
   {"op": "set", "target": "$blkIn", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$blk", "type": "ILocalVariable", "name": "Score", "as": "$score"},
   {"op": "set", "target": "$score", "prop": "DataType", "value": "Integer"},
 
-  {"op": "create", "parent": "$blk", "type": "IBlockEvent", "name": "OnRate", "as": "$ev", "_why": "2. contrato: obrigatorio, para cada uma das tres instancias ter de ligar handler"},
+  {"op": "create", "parent": "$blk", "type": "IBlockEvent", "name": "OnRate", "as": "$ev", "_why": "2. contract: mandatory, so that each of the three instances has to link a handler"},
   {"op": "set", "target": "$ev", "prop": "Description", "value": "Disparado quando o utilizador escolhe uma nota no bloco"},
   {"op": "set", "target": "$ev", "prop": "IsMandatory", "value": true},
   {"op": "create", "parent": "$ev", "type": "IInputParameter", "name": "Rating", "as": "$evRating"},
@@ -42,7 +42,7 @@
   {"op": "layout", "target": "$rate"},
   {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$rate"},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfRatingBoard", "as": "$scr", "_why": "4. a tela que instancia o bloco tres vezes"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfRatingBoard", "as": "$scr", "_why": "4. the screen that instantiates the block three times"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "\"Avaliacoes\""},
@@ -60,7 +60,7 @@
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "RemapScore", "as": "$v6"},
   {"op": "set", "target": "$v6", "prop": "DataType", "value": "Integer"},
 
-  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "WfStayRated", "as": "$hA", "_why": "5. handler da PRIMEIRA instancia; na autoria visual os inputs TEM de se chamar Rating e Comment"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "WfStayRated", "as": "$hA", "_why": "5. handler of the FIRST instance; in visual authoring the inputs MUST be called Rating and Comment"},
   {"op": "create", "parent": "$hA", "type": "IInputParameter", "name": "Rating", "as": "$hA1"},
   {"op": "set", "target": "$hA1", "prop": "DataType", "value": "Integer"},
   {"op": "create", "parent": "$hA", "type": "IInputParameter", "name": "Comment", "as": "$hA2"},
@@ -79,7 +79,7 @@
   {"op": "link", "from": "$hAAs", "to": "$hA9"},
   {"op": "layout", "target": "$hA"},
 
-  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "WfCleaningRated", "as": "$hB", "_why": "6. handler DIFERENTE para a SEGUNDA instancia do mesmo bloco"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "WfCleaningRated", "as": "$hB", "_why": "6. DIFFERENT handler for the SECOND instance of the same block"},
   {"op": "create", "parent": "$hB", "type": "IInputParameter", "name": "Rating", "as": "$hB1"},
   {"op": "set", "target": "$hB1", "prop": "DataType", "value": "Integer"},
   {"op": "create", "parent": "$hB", "type": "IInputParameter", "name": "Comment", "as": "$hB2"},
@@ -98,7 +98,7 @@
   {"op": "link", "from": "$hBAs", "to": "$hB9"},
   {"op": "layout", "target": "$hB"},
 
-  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "WfRemapRated", "as": "$hC", "_why": "7. handler da TERCEIRA instancia, com nomes FORA do contrato: so a forma nativa consegue liga-lo"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAction", "name": "WfRemapRated", "as": "$hC", "_why": "7. handler of the THIRD instance, with names OUTSIDE the contract: only the native form can link it"},
   {"op": "create", "parent": "$hC", "type": "IInputParameter", "name": "Score", "as": "$hC1"},
   {"op": "set", "target": "$hC1", "prop": "DataType", "value": "Integer"},
   {"op": "create", "parent": "$hC", "type": "IInputParameter", "name": "Label", "as": "$hC2"},
@@ -117,24 +117,24 @@
   {"op": "link", "from": "$hCAs", "to": "$hC9"},
   {"op": "layout", "target": "$hC"},
 
-  {"op": "html", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "file": "tests/html/visual/block-event-two.html", "_why": "8. as DUAS primeiras instancias num so fragmento: mesmo `name`, `@OnRate` diferente em cada uma"},
+  {"op": "html", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "file": "tests/html/visual/block-event-two.html", "_why": "8. the FIRST TWO instances in a single fragment: same `name`, different `@OnRate` in each"},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "WfRemapPicker", "as": "$i3", "source": "IMobileBlock:WfRatingPicker", "_why": "9. a terceira, a mao, para mostrar o que o fragmento nao expressa"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "WfRemapPicker", "as": "$i3", "source": "IMobileBlock:WfRatingPicker", "_why": "9. the third, by hand, to show what the fragment does not express"},
   {"op": "set", "target": "$i3/Caption", "prop": "Value", "value": "\"E o pequeno-almoco?\""},
   {"op": "set", "target": "$i3/OnRate", "prop": "Handler", "value": "$hC"},
-  {"op": "set", "target": "$i3/OnRate/Score", "prop": "Value", "value": "Rating * 10", "_why": "argumento e EXPRESSAO, nao nome: o parametro Rating do evento entra num input chamado Score"},
-  {"op": "set", "target": "$i3/OnRate/Label", "prop": "Value", "value": "Comment + \" / \" + StayComment", "_why": "o escopo soma: Comment e do evento, StayComment e da tela"},
+  {"op": "set", "target": "$i3/OnRate/Score", "prop": "Value", "value": "Rating * 10", "_why": "the argument is an EXPRESSION, not a name: the event's Rating parameter goes into an input called Score"},
+  {"op": "set", "target": "$i3/OnRate/Label", "prop": "Value", "value": "Comment + \" / \" + StayComment", "_why": "the scope adds up: Comment is the event's, StayComment is the screen's"},
 
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$echo3"},
   {"op": "set", "target": "$echo3", "prop": "Value", "value": "\"Pequeno-almoco: \" + IntegerToText(RemapScore) + \" (\" + RemapLabel + \")\""},
 
   {"op": "get", "target": "$ev"},
-  {"op": "get", "target": "$scr/#IMobileBlockInstanceWidget/MainContent/RatingBoard/**IMobileBlockInstanceWidget[1]", "_why": "a instancia StayPicker nasceu do fragmento com o nome do id (o `**` procura em largura: sem o RatingBoard cairia na instancia nativa, que e filha direta)"},
+  {"op": "get", "target": "$scr/#IMobileBlockInstanceWidget/MainContent/RatingBoard/**IMobileBlockInstanceWidget[1]", "_why": "the instance StayPicker was born from the fragment with the name from the id (the `**` searches breadth-first: without the RatingBoard it would fall on the native instance, which is a direct child)"},
   {"op": "get", "target": "$scr/#IMobileBlockInstanceWidget/MainContent/RatingBoard/**IEventHandler[1]", "_why": "handler da 1a instancia do fragmento"},
-  {"op": "get", "target": "$scr/#IMobileBlockInstanceWidget/MainContent/RatingBoard/**IEventHandler[2]", "_why": "handler da 2a: OUTRA chave de Handler, mesmo Event"},
-  {"op": "get", "target": "$i3/#IEventHandler", "_why": "o handler nativo, com a terceira action"},
+  {"op": "get", "target": "$scr/#IMobileBlockInstanceWidget/MainContent/RatingBoard/**IEventHandler[2]", "_why": "handler of the 2nd: ANOTHER Handler key, same Event"},
+  {"op": "get", "target": "$i3/#IEventHandler", "_why": "the native handler, with the third action"},
   {"op": "usages", "target": "$ev", "_why": "3 IEventHandler (dois do fragmento, um nativo) + 1 ITriggerNode"},
-  {"op": "usages", "target": "$hA", "_why": "cada handler serve UMA instancia"},
+  {"op": "usages", "target": "$hA", "_why": "each handler serves ONE instance"},
   {"op": "usages", "target": "$hB"},
   {"op": "usages", "target": "$hC"},
   {"op": "dump", "target": "$scr", "depth": 8}

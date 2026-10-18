@@ -8,14 +8,20 @@
 //   refusal: `continuation` {tool, arguments, why} when the tool gave none, from a small table by code (by gate on ODC).
 //            Without the data the call needs, nothing is added (never invented). The user's words never travel: only
 //            the marker, and only in the continuation of a tool that already requires words (o11_deliver).
-// Exact answers ("entregue", "publicado", "fechada") pass untouched; an answer with nothing to add keeps its identity.
+// Exact answers ("delivered", "published", "closed", or their Portuguese aliases in older records) pass untouched; an
+// answer with nothing to add keeps its identity.
+import { RESULT, RESULT_ALIASES, resultIs } from './result-values.mjs';
 
-export const WORDS_MARKER = '<palavras do usuário>'; // the same marker as o11-cycle.mjs (checked by the test)
-export const JOB_MARKER = '<job corrigido>';
+// ONE marker for the user's words (owner rule 15/10/2026: English only): continuations.mjs WORDS, the same in o11-cycle.mjs,
+// tool-input.mjs, ui-precheck.mjs, prototype-op.mjs and ssam.mjs (checked by the test). The Portuguese marker of the releases
+// before, "<palavras do usuário>", is no words either: any "<...>" is refused as words (o11-cycle.mjs, standing-grants.mjs).
+export const WORDS_MARKER = "<the user's own words>";
+export const JOB_MARKER = '<corrected job>';
 export const KEY_MARKER = '@<key>';
-export const EXACT = new Set(['entregue', 'entregue e publicado', 'publicado', 'fechada']);
+export const EXACT = new Set([RESULT.delivered, RESULT.deliveredAndPublished, RESULT.published, RESULT.closed,
+  ...Object.keys(RESULT_ALIASES).filter(k => resultIs(k, 'delivered', 'deliveredAndPublished', 'published', 'closed'))]);
 // `result` of a deliver whose change is merged: whatever its publish said, the delivery is never repeated.
-const DELIVERED = new Set(['entregue', 'entregue e publicado']);
+const DELIVERED = { has: value => resultIs(value, 'delivered', 'deliveredAndPublished') };
 // The only tools a success `next` may name: reads (readOnly annotations), never a write.
 export const READS = new Set(['ssam_map', 'o11_inspect', 'studio_inspect', 'studio_snapshot', 'studio_check_base', 'studio_preview']);
 const MAX_NEXT = 2, MAX_CALL_BYTES = 1024, MAX_CONTINUATION_BYTES = 2048;
@@ -51,7 +57,7 @@ function readingNext(tool, input, value) {
   if (!str(file) || !SHA.test(sha ?? '')) return null;
   const out = [];
   if (isObject(value.navigation))
-    out.push(step(tool, { [fileKey]: file, path: KEY_MARKER, expectedSourceSha256: sha }, 'troque <key> por uma reference de summary.targets'));
+    out.push(step(tool, { [fileKey]: file, path: KEY_MARKER, expectedSourceSha256: sha }, 'replace <key> with a reference of summary.targets'));
   const nextOffset = value.summary?.nextOffset ?? value.nextOffset;
   if (Number.isInteger(nextOffset) && nextOffset > 0) {
     const filters = {};
@@ -80,17 +86,17 @@ const SUCCESS = {
 };
 
 // ---- refusal: the continuation by code
-const CONNECT = step('ssam_connect', { lane: 'o11' }, 'conecte de novo o Service Studio aberto na faixa O11');
-const O11_STATUS = step('o11_studio', { command: 'status' }, 'leia o estado do Studio antes de repetir');
+const CONNECT = step('ssam_connect', { lane: 'o11' }, 'connect again the Service Studio open on the O11 lane');
+const O11_STATUS = step('o11_studio', { command: 'status' }, 'read the Studio state before repeating');
 const NO_DIALOGS = step('o11_studio', { command: 'wait', args: { condition: 'no-dialogs' } },
-  'peça à pessoa para responder o diálogo no Studio; esta chamada espera ele fechar');
-const doctor = lane => step('ssam_doctor', { lane }, 'mostra o que falta na faixa; o integrador ou o usuário compila, nunca a sessão');
+  'ask the person to answer the dialog in the Studio; this call waits for it to close');
+const doctor = lane => step('ssam_doctor', { lane }, 'shows what the lane is missing; the integrator or the user builds it, never the session');
 const o11Only = fixed => (tool, input, value, lane) => (lane === 'o11' ? fixed : null);
 
 // The correction of a refusal that named its job (job, jobSha256): a JSON Patch over that job (job-patch.mjs), never the
 // whole job again; the op the kernel named (failedOp) goes into the path when known. An array job (jobShape 'array', or
 // the inline array of the call) is patched at /<i>/..., an {ops} job at /ops/<i>/....
-const patchMarker = (failedOp, array) => [{ op: 'replace', path: (array ? '/' : '/ops/') + (Number.isInteger(failedOp) ? failedOp : '<i>') + '/<campo>', value: '<valor corrigido>' }];
+const patchMarker = (failedOp, array) => [{ op: 'replace', path: (array ? '/' : '/ops/') + (Number.isInteger(failedOp) ? failedOp : '<i>') + '/<field>', value: '<corrected value>' }];
 function correction(value, input) {
   if (!str(value.job) || !SHA.test(value.jobSha256 ?? '')) return { job: JOB_MARKER };
   const array = value.jobShape === 'array' || (value.jobShape == null && input?.patch == null && Array.isArray(input?.job));
@@ -106,30 +112,30 @@ function redeliver(tool, input, value) {
   const published = isObject(value.publish) && value.publish.outcome !== 'skipped';
   if (tool !== 'o11_deliver' || !str(input.module) || value.merged === true || DELIVERED.has(value.result) || published) return null;
   const fix = correction(value, input);
-  const how = fix.patch ? 'corrija só o que as mensagens apontam com patch sobre basedOn (o job desta recusa; caminhos por nome: actions/<Ação>/steps/<as>/..., '
-    + 'ou os patchByName da recusa) ou mande em job só as actions alteradas com o mesmo basedOn, sem reenviar o job inteiro'
-    : 'corrija o job pelas mensagens acima';
+  const how = fix.patch ? 'fix only what the messages point to with a patch over basedOn (the job of this refusal; paths by name: actions/<Action>/steps/<as>/..., '
+    + 'or the patchByName of the refusal) or send in job only the changed actions with the same basedOn, without resending the whole job'
+    : 'fix the job by the messages above';
   const same = { module: input.module, ...fix, ...(Array.isArray(input.checks) && input.checks.length ? { checks: input.checks } : {}),
     ...(isObject(input.producers) ? { producers: input.producers } : {}),
     ...(Array.isArray(input.captureProducers) && input.captureProducers.length ? { captureProducers: input.captureProducers } : {}),
     ...(str(input.expectedEnvironment) ? { expectedEnvironment: input.expectedEnvironment } : {}) };
   if (input.until === 'apply')
     return step('o11_deliver', { ...same, until: 'apply', authorize: WORDS_MARKER },
-      how + ' e valide de novo. authorize: as palavras do usuário no lugar do marcador.');
+      how + ', and validate again. authorize: the user\'s words in place of the marker.');
   if (TASK_ID.test(value.taskId ?? ''))
     return step('o11_deliver', { ...same, closePrevious: value.taskId, authorize: WORDS_MARKER },
-      how + ' e entregue de novo; closePrevious fecha a tarefa recusada. authorize: as palavras do usuário no lugar do marcador.');
+      how + ', and deliver again; closePrevious closes the refused task. authorize: the user\'s words in place of the marker.');
   return null;
 }
 
 // The codes the shaper gives a refusal that had none (refusal-codes.mjs, A20): the index of the discover that no longer
 // matches its sources and an unusable lane go to the doctor and the connect; a lost ODC bridge pipe to the attach.
-const DOCTOR_ALL = step('ssam_doctor', {}, 'o índice do discover não confere com as fontes desta release; o doctor mostra a release e o índice; não repita a leitura antes');
+const DOCTOR_ALL = step('ssam_doctor', {}, 'the discover index does not match the sources of this release; the doctor shows the release and the index; do not repeat the read before it');
 const connectLane = (tool, input) => {
   const lane = ['o11', 'odc'].includes(input?.lane) ? input.lane : tool === 'studio_doctor' ? 'odc' : null;
-  return step('ssam_connect', lane ? { lane } : {}, 'conecta o Studio já aberto da faixa, sem salvar, publicar nem reiniciar; depois repita o doctor');
+  return step('ssam_connect', lane ? { lane } : {}, 'connects the already open Studio of the lane, without saving, publishing or restarting; then repeat the doctor');
 };
-const attach = (tool, input, value, lane) => (lane === 'odc' ? step('studio_attach', withPid({}, input), 'a bridge do ODC Studio não está anexada; anexe e repita a chamada') : null);
+const attach = (tool, input, value, lane) => (lane === 'odc' ? step('studio_attach', withPid({}, input), 'the ODC Studio bridge is not attached; attach it and repeat the call') : null);
 // G11 (FarmaVirtual 2026-10-10, call 131): an @key the reader did not resolve; the map of the same capture (pinned by its
 // hash) says what the key is and lists what lives under it. The map's own refusal already says it, so nothing for ssam_map.
 function keyMap(tool, input, value) {
@@ -140,7 +146,7 @@ function keyMap(tool, input, value) {
   const sha = input.expectedSourceSha256 ?? value.capture?.sha256;
   if (!key || !str(file) || !/\.oml$/i.test(file)) return null;
   return step('ssam_map', { lane: tool === 'o11_inspect' ? 'o11' : 'odc', target: file, parent: key, ...(SHA.test(sha ?? '') ? { expectedSourceSha256: sha } : {}) },
-    'a chave não resolveu neste leitor; o mapa da mesma captura diz o que ela é e lista o que fica sob ela');
+    'the key did not resolve in this reader; the map of the same capture says what it is and lists what lives under it');
 }
 
 const BY_CODE = new Map([
@@ -160,7 +166,7 @@ const BY_CODE = new Map([
 function byGate(tool, input, value, lane) {
   if (lane !== 'odc') return null;
   if (value.gate === 'base_drift' && ['studio_check_base', 'studio_preview', 'studio_merge'].includes(tool) && str(value.module))
-    return step('studio_snapshot', withPid({ module: value.module }, input), 'o módulo aberto mudou desde a captura: nova captura, depois novo build');
+    return step('studio_snapshot', withPid({ module: value.module }, input), 'the open module changed since the capture: a new capture, then a new build');
   // The person edited the module in the Studio between the capture and the merge: the same delivery again captures the
   // module as it is now and builds on it; nothing was merged. Without output: the refused attempt claimed that directory
   // (evidence is never overwritten), so the repeated delivery takes a new one.
@@ -169,9 +175,9 @@ function byGate(tool, input, value, lane) {
     // fase4-24: an inline job is never echoed back (a large job doubled the answer): the same delivery names the job file
     // the proxy wrote for it (nextBasedOn.job), which holds the same job.
     if (typeof again.job !== 'string' && str(value.nextBasedOn?.job)) again.job = value.nextBasedOn.job;
-    return step('studio_deliver', again, 'o módulo mudou no Studio entre a captura e o merge; nada foi mesclado: a mesma entrega captura o módulo como está agora e refaz o build');
+    return step('studio_deliver', again, 'the module changed in the Studio between the capture and the merge; nothing was merged: the same delivery captures the module as it is now and builds again');
   }
-  if (value.gate === 'studio_busy') return step('studio_status', withPid({}, input), 'veja os diálogos com escolha e o comando em curso; não repita antes');
+  if (value.gate === 'studio_busy') return step('studio_status', withPid({}, input), 'see the dialogs with a choice and the running command; do not repeat before');
   return null;
 }
 
@@ -216,12 +222,12 @@ export function refusalContinuation(tool, input = {}, value = {}, opts = {}) {
 function publishOnly(tool, input, value) {
   const code = str(value.code) ? value.code : null;
   if (tool === 'o11_deliver' && str(input.module)) {
-    if (code === 'PUBLISH_UNCERTAIN') return step('o11_studio', { command: 'publish-log', args: { module: input.module } }, 'a entrega está feita; leia o resultado da publicação antes de qualquer outra coisa (nunca repita a entrega)');
-    if (code === 'PUBLISH_FAILED') return step('o11_publish', { module: input.module, authorize: WORDS_MARKER }, 'a entrega está feita; corrija o que as mensagens da publicação apontam e publique de novo (nunca repita a entrega). authorize: as palavras do usuário no lugar do marcador.');
+    if (code === 'PUBLISH_UNCERTAIN') return step('o11_studio', { command: 'publish-log', args: { module: input.module } }, 'the delivery is done; read the result of the publication before anything else (never repeat the delivery)');
+    if (code === 'PUBLISH_FAILED') return step('o11_publish', { module: input.module, authorize: WORDS_MARKER }, 'the delivery is done; fix what the messages of the publication point to and publish again (never repeat the delivery). authorize: the user\'s words in place of the marker.');
   }
   if (tool === 'studio_deliver') {
-    if (code === 'PUBLISH_UNCERTAIN') return step('studio_command', withPid({ command: 'publish-log', args: str(input.module) ? [input.module] : [] }, input), 'a entrega está feita; leia o resultado da publicação (nunca repita a entrega)');
-    if (code === 'PUBLISH_FAILED' && str(value.manifest)) return step('studio_publish', withPid({ manifest: value.manifest, wait: true }, input), 'a entrega está feita; corrija o que as mensagens da publicação apontam e publique de novo (nunca repita a entrega)');
+    if (code === 'PUBLISH_UNCERTAIN') return step('studio_command', withPid({ command: 'publish-log', args: str(input.module) ? [input.module] : [] }, input), 'the delivery is done; read the result of the publication (never repeat the delivery)');
+    if (code === 'PUBLISH_FAILED' && str(value.manifest)) return step('studio_publish', withPid({ manifest: value.manifest, wait: true }, input), 'the delivery is done; fix what the messages of the publication point to and publish again (never repeat the delivery)');
   }
   return null;
 }

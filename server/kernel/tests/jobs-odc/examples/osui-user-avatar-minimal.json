@@ -1,5 +1,5 @@
 {
- "description": "UserAvatar do OSUI: a instancia com o nome que gera as iniciais.",
+ "description": "UserAvatar of OSUI: the instance with the name that generates the initials.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

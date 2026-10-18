@@ -307,7 +307,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
     const seconds = Math.max(0, Math.round((nowMs() - Date.parse(state.lastSeenAt)) / 1000));
     return callError('AGENT_RECONNECTING', 'The SSAM agent of this account lost its connection ' + seconds + ' s ago and is reconnecting by itself; nothing ran.',
       { retryAfterSeconds: 15, lastSeenSecondsAgo: seconds, continuation: { tool: 'ssam_doctor', arguments: {},
-        why: 'o agente reconecta sozinho: repita a mesma chamada em 15 s; o doctor mostra quando ele voltou' } });
+        why: 'the agent reconnects by itself: repeat the same call in 15 s; the doctor shows when it is back' } });
   }
 
   // C33: one agent-call line per settled call {kind, ms, ok, code}: the relay's own timing, never arguments or values.
@@ -456,6 +456,8 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
           studios: hello?.studios ?? null, o11Connection: hello?.o11Connection ?? null, kernel: { ...serverKernel },
           compatible: compatibility(hello, serverKernel, state.lanes, { refused: kernelRefused }) };
       },
+      // A1 (round 2): a Studio process the executor or the gate refused (studio-identity.mjs), named once like the hub's.
+      studioUnserved: (lane, studio, cause) => logUnserved(state, lane, studio, cause),
       // C03: true when the agent is connected now or a Hello opens its channel within ms.
       waitConnected: ms => waitConnected(state, ms),
       // The kinds the connected agent runs (Hello agent.kinds, agent 0.2.0+); an older agent runs the nine of protocol 1.
@@ -531,14 +533,19 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
   function noteUnserved(state, compatible) {
     for (const lane of LANES) {
       const entry = compatible?.[lane];
-      const studio = entry?.studio;
-      if (!studio || entry.ok !== false) { state.unserved.delete(lane); continue; }
-      const key = studio.installed + '>' + studio.served + ':' + studio.policy;
-      if (state.unserved.get(lane) === key) continue;
-      state.unserved.set(lane, key);
-      log({ event: 'studio-version-unserved', token: state.tokenId, lane, installed: studio.installed, served: studio.served, relation: studio.relation,
-        cause: entry.cause, policy: studio.policy });
+      if (!entry?.studio || entry.ok !== false) { state.unserved.delete(lane); continue; }
+      logUnserved(state, lane, entry.studio, entry.cause);
     }
+  }
+  // A1 (round 2): the same line for a refusal of the PROCESS a call goes to (AgentLink studioUnserved, from the
+  // AgentExecutor and the gate), with the same key: one event per Studio, whoever saw it first.
+  function logUnserved(state, lane, studio, cause) {
+    if (!LANES.includes(lane) || !studio || typeof cause !== 'string') return;
+    const key = studio.installed + '>' + studio.served + ':' + studio.policy;
+    if (state.unserved.get(lane) === key) return;
+    state.unserved.set(lane, key);
+    log({ event: 'studio-version-unserved', token: state.tokenId, lane, installed: studio.installed, served: studio.served, relation: studio.relation,
+      cause, policy: studio.policy });
   }
 
   async function hello(state, auth, req, res) {
@@ -567,7 +574,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
         const alert = { time: iso(), event: 'agent-machine-changed', token: state.tokenId, customer: auth.customer, first, machine: seen, ip };
         log(alert);
         try { fs.appendFileSync(path.join(dir, 'access-alerts.jsonl'), JSON.stringify(alert) + '\n'); } catch { /* the log line stays */ }
-        notifyOwner('SSAM: acesso em outra maquina', `${auth.customer}: ${seen.name} (${seen.user}) em vez de ${first.name} (${first.user}). IP ${ip}`);
+        notifyOwner('SSAM: access from another machine', `${auth.customer}: ${seen.name} (${seen.user}) instead of ${first.name} (${first.user}). IP ${ip}`);
       }
     }
     const resumed = state.instance === h.instance;

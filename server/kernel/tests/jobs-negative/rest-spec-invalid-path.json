@@ -1,5 +1,5 @@
 {
- "description": "Op rest recusada antes de qualquer mudanca, com todos os problemas numa recusa so: caminho sem '/', {CEP} sem input na URL e corpo em GET.",
+ "description": "Rest op refused before any change, with all the problems in a single refusal: path without '/', {CEP} without an input in the URL and body in GET.",
  "base": "tests/fixtures/blank-service.oml",
  "expectError": ["[REST_URLPATH_INVALID]", "[REST_PATH_PARAM_WITHOUT_INPUT]", "[REST_BODY_ON_GET]", "\"path\": \"/ws/json\""],
  "ops": [

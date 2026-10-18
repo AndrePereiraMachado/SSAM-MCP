@@ -1,3 +1,4 @@
+import '../../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import { fileURLToPath } from 'node:url';
 import {sanitizeRows,sanitizeExcerpt,createSanitizer,privacyIssues,fixtureBytes,MAX_FIXTURE_BYTES,MAX_FIXTURE_TOTAL_BYTES} from './sanitize-fixture.mjs';
 import { classifyOutcome } from './measure/lane-outcomes.mjs';

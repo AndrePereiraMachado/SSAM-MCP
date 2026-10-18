@@ -1,10 +1,10 @@
 {
- "description": "Frente B (catalogo abrangente), faixa ODC: escrever propriedades do PROPRIO ILink (Style, Enabled) e le-las de volta. cat-b-widget-gallery ja cria um link, mas so mexe nos objetos filhos (a legenda #ITextWidget e o evento OnClick); o set de link no ODC ficou por medir. O link navega para uma tela sem input, criada antes (a primeira tela criada sem Studio vira a DefaultScreen no ODC, e aqui isso nao importa: nada e apagado).",
+ "description": "Front B (comprehensive catalog), ODC lane: write properties of the ILink ITSELF (Style, Enabled) and read them back. cat-b-widget-gallery already creates a link, but only touches the child objects (the caption #ITextWidget and the OnClick event); the set of a link in ODC was left unmeasured. The link navigates to a screen without an input, created beforehand (the first screen created without Studio becomes the DefaultScreen in ODC, and here that does not matter: nothing is deleted).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CatBLinkHome", "as": "$home", "_why": "1. a tela do link e a tela de destino"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CatBLinkHome", "as": "$home", "_why": "1. the link's screen and the destination screen"},
   {"op": "set", "target": "$home/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$home/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$homeTitle"},
   {"op": "set", "target": "$homeTitle", "prop": "Value", "value": "\"Links\""},
@@ -21,7 +21,7 @@
   {"op": "set", "target": "$lnk/OnClick", "prop": "Destination", "value": "$target"},
   {"op": "set", "target": "$lnk", "prop": "Style", "value": "\"text-primary\""},
   {"op": "set", "target": "$lnk", "prop": "Enabled", "value": "CanOpen"},
-  {"op": "get", "target": "$lnk", "_why": "3. LER DE VOLTA: Style e Enabled no proprio link"},
+  {"op": "get", "target": "$lnk", "_why": "3. READ BACK: Style and Enabled on the link itself"},
   {"op": "dump", "target": "$home", "depth": 6}
  ]
 }

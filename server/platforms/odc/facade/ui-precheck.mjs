@@ -19,8 +19,8 @@
 // without the static check, an answer that cannot be read, a timeout, an exception) lets the call go on exactly as
 // before. A job without html/screen ops pays nothing: no bridge call, no CLI run, no file written. Never for resume,
 // close or a job with a prototype op (the callers do not call it there; a prototype op is refused here too).
-// CX16 r4 (plan B, agreed with the owner): OFF by default; SSAM_UI_PRECHECK=1 (or on, true) turns it on. Off, every call
-// runs as before CX16 (review cx16-3 M3: with the resident worker check-job queues behind the apply on the same worker). SSAM_UI_PRECHECK_STOP=error restores the stop rule of the
+// CX16 r4: ON by default again once check-job runs outside the worker queue (b6e8c45c; e894f3ed, plan B, had it off);
+// SSAM_UI_PRECHECK=0 (or off, false) turns it off: every call runs as before CX16. SSAM_UI_PRECHECK_STOP=error restores the stop rule of the
 // first round (CX16 r1: any error of the preflight or of the static check refuses before the apply; serial, opt-in only,
 // never the default), the owner's way back.
 //
@@ -49,8 +49,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { hostedContext } from './executor.mjs';
 
 export const PRECHECK_CODE = 'PREFLIGHT_REFUSED';
-// The values of SSAM_UI_PRECHECK that turn the precheck on (CX16 r4: off by default).
-const PRECHECK_ON = /^(1|on|true)$/i;
+// The values of SSAM_UI_PRECHECK that turn the precheck off (CX16 r4: on by default again, check-job outside the worker queue).
+const PRECHECK_OFF = /^(0|off|false)$/i;
 // Time: the precheck within SSAM_UI_PRECHECK_MS (default 20000, inside the 25 s of a call). The capture by key is never cut
 // (bridge reads with their own timeouts, as the build phase's); what it used is taken from the rest: check-job within
 // SSAM_UI_PRECHECK_CHECK_MS and what is left (at least CHECK_MIN_MS). A run past its time decides nothing: the call goes on.
@@ -58,7 +58,7 @@ export const PRECHECK_BUDGET_MS = 20000;
 export const CHECK_BUDGET_MS = 12000;
 export const CHECK_MIN_MS = 3000;
 // The text o11-cycle.mjs WORDS_MARKER carries (the user's words are never repeated in a continuation).
-const WORDS_MARKER = '<palavras do usuário>';
+const WORDS_MARKER = "<the user's own words>";
 const UI_OPS = new Set(['html', 'screen']);
 const BINDING = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SHA = /^[a-f0-9]{64}$/i;
@@ -133,11 +133,47 @@ function storedIndex(map, lane, sha, env) {
   return files.find(isFile) ?? null;
 }
 // The runner of check-job: the lane's (in a phased call the cycle's runner never takes the Studio for check-job).
+const laneNameOf = deps => deps.o11Lane ?? (typeof deps.lane === 'function' ? deps.lane()?.name : typeof deps.lane === 'string' ? deps.lane : undefined);
 async function defaultRunner(deps, lane, root, env) {
   if (deps.runAnvil) return deps.runAnvil;
-  const name = deps.o11Lane ?? (typeof deps.lane === 'function' ? deps.lane()?.name : typeof deps.lane === 'string' ? deps.lane : undefined);
+  const name = laneNameOf(deps);
   if (lane === 'odc') return (await import('./anvil-cli.mjs')).createAnvilRunner({ root, env, ...(name ? { lane: name } : {}) });
   return (await import('./anvil-worker.mjs')).createWorkerFirstRunner({ root, env, ...(name ? { o11: name } : {}) });
+}
+// CX16 r4 (M3, review cx16-3): alongside the apply path, check-job never enters the queue of the process that runs the
+// apply or the build. The O11 lane worker runs one request at a time (WorkerServer.cs), and the apply of runJob, the
+// cycle's runner and slot 0 of the build pool all go to it: there check-job would wait behind the apply (the parallel
+// becomes serial) and, past its time, be dropped (the refusal without the static problems). So with the worker on,
+// check-job runs in a process of its own (createAnvilRunner, cold: ~1.3-2.8 s measured in r3), never a worker; with the
+// worker off every runner already starts a process of its own, and the lane's is kept (deps.runAnvil in tests). The ODC
+// check-job always runs cold (it names another assembly). In series (SSAM_UI_PRECHECK_STOP=error) the lane's runner
+// is kept. deps.checkRunner (the cycle's ctx.checkRunner) replaces the runner of the parallel check-job (tests).
+async function checkRunnerOf(deps, lane, root, env, parallel) {
+  if (parallel && typeof deps.checkRunner === 'function') return { runner: deps.checkRunner, via: 'injected' };
+  if (parallel && lane === 'o11') {
+    const { workerDisabled } = await import('./anvil-worker.mjs');
+    if (!workerDisabled('o11', env)) {
+      const name = laneNameOf(deps);
+      return { runner: (await import('./anvil-cli.mjs')).createAnvilRunner({ root, env, ...(name ? { lane: name } : {}) }), via: 'own-process' };
+    }
+  }
+  return { runner: await defaultRunner(deps, lane, root, env), via: 'lane' };
+}
+// Why a check-job decided nothing, in words: a timeout says so (and, on the lane worker, that it runs one request at a
+// time), never a bare "exit 1" (review cx16-3 M3).
+function undecidedReason(run, timeoutMs) {
+  if (run?.timedOut) return 'check-job gave no answer within ' + timeoutMs + ' ms' + (run.via === 'worker'
+    ? ' on the lane worker, which runs one request at a time (queued behind another request, or still running; the worker may still run it)' : ' (its process was stopped)')
+    + (run.code ? ' [' + run.code + ']' : '');
+  return String(run?.error?.message ?? run?.envelope?.error ?? (run?.exitCode != null ? 'check-job exited ' + run.exitCode + ' without an answer' + (Array.isArray(run.stderr) && run.stderr.length ? ': ' + run.stderr.join(' ') : '') : 'no answer'));
+}
+// CX16 r4 (M3): the answers the precheck cannot change (joinPrecheck: an accepted or uncertain answer is never touched)
+// are never held for it: the caller answers at once and settleLater writes the journal when check-job ends.
+export function waitsForPrecheck(answer) {
+  return plain(answer) && (answer.ok === false || answer.accepted === false) && answer.outcome !== 'uncertain';
+}
+export function settleLater(pending, answer) {
+  Promise.resolve(pending).then(pre => { if (pre?.carry) joinPrecheck(answer, pre); }).catch(() => {});
 }
 // The index of the base (see the header): {file, sha256, source, ms} or {skipped, ms}. Never built here (CX16 r3, M3).
 function baseIndex({ map, lane, capture, module, env }) {
@@ -256,9 +292,9 @@ async function precheck(request, deps, parallel) {
   if (!ops || !ops.some(op => UI_OPS.has(op?.op)) || ops.some(op => op?.op === 'prototype')) return null;
   if (request.signal?.aborted) return null;
   const env = deps.env ?? process.env;
-  // CX16 r4 (plan B, agreed with the owner): OFF by default; SSAM_UI_PRECHECK=1 (or on, true) turns it on. Off, every call
-  // runs as before CX16 (review cx16-3 M3: with the resident worker check-job queues behind the apply).
-  if (!PRECHECK_ON.test(String(env.SSAM_UI_PRECHECK ?? process.env.SSAM_UI_PRECHECK ?? '').trim())) return null;
+  // CX16 r4: ON by default again (b6e8c45c: check-job never queues behind the apply on the resident worker; e894f3ed had it
+  // off). SSAM_UI_PRECHECK=0 (or off, false) turns it off: every call runs as before CX16.
+  if (PRECHECK_OFF.test(String(env.SSAM_UI_PRECHECK ?? process.env.SSAM_UI_PRECHECK ?? '').trim())) return null;
   const started = performance.now();
   const mode = ['deliver', 'check', 'job'].includes(request.mode) ? (request.mode === 'job' && /[\\/]jobs[\\/]check[\\/]/i.test(jobFile ?? '') ? 'check' : request.mode) : 'job';
   const { anvilRoot, odcRoot } = await import('./workspace.mjs');
@@ -332,7 +368,7 @@ async function precheck(request, deps, parallel) {
     }
     // check-job with the static flags
     const checkBegin = performance.now();
-    const runner = await defaultRunner(deps, lane, root, env);
+    const { runner, via: checkVia } = await checkRunnerOf(deps, lane, root, env, parallel && !stopOnError);
     const args = ['check-job', '--job', jobFile, ...(index.file ? ['--module-index', index.file] : []),
       ...producers.filter(p => p.file).flatMap(p => ['--producer-index', p.name + '=' + p.file]), ...catalogs.flatMap(c => ['--ui-catalog', c.file]),
       '--basis-fresh', String(base.fresh)];
@@ -342,9 +378,9 @@ async function precheck(request, deps, parallel) {
     catch (error) { run = { error }; }
     const checkMs = Math.round(performance.now() - checkBegin);
     const data = run?.envelope?.data;
-    const timings = { captureMs, indexMs: index.ms, checkMs };
+    const timings = { captureMs, indexMs: index.ms, checkMs, checkVia };
     const basisNote = { capture: base.path, sha256: base.sha256, fresh: base.fresh, source: base.source, index: index.file ?? null, indexSource: index.source ?? null };
-    if (!plain(data)) { note({ outcome: 'undecided', reason: clip(String(run?.error?.message ?? run?.envelope?.error ?? (run?.exitCode != null ? 'exit ' + run.exitCode : 'no answer')), 200), basis: basisNote, timings }); return null; }
+    if (!plain(data)) { note({ outcome: 'undecided', reason: clip(undecidedReason(run, checkTimeout), 300), ...(run?.timedOut ? { timedOut: true } : {}), basis: basisNote, timings }); return null; }
     const listed = Array.isArray(data.problems) ? data.problems : [];
     let problems = listed.filter(p => !plain(p) || p.severity !== 'warning').map(problemOf);
     if (!problems.length && data.valid === false && Array.isArray(data.errors)) problems = data.errors.map(problemOf);

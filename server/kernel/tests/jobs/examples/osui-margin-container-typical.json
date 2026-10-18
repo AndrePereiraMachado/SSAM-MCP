@@ -1,5 +1,5 @@
 {
- "description": "MarginContainer (OutSystemsUI, Utilities) tipico; placeholders MarginContainer com dados do aggregate de tarefas.",
+ "description": "Typical MarginContainer (OutSystemsUI, Utilities); placeholders MarginContainer with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

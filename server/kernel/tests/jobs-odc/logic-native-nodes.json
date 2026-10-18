@@ -1,8 +1,8 @@
 {
- "description": "ODC (cobertura C): os seis nos nativos que faltavam na faixa, num app minimo sobre a fixture do InsuranceApp. Client-side, em IScreenAction de um IMobileScreen: IMessageNode (os quatro Type), IDestinationNode (com argumento para o input da tela destino) e IDownloadNode. Server-side, em IServerAction: IJSONSerializeNode/IJSONDeserializeNode (record e lista, os dois SerializeDefaultValues) e IRecordListToExcelNode/IExcelToRecordListNode. O censo dos 45 modulos ODC reais diz onde cada um pode viver: Message e Destination nunca aparecem em IServerAction, Download so em IScreenAction (38 de 38) e RecordListToExcel so em IServerAction (9 de 9); este job segue esse recorte e liga as duas metades, porque o binario que o no de Excel produz atravessa a server action e chega ao Download da tela.",
+ "description": "ODC (coverage C): the six native nodes that were missing in the lane, in a minimal app on the InsuranceApp fixture. Client-side, in IScreenAction of an IMobileScreen: IMessageNode (the four Types), IDestinationNode (with an argument for the input of the destination screen) and IDownloadNode. Server-side, in IServerAction: IJSONSerializeNode/IJSONDeserializeNode (record and list, both SerializeDefaultValues) and IRecordListToExcelNode/IExcelToRecordListNode. The census of the 45 real ODC modules says where each one can live: Message and Destination never appear in IServerAction, Download only in IScreenAction (38 of 38) and RecordListToExcel only in IServerAction (9 of 9); this job follows that cut and links the two halves, because the binary that the Excel node produces crosses the server action and reaches the Download of the screen.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfNode_Envelope_Roundtrip (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfNode_Envelope_Roundtrip (ServerAction)", "why": "ODC: an app (CrossDevice) does not expose a public server action (the live Studio gives an error); the action stays private and without a consumer in this proof job"}],
  "ops": [
   {
    "op": "spec",
@@ -37,7 +37,7 @@
   {"op": "create", "parent": "$target", "type": "IInputParameter", "name": "Note", "as": "$note"},
   {"op": "set", "target": "$note", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$target/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$noteText"},
-  {"op": "set", "target": "$noteText", "prop": "Value", "value": "Note", "_why": "o input da tela destino tem de ser lido por alguem, senao nasce UnusedElement; e ele que recebe o argumento do IDestinationNode"},
+  {"op": "set", "target": "$noteText", "prop": "Value", "value": "Note", "_why": "the input of the destination screen has to be read by someone, otherwise UnusedElement is born; it is what receives the argument of the IDestinationNode"},
 
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfNodeProof", "as": "$scr"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
@@ -53,7 +53,7 @@
 
   {
    "op": "logic",
-   "_why": "as cinco actions numa so op logic: o compilador ordena por dependencia, logo a server action do Excel nasce antes da screen action que a chama",
+   "_why": "the five actions in a single logic op: the compiler orders by dependency, so the Excel server action is born before the screen action that calls it",
    "data": {
     "actions": [
      {
@@ -127,14 +127,14 @@
   {"op": "set", "target": "$btnGo/OnClick", "prop": "Destination", "value": "IMobileScreen:WfNodeProof/WfNodeGoToTarget"},
   {"op": "set", "target": "$btnDownload/OnClick", "prop": "Destination", "value": "IMobileScreen:WfNodeProof/WfNodeDownloadExport"},
 
-  {"op": "dump", "target": "IMobileScreen:WfNodeProof/WfNodeNotify", "depth": 3, "_why": "le de volta os quatro IMessageNode: o Label vindo do 'as' e cada Type"},
-  {"op": "get", "target": "IMobileScreen:WfNodeProof/WfNodeGoToTarget/#IDestinationNode", "_why": "prova Destination e Transition; o no de destino nao tem Name proprio, enderece-o por #Tipo"},
+  {"op": "dump", "target": "IMobileScreen:WfNodeProof/WfNodeNotify", "depth": 3, "_why": "reads back the four IMessageNode: the Label coming from 'as' and each Type"},
+  {"op": "get", "target": "IMobileScreen:WfNodeProof/WfNodeGoToTarget/#IDestinationNode", "_why": "proves Destination and Transition; the destination node has no Name of its own, address it by #Type"},
   {"op": "get", "target": "IMobileScreen:WfNodeProof/WfNodeDownloadExport/#IDownloadNode", "_why": "prova FileContent, FileName, MimeType e SaveToDisk"},
-  {"op": "get", "target": "IServerAction:WfNode_Envelope_Roundtrip/Encode", "_why": "os nos de JSON e de Excel TEM Name proprio: enderecam-se pelo nome do 'as'"},
+  {"op": "get", "target": "IServerAction:WfNode_Envelope_Roundtrip/Encode", "_why": "the JSON and Excel nodes HAVE their own Name: they are addressed by the name of the 'as'"},
   {"op": "get", "target": "IServerAction:WfNode_Envelope_Roundtrip/DecodeLines"},
   {"op": "get", "target": "IServerAction:WfNode_Lines_ToExcel/Export"},
   {"op": "get", "target": "IServerAction:WfNode_Lines_ToExcel/Import"},
-  {"op": "usages", "target": "IServerAction:WfNode_Lines_ToExcel", "_why": "a screen action do Download tem de aparecer como consumidor: e assim que o binario do Excel atravessa para o client-side"},
+  {"op": "usages", "target": "IServerAction:WfNode_Lines_ToExcel", "_why": "the screen action of the Download has to show up as a consumer: this is how the Excel binary crosses to the client-side"},
   {"op": "find", "name": "WfNodeTarget"}
  ]
 }

@@ -1,5 +1,5 @@
 {
- "description": "Entidade e server action com aggregate, If, Assign, Execute e Raise.",
+ "description": "Entity and server action with aggregate, If, Assign, Execute and Raise.",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "ops": [

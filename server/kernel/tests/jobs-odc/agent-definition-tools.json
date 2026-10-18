@@ -1,14 +1,14 @@
 {
- "description": "ODC (contexto: agent definition). O manifesto de agente (IAgentManifest) e as suas ferramentas so existem num modulo AgentDefinition: a plataforma cria o manifesto com o modulo (create-blank --kind AgentDefinition) e ele nasce invalido ate ter AI model e instrucoes. A fixture traz conexoes offline de AI model, MCP e knowledge base (--connection), e a ferramenta de service action usa a app produtora (blank-mobile-producer.oml), porque um AgentDefinition nao cria server actions ('Server Action can't be created in AgentDefinition runtime kind'). A ferramenta de evento fica em tests/jobs-coverage/f2-ctx/agent-definition-event-tool.json (um evento referenciado sem handler avisa UnusedReferenceGlobalEvent, id so do ODC que expectedMessages ainda nao aceita); a de external library fica de fora: a sua Action vem de uma external library, que nao se constroi offline.",
+ "description": "ODC (context: agent definition). The agent manifest (IAgentManifest) and its tools only exist in an AgentDefinition module: the platform creates the manifest with the module (create-blank --kind AgentDefinition) and it is born invalid until it has an AI model and instructions. The fixture brings offline connections for AI model, MCP and knowledge base (--connection), and the service action tool uses the producer app (blank-mobile-producer.oml), because an AgentDefinition does not create server actions ('Server Action can't be created in AgentDefinition runtime kind'). The event tool is in tests/jobs-coverage/f2-ctx/agent-definition-event-tool.json (an event referenced without a handler warns UnusedReferenceGlobalEvent, an ODC-only id that expectedMessages does not accept yet); the external library one is left out: its Action comes from an external library, which cannot be built offline.",
  "base": "tests/fixtures/odc/blank-agent-definition.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
   {"op": "reference", "producer": "tests/fixtures/odc/blank-mobile-producer.oml", "elements": ["IServiceAction:CovSService"]},
-  {"op": "get", "target": "IAgentManifest:CovBlankAgentDefinition", "_why": "o manifesto ja existe: e a plataforma que o cria com o modulo"},
+  {"op": "get", "target": "IAgentManifest:CovBlankAgentDefinition", "_why": "the manifest already exists: it is the platform that creates it with the module"},
   {"op": "set", "target": "IAgentManifest:CovBlankAgentDefinition", "prop": "GoalsAndInstructions", "value": "Responder com o que as ferramentas devolvem."},
   {"op": "set", "target": "IAgentManifest:CovBlankAgentDefinition", "prop": "AIModel", "value": "IServerActionSignature:CovAIModel",
-   "_why": "as duas propriedades que o modulo em branco deixa por preencher (RequiredPropertyValue_PropertyIn): o job conserta o que veio da base"},
+   "_why": "the two properties that the blank module leaves unfilled (RequiredPropertyValue_PropertyIn): the job fixes what came from the base"},
   {"op": "create", "parent": "IAgentManifest:CovBlankAgentDefinition", "type": "IAIModelSetting", "name": "temperature", "as": "$temp"},
   {"op": "set", "target": "$temp", "prop": "Value", "value": "0.2"},
   {"op": "create", "parent": "IAgentManifest:CovBlankAgentDefinition", "type": "IMCPToolReference", "name": "CovDMcp", "as": "$mcp"},

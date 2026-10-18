@@ -1,5 +1,5 @@
 {
- "description": "Loja (parte 2 de 4): tela Cart em tabela - linhas com produto, preco, - quantidade + e total da linha; o clique grava a quantidade nova em GetCartLines.List[Linha] e o resumo devolvido pelo servidor, sem reler a tabela.",
+ "description": "Store (part 2 of 4): the Cart screen as a table - lines with product, price, - quantity + and the line total; the click writes the new quantity to GetCartLines.List[Line] and the summary returned by the server, without reading the table again.",
  "base": "job:ecommerce-01-data",
  "expectValid": true,
  "expectedMessages": [],
@@ -9,7 +9,7 @@
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "\"Cart\""},
 
-  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetCartLines", "as": "$agg", "_why": "1. as linhas: CartItem com o Product da linha (join)"},
+  {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetCartLines", "as": "$agg", "_why": "1. the lines: CartItem with the Product of the line (join)"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:CartItem"}, "as": "$srcLine"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}, "as": "$srcProduct"},
   {"op": "create", "parent": "$agg", "type": "IJoin", "as": "$join"},
@@ -20,7 +20,7 @@
   {"op": "create", "parent": "$agg", "type": "ISort", "as": "$sort"},
   {"op": "set", "target": "$sort", "prop": "Attribute", "value": "Product.Name"},
 
-  {"op": "logic", "_why": "2. o resumo vem de uma data action; a troca de quantidade escreve na linha e no resumo, sem Refresh Data", "data": {"actions": [
+  {"op": "logic", "_why": "2. the summary comes from a data action; the quantity change writes to the line and to the summary, without Refresh Data", "data": {"actions": [
    {"name": "LoadSummary", "kind": "data", "owner": "IMobileScreen:Cart", "fetch": "AtStart",
     "outputs": [{"name": "Summary", "type": "CartSummary"}],
     "steps": [{"call": "Cart_GetSummary", "as": "ReadSummary"}, {"assign": {"Summary": "ReadSummary.Summary"}, "as": "SetSummary"}]},
@@ -30,7 +30,7 @@
      {"call": "Cart_ChangeQuantity", "as": "Change", "args": {"CartItemId": "GetCartLines.List[RowIndex].CartItem.Id", "Delta": "Delta"}},
      {"assign": {"GetCartLines.List[RowIndex].CartItem.Quantity": "Change.NewQuantity", "LoadSummary.Summary": "Change.Summary"}, "as": "ApplyResult"}]}]}},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ITableRecords", "name": "CartTable", "as": "$tbl", "_why": "3. a tabela: uma coluna = um IHeaderCell + um IRowCell"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ITableRecords", "name": "CartTable", "as": "$tbl", "_why": "3. the table: one column = one IHeaderCell + one IRowCell"},
   {"op": "set", "target": "$tbl", "prop": "Source", "value": "GetCartLines.List"},
   {"op": "create", "parent": "$tbl/HeaderRow", "type": "IHeaderCell", "name": "ProductHeader", "as": "$h1"},
   {"op": "create", "parent": "$h1/Content", "type": "IExpression", "as": "$h1Text"},
@@ -70,7 +70,7 @@
   {"op": "create", "parent": "$r4/Content", "type": "IExpression", "as": "$r4Text"},
   {"op": "set", "target": "$r4Text", "prop": "Value", "value": "FormatCurrency(GetCartLines.List.Current.CartItem.Quantity * GetCartLines.List.Current.CartItem.UnitPrice, \"$\", 2, \".\", \",\")"},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "CartTotals", "as": "$totals", "_why": "4. o resumo le a saida da data action, que ChangeQuantity atualiza"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "CartTotals", "as": "$totals", "_why": "4. the summary reads the output of the data action, which ChangeQuantity updates"},
   {"op": "set", "target": "$totals", "prop": "Style", "value": "\"text-align-right\""},
   {"op": "create", "parent": "$totals", "type": "IExpression", "as": "$count"},
   {"op": "set", "target": "$count", "prop": "Value", "value": "\"Items: \" + LoadSummary.Summary.ItemCount"},

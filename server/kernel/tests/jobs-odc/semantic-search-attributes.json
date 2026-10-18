@@ -1,8 +1,8 @@
 {
- "description": "ODC: os atributos de pesquisa de um no Semantic Search pelos verbos. ISemanticSearchNode.SearchAttributes e so leitura; o Model API edita-o por AddSearchableAttributes/RemoveSearchableAttributes. O `set` de uma lista assim recebe um array de referencias e deixa a lista EXATAMENTE igual (tira o que sobra, acrescenta o que falta): primeiro Title e Summary, depois so Summary. Sem isto o no ficava com o erro SemanticSearch_RequiredSearchAttributes (a recusa da fase 1). Os atributos tem de ser IsSearchable antes.",
+ "description": "ODC: the search attributes of a Semantic Search node through the verbs. ISemanticSearchNode.SearchAttributes is read-only; the Model API edits it through AddSearchableAttributes/RemoveSearchableAttributes. The `set` of such a list takes an array of references and leaves the list EXACTLY equal (removes what is left over, adds what is missing): first Title and Summary, then only Summary. Without this the node stayed with the error SemanticSearch_RequiredSearchAttributes (the phase 1 refusal). The attributes must be IsSearchable beforehand.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCovSearchArticles (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCovSearchArticles (ServerAction)", "why": "ODC: an app (CrossDevice) does not expose a public server action (the live Studio gives an error); the action stays private and without a consumer in this proof job"}],
  "ops": [
   {"op": "spec", "data": {"entities": [{"name": "WfCovArticle", "attributes": [{"name": "Title", "type": "Text", "length": 50}, {"name": "Summary", "type": "Text", "length": 500}]}]}},
   {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfCovSearchArticles", "as": "$action"},

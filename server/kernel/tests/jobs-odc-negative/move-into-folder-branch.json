@@ -1,5 +1,5 @@
 {
- "description": "Faixa ODC, o espelho de tests/jobs-negative/move-into-folder-branch.json. A recusa do move de um elemento de topo para uma pasta de outro ramo da arvore: uma structure nao entra numa pasta de Server Actions. O setter nativo de Folder nao lanca (troca a pasta por nenhuma em silencio), por isso o verbo le de volta, desfaz e recusa nomeando o ramo de cada um. O caminho limpo (pasta do mesmo ramo, chave igual) esta em tests/jobs-odc/refactor-reparent.json.",
+ "description": "ODC lane, the mirror of tests/jobs-negative/move-into-folder-branch.json. The refusal of moving a top-level element into a folder of another branch of the tree: a structure does not go into a Server Actions folder. The native Folder setter does not throw (it swaps the folder for none silently), so the verb reads back, undoes and refuses, naming the branch of each. The clean path (folder of the same branch, equal key) is in tests/jobs-odc/refactor-reparent.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectError": [

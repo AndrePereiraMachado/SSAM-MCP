@@ -4,8 +4,9 @@
 // html-visual.shape.file, the fragment form). 50 {kind:"api", query:{op:"html-presentation"}} was CLI_REFUSED without a
 // candidate (13 edits from html) and continued to op verbs; the next call (53) searched the examples for "presentation"
 // and found none. 66 {kind:"rules", query:"HTML"} was RULES_SECTION_NOT_FOUND: the search read only the headings, and
-// "html" is in the text of the lesson "Protótipo aprovado: portar 1:1". The facade runs a fake CLI with the kernel's
+// "html" is in the text of the lesson "Approved prototype: port it 1:1". The facade runs a fake CLI with the kernel's
 // contracts in miniature; rules read the real docs/CONHECIMENTO-DO-TIME.md.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -215,19 +216,19 @@ test('G10 (call 66): rules words that no heading has are looked up in the text o
   const h = await harness(t);
   // Call 66 on the real docs/CONHECIMENTO-DO-TIME.md: the lesson that says "a op `html`" is among the answers (lessons the
   // team adds with the same words join it, so nothing here counts them).
-  const lesson = { id: '3', title: 'Protótipo aprovado: portar 1:1' };
+  const lesson = { id: '3', title: 'Approved prototype: port it 1:1' };
   const html = await h.ask('o11', 'rules', 'HTML');
   assert.equal(html.ok, true, JSON.stringify(html).slice(0, 400));
   assert.equal(html.matchedIn, 'text');
   assert.ok(html.section.some(s => s.id === lesson.id && s.title === lesson.title), JSON.stringify(html.section));
-  assert.match(html.text, /^### Protótipo aprovado: portar 1:1\r?$/m);
-  assert.match(html.text, /a op `html` com a marcação do protótipo/);
+  assert.match(html.text, /^### Approved prototype: port it 1:1\r?$/m);
+  assert.match(html.text, /the op `html` with the markup of the prototype/);
   const both = await h.ask('odc', 'rules', { section: 'html css' });
   assert.ok(both.section.some(s => s.title === lesson.title), 'every word, in one unit: ' + JSON.stringify(both.section));
   // A heading still wins.
   const title = await h.ask('o11', 'rules', 'Changed Attributes');
   assert.equal(title.matchedIn, undefined);
-  assert.ok(title.section.some(s => s.title.startsWith('O11: entidade com "Changed Attributes"')), JSON.stringify(title.section));
+  assert.ok(title.section.some(s => s.title.startsWith('O11: an entity with "Changed Attributes"')), JSON.stringify(title.section));
   assert.equal(h.run.calls.length, 0, 'no CLI');
   // On a document of the test's own: a section's own text (before its first lesson) is a unit of its own, so the lesson
   // below is not returned with it; every word in the same unit; words that no text has are still the one refusal.

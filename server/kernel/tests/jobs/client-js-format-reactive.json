@@ -1,5 +1,5 @@
 {
- "description": "Cold D: client action FormatPhone(Phone Text) -> Formatted Text com no JavaScript que remove nao-digitos e formata (XX) XXXXX-XXXX; tela PhoneDemo com Input ligado a local Phone, botao Format -> screen action OnFormat que chama FormatPhone e guarda em local Formatted, mostrada numa Expression (escrito por uma LLM sem contexto na sessao fria D de 2026-09-04, passou a primeira)",
+ "description": "Cold D: client action FormatPhone(Phone Text) -> Formatted Text with a JavaScript node that removes non-digits and formats (XX) XXXXX-XXXX; screen PhoneDemo with Input bound to local Phone, button Format -> screen action OnFormat that calls FormatPhone and stores the result in local Formatted, shown in an Expression (written by an LLM with no context in cold session D of 2026-09-04, passed on the first try)",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "ops": [

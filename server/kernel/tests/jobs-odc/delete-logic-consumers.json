@@ -1,8 +1,8 @@
 {
- "description": "ODC: apagar LOGICA com consumidores reais sobre o InsuranceApp do tenant pessoal. A server action WfProof_Save e chamada por outra server action (WfProof_Import) e por uma screen action da tela WfProofScreen. O verbo replace reponta os dois consumidores para WfProof_Store e so entao o delete passa sem force. A recusa (sem force) esta em tests/jobs-odc/delete-logic-in-use.json.",
+ "description": "ODC: delete LOGIC with real consumers on the InsuranceApp of the personal tenant. The server action WfProof_Save is called by another server action (WfProof_Import) and by a screen action of the screen WfProofScreen. The replace verb re-points both consumers to WfProof_Store and only then does the delete pass without force. The refusal (without force) is in tests/jobs-odc/delete-logic-in-use.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfProof_Import (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfProof_Import (ServerAction)", "why": "ODC: an app (CrossDevice) does not expose a public server action (the live Studio gives an error); the action stays private and without a consumer in this proof job"}],
  "ops": [
   {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfProof_Save", "as": "$old"},
   {"op": "create", "parent": "$old", "type": "IInputParameter", "name": "Title", "as": "$oldIn"},
@@ -20,7 +20,7 @@
   {"op": "link", "from": "$oAs", "to": "$o9"},
   {"op": "layout", "target": "$old"},
 
-  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfProof_Import", "as": "$imp", "_why": "(1) consumidor 1: outra server action"},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfProof_Import", "as": "$imp", "_why": "(1) consumer 1: another server action"},
   {"op": "create", "parent": "$imp", "type": "IInputParameter", "name": "Title", "as": "$impIn"},
   {"op": "set", "target": "$impIn", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$imp", "type": "IStartNode", "as": "$i0"},
@@ -32,7 +32,7 @@
   {"op": "link", "from": "$iCall", "to": "$i9"},
   {"op": "layout", "target": "$imp"},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfProofScreen", "as": "$scr", "_why": "(2) consumidor 2: uma tela que chama a mesma action"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfProofScreen", "as": "$scr", "_why": "(2) consumer 2: a screen that calls the same action"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "\"Frente A: apagar com consumidores\""},
@@ -55,7 +55,7 @@
 
   {"op": "usages", "target": "$old", "_why": "(3) dois consumidores reais: o no de WfProof_Import e o no da screen action SaveIt"},
 
-  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfProof_Store", "as": "$new", "_why": "(4) a substituta, com a MESMA assinatura"},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfProof_Store", "as": "$new", "_why": "(4) the replacement, with the SAME signature"},
   {"op": "set", "target": "$new", "prop": "Description", "value": "Substitui WfProof_Save: mesma assinatura"},
   {"op": "create", "parent": "$new", "type": "IInputParameter", "name": "Title", "as": "$newIn"},
   {"op": "set", "target": "$newIn", "prop": "DataType", "value": "Text"},
@@ -72,12 +72,12 @@
   {"op": "link", "from": "$nAs", "to": "$n9"},
   {"op": "layout", "target": "$new"},
 
-  {"op": "replace", "from": "$old", "to": "$new", "_why": "(5) os dois consumidores passam para a action nova, com a mesma chave"},
+  {"op": "replace", "from": "$old", "to": "$new", "_why": "(5) the two consumers move to the new action, with the same key"},
 
-  {"op": "usages", "target": "$old", "_why": "(6) tem de ficar em zero"},
-  {"op": "usages", "target": "$new", "_why": "(6) os dois consumidores estao aqui"},
+  {"op": "usages", "target": "$old", "_why": "(6) it must stay at zero"},
+  {"op": "usages", "target": "$new", "_why": "(6) the two consumers are here"},
 
-  {"op": "delete", "target": "$old", "_why": "(7) sem consumidores, o delete passa sem force: brokenConsumers=0"},
+  {"op": "delete", "target": "$old", "_why": "(7) without consumers, the delete passes without force: brokenConsumers=0"},
 
   {"op": "find", "name": "WfProof_Save", "_why": "(8) lista vazia"},
   {"op": "get", "target": "$aCall"},

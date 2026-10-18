@@ -1,5 +1,5 @@
 {
- "description": "Animate (OutSystemsUI, Interaction) tipico; inputs obrigatorios AnimationType ligados a variaveis da tela; placeholders Content com dados do aggregate de tarefas.",
+ "description": "Typical Animate (OutSystemsUI, Interaction); required inputs AnimationType bound to screen variables; placeholders Content with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

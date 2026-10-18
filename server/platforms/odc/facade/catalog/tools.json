@@ -2454,15 +2454,15 @@
  "modelGuard": {
   "note": "A route of these groups is vetoed where the request is a model change: a model element it never mentions with a build verb, a change verb or a UI widget; a build or change verb whose object is a model element (the verb not being a term of the route); a condition (quando/when/ao salvar/a cada) with any model element or click anywhere; a click on a UI widget; a concept that only exists inside an app (modelOnly). A trigger with a build or change verb holds only when that verb acts on one of its own nouns (objects). Readers (reader:true) never answer a build, change or save they do not name. Tools whose arguments are model elements (debugger, references, readers of a capture) are exempt. changeVerbs: with a model element among the words no tool explains, the hint says two parts; a verb after a modal (posso) is asked about.",
   "groups": [
-   "sessao",
-   "modulos",
-   "publicacao",
-   "ambiente",
-   "dados",
+   "session",
+   "modules",
+   "publication",
+   "environment",
+   "data",
    "service-center",
    "portal",
-   "usuarios",
-   "diagnostico"
+   "users",
+   "diagnostics"
   ],
   "exemptTools": [
    "ssam_reference",
@@ -2899,31 +2899,31 @@
    "title": "Local unpublished visual preview"
   },
   {
-   "id": "sessao",
+   "id": "session",
    "title": "Studio session, connection, dialogs and readiness"
   },
   {
-   "id": "modulos",
+   "id": "modules",
    "title": "Open, close, capture and references of modules"
   },
   {
-   "id": "leitura",
+   "id": "reading",
    "title": "Read the model of a capture"
   },
   {
-   "id": "mudanca",
+   "id": "change",
    "title": "Deliver a model change (one call; a headless proof only when the person asks)"
   },
   {
-   "id": "publicacao",
+   "id": "publication",
    "title": "Publish, create assets, deploy"
   },
   {
-   "id": "ambiente",
+   "id": "environment",
    "title": "Environment, applications, URLs, configurations"
   },
   {
-   "id": "dados",
+   "id": "data",
    "title": "Development/runtime data and database connections"
   },
   {
@@ -2935,11 +2935,11 @@
    "title": "ODC Portal and public APIs"
   },
   {
-   "id": "usuarios",
+   "id": "users",
    "title": "End-user roles"
   },
   {
-   "id": "diagnostico",
+   "id": "diagnostics",
    "title": "Debugger, evidence, long tasks, friction, references"
   }
  ],
@@ -2947,7 +2947,7 @@
   "ssam_query_test": {
    "effect": "write",
    "lane": "both",
-   "group": "diagnostico",
+   "group": "diagnostics",
    "kind": "operations",
    "title": "Native SQL and Aggregate test",
    "when": "Direct native test of a query in an unpublished capture against existing database schema. Developer identity, not app-user access validation.",
@@ -3335,7 +3335,7 @@
   "o11_data": {
    "effect": "write",
    "lane": "o11",
-   "group": "dados",
+   "group": "data",
    "kind": "data",
    "title": "O11 headless entity data",
    "when": "Read or write published O11 business records (Edit Data) of an entity through the connected Service Studio login: the rows, never the entity definition.",
@@ -3862,7 +3862,7 @@
   "ssam_debug": {
    "effect": "write",
    "lane": "both",
-   "group": "diagnostico",
+   "group": "diagnostics",
    "kind": "operations",
    "title": "Debug O11 or ODC headlessly",
    "when": "Headless server debugger of a published O11/ODC module (node breakpoints, variables, stepping). ODC: no Studio; O11 native SSO: the connected Service Studio.",
@@ -4772,7 +4772,7 @@
   "ssam_debug_run": {
    "effect": "write",
    "lane": "both",
-   "group": "diagnostico",
+   "group": "diagnostics",
    "kind": "operations",
    "title": "Debug an ODC or O11 action with chosen inputs as the app user",
    "when": "Run an action with typed inputs (1..50 scenarios) as the app user through the nearest public entry the code picks (native-entry; nothing published).",
@@ -5386,7 +5386,7 @@
   "ssam_debug_invoke": {
    "effect": "write",
    "lane": "odc",
-   "group": "diagnostico",
+   "group": "diagnostics",
    "kind": "operations",
    "title": "Invoke an existing ODC entry and observe internal actions headlessly",
    "when": "ODC only: one call of an EXISTING screen entry (hash-checked capture, private envelope) as the signed-in app user; not arbitrary ServerAction invocation.",
@@ -5646,7 +5646,7 @@
   "ssam_debug_server": {
    "effect": "write",
    "lane": "both",
-   "group": "diagnostico",
+   "group": "diagnostics",
    "kind": "operations",
    "title": "Interactive server inspection of an original O11 or ODC run",
    "when": "Persistent coordinator: one original native-entry run with breakpoints on published scopes; observe stops, read scopes and values, step and continue.",
@@ -6507,7 +6507,7 @@
   "ssam_debug_client": {
    "effect": "write",
    "lane": "both",
-   "group": "diagnostico",
+   "group": "diagnostics",
    "kind": "operations",
    "title": "Interactive client inspection of an original O11 or ODC run",
    "when": "Persistent client inspection: one original run with client scopes (ODC mounted screens included); observe pauses, read values, step and continue.",
@@ -7335,7 +7335,7 @@
   "ssam_debug_matrix": {
    "effect": "read",
    "lane": "both",
-   "group": "diagnostico",
+   "group": "diagnostics",
    "kind": "operations",
    "title": "Final matrix of the headless debugger (read-only)",
    "when": "Generate or check the R19 debugger matrix from its tracked manifest; every evidence pin is re-verified offline, no tenant is contacted.",
@@ -11501,7 +11501,7 @@
   "o11_dependencies": {
    "effect": "read",
    "lane": "o11",
-   "group": "modulos",
+   "group": "modules",
    "kind": "operations",
    "title": "List and capture O11 public dependencies",
    "when": "O11 Manage Dependencies: list referenceable producers and their public elements, capture an attested .avsig for a reference op, inspect what an OML consumes.",
@@ -11816,7 +11816,7 @@
   "context": {
    "effect": "read",
    "lane": "o11",
-   "group": "mudanca",
+   "group": "change",
    "kind": "model",
    "title": "",
    "when": "Controlled app session: read the host-captured request, accepted module contract and supported schema of the task.",
@@ -11885,7 +11885,7 @@
   "propose": {
    "effect": "write",
    "lane": "o11",
-   "group": "mudanca",
+   "group": "change",
    "kind": "model",
    "title": "",
    "when": "Controlled app session: record the complete initial module contract (C#/UI source, data, logic, roles) from the request; does not deliver or publish.",
@@ -11954,7 +11954,7 @@
   "continue": {
    "effect": "write",
    "lane": "o11",
-   "group": "mudanca",
+   "group": "change",
    "kind": "delivery",
    "title": "",
    "when": "Controlled app session: advance or resume the accepted task (snapshot, compilation, merge or reconciliation).",
@@ -12023,7 +12023,7 @@
   "status": {
    "effect": "read",
    "lane": "o11",
-   "group": "mudanca",
+   "group": "change",
    "kind": "delivery",
    "title": "",
    "when": "Controlled app session: read the task's delivery facts and content proof.",
@@ -12091,7 +12091,7 @@
   "o11_inspect": {
    "effect": "read",
    "lane": "o11",
-   "group": "leitura",
+   "group": "reading",
    "kind": "model",
    "title": "Read the structure of an O11 capture",
    "when": "Read the structure of an O11 capture by path or @key: subtrees, properties, usages (after ssam_map).",
@@ -12171,7 +12171,7 @@
   "o11_deliver": {
    "effect": "delivery",
    "lane": "o11",
-   "group": "mudanca",
+   "group": "change",
    "kind": "delivery",
    "title": "Deliver an O11 job to the selected Service Studio",
    "when": "Change an O11 module in one call, directly: the job on a fresh capture of the open module, validated (TrueChange) and merged; no separate proof first. Publishes only with publish:true.",
@@ -12181,7 +12181,7 @@
     "job ops from ssam_discover (this call validates them; no separate o11_job proof or until=apply first)",
     "the user's own authorization words, verbatim (never a paraphrase)"
    ],
-   "next": "\"entregue\" -> o11_publish {module, authorize}; refusal -> patch + basedOn {job, sha256} (+ closePrevious); uncertain -> resume",
+   "next": "\"delivered\" -> o11_publish {module, authorize}; refusal -> patch + basedOn {job, sha256} (+ closePrevious); uncertain -> resume",
    "args": {
     "module": "<Module>",
     "job": {
@@ -12225,7 +12225,7 @@
       "the Reactive or Mobile module is open in that Service Studio",
       "the owner's own words, verbatim: they cover the import, the publication and the demo data; never read nor convert the prototype by hand"
      ],
-     "next": "\"entregue e publicado\" with prototype (the receipt): give the person prototype.screens[].url; a refusal brings every problem with its patch: apply it with patch + basedOn",
+     "next": "\"delivered and published\" with prototype (the receipt): give the person prototype.screens[].url; a refusal brings every problem with its patch: apply it with patch + basedOn",
      "args": {
       "module": "<Module>",
       "job": {
@@ -12436,7 +12436,7 @@
      "field": "publish",
      "value": "true",
      "selector": "presence",
-     "when": "Deliver and publish in one call: after a clean merge the same module is published with the same words or a standing grant (ssam_grant); answers result \"entregue e publicado\" and publish {outcome}.",
+     "when": "Deliver and publish in one call: after a clean merge the same module is published with the same words or a standing grant (ssam_grant); answers result \"delivered and published\" and publish {outcome}.",
      "preconditions": [
       "Service Studio open and connected on the O11 lane (ssam_connect {lane:\"o11\"}), signed in to the environment",
       "the module is open in that Service Studio (o11_studio {command:\"open-module\"})",
@@ -12626,7 +12626,7 @@
      "preconditions": [
       "a refusal that named job and jobSha256 (nextBasedOn)"
      ],
-     "next": "o11_publish after \"entregue\"",
+     "next": "o11_publish after \"delivered\"",
      "args": {
       "module": "<Module>",
       "patch": [
@@ -12709,7 +12709,7 @@
   "ssam_task": {
    "effect": "write",
    "lane": "o11",
-   "group": "diagnostico",
+   "group": "diagnostics",
    "kind": "operations",
    "title": "State of long facade tasks, and the close of an uncertain delivery with proof",
    "when": "State of long facade tasks (today o11_deliver and o11_publish): running | ok | failed | uncertain; with close, closes a delivery task only with the proof that nothing was applied.",
@@ -12861,7 +12861,7 @@
   "o11_studio": {
    "effect": "write",
    "lane": "o11",
-   "group": "sessao",
+   "group": "session",
    "kind": "operations",
    "title": "O11 Service Studio state, waits and dialogs",
    "when": "O11 Service Studio state, waits, module opening, snapshot, TrueChange errors, the last 1-Click Publish log, windows, dialogs and sign-in, in one call.",
@@ -13554,7 +13554,7 @@
   "o11_environment": {
    "effect": "write",
    "lane": "o11",
-   "group": "ambiente",
+   "group": "environment",
    "kind": "operations",
    "title": "O11 environment: inventory, downloads, applications and modules",
    "when": "The O11 environment through the logged-in Service Studio: inventory, downloads, templates, references, create/update/delete applications and modules, refresh references, user provider.",
@@ -14272,7 +14272,7 @@
   "o11_extension": {
    "effect": "write",
    "lane": "o11",
-   "group": "ambiente",
+   "group": "environment",
    "kind": "operations",
    "title": "O11 .NET extension without Integration Studio",
    "when": "Read, create or change (publish) and delete an O11 .NET extension (XIF) headless: built here from a spec and published through the Studio's session.",
@@ -14439,7 +14439,7 @@
   "o11_publish": {
    "effect": "write",
    "lane": "o11",
-   "group": "publicacao",
+   "group": "publication",
    "kind": "delivery",
    "title": "Publish the module open in the O11 Service Studio",
    "when": "Publish (1-Click Publish) the module open in O11 Service Studio; TrueChange errors come back and nothing is published.",
@@ -14448,7 +14448,7 @@
     "the module is open in that Service Studio (o11_studio {command:\"open-module\"})",
     "the user's own authorization words, verbatim (never a paraphrase)"
    ],
-   "next": "\"publicado\" -> consumers:true republishes the consumers of a changed producer; uncertain -> o11_studio status (never repeat)",
+   "next": "\"published\" -> consumers:true republishes the consumers of a changed producer; uncertain -> o11_studio status (never repeat)",
    "args": {
     "module": "<Module>",
     "authorize": "<user's words>",
@@ -14479,7 +14479,7 @@
      "value": "<absent>",
      "selector": "presence",
      "when": "Publish the module (1-Click Publish); with authorize absent a standing grant of the module for publish is used.",
-     "next": "\"publicado\" -> consumers:true when a producer changed; uncertain -> o11_studio status (never repeat)",
+     "next": "\"published\" -> consumers:true when a producer changed; uncertain -> o11_studio status (never repeat)",
      "args": {
       "module": "<Module>",
       "authorize": "<user's words>",
@@ -14643,7 +14643,7 @@
   "ssam_grant": {
    "effect": "write",
    "lane": "both",
-   "group": "publicacao",
+   "group": "publication",
    "kind": "operations",
    "title": "Standing authorization of deliveries and publications",
    "when": "A standing grant: the user's own words, given once, authorize deliver and/or publish of an app until revoked; grant, revoke or list. Never without the user asking in their own words.",
@@ -14828,12 +14828,12 @@
   "ssam_reference": {
    "effect": "read",
    "lane": "both",
-   "group": "diagnostico",
+   "group": "diagnostics",
    "kind": "model",
    "title": "Kernel references: Model API, functions, UI blocks, types, recipes, proven examples, Verify messages, job and delivery checks, team rules",
    "when": "Kernel lookups instead of reading source: Model API, built-in functions, UI blocks, types, where-can, recipes, proven examples by id, job/delivery checks, Verify messages, team rules.",
    "preconditions": [
-    "odc lane answers api, check-job, verify-message, recipe, example and rules"
+    "odc lane answers api, check-job, verify-message, recipe, example, rules and tool"
    ],
    "next": "ssam_discover / o11_deliver / studio_deliver",
    "args": {
@@ -15218,7 +15218,7 @@
      "field": "kind",
      "value": "rules",
      "selector": "enum",
-     "when": "The team rules before generating or changing a module: how to work, standards, platform lessons (query \"padroes\": the 35 OutSystems padrões rules); never a file read.",
+     "when": "The team rules before generating or changing a module: how to work, standards, platform lessons (query \"standards\": the 35 OutSystems standards rules); never a file read.",
      "next": "ssam_discover / o11_deliver / studio_deliver",
      "args": {
       "lane": "<lane>",
@@ -15418,13 +15418,51 @@
        "meaning of the TrueChange message"
       ]
      }
+    },
+    "tool": {
+     "field": "kind",
+     "value": "tool",
+     "selector": "enum",
+     "when": "The complete original tool description and input schema.",
+     "next": "call the named tool",
+     "args": {
+      "lane": "<lane>",
+      "kind": "tool",
+      "query": "<tool>"
+     },
+     "triggers": [
+      [
+       "tool",
+       "description"
+      ],
+      [
+       "tool",
+       "schema"
+      ],
+      [
+       "ferramenta",
+       "descricao"
+      ],
+      [
+       "ferramenta",
+       "esquema"
+      ]
+     ],
+     "intents": {
+      "en": [
+       "original tool description"
+      ],
+      "pt": [
+       "descricao da ferramenta"
+      ]
+     }
     }
    }
   },
   "ssam_evidence": {
    "effect": "read",
    "lane": "both",
-   "group": "diagnostico",
+   "group": "diagnostics",
    "kind": "operations",
    "title": "Read SSAM evidence (JSON/JSONL) without scripts",
    "when": "Read a JSON/JSONL evidence file SSAM wrote (inspect out, result.json, receipts, journals) instead of a script.",
@@ -15490,7 +15528,7 @@
   "ssam_connect": {
    "effect": "write",
    "lane": "both",
-   "group": "sessao",
+   "group": "session",
    "kind": "operations",
    "title": "Connect to an already open Studio",
    "when": "Connect SSAM to every Studio already open (both lanes without lane; one lane with lane), reusing their sessions and unsaved work; nothing is reattached when already attached.",
@@ -15557,7 +15595,7 @@
   "ssam_discover": {
    "effect": "read",
    "lane": "both",
-   "group": "leitura",
+   "group": "reading",
    "kind": "model",
    "title": "Discover capabilities and contracts for an intent",
    "when": "The single entry of any SSAM request: capabilities, ops, contracts and examples of a model change, or the route to the tool. packet:true (with app): the work packet an agent or subagent starts from.",
@@ -15615,7 +15653,7 @@
   "ssam_map": {
    "effect": "read",
    "lane": "both",
-   "group": "leitura",
+   "group": "reading",
    "kind": "model",
    "title": "Map every element of an application capture",
    "when": "Read an application: the module as text in pages (digest), its data as DDL with @keys (ddl), every element with @key (map), text in expressions and values (search), who uses an element across the app's modules (uses).",
@@ -16138,7 +16176,7 @@
   "ssam_app_url": {
    "effect": "read",
    "lane": "odc",
-   "group": "ambiente",
+   "group": "environment",
    "kind": "operations",
    "title": "App home and screen URLs",
    "when": "App home and screen URLs to hand to the user after app/screen work (does not verify publication).",
@@ -16200,7 +16238,7 @@
   "studio_doctor": {
    "effect": "read",
    "lane": "odc",
-   "group": "sessao",
+   "group": "session",
    "kind": "operations",
    "title": "State of everything before working",
    "when": "ODC readiness detail: dotnet, bridge build and attachment, ODC Studio process, catalog age, Portal credential per tenant, journal.",
@@ -16248,7 +16286,7 @@
   "studio_attach": {
    "effect": "write",
    "lane": "odc",
-   "group": "sessao",
+   "group": "session",
    "kind": "operations",
    "title": "Attach the newest bridge to ODC Studio",
    "when": "Load the newest built bridge into the running ODC Studio (same as ssam_connect {lane:\"odc\"}).",
@@ -16293,7 +16331,7 @@
   "studio_status": {
    "effect": "read",
    "lane": "odc",
-   "group": "sessao",
+   "group": "session",
    "kind": "operations",
    "title": "Bridge and Studio status",
    "when": "ODC Studio and bridge status: busy command, catalog, dialogs with choices, open modules.",
@@ -16380,7 +16418,7 @@
   "studio_wait": {
    "effect": "read",
    "lane": "odc",
-   "group": "sessao",
+   "group": "session",
    "kind": "operations",
    "title": "Wait for a Studio state",
    "when": "One blocking call for an ODC Studio state: idle, no-dialogs, published <module>, open <module>.",
@@ -16614,7 +16652,7 @@
   "studio_assets": {
    "effect": "read",
    "lane": "odc",
-   "group": "ambiente",
+   "group": "environment",
    "kind": "operations",
    "title": "List tenant assets natively and refresh the catalog",
    "when": "List the tenant assets natively (Studio Open dialog service) and refresh the catalog; run before any claim about what exists.",
@@ -16672,7 +16710,7 @@
   "studio_consumers": {
    "effect": "read",
    "lane": "odc",
-   "group": "modulos",
+   "group": "modules",
    "kind": "operations",
    "title": "Published consumers of a module",
    "when": "Published consumers of a module (native GetConsumers) with an open flag per consumer.",
@@ -16736,7 +16774,7 @@
   "studio_data": {
    "effect": "read",
    "lane": "odc",
-   "group": "dados",
+   "group": "data",
    "kind": "data",
    "title": "Read records of an entity (development database)",
    "when": "Read records of an entity in the ODC development database (Studio View data): the rows, never the entity definition.",
@@ -16812,7 +16850,7 @@
   "studio_data_insert": {
    "effect": "write",
    "lane": "odc",
-   "group": "dados",
+   "group": "data",
    "kind": "data",
    "title": "Insert records into an entity (development database)",
    "when": "Insert records into an entity of the ODC development database.",
@@ -16897,7 +16935,7 @@
   "studio_data_update": {
    "effect": "write",
    "lane": "odc",
-   "group": "dados",
+   "group": "data",
    "kind": "data",
    "title": "Update records of an entity (development database)",
    "when": "Update records (identifier plus attributes) in the ODC development database.",
@@ -17018,7 +17056,7 @@
   "studio_data_delete": {
    "effect": "write",
    "lane": "odc",
-   "group": "dados",
+   "group": "data",
    "kind": "data",
    "title": "Delete records of an entity (development database)",
    "when": "Delete records by identifier in the ODC development database, in two calls: the preview reads the records (the backup); the execution takes the confirmationToken.",
@@ -17118,7 +17156,7 @@
   "studio_open": {
    "effect": "write",
    "lane": "odc",
-   "group": "modulos",
+   "group": "modules",
    "kind": "operations",
    "title": "Open a module from the organization",
    "when": "Open a module from the organization in ODC Studio (native open that keeps the publish linkage).",
@@ -17177,7 +17215,7 @@
   "studio_close": {
    "effect": "write",
    "lane": "odc",
-   "group": "modulos",
+   "group": "modules",
    "kind": "operations",
    "title": "Close open copies of a module",
    "when": "Close open copies of a module (duplicates; discard a modified copy after snapshotting).",
@@ -17230,7 +17268,7 @@
   "studio_snapshot": {
    "effect": "read",
    "lane": "odc",
-   "group": "modulos",
+   "group": "modules",
    "kind": "operations",
    "title": "Capture the open module as a hash-named base",
    "when": "Capture the open ODC module as a hash-named base .oml.",
@@ -17301,7 +17339,7 @@
   "studio_reference_snapshot": {
    "effect": "read",
    "lane": "odc",
-   "group": "modulos",
+   "group": "modules",
    "kind": "operations",
    "title": "Discover and capture public producer dependencies",
    "when": "Discover the public elements a producer (module/library, system ones included) offers to the consumer and capture them as .avsig.",
@@ -17380,7 +17418,7 @@
   "studio_latest": {
    "effect": "read",
    "lane": "odc",
-   "group": "modulos",
+   "group": "modules",
    "kind": "operations",
    "title": "Download the latest published revision",
    "when": "Download the latest published revision of a module (.oml).",
@@ -17466,7 +17504,7 @@
   "studio_refresh_references": {
    "effect": "write",
    "lane": "odc",
-   "group": "modulos",
+   "group": "modules",
    "kind": "operations",
    "title": "Refresh dependencies natively",
    "when": "Refresh dependencies natively (Check for dependency updates, or one producer to its latest revision).",
@@ -17536,7 +17574,7 @@
   "studio_dismiss_dialog": {
    "effect": "write",
    "lane": "odc",
-   "group": "sessao",
+   "group": "session",
    "kind": "operations",
    "title": "Close a Studio dialog through its own action",
    "when": "Close an ODC Studio dialog through its own action, only for a choice the user decided.",
@@ -17606,7 +17644,7 @@
   "studio_build": {
    "effect": "write",
    "lane": "odc",
-   "group": "mudanca",
+   "group": "change",
    "kind": "delivery",
    "title": "Build a candidate with the headless builder",
    "when": "Build a candidate with the headless builder from a C# feature (or a new module with newModule).",
@@ -17685,7 +17723,7 @@
   "studio_inspect": {
    "effect": "read",
    "lane": "odc",
-   "group": "leitura",
+   "group": "reading",
    "kind": "model",
    "title": "Read the structure of a module",
    "when": "Read the structure of an ODC module/capture by path or @key: subtrees, properties, usages (after ssam_map).",
@@ -17770,7 +17808,7 @@
   "studio_check_base": {
    "effect": "read",
    "lane": "odc",
-   "group": "mudanca",
+   "group": "change",
    "kind": "delivery",
    "title": "Check that the open module still equals the captured base",
    "when": "Check that the open module still equals the captured base (base_drift means new snapshot, new build).",
@@ -17829,7 +17867,7 @@
   "studio_preview": {
    "effect": "read",
    "lane": "odc",
-   "group": "mudanca",
+   "group": "change",
    "kind": "delivery",
    "title": "Preview the native merge",
    "when": "Preview the native merge (validation delta and conflicts) without merging.",
@@ -17881,7 +17919,7 @@
   "studio_merge": {
    "effect": "write",
    "lane": "odc",
-   "group": "mudanca",
+   "group": "change",
    "kind": "delivery",
    "title": "Merge the candidate natively",
    "when": "Merge a prepared candidate natively (one CompareAndMerge per evidence directory).",
@@ -17924,7 +17962,7 @@
   "studio_authorize": {
    "effect": "write",
    "lane": "odc",
-   "group": "publicacao",
+   "group": "publication",
    "kind": "delivery",
    "title": "Record the user's authorization in the manifest",
    "when": "Record the user's authorization (their own quoted words) in a manifest, for publish or create.",
@@ -18077,7 +18115,7 @@
   "studio_publish": {
    "effect": "write",
    "lane": "odc",
-   "group": "publicacao",
+   "group": "publication",
    "kind": "delivery",
    "title": "Publish through the native Publish command",
    "when": "Publish an open module (its last clean SSAM merge, found from the delivery evidence; or a manifest) through the native Publish command; with wait follows the server process, downloads the revision and compares it.",
@@ -18147,7 +18185,7 @@
   "studio_create": {
    "effect": "write",
    "lane": "odc",
-   "group": "publicacao",
+   "group": "publication",
    "kind": "delivery",
    "title": "Upload a ready whole-module candidate as a new asset",
    "when": "Low level: upload a whole-module candidate already built (lab feature, test producer) as a new asset (revision 1, no deploy). A new app or library is studio_create_app.",
@@ -18218,7 +18256,7 @@
   "studio_create_app": {
    "effect": "write",
    "lane": "odc",
-   "group": "publicacao",
+   "group": "publication",
    "kind": "operations",
    "title": "Create an ODC app or library as the ODC Studio does",
    "when": "A new Agentic, Reactive or Mobile app (clone of the tenant's template, as the Studio's Create app) or Library, uploaded, opened and published in one call; templates lists the tenant's application templates.",
@@ -18406,7 +18444,7 @@
   "studio_command": {
    "effect": "write",
    "lane": "odc",
-   "group": "sessao",
+   "group": "session",
    "kind": "operations",
    "title": "Any other bridge command",
    "when": "Passthrough for bridge commands without a dedicated tool (module-info, publish-status, publish-log, stop); never data-delete, portal-call, portal-private-call or portal-api-client-fixture-cleanup (DESTRUCTIVE_NEEDS_DEDICATED_TOOL).",
@@ -18692,7 +18730,7 @@
   "studio_manifest": {
    "effect": "write",
    "lane": "odc",
-   "group": "mudanca",
+   "group": "change",
    "kind": "delivery",
    "title": "Prepare an existing kernel candidate for native delivery",
    "when": "Headless: prepare an existing kernel candidate for native delivery (fresh directory + standard manifest).",
@@ -18743,7 +18781,7 @@
   "studio_deliver": {
    "effect": "delivery",
    "lane": "odc",
-   "group": "mudanca",
+   "group": "change",
    "kind": "delivery",
    "title": "Deliver a C# feature or an ODC kernel job",
    "when": "Change an ODC module in one call, directly: fresh capture, build, check-base, preview and native merge, refusing before any change. Publishes only with publish:true.",
@@ -18799,9 +18837,9 @@
       "the module is open in ODC Studio (studio_open)",
       "the owner's own words, verbatim: they cover the import, the publication and the demo data; never read nor convert the prototype by hand"
      ],
-     "next": "\"entregue e publicado\" with prototype (the receipt): give the person prototype.screens[].url; a refusal brings every problem with its patch: apply it with patch + basedOn",
+     "next": "\"delivered and published\" with prototype (the receipt): give the person prototype.screens[].url; a refusal brings every problem with its patch: apply it with patch + basedOn",
      "args": {
-      "feature": "Protótipo <Prefix>",
+      "feature": "Prototype <Prefix>",
       "module": "<Module>",
       "job": {
        "ops": [
@@ -18817,7 +18855,7 @@
        "<Prefix>"
       ],
       "changes": [
-       "Protótipo <Prefix> importado como telas nativas"
+       "Prototype <Prefix> imported as native screens"
       ],
       "publish": true,
       "authorize": "<user's words>"
@@ -19198,7 +19236,7 @@
      "field": "publish",
      "value": "true",
      "selector": "presence",
-     "when": "Deliver and publish in one call: after a clean merge (merged and strictlyEqual) the publish authorization is recorded with the same words (authorize) or a standing grant and the module is published; answers result \"entregue e publicado\" and publish {outcome}.",
+     "when": "Deliver and publish in one call: after a clean merge (merged and strictlyEqual) the publish authorization is recorded with the same words (authorize) or a standing grant and the module is published; answers result \"delivered and published\" and publish {outcome}.",
      "preconditions": [
       "ODC Studio open with the bridge attached (ssam_connect {lane:\"odc\"})",
       "the module is open in ODC Studio (studio_open)",
@@ -26571,7 +26609,7 @@
   "odc_operation_status": {
    "effect": "read",
    "lane": "odc",
-   "group": "publicacao",
+   "group": "publication",
    "kind": "portal",
    "title": "Follow a deployment, publication, build or analysis",
    "when": "Follow an ODC deployment, publish, build, native build, generation or analysis by key (waitSeconds polls up to 600 s).",
@@ -27010,7 +27048,7 @@
   "odc_deploy": {
    "effect": "write",
    "lane": "odc",
-   "group": "publicacao",
+   "group": "publication",
    "kind": "portal",
    "title": "Deploy an app between stages and wait",
    "when": "Deploy, undeploy or apply configs of an ODC asset revision to a stage, then follow it to the end.",
@@ -27244,7 +27282,7 @@
   "odc_configurations": {
    "effect": "write",
    "lane": "odc",
-   "group": "ambiente",
+   "group": "environment",
    "kind": "portal",
    "title": "App, agent or stage configurations (settings, timers)",
    "when": "Get or set ODC app/agent/stage configurations: settings, secret settings by vault entry, timers, integrations, libraries.",
@@ -27445,7 +27483,7 @@
   "odc_asset_delete": {
    "effect": "write",
    "lane": "odc",
-   "group": "publicacao",
+   "group": "publication",
    "kind": "portal",
    "title": "Delete an app or library",
    "when": "Delete an ODC app or library in two calls (the preview reads its identity, consumers and backup plan; the execution takes the confirmationToken; words must name it; a read confirms it is gone).",
@@ -27503,7 +27541,7 @@
   "odc_external_library": {
    "effect": "write",
    "lane": "odc",
-   "group": "publicacao",
+   "group": "publication",
    "kind": "portal",
    "title": "ODC External Library: generate, build, upload, publish and tag",
    "when": "An ODC External Library: deploy in one call (generate, build, upload, publish, tag); build; status; discard in two calls (preview, then confirmationToken); references go through the existing reference job.",
@@ -27712,7 +27750,7 @@
   "odc_external_db_connection": {
    "effect": "write",
    "lane": "odc",
-   "group": "dados",
+   "group": "data",
    "kind": "portal",
    "title": "External database connections (Portal)",
    "when": "ODC Portal external database connections: providers, list, entities, test, create, import entities; delete and remove-entities in two calls.",
@@ -28328,7 +28366,7 @@
   "o11_job": {
    "effect": "delivery",
    "lane": "o11",
-   "group": "mudanca",
+   "group": "change",
    "kind": "model",
    "title": "Run a verb job on an O11 fixture",
    "when": "Only when the person asks for a headless proof: an O11 job on a fixture (ok/isValid, messages); delivers nothing. A change goes to o11_deliver.",
@@ -28394,7 +28432,7 @@
   "ssam_code": {
    "effect": "delivery",
    "lane": "both",
-   "group": "mudanca",
+   "group": "change",
    "kind": "model",
    "title": "Read, check and write a module as code: data as SQL DDL, logic as pseudocode, screens as HTML",
    "when": "The module as code: part ddl (SQL DDL), logic (pseudocode), html (screens). grammar for the syntax and an example (empty module), read, check against a capture without Studio, write (delivered).",
@@ -28511,7 +28549,7 @@
      "value": "write",
      "selector": "enum",
      "when": "Write a part as code, delivered by the lane's own delivery (one call, validated before any change): new statements, actions or screens without keys; changed ones with their keys and basedOn (a changed action WHOLE as read: a line left out is deleted); files:[paths] sends the parts subagents wrote (.flow with several actions, .ddl, .html, .json ops) in the same call; edits:[{replace|after|before|delete:\"@id\"}] with element and basedOn changes only the lines named.",
-     "next": "\"entregue\"; a refusal -> patch + basedOn {job, sha256}; publish with the user's words",
+     "next": "\"delivered\"; a refusal -> patch + basedOn {job, sha256}; publish with the user's words",
      "args": {
       "lane": "<lane>",
       "action": "write",
@@ -28547,7 +28585,7 @@
   "ssam_job": {
    "effect": "delivery",
    "lane": "both",
-   "group": "mudanca",
+   "group": "change",
    "kind": "model",
    "title": "Run a verb job on a fixture, in either lane",
    "when": "Only when the person asks for a headless proof: a job on a fixture (ok/isValid, messages); delivers nothing. A change goes to studio_deliver/o11_deliver.",
@@ -28605,7 +28643,7 @@
   "o11_access": {
    "effect": "write",
    "lane": "o11",
-   "group": "usuarios",
+   "group": "users",
    "kind": "operations",
    "title": "O11 end-user roles by versioned manifest",
    "when": "O11 end-user roles by a versioned access manifest: plan offline, apply (one delivery per owner module with the user's words).",
@@ -28867,7 +28905,7 @@
   "ssam_doctor": {
    "effect": "write",
    "lane": "both",
-   "group": "sessao",
+   "group": "session",
    "kind": "operations",
    "title": "Both lanes side by side",
    "when": "Both lanes side by side: root, CLI, catalog and which Studio is open in each lane; the first call of a session. With release, frees a foreign or orphan module reservation with the user's words.",
@@ -29016,7 +29054,7 @@
   "ssam_friction": {
    "effect": "write",
    "lane": "both",
-   "group": "diagnostico",
+   "group": "diagnostics",
    "kind": "operations",
    "title": "",
    "when": "Automatically recorded operation failures and task timing from the local queue (metadata only); report records a gap, defect or slowness that produced no failure.",
@@ -29197,7 +29235,7 @@
   "odc_mcp_import": {
    "effect": "write",
    "lane": "odc",
-   "group": "dados",
+   "group": "data",
    "kind": "portal",
    "title": "Import reviewed MCP tools",
    "when": "Execute a reviewed MCP import plan and reconcile its receipt without resending.",
@@ -29232,7 +29270,7 @@
   "odc_mcp_connection": {
    "effect": "read",
    "lane": "odc",
-   "group": "dados",
+   "group": "data",
    "kind": "portal",
    "title": "MCP connection readiness",
    "when": "Inspect available and imported MCP actions and metadata readiness without invoking or importing tools.",
@@ -29323,7 +29361,7 @@
   "odc_native_package": {
    "effect": "read",
    "lane": "odc",
-   "group": "publicacao",
+   "group": "publication",
    "kind": "portal",
    "title": "Download a verified native mobile package headlessly",
    "when": "Download Android or iOS package from its finished native build and confirmed receipt.",
@@ -29354,7 +29392,7 @@
   "odc_generated_code": {
    "effect": "read",
    "lane": "odc",
-   "group": "publicacao",
+   "group": "publication",
    "kind": "portal",
    "title": "Download packaged generated code",
    "when": "Download generated code after packaging has finished, keeping the signed location private.",
@@ -29382,7 +29420,7 @@
   "odc_asset_revision": {
    "effect": "write",
    "lane": "odc",
-   "group": "publicacao",
+   "group": "publication",
    "kind": "portal",
    "title": "Create a revision from downloaded source",
    "when": "Send downloaded source or a native validated candidate as an ODC asset revision; prove a new revision separately from content deduplication.",
@@ -29421,7 +29459,7 @@
   "odc_asset_source": {
    "effect": "read",
    "lane": "odc",
-   "group": "publicacao",
+   "group": "publication",
    "kind": "portal",
    "title": "Download exact asset revision source",
    "when": "Download source bytes of an exact ODC asset revision, with a private file and SHA256.",
@@ -29512,7 +29550,7 @@
   "studio_reference_producers": {
    "effect": "read",
    "lane": "odc",
-   "group": "modulos",
+   "group": "modules",
    "kind": "operations",
    "title": "Producers visible to the consumer session",
    "when": "List native referenceable producer names and keys in the named open consumer session.",
@@ -29552,7 +29590,7 @@
   {
    "id": "odc-timer-run",
    "lane": "odc",
-   "group": "ambiente",
+   "group": "environment",
    "triggers": [
     [
      "@rodar",
@@ -29578,7 +29616,7 @@
   {
    "id": "o11-deploy-between-environments",
    "lane": "o11",
-   "group": "publicacao",
+   "group": "publication",
    "triggers": [
     [
      "@deploy"
@@ -29601,7 +29639,7 @@
   {
    "id": "odc-solutions",
    "lane": "odc",
-   "group": "publicacao",
+   "group": "publication",
    "triggers": [
     [
      "@solution"

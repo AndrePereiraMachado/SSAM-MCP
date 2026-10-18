@@ -144,7 +144,7 @@ test('a map during a delivery answers from a fresh capture of an open module; a 
   const call = await ssamWithMap(t, s, bridge);
   const gate = deferred();
   const delivery = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'A', job: [{ op: 'x' }], authorize: 'pode' }, lane: 'o11', deps: s.lockDeps },
-    async () => { await gate.promise; return 'entregue'; });
+    async () => { await gate.promise; return 'delivered'; });
   // The open module B (and A, the one being delivered) is read by key while the delivery holds the lock.
   const b = await call('B'); const a = await call('A');
   assert.equal(b.ok, true, JSON.stringify(b)); assert.equal(a.ok, true, JSON.stringify(a));
@@ -153,7 +153,7 @@ test('a map during a delivery answers from a fresh capture of an open module; a 
   assert.equal(c.ok, true, JSON.stringify(c)); assert.equal(c.capturedBy, map.PUBLISHED_CAPTURE);
   assert.notEqual(c.code, BUSY_CODE);
   assert.deepEqual(bridge.opened(), []); assert.equal(bridge.state.active, 'A');
-  gate.resolve(); assert.equal(await delivery, 'entregue');
+  gate.resolve(); assert.equal(await delivery, 'delivered');
 });
 
 test('two concurrent maps of open modules an older bridge must select both answer: the selects wait in the queue, one at a time', async t => {

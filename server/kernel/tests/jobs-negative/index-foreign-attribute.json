@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA de um indice sobre um atributo de OUTRA entidade: os atributos de um indice tem de pertencer a entidade dona. O caminho limpo esta em tests/jobs/entity-lifecycle.json (lote de dados, fase 3).",
+ "description": "The REFUSAL of an index on an attribute of ANOTHER entity: the attributes of an index have to belong to the owning entity. The clean path is in tests/jobs/entity-lifecycle.json (data lot, phase 3).",
  "base": "job:spec-data",
  "expectValid": true,
  "expectError": ["EntityIndex attributes must belong to its parent entity"],

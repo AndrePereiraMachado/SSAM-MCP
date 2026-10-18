@@ -5,6 +5,7 @@
 // deferred default. Merge 1 is the candidate without those defaults (it creates the elements), merge 2 the full candidate
 // over the module captured after merge 1 (the defaults land on existing elements); the bridge's own plan is empty both
 // times, so Prepare returns before its transaction.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -56,7 +57,7 @@ test('a candidate with a deferred default is delivered in two merges of one call
   const f = fixture(t);
   const result = await deliverKernel({ ...f.input, pid: 7 }, f.deps);
   assert.equal(result.ok, true, result.error);
-  assert.equal(result.merged, true); assert.equal(result.result, 'entregue');
+  assert.equal(result.merged, true); assert.equal(result.result, 'delivered');
   assert.deepEqual(f.calls, ['snapshot', 'apply', 'merge-order', 'manifest', 'merge', 'snapshot', 'manifest', 'merge', 'status']);
   // Merge 1: the first-pass candidate (no deferred default) over the first capture; merge 2: the full candidate over the
   // module captured after merge 1.

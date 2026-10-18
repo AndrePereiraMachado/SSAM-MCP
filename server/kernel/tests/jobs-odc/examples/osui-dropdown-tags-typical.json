@@ -1,5 +1,5 @@
 {
- "description": "DropdownTags do OSUI com dados: uma data action monta as opcoes a partir dos produtos, o Prompt muda e o OnChanged guarda a lista escolhida numa variavel.",
+ "description": "DropdownTags of OSUI with data: a data action builds the options from the products, the Prompt changes and OnChanged keeps the chosen list in a variable.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -2,6 +2,7 @@
 // inherits the caller's handles), status, a second start says it is already running, a port already answered by
 // another process is refused with exit 1 and no process left, and stop. Ports 7400-7499, temporary SSAM_SERVER_DIR;
 // the real `ssam serve` of this checkout starts with workers off and serves no Studio here.
+import '../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

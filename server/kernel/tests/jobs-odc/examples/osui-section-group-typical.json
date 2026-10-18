@@ -1,5 +1,5 @@
 {
- "description": "SectionGroup do OSUI com titulos fixos (HasStickyTitles) e duas Section com conteudo ligado a variaveis.",
+ "description": "SectionGroup of OSUI with sticky titles (HasStickyTitles) and two Sections with content bound to variables.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

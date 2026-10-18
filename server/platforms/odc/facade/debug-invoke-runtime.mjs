@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { workspaceRoot } from './workspace.mjs';
 import { invokeSchema } from './debug-invoke.mjs';
@@ -100,7 +100,8 @@ async function launch(input) {
   }
   fs.writeFileSync(handle, JSON.stringify({ operationId: input.operationId })); fs.closeSync(handle);
   const receipt = { ok: true, state: 'accepted', operationId: input.operationId, planId: input.planId, identity: plan.identity, suppliedInputHash: digest(input.inputs), inputPaths: Object.keys(inputs), outputPaths: input.outputPaths.length ? input.outputPaths : plan.outputPaths, authorizedAt: new Date().toISOString(), receiptPath, lock };
-  writeReceipt(path.join(dir, 'authorization.json'), { operationId: input.operationId, planId: input.planId, words: input.authorization });
+  // CX15 r5 (N-3): the file keeps wordsSha256 of the user's words, never the words.
+  writeReceipt(path.join(dir, 'authorization.json'), { operationId: input.operationId, planId: input.planId, wordsSha256: createHash('sha256').update(String(input.authorization)).digest('hex') });
   writeReceipt(receiptPath, receipt);
   const worker = fileURLToPath(new URL('./debug-invoke-worker.mjs', import.meta.url));
   let child;

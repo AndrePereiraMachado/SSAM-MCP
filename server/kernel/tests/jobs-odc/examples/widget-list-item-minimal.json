@@ -1,5 +1,5 @@
 {
- "description": "List Item: um IListItem dentro da List, com texto no Content e a swipe action de exemplo removida.",
+ "description": "List Item: an IListItem inside the List, with a text in the Content and the sample swipe action removed.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -12,7 +12,7 @@
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "ContactList", "as": "$list"},
   {"op": "set", "target": "$list", "prop": "Source", "value": "GetContacts.List"},
   {"op": "create", "parent": "$list", "type": "IListItem", "name": "ContactItem", "as": "$item"},
-  {"op": "delete", "target": "$item/RightActions/#IListItemAction", "_why": "o List Item nasce com uma swipe action sem OnClick (erro no Verify)"},
+  {"op": "delete", "target": "$item/RightActions/#IListItemAction", "_why": "the List Item is born with a swipe action without an OnClick (an error in the Verify)"},
   {"op": "create", "parent": "$item/Content", "type": "IExpression", "as": "$name"},
   {"op": "set", "target": "$name", "prop": "Value", "value": "GetContacts.List.Current.Contact.FullName"}
  ]

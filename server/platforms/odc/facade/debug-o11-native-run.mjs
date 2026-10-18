@@ -11,6 +11,7 @@
 //
 // Assumptions (DEV environments): a server breakpoint may also catch another user's request on the same action;
 // request isolation is not proved. A historical uncertain binding requires a verified native neutralization record.
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -693,7 +694,7 @@ export function createO11NativeRun(services = {}) {
           scopes: backgroundScopes, scopeSourceSha256: owner.snapshot.sha256, omittedScopeRoots, valuesComplete: false,
           observationSeconds: Math.min(60, input.timeoutSeconds ?? 30), requestOwnershipProved: false,
           applicationUserContext: false, appUserIdentityProved: false, rolesProved: false, propagationProved: false, executionCompleted: false };
-        if (input.op === 'run' && (typeof input.words !== 'string' || !input.words.trim()))
+        if (input.op === 'run' && !wordsGiven(input.words)) // CX15 r7: one predicate
           fail('debug_native_background_explicit_background_authorization_required');
         // A Run Now never-list or registry-blocked binding gets no Service Center form read (adapter.prepare).
         if (input.trigger === 'service-center-run-now' &&

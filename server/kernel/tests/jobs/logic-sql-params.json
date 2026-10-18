@@ -1,5 +1,5 @@
 {
- "description":"Spec SQL: parametros no statement e no contrato, input consumido em params.value, MaxRecords por max e lista atribuida ao output.",
+ "description":"SQL spec: parameters in the statement and in the contract, input consumed in params.value, MaxRecords by max and list assigned to the output.",
  "base":"tests/fixtures/blank-service.oml",
  "expectValid":true,
  "ops":[

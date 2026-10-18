@@ -1,11 +1,11 @@
 {
- "description": "ODC (cobertura T): REST EXPOSTO, que nunca tinha passado pela faixa ODC. Espelha tests/jobs/rest-expose.json: IRestService com um IRestServiceAction GET (que ja nasce com Start e End), input na URL, output Body tipado por uma structure e um Assign que preenche a resposta. Na faixa ODC este tipo existe mesmo (ServiceStudio.Plugin.RESTService.RestService, criado por IESpace.CreateIntegration<T>), ao contrario do que o nome do namespace publico (IService/IExposedAction, ambos IsConcrete=false) faz supor.",
+ "description": "ODC (T coverage): EXPOSED REST, which had never passed through the ODC lane. Mirrors tests/jobs/rest-expose.json: IRestService with an IRestServiceAction GET (which is already born with Start and End), input in the URL, output Body typed by a structure and an Assign that fills in the response. In the ODC lane this type really exists (ServiceStudio.Plugin.RESTService.RestService, created by IESpace.CreateIntegration<T>), contrary to what the name of the public namespace (IService/IExposedAction, both IsConcrete=false) suggests.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
   {"op": "create", "parent": "@espace", "type": "IStructure", "name": "WfCovZoneInfo", "as": "$st"},
-  {"op": "set", "target": "$st", "prop": "Public", "value": true, "_why": "no ODC (vocabulario: shareable) um contrato exposto so pode usar tipos partilhaveis"},
+  {"op": "set", "target": "$st", "prop": "Public", "value": true, "_why": "in ODC (vocabulary: shareable) an exposed contract can only use shareable types"},
   {"op": "create", "parent": "$st", "type": "IStructureAttribute", "name": "Zone", "as": "$stZone"},
   {"op": "set", "target": "$stZone", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$st", "type": "IStructureAttribute", "name": "IsHighRisk", "as": "$stRisk"},
@@ -34,13 +34,13 @@
   {"op": "set", "target": "$a2", "prop": "Variable", "value": "Info.IsHighRisk"},
   {"op": "set", "target": "$a2", "prop": "Value", "value": "Length(Postcode) > 5"},
 
-  {"op": "link", "from": "$m/#IStartNode", "to": "$assign", "_why": "o IRestServiceAction ja NASCE com Start e End: nao se criam novos"},
+  {"op": "link", "from": "$m/#IStartNode", "to": "$assign", "_why": "the IRestServiceAction is already BORN with Start and End: new ones are not created"},
   {"op": "link", "from": "$assign", "to": "$m/#IEndNode"},
   {"op": "layout", "target": "$m"},
 
   {"op": "get", "target": "$m", "_why": "prova HTTPMethod e URLPath do metodo exposto"},
-  {"op": "get", "target": "$in", "_why": "prova o input e onde ele e recebido"},
-  {"op": "get", "target": "$out", "_why": "prova o output tipado pela structure e onde ele e enviado"},
-  {"op": "dump", "target": "$svc", "depth": 4, "_why": "prova a arvore inteira do servico exposto"}
+  {"op": "get", "target": "$in", "_why": "proves the input and where it is received"},
+  {"op": "get", "target": "$out", "_why": "proves the output typed by the structure and where it is sent"},
+  {"op": "dump", "target": "$svc", "depth": 4, "_why": "proves the whole tree of the exposed service"}
  ]
 }

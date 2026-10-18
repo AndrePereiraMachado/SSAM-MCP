@@ -1,5 +1,5 @@
 {
- "description": "Dropdown nativo: Variable, List do aggregate e Values/Labels lidos pelo nome da entidade da linha.",
+ "description": "Native Dropdown: the Variable, the List of the aggregate and the Values/Labels read by the name of the entity of the row.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -7,6 +7,7 @@
 // UI/integration intents that share a word with the theme (trocar, redirecionar, copiar, impacto, ordem, posição,
 // consumidores) do not select a refactor capability, the outside-root sequence mechanics are accounted, and every answer
 // fits the 12000-byte budget. Needs the lane CLIs built (the index is built from them); skips otherwise.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';

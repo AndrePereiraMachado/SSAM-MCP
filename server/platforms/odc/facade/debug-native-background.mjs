@@ -1,6 +1,7 @@
 // A background entry uses the scheduler's native execution context. Trigger
 // acceptance, observed execution and successful completion are separate facts.
 // It is never presented as application-user access validation.
+import { wordsGiven } from './destructive-operations.mjs';
 import { createHash } from 'node:crypto';
 import { serviceCenterTool } from './service-center/index.mjs';
 import { serviceCenterArguments } from './o11-operations.mjs';
@@ -116,7 +117,7 @@ export function createNativeBackgroundAdapter({ serviceCenter = nativeBackground
     },
     async run(plan, { root, operationId, context, authorizationWords, inputs = {} }) {
       if (!plan?.executable || !plan.nativeAuthenticationQualified || plan.trigger !== 'o11-service-center-timer-run') fail('entry_unprepared');
-      if (context !== 'native-background' || typeof authorizationWords !== 'string' || !authorizationWords.trim() || !GUID.test(operationId ?? '')) fail('explicit_background_authorization_required');
+      if (context !== 'native-background' || !wordsGiven(authorizationWords) || !GUID.test(operationId ?? '')) fail('explicit_background_authorization_required'); // CX15 r7
       if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs) || Object.keys(inputs).length) fail('timer_has_no_direct_inputs');
       const host = new URL(plan.binding.runtimeUrl).hostname;
       if (blockedBinding(root, host, plan.binding.moduleKey)) fail('binding_blocked');

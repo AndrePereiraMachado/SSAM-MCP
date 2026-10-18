@@ -1,22 +1,22 @@
 {
- "description": "ODC: avisos que SO o verificador do ODC emite podem ser declarados em expectedMessages. Dois eventos globais sem trigger nem handler: o privado da PrivateUnusedGlobalEvent e UnusedGlobalEvent, o publico so UnusedGlobalEvent. Esses ids nao existem nas listas do O11 (catalog/verify-messages-*.json); a faixa ODC valida contra catalog/odc/verify-messages-<versao>.json, gerado do ODC Studio instalado por `anvil-odc verify-catalog --out`. Antes disto o job era recusado na leitura ('unknown expectedMessages id') e um job ODC com estes avisos nunca saia accepted:true.",
+ "description": "ODC: warnings that ONLY the ODC verifier emits can be declared in expectedMessages. Two global events with no trigger or handler: the private one gets PrivateUnusedGlobalEvent and UnusedGlobalEvent, the public one only UnusedGlobalEvent. These ids do not exist in the O11 lists (catalog/verify-messages-*.json); the ODC lane validates against catalog/odc/verify-messages-<version>.json, generated from the installed ODC Studio by `anvil-odc verify-catalog --out`. Before this the job was refused at read time ('unknown expectedMessages id') and an ODC job with these warnings never came out accepted:true.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "PrivateUnusedGlobalEvent",
    "element": "InsuranceApp (ESpace) / WfCovPrivateEvent (GlobalEvent)",
-   "why": "Evento privado sem handler local: o aviso so do ODC que este job existe para declarar."
+   "why": "Private event with no local handler: the ODC-only warning that this job exists to declare."
   },
   {
    "id": "UnusedGlobalEvent",
    "element": "InsuranceApp (ESpace) / WfCovPrivateEvent (GlobalEvent)",
-   "why": "Evento sem trigger (nenhum TriggerGlobalNode o dispara): aviso so do ODC."
+   "why": "Event with no trigger (no TriggerGlobalNode triggers it): ODC-only warning."
   },
   {
    "id": "UnusedGlobalEvent",
    "element": "InsuranceApp (ESpace) / WfCovPublicEvent (GlobalEvent)",
-   "why": "O evento publico tambem nao tem trigger; sendo publico, nao pede handler local."
+   "why": "The public event also has no trigger; being public, it does not ask for a local handler."
   }
  ],
  "ops": [

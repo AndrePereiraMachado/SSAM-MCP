@@ -1,5 +1,5 @@
 {
- "description": "BreadcrumbsItem do OSUI: um item com texto no Title, dentro do Breadcrumbs do layout.",
+ "description": "BreadcrumbsItem of OSUI: one item with a text in the Title, inside the Breadcrumbs of the layout.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

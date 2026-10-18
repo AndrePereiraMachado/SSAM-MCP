@@ -1,5 +1,5 @@
 {
- "description": "Email (Traditional): email no flow Emails com input, Subject e conteudo; server action que envia com Send Email (To, argumento)",
+ "description": "Email (Traditional): email in the flow Emails with input, Subject and content; server action that sends with Send Email (To, argument)",
  "base": "tests/fixtures/traditional-ui.oml",
  "expectValid": true,
  "ops": [

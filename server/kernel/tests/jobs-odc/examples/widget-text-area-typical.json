@@ -1,5 +1,5 @@
 {
- "description": "Text Area de um registro: edita a descricao do produto lido pelo input da tela, mostra os caracteres restantes e grava com uma server action.",
+ "description": "A Text Area of a record: edits the description of the product read by the input of the screen, shows the characters left and saves with a server action.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

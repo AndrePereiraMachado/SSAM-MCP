@@ -1,42 +1,42 @@
 {
- "description": "Tickets: actions auxiliares privadas (evento, notificacao, matriz de transicao, acesso, numero, SLA, permissoes); warnings de actions privadas ainda sem uso",
+ "description": "Tickets: private helper actions (event, notification, transition matrix, access, number, SLA, permissions); warnings of private actions not yet used",
  "base": "job:tickets-01-data",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "UnusedElement",
    "element": "Calendar_AddBusinessMinutes (ServerAction) / BusinessHoursOnly (InputParameter)",
-   "why": "BusinessHoursOnly ainda nao e consumido pelo calculo simplificado do calendario; limitacao explicita a tratar no passo de inputs sem uso."
+   "why": "BusinessHoursOnly is not yet consumed by the simplified calendar calculation; explicit limitation to be handled in the step for unused inputs."
   },
   {
    "id": "UnusedUserAction",
    "element": "Headless_CS (ESpace) / Event_Write (ServerAction)",
-   "why": "Action auxiliar privada criada nesta etapa; os consumidores sao criados nas etapas seguintes."
+   "why": "Private helper action created in this step; the consumers are created in the following steps."
   },
   {
    "id": "UnusedUserAction",
    "element": "Headless_CS (ESpace) / Notification_Create (ServerAction)",
-   "why": "Action auxiliar privada criada nesta etapa; os consumidores sao criados nas etapas seguintes."
+   "why": "Private helper action created in this step; the consumers are created in the following steps."
   },
   {
    "id": "UnusedUserAction",
    "element": "Headless_CS (ESpace) / Sla_ComputeDueDates (ServerAction)",
-   "why": "Action auxiliar privada criada nesta etapa; os consumidores sao criados nas etapas seguintes."
+   "why": "Private helper action created in this step; the consumers are created in the following steps."
   },
   {
    "id": "UnusedUserAction",
    "element": "Headless_CS (ESpace) / Ticket_AssertAccess (ServerAction)",
-   "why": "Action auxiliar privada criada nesta etapa; os consumidores sao criados nas etapas seguintes."
+   "why": "Private helper action created in this step; the consumers are created in the following steps."
   },
   {
    "id": "UnusedUserAction",
    "element": "Headless_CS (ESpace) / Ticket_CanTransition (ServerAction)",
-   "why": "Action auxiliar privada criada nesta etapa; os consumidores sao criados nas etapas seguintes."
+   "why": "Private helper action created in this step; the consumers are created in the following steps."
   },
   {
    "id": "UnusedUserAction",
    "element": "Headless_CS (ESpace) / Ticket_NextNumber (ServerAction)",
-   "why": "Action auxiliar privada criada nesta etapa; os consumidores sao criados nas etapas seguintes."
+   "why": "Private helper action created in this step; the consumers are created in the following steps."
   }
  ],
  "ops": [

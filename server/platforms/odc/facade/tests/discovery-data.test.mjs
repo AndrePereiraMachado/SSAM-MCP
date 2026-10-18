@@ -1,6 +1,7 @@
 // The data lot (phase 3, 2026-09-23): entities, attributes, identifiers (foreign keys) and indexes shared between the
 // ODC and O11 lanes, through the PUBLIC discovery entry; the selection tiers (direct / dependency / alternative) and
 // the hard byte budget. Index checks need the lane CLI built and skip otherwise; the pure checks always run.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';

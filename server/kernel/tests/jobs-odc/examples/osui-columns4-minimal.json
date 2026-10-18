@@ -1,5 +1,5 @@
 {
- "description": "Columns4 do OSUI: a instancia do bloco de colunas no MainContent, com os placeholders vazios.",
+ "description": "Columns4 of OSUI: the instance of the columns block in the MainContent, with the placeholders empty.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

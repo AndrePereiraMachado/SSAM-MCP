@@ -1,5 +1,5 @@
 {
- "description": "Frente A (catalogo abrangente), faixa ODC: a RECUSA de ligar um ramo por um conector que o no nao tem. Num If os ramos sao TrueTarget/FalseTarget; 'Then' nao existe e o link tem de ser recusado com a lista dos conectores aceites, antes de tocar no fluxo. E o diagnostico que o contrato de logic.flow devolve quando a intencao usa o nome do ramo em vez do conector.",
+ "description": "Front A (comprehensive catalog), ODC lane: the REFUSAL of linking a branch by a connector that the node does not have. In an If the branches are TrueTarget/FalseTarget; 'Then' does not exist and the link must be refused with the list of accepted connectors, before touching the flow. It is the diagnostic that the logic.flow contract returns when the intent uses the branch name instead of the connector.",
  "base": "job:logic-steps",
  "expectValid": true,
  "expectError": [

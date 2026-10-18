@@ -1,16 +1,16 @@
 {
- "description": "ODC: evento de bloco de ponta a ponta sobre o InsuranceApp do tenant pessoal. O bloco WfRatingPicker declara o evento OnRate (obrigatorio, com os parametros Rating e Comment) e dispara-o com um ITriggerNode; a tela WfRatingDemo instancia o bloco pela autoria VISUAL (op html com parent, seccao 3.5 / docs/UI-HTML-VISUAL.md: `<Block name @OnRate=...>` liga o handler pelo nome) e o handler WfRateReceived usa os dois parametros que chegaram. Equivalente ODC de tests/jobs/block-events-reactive.json.",
+ "description": "ODC: block event end to end on the InsuranceApp of the personal tenant. The block WfRatingPicker declares the event OnRate (mandatory, with the parameters Rating and Comment) and fires it with an ITriggerNode; the screen WfRatingDemo instantiates the block through VISUAL authoring (html op with parent, section 3.5 / docs/UI-HTML-VISUAL.md: `<Block name @OnRate=...>` links the handler by name) and the handler WfRateReceived uses the two parameters that arrived. ODC equivalent of tests/jobs/block-events-reactive.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfRatingPicker", "as": "$blk", "_why": "1. o bloco que produz o evento"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfRatingPicker", "as": "$blk", "_why": "1. the block that produces the event"},
   {"op": "create", "parent": "$blk", "type": "IInputParameter", "name": "Caption", "as": "$blkIn"},
   {"op": "set", "target": "$blkIn", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$blk", "type": "ILocalVariable", "name": "Score", "as": "$score"},
   {"op": "set", "target": "$score", "prop": "DataType", "value": "Integer"},
 
-  {"op": "create", "parent": "$blk", "type": "IBlockEvent", "name": "OnRate", "as": "$ev", "_why": "2. contrato do evento; obrigatorio, para o consumidor ter de ligar handler"},
+  {"op": "create", "parent": "$blk", "type": "IBlockEvent", "name": "OnRate", "as": "$ev", "_why": "2. event contract; mandatory, so the consumer has to link a handler"},
   {"op": "set", "target": "$ev", "prop": "Description", "value": "Disparado quando o utilizador escolhe uma nota no bloco"},
   {"op": "set", "target": "$ev", "prop": "IsMandatory", "value": true},
   {"op": "create", "parent": "$ev", "type": "IInputParameter", "name": "Rating", "as": "$evRating"},
@@ -24,7 +24,7 @@
   {"op": "create", "parent": "$body", "type": "IButton", "name": "RateButton", "as": "$btn"},
   {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Rate"},
 
-  {"op": "create", "parent": "$blk", "type": "IScreenAction", "name": "Rate", "as": "$rate", "_why": "4. disparar: ITriggerNode com o evento e os argumentos"},
+  {"op": "create", "parent": "$blk", "type": "IScreenAction", "name": "Rate", "as": "$rate", "_why": "4. fire: ITriggerNode with the event and the arguments"},
   {"op": "create", "parent": "$rate", "type": "IStartNode", "as": "$r0"},
   {"op": "create", "parent": "$rate", "type": "IAssignNode", "as": "$rAssign"},
   {"op": "set", "target": "$rAssign", "prop": "Label", "value": "BumpScore"},
@@ -42,7 +42,7 @@
   {"op": "layout", "target": "$rate"},
   {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$rate"},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfRatingDemo", "as": "$scr", "_why": "5. a tela consumidora e o handler"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfRatingDemo", "as": "$scr", "_why": "5. the consuming screen and the handler"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "\"Rating\""},
@@ -70,13 +70,13 @@
   {"op": "link", "from": "$hAssign", "to": "$h9"},
   {"op": "layout", "target": "$h"},
 
-  {"op": "html", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "file": "tests/html/visual/block-event.html", "_why": "6. a instancia e a ligacao do evento pela autoria visual, pelo nome"},
+  {"op": "html", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "file": "tests/html/visual/block-event.html", "_why": "6. the instance and the event link through visual authoring, by name"},
 
   {"op": "get", "target": "$ev"},
   {"op": "get", "target": "$trg"},
   {"op": "get", "target": "$scr/#IMobileBlockInstanceWidget/MainContent/**IMobileBlockInstanceWidget[1]"},
   {"op": "get", "target": "$scr/#IMobileBlockInstanceWidget/MainContent/**IEventHandler[1]"},
-  {"op": "usages", "target": "$ev", "_why": "o evento tem de ter a instancia da tela e o trigger do bloco como consumidores"},
+  {"op": "usages", "target": "$ev", "_why": "the event must have the screen instance and the trigger of the block as consumers"},
   {"op": "dump", "target": "$blk", "depth": 6},
   {"op": "dump", "target": "$scr", "depth": 8}
  ]

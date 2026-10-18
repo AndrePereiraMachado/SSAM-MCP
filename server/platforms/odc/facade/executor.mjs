@@ -267,6 +267,11 @@ export function hostedSpawnEnv(lane) {
   // reads a kept reading (html keys and text, a data text, an action's flow read) only of the capture it runs on
   // (ModuleIndexStore.OwnReadingsOnly).
   env.ANVIL_KEPT_READINGS = 'own';
+  // servidor/fase4-26 (a7, SD): the Studio's defaults of the screen reading (kernel StudioDefaults, marco-a5 e8f4073f) are
+  // measured on a disposable copy of the customer's module and kept per user profile (<profile>/.ssam-hybrid/studio-defaults,
+  // whose file names the module and flow measured). Hosted, the customer's own folder (state/: internal, never read back by
+  // ssam_evidence), never the server's profile or HOME shared by every customer.
+  env.SSAM_STUDIO_DEFAULTS_ROOT = path.join(context.workspace, 'state', 'studio-defaults');
   return { env, cwd };
 }
 

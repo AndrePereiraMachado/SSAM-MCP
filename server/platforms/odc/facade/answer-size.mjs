@@ -5,16 +5,47 @@ import { createHash } from 'node:crypto';
 import { fitProblems } from './refusal-problems.mjs';
 import { missingCall } from './paged-answer.mjs';
 import { VERBATIM } from './responses.mjs';
+import { writeAnswerOrigin } from './reference-files.mjs';
 
-export const ANSWER_BUDGETS = Object.freeze({ discoverFirst: 5120, receipt: 2048, refusal: 8192, read: 1536, other: 4096, plan: 4096 });
+import { ANSWER_BUDGETS, EXPANSION_DEFAULT_BYTES, RECOVERY_PART_BYTES } from './context-budget.mjs';
+export { ANSWER_BUDGETS } from './context-budget.mjs';
 const bytes = value => Buffer.byteLength(JSON.stringify(value) ?? '', 'utf8');
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const warningIdentity = value => JSON.stringify(object(value)
+  ? Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'count')) : value,
+(_key, child) => object(child) ? Object.fromEntries(Object.keys(child).sort().map(key => [key, child[key]])) : child);
+const warningCount = list => list.reduce((sum, entry) => sum + (Number.isFinite(entry?.count) ? entry.count : 1), 0);
+
+// No clone unless a duplicate exists; stable identity is part of fitAnswer's
+// idempotence contract. Complete HIGH entries are never rewritten or grouped.
+export function normalizeOutputWarnings(full) {
+  if (!object(full) || !Array.isArray(full.highWarnings) || !Array.isArray(full.warnings)) return full;
+  const high = new Map(), removed = new Map();
+  for (const entry of full.highWarnings) {
+    const key = warningIdentity(entry);
+    high.set(key, (high.get(key) ?? 0) + warningCount([entry]));
+  }
+  const warnings = full.warnings.filter(entry => {
+    const key = warningIdentity(entry);
+    if (!high.has(key)) return true;
+    removed.set(key, (removed.get(key) ?? 0) + warningCount([entry]));
+    return false;
+  });
+  if (warnings.length === full.warnings.length) return full;
+  const shown = warningCount(warnings) + warningCount(full.highWarnings);
+  const total = Math.max(Number.isFinite(full.warningsTotal) ? full.warningsTotal : 0,
+    warningCount(warnings) + [...high].reduce((sum, [key, count]) => sum + Math.max(count, removed.get(key) ?? 0), 0));
+  return { ...full, warnings,
+    ...(Number.isFinite(full.warningsTotal) || total > shown ? { warningsTotal: total } : {}) };
+}
+
 const PROSE_FIELDS = new Set(['error', 'errors', 'message', 'messages', 'warnings', 'fix', 'why', 'note', 'notes', 'hint', 'description', 'summary', 'title', 'detail', 'details', 'guidance', 'reason', 'recover', 'next']);
 const token = key => String(key).replace(/~/g, '~0').replace(/\//g, '~1');
 const pointer = keys => keys.map(k => '/' + token(k)).join('');
 const delivery = new Set(['o11_deliver', 'studio_deliver', 'ssam_job', 'o11_job']);
 export function answerKind(tool, args = {}, value) {
   if (value?.ok === false) return 'refusal';
+  if (tool === 'ssam_discover' && (args.packet || value?.schemaVersion === 'ssam-packet/1')) return 'packet';
   if (delivery.has(tool) || (tool === 'ssam_code' && (args.action ?? args.mode) === 'write')) return 'receipt';
   // X1: the answer of ssam_code plan is the launch of its subagents (fitAnswer keeps every batch's launchPrompt).
   if (tool === 'ssam_code' && (args.action ?? args.mode) === 'plan') return 'plan';
@@ -25,7 +56,13 @@ export function answerKind(tool, args = {}, value) {
 
 // directory: where the file goes (default <root>/.local/answers; a hosted session passes the customer's <ws>/o11/answers,
 // servidor/fase4-25, so the files of one customer are never in the server's root and only that customer's ssam_evidence reads them).
-export function keepAnswer(full, root, directory = path.join(root, '.local', 'answers')) {
+// origin {tool, kind?} (fix/no-internals round 4, a licensee's server): the tool whose answer this is, kept next to it
+// (reference-files.mjs writeAnswerOrigin), so ssam_evidence reads the file back as that tool's answer. None: nothing more.
+// servidor/fase4-26 a7: the product's signature (origin third), the line's directory as an option; a string in the place of
+// origin is the directory of a caller written before the a7 merge.
+export function keepAnswer(full, root, origin = null, { directory = null } = {}) {
+  if (typeof origin === 'string') { directory = origin; origin = null; }
+  directory ??= path.join(root, '.local', 'answers');
   const body = JSON.stringify(full);
   const sha256 = createHash('sha256').update(body, 'utf8').digest('hex');
   const file = path.join(directory, sha256 + '.json');
@@ -35,6 +72,7 @@ export function keepAnswer(full, root, directory = path.join(root, '.local', 'an
     fs.writeFileSync(temporary, body, 'utf8');
     fs.renameSync(temporary, file);
   }
+  if (origin) { try { writeAnswerOrigin(file, origin); } catch { /* the answer is kept; a missing origin reads it as a run's evidence */ } }
   return { file, sha256 };
 }
 
@@ -57,10 +95,10 @@ function at(value, keys) { return keys.reduce((v, k) => v?.[k], value); }
 function recoverableParts(full, paths) {
   const split = keys => {
     const value = at(full, keys);
-    if (bytes(value) < 60000 || !value || typeof value !== 'object') return [{ at: pointer(keys) }];
+    if (bytes(value) < RECOVERY_PART_BYTES || !value || typeof value !== 'object') return [{ at: pointer(keys) }];
     if (Array.isArray(value)) {
       const largest = value.reduce((size, item) => Math.max(size, bytes(item)), 1);
-      if (largest < 52000) return [{ at: pointer(keys), max: Math.min(1000, Math.max(1, Math.floor(52000 / largest))) }];
+      if (largest < RECOVERY_PART_BYTES) return [{ at: pointer(keys), max: Math.min(1000, Math.max(1, Math.floor(RECOVERY_PART_BYTES / largest))) }];
     }
     return Object.keys(value).flatMap(k => split([...keys, k]));
   };
@@ -76,28 +114,42 @@ function recoveryCall(full, file, paths) {
   return omitted;
 }
 
-export function fitAnswer(tool, args = {}, full, { root, directory, budgets = ANSWER_BUDGETS } = {}) {
+export function fitAnswer(tool, args = {}, full, { root, directory, budgets = ANSWER_BUDGETS, origin = null } = {}) {
+  const originalFull = full;
+  full = normalizeOutputWarnings(full);
   if (VERBATIM.has(tool) || full?.omitted?.tool === 'ssam_evidence' || full?.paged) return full;
   // Work packets own their budget. Explicit expansions retain their requested content;
-  // only the surrounding metadata is fitted, at their requested (normally 40 KB) budget.
-  if (tool === 'ssam_discover' && (full?.schemaVersion === 'ssam-packet/1' || args.packet)) return full;
+  // only the surrounding metadata is fitted, at their requested (normally the shared expansion budget) budget.
+  if (tool === 'ssam_discover' && (['ssam-packet/1', 'ssam-packet-part/1'].includes(full?.schemaVersion) || args.packet)) return full;
+  if (full?.schemaVersion === 'ssam-tool-definition/1') return full;
   const expanded = tool === 'ssam_discover' && ['expand', 'detail', 'type', 'catalog'].some(k => args[k]);
   const kind = answerKind(tool, args, full);
-  const budget = tool === 'ssam_discover' && Number.isFinite(args.budgetBytes) ? args.budgetBytes : expanded ? 40960 : (budgets[kind] ?? ANSWER_BUDGETS[kind]);
+  const budget = tool === 'ssam_discover' && Number.isFinite(args.budgetBytes) ? args.budgetBytes : expanded ? EXPANSION_DEFAULT_BYTES : (budgets[kind] ?? ANSWER_BUDGETS[kind]);
   if (!object(full)) {
     if (bytes(full) <= budget) return full;
-    const saved = keepAnswer(full, root, directory);
+    const saved = keepAnswer(originalFull, root, origin, { directory });
     return { ok: true, ...(Array.isArray(full) ? { count: full.length } : {}), omitted: recoveryCall(full, saved.file, [[]]) };
   }
   const value = structuredClone(full), changed = [];
-  const mark = keys => { if (!changed.some(p => pointer(p) === pointer(keys))) changed.push(keys); };
-  const remove = (parent, key, keys) => { if (Object.hasOwn(parent, key)) { delete parent[key]; mark(keys); } };
+  const mark = keys => {
+    // Normalization removes array entries. Recover any later prose cut from the
+    // original warnings list, whose indexes precede that normalization.
+    if (full !== originalFull && keys[0] === 'warnings') keys = ['warnings'];
+    if (!changed.some(p => pointer(p) === pointer(keys))) changed.push(keys);
+  };
+  const remove = (parent, key, keys) => { if (Object.hasOwn(parent, key)) {
+    if (parent === value && key === 'warnings' && Array.isArray(parent.warnings)) {
+      const total = warningCount(parent.warnings) + warningCount(parent.highWarnings ?? []);
+      parent.warningsTotal = Math.max(Number.isFinite(parent.warningsTotal) ? parent.warningsTotal : 0, total);
+    }
+    delete parent[key]; mark(keys);
+  } };
   const measured = v => bytes(kind === 'read' ? answerEnvelope(v) : v);
   let saved;
   const withOmitted = () => {
     if (!changed.length) return value;
-    saved ??= keepAnswer(full, root, directory);
-    return { ...value, ...(typeof full.omitted === 'number' ? { omittedCount: full.omitted } : {}), omitted: recoveryCall(full, saved.file, changed) };
+    saved ??= keepAnswer(originalFull, root, origin, { directory });
+    return { ...value, ...(typeof full.omitted === 'number' ? { omittedCount: full.omitted } : {}), omitted: recoveryCall(originalFull, saved.file, changed) };
   };
   const tooLarge = () => measured(withOmitted()) > budget;
 
@@ -135,11 +187,24 @@ export function fitAnswer(tool, args = {}, full, { root, directory, budgets = AN
   // Repeated explanation is removed even for answers below their byte budget. A call's
   // arguments are executable data, not prose, and read payloads are deliberately untouched.
   const seen = new Set();
+  // HIGH prose has priority, but A03 forbids rewriting any HIGH entry. Seed the
+  // same editorial strings before deduplicating the rest of the answer.
+  const rememberHighProse = (node, proseArray = false) => {
+    if (!node || typeof node !== 'object') return;
+    for (const [key, child] of Object.entries(node)) {
+      if (key === 'arguments' && typeof node.tool === 'string') continue;
+      if (typeof child === 'string' && child.length >= 40 && (PROSE_FIELDS.has(key) || (Array.isArray(node) && proseArray))) seen.add(child);
+      else rememberHighProse(child, Array.isArray(child) && (PROSE_FIELDS.has(key) || proseArray));
+    }
+  };
+  rememberHighProse(value.highWarnings);
   const deduplicate = (node, keys = [], proseArray = false) => {
     if (!node || typeof node !== 'object') return;
     const priority = key => key === 'highWarnings' ? -2 : key === 'problems' ? -1 : 0;
     const entries = Object.entries(node).sort(([a], [b]) => priority(a) - priority(b));
     for (const [key, child] of entries) {
+      if (key === 'highWarnings') continue; // A03: every HIGH entry stays complete, including repeated prose.
+      if (key === 'studioWrites') continue; // fix-ext-refs round 4 (N6): the protected declaration of the Studio writes stays whole.
       if (key === 'arguments' && typeof node.tool === 'string') continue;
       if (kind === 'read' && keys.length === 0 && !READ_ENVELOPE.has(key)) continue;
       if (typeof child === 'string' && child.length >= 40 && (PROSE_FIELDS.has(key) || (Array.isArray(node) && proseArray))) {
@@ -157,6 +222,18 @@ export function fitAnswer(tool, args = {}, full, { root, directory, budgets = AN
   }
   if (expanded) {
     for (const key of ['hint', 'identity', 'coverage', 'lexical', 'notes', 'elapsedMs', 'size', 'nextCalls']) {
+      if (!tooLarge()) break;
+      remove(value, key, [key]);
+    }
+  }
+
+  // An explicit expansion can share its response with a large model answer. Recovery
+  // metadata is attached after the engine fits that model, so the model may still
+  // overflow the requested budget after the editorial envelope has yielded. Keep
+  // every named expansion and its next page intact; recover other sections exactly.
+  if (expanded && kind !== 'refusal' && object(value.expansions) && tooLarge()) {
+    const keep = new Set(['ok', 'code', 'error', 'problems', 'result', 'schemaVersion', 'lane', 'intent', 'expansions', 'expansionsReduced', 'expansionsOmitted', 'continuation', 'continuations', 'highWarnings']);
+    for (const key of Object.keys(value).filter(k => !keep.has(k)).sort((a, b) => bytes(value[b]) - bytes(value[a]))) {
       if (!tooLarge()) break;
       remove(value, key, [key]);
     }
@@ -208,7 +285,9 @@ export function fitAnswer(tool, args = {}, full, { root, directory, budgets = AN
       remove(value, key, [key]);
     }
   }
-  const protectedKeys = new Set(['ok', 'result', 'code', 'error', 'module', 'nextBasedOn', 'continuation', 'highWarnings', 'removed', 'removedTotal', 'counts', 'problems', 'grouped', 'verifiedPatch', 'patchIn',
+  // fix-ext-refs round 3 (F1): studioWrites, the short declaration of every Studio write a delivery made outside its merge
+  // (o11-cycle.mjs studioWritesOf), is never dropped: the person always sees that the Studio changed the module.
+  const protectedKeys = new Set(['ok', 'result', 'code', 'error', 'module', 'nextBasedOn', 'continuation', 'highWarnings', 'removed', 'removedTotal', 'counts', 'problems', 'grouped', 'verifiedPatch', 'patchIn', 'studioWrites',
     // The generators' receipts, compacted above, and the launch of a plan.
     ...(kind === 'receipt' ? ['integration', 'entityActions'] : []), ...(kind === 'plan' ? ['lane', 'action', 'planId', 'dir', 'data', 'batches', 'final', 'launch'] : [])]);
   if (kind !== 'read' && !expanded) {
@@ -232,7 +311,7 @@ export function fitAnswer(tool, args = {}, full, { root, directory, budgets = AN
 }
 
 export function fitResult(tool, args, result, options) {
-  if (VERBATIM.has(tool) || !Array.isArray(result?.content)) return result;
+  if (!Array.isArray(result?.content)) return result;
   let full = result.structuredContent;
   if (full === undefined && result.content.length === 1 && result.content[0]?.type === 'text') {
     try { full = JSON.parse(result.content[0].text); } catch { full = result.content[0].text; }

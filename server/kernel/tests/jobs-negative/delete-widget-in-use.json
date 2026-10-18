@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA do delete de um WIDGET consumido por outro widget: um Label aponta para o Input Email_Input pela propriedade TargetWidget. Sem force o delete do Input tem de ser recusado E a mensagem tem de nomear o Label (o caminho limpo esta em tests/jobs/delete-interface-consumers.json).",
+ "description": "The REFUSAL of the delete of a WIDGET consumed by another widget: a Label points to the Input Email_Input through the property TargetWidget. Without force the delete of the Input has to be refused AND the message has to name the Label (the clean path is in tests/jobs/delete-interface-consumers.json).",
  "base": "job:screen-form-reactive",
  "expectValid": true,
  "expectError": [

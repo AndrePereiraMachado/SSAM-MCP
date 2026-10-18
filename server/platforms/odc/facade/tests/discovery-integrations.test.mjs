@@ -2,6 +2,7 @@
 // and a declared gap on ODC; the OpenAPI import has its own capability; deleting a REST method shows the delete operation
 // with the consumer and words preconditions and the proof jobs. Real answers over a private index built with each lane's
 // CLI of this checkout (no Studio, no reader, no worker).
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';

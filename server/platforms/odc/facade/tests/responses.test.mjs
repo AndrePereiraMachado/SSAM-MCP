@@ -1,6 +1,7 @@
 // responses.mjs: shell hints become MCP calls (text + continuation), studio_deliver answers `entregue` or the
 // essentials of a refusal, and the whole pass is cheap enough to wrap every tool answer. Pure: no Studio, no I/O
 // besides reading the kernel's stamped hint texts from this checkout.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -157,9 +158,9 @@ test('fast enough to wrap every answer: big strings and big objects', () => {
 test('studio_deliver: a delivered integration job keeps its integration reports (contract I7)', () => {
   const integration = [{ op: 'rest', client: { name: 'ViaCepApi', key: 'k1', created: true }, imported: ['IRestAction:GetAddressByCep'], skipped: [], updated: [], removed: [], consumersBroken: [], warnings: [] }];
   const answer = { ok: true, merged: true, strictlyEqual: true, steps: [{ step: 'merge' }], totalSeconds: 3, integration, integrationTotal: 12 };
-  assert.deepEqual(compactDelivery('studio_deliver', {}, answer), { ok: true, result: 'entregue', integration, integrationTotal: 12 });
+  assert.deepEqual(compactDelivery('studio_deliver', {}, answer), { ok: true, result: 'delivered', integration, integrationTotal: 12 });
   // A refused delivery that was delivered before the publish failed keeps it too; a plain refusal has none to keep.
-  assert.deepEqual(compactDelivery('studio_deliver', {}, { ok: false, result: 'entregue', failed: 'publish', error: 'p', integration }).integration, integration);
+  assert.deepEqual(compactDelivery('studio_deliver', {}, { ok: false, result: 'delivered', failed: 'publish', error: 'p', integration }).integration, integration);
 });
 
 test('studio_deliver: merged and strictly equal answers entregue; a refusal keeps only what the model acts on', () => {
@@ -167,8 +168,8 @@ test('studio_deliver: merged and strictly equal answers entregue; a refusal keep
   // The manifest stays and, not published, the publication is named (atritos-a-publish.test.mjs).
   const delivered = compactDelivery('studio_deliver', {}, merged);
   assert.deepEqual({ ...delivered, continuation: delivered.continuation.tool + ' ' + JSON.stringify(delivered.continuation.arguments) },
-    { ok: true, result: 'entregue', manifest: 'm', continuation: 'studio_publish {"module":"M"}' });
-  assert.deepEqual(compactDelivery('studio_deliver', { until: 'merge' }, { ok: true, feature: 'F', merge: { merged: true, strictlyEqual: true } }), { ok: true, result: 'entregue' });
+    { ok: true, result: 'delivered', manifest: 'm', continuation: 'studio_publish {"module":"M"}' });
+  assert.deepEqual(compactDelivery('studio_deliver', { until: 'merge' }, { ok: true, feature: 'F', merge: { merged: true, strictlyEqual: true } }), { ok: true, result: 'delivered' });
   // Not strictly equal is not `entregue` (the kernel path already refuses it; a C# feature answer passes as it is, without timings).
   const loose = compactDelivery('studio_deliver', {}, { ok: true, feature: 'F', merge: { merged: true, strictlyEqual: false }, steps: [], totalSeconds: 3 });
   assert.equal(loose.result, undefined); assert.equal(loose.steps, undefined); assert.equal(loose.totalSeconds, undefined); assert.equal(loose.merge.strictlyEqual, false);
@@ -210,13 +211,13 @@ test('shapeToolResult: structured answers, JSON text answers and plain text answ
   // A delivery: entregue, in both the structured value and the text.
   const delivered = { content: [{ type: 'text', text: '{}' }], structuredContent: { ok: true, merged: true, strictlyEqual: true, steps: [] } };
   const d = shapeToolResult('studio_deliver', { feature: 'F' }, delivered);
-  assert.deepEqual(d.structuredContent, { ok: true, result: 'entregue' }); assert.equal(d.content[0].text, '{"ok":true,"result":"entregue"}');
+  assert.deepEqual(d.structuredContent, { ok: true, result: 'delivered' }); assert.equal(d.content[0].text, '{"ok":true,"result":"delivered"}');
   // A proxied answer with JSON only in its text (the O11 server): parsed, shaped, written back as text.
   const proxied = { content: [{ type: 'text', text: JSON.stringify({ ok: true, hint: 'see anvil api --name X' }) }] };
   const p = shapeToolResult('propose', {}, proxied);
   assert.equal(p.structuredContent, undefined);
   assert.deepEqual(JSON.parse(p.content[0].text), { ok: true, hint: 'see ssam_reference {lane:"o11", kind:"api", query:"X"}',
-    nextCalls: [{ tool: 'ssam_reference', arguments: { lane: 'o11', kind: 'api', query: 'X' }, why: 'contrato da Model API / das ops do kernel da faixa' }] });
+    nextCalls: [{ tool: 'ssam_reference', arguments: { lane: 'o11', kind: 'api', query: 'X' }, why: 'contract of the Model API / of the kernel ops of the lane' }] });
   // Plain text: the text itself.
   const text = shapeToolResult('context', {}, { content: [{ type: 'text', text: 'blocked: run odc attach' }] });
   assert.equal(text.content[0].text, 'blocked: call studio_attach {}');
@@ -242,7 +243,7 @@ test('shapeToolResult adds the next read of a capture and keeps the exact texts'
   const r = shapeToolResult('studio_snapshot', { module: 'Orders' }, { content: [{ type: 'text', text: JSON.stringify(shot) }], structuredContent: shot });
   assert.deepEqual(r.structuredContent.next.map(c => c.tool), ['ssam_map', 'studio_inspect']);
   assert.deepEqual(r.structuredContent.next[1].arguments, { target: shot.path, expectedSourceSha256: sha });
-  for (const [tool, word] of [['o11_deliver', 'entregue'], ['o11_publish', 'publicado'], ['o11_deliver', 'fechada']]) {
+  for (const [tool, word] of [['o11_deliver', 'delivered'], ['o11_publish', 'published'], ['o11_deliver', 'closed']]) {
     const reply = { content: [{ type: 'text', text: word }], structuredContent: { ok: true, result: word } };
     assert.equal(shapeToolResult(tool, { authorize: 'pode, sim' }, reply), reply);
   }
@@ -256,11 +257,11 @@ test('ssam_evidence passes untouched: the evidence says what its file says, and 
   assert.match(JSON.stringify(shapeToolResult('o11_job', {}, reply, { lane: 'o11' }).structuredContent), /o11_deliver/);
 });
 
-// 2026-10-12: "entregue" carries what the job created (job-summary.mjs), so no ssam_map follows the delivery.
-test('a delivered studio_deliver keeps the summary of the job beside "entregue"; a refusal never carries one', () => {
+// 2026-10-12: "delivered" carries what the job created (job-summary.mjs), so no ssam_map follows the delivery.
+test('a delivered studio_deliver keeps the summary of the job beside "delivered"; a refusal never carries one', () => {
   const summary = { ops: 2, actions: ['Pedido_Get(PedidoId: Pedido Identifier) -> (Pedido: Pedido)'], entities: [{ name: 'Pedido', attributes: 3 }] };
   const delivered = compactDelivery('studio_deliver', {}, { ok: true, feature: 'F', merge: { merged: true, strictlyEqual: true }, summary, steps: [], totalSeconds: 4 });
-  assert.deepEqual(delivered, { ok: true, result: 'entregue', summary });
+  assert.deepEqual(delivered, { ok: true, result: 'delivered', summary });
   const refused = compactDelivery('studio_deliver', {}, { ok: false, failed: 'build', error: 'x', summary });
   assert.equal(refused.summary, undefined);
 });

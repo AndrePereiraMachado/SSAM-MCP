@@ -1,5 +1,5 @@
 {
- "description": "Static entity com registros num Dropdown: spec cria ExpenseCategory (Travel, Meals, Office) e Expense com FK; a tela le a static por aggregate ordenado, liga o Dropdown ao campo FK de um record local e usa Entities.ExpenseCategory.Travel no OnInitialize e numa expressao.",
+ "description": "A static entity with records in a Dropdown: the spec creates ExpenseCategory (Travel, Meals, Office) and Expense with an FK; the screen reads the static with a sorted aggregate, binds the Dropdown to the FK field of a local record and uses Entities.ExpenseCategory.Travel in OnInitialize and in an expression.",
  "base": "reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],

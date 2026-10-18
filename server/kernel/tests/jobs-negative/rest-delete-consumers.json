@@ -1,5 +1,5 @@
 {
- "description": "Op rest com remove de um metodo que tem chamador: recusada com DELETE_HAS_CONSUMERS nomeando o caminho do chamador, nada apagado (o chamador sai antes no mesmo job, ou breaks o nomeia).",
+ "description": "Op rest with remove of a method that has a caller: refused with DELETE_HAS_CONSUMERS naming the path of the caller, nothing deleted (the caller is removed first in the same job, or breaks names it).",
  "base": "job:rest-consume-call",
  "expectError": ["delete: refused", "GetAddressByCep", "Cep_Lookup", "breaks"],
  "ops": [

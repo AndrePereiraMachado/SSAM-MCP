@@ -1,5 +1,5 @@
 {
- "description": "Estado vazio com If: enquanto o aggregate busca mostra 'Loading', vazio mostra uma mensagem, e com dados mostra a List (If aninhado no ramo False).",
+ "description": "An empty state with If: while the aggregate fetches it shows 'Loading', empty it shows a message, and with data it shows the List (an If nested in the False branch).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -11,7 +11,7 @@
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:SalesOrder"}},
 
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IIfWidget", "name": "IsLoading", "as": "$loading"},
-  {"op": "set", "target": "$loading", "prop": "Condition", "value": "not GetOrders.IsDataFetched", "_why": "IsDataFetched e falso enquanto a busca corre"},
+  {"op": "set", "target": "$loading", "prop": "Condition", "value": "not GetOrders.IsDataFetched", "_why": "IsDataFetched is false while the fetch runs"},
   {"op": "create", "parent": "$loading/TrueBranch", "type": "IExpression", "as": "$wait"},
   {"op": "set", "target": "$wait", "prop": "Value", "value": "\"Loading...\""},
   {"op": "create", "parent": "$loading/FalseBranch", "type": "IIfWidget", "name": "IsEmpty", "as": "$empty"},

@@ -1,5 +1,5 @@
 {
- "description": "O espelho de tests/jobs-negative/move-foreign-sibling.json na faixa ODC: before/after do move so aceita um irmao do MESMO pai, e a mensagem nomeia os dois caminhos. Sem a recusa a plataforma cai na mesma asserção interna (`Condition is false`) nas duas faixas. Roda em OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane. O caminho limpo esta em tests/jobs-odc/refactor-move.json.",
+ "description": "The mirror of tests/jobs-negative/move-foreign-sibling.json in the ODC lane: before/after of the move only accepts a sibling of the SAME parent, and the message names the two paths. Without the refusal the platform falls into the same internal assertion (`Condition is false`) in both lanes. Runs in OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane. The clean path is in tests/jobs-odc/refactor-move.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectError": [

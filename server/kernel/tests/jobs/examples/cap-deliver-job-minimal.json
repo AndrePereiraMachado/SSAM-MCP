@@ -1,11 +1,11 @@
 {
- "description": "Forma minima de um job entregavel: description, base, expectValid, expectedMessages e uma op. Aqui uma op logic cria uma funcao de servidor. Na entrega o base e o snapshot do modulo aberto (o11_deliver).",
+ "description": "Minimal form of a deliverable job: description, base, expectValid, expectedMessages and one op. Here a logic op creates a server function. On delivery the base is the snapshot of the open module (o11_deliver).",
  "base": "blank-service.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
   {"op": "logic", "data": {"actions": [
-   {"name": "Text_Initials", "kind": "server", "public": true, "function": true, "description": "Inicial maiuscula do nome",
+   {"name": "Text_Initials", "kind": "server", "public": true, "function": true, "description": "Initial capital letter of the name",
     "inputs": [{"name": "FullName", "type": "Text"}],
     "outputs": [{"name": "Initials", "type": "Text"}],
     "steps": [{"assign": {"Initials": "ToUpper(Substr(Trim(FullName), 0, 1))"}, "as": "TakeFirstLetter"}]}]}}

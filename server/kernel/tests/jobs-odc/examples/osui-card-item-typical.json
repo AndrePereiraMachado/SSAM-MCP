@@ -1,5 +1,5 @@
 {
- "description": "CardItem do OSUI por linha: icone no Left, codigo no Title, data no Content e total no Right, cada um ligado ao registro.",
+ "description": "CardItem of OSUI per row: an icon in Left, the code in Title, the date in Content and the total in Right, each bound to the record.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

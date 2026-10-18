@@ -1,5 +1,5 @@
 {
- "description": "Carousel do OSUI: List de produtos no CarouselItems com foto externa, navegacao por pontos e OnSlideMoved guardando o indice.",
+ "description": "Carousel of OSUI: a List of products in CarouselItems with an external photo, navigation by dots and OnSlideMoved keeping the index.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

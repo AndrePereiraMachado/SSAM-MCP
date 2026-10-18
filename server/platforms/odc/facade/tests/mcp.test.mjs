@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -47,13 +48,15 @@ test('facade serves studio_* and odc_* tools on one stdio server', async () => {
     // Offline, an invalid spec is refused before anything runs.
     const invalid = await client.callTool({ name: 'odc_external_library', arguments: { action: 'build', spec: { name: '9Lib', actions: [] } } });
     assert.equal(invalid.isError, true); assert.equal(invalid.structuredContent.code, 'EXTERNAL_LIBRARY_SPEC_INVALID');
-    assert.match(client.getInstructions(), /ODC Studio session first.*headless HTTP.*Windows vault.*private Windows prompt only when the tenant has nothing stored/);
-    // The map is the first read of an application, both lanes, read-only; the instructions say so.
+    assert.match(client.getInstructions(), /Studio session first.*Windows-vault credential next.*private Windows prompt only when none is stored/);
+    // The map is the first read of an application, both lanes, read-only. On this standalone server the instruction
+    // leaves the map rules to ssam_map's own served description (server-instructions.mjs ODC_RULES_IN_TOOLS).
     const map = tools.find(t => t.name === 'ssam_map');
     assert.equal(map.annotations.readOnlyHint, true);
     assert.deepEqual(map.inputSchema.properties.lane.enum, ['odc', 'o11']);
     assert.ok(map.inputSchema.properties.role.enum.includes('screen'));
-    assert.match(client.getInstructions(), /To read an application, start with ssam_map \{lane, target, view:"digest"\}: the whole module as text, in pages.*read it once and work in context\. ssam_map \{lane, target\} lists every element with its @key.*studio_inspect only to go deeper into an @key \(path "@<key>" with expectedSourceSha256\)/);
+    assert.match(map.description, /view "digest".*Read it once and work in context; inspect only to go deeper into an @key/);
+    assert.match(map.description, /continuations\.inspect is the exact studio_inspect \(ODC\) or o11_inspect \(O11\) call for a subtree, properties or usages by @key with expectedSourceSha256/);
     // logic: the view flow under the word of ssam_code (part logic).
     assert.deepEqual(map.inputSchema.properties.view.enum, ['map', 'digest', 'ddl', 'flow', 'search', 'uses', 'html', 'logic']);
     assert.match(map.description, /ssam_code/);
@@ -67,7 +70,7 @@ test('facade serves studio_* and odc_* tools on one stdio server', async () => {
     assert.ok(map.inputSchema.properties.target.anyOf.some(s => s.type === 'array'), 'target takes a list');
     assert.ok(map.inputSchema.properties.expectedSourceSha256.anyOf.some(s => s.type === 'array'), 'one hash per target');
     for (const field of ['text', 'regex', 'property', 'element']) assert.ok(map.inputSchema.properties[field], field);
-    assert.match(client.getInstructions(), /Cross-cutting questions .*: ONE ssam_map call, view "search" \{text\} or view "uses" \{element\}/);
+    assert.match(map.description, /Cross-cutting questions in ONE call.*Use these instead of inspecting element by element/);
     assert.match(tools.find(t => t.name === 'studio_inspect').description, /Start with ssam_map/);
     assert.ok(names.includes('ssam_debug'));
     assert.ok(!names.includes('studio_debug'));

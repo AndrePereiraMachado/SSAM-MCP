@@ -1,5 +1,5 @@
 {
- "description": "Op rest-expose (REST exposto declarativo): o servico CepService com GET /cep/{Cep} mapeado para a server action CepInfo_Get (chamada e atribuicao geradas, Start e End do proprio metodo).",
+ "description": "Rest-expose op (declarative exposed REST): the service CepService with GET /cep/{Cep} mapped to the server action CepInfo_Get (call and assignment generated, Start and End of the method itself).",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "ops": [

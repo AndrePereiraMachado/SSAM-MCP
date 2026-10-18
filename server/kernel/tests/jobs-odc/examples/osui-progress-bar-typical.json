@@ -1,5 +1,5 @@
 {
- "description": "ProgressBar do OSUI com dados: Progress calculado do aggregate (feitas sobre total), cores, espessura e o percentual no Content.",
+ "description": "ProgressBar of OSUI with data: Progress computed from the aggregate (done over total), colors, thickness and the percentage in the Content.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

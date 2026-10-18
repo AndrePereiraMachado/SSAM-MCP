@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';
 import {isolateOdcBrowserInstrumentation} from '../debug-odc-browser-instrumentation.mjs';
 test('native factory is retained and transport controls do not replace logger, tracer or debugger callbacks',async()=>{

@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';
 import {mobileBinaryUploadApproval,mobileBinaryContent,MOBILE_FILE_UPLOAD,MOBILE_FILE_SAVE} from '../runtime/mobile-binary-upload.mjs';
 import {mobileBinarySaveApproval,mobileBinarySaveObservation} from '../runtime/mobile-binary-save.mjs';

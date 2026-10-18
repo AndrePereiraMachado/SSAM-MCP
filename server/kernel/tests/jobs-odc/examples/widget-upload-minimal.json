@@ -1,5 +1,5 @@
 {
- "description": "Upload: um IUpload grava o conteudo e o nome do arquivo em duas variaveis da tela (Binary Data e Text).",
+ "description": "Upload: an IUpload saves the content and the name of the file in two screen variables (Binary Data and Text).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -11,7 +11,7 @@
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "FileName", "as": "$name"},
   {"op": "set", "target": "$name", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IUpload", "name": "AttachmentUpload", "as": "$up"},
-  {"op": "set", "target": "$up", "prop": "FileContent", "value": "FileContent", "_why": "FileContent e FileName sao obrigatorios"},
+  {"op": "set", "target": "$up", "prop": "FileContent", "value": "FileContent", "_why": "FileContent and FileName are required"},
   {"op": "set", "target": "$up", "prop": "FileName", "value": "FileName"}
  ]
 }

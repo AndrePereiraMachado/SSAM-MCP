@@ -1,5 +1,5 @@
 {
- "description": "Accordion do OSUI: perguntas frequentes vindas de uma entidade, um AccordionItem por linha de uma List, MultipleItems ligado e OnToggle contando as aberturas.",
+ "description": "Accordion of OSUI: frequently asked questions from an entity, one AccordionItem per row of a List, MultipleItems on and OnToggle counting the openings.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

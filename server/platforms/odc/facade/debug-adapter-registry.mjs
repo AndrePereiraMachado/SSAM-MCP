@@ -6,6 +6,7 @@
 // interactive: true | false (refused, refusalCode) | 'excluded' | 'native-limit' | 'legacy'.
 // dependsOn: keys of debug-foreign-pending.mjs (SC/Portal files the row needs at run time, port D7). While one is
 // pending, an interactive row is 'unavailable': not admitted and described as such; it turns on when the file arrives.
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -180,7 +181,7 @@ export function dispatcherBranches(lane, source) {
 const MESSAGES = deep({
   server: 'server inspection requires native-entry trace:full; explicit anonymous context requires an original endpoint',
   client: 'client inspection needs an original native-entry run with trace:none' });
-const satisfies = (requires = {}, run) => (!requires.launch || !!run.launch) && (!requires.words || !!run.words?.trim()) &&
+const satisfies = (requires = {}, run) => (!requires.launch || !!run.launch) && (!requires.words || wordsGiven(run.words)) &&
   (!requires.launchContextMode || run.launch?.contextMode === requires.launchContextMode) &&
   (requires.launchInputs !== 'empty' || Object.keys(run.launch?.inputs ?? {}).length === 0) && (requires.workflow !== false || !run.workflow) &&
   (!requires.trigger || run.trigger === requires.trigger) && (requires.launch !== false || run.launch === undefined);

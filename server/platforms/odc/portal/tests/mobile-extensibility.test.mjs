@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';
 import {MOBILE_EXTENSIBILITY_PATCH as operationId,extensibilityChanges,extensibilityStateHash,extensibilityExpectation,verifyExtensibility} from '../runtime/mobile-extensibility.mjs';
 import {mobileConfigurationApproval,mobileConfigurationHash} from '../runtime/mobile-configuration-approval.mjs';

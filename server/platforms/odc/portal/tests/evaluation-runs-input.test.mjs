@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';
 import {evaluationRunsInput} from '../runtime/evaluation-runs-input.mjs';
 test('run search derives current native Id records and refuses an unproven filter',async()=>{

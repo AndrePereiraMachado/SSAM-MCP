@@ -9,6 +9,7 @@
 // the natives resolve in each lane runtime; intents of other fronts that share words (If widget, UI flow, REST call,
 // security role, process flow, database connector) never select logic.flow; every answer fits the 12000-byte budget.
 // Needs the lane CLIs built (the index is built from them); skips otherwise.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';

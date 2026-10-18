@@ -1,11 +1,11 @@
 {
- "description": "Switch tipico: em cada linha da lista, ligado ao campo Done da tarefa; OnChange grava pelo wrapper Task_SetDone (server action) com o Id e o novo valor da linha.",
+ "description": "Typical Switch: on each row of the list, bound to the Done field of the task; OnChange saves through the wrapper Task_SetDone (server action) with the Id and the new value of the row.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
   {"op": "logic", "data": {"actions": [
-   {"name": "Task_SetDone", "kind": "server", "description": "Marca ou desmarca uma tarefa como concluida",
+   {"name": "Task_SetDone", "kind": "server", "description": "Marks or unmarks a task as done",
     "inputs": [{"name": "TaskId", "type": "Task Identifier"}, {"name": "Done", "type": "Boolean"}],
     "vars": [{"name": "Item", "type": "Task"}],
     "steps": [
@@ -15,7 +15,7 @@
   {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetTaskRows", "as": "$agg"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
   {"op": "logic", "data": {"actions": [
-   {"name": "DoneOnChange", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Grava o novo estado da linha",
+   {"name": "DoneOnChange", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Saves the new state of the row",
     "inputs": [{"name": "TaskId", "type": "Task Identifier"}, {"name": "Done", "type": "Boolean"}],
     "steps": [{"call": "Task_SetDone", "as": "SaveDone", "args": {"TaskId": "TaskId", "Done": "Done"}}]}]}},
   {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "TaskRows", "as": "$list"},

@@ -1,15 +1,15 @@
 {
- "description": "ODC: bloco DENTRO de bloco, com o evento a subir dois andares, sobre o InsuranceApp do tenant pessoal. WfColorPicker (interno) dispara OnPick; WfColorPanel (externo) INSTANCIA o WfColorPicker dentro de si - o consumidor de um evento de bloco nao precisa de ser uma tela - e o handler dessa instancia e uma IScreenAction do PROPRIO bloco externo (WfColorPicker1_OnPick), que reembala e dispara o SEU evento OnPicked; so a tela WfColorDemo, no topo, e que trata. A prova esta nos dois `usages`: OnPick tem o IEventHandler dentro de IMobileBlock:WfColorPanel (caminho sem nenhum IMobileScreen) e OnPicked tem o ITriggerNode dentro do handler do evento de baixo. Equivalente ODC de tests/jobs/block-events-nested-reactive.json.",
+ "description": "ODC: block INSIDE block, with the event going up two floors, over the InsuranceApp of the personal tenant. WfColorPicker (inner) fires OnPick; WfColorPanel (outer) INSTANTIATES the WfColorPicker inside itself - the consumer of a block event does not have to be a screen - and the handler of that instance is an IScreenAction of the outer block ITSELF (WfColorPicker1_OnPick), which repackages and fires ITS OWN event OnPicked; only the screen WfColorDemo, at the top, actually handles it. The proof is in the two `usages`: OnPick has the IEventHandler inside IMobileBlock:WfColorPanel (path without any IMobileScreen) and OnPicked has the ITriggerNode inside the handler of the lower event. ODC equivalent of tests/jobs/block-events-nested-reactive.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfColorPicker", "as": "$inner", "_why": "1. o bloco de baixo: quem origina o evento"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfColorPicker", "as": "$inner", "_why": "1. the lower block: who originates the event"},
   {"op": "create", "parent": "$inner", "type": "IInputParameter", "name": "Palette", "as": "$inPal"},
   {"op": "set", "target": "$inPal", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$inner", "type": "IBlockEvent", "name": "OnPick", "as": "$evIn"},
   {"op": "set", "target": "$evIn", "prop": "Description", "value": "Disparado quando uma cor e escolhida no seletor"},
-  {"op": "set", "target": "$evIn", "prop": "IsMandatory", "value": true, "_why": "obrigatorio: quem instancia TEM de tratar; quem cumpre e o bloco externo, nao uma tela"},
+  {"op": "set", "target": "$evIn", "prop": "IsMandatory", "value": true, "_why": "mandatory: whoever instantiates MUST handle it; the one that complies is the outer block, not a screen"},
   {"op": "create", "parent": "$evIn", "type": "IInputParameter", "name": "Color", "as": "$evInColor"},
   {"op": "set", "target": "$evInColor", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$inner", "type": "IButton", "name": "PickButton", "as": "$innerBtn"},
@@ -25,7 +25,7 @@
   {"op": "layout", "target": "$innerAct"},
   {"op": "set", "target": "$innerBtn/OnClick", "prop": "Destination", "value": "$innerAct"},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfColorPanel", "as": "$outer", "_why": "2. o bloco do meio: consome o de baixo e declara o seu proprio evento"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileBlock", "name": "WfColorPanel", "as": "$outer", "_why": "2. the middle block: consumes the lower one and declares its own event"},
   {"op": "create", "parent": "$outer", "type": "IInputParameter", "name": "PanelName", "as": "$outName"},
   {"op": "set", "target": "$outName", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$outer", "type": "IBlockEvent", "name": "OnPicked", "as": "$evOut"},
@@ -33,10 +33,10 @@
   {"op": "set", "target": "$evOut", "prop": "IsMandatory", "value": true},
   {"op": "create", "parent": "$evOut", "type": "IInputParameter", "name": "Color", "as": "$evOutColor"},
   {"op": "set", "target": "$evOutColor", "prop": "DataType", "value": "Text"},
-  {"op": "create", "parent": "$evOut", "type": "IInputParameter", "name": "Source", "as": "$evOutSrc", "_why": "o andar do meio ACRESCENTA o que o de baixo nao sabe"},
+  {"op": "create", "parent": "$evOut", "type": "IInputParameter", "name": "Source", "as": "$evOutSrc", "_why": "the middle floor ADDS what the lower one does not know"},
   {"op": "set", "target": "$evOutSrc", "prop": "DataType", "value": "Text"},
 
-  {"op": "create", "parent": "$outer", "type": "IScreenAction", "name": "WfColorPicker1_OnPick", "as": "$relay", "_why": "3. o repasse: handler do evento de baixo cujo corpo e um ITriggerNode do evento de cima"},
+  {"op": "create", "parent": "$outer", "type": "IScreenAction", "name": "WfColorPicker1_OnPick", "as": "$relay", "_why": "3. the pass-through: handler of the lower event whose body is an ITriggerNode of the upper event"},
   {"op": "create", "parent": "$relay", "type": "IInputParameter", "name": "Color", "as": "$relayIn"},
   {"op": "set", "target": "$relayIn", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$relay", "type": "IStartNode", "as": "$r0"},
@@ -49,12 +49,12 @@
   {"op": "link", "from": "$rTrg", "to": "$r9"},
   {"op": "layout", "target": "$relay"},
 
-  {"op": "create", "parent": "$outer", "type": "IMobileBlockInstanceWidget", "name": "WfColorPicker1", "as": "$innerInst", "source": "IMobileBlock:WfColorPicker", "_why": "4. a instancia mora DENTRO de um bloco, nao de uma tela"},
+  {"op": "create", "parent": "$outer", "type": "IMobileBlockInstanceWidget", "name": "WfColorPicker1", "as": "$innerInst", "source": "IMobileBlock:WfColorPicker", "_why": "4. the instance lives INSIDE a block, not a screen"},
   {"op": "set", "target": "$innerInst/Palette", "prop": "Value", "value": "PanelName"},
   {"op": "set", "target": "$innerInst/OnPick", "prop": "Handler", "value": "$relay"},
   {"op": "set", "target": "$innerInst/OnPick/Color", "prop": "Value", "value": "Color"},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfColorDemo", "as": "$scr", "_why": "5. o topo: a unica que trata de verdade"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfColorDemo", "as": "$scr", "_why": "5. the top: the only one that really handles it"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "\"Cores\""},
@@ -91,9 +91,9 @@
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$echo"},
   {"op": "set", "target": "$echo", "prop": "Value", "value": "PickedColor + \" via \" + PickedSource"},
 
-  {"op": "usages", "target": "$evIn", "_why": "andar de baixo: o IEventHandler esta dentro de IMobileBlock:WfColorPanel, sem IMobileScreen no caminho"},
-  {"op": "usages", "target": "$evOut", "_why": "andar de cima: o ITriggerNode esta DENTRO do handler do evento de baixo"},
-  {"op": "usages", "target": "$inner", "_why": "o bloco interno tem um unico consumidor, e e um bloco"},
+  {"op": "usages", "target": "$evIn", "_why": "lower floor: the IEventHandler is inside IMobileBlock:WfColorPanel, with no IMobileScreen in the path"},
+  {"op": "usages", "target": "$evOut", "_why": "upper floor: the ITriggerNode is INSIDE the handler of the lower event"},
+  {"op": "usages", "target": "$inner", "_why": "the inner block has a single consumer, and it is a block"},
   {"op": "get", "target": "$innerInst/#IEventHandler"},
   {"op": "dump", "target": "$outer", "depth": 6},
   {"op": "dump", "target": "$scr", "depth": 7}

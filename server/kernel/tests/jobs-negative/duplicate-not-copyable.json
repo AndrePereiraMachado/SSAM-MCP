@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA de `duplicate` de um tipo que a plataforma nao copia sozinho (faixa O11): um Sort de agregado tem CanBeRootOfImport falso (o Copy do Studio fica desligado para ele) e so viaja dentro do agregado. Nenhum destino muda isso; a mensagem diz o porque e manda duplicar o IAggregateNode ou criar outro Sort.",
+ "description": "The REFUSAL of `duplicate` of a type that the platform does not copy by itself (O11 lane): an aggregate Sort has CanBeRootOfImport false (the Studio Copy is disabled for it) and only travels inside the aggregate. No destination changes that; the message says why and tells you to duplicate the IAggregateNode or create another Sort.",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "expectError": [

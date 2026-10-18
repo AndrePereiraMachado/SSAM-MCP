@@ -8,6 +8,7 @@
 // __doPostBack with __EVENTTARGET/__EVENTARGUMENT added here; OsAjax replies are read only through their refreshed
 // "__OSVSTATE" and the HTML they carry. Pages whose layout is only ASSUMED refuse any other layout with LAYOUT_UNKNOWN
 // and the page-layout read that captures them live.
+import { wordsGiven } from '../destructive-operations.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { readCheckpoint } from '../read-budget.mjs';
@@ -1587,7 +1588,7 @@ export class Client {
   async mutate(action, moduleId, name, { value = null, secret = null, execute = false, words: userWords = null, operationId = null, journal = null } = {}) {
     const identity = { host: this.vault.host, action, moduleId: String(moduleId), name };
     if (execute) {
-      if (!userWords || !strip(userWords) || !operationId || !journal) throw new ProtocolError("Execution requires the user's words, operation-id and a durable journal");
+      if (!wordsGiven(userWords) || !strip(userWords) || !operationId || !journal) throw new ProtocolError("Execution requires the user's words, operation-id and a durable journal"); // CX15 r7
       const existing = journal.lookup(operationId, identity);
       if (existing) {
         if (action === 'timer-run') return journal.rawState(operationId) === 'sending'
@@ -2455,7 +2456,7 @@ export function bridgeFailure(error, tracker = {}, identity = null) {
 // with notSent and that value, so its target lock is released).
 export async function runWrite(identity, prepare, send, { execute, words: userWords, operationId, journal, authorizing = null, lock = null, approve = null, beforeSend = null }) {
   if (execute) {
-    if (!userWords || !strip(userWords) || !operationId || !journal) throw new ProtocolError("Execution requires the user's words, operation-id and a durable journal");
+    if (!wordsGiven(userWords) || !strip(userWords) || !operationId || !journal) throw new ProtocolError("Execution requires the user's words, operation-id and a durable journal"); // CX15 r7
     const existing = journal.lookup(operationId, identity);
     if (existing) return { ...existing, replayed: false, existingReceipt: true };
   }
@@ -2622,7 +2623,7 @@ export class Journal {
 
   // The user's explicit discard of an uncertain receipt: their words (only the sha256 is kept) close it as discarded.
   discard(receipt, userWords, now = Date.now()) {
-    if (!userWords || !strip(userWords)) throw new ProtocolError("discard needs the user's own words");
+    if (!wordsGiven(userWords) || !strip(userWords)) throw new ProtocolError("discard needs the user's own words"); // CX15 r7
     return this.resolve(receipt, 'discarded', 'discarded by the user; the outcome of the send stays unknown and nothing was sent again',
       { authorization: { wordsSha256: sha256(Buffer.from(userWords, 'utf8')) } }, now);
   }

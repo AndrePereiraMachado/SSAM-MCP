@@ -3,6 +3,7 @@
 // and the sign-in failed with "the Studio has no window". The process list says which Studio has a window (system
 // information only), connect never selects a windowless one, the record that names one is stale and the doctor lists it
 // with the fix. Fake process lists and bridges only; no Studio is touched.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { windowState, parseStudioProcesses, studioProcessScript } from '../lanes.mjs';
@@ -33,7 +34,7 @@ test('D5: the process list says whether each Studio still has a main window', ()
 
 test('D5: connect never selects a windowless Studio; asking for it by pid is STUDIO_WINDOWLESS', () => {
   assert.equal(chooseStudio([WINDOWLESS, WINDOWED]).pid, 202);
-  assert.throws(() => chooseStudio([WINDOWLESS, WINDOWED], 101), error => error.code === STUDIO_WINDOWLESS && /101/.test(error.message) && /ignora este processo/.test(error.message));
+  assert.throws(() => chooseStudio([WINDOWLESS, WINDOWED], 101), error => error.code === STUDIO_WINDOWLESS && /101/.test(error.message) && /ignores this process/.test(error.message));
   assert.throws(() => chooseStudio([WINDOWLESS]), /No matching Studio is open with a window \(STUDIO_WINDOWLESS: 101 ignored\)/);
   const studio = classifyO11([WINDOWLESS, WINDOWED], { connected: true, pid: 101 });
   assert.equal(studio.connected, false, 'a bridge in a windowless Studio does not connect the lane');
@@ -67,7 +68,7 @@ test('D5: the doctor lists windowless:[{pid}] with the fix and treats the record
   const good = await doctorO11(deps(202));
   assert.equal(good.ok, true, JSON.stringify(good.continuation));
   assert.deepEqual(good.windowless.map(w => [w.pid, w.code]), [[101, STUDIO_WINDOWLESS]]);
-  assert.match(good.windowless[0].fix, /o SSAM ignora este processo; o Studio com janela é o da lane/);
+  assert.match(good.windowless[0].fix, /SSAM ignores this process; the Studio with a window is the one of the lane/);
   const stale = await doctorO11(deps(101));
   assert.equal(stale.ok, false);
   assert.deepEqual(stale.connectionStale, { pid: 101, reason: 'windowless', code: STUDIO_WINDOWLESS });

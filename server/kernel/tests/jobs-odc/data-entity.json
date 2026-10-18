@@ -1,5 +1,5 @@
 {
- "description": "ODC (WS1): spec de dados sobre o InsuranceApp do tenant pessoal (r8): uma static entity com records e uma entidade com FK e defaults; depois um set sobre o alias gerado.",
+ "description": "ODC (WS1): data spec on the InsuranceApp of the personal tenant (r8): a static entity with records and an entity with FK and defaults; then a set on the generated alias.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "ops": [

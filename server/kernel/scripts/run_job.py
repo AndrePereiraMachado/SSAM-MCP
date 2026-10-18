@@ -53,7 +53,7 @@ def odc_lane(job: str, base: str | None, out: str | None, producers: list[str]) 
     (`anvil-odc serve`, as DLLs do Studio ja carregadas); se ele nao estiver disponivel, processo frio, que da o
     mesmo resultado, so mais lento. O envelope devolvido e o mesmo da faixa O11."""
     if not ODC_CLI.exists():
-        print(json.dumps({"ok": False, "lane": "odc", "job": job, "error": "CLI da faixa ODC nao construido",
+        print(json.dumps({"ok": False, "lane": "odc", "job": job, "error": "the CLI of the ODC lane is not built",
                           "build": "dotnet build src/Anvil.Cli.Odc -c Release -o .local/lane-odc/cli",
                           "docs": "docs/lanes.md"}, ensure_ascii=False, indent=2))
         return 1, {}
@@ -89,7 +89,7 @@ def odc_lane(job: str, base: str | None, out: str | None, producers: list[str]) 
             envelope = json.loads(done.stdout)
         except json.JSONDecodeError:
             print(json.dumps({"ok": False, "lane": "odc", "job": job, "exitCode": done.returncode,
-                              "error": "o CLI nao devolveu JSON", "stdout": (done.stdout or "")[:2000]},
+                              "error": "the CLI did not return JSON", "stdout": (done.stdout or "")[:2000]},
                              ensure_ascii=False, indent=2))
             return 1, {}
     wall = int((time.monotonic() - started) * 1000)
@@ -117,7 +117,7 @@ def capture_producers(job: str, entries: list[str], folder: pathlib.Path) -> tup
         try:
             envelope = json.loads(done.stdout)
         except json.JSONDecodeError:
-            envelope = {"ok": False, "error": "o CLI nao devolveu JSON", "stdout": (done.stdout or "")[:2000]}
+            envelope = {"ok": False, "error": "the CLI did not return JSON", "stdout": (done.stdout or "")[:2000]}
         if not envelope.get("ok"):
             raise SystemExit(json.dumps({"ok": False, "stage": "capture-producer", "producer": producer,
                                          "error": envelope.get("error")}, ensure_ascii=False, indent=2))

@@ -1,17 +1,17 @@
 {
- "description": "O espelho de tests/jobs/refactor-duplicate.json na faixa ODC, sobre o InsuranceApp do tenant pessoal: atributo, entidade inteira, widget dentro de container, screen action com os nos e a tela inteira. Prova que o verbo duplicate se comporta igual nas duas faixas -- sufixo escolhido pela plataforma, copia no fim da sequencia do mesmo pai, e copia sem consumidores.",
+ "description": "The mirror of tests/jobs/refactor-duplicate.json in the ODC lane, on the InsuranceApp of the personal tenant: attribute, whole entity, widget inside a container, screen action with its nodes and the whole screen. It proves that the duplicate verb behaves the same in both lanes -- suffix chosen by the platform, copy at the end of the sequence of the same parent, and copy without consumers.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "UnusedAction",
    "element": "WfDupScreen (MobileScreen) / Greet2 (ScreenAction)",
-   "why": "A copia de uma screen action nasce sem consumidores: e exatamente o que este job prova, e o Verify do ODC diz o mesmo que o do O11."
+   "why": "The copy of a screen action is born without consumers: that is exactly what this job proves, and the ODC Verify says the same as the O11 one."
   },
   {
    "id": "UnusedAction",
    "element": "WfDupScreen2 (MobileScreen) / Greet2 (ScreenAction)",
-   "why": "A tela copiada leva as duas actions, e a copia da copia continua sem consumidores."
+   "why": "The copied screen carries the two actions, and the copy of the copy still has no consumers."
   }
  ],
  "ops": [
@@ -49,9 +49,9 @@
   {"op": "set", "target": "$btn/#ITextWidget", "prop": "Text", "value": "Go"},
   {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$act"},
 
-  {"op": "usages", "target": "$WfDupNotice.Body", "_why": "antes de duplicar"},
+  {"op": "usages", "target": "$WfDupNotice.Body", "_why": "before duplicating"},
   {"op": "duplicate", "target": "$WfDupNotice.Body", "as": "$bodyCopy"},
-  {"op": "get", "target": "$bodyCopy", "_why": "Body2, como no O11"},
+  {"op": "get", "target": "$bodyCopy", "_why": "Body2, as in O11"},
   {"op": "usages", "target": "$bodyCopy", "_why": "zero consumidores reais"},
   {"op": "dump", "target": "$WfDupNotice", "depth": 2},
 
@@ -63,7 +63,7 @@
 
   {"op": "duplicate", "target": "$act", "as": "$actCopy"},
   {"op": "dump", "target": "$actCopy", "depth": 2},
-  {"op": "usages", "target": "$act", "_why": "o OnClick do botao continua no original"},
+  {"op": "usages", "target": "$act", "_why": "the OnClick of the button stays on the original"},
 
   {"op": "duplicate", "target": "$scr", "as": "$scrCopy"},
   {"op": "get", "target": "$scrCopy"},

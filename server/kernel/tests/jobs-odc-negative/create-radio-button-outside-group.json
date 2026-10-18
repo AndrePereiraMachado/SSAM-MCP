@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA do create de um Radio Button fora de um Radio Group. A plataforma ODC ja recusava ('A Radio Button must be placed inside a Radio Group widget.'); o kernel recusa antes, com o mesmo texto e o como fazer, igual nas duas faixas (no O11 o Verify nativo caia fora de qualquer op). Dentro do Content do grupo o create funciona: tests/jobs-odc/cat-b-choice-table.json. Cobertura testada, fase 2.",
+ "description": "ODC: the REFUSAL of the create of a Radio Button outside a Radio Group. The ODC platform already refused ('A Radio Button must be placed inside a Radio Group widget.'); the kernel refuses earlier, with the same text and the how-to, equal in both lanes (in O11 the native Verify crashed outside any op). Inside the Content of the group the create works: tests/jobs-odc/cat-b-choice-table.json. Tested coverage, phase 2.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectError": [

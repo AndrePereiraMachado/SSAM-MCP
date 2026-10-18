@@ -1,5 +1,5 @@
 {
- "description": "Job NEGATIVO (tem de falhar na COMPILACAO, antes de tocar no modelo): a spec de logica tem uma chave que nao existe ('inputz'); a mensagem lista as chaves permitidas. Mostra que o esquema e fechado.",
+ "description": "NEGATIVE job (must fail at COMPILATION, before touching the model): the logic spec has a key that does not exist ('inputz'); the message lists the allowed keys. It shows that the schema is closed.",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": false,
  "ops": [

@@ -1,5 +1,5 @@
 {
- "description": "Separator do OSUI: a instancia, sem inputs obrigatorios.",
+ "description": "Separator of OSUI: the instance, without required inputs.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

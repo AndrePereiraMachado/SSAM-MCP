@@ -1,5 +1,5 @@
 {
- "description": "Job composto: jobs concatena os ops das partes, na ordem, numa unica transacao (um merge so na entrega). O base das partes e ignorado; cada parte continua provada sozinha.",
+ "description": "Composite job: jobs concatenates the ops of the parts, in order, in one single transaction (only one merge on delivery). The base of the parts is ignored; each part stays proven on its own.",
  "base": "reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],

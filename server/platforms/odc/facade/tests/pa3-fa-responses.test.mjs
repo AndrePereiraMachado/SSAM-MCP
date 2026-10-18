@@ -1,7 +1,8 @@
 // Atritos 3, lane fa, interface I8 (C16 of lane mb lands in this shaper): a studio_deliver merge equal but for the
-// normalizations the Studio applies itself is "entregue" with normalized; a refusal that says the merge was already
+// normalizations the Studio applies itself is "delivered" with normalized; a refusal that says the merge was already
 // integrated (merged:true) keeps merged and evidence and reads it, never the same delivery. Section 5.3: the new refusal
 // codes have their continuations.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { compactDelivery, DELIVERY_FIELDS } from '../responses.mjs';
@@ -12,7 +13,7 @@ test('I8: merged with equivalence "normalized" is entregue, with normalized and 
   for (const field of ['equivalence', 'normalized', 'normalizedTotal']) assert.ok(DELIVERY_FIELDS.includes(field), field);
   const normalized = [{ element: 'Block1', rule: 'CustomNameTrio', local: '', candidate: 'Block1' }];
   const value = compactDelivery('studio_deliver', { module: 'Shop' }, { ok: true, merged: true, strictlyEqual: false, equivalence: 'normalized', normalized, normalizedTotal: 1, steps: [1] });
-  assert.equal(value.result, 'entregue');
+  assert.equal(value.result, 'delivered');
   assert.deepEqual(value.normalized, normalized); assert.equal(value.normalizedTotal, 1); assert.equal(value.equivalence, 'normalized');
   // Not normalized and not strictly equal: unchanged (the gate refuses it upstream).
   assert.equal(compactDelivery('studio_deliver', {}, { ok: true, merged: true, strictlyEqual: false, equivalence: 'uncertain' }).result, undefined);

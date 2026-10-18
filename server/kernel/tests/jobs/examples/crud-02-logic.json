@@ -1,14 +1,14 @@
 {
- "description": "CRUD back-office, parte 2 de 5 (logica): Product_Save valida role, campos e codigo repetido e faz create ou update do record recebido; Product_Delete confere o role e apaga. As telas chamam estes wrappers, nunca as entity actions.",
+ "description": "Back-office CRUD, part 2 of 5 (logic): Product_Save validates the role, the fields and a repeated code and creates or updates the record it receives; Product_Delete checks the role and deletes. The screens call these wrappers, never the entity actions.",
  "base": "job:crud-01-data",
  "expectValid": true,
  "expectedMessages": [
-  {"id": "UnusedUserAction", "element": "Product_Save (ServerAction)", "why": "O chamador (ProductEdit) chega na parte 4; no crud-all nao ha aviso."},
-  {"id": "UnusedUserAction", "element": "Product_Delete (ServerAction)", "why": "O chamador (ProductList) chega na parte 5; no crud-all nao ha aviso."}
+  {"id": "UnusedUserAction", "element": "Product_Save (ServerAction)", "why": "The caller (ProductEdit) arrives in part 4; in crud-all there is no warning."},
+  {"id": "UnusedUserAction", "element": "Product_Delete (ServerAction)", "why": "The caller (ProductList) arrives in part 5; in crud-all there is no warning."}
  ],
  "ops": [
   {"op": "logic", "data": {"actions": [
-   {"name": "Product_Save", "kind": "server", "description": "Cria ou atualiza um produto validado",
+   {"name": "Product_Save", "kind": "server", "description": "Creates or updates a validated product",
     "inputs": [{"name": "Item", "type": "Product"}],
     "outputs": [{"name": "ProductId", "type": "Product Identifier"}],
     "steps": [

@@ -1,5 +1,5 @@
 {
- "description": "RangeSliderInterval (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios MinValue, MaxValue, StartingValueFrom, StartingValueTo com valores simples; evento obrigatorio OnValueChange ligado a uma screen action vazia.",
+ "description": "Minimal RangeSliderInterval (OutSystemsUI, Interaction): an instance as the Studio creates it when the block is dragged; required inputs MinValue, MaxValue, StartingValueFrom, StartingValueTo with simple values; the required event OnValueChange bound to an empty screen action.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

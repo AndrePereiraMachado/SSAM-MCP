@@ -4,6 +4,7 @@
 // credential prompt windows open only from the two openPrompt functions; and the Portal runtime's HTTP, vault helpers
 // and Cognito login stay in the modules that have them today. A new use outside these lists fails here, so a hosted
 // call can never reach the owner's machine by a path the seam does not see.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

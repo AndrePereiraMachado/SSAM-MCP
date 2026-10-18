@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import{createHash,randomUUID}from'node:crypto';
 import{observeO11OrphanedClient,freshProcessAbsence}from'../debug-o11-client-orphan-observation.mjs';
 function fixture(t){

@@ -1,3 +1,4 @@
+import '../../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {updateLedger,readLedger,main} from './speed-ledger.mjs';
 const dirty=()=>({key:'old',workspace:'personal-'+'z'.repeat(8),wallSec:123,inputTokens:456});const clean=()=>({...dirty(),workspace:'safe-project'});

@@ -182,7 +182,7 @@ test('o11_environment delete-app and o11_extension delete take the same two call
   const other = await call({ action: 'delete-app', app: 'Other', host: PERSONAL, confirmationToken: preview.confirmationToken, authorize: 'sim, apaga o 1 ZZApp' });
   assert.equal(other.code, 'PREVIEW_OTHER_TARGET');
   const done = await call({ action: 'delete-app', host: PERSONAL, confirmationToken: preview.confirmationToken, authorize: 'sim, apaga o 1 ZZApp' });
-  assert.deepEqual([done.ok, done.state, done.result], [true, 'confirmed', 'feito']);
+  assert.deepEqual([done.ok, done.state, done.result], [true, 'confirmed', 'done']);
   // The token of o11_environment is not a token of o11_service_center_write.
   const x = environment({ extensions: [{ key: 'x-1', name: 'ZZExt' }] });
   const run = createO11Extension({ destructiveRoot: x.root, serviceCenter: (argv, extra) => runServiceCenter(argv, { ...x.deps(), ...extra }) });

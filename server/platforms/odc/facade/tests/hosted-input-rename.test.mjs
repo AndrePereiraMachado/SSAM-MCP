@@ -5,6 +5,7 @@
 // gate saw no path and the server's reader opened a file of the server or of another customer. A real hosted
 // createSsamServer with a fake ODC lane (ssam_map and studio_inspect with their read-only shapes) and the real
 // ssam_evidence; no hub, agent or Studio.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -32,6 +33,10 @@ async function hostedServer(t) {
   fs.mkdirSync(path.dirname(otherCustomer), { recursive: true }); fs.writeFileSync(otherCustomer, SECRET);
   const inside = path.join(dirs.workspace, 'o11', 'answers', 'probe.json');
   fs.mkdirSync(path.dirname(inside), { recursive: true }); fs.writeFileSync(inside, JSON.stringify({ ok: true, where: 'inside' }));
+  // a7 phase 3 (D13 of no-internals round 5, hosted): a kept answer is read back only with the origin record the server
+  // writes in <ws>/state/answer-origins (without it: ANSWER_ORIGIN_UNKNOWN, hosted-marco-a7-phase3).
+  fs.mkdirSync(path.join(dirs.workspace, 'state', 'answer-origins'), { recursive: true });
+  fs.writeFileSync(path.join(dirs.workspace, 'state', 'answer-origins', 'probe.origin'), JSON.stringify({ tool: 'ssam_doctor' }));
   const capture = path.join(dirs.workspace, 'odc', 'snapshots', 'Orders.oml');
   fs.mkdirSync(path.dirname(capture), { recursive: true }); fs.writeFileSync(capture, 'oml');
   const link = fakeAgentLink({ agentRoot: dirs.agentRoot });

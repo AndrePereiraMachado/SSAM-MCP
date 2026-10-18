@@ -1,5 +1,5 @@
 {
- "description": "DropdownSearch (OutSystemsUI) tipico: aggregate da static Priority, OnAfterFetch monta as opcoes (ForEach + ListAppend), OnChanged grava a escolha numa variavel Priority Identifier mostrada na tela.",
+ "description": "Typical DropdownSearch (OutSystemsUI): an aggregate of the static Priority, OnAfterFetch builds the options (ForEach + ListAppend), OnChanged writes the choice to a Priority Identifier variable shown on the screen.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

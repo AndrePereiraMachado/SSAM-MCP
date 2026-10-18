@@ -1,5 +1,5 @@
 {
- "description": "StaticMap do OutSystemsMaps: imagem estatica do mapa com centro e altura.",
+ "description": "StaticMap of OutSystemsMaps: a static image of the map with center and height.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

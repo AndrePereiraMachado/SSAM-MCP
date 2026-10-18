@@ -41,6 +41,10 @@ public sealed class KernelModelReader : ModelReader<IObjectSignature>
             && typeof(IObjectSignature).IsAssignableFrom(item) && !typeof(IExpression).IsAssignableFrom(item)) return 'l';
         return null;
     }
+    // The installed Studio's defaults of the screen reading for the pages of a UI flow of this module (StudioDefaults: measured
+    // once per Studio identity and context: the module and the theme of the flow).
+    protected internal override ScreenDefaults? DefaultsOf(IObjectSignature module, IObjectSignature? flow) =>
+        module is ServiceStudio.Model.ESpace espace ? StudioDefaults.For(espace, flow) : null;
     // O11 keeps the mapping of an assignment or an argument in its TypeConversion (the platform adapter reads it); ODC keeps
     // it in the expression text, and its adapter has none.
     protected internal override NativeMapping? RecordMapping(IObjectSignature node) => StudioAdapter.Runtime.Mappings?.Read(node);

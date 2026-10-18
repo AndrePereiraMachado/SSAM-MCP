@@ -1,5 +1,5 @@
 {
- "description": "O verbo move REORDENA dentro do mesmo pai e posiciona um no de fluxo na tela; mudar de pai e o `into` (tests/jobs/refactor-reparent.json). Nas tres areas: atributos de uma entidade, widgets dentro de um container, screen actions de uma tela, e o x/y de um no. Cada move devolve a ORDEM que ficou, por isso a prova esta no proprio resultado do op e nao precisa de um dump a seguir (os dumps aqui sao para quem le). O que a ordem muda de facto: atributos definem a ordem das colunas e do registo; widgets definem a ordem da pagina; x/y so mexem no desenho do fluxo. A recusa de um irmao de outro pai esta em tests/jobs-negative/move-foreign-sibling.json.",
+ "description": "The move verb REORDERS within the same parent and positions a flow node on the screen; changing parent is the `into` (tests/jobs/refactor-reparent.json). In the three areas: attributes of an entity, widgets inside a container, screen actions of a screen, and the x/y of a node. Each move returns the ORDER that remained, so the proof is in the result of the op itself and needs no dump afterwards (the dumps here are for whoever reads). What the order really changes: attributes define the order of the columns and of the record; widgets define the order of the page; x/y only change the drawing of the flow. The refusal of a sibling from another parent is in tests/jobs-negative/move-foreign-sibling.json.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "ops": [
@@ -13,8 +13,8 @@
 
   {"op": "dump", "target": "$MoveNotice", "depth": 2, "_why": "Id, Title, Body, Rank"},
   {"op": "move", "target": "$MoveNotice.Rank", "after": "$MoveNotice.Title", "_why": "Id, Title, Rank, Body"},
-  {"op": "move", "target": "$MoveNotice.Body", "first": true, "_why": "Body passa a frente do proprio Id: a API deixa, a interface do Studio nao poe nada antes do Id"},
-  {"op": "move", "target": "$MoveNotice.Body", "last": true, "_why": "e volta para o fim"},
+  {"op": "move", "target": "$MoveNotice.Body", "first": true, "_why": "Body goes ahead of the Id itself: the API allows it, the Studio interface puts nothing before the Id"},
+  {"op": "move", "target": "$MoveNotice.Body", "last": true, "_why": "and back to the end"},
   {"op": "dump", "target": "$MoveNotice", "depth": 2},
 
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "MoveScreen", "as": "$scr"},
@@ -31,7 +31,7 @@
   {"op": "move", "target": "$c3", "first": true, "_why": "Tres, Um, Dois"},
   {"op": "move", "target": "$c3", "after": "$c1", "_why": "Um, Tres, Dois -- o after decisivo"},
   {"op": "move", "target": "$c1", "before": "$c2", "_why": "Tres, Um, Dois"},
-  {"op": "move", "target": "$c2", "last": true, "_why": "Tres, Um, Dois (ja estava no fim; last e idempotente)"},
+  {"op": "move", "target": "$c2", "last": true, "_why": "Tres, Um, Dois (it was already at the end; last is idempotent)"},
   {"op": "dump", "target": "$box", "depth": 2},
 
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Zebra", "as": "$v1"},
@@ -73,12 +73,12 @@
   {"op": "set", "target": "$btnA/#ITextWidget", "prop": "Text", "value": "Alfa"},
   {"op": "set", "target": "$btnA/OnClick", "prop": "Destination", "value": "$alfa"},
 
-  {"op": "move", "target": "$p2", "first": true, "_why": "a ORDEM dos parametros de entrada e a ordem que quem chama ve"},
-  {"op": "move", "target": "$v2", "first": true, "_why": "variaveis de tela tambem sao sequencia: Abelha, Zebra"},
+  {"op": "move", "target": "$p2", "first": true, "_why": "the ORDER of the input parameters is the order that whoever calls sees"},
+  {"op": "move", "target": "$v2", "first": true, "_why": "screen variables are also a sequence: Abelha, Zebra"},
   {"op": "dump", "target": "$beta", "depth": 1},
   {"op": "dump", "target": "$scr", "depth": 1},
 
-  {"op": "move", "target": "$b1", "x": 5000, "y": 3000, "_why": "x/y so no desenho do fluxo; devolve as coordenadas que ficaram"},
+  {"op": "move", "target": "$b1", "x": 5000, "y": 3000, "_why": "x/y only in the drawing of the flow; it returns the coordinates that remained"},
   {"op": "get", "target": "$b1"}
  ]
 }

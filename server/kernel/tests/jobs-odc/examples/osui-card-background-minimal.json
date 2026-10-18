@@ -1,5 +1,5 @@
 {
- "description": "CardBackground do OSUI: a instancia com empty e um texto no Content.",
+ "description": "CardBackground of OSUI: the instance with empty and a text in the Content.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

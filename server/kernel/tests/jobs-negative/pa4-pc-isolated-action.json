@@ -1,5 +1,5 @@
 {
- "description": "NEGATIVO (primeira-certa, A4/A6): uma op logic com uma action que falha no apply (call a action inexistente) aplica sem ela e sem a que a chama, e as outras chegam ao Verify (Text atribuido a Integer); a mesma recusa traz os patches exatos: output e argumento de uma action do proprio job escritos errado, NullDateTime( que e NullDate( (dentro de um If o tipo alvo nao e conhecido: fora dele o motor ja escreve o nulo do tipo, JobNormalizer) e a sintaxe de uma expressao (==). Nada e salvo.",
+ "description": "NEGATIVE (first-time-right, A4/A6): an op logic with an action that fails on apply (call to a nonexistent action) applies without it and without the one that calls it, and the others reach the Verify (Text assigned to Integer); the same refusal brings the exact patches: output and argument of an action of the job itself written wrong, NullDateTime( which is NullDate( (inside an If the target type is not known: outside it the engine already writes the null of the type, JobNormalizer) and the syntax of an expression (==). Nothing is saved.",
  "base": "tests/fixtures/blank-service.oml",
  "expectError": [
   "[ARGUMENT_UNKNOWN]: 'Quantty' is not an input of PcCalc",

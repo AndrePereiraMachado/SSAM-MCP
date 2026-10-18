@@ -1,5 +1,5 @@
 {
- "description": "Formulario com validacao e gravacao: server action Customer_Save (create ou update conforme o Id, record recebido inteiro) com validacao no servidor; tela com Form, Inputs obrigatorios, validacao propria no cliente (Valid/ValidationMessage) e chamada so com Form.Valid, passando o record como expressao.",
+ "description": "A form with validation and saving: the server action Customer_Save (create or update by the Id, the whole record received) with validation on the server; a screen with a Form, required Inputs, its own validation on the client (Valid/ValidationMessage) and the call only with Form.Valid, passing the record as an expression.",
  "base": "reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -11,7 +11,7 @@
    {"name": "Active", "type": "Boolean", "default": "True"}]}]}},
   {"op": "create", "parent": "@espace", "type": "IUserException", "name": "InvalidCustomer", "as": "$exc"},
   {"op": "logic", "data": {"actions": [
-   {"name": "Customer_Save", "kind": "server", "description": "Cria ou atualiza o cliente recebido; recusa nome vazio",
+   {"name": "Customer_Save", "kind": "server", "description": "Creates or updates the customer received; refuses an empty name",
     "inputs": [{"name": "Customer", "type": "Customer"}],
     "outputs": [{"name": "CustomerId", "type": "Customer Identifier"}],
     "steps": [
@@ -52,7 +52,7 @@
   {"op": "set", "target": "$chkActive", "prop": "Variable", "value": "GetCustomerById.List.Current.Customer.Active"},
 
   {"op": "logic", "data": {"actions": [
-   {"name": "SaveOnClick", "kind": "screen", "owner": "IMobileScreen:CustomerEdit", "description": "Valida no cliente e grava so com o Form valido",
+   {"name": "SaveOnClick", "kind": "screen", "owner": "IMobileScreen:CustomerEdit", "description": "Validates on the client and saves only with a valid Form",
     "steps": [
      {"if": "Length(Trim(GetCustomerById.List.Current.Customer.Name)) < 3", "label": "NameTooShort?",
       "then": [{"assign": {"Name_Input.Valid": "False", "Name_Input.ValidationMessage": "\"Use at least 3 letters\""}, "as": "MarkNameInvalid"}]},

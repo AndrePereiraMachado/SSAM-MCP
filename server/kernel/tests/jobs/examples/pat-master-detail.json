@@ -1,5 +1,5 @@
 {
- "description": "Mestre-detalhe numa tela: tabela de pedidos a esquerda (Columns2), o numero e um Link que guarda o pedido escolhido e refaz o aggregate das linhas; tabela de linhas a direita filtrada pelo pedido; If mostra um aviso enquanto nada foi escolhido.",
+ "description": "Master-detail on one screen: a table of orders on the left (Columns2), the number is a Link that keeps the chosen order and runs the aggregate of the lines again; a table of lines on the right filtered by the order; an If shows a notice while nothing is chosen.",
  "base": "reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -28,7 +28,7 @@
   {"op": "create", "parent": "$aggLines", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:OrderLine"}},
   {"op": "create", "parent": "$aggLines", "type": "IFilter", "args": {"condition": "OrderLine.SalesOrderId = SelectedOrderId"}},
   {"op": "logic", "data": {"actions": [
-   {"name": "SelectOrder", "kind": "screen", "owner": "IMobileScreen:Orders", "description": "Guarda o pedido escolhido e carrega as linhas dele",
+   {"name": "SelectOrder", "kind": "screen", "owner": "IMobileScreen:Orders", "description": "Keeps the chosen order and loads its lines",
     "inputs": [{"name": "OrderId", "type": "SalesOrder Identifier"}],
     "steps": [
      {"assign": {"SelectedOrderId": "OrderId"}, "as": "KeepOrder"},

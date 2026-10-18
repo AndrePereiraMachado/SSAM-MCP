@@ -1,5 +1,5 @@
 {
- "description": "A recusa do move: before/after so aceita um IRMAO, isto e, um objeto do MESMO pai. Sem esta recusa a plataforma cai numa asserção interna (`InvalidOperationException: Condition is false`) que nao diz nada a quem escreve o job. A mensagem tem de nomear o caminho dos DOIS pais e dizer que, sem `into`, move nao muda de pai. O caminho limpo esta em tests/jobs/refactor-move.json; mudar de pai, em tests/jobs/refactor-reparent.json.",
+ "description": "The refusal of the move: before/after only accepts a SIBLING, that is, an object of the SAME parent. Without this refusal the platform falls into an internal assertion (`InvalidOperationException: Condition is false`) that tells nothing to whoever writes the job. The message has to name the path of the TWO parents and say that, without `into`, move does not change the parent. The clean path is in tests/jobs/refactor-move.json; changing the parent, in tests/jobs/refactor-reparent.json.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectError": [

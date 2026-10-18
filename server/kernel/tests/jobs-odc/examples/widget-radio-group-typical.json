@@ -1,5 +1,5 @@
 {
- "description": "Radio Group sobre uma static entity: cada RadioButton vale um registro (Entities.Delivery.X), e o OnChange do grupo recalcula o frete.",
+ "description": "A Radio Group over a static entity: each RadioButton is a record (Entities.Delivery.X), and the OnChange of the group computes the shipping again.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

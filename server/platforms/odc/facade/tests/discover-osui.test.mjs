@@ -2,6 +2,7 @@
 // sources (completeness, shape, hashes, the library's own texts), which intents get the section, the levels and the
 // expansions (pure), and through the public discover() on both lanes: screen intents carry the section, other intents
 // do not, and the section never changes the model part at any budget. Index checks need the lane CLI and skip otherwise.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';

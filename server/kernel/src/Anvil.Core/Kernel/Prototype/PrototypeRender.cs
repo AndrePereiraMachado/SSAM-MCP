@@ -230,7 +230,10 @@ public static class PrototypeRender
     }
 
     private static readonly string[] ReadProps = ["Style", "StyleClasses", "Tag", "Text", "Value", "Condition", "Source", "ShowPopup", "InputType", "Variable",
-        "Enabled", "CustomStyle", "Label", "Image", "Url", "Prompt", "Mode", "Width", "List", "Values", "Labels", "MaxLength"];
+        "Enabled", "CustomStyle", "Label", "Image", "Url", "Prompt", "Mode", "Width", "List", "Values", "Labels", "MaxLength",
+        // CX17: the left margin the runtime turns into ThemeGrid_MarginGutter (read for ScreenVisual's prediction; the importer's
+        // render does not use it)
+        "MarginLeft"];
 
     private static string Base(string kind) => kind.Length > "Widget".Length && kind.EndsWith("Widget", StringComparison.Ordinal) && kind != "IfWidget" ? kind[..^"Widget".Length] : kind;
 

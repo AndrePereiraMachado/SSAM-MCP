@@ -1,5 +1,5 @@
 {
- "description": "Counter do OSUI com dados: Content com o Count do aggregate e o rotulo, cor de fundo e altura.",
+ "description": "Counter of OSUI with data: the Content with the Count of the aggregate and the label, a background color and a height.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

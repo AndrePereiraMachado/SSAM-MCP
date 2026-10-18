@@ -1,5 +1,5 @@
 {
- "description": "BlankSlate (OutSystemsUI, Content) tipico; placeholders Content, Actions com dados do aggregate de tarefas.",
+ "description": "Typical BlankSlate (OutSystemsUI, Content); placeholders Content, Actions with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

@@ -22,7 +22,8 @@ import fs from 'node:fs';
 import { workspaceRoot } from './workspace.mjs';
 import { hostedContext } from './executor.mjs';
 
-export const BUILD_STUDIO_READS = new Set(['snapshot', 'reference-snapshot']);
+// reference-producers (fix/system-reference): the listing a delivery reads once when the session offers no producer of the job's name.
+export const BUILD_STUDIO_READS = new Set(['snapshot', 'reference-snapshot', 'reference-producers']);
 const busy = error => error?.code === 'BRIDGE_BUSY' && error?.sent !== true;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 

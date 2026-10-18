@@ -4,6 +4,7 @@
 // Development origin of <name>.outsystems.dev, the customer's tenants.json filled from the connected tenant, the fragment
 // preview of a delivery), C14 (one file.sync per command, a skipped put releases its transfer, the heavy evidence of a
 // successful merge stays on the agent) and the warm-up. Fakes only: no hub, no agent process, no Studio.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -79,7 +80,7 @@ test('C26: an absolute path under the agent folder is its agent: path; any other
   const outside = (await deliver({ job: 'C:\\Users\\cliente\\AppData\\Local\\Temp\\claude\\job.json', module: 'Shop' })).structuredContent;
   assert.equal(outside.code, 'PATH_OUTSIDE_WORKSPACE');
   // fase4-24: a job goes inline; the fix says so first and still names the inbox file for a job that already is a file.
-  assert.match(outside.fix, /^mande o próprio job inline em job/);
+  assert.match(outside.fix, /^send the job itself inline in job/);
   assert.match(outside.fix, /C:\\SSAM-Agent\\inbox\\job\.json/);
   assert.equal(outside.inbox, 'C:\\SSAM-Agent\\inbox');
   assert.deepEqual(outside.continuation.arguments, { job: INLINE_JOB_MARKER, module: 'Shop' });
@@ -113,6 +114,33 @@ test('C32: the hosted doctor judges only the enabled lanes; a closed Studio lead
   const gone = harness({ connected: false, info: { lastSeenAt: ago(3000) } });
   const reconnecting = await hostedDoctor(null, { context: gone.context, session: { agent: gone.link } });
   assert.equal(reconnecting.code, 'AGENT_RECONNECTING');
+});
+
+// B3 (round 3 of studio-build-identity, owner rule of 2026-10-15): every text SSAM emits is English, the continuations of
+// the hosted doctor and of the gate included; no pt-BR line.
+const PT_BR = /[ãõçáéíóúâêôà]|\b(não|deste|computador|Atualize|Aviso|Nada rodou|servidor|dono|ferramentas|continuam|rodou|repita|peça|abra|conecte|versões|faixa)\b/i;
+test('B3: the continuations of the hosted doctor (Studio closed, versions differ, no lane) and of the reconnecting agent are English', async () => {
+  const closed = harness();
+  closed.executor.call = async () => ({ processes: [] });
+  const down = await hostedDoctor(null, { context: closed.context, session: { agent: closed.link } });
+  assert.equal(down.continuation.tool, 'ssam_connect');
+  assert.match(down.continuation.why, /^Open ODC Studio normally/);
+  assert.doesNotMatch(down.continuation.why, PT_BR);
+  const open = harness({ info: { compatible: { odc: { ok: false, code: 'AGENT_PACK_MISMATCH' } } } });
+  const differs = await hostedDoctor(null, { context: open.context, session: { agent: open.link } });
+  assert.equal(differs.continuation.tool, 'ssam_doctor');
+  assert.match(differs.continuation.why, /^AGENT_PACK_MISMATCH /);
+  assert.doesNotMatch(differs.continuation.why, PT_BR);
+  const unjudged = harness({ info: { compatible: { odc: null } } });
+  const openStudio = await hostedDoctor(null, { context: unjudged.context, session: { agent: unjudged.link } });
+  assert.deepEqual([openStudio.continuation.tool, openStudio.continuation.arguments], ['ssam_connect', { lane: 'odc' }]);
+  assert.match(openStudio.continuation.why, /^ODC Studio is open: connect it/);
+  assert.doesNotMatch(openStudio.continuation.why, PT_BR);
+  const noLane = harness({ lanes: [] });
+  const none = await hostedDoctor(null, { context: noLane.context, session: { agent: noLane.link } });
+  assert.equal(none.continuation.tool, 'ssam_doctor');
+  assert.doesNotMatch(none.continuation.why, PT_BR);
+  for (const seen of [10000, 200000]) assert.doesNotMatch(agentNotConnected({ instance: 'i', lastSeenAt: ago(seen) }).continuation.why, PT_BR, String(seen));
 });
 
 // ---- C04

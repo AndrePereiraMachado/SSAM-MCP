@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {qualifyOdcNativeDataTypes} from '../debug-odc-native-data-types.mjs';
 const file='_oschunk-SDK.js',source='var E;(function(t){t[t.Integer=0]="Integer",t[t.Text=4]="Text"})(E||(E={}));var ns=Object.freeze({get DataTypes(){return E}});export{ns as w};';

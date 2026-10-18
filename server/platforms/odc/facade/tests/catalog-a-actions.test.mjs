@@ -5,6 +5,7 @@
 // a Traditional Web preparation exists only on O11), intents of other fronts that share words with this theme (input
 // widget, REST parameter, web service, client variable, local storage) do NOT select these capabilities, and every
 // answer fits the 12000-byte budget. Needs the lane CLIs built (the index is built from them); skips otherwise.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';

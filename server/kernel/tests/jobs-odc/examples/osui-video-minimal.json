@@ -1,5 +1,5 @@
 {
- "description": "Video do OSUI: o input obrigatorio URL.",
+ "description": "Video of OSUI: the required input URL.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

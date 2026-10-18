@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {inspectOdcRenderExpressions} from '../debug-odc-render-expressions.mjs';
 import {odcMountRenderTargets} from '../debug-odc-view-render.mjs';

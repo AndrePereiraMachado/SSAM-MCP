@@ -1,5 +1,5 @@
 {
- "description": "Polyline do OutSystemsMaps: Locations (obrigatorio, Text List) com os pontos da linha, no AddOns_Placeholder de um LeafletMap.",
+ "description": "Polyline of OutSystemsMaps: Locations (required, Text List) with the points of the line, in the AddOns_Placeholder of a LeafletMap.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

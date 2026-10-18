@@ -48,7 +48,7 @@ export const debugSchema = z.object({
   moduleKey: key.optional(), runtimeUrl: z.url().optional(), nodeKeys: z.array(key).min(1).max(200).optional(), trace: traceSchema.optional(),
   // Per-node breakpoint owner (native ExtendedBreakpointId owner): the session module plus at most one partner.
   nodeModuleKeys: z.record(key, key).optional(),
-  credentials: z.string().max(2000).optional(), seconds: z.number().int().min(1).max(600).default(120),
+  credentials: z.string().max(2000).optional().describe('Legacy O11 developer sign-in only: path of a private developer credentials file, never a secret value; not with o11Auth.'), seconds: z.number().int().min(1).max(600).default(120),
   o11Auth: o11AuthSchema.optional(),
   inspection: inspectionSchema.optional(),
   modelScope: modelScopeSchema.optional(),

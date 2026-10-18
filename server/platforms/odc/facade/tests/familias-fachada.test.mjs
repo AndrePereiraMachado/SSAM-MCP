@@ -39,7 +39,7 @@ const screenAction = (screen, name) => `action ${screen}.${name}\n  end\n`;
 const setupOps = n => Array.from({ length: n }, (_, i) => ({ op: 'create', parent: '@espace', type: 'IRole', name: 'Role' + i }));
 
 // A fake ODC lane (studio_deliver records the job the relay wrote), the real ssam server around it.
-async function liveServer(t, { answer = () => ({ ok: true, result: 'entregue' }), codeMap = async input => ({ ok: true, echo: input }) } = {}) {
+async function liveServer(t, { answer = () => ({ ok: true, result: 'delivered' }), codeMap = async input => ({ ok: true, echo: input }) } = {}) {
   const root = tmp(t); const seen = [];
   const odcFacade = async () => {
     const fake = new McpServer({ name: 'fake-odc', version: '0.0.1' });
@@ -104,7 +104,7 @@ test('call shape: a correction (patch + basedOn) needs no part; a write of ops a
 
 test('call shape: the kernel rewrites a delivery answers (object) keep their entries when the job notes join them', async t => {
   const kernel = { total: 1, byRule: { SORT_KEYS_SPLIT: 1 }, items: [{ rule: 'SORT_KEYS_SPLIT', path: '/ops/0/data/actions/0/steps/3/sort', from: 'A.B, A.C', to: '["A.B","A.C"]' }] };
-  const { code } = await liveServer(t, { answer: () => ({ ok: true, result: 'entregue', normalizations: kernel }) });
+  const { code } = await liveServer(t, { answer: () => ({ ok: true, result: 'delivered', normalizations: kernel }) });
   const w = await code({ action: 'write', part: 'html', ops: [{ op: 'set', target: 'IMobileTheme:AppTheme', props: { StyleSheet: '.a{}', Description: 'd' } }] });
   assert.equal(w.ok, true, JSON.stringify(w).slice(0, 500));
   assert.equal(Array.isArray(w.normalizations), false, JSON.stringify(w.normalizations));
@@ -238,10 +238,10 @@ test('cards: the exact forms the parsers take, each one inside an example; no pa
   // platform's default there (kernel ScreenHtml.PopupTransition): the kernel writes it, the reader omits it, so the example
   // writes the event as it reads back and the rule writes os-onclick.Transition only for another transition.
   assert.ok(html.rules.some(r => /<popup show="Var">/.test(r) && /never a <div if>/.test(r) && /Transition Fade/.test(r) && /only for another transition/.test(r)));
-  assert.match(EXAMPLE_HTML, /<popup show="MostrarResumo">[\s\S]*<button class="btn" onclick="FecharResumo">Fechar<\/button>[\s\S]*<\/popup>/);
+  assert.match(EXAMPLE_HTML, /<popup show="ShowSummary">[\s\S]*<button class="btn" onclick="CloseSummary">Close<\/button>[\s\S]*<\/popup>/);
   assert.doesNotMatch(EXAMPLE_HTML, /os-onclick\.Transition="Fade"/, 'the example writes no default the reader omits');
-  assert.ok(EXAMPLE_LOGIC.some(t => /action Visitas\.AbrirResumo\n  assign MostrarResumo = True\n  end/.test(t)));
-  assert.ok(EXAMPLE_LOGIC.some(t => /action Visitas\.FecharResumo\n  assign MostrarResumo = False\n  end/.test(t)));
+  assert.ok(EXAMPLE_LOGIC.some(t => /action Visits\.OpenSummary\n  assign ShowSummary = True\n  end/.test(t)));
+  assert.ok(EXAMPLE_LOGIC.some(t => /action Visits\.CloseSummary\n  assign ShowSummary = False\n  end/.test(t)));
   // Every exact form is inside the example the CLI round trip applies (ssam-code.test.mjs) and read back.
   const ui = exampleCall('odc').arguments;
   const sources = { ddl: ui.text, logic: [].concat(ui.also.find(p => p.part === 'logic').text).join('\n'), html: ui.also.find(p => p.part === 'html').text };
@@ -249,8 +249,8 @@ test('cards: the exact forms the parsers take, each one inside an example; no pa
     assert.ok(card.forms && Object.keys(card.forms).length >= 3, part + ' card names its forms');
     for (const [name, form] of Object.entries(card.forms)) assert.ok(sources[part].includes(form), `${part} form "${name}" is in the example: ${form}`);
   }
-  assert.match(ui.text, /\nclient variable UltimoFiltro: Text = "todas"\n/);
-  assert.match(ddl.exampleWithUi, /client variable UltimoFiltro: Text = "todas"/);
+  assert.match(ui.text, /\nclient variable LastFilter: Text = "all"\n/);
+  assert.match(ddl.exampleWithUi, /client variable LastFilter: Text = "all"/);
   // The service example (an empty or _CS module) has no client variable and no screen.
   assert.doesNotMatch(grammarCard(null, 'o11').example.call.arguments.text, /client variable/);
 });

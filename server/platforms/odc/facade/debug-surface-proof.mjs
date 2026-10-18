@@ -1,6 +1,7 @@
 // Tracked live proof driver (R17): one declarative script over either public surface, `ssam mcp`
 // (MCP stdio, ssam_debug_server|client) or `ssam debug <runtime> --stdio --lane <lane>` (JSON lines).
 // It binds the observed stop tokens, never evaluates or replays, and audits requests by hash only.
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -99,7 +100,7 @@ function hook(h, max) {
   if (typeof h.tool !== 'string' || !READ_TOOLS.has(h.tool) && !WRITE_TOOLS.has(h.tool)) invalid('hook_tool');
   if (h.tool === 'odc_deploy' && h.at !== 'held') invalid('hook_at');
   if (!plain(h.arguments) || Object.keys(h.arguments).some(k => SECRET.test(k) || k === h.authorizationField)) invalid('hook_arguments');
-  if (WRITE_TOOLS.has(h.tool) ? typeof h.authorization !== 'string' || !h.authorization.trim() || h.authorization.length > 2000 ||
+  if (WRITE_TOOLS.has(h.tool) ? !wordsGiven(h.authorization) || h.authorization.length > 2000 ||
       typeof h.authorizationField !== 'string' || !/^[A-Za-z][A-Za-z0-9]{0,63}$/.test(h.authorizationField)
     : h.authorization !== undefined || h.authorizationField !== undefined) invalid('hook_authorization');
   return Object.freeze({ at: h.at, occurrence: h.at === 'held' ? h.occurrence ?? 1 : null, tool: h.tool, arguments: structuredClone(h.arguments),
@@ -177,7 +178,7 @@ export function createMcpSurface({ root, entry, runtime, env, deps = {} }) {
         const Client = deps.Client ?? (await import('@modelcontextprotocol/client')).Client;
         const Transport = deps.StdioClientTransport ?? (await import('@modelcontextprotocol/client/stdio')).StdioClientTransport;
         client = new Client({ name: 'ssam-debug-surface-proof', version: '1' });
-        await client.connect(new Transport({ command: process.execPath, args: [entry, 'mcp'], cwd: root, env, stderr: 'ignore' }));
+        await client.connect(new Transport({ command: process.execPath, args: [entry, 'mcp', '--profile', 'all'], cwd: root, env, stderr: 'ignore' }));
       } catch { surface.lost = true; fail('surface_unavailable'); }
     },
     request: (request, timeoutMs) => surface.tool(TOOL[runtime], request, timeoutMs),
@@ -300,7 +301,7 @@ export async function runSurfaceProof({ script: raw, transport, root, entry, out
   const auditPath = path.join(outDir, 'audit.json'), transcriptPath = path.join(outDir, 'transcript.jsonl');
   const stateRoot = path.resolve(root, '.local', 'debugger');
   const audit = { schema: AUDIT_SCHEMA, complete: false, transport: transport === 'mcp' ? 'mcp-stdio' : 'cli-json-lines', runtime, lane,
-    surface: transport === 'mcp' ? { args: ['mcp'], tool: TOOL[runtime] } : { args: ['debug', runtime, '--stdio', '--lane', lane], tool: null },
+    surface: transport === 'mcp' ? { args: ['mcp', '--profile', 'all'], tool: TOOL[runtime] } : { args: ['debug', runtime, '--stdio', '--lane', lane], tool: null },
     script: { name: script.name, sha256: canonicalSha256(redactSecrets(script)) },
     entry: { path: entryPath, sha256: fileSha(entryPath) }, driver: { path: selfPath, sha256: fileSha(selfPath) }, root,
     startedAt: iso(), finishedAt: null, sessionId: null, nativeSessionId: null, runnerOperationId: null, requests: [], sequence: null,

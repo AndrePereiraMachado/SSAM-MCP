@@ -1,5 +1,5 @@
 {
- "description": "RadioGroup tipico: vazio na criacao, tres RadioButtons com os registros da static Priority como valores, ligado a uma variavel Priority Identifier; OnChange refaz o aggregate filtrado pela prioridade.",
+ "description": "Typical RadioGroup: empty on creation, three RadioButtons with the records of the static Priority as values, bound to a Priority Identifier variable; OnChange runs the aggregate filtered by the priority again.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

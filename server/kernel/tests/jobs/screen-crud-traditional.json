@@ -1,5 +1,5 @@
 {
- "description": "Traditional Web CRUD: entidade Contact + Contact_Save; tela ContactsWeb com Preparation (aggregate) e TableRecords (cabecalho, linhas, link para detalhe); tela ContactDetailWeb com input, Preparation filtrada, Inputs ligados ao registro e Button -> screen action Save",
+ "description": "Traditional Web CRUD: entity Contact + Contact_Save; screen ContactsWeb with Preparation (aggregate) and TableRecords (header, rows, link to detail); screen ContactDetailWeb with input, filtered Preparation, Inputs bound to the record and Button -> screen action Save",
  "base": "tests/fixtures/traditional-ui.oml",
  "expectValid": true,
  "ops": [
@@ -503,7 +503,7 @@
    "op": "link",
    "from": "$lst",
    "to": "$det",
-   "_why": "conector do UI flow entre as telas (o Studio cria ao definir o destino; headless nao)"
+   "_why": "UI flow connector between the screens (the Studio creates it when the destination is defined; headless does not)"
   },
   {
    "op": "get",

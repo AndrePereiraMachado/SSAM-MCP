@@ -239,8 +239,8 @@ const moduleFileOf = (dir, lane, id, module) => path.join(dir, lane + '~' + (id 
 // ---- Answers: the holder's tool, pid and start only; never its arguments. The continuation is the status read of the
 // busy Studio (O11 o11_studio status; ODC studio_status, with the pid of the call): the writes of every tool, tracked or
 // not, leave it there. The server that registers this wrapper swaps it for ssam_doctor when it does not serve that tool.
-export const BUSY_WHY = 'uma escrita ja esta rodando neste Studio: espere a resposta dela e repita esta chamada; esta leitura mostra o estado do Studio';
-export const QUEUE_WHY = 'a fila de escrita deste Studio nao andou dentro do limite; esta leitura mostra o Studio e a escrita que o ocupa';
+export const BUSY_WHY = 'a write is already running in this Studio: wait for its answer and repeat this call; this read shows the Studio state';
+export const QUEUE_WHY = 'the write queue of this Studio did not move within the limit; this read shows the Studio and the write that holds it';
 export const busyContinuation = ({ lane = 'o11', pid } = {}, why = BUSY_WHY) => (lane === 'odc'
   ? { tool: 'studio_status', arguments: Number.isSafeInteger(pid) ? { pid } : {}, why }
   : { tool: 'o11_studio', arguments: { command: 'status' }, why });
@@ -818,7 +818,7 @@ export async function withStudioWriteLock({ tool, args = {}, lane, studioKey, de
 // nothing run: STUDIO_WRITE_QUEUE_TIMEOUT (the Studio), BUILD_QUEUE_TIMEOUT (the module guard or the build pool).
 export const BUILD_QUEUE_TIMEOUT_CODE = 'BUILD_QUEUE_TIMEOUT';
 export const GUARD_SCHEMA = 'ssam-module-build-guard/1';
-export const BUILD_WHY = 'outra entrega do mesmo módulo (ou o pool de build) não terminou dentro do limite; nada desta rodou: leia o estado do Studio e repita a mesma entrega';
+export const BUILD_WHY = 'another delivery of the same module (or the build pool) did not end within the limit; none of this one ran: read the Studio state and repeat the same delivery';
 export const PHASED_TOOLS = Object.freeze({
   // A new delivery (and resume, closePrevious): its first Studio write takes the Studio. close alone and until=apply are
   // writes from their first call, so they keep the lock of the whole call.

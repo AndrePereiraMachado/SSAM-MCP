@@ -1,5 +1,5 @@
 {
- "description": "Notification do OSUI: a instancia com o texto no Content.",
+ "description": "Notification of OSUI: the instance with the text in the Content.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

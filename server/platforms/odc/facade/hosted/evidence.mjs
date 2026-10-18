@@ -10,8 +10,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { anvilRoot, workspaceRoot } from '../workspace.mjs';
 
-export const OMITTED = '<fixture omitida>';
-export const CLIENT_OMITTED = '<cliente omitido>';
+// a7 phase 3: the markers of withheld data are English (owner rule of 15/10; before phase 3 they were Portuguese).
+// Nothing reads either as input (tests and documents only).
+export const OMITTED = '<fixture omitted>';
+export const CLIENT_OMITTED = '<customer omitted>';
 const JOB_DIRS = ['jobs-odc', 'jobs-odc-negative', path.join('jobs-odc', 'examples')];
 
 // ---- the publisher's list (scripts/release/client-content.json), read once: forbidden[].pattern (the client text the
@@ -126,8 +128,8 @@ export function scrubDiscover(result, jobs = thirdPartyJobs()) {
 // scrubEvidence(result, jobs, {clientText}) -> a new tool result. In structuredContent, at any depth: a list item that
 // is evidence of a job of the set (an object whose job is in the set or whose path, base or fixture names the capture,
 // or the job name itself) leaves the list; such an object as a field value becomes null; every other text naming the
-// capture gets '<fixture omitida>'. With clientText (an answer made of the owner's catalogs, ssam_discover), every text
-// matching a client pattern also gets '<cliente omitido>'; other answers carry the customer's own data and keep it.
+// capture gets '<fixture omitted>'. With clientText (an answer made of the owner's catalogs, ssam_discover), every text
+// matching a client pattern also gets '<customer omitted>'; other answers carry the customer's own data and keep it.
 // With anything taken out, structuredContent.hostedEvidenceOmitted counts it. A content text that was the JSON of the
 // original structuredContent is written again from the cleaned one; other text only gets the replacement.
 export function scrubEvidence(result, jobs = thirdPartyJobs(), { clientText = false } = {}) {

@@ -1,29 +1,29 @@
 {
- "description": "Frente B (catalogo abrangente), faixa O11 Reactive: porta de tests/jobs-odc/ui-flow-comment.json e da parte popover/metadata de tests/jobs-odc/email-popover-metadata.json. (1) Comment do canvas do fluxo de UI: tipo QUALIFICADO OutSystems.Model.UI.Mobile.IComment (o nome nu tambem existe em UI.Web); no O11 a interface tem Text e IsReminder gravaveis e nenhum Name (model-api-11.55.69), por isso o name do create nao e prova de nada; dois comentarios, o segundo com IsReminder=true (a mensagem Reminder esta declarada) e separado com move x/y. (2) O fluxo IMobileFlow:MainFlow lido com get e dump, onde os comentarios aparecem ao lado das telas. (3) IPopover do plugin NRWidgets, numa tela: no O11 as proprias propriedades gravaveis sao PopoverWidth e Style (nao ha Width), e TopContent/BottomContent nascem com o widget. (4) ITextMetadata pendurada num IScreenAggregate por CreateMetadata<T>(name, managedBy) (IAggregate no O11), com Value e Hidden. O email do job ODC fica FORA: o runtime O11 11.55.87 nao carrega OutSystems.Model.UI.Mobile.IMobileEmail (overlays-email.json, limite o11). Nada aqui foi corrido nativamente ainda.",
+ "description": "Front B (broad catalog), O11 Reactive lane: port of tests/jobs-odc/ui-flow-comment.json and of the popover/metadata part of tests/jobs-odc/email-popover-metadata.json. (1) Comment on the canvas of the UI flow: QUALIFIED OutSystems type OutSystems.Model.UI.Mobile.IComment (the bare name also exists in UI.Web); in O11 the interface has Text and IsReminder writable and no Name (model-api-11.55.69), so the name of the create proves nothing; two comments, the second with IsReminder=true (the Reminder message is declared) and moved apart with move x/y. (2) The flow IMobileFlow:MainFlow read with get and dump, where the comments appear next to the screens. (3) IPopover of the NRWidgets plugin, in a screen: in O11 the own writable properties are PopoverWidth and Style (there is no Width), and TopContent/BottomContent are born with the widget. (4) ITextMetadata hung on an IScreenAggregate through CreateMetadata<T>(name, managedBy) (IAggregate in O11), with Value and Hidden. The email of the ODC job stays OUT: the O11 11.55.87 runtime does not load OutSystems.Model.UI.Mobile.IMobileEmail (overlays-email.json, o11 limit). Nothing here has been run natively yet.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "Reminder",
    "element": "MainFlow (MobileFlow) / CommentNode",
-   "why": "IsReminder=true faz a plataforma emitir uma mensagem Reminder com o texto do proprio comentario: e o significado da propriedade e o que este job prova (igual ao job ODC ui-flow-comment). O comentario com IsReminder=false nao emite nada. No O11 o elemento sai como CommentNode (o comentario do fluxo nao tem nome; medido na sonda B-006 fase 1)."
+   "why": "IsReminder=true makes the platform emit a Reminder message with the text of the comment itself: it is the meaning of the property and what this job proves (same as the ODC job ui-flow-comment). The comment with IsReminder=false emits nothing. In O11 the element comes out as CommentNode (the flow comment has no name; measured in probe B-006 phase 1)."
   }
  ],
  "ops": [
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "OutSystems.Model.UI.Mobile.IComment", "name": "CatBFlowNote", "as": "$note",
-   "_why": "nome qualificado: o nu IComment casa tambem com OutSystems.Model.UI.Web.IComment"},
+   "_why": "qualified name: the bare IComment also matches OutSystems.Model.UI.Web.IComment"},
   {"op": "set", "target": "$note", "prop": "Text", "value": "Prova O11: comentario no canvas do fluxo de UI"},
   {"op": "get", "target": "$note",
-   "_why": "estado de omissao: IsReminder=False, posicao dada pela plataforma, name"},
+   "_why": "default state: IsReminder=False, position given by the platform, name"},
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "OutSystems.Model.UI.Mobile.IComment", "as": "$reminder"},
   {"op": "set", "target": "$reminder", "prop": "Text", "value": "Prova O11: este comentario esta marcado como Is Reminder"},
   {"op": "set", "target": "$reminder", "prop": "IsReminder", "value": true,
-   "_why": "booleana recebe JSON true; e esta escrita que faz nascer a mensagem Reminder declarada"},
+   "_why": "a boolean takes JSON true; and it is this write that makes the declared Reminder message be born"},
   {"op": "get", "target": "$reminder"},
   {"op": "move", "target": "$reminder", "x": 3196, "y": 1040,
-   "_why": "so desenho: x/y no canvas do fluxo de UI; o resultado devolve a posicao que ficou"},
+   "_why": "drawing only: x/y on the canvas of the UI flow; the result returns the position that was left"},
   {"op": "get", "target": "$reminder",
-   "_why": "confirma HorizontalPosition/VerticalPosition depois do move"},
+   "_why": "confirms HorizontalPosition/VerticalPosition after the move"},
 
   {
    "op": "spec",
@@ -40,7 +40,7 @@
    }
   },
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "CatBNoticeBoard", "as": "$scr",
-   "_why": "a tela que segura o aggregate (com a metadata) e o popover"},
+   "_why": "the screen that holds the aggregate (with the metadata) and the popover"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "\"Notices\""},
@@ -48,35 +48,35 @@
   {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetNotices", "as": "$agg"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$CatBNotice"}},
   {"op": "create", "parent": "$agg", "type": "ITextMetadata", "name": "CatBNote", "args": {"managedBy": "anvil"}, "as": "$md",
-   "_why": "CreateMetadata<T>(name, managedBy) de IAggregate no O11: managedBy sem default, por isso o args e obrigatorio; Name e ManagedBy sao readOnly em IMetadata"},
+   "_why": "CreateMetadata<T>(name, managedBy) of IAggregate in O11: managedBy has no default, so the args is mandatory; Name and ManagedBy are readOnly in IMetadata"},
   {"op": "set", "target": "$md", "prop": "Value", "value": "aggregate escrito pelo job cat-b-flow-comment-popover"},
   {"op": "set", "target": "$md", "prop": "Hidden", "value": true},
 
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IContainer", "name": "Board", "as": "$box"},
   {"op": "create", "parent": "$box", "type": "IPopover", "name": "CatBMenu", "as": "$pop",
-   "_why": "ServiceStudio.Plugin.NRWidgets.IPopover por CreateWidget<T>, como qualquer widget da tela"},
+   "_why": "ServiceStudio.Plugin.NRWidgets.IPopover through CreateWidget<T>, like any widget of the screen"},
   {"op": "set", "target": "$pop", "prop": "PopoverWidth", "value": 320,
-   "_why": "Nullable<Int32>, propriedade propria do Popover no O11"},
+   "_why": "Nullable<Int32>, own property of the Popover in O11"},
   {"op": "set", "target": "$pop", "prop": "Style", "value": "\"popover\"",
-   "_why": "no O11 nao ha Width no IPopover; Style e expressao (SetStyle)"},
+   "_why": "in O11 there is no Width in the IPopover; Style is an expression (SetStyle)"},
   {"op": "create", "parent": "$pop/TopContent", "type": "IExpression", "as": "$popTop",
-   "_why": "TopContent e BottomContent nascem com o widget: referem-se pela propriedade que devolve o IContent"},
+   "_why": "TopContent and BottomContent are born with the widget: they are referred to by the property that returns the IContent"},
   {"op": "set", "target": "$popTop", "prop": "Value", "value": "\"Notices\""},
   {"op": "create", "parent": "$pop/BottomContent", "type": "IExpression", "as": "$popBottom"},
   {"op": "set", "target": "$popBottom", "prop": "Value", "value": "IntegerToText(GetNotices.List.Length)",
-   "_why": "o aggregate alimenta o popover: sem leitor ele ficaria sem uso"},
+   "_why": "the aggregate feeds the popover: without a reader it would stay unused"},
 
   {"op": "get", "target": "$md",
    "_why": "le de volta a metadata: Name, ManagedBy, Value e Hidden"},
   {"op": "get", "target": "$pop",
    "_why": "le de volta PopoverWidth e Style"},
   {"op": "dump", "target": "$agg", "depth": 3,
-   "_why": "a metadata aparece como filha do aggregate"},
+   "_why": "the metadata appears as a child of the aggregate"},
   {"op": "dump", "target": "$pop", "depth": 3,
-   "_why": "o que o popover trouxe de fabrica e o que o job acrescentou"},
+   "_why": "what the popover brought from the factory and what the job added"},
   {"op": "get", "target": "IMobileFlow:MainFlow",
-   "_why": "o fluxo de UI lido por si: Nodes e Theme"},
+   "_why": "the UI flow read by itself: Nodes and Theme"},
   {"op": "dump", "target": "IMobileFlow:MainFlow", "depth": 1,
-   "_why": "os dois comentarios sao filhos do FLUXO, ao lado das telas"}
+   "_why": "the two comments are children of the FLOW, next to the screens"}
  ]
 }

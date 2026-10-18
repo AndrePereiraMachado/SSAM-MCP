@@ -10,9 +10,11 @@
 //    with the inputs; trace.jsonl is the map. 4. Unless keep=true the wrapper is removed from the LATEST revision
 //    (a unique "SSAM Debug REST Remove" comment) and published again. Every write is recorded before send and
 //    sent once; explicit reconciliation only reads bound revisions/deployments and never replays uncertain writes.
+import { wordsGiven, wordsRequired, callWordsProblems } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import * as z from 'zod/v4';
 import { workspaceRoot } from './workspace.mjs';
@@ -142,9 +144,12 @@ const authFile = path.join(root, 'authorization.json');
 function authorization(host) {
   try { return read(authFile).tenants?.[host] ?? null; } catch { return null; }
 }
+// The lease and its journal note name the grant by the sha256 of its words (a grant of before, with words, is hashed here).
+const grantDigest = grant => (grant?.wordsSha256 ? 'sha256:' + grant.wordsSha256 : typeof grant?.words === 'string' ? 'sha256:' + createHash('sha256').update(grant.words).digest('hex') : undefined);
 function authorize(host, words) {
   let all = { tenants: {} }; try { all = read(authFile); } catch { /* first grant */ }
-  all.tenants[host] = { words, grantedAt: now(), scope: 'SSAM Debug REST wrapper create/remove publications in the Development stage' };
+  // CX15 r5 (N-3): the standing grant keeps wordsSha256 of the user's words, never the words, and the answer says no words.
+  all.tenants[host] = { wordsSha256: createHash('sha256').update(String(words)).digest('hex'), grantedAt: now(), scope: 'SSAM Debug REST wrapper create/remove publications in the Development stage' };
   write(authFile, all); return { ok: true, tenant: host, authorization: all.tenants[host] };
 }
 
@@ -311,7 +316,7 @@ async function ensureWrapper(input, ctx, lease) {
     runtimeUrl: ctx.runtimeUrl, environmentKey: ctx.stage.key, state: 'creating', baseRevision: latest.revision, base, candidate, dir, token,
     actions: actions.map(a => ({ name: a.name, key: a.key })), wrappers, entries, authentication: 'native-app-user',
     targets: Object.fromEntries(models.map(m => [m.name, m.model])),
-    authorization: authorization(ctx.portal.host)?.words, createdAt: now(), steps: [], writeHistory };
+    authorization: grantDigest(authorization(ctx.portal.host)), createdAt: now(), steps: [], writeHistory };
   write(file, lease);
   const pending = beginWrite(input, ctx, lease, 'create', base, candidate, dir);
   const created = await P.createRevision(ctx.portal, candidate.file, pending.operation.comment, pending);
@@ -453,7 +458,8 @@ function armReaper(ctx, input, lease) {
 }
 
 async function dispatch(input, services = {}) {
-  if (input.op === 'authorize') return authorize(input.tenant, input.words);
+  // CX15 r7 (M-1): the standing grant of the wrapper takes the owner's words only (wordsGiven), before anything is written.
+  if (input.op === 'authorize') return wordsGiven(input.words) ? authorize(input.tenant, input.words) : wordsRequired([{ path: 'words', value: input.words }], { tool: 'ssam_debug_run' });
   const ctx = await (services.context ?? context)(input), file = services.leasePath ?? leaseFile(ctx.portal.host, input.module);
   let lease = fs.existsSync(file) ? read(file) : null;
   if (input.op === 'status') return { ok: true, lease: lease && { ...lease, token: lease.token ? '[private]' : null } };
@@ -733,6 +739,10 @@ export async function debugRun(raw, options = {}) {
 }
 
 async function debugRunWithinScope(raw, { services = {} } = {}) {
+  // CX15 r7 (M-1): the words of a run (words, roleCycle.words, authorization) are the owner's (wordsGiven), never a marker, a
+  // <template> or a sha256 of the server: one WORDS_REQUIRED before any executor, reader or sign-in.
+  const noWords = callWordsProblems('ssam_debug_run', { words: raw?.words, roleCycle: raw?.roleCycle, authorization: raw?.authorization });
+  if (noWords.length) return wordsRequired(noWords, { tool: 'ssam_debug_run' });
   // Read-only lock inventory: never writes, renames, opens DPAPI or contacts a tenant.
   if (raw?.op === 'locks') {
     try { return (await import('./debug-lock-inventory.mjs')).debugLocks(raw, services.root ? { root: services.root } : {}); }

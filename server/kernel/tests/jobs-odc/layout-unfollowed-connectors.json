@@ -1,8 +1,8 @@
 {
- "description": "ODC: o layout automatico (depois das ops, fora de qualquer uma) com conectores que ele nao pode seguir (cobertura testada, fase 2). Um comentario de processo ligado ao End e um comentario do fluxo de UI ligado a uma tela: IActionConnector.Target caia com InvalidCastException ('to type IActionNode') e o job abortava sem indice de op. O layout ignora conector cujo alvo nao e no de logica (e alvo nulo, o caso do Switch copiado no O11, tambem aqui exercitado); o resto do desenho fica igual. Mesmo cenario na faixa O11: tests/jobs/layout-unfollowed-connectors.json.",
+ "description": "ODC: the automatic layout (after the ops, outside any of them) with connectors it cannot follow (tested coverage, phase 2). A process comment linked to the End and a UI flow comment linked to a screen: IActionConnector.Target crashed with InvalidCastException ('to type IActionNode') and the job aborted without an op index. The layout ignores a connector whose target is not a logic node (and a null target, the case of the Switch copied in O11, also exercised here); the rest of the drawing stays the same. Same scenario in the O11 lane: tests/jobs/layout-unfollowed-connectors.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / LayoutSwitchCopy (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / LayoutSwitchCopy (ServerAction)", "why": "ODC: an app (CrossDevice) does not expose a public server action (the live Studio gives an error); the action stays private and without a consumer in this proof job"}],
  "ops": [
   {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "LayoutSwitchCopy", "as": "$act"},
   {"op": "create", "parent": "$act", "type": "IStartNode", "as": "$s"},

@@ -1,5 +1,5 @@
 {
- "description": "LeafletMap do OutSystemsMaps: a instancia do mapa (Leaflet nao pede chave de API).",
+ "description": "LeafletMap of OutSystemsMaps: the map instance (Leaflet asks for no API key).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

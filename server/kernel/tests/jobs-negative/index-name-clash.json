@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA de um indice com nome repetido na mesma entidade, sem distincao de maiusculas: IX_Contact_Email ja existe, ix_contact_email e recusado antes de tocar o modelo. O caminho limpo esta em tests/jobs/entity-lifecycle.json (lote de dados, fase 3).",
+ "description": "THE REFUSAL of an index with a repeated name in the same entity, case-insensitive: IX_Contact_Email already exists, ix_contact_email is refused before touching the model. The clean path is in tests/jobs/entity-lifecycle.json (data batch, phase 3).",
  "base": "job:spec-data",
  "expectValid": true,
  "expectError": ["EntityIndex 'ix_contact_email' already exists on Contact"],

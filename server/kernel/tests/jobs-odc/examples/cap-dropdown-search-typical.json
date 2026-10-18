@@ -1,5 +1,5 @@
 {
- "description": "DropdownSearch do OSUI com dados: uma data action monta a lista de opcoes a partir da static entity Category e o OnChanged grava o Id escolhido numa variavel Category Identifier.",
+ "description": "DropdownSearch of OSUI with data: a data action builds the list of options from the static entity Category and OnChanged saves the chosen Id in a Category Identifier variable.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

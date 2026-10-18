@@ -1,5 +1,5 @@
 {
- "description": "Map do OutSystemsMaps (Google): a instancia do mapa; a chave de API vem de um Setting no app real, nunca escrita no modelo.",
+ "description": "Map of OutSystemsMaps (Google): the map instance; the API key comes from a Setting in the real app, never written in the model.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

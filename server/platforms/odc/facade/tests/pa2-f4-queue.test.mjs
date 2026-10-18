@@ -42,7 +42,7 @@ const value = await withStudioWriteLock({ tool: 'o11_deliver', args: { module: p
   const start = Date.now(); process.stdout.write('start ' + start + '\\n');
   if (process.env.HOLD === 'stdin') await new Promise(resolve => process.stdin.once('data', resolve));
   else await new Promise(resolve => setTimeout(resolve, 150));
-  return { ok: true, result: 'entregue', module: process.env.CHILD_MODULE, start, end: Date.now() };
+  return { ok: true, result: 'delivered', module: process.env.CHILD_MODULE, start, end: Date.now() };
 });
 process.stdout.write('result ' + JSON.stringify(value) + '\\n');
 process.stdin.destroy();
@@ -95,14 +95,14 @@ test('two processes writing two modules of one Studio: the later writes wait and
   ui.child.stdin.write('go\n');
   for (const w of [ui, bo, cs]) assert.equal(await w.exited, 0, w.io.err);
   const [a, b, c] = [ui.result(), bo.result(), cs.result()];
-  for (const value of [a, b, c]) assert.equal(value.result, 'entregue', JSON.stringify(value));
+  for (const value of [a, b, c]) assert.equal(value.result, 'delivered', JSON.stringify(value));
   assert.ok(b.start >= a.end, 'the BackOffice ran after the UI ended');
   assert.ok(c.start >= b.end, 'the CS ran after the BackOffice ended: first in, first out');
   assert.equal(a.queue, undefined, 'the first write never waited');
   assert.deepEqual([b.queue.position, b.queue.holder.tool, b.queue.holder.pid], [1, 'o11_deliver', ui.child.pid]);
   assert.equal(c.queue.position, 2);
   assert.ok(b.queue.waitedMs >= 200 && c.queue.waitedMs >= 0);
-  assert.doesNotMatch(ui.io.out + bo.io.out + cs.io.out, /STUDIO_WRITE_BUSY|espere a resposta dela e repita/);
+  assert.doesNotMatch(ui.io.out + bo.io.out + cs.io.out, /STUDIO_WRITE_BUSY|wait for its answer and repeat|espere a resposta dela e repita/);
   assert.deepEqual(files(locks(deps), '.lock'), []); assert.deepEqual(files(locks(deps), '.queue'), []);
 });
 
@@ -111,7 +111,7 @@ test('a wait that runs out answers STUDIO_WRITE_QUEUE_TIMEOUT with the holder an
   const holder = writer(deps, 'Cardapio_UI', 'stdin');
   await holder.started;
   let first = false, second = false;
-  const waiting = withStudioWriteLock({ tool: 'o11_publish', args: { module: 'Cardapio_UI' }, lane: 'o11', deps }, async () => { first = true; return { ok: true, result: 'publicado' }; });
+  const waiting = withStudioWriteLock({ tool: 'o11_publish', args: { module: 'Cardapio_UI' }, lane: 'o11', deps }, async () => { first = true; return { ok: true, result: 'published' }; });
   await until(() => entries(locks(deps)).length === 1, 'the first waiter in the queue');
   // SSAM_WRITE_QUEUE_MS bounds the wait of this call
   const started = Date.now();
@@ -133,7 +133,7 @@ test('a wait that runs out answers STUDIO_WRITE_QUEUE_TIMEOUT with the holder an
   holder.child.stdin.write('go\n');
   assert.equal(await holder.exited, 0, holder.io.err);
   const after = await waiting;
-  assert.equal(first, true); assert.equal(after.result, 'publicado'); assert.equal(after.queue.holder.pid, holder.child.pid);
+  assert.equal(first, true); assert.equal(after.result, 'published'); assert.equal(after.queue.holder.pid, holder.child.pid);
   assert.deepEqual(files(locks(deps), '.queue'), []);
 });
 
@@ -146,7 +146,7 @@ test('a cancelled wait leaves the queue at once, nothing of it runs, and the wri
   const cancelled = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'Cardapio_BackOffice' }, lane: 'o11', deps, signal: controller.signal },
     async () => { cancelledRan = true; });
   await until(() => entries(locks(deps)).length === 1, 'the first waiter in the queue');
-  const behind = withStudioWriteLock({ tool: 'o11_publish', args: { module: 'Cardapio_CS' }, lane: 'o11', deps }, async () => ({ ok: true, result: 'publicado' }));
+  const behind = withStudioWriteLock({ tool: 'o11_publish', args: { module: 'Cardapio_CS' }, lane: 'o11', deps }, async () => ({ ok: true, result: 'published' }));
   await until(() => entries(locks(deps)).length === 2, 'the second waiter in the queue');
   const at = Date.now();
   controller.abort();
@@ -159,7 +159,7 @@ test('a cancelled wait leaves the queue at once, nothing of it runs, and the wri
   holder.child.stdin.write('go\n');
   assert.equal(await holder.exited, 0, holder.io.err);
   const next = await behind;
-  assert.equal(next.result, 'publicado');
+  assert.equal(next.result, 'published');
   assert.equal(next.queue.position, 2, 'it entered behind the running write and the cancelled one');
   assert.deepEqual(files(locks(deps), '.queue'), []); assert.deepEqual(files(locks(deps), '.lock'), []);
 });
@@ -211,11 +211,11 @@ test('through the ssam server: a second o11_deliver on the same Studio waits for
   await sleep(150);
   assert.equal(delivers, 1, 'the second delivery waits its turn: never two on the Studio at once, never refused');
   release();
-  assert.equal(JSON.parse((await first).content[0].text).result, 'entregue');
+  assert.equal(JSON.parse((await first).content[0].text).result, 'delivered');
   const after = await second;
   assert.notEqual(after.isError, true, JSON.stringify(after));
   const texts = after.content.map(c => c.text).join('\n');
-  assert.match(texts, /entregue/);
+  assert.match(texts, /delivered/);
   const queue = after.structuredContent?.queue ?? JSON.parse(after.content.find(c => /"queue"/.test(c.text)).text).queue;
   assert.deepEqual([queue.position, queue.holder.tool, queue.holder.pid], [1, 'o11_deliver', process.pid]);
   assert.doesNotMatch(texts, /Ana 0912|STUDIO_WRITE_BUSY/);

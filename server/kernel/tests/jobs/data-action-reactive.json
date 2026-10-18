@@ -1,5 +1,5 @@
 {
- "description": "Data action numa tela Reactive: busca dados por logica (nao por aggregate), com output structure list usado numa List; OnAfterFetch opcional",
+ "description": "Data action on a Reactive screen: fetches data by logic (not by aggregate), with a structure list output used in a List; OnAfterFetch optional",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "ops": [
@@ -71,7 +71,7 @@
   {
    "op": "delete",
    "target": "$da/Out1",
-   "_why": "a data action nasce com um output Out1 de exemplo"
+   "_why": "the data action is born with a sample output Out1"
   },
   {
    "op": "create",

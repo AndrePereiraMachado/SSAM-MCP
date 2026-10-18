@@ -1,5 +1,6 @@
 // hosted/odc-stage.mjs through the AgentExecutor (docs/FASE2-AGENTE.md 4.5): what each ODC bridge command sends to the
 // agent before and brings back after. The fake AgentLink plays the agent and the bridge on a temporary agent root.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

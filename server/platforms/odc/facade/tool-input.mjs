@@ -41,15 +41,17 @@ import { createHash } from 'node:crypto';
 import * as z from 'zod/v4';
 import { shapeCall } from './call-shapes.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
+import { WORD_KEYS, bridgeEchoWithoutWords, maskWords } from './destructive-operations.mjs';
 
 export const INPUT_INVALID = 'INPUT_INVALID';
 export const NEVER_ADJUSTED = Object.freeze(['authorize', 'words', 'text', 'job', 'patch', 'basedOn', 'html', 'request', 'records']);
 export const BATCHED = Object.freeze(['select']);
 // In `corrected` the user's words are never echoed (the marker of next-steps.mjs) and a large payload is not sent back.
-export const WORDS_MARKER = '<palavras do usuário>';
-export const AS_SENT = '<como enviado>';
+export const WORDS_MARKER = "<the user's own words>"; // the one marker of next-steps.mjs and continuations.mjs
+export const AS_SENT = '<as sent>';
 const NEVER = new Set(NEVER_ADJUSTED);
-const WORDS = new Set(['authorize', 'words']);
+// CX15 r5 (N-1): the same keys as destructive-operations.mjs WORD_KEYS (authorize, authorization, words, ownerRequest).
+const WORDS = new Set(WORD_KEYS);
 const LARGE_ECHO = 2048, MAX_VIOLATIONS = 50, MAX_REF_DEPTH = 32, MAX_PASSES = 3;
 const SUMMED = new Set(['requested', 'count', 'total', 'bytes']);
 const IDENTIFIER = /^(?:pid|port)$|(?:Id|Key|Uuid)$/;
@@ -404,15 +406,17 @@ function readNormalized(jsonSchema, args) {
 }
 
 // ---- answers
-function forEcho(args, words) {
+// CX15 r6 (M-2): for studio_command the words sit in command/args where the bridge reads them (bridgeEchoWithoutWords).
+function forEcho(args, words, name) {
+  if (name === 'studio_command' && isObject(args)) args = bridgeEchoWithoutWords(args);
   if (!isObject(args)) return args;
   const out = {};
   for (const [k, v] of Object.entries(args)) {
     if (words.has(k) && typeof v === 'string') out[k] = WORDS_MARKER;
     else if (NEVER.has(k) && Buffer.byteLength(JSON.stringify(v ?? null), 'utf8') > LARGE_ECHO) out[k] = AS_SENT;
-    else out[k] = v;
+    // CX15 r5 (N-1): the words at any depth too (request.batch[].authorization, ownerRequest, reconcile.authorize...).
+    else out[k] = maskWords(v);
   }
-  if (isObject(out.request) && typeof out.request.authorization === 'string') out.request = { ...out.request, authorization: WORDS_MARKER };
   return out;
 }
 
@@ -421,7 +425,7 @@ export function inputInvalidAnswer(name, violations, corrected, { fixed = false 
   const value = { ok: false, code: INPUT_INVALID,
     error: `${violations.length} argument problem(s) for ${name}: ` + shown.slice(0, 5).map(v => (v.path || '/') + ' ' + v.message).join('; '),
     violations: shown, ...(violations.length > shown.length ? { violationsTotal: violations.length } : {}), corrected,
-    ...(fixed ? { continuation: { tool: name, arguments: corrected, why: 'os mesmos argumentos com as correções acima; troque cada <campo> pelo valor certo, as palavras do usuário pelas dele, literais, e <como enviado> pelo valor desta chamada' } } : {}) };
+    ...(fixed ? { continuation: { tool: name, arguments: corrected, why: 'the same arguments with the corrections above; replace each <field> with the right value, the user\'s words marker with the user\'s own words, verbatim, and <as sent> with the value of this call' } } : {}) };
   return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, isError: true };
 }
 
@@ -521,7 +525,7 @@ export function relaxTool(name, config, handler, { prepare } = {}) {
       const parsed = await std.validate(args);
       if (parsed?.issues?.length) {
         const violations = parsed.issues.map(issue => ({ path: issuePath(issue), message: String(issue.message ?? 'invalid'), accepted: null }));
-        return { refused: inputInvalidAnswer(name, violations, forEcho(args, words)) };
+        return { refused: inputInvalidAnswer(name, violations, forEcho(args, words, name)) };
       }
       return { result: await handler(parsed?.value ?? args, ctx) };
     };
@@ -535,7 +539,7 @@ export function relaxTool(name, config, handler, { prepare } = {}) {
     const relaxedHandler = async (raw, ctx) => {
       const { n, shaped, args } = prepared(raw);
       const noted = result => withNormalizations(result, shaped.normalizations);
-      if (n.violations.length) return noted(inputInvalidAnswer(name, n.violations, forEcho(n.corrected, words), { fixed: n.fixed }));
+      if (n.violations.length) return noted(inputInvalidAnswer(name, n.violations, forEcho(n.corrected, words, name), { fixed: n.fixed }));
       if (!n.batches.length) {
         const r = await run(args, ctx);
         return noted(r.refused ?? withInputAdjusted(r.result, n.adjusted));

@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {datasetCreationOutcome,datasetCreationObservation} from '../runtime/dataset-receipt.mjs';
 test('dataset receipt retains both native identities but does not claim read-back',()=>{

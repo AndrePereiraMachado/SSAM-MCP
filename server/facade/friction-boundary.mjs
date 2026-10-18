@@ -138,24 +138,34 @@ export function readQueue(store,args={},context={}) {
 // server's mcp-session-id); without it, one session per observer (per process), as before.
 // The queue answers here, synchronously, on the line of the client's requests: its store never rebuilds the index from the
 // operation files (rebuild:false), so no friction call scans the whole queue while the session waits.
-export function observeMcp({root,entry,args,env=process.env,store=createStore({root,env,rebuild:false}),meta:given=boundaryMetadata(root,entry,args,env),sessionId,toServer,toClient}={}) {
+export function observeMcp({root,entry,args,env=process.env,store=createStore({root,env,rebuild:false}),meta:given=boundaryMetadata(root,entry,args,env),sessionId,toServer,toClient,includeFrictionTool=true,shapeFrictionResult}={}) {
   const meta=sessionId?{...given,sessionId}:given;
   const pending=new Map(),lists=new Set();
   const key=id=>JSON.stringify(id);
   const send=value=>{try{toClient(JSON.stringify(value)+'\n');}catch{store.warn('MCP_FORWARD_WRITE_FAILED');}};
+  const localAnswer=(id,args,result)=>{
+    const deliver=result=>send({jsonrpc:'2.0',id,result});
+    if(!shapeFrictionResult){deliver(result);return;}
+    // Consume the local request synchronously; lineChannel must never see a Promise or forward it twice.
+    Promise.resolve().then(()=>shapeFrictionResult(args,result)).then(deliver).catch(()=>{
+      store.warn('FRICTION_ANSWER_FAILED');
+      const value={ok:false,code:'FRICTION_ANSWER_FAILED',error:'The local queue answer could not be formatted; inspect issues to check the recorded state.',continuation:{tool:'ssam_friction',arguments:{view:'issues'},why:'Read queue state without repeating a report.'}};
+      deliver({isError:true,content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value});
+    });
+  };
   const request=lineChannel({onRaw:toServer,warning:store.warn,onMessage(message){
     if(!message||typeof message!=='object'||Array.isArray(message)){store.warn('MCP_INVALID_ENVELOPE');return false;}
     if(message.method==='tools/list'&&message.id!==undefined)lists.add(key(message.id));
     if(message.method==='tools/call'&&message.id!==undefined){
       const input=message.params??{};
-      if(input.name===frictionTool.name){
+      if(includeFrictionTool&&input.name===frictionTool.name){
         try {
           const value=readQueue(store,input.arguments,{sessionId:meta.sessionId,profile:meta.profile});
-          send({jsonrpc:'2.0',id:message.id,result:{content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value,...(value?.ok===false?{isError:true}:{})}});
+          localAnswer(message.id,input.arguments,{content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value,...(value?.ok===false?{isError:true}:{})});
         }
         catch(error){
           const refused={ok:false,code:'FRICTION_QUERY_INVALID',error:String(error?.message??'').startsWith('Invalid report')?error.message:'Invalid friction query; use issues or task with an explicit taskId, or report {kind, tool, intent, attempted}.'};
-          send({jsonrpc:'2.0',id:message.id,result:{isError:true,content:[{type:'text',text:JSON.stringify(refused)}],structuredContent:refused}});
+          localAnswer(message.id,input.arguments,{isError:true,content:[{type:'text',text:JSON.stringify(refused)}],structuredContent:refused});
         }
         return true;
       }
@@ -178,7 +188,7 @@ export function observeMcp({root,entry,args,env=process.env,store=createStore({r
     if(message.id===undefined)return false;
     const ref=key(message.id),op=pending.get(ref);
     if(op){op.finish(message.result??message.error,{protocolError:!!message.error,evidence:receiptEvidence(root,message.result)});pending.delete(ref);}
-    if(lists.delete(ref)&&message.result&&Array.isArray(message.result.tools)&&!message.result.nextCursor){
+    if(lists.delete(ref)&&includeFrictionTool&&message.result&&Array.isArray(message.result.tools)&&!message.result.nextCursor){
       if(!message.result.tools.some(t=>t.name===frictionTool.name))message.result.tools.push(frictionTool);
       send(message);return true;
     }

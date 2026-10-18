@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { indexChunk, indexBootstrap, indexRuntime, guidToKey, keyToGuid, endpointOwner } from '../debug-odc-native-runtime.mjs';

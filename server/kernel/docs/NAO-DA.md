@@ -6,7 +6,7 @@ visto, para se poder repetir a medicao em vez de acreditar nesta pagina.
 Existe porque metade do tempo perdido a automatizar OutSystems e gasto a tentar outra vez uma coisa que ja se
 sabe que a plataforma recusa. Um LLM frio que leia isto primeiro nao repete a tentativa.
 
-## Quanto disto esta verificado (2026-09-17)
+## How much of this is verified (2026-09-17)
 
 Estes 100 itens foram COLHIDOS de relatorios e jobs por agentes. Os 52 que so se apoiavam em apontamentos foram
 depois ATACADOS um a um por uma passagem adversarial -- agentes com ordem de os DERRUBAR, nao de os confirmar,
@@ -57,11 +57,11 @@ Os tipos:
 | `limite-do-kernel` | limitacao nossa, do Anvil ou do SSAM, e nao da plataforma |
 
 
-## Limites do tradutor de C# para logica OutSystems (Anvil.CSharp)
+## Limits of the C# to OutSystems logic translator (Anvil.CSharp)
 
-### TimeSpan.FromDays/FromHours/... com argumento NAO constante
+### TimeSpan.FromDays/FromHours/... with a NON-constant argument
 
-`limite-do-kernel`
+`kernel-limit`
 
 `TimeSpan.FromDays(x)` com `x` variavel e recusado com `AVCS310: Duration factory double semantics require a
 constant or a supported exact integral range`. Com um literal compila, porque o valor e calculado na compilacao.
@@ -86,14 +86,14 @@ require a constant or a supported exact integral range
 TemporalInstants.cs(14,71): AVCS310: (a mesma, na linha seguinte)
 ```
 
-Visto em: `src/Anvil.CSharp/MethodCompiler.cs:20` (`Unsupported` monta o AVCS310) e o teste
+Seen in: `src/Anvil.CSharp/MethodCompiler.cs:20` (`Unsupported` builds the AVCS310) and the test
 `tests/Anvil.Tests/CSharpTemporalTests.cs:25`, unico vermelho da suite O11 em 2026-09-18 (1138/1139).
 
-## Recusas e limites da plataforma ODC (Verify e Model API): o que o ODC recusa mesmo estando a API publica disponivel
+## Refusals and limits of the ODC platform (Verify and Model API): what ODC refuses even though the public API is available
 
-### IRestClient.Username / IRestClient.Password (REST consumido)
+### IRestClient.Username / IRestClient.Password (consumed REST)
 
-`recusa-da-plataforma`
+`platform-refusal`
 
 As duas propriedades existem na API do ODC e aceitam escrita, mas o Verify recusa-as como ERRO: no ODC as credenciais nao vivem no modelo. Fica no modelo apenas o MODO de autenticacao (AuthenticationType + ClientAuthentication); o segredo fica fora dele. Nao tente gravar credencial num IRestClient.
 
@@ -103,11 +103,11 @@ Prova:
 CustomObjectError: Invalid Password | Password is not supported, please remove it using Model API. @ InsuranceApp (ESpace) / WfCovOrdersApi (RestClient) / Password (CustomProperty) -- idem para Username. O enum AuthenticationType do ODC so tem None, BasicAuthentication e OAuth2; o get do cliente devolve Username e Password a NULL.
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc\rest-consume-post.json:2 (description, medida no proprio job) e :11 (_why do AuthenticationType); C:\Users\andre\Anvil\tests\jobs-odc\rest-consume-lifecycle.json:8
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc\rest-consume-post.json:2 (description, measured in the job itself) and :11 (_why of AuthenticationType); C:\Users\andre\Anvil\tests\jobs-odc\rest-consume-lifecycle.json:8
 
 ### ISessionVariable / IESpace.CreateSessionVariable
 
-`recusa-da-plataforma`
+`platform-refusal`
 
 Session Variable nao existe no produto ODC (nao ha Traditional Web). A API publica ainda oferece o tipo e o metodo de criacao exatamente como no SS11, mas a fabrica recusa na hora. Quem precisa de estado no ODC usa client variable.
 
@@ -117,11 +117,11 @@ Prova:
 op #0 (create WfCovSessionState): InvalidOperationException: Session Variable objects can't be children of App objects
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc-negative\session-variable-not-in-odc.json:7 (expectError, corre em OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane); saida colada em C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:213 e :427
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc-negative\session-variable-not-in-odc.json:7 (expectError, runs in OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane); output pasted in C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:213 and :427
 
-### rename sobre IEvent (Extended Event) e ISystemEvent
+### rename on IEvent (Extended Event) and ISystemEvent
 
-`recusa-da-plataforma`
+`platform-refusal`
 
 Renomear um evento de plataforma e recusado PELA PLATAFORMA, antes de o kernel chegar ao seu proprio 'Name is read-only': a coleccao Events nao tem handler de colisao de nomes. A unica forma de mudar o nome de um Extended Event e escrever a propriedade 'Event' (lista fechada de 11 nomes do produto); o DisplayName e o ReadableIdentifier acompanham sozinhos.
 
@@ -131,13 +131,13 @@ Prova:
 op #N (rename <nome>): InvalidOperationException: Cannot find handler for object On Click of type Event. -- e, para o system event: op #N (rename WfEvtOnStart): InvalidOperationException: Cannot find handler for object OnApplicationReady of type On Application Ready. Ambas atiradas de ServiceStudio.Model.NameClashHandler.GetNamesToNameClashAgainstChildObj. Contraprova no mesmo job: o IExternalSite vizinho renomeia-se sem uma queixa.
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc\platform-events-lifecycle.json:2 (description, pontos 2 e 3) e :51, :90
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc\platform-events-lifecycle.json:2 (description, points 2 and 3) and :51, :90
 
 ### ISystemRole
 
-`inalcancavel`
+`unreachable`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > A primeira passagem tinha dito `confirmado`; caiu na reconferencia.
 > 
 > **Correccao:** Manter a conclusao (nenhum job cria os tres) e trocar o motivo de IService/IExposedAction. Nao e 'abstratos (IsConcrete = false) sem classe concreta': ha classe concreta (CustomService implementa IService; CustomActionFlow implementa IExposedAction) e a flag IsConcrete nao e lida por ninguem em runtime. O que impede e o registo da ModelFactory: so fica construtor para a interface de modelo com UMA unica implementacao e que nao seja interface-base de outra ja registada (ModelFactory.cs:259-275); IService e base de IRestService/ISOAPService, por isso sai do registo e Create atira 'Couldn't find any concrete class implementing'. IExposedAction nem chega a fabrica -- nenhum pai publica Create para ele, e a recusa e do proprio kernel (Verbs.cs:311). ISystemRole fica como esta: e IsConcrete = true (ISystemRole.cs:6) e o motivo e mesmo a ausencia de Create em IESpace.
@@ -155,11 +155,11 @@ Prova:
 IESpace 'InsuranceApp' cannot create ISystemRole (no Create method in the API)
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:500 (tabela 'Tipos que NAO existem no ODC'); caminho que funciona provado em C:\Users\andre\Anvil\tests\jobs-odc\security-settings.json
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:500 (table 'Tipos que NAO existem no ODC'); path that works, proven in C:\Users\andre\Anvil\tests\jobs-odc\security-settings.json
 
-### IService e IExposedAction (OutSystems.Model.Logic.Integrations)
+### IService and IExposedAction (OutSystems.Model.Logic.Integrations)
 
-`inalcancavel`
+`unreachable`
 
 Os dois nomes existem na API mas sao abstratos (IsConcrete = false) e nao tem classe concreta nem metodo Create. O REST exposto de verdade no ODC e IRestService, do plugin ServiceStudio.Plugin.RESTService, criado por IESpace.CreateIntegration<T>.
 
@@ -169,11 +169,11 @@ Prova:
 ArgumentException: Couldn't find any concrete class implementing OutSystems.Model.Logic.Integrations.IService -- e IESpace 'InsuranceApp' cannot create IExposedAction (no Create method in the API)
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:501; caminho que funciona em C:\Users\andre\Anvil\tests\jobs-odc\rest-expose.json
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:501; path that works in C:\Users\andre\Anvil\tests\jobs-odc\rest-expose.json
 
 ### ILocalStorageEntity
 
-`inalcancavel`
+`unreachable`
 
 Nao existe tipo proprio de 'local storage' no ODC: o tipo e IClientEntity, o mesmo nome do SS11. Procurar pelo nome do conceito da erro de tipo desconhecido.
 
@@ -183,13 +183,13 @@ Prova:
 KeyNotFoundException: unknown Model API type: ILocalStorageEntity (not in OutSystems.Model.V1 nor in the Studio plugins)
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:499; IClientEntity criado com sucesso em C:\Users\andre\Anvil\tests\jobs-odc\client-storage.json
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:499; IClientEntity created successfully in C:\Users\andre\Anvil\tests\jobs-odc\client-storage.json
 
-### IAggregateAttribute (nome do SS11) num job ODC
+### IAggregateAttribute (SS11 name) in an ODC job
 
-`diferenca-entre-faixas`
+`lane-difference`
 
-> **CONFIRMADO** (passagem adversarial, 2026-09-17)
+> **CONFIRMED** (passagem adversarial, 2026-09-17)
 > 
 > **Como se soube:** C:\Users\andre\ODC3\decompiled\odc\OutSystems.Model.V1\OutSystems.Model.Logic.Aggregates\IAggregatedAttribute.cs:10-11 -- `[ModelInterface(DisplayName = "Aggregate Attribute", Icon = "StructureAttribute.ico", IsConcrete = true)]` / `public interface IAggregatedAttribute : IObject, ...`. Nessa mesma pasta NAO existe IAggregateAttribute.cs (Test-Path = False). Do lado O11: C:\Users\andre\Anvil\catalog\model-api-11.55.69.json:8734 -- `"Name": "OutSystems.Model.Logic.Aggregates.IAggregateAttribute"`. As propriedades batem (AggregationType, Attribute, DataType, Name) e a classe concreta e ServiceStudio.Model.AggregateAttribute nas duas.
 > 
@@ -204,13 +204,13 @@ Prova:
 op #12 (create OpenCount): KeyNotFoundException: unknown Model API type: IAggregateAttribute (not in OutSystems.Model.V1 nor in the Studio plugins)
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:366-379
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:366-379
 
-### Prefixo de expressao Site.<Nome> (Site Property do SS11)
+### Expression prefix Site.<Name> (SS11 Site Property)
 
-`diferenca-entre-faixas`
+`lane-difference`
 
-> **CONFIRMADO** (passagem adversarial, 2026-09-17)
+> **CONFIRMED** (passagem adversarial, 2026-09-17)
 > 
 > **Como se soube:** C:\Users\andre\ODC3\decompiled\odc\OutSystems.Model\ServiceStudio.Model\ModelFrameworkConstants.cs:148-155 -- `public static string GetSiteOrSettings(ESpace eSpace) { if (!ServiceStudio.ModelFeatures.ModelFeatures.SitePropertiesRefactoredToSettings.CanBeUsedInServerAndServiceStudio(eSpace)) { return "Site"; } return "Settings"; }`. O prefixo de cliente em C:\Users\andre\ODC3\decompiled\authorship\ESpace.cs:1719 -- `Add("Client", ScopeLookupKind.NotFunction, AggregatorScopeEntry.ClientVariables(), ...)`. A mesma funcao e usada pelo parser de expressoes: ParsedExpression.cs:1171 e :1185.
 > 
@@ -225,13 +225,13 @@ Prova:
 Error ExpressionUnknownObject: Invalid Expression | Can't identify 'Site' element in expression. @ InsuranceApp (ESpace) / WfProbe_ReadSite (ServerAction) / ReadWithSitePrefix (AssignNode) / Assignment -- e sem prefixo nenhum: Can't identify 'WfCovMaxRows' element in expression. Com Settings.WfCovMaxRows: 0 mensagens novas. Fonte: ScopeTreeFolders.GetSiteOrSettings em ServiceStudio.Model/ModelFrameworkConstants.cs (assembly OutSystems.Model do ODC Studio).
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:301-338
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:301-338
 
-### Public / Shareable em action, block, structure
+### Public / Shareable on action, block, structure
 
-`diferenca-entre-faixas`
+`lane-difference`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Trocar `usar um tipo nao partilhavel no contrato de uma action shareable e ERRO, nao aviso como no O11` por: e ERRO nas duas faixas -- o que muda e a palavra (Public/public no O11, Shareable/shareable no ODC), nao a severidade. Manter o resto: IServerAction e IStructure do ODC tem as duas propriedades, o SS11 so tem Public, e `set Public true` continua a ser o que compila nas duas.
 > 
@@ -248,13 +248,13 @@ Prova:
 Catalogo do Verify do ODC: { "Id": "InvalidPublic_ActionParameterNotPublic", "Severity": "Error", "Title": "Invalid Shareable Action", "Detail": "The Action '{0}' is shareable but its parameter '{1}' is defined as a record of type {2} that is not shareable." } e { "Id": "InvalidPublicNRBlock", "Severity": "Error", ... }. Na API, IServerAction do ODC tem AS DUAS propriedades (Public e Shareable); no SS11 so tem Public.
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:340-364; resumo em lab\ws1-diferencas.md:50
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:340-364; summary in lab\ws1-diferencas.md:50
 
-### Count de aggregate e action sem consumidor (Verify do ODC)
+### Count of aggregate and action without a consumer (ODC Verify)
 
-`diferenca-entre-faixas`
+`lane-difference`
 
-> **REFUTADO** (passagem adversarial, 2026-09-17)
+> **REFUTED** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** O que e verdade: no ODC o Count de um aggregate e Long Integer e o Sum sobre Integer sobe a Long Integer -- e o job tem de declarar o tipo certo. O que e falso e o parentese `(no O11 e Integer)` e a classificacao `diferenca-entre-faixas`: em 11.55.87 o O11 devolve Long Integer pelo mesmo metodo. Idem para UnusedUserAction: uma server action NAO publica sem consumidor leva o aviso nas duas faixas (e marca-la Public evita-o nas duas). Reclassificar como `armadilha` do ODC ou, melhor, como facto de plataforma valido nas duas faixas. O cabecalho gemeo da linha 617 (`UnusedUserAction em server action sem consumidor`, que diz `no SS11 nao`) cai pela mesma prova e tem de ser corrigido junto.
 > 
@@ -271,13 +271,13 @@ Prova:
 ExpressionUnexpectedExpresssionType ... 'Integer' data type expected instead of 'Long Integer'; UnusedUserAction ... is never used
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\ws1-diferencas.md:28
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\ws1-diferencas.md:28
 
-### IEndNode dentro de tela (eSpace CrossDevice)
+### IEndNode inside a screen (CrossDevice eSpace)
 
-`recusa-da-plataforma`
+`platform-refusal`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** A fabrica do ODC nao recusa nos de fim 'num eSpace CrossDevice' -- recusa um no de fim num PAI onde nenhuma variante terminal e permitida, e escreve o tipo do eSpace na mensagem so como contexto. O caso medido foi resolucao de nome no namespace errado (Processes/BusinessProcesses), ja tratada pelo kernel (FindCreateCore.Rank + GetBaseException). Reescrever como 'armadilha' de resolucao de nome, nao como recusa-da-plataforma, e dizer explicitamente que IEndNode dentro de client/screen action funciona na faixa ODC.
 > 
@@ -294,13 +294,13 @@ Prova:
 op #23 (create ): Nodes of type IEndNode are not allowed in IMobileScreen or eSpaces of type CrossDevice (a excecao vem aninhada em dois TargetInvocationException: usar GetBaseException())
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\ws1-diferencas.md:22
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\ws1-diferencas.md:22
 
-### CronSchedule de ITimer
+### CronSchedule of ITimer
 
-`recusa-da-plataforma`
+`platform-refusal`
 
-> **CONFIRMADO** (passagem adversarial, 2026-09-17)
+> **CONFIRMED** (passagem adversarial, 2026-09-17)
 > 
 > **Como se soube:** C:\Users\andre\ODC3\decompiled\odc\OutSystems.Model\ServiceStudio.Model\Schedule.cs:846-849 -- `string[] array = cronExpression.Split(new char[1] { ' ' }); if (array.Length != 5) { throw new InvalidOperationException("Invalid cron expression provided: " + cronExpression); }`, e :640 -- `return ToCronExpression<Minute>() + " " + ToCronExpression<Hour>() + " " + ToCronExpression<DayOfMonth>() + " " + ToCronExpression<Month>() + " " + ToCronExpression<DayOfWeek>();` (a ordem citada no item confere). Ja tem ancora viva: C:\Users\andre\Anvil\tests\jobs-odc\timer-action.json -- `{"op":"set","target":"$timer","prop":"CronSchedule","value":"15 3 * * *","_why":"cron de CINCO campos (minuto hora diaDoMes mes diaDaSemana); com seis campos o ODC recusa: 'Invalid cron expression provided'"}` mais um `get` e um `dump depth 3` que provam Schedule e o filho ScheduleConfiguration. Citacao confere: docs\tasks\cobertura-t-relatorio.md:381-397. Nota que o item nao da e nao contradiz: FromCronExpression tambem aceita a string vazia (limpa os itens, :837-840) e o literal `"WhenPublished"` (:841-845).
 > 
@@ -315,11 +315,11 @@ Prova:
 op #4 (set CronSchedule): InvalidOperationException: Invalid cron expression provided: 0 15 3 * * ?  at ServiceStudio.Model.Schedule.FromCronExpression(String cronExpression). Confirmado na fonte ServiceStudio.Model/Schedule.cs (ToCronExpression<Minute|Hour|DayOfMonth|Month|DayOfWeek>).
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:381-397
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:381-397
 
-### IActionSignature:ListAppend num IExecuteServerActionNode
+### IActionSignature:ListAppend in an IExecuteServerActionNode
 
-`armadilha`
+`trap`
 
 No ODC ListAppend existe como IClientActionSignature E como IServerActionSignature. A forma do job O11 (IActionSignature:ListAppend) acerta na do cliente e o no de servidor recusa-a. Tem de se escrever IServerActionSignature:ListAppend.
 
@@ -329,11 +329,11 @@ Prova:
 op #30 (set Action): InvalidOperationException: Cannot set OutSystems.Model.Logic.Nodes.IExecuteServerActionNode.Action to 'ListAppend' (OutSystems.Model.IObject): the value is not valid in this context
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:399-418; correcao aplicada em C:\Users\andre\Anvil\tests\jobs-odc\data-action.json:64
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:399-418; fix applied in C:\Users\andre\Anvil\tests\jobs-odc\data-action.json:64
 
-### IsSecret numa Setting (ISiteProperty)
+### IsSecret on a Setting (ISiteProperty)
 
-`armadilha`
+`trap`
 
 IsSecret NAO protege nada dentro do modelo: nem o Verify nem a Model API impedem gravar um DefaultValue em claro numa Setting secreta, e ligar IsSecret numa Setting que ja tem valor nao o apaga nem o bloqueia. Quem guarda o segredo e o Portal do ODC, nao o Studio. A bandeira e ortogonal ao valor.
 
@@ -343,13 +343,13 @@ Prova:
 Medido: set DefaultValue "CHANGE-ME-IN-THE-PORTAL" numa Setting com IsSecret True passa via 'SetDefaultValue' e o get devolve o valor em claro, IsSecret continua True, 0 mensagens novas de Verify; depois set IsSecret true numa Setting com DefaultValue 250 -> get devolve IsSecret True e DefaultValue 250 INTACTO.
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc\setting-lifecycle.json:25 (_why 8a), :26 (8b), :28 (9a), :29 (9b)
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc\setting-lifecycle.json:25 (_why 8a), :26 (8b), :28 (9a), :29 (9b)
 
-### Gravar Setting dentro de uma action (WriteableSiteProperties removido)
+### Writing a Setting inside an action (WriteableSiteProperties removed)
 
-`armadilha`
+`trap`
 
-> **NAO MEDIDO** (passagem adversarial, 2026-09-17)
+> **NOT MEASURED** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Nada a corrigir no texto, mas esta na seccao errada: vive sob "## Recusas e limites da plataforma ODC ... o que o ODC recusa" (NAO-DA.md:38) e o proprio item diz que o ODC NAO recusou. Ou muda de seccao, ou a seccao ganha um aviso de que este item e o unico nao provado.
 > 
@@ -366,13 +366,13 @@ Prova:
 Catalogo: { "Id": "ModelFeature_RemovedFeature_ModelFeature_WriteableSiteProperties", "Severity": "Error", "Detail": "You cannot change the value of a setting within an action. To change settings values, you must edit their default values." }. Contraprova medida: == probe-setting-write.json: ok=True {'ops': 17, 'objects': 59293, 'isValid': True, 'messages': 55, 'applyMs': 17} ... unexpected: 0, accepted=True
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:448-482 (a propria fonte escreve 'Nao esta provado')
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:448-482 (the source itself writes 'Nao esta provado')
 
 ### BPT / IESpace.CreateBusinessProcess
 
-`inalcancavel`
+`unreachable`
 
-> **REFUTADO** (passagem adversarial, 2026-09-17)
+> **REFUTED** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** O ODC TEM a funcionalidade: chama-se Workflow, e um tipo de asset proprio (SegmentationKind.BusinessProcess), escreve-se no Workflow Editor do ODC Portal e o ODC Studio recusa-se a abrir o ficheiro ('Files created with Workflow Editor can only be opened in ODC Portal'). E o mesmo padrao de vocabulario ja registado na pagina (ISiteProperty = Settings): na API chama-se BusinessProcess, no produto chama-se Workflow. O que nao se sabe -- porque ninguem executou -- e se `IESpace.CreateBusinessProcess` num modulo de Studio produz algo valido; a marca de modelo e `Stable` com `checkEnvironmentCompatibility: true`, e pelo proprio relatorio (cobertura-t-relatorio.md:477-482) marcas assim NAO disparam headless, logo o mais provavel e que a criacao passe em silencio e produza lixo. Corrigir tambem a frase 'Processo e trabalho da faixa O11' e a mesma afirmacao copiada para a description de tests/jobs-odc-negative/session-variable-not-in-odc.json:2 ('o mesmo padrao do CreateBusinessProcess (API sim, produto nao)').
 > 
@@ -389,13 +389,13 @@ Prova:
 Superficie confirmada por sonda sobre a DLL: CreateBusinessProcess: True; IBusinessProcess: True; OutSystems.Model.BusinessProcesses.Nodes: True (OutSystems.Model.V1/OutSystems.Model/IESpace.cs). Ausencia no produto: 'confirmado pelo dono em 2026-09-17'. Regra derivada: superficie de API nao e prova de funcionalidade.
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\ws1-diferencas.md:55-59; C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:502; C:\Users\andre\SSAM-Hybrid-ODC\docs\PLANO-COBERTURA.md:161
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\ws1-diferencas.md:55-59; C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:502; C:\Users\andre\SSAM-Hybrid-ODC\docs\PLANO-COBERTURA.md:161
 
-### Assets ODC sem modelo low-code (Cordova, WidgetLibrary, ExternalLibrary, ExtensionLibrary, ExternalConnection, AIModelConnection)
+### ODC assets without a low-code model (Cordova, WidgetLibrary, ExternalLibrary, ExtensionLibrary, ExternalConnection, AIModelConnection)
 
-`inalcancavel`
+`unreachable`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Trocar a lista pela medicao. (a) 'Cordova' nao e um tipo de asset -- os dois plugins Cordova que falharam sao assetType MobileLibrary, e outro MobileLibrary (Device Diagnostic) abriu em 7s, logo o tipo nao explica nada. (b) WidgetLibrary e Agent falharam mesmo, mas nao por 'nao terem modelo low-code': para o Agent a plataforma tem regra propria e literal -- resx:704 'AgentDefinitionInvalidApp|Error|Couldn't open file|Files created with Agent Editor can only be opened in ODC Portal.' (c) Um LowCodeLibrary (OutSystems UI) tambem falhou, o que derruba de vez 'sem modelo low-code' como causa. (d) ExternalLibrary, ExtensionLibrary, ExternalConnection e AIModelConnection nunca foram tentados na corrida medida -- para esses a afirmacao e suposicao a priori do script, nao medicao. O que esta medido e util: ha assets que nao abrem, o open fica 3m43s pendurado antes de desistir, e o caminho e a API publica.
 > 
@@ -412,13 +412,13 @@ Prova:
 Medido no tenant clienttenant (206 assets): download pela bridge ~10s por modulo e 3m43s por asset SEM modelo low-code.
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\tenants.json:30 (nota do tenant clienttenant.outsystems.dev, registada em 2026-09-17)
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\tenants.json:30 (note of tenant clienttenant.outsystems.dev, recorded on 2026-09-17)
 
-### IImage do modulo (recurso de imagem)
+### IImage of the module (image resource)
 
-`limite-do-kernel`
+`kernel-limit`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > A primeira passagem tinha dito `confirmado`; caiu na reconferencia.
 > 
 > **Correccao:** Trocar "o unico construtor exige byte[] binary" por "as DUAS sobrecargas de CreateImage exigem byte[] binary" (a segunda acrescenta ImageFormat/width/height, todos convertiveis -- so o binary nao e). A conclusao do item nao muda: continua inexprimivel nas duas faixas. Vale tambem notar que este item esta TRIPLICADO na pagina (NAO-DA.md:278, :729 e :993), com o mesmo defeito de frase nos tres.
@@ -434,11 +434,11 @@ Prova:
 op #0 (create WfProbeImage): InvalidOperationException: Image binary cannot be null: Object not set. Assinatura: IImage CreateImage(byte[] binary, string originalPath, string name = null, IKey key = null). Convert so sabe string, bool, int, long, decimal, enum, ITypeSignature, interface do modelo e ExpressionDefinition.
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:512-533
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:512-533
 
-### IUserException.Description no ODC
+### IUserException.Description in ODC
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 No ODC a excecao de usuario nao tem Description: so CreatedBy, LastModifiedBy, LastModifiedDate e Name sao escritaveis. Um job do O11 que escreve Description na excecao nao se copia letra a letra.
 
@@ -448,11 +448,11 @@ Prova:
 Registado no _why do op que cria a excecao: 'no ODC a IUserException nao tem Description -- so CreatedBy, LastModifiedBy, LastModifiedDate e Name sao escritaveis'
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc\service-action.json:106
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc\service-action.json:106
 
-### Client entity com Id AutoNumber
+### Client entity with an AutoNumber Id
 
-`recusa-da-plataforma`
+`platform-refusal`
 
 O Verify recusa IsAutoNumber Yes numa client entity: o Id e Long Integer SEM AutoNumber, porque o identificador e do dispositivo. Vale nas duas faixas e esta provado na faixa ODC.
 
@@ -462,13 +462,13 @@ Prova:
 Job ODC grava IsAutoNumber = No com o _why 'o Verify recusa AutoNumber Yes em client entity; o Id e do dispositivo'; corrida limpa: client-storage :: ok=True isValid=True messages=55 accepted=True
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc\client-storage.json:10; C:\Users\andre\Anvil\AGENTS.md:204; corrida em lab\cobertura-t-relatorio.md:118-121
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc\client-storage.json:10; C:\Users\andre\Anvil\AGENTS.md:204; run in lab\cobertura-t-relatorio.md:118-121
 
-### DeployAction = DeployToTargetDirectory num IResource
+### DeployAction = DeployToTargetDirectory in an IResource
 
-`armadilha`
+`trap`
 
-> **CONFIRMADO** (passagem adversarial, 2026-09-17)
+> **CONFIRMED** (passagem adversarial, 2026-09-17)
 > 
 > **Como se soube:** Verificado nos quatro ficheiros decompilados, um a um. OutSystems.Model.Enumerations.DeployAction = { Ignore, CopyToApplicationDir } nas DUAS faixas (C:\Users\andre\ODC3\decompiled\odc\OutSystems.Model.V1\OutSystems.Model.Enumerations\DeployAction.cs e o gemeo em ...\o11\...). OutSystems.Model.Extensions.DeployAction = { Ignore, CopyToBinariesDirectory, CopyToApplicationDirectory, CopyToImagesDirectory } nas DUAS. O 'so o DisplayName engana' e literal no ficheiro do ODC: `[EnumValue(DisplayName = "Deploy to Target Directory")] CopyToApplicationDir` (e `[EnumValue(DisplayName = "Do Nothing")] Ignore`). A mensagem da Prova tambem e real e localizavel: o formato `op #{origin}: {target}.{property} value '{value}' invalid; allowed: {...}; see anvil api --name {...}` esta em C:\Users\andre\Anvil\src\Anvil.Core\Kernel\DataPreflight.cs:49 -- casa palavra a palavra com o texto colado.
 > 
@@ -483,11 +483,11 @@ Prova:
 InvalidOperationException: op #2: $r.DeployAction value 'DeployToTargetDirectory' invalid; allowed: Ignore, CopyToApplicationDir; see anvil api --name DeployAction. OutSystems.Model.Enumerations.DeployAction = Ignore, CopyToApplicationDir nas duas; OutSystems.Model.Extensions.DeployAction = Ignore, CopyToBinariesDirectory, CopyToApplicationDirectory, CopyToImagesDirectory nas duas.
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:433-446
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:433-446
 
-### move entre pais diferentes (before/after com irmao de outro pai)
+### move between different parents (before/after with a sibling of another parent)
 
-`armadilha`
+`trap`
 
 O move so REORDENA dentro do mesmo pai. Sem a recusa do kernel, a plataforma cai numa assercao interna sem informacao nenhuma, nas DUAS faixas. Para mudar de pai: criar no destino e apagar o antigo.
 
@@ -497,11 +497,11 @@ Prova:
 Sem a recusa a plataforma cai na mesma assercao interna ('Condition is false') nas duas faixas. A recusa ensinada nomeia os dois caminhos: 'move before: IContainer:WfBoxB is not a sibling of IContainer:WfBoxA ... move only REORDERS inside the same parent ... create the object at the new parent and delete the old one'.
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc-negative\move-foreign-sibling.json:2 (description) e :5-12 (expectError)
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc-negative\move-foreign-sibling.json:2 (description) and :5-12 (expectError)
 
-### IESpace.DefaultScreen do ODC ao apagar a primeira tela criada headless
+### ODC IESpace.DefaultScreen when deleting the first screen created headless
 
-`armadilha`
+`trap`
 
 No ODC o ESpace guarda DefaultScreen e a primeira tela criada headless fica com esse papel. O delete dessa tela e recusado por um consumidor que aparece com CAMINHO VAZIO (o ESpace nao tem caminho), invisivel para quem le so a mensagem. Tem de se apontar DefaultScreen para outra tela antes.
 
@@ -511,13 +511,13 @@ Prova:
 delete: refused, IMobileScreen 'WfCovTaskDetail' is used by 3 consumer(s) -- dois OnClick com caminho e o terceiro com caminho vazio (o ESpace). Correcao provada: set @espace DefaultScreen = IMobileScreen:WfCovTasks antes do delete.
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc-negative\delete-screen-in-use.json:2 (description e expectError); caminho limpo em C:\Users\andre\Anvil\tests\jobs-odc\delete-screen.json:7 e :45
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc-negative\delete-screen-in-use.json:2 (description and expectError); clean path in C:\Users\andre\Anvil\tests\jobs-odc\delete-screen.json:7 and :45
 
-### ITransactionsManager do ODC (formas assincrona, oculta e descartavel)
+### ODC ITransactionsManager (asynchronous, hidden and disposable forms)
 
-`limite-do-kernel`
+`kernel-limit`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** So o TIPO esta errado. A pagina define `limite-do-kernel` como 'limitacao nossa, do Anvil ou do SSAM, e nao da plataforma' (NAO-DA.md:35) -- estes tres NotImplementedException sao da plataforma, nao nossos. Deve ser `recusa-da-plataforma` (ou `diferenca-entre-faixas`, como no item gemeo 'Transacao (ITransactionsManager)'). Acrescentar tambem a precisao que o proprio literal da: as formas nao 'nao existem', sao 'Only implemented by the Model Versioning strategy', estrategia que nao vem instalada. E este item e o 'Transacao (ITransactionsManager)' sao o mesmo facto duas vezes.
 > 
@@ -534,13 +534,13 @@ Prova:
 Levantamento de 2026-09-17 sobre C:\Users\andre\ODC3\decompiled\odc (API publica com 1254 arquivos): ITransactionsManager.ExecuteTransaction com Undo/Redo/CanUndo e transactionGroupId; formas assincrona/oculta/descartavel -> NotImplementedException; eSpace nao registrado -> roda sem transacao. No O11 ITransactionsManager nao existe na API.
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\api-nativa-o11-odc.md:166-171
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\api-nativa-o11-odc.md:166-171
 
-### Disparar o Mentor do ODC Studio de fora da interface grafica
+### Triggering the ODC Studio Mentor from outside the graphical interface
 
-`inalcancavel`
+`unreachable`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > A primeira passagem tinha dito `confirmado`; caiu na reconferencia.
 > 
 > **Correccao:** A conclusao pratica fica de pe (nao ha caminho suportado para acionar o Mentor de fora da GUI), mas ha tres consertos. Trocar o `Visto em:` de lab\mentor-odc.md (apontamento) para codigo: C:\Users\andre\ODC3\decompiled\odc\ServiceStudio.Presenter\ServiceStudio.Presenter.Commands\CommandLineSwitch.cs (24 switches, nenhum de Mentor) mais ChatWithAgent\ChatWithAgentPaneProvider.cs:12 (o Mentor e IPaneProvider). Trocar 'nao ha ... cano nomeado' por 'o cano nomeado que existe (ProcessReuse) so transporta switches de linha de comando, e nenhum e de Mentor'. E marcar o resto do Prova como nao reconferido: 49 ferramentas, WebSocket JSON-RPC e MentorUse vivem em assemblies (OutSystems.AI.*, WebViewImplementation, ServerCommunications.API) que NAO estao em C:\Users\andre\ODC3\decompiled -- nao se verificam sem reabrir os binarios instalados. Corrigir tambem a citacao para mentor-odc.md:15-21.
@@ -558,13 +558,13 @@ Prova:
 Levantamento sobre C:\Program Files\OutSystems\ODC Studio\ODC Studio: transporte WebSocket JSON-RPC 2.0 (converse/getAgentModes/stateChanged/chatUpdate) em OutSystems.AI.AgentAdapter.dll; 49 ferramentas em OutSystems.AI.ClientTools.dll; permissao MentorUse por asset e portfolio (controle de acesso do tenant, nao licenca). Literal da seccao do AppSettingsOverride.xml: 'nao ha evidencia'.
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\mentor-odc.md:80-86 (e a tabela de pecas em :15-24)
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\mentor-odc.md:80-86 (and the table of parts at :15-24)
 
-### studio_open com nome de asset que tem espaco
+### studio_open with an asset name that has a space
 
-`armadilha`
+`trap`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Trocar o rider por: "Consertar exige recompilar a bridge e ANEXAR uma versao nova (bump de Version + AssemblyName, `odc attach`, ~2 s) - o Studio NAO precisa de fechar. O que nao se recupera e o estado em memoria da versao antiga (busy, 'merged in this session'), que nao atravessa versoes; por isso e que nao se faz no meio de uma entrega."
 > 
@@ -581,55 +581,55 @@ Prova:
 Local model not found: C:\ProgramData\... -- causa em studio\bridge\StartupHook.cs:878 (argument.Split(' ', 2)). Contorno medido: studio_open module: "qclhM3yjX06Cr_HZbsHyZw" abre "Sinal ClientUITheme".
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\docs\ENTREGA-AGORA.md:32-46
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\docs\ENTREGA-AGORA.md:32-46
 
 
-## Integracoes REST e SOAP (lane restsoap, 2026-10-06): o que as ops `rest`, `rest-expose` e `soap` nao fazem
+## REST and SOAP integrations (lane restsoap, 2026-10-06): what the ops `rest`, `rest-expose` and `soap` do not do
 
-### SOAP no ODC
+### SOAP in ODC
 
-`lacuna-declarada`
+`declared-gap`
 
 A op `soap` responde `SOAP_LANE_UNSUPPORTED` na faixa ODC, antes de qualquer op (regra `PreflightRules.IntegrationOps` e o
 proprio handler). Um binario do ODC declara o consumo SOAP removido, enquanto o ODC Studio 1.7.25 ainda traz o plugin SOAP;
 nenhuma rota foi provada. No catalogo: `integration.soap-odc` (indisponivel). Alternativa: uma fachada REST do servico (op `rest`)
 ou uma biblioteca externa que o chame.
 
-Visto em: src/Anvil.Core/Kernel/Verbs.Integration.cs (SoapOp); src/Anvil.Core/Kernel/IntegrationPreflight.cs; docs/GITSSAM-O-QUE-SE-APROVEITA.md:799-807
+Seen in: src/Anvil.Core/Kernel/Verbs.Integration.cs (SoapOp); src/Anvil.Core/Kernel/IntegrationPreflight.cs; docs/GITSSAM-O-QUE-SE-APROVEITA.md:799-807
 
-### Callbacks de REST (OnBefore/OnAfterRequest, OnRequest/OnResponse)
+### REST callbacks (OnBefore/OnAfterRequest, OnRequest/OnResponse)
 
-`lacuna-declarada`
+`declared-gap`
 
 Nenhuma das ops escreve callbacks. Os quatro criadores de callback do cliente consumido deixam o create generico ambiguo (a
 primeira fabrica atribuivel venceria). Continua `integration.rest-callbacks` (indisponivel) nas duas faixas.
 
-Visto em: platforms/odc/facade/catalog/fragments/C/integrations-without-route.json (integration.rest-callbacks)
+Seen in: platforms/odc/facade/catalog/fragments/C/integrations-without-route.json (integration.rest-callbacks)
 
-### Fluxo de autenticacao de REST exposto (Basic/Custom)
+### Authentication flow of exposed REST (Basic/Custom)
 
-`regra-do-ssam`
+`ssam-rule`
 
 A op `rest-expose` recusa `authentication` diferente de `None` com `REST_EXPOSE_AUTH_FLOW_UNSUPPORTED`: Basic e Custom pedem o
 fluxo OnAuthentication do servico, que nao tem criador em nenhum catalogo e nenhum job. Alternativa: conferir o chamador dentro do
 metodo (entrada em header comparada com uma setting) ou escrever o fluxo no Studio.
 
-Visto em: src/Anvil.Core/Kernel/RestExposeExpander.cs (Validate)
+Seen in: src/Anvil.Core/Kernel/RestExposeExpander.cs (Validate)
 
-### Credencial de REST consumido no O11
+### Consumed REST credential in O11
 
-`regra-do-ssam`
+`ssam-rule`
 
 O Verify do O11 aceita `Username`/`Password` num IRestClient (o do ODC recusa, secao acima). O SSAM nunca escreve segredo literal
 num modulo: a op `rest` recusa `auth` diferente de `None` ou chaves de credencial com `REST_CREDENTIALS_NOT_IN_MODEL` e
 `ssamRule: true`. A correcao e uma entrada obrigatoria `Authorization` em header, com o valor vindo de uma setting na chamada.
 Os verbos crus continuam podendo gravar o modo (`AuthenticationType`), como em `tests/jobs/rest-consume-post.json`.
 
-Visto em: src/Anvil.Core/Kernel/RestExpander.cs (Validate); tests/Anvil.Tests/RestSpecTests.cs (CredentialsNeverGoInTheModel)
+Seen in: src/Anvil.Core/Kernel/RestExpander.cs (Validate); tests/Anvil.Tests/RestSpecTests.cs (CredentialsNeverGoInTheModel)
 
-### Import OpenAPI do ODC pede o icone do host da API
+### ODC OpenAPI import asks for the API host icon
 
-`medido`
+`measured`
 
 `CreateRestClientFromSwagger` pede `favicon.ico` ao host do `servers[0].url` (tres URLs) para decorar o cliente. O servico HTTP
 que o kernel entrega ao plugin responde 404 localmente a esses pedidos (aviso na resposta) e recusa qualquer outro
@@ -641,24 +641,24 @@ Prova:
 tests/Anvil.Tests.Odc/RestOpenApiImportTests.cs (OnlyTheChosenOperationsAreCreated): warnings "the importer asked for the API icon https://example.invalid/favicon.ico; answered 404 locally (no network)", idem https://www.invalid/favicon.ico e https://example.invalid/img/favicon.ico
 ```
 
-Visto em: src/Anvil.Core.Odc/Adapters.ODC/OdcRestOpenApi.cs (RefusingRestService)
+Seen in: src/Anvil.Core.Odc/Adapters.ODC/OdcRestOpenApi.cs (RefusingRestService)
 
-### Import OpenAPI e SOAP do O11 fora da entrega
+### O11 OpenAPI and SOAP import outside the delivery
 
-`depende-do-studio`
+`studio-dependent`
 
 O importador OpenAPI do O11 desreferencia o workspace (NullReferenceException headless, medido em 2026-09-04) e o importador de
 WSDL so existe dentro do plugin do Studio. As duas importacoes rodam na bridge (`integration_import`), numa copia destacada do
 modulo, dentro do `o11_deliver`. `ssam_job`/`o11_job` sem Studio respondem `INTEGRATION_IMPORT_NEEDS_STUDIO`. Ainda sem prova ao
 vivo: `tests/jobs-live/soap-import-calculator.json`, `tests/jobs-live/o11-rest-openapi-import.json`.
 
-Visto em: docs/mapa/2026-09-04-rest-investigacao.md:170; src/Anvil.Bridge/IntegrationImportHandler.cs
+Seen in: docs/mapa/2026-09-04-rest-investigacao.md:170; src/Anvil.Bridge/IntegrationImportHandler.cs
 
-## Diferencas medidas entre O11 (SS11) e ODC: o que se comporta diferente nas duas faixas, com o numero ou a mensagem que o provou
+## Measured differences between O11 (SS11) and ODC: what behaves differently in the two lanes, with the number or message that proved it
 
 ### ISessionVariable / IESpace.CreateSessionVariable
 
-`recusa-da-plataforma`
+`platform-refusal`
 
 Session variable nao existe no produto ODC: a API publica oferece o tipo e a fabrica, mas a fabrica recusa na hora (no SS11 session variable e Traditional Web, e o ODC nao tem Traditional Web).
 
@@ -668,13 +668,13 @@ Prova:
 "error": "op #0 (create WfCovSessionState): InvalidOperationException: Session Variable objects can't be children of App objects" -- repare no vocabulario: App, nao ESpace. Superficie da API: OutSystems.Model.V1/OutSystems.Model.Data/ISessionVariable.cs e IESpace.CreateSessionVariable(bool isReadOnly, string name, IKey key).
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc-negative\session-variable-not-in-odc.json (expectError); C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:427 e :498
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc-negative\session-variable-not-in-odc.json (expectError); C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:427 and :498
 
 ### ISystemRole, IService, IExposedAction
 
-`inalcancavel`
+`unreachable`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > A primeira passagem tinha dito `confirmado`; caiu na reconferencia.
 > 
 > **Correccao:** Manter a conclusao (nenhum job cria os tres) e trocar o motivo de IService/IExposedAction. Nao e 'abstratos (IsConcrete = false) sem classe concreta': ha classe concreta (CustomService implementa IService; CustomActionFlow implementa IExposedAction) e a flag IsConcrete nao e lida por ninguem em runtime. O que impede e o registo da ModelFactory: so fica construtor para a interface de modelo com UMA unica implementacao e que nao seja interface-base de outra ja registada (ModelFactory.cs:259-275); IService e base de IRestService/ISOAPService, por isso sai do registo e Create atira 'Couldn't find any concrete class implementing'. IExposedAction nem chega a fabrica -- nenhum pai publica Create para ele, e a recusa e do proprio kernel (Verbs.cs:311). ISystemRole fica como esta: e IsConcrete = true (ISystemRole.cs:6) e o motivo e mesmo a ausencia de Create em IESpace.
@@ -692,11 +692,11 @@ Prova:
 "IESpace 'InsuranceApp' cannot create ISystemRole (no Create method in the API)"; "ArgumentException: Couldn't find any concrete class implementing OutSystems.Model.Logic.Integrations.IService"; "IESpace 'InsuranceApp' cannot create IExposedAction (no Create method in the API)"
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:500-501
+Seen in: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:500-501
 
 ### IAggregateAttribute vs IAggregatedAttribute
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 O tipo do atributo agregado mudou de nome entre as faixas: copiar letra a letra um job do SS11 falha na hora do create. Propriedades, DisplayName ('Aggregate Attribute') e classe concreta (ServiceStudio.Model.AggregateAttribute) sao identicos -- so a interface que o job escreve mudou.
 
@@ -706,11 +706,11 @@ Prova:
 "error": "op #12 (create OpenCount): KeyNotFoundException: unknown Model API type: IAggregateAttribute (not in OutSystems.Model.V1 nor in the Studio plugins)". Catalogo SS11: OutSystems.Model.Logic.Aggregates.IAggregateAttribute; API ODC: OutSystems.Model.Logic.Aggregates.IAggregatedAttribute.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:371-379; jobs C:\Users\andre\Anvil\tests\jobs-odc\aggregate-full.json:65 e structure-list-type.json:21
+Seen in: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:371-379; jobs C:\Users\andre\Anvil\tests\jobs-odc\aggregate-full.json:65 and structure-list-type.json:21
 
-### Count de aggregate (tipo de dados)
+### Count of aggregate (data type)
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 No ODC o Count de um aggregate e Long Integer; no SS11 e Integer. Declarar Integer no ODC derruba o Verify.
 
@@ -720,11 +720,11 @@ Prova:
 ExpressionUnexpectedExpresssionType ... 'Integer' data type expected instead of 'Long Integer'. Contorno provado: o job declara Long Integer e fecha com 0 mensagens novas.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:28; C:\Users\andre\Anvil\tests\jobs-odc\aggregate-full.json:37 e structure-list-type.json:56
+Seen in: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:28; C:\Users\andre\Anvil\tests\jobs-odc\aggregate-full.json:37 and structure-list-type.json:56
 
-### Prefixo de expressao de Site Property / Setting
+### Expression prefix of Site Property / Setting
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 A mesma configuracao le-se 'Settings.<Nome>' no ODC e 'Site.<Nome>' no SS11 (e a variavel de cliente e 'Client.<Nome>'). Copiar a expressao do O11 quebra o modulo; escrever sem prefixo tambem.
 
@@ -734,13 +734,13 @@ Prova:
 Sonda probe-site-prefix.json: ok=False {'ops': 17, 'objects': 59293, 'isValid': False, 'messages': 57} -- "Error ExpressionUnknownObject: Invalid Expression | Can't identify 'Site' element in expression."; sem prefixo: "Can't identify 'WfCovMaxRows' element in expression."; com Settings.WfCovMaxRows: 0 mensagens novas. Fonte: ServiceStudio.Model/ModelFrameworkConstants.cs, ScopeTreeFolders.GetSiteOrSettings(ESpace).
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:301-338; job tests\jobs-odc\security-settings.json
+Seen in: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:301-338; job tests\jobs-odc\security-settings.json
 
-### Site Property = Setting (vocabulario do produto)
+### Site Property = Setting (product vocabulary)
 
-`armadilha`
+`trap`
 
-> **CONFIRMADO** (passagem adversarial, 2026-09-17)
+> **CONFIRMED** (passagem adversarial, 2026-09-17)
 > 
 > **Como se soube:** Nome da API: C:\Users\andre\ODC3\decompiled\odc\OutSystems.Model.V1\OutSystems.Model.Data\ISiteProperty.cs:11-12 -- `[ModelInterface(DisplayName = "Site Property", Icon = "SiteProperty.ico", IsConcrete = true)]` / `public interface ISiteProperty : IObject, ...`. Nome do produto: C:\Users\andre\ODC3\decompiled\odc\OutSystems.Model\ServiceStudio.Model\ModelFrameworkConstants.cs:175 -- `public const string Setting = "Setting";` e :177 -- `public static string Application = "App";` (classe DisplayNames), e :1803-1810 `GetSiteOrSetting(ESpace)` devolve "Site Property" ou "Setting" conforme a marca. Marca real em ...\ServiceStudio.ModelFeatures\ModelFeatures.cs:126 -- `public const string SitePropertiesRefactoredToSettings = "ModelFeature_SitePropertiesRefactoredToSettings";`. O gabarito da mensagem confere: resx do ODC:534 -- `UnusedElement|Warning|Unused Element|{0} '{1}' is never used in {2} '{3}'.`
 > 
@@ -755,11 +755,11 @@ Prova:
 Verify do ODC Studio instalado: "Warning UnusedElement: Unused Element | Setting 'WfCovAuditToken' is never used in App 'InsuranceApp'. Consider deleting it. @ InsuranceApp (ESpace) / WfCovAuditToken (SiteProperty)" -- o texto diz Setting/App, o caminho (que vem do modelo) diz SiteProperty/ESpace. Marca: ModelFeatures.SitePropertiesRefactoredToSettings.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:275-299; C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:76
+Seen in: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:275-299; C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:76
 
-### Propriedade Shareable (so no ODC) e o seu par com Public
+### Shareable property (ODC only) and its pairing with Public
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 O ODC tem a propriedade Shareable, que o SS11 nao tem, e ela anda AGARRADA a Public nos dois sentidos: por Public a False o Shareable cai sozinho, e por Shareable a False o Public cai sozinho. Em IResource e IScript sao literalmente o mesmo bit.
 
@@ -769,13 +769,13 @@ Prova:
 Quatro gets sobre a mesma IServiceAction mostram os quatro estados do par (service-action.json ops 167-173): set Public false -> Shareable cai; set Public true + set Shareable false -> Public volta a False; um unico set Shareable true repoe os dois. Em IResource: 'IResource.Public devolve e escreve IResource.Shareable', um so op liga os dois.
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc\service-action.json:167-173 e :2; resource-script-lifecycle.json:25-26
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc\service-action.json:167-173 and :2; resource-script-lifecycle.json:25-26
 
-### InvalidPublic_ActionParameterNotPublic (severidade)
+### InvalidPublic_ActionParameterNotPublic (severity)
 
-`diferenca-entre-faixas`
+`lane-difference`
 
-> **CONFIRMADO** (passagem adversarial, 2026-09-17)
+> **CONFIRMED** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Pode deixar de ser `AFIRMACAO CONTESTADA` e passar a facto fechado: a severidade e Error nas DUAS faixas, so o vocabulario muda. E este item que deve ser o dono do assunto; os cabecalhos das linhas 152 e 1399 repetem a versao errada e devem apontar para ca.
 > 
@@ -792,11 +792,11 @@ Prova:
 ODC: "Error InvalidPublic_ActionParameterNotPublic: Invalid Shareable Action | The Action 'WfCov_Tasks_SearchSql' is shareable but its parameter 'Tasks' is defined as a record of type 'WfCovTask' Entity that is not shareable." (validation new:1, unexpected:1, accepted=False). O11, mesma id, tambem Error: "The Action 'Contact_Import' is public but its parameter 'Contact' is defined as a record of type 'Contact' Entity that is not public".
 ```
 
-Visto em: ODC: cobertura-c-relatorio.md:187-200 e ws1-diferencas.md:77. Contradicao O11: C:\Users\andre\Anvil\docs\tasks\cobertura-a-relatorio.md:380-384
+Seen in: ODC: cobertura-c-relatorio.md:187-200 and ws1-diferencas.md:77. O11 contradiction: C:\Users\andre\Anvil\docs\tasks\cobertura-a-relatorio.md:380-384
 
-### Rename de action/no/saida e a expressao <No>.<Saida>
+### Rename of action/node/output and the expression <Node>.<Output>
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 Renomeada a action, o ODC religa sozinho a expressao que le a saida do no; o O11 deixa o nome antigo e o modulo cai no Verify. Nas DUAS faixas o rename devolve expressionsRewritten: 0, porque quem conta como consumidor e o NO, nao a expressao -- quem confiar nesse numero entrega quebrado.
 
@@ -806,13 +806,13 @@ Prova:
 Mesmo job, uma faixa cada. O11: "probe-rename-breaks-expression.json: ok=True {'ops': 39, 'objects': 11219, 'isValid': False, 'messages': 1}" + "Error ExpressionUnknownObject: Invalid Expression | Can't identify 'Slug_Make' element in expression." ODC: "probe-rename-breaks-expression-odc.json: ok=True {'ops': 39, 'objects': 59367, 'isValid': True, 'messages': 55}" + get IAssignment ... "Value": "WfP_Slug_Build.Slug".
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\cobertura-r-relatorio.md:308-332; tests\jobs-odc\rename-logic-propagation.json:98 e :106
+Seen in: C:\Users\andre\Anvil\docs\tasks\cobertura-r-relatorio.md:308-332; tests\jobs-odc\rename-logic-propagation.json:98 and :106
 
-### Propriedades de expressao gravaveis (set de Value, DefaultValue, SetVariable)
+### Writable expression properties (set of Value, DefaultValue, SetVariable)
 
-`diferenca-entre-faixas`
+`lane-difference`
 
-> **CONFIRMADO** (passagem adversarial, 2026-09-17)
+> **CONFIRMED** (passagem adversarial, 2026-09-17)
 > 
 > **Como se soube:** C:\Users\andre\Anvil\src\Anvil.Core\Kernel\Verbs.cs:988-991, literal: "// ODC: writable expression properties (static record values, defaults) hold a parsed ExpressionDefinition, // where SS11 exposes a read-only IExpression whose Text is written." + `if (t.FullName == "OutSystems.Model.Expressions.ExpressionDefinition") return t.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static, [typeof(string)])!.Invoke(null, [s]);` -- e a chamada e mesmo por reflexao, como o item diz. A segunda metade (o contrato de dados lembra o TEXTO) esta em Verbs.cs:950-954: `Remembered(...)` devolve `value?.ToString()` quando o convertido e `OutSystems.Model.Expressions.ExpressionDefinition`, com o comentario "because the proof reads the text back"; repetido em DataAssertions.cs:20-21.
 > 
@@ -827,13 +827,13 @@ Prova:
 "spec op #18 (set Value on $WfProofStatus.Active/Label): InvalidCastException: Invalid cast from 'System.String' to 'OutSystems.Model.Expressions.ExpressionDefinition'"; e depois "Data property mismatch ... expected ExpressionDefinition+Text, actual \"Active\"".
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:25
+Seen in: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:25
 
 ### IContainer.CreateWidget / CreateSibling
 
-`armadilha`
+`trap`
 
-> **OBSOLETO** (passagem adversarial, 2026-09-17)
+> **OBSOLETE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** E historia, nao limite presente. Texto certo: "No ODC o IObject tem CreateSibling<T>/CreateSibling(Type) que o O11 nao tem, e a descoberta reflexiva escolhia-o num IContainer (widget irmao, ordem inversa, fora do Content). CORRIGIDO em 3f6fba6 (2026-09-16): FindCreate ignora todo `CreateSibling*`, o create com pai IContainer volta a cair dentro do Content na ordem do job, e o pai explicito `$container/#IContent` deixou de ser preciso."
 > 
@@ -850,13 +850,13 @@ Prova:
 Merge recusado duas vezes: "ok=false, outcome=uncertain, gate=equivalence", "Native object differs from the candidate: (Object Block) WF_PinNotFoundBanner [ChangedInLocal]", com native-equivalence.txt so com EffectiveMarginLeft (Auto_0/Auto_Gutter, 'Not Visible') em DropPinButton, Title e WarningIcon. Com pai explicito $container/#IContent: strictlyEqual = true a primeira.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws2-prova-viva.md:100-116; lab\ws2-prova-viva\01-block-alert e 02-block-alert; ws1-diferencas.md:67
+Seen in: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws2-prova-viva.md:100-116; lab\ws2-prova-viva\01-block-alert and 02-block-alert; ws1-diferencas.md:67
 
-### Legenda de botao/link/label (ITextWidget)
+### Caption of button/link/label (ITextWidget)
 
-`diferenca-entre-faixas`
+`lane-difference`
 
-> **CONFIRMADO** (passagem adversarial, 2026-09-17)
+> **CONFIRMED** (passagem adversarial, 2026-09-17)
 > 
 > **Como se soube:** C:\Users\andre\Anvil\src\Anvil.Core\Kernel\Verbs.cs:824-826 (comentario literal): "// ODC keeps a widget's default caption inside its Content (button, link, label); SS11 puts it beside it." seguido de `if (hits.Count < index) hits = hits.Concat(owner.Children.OfType<IObjectSignature>().Where(c => Implements(c, "IContent")).SelectMany(...))`. A mensagem da Prova nasce literalmente de Verbs.cs:828: `throw new KeyNotFoundException($"{Describe(owner)} has no child #{index} of type {spec} (has {hits.Count})")` -> "IButton 'GreetButton' has no child #1 of type ITextWidget (has 0)". Uso vivo nas duas faixas: tests\jobs-odc\screen-basic.json:21 e tests\jobs\block-events-reactive.json:25, ambos `"target": "$btn/#ITextWidget"`.
 > 
@@ -871,11 +871,11 @@ Prova:
 "op #15 (set Text): KeyNotFoundException: IButton 'GreetButton' has no child #1 of type ITextWidget (has 0)"
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:26
+Seen in: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:26
 
-### Filhos de uma IList
+### Children of an IList
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 No ODC o filho de uma List nao pendura direto: vive num IContent intermedio, e e esse o caminho que sai em usages e nas mensagens de recusa. Quem escrever expectError partilhado entre as faixas nao pode casar o caminho.
 
@@ -885,11 +885,11 @@ Prova:
 Caminho devolvido pelo usages no ODC: IList:RegionList/IContent:content/IExpression -- o job escreve na List e o kernel poe o IContent no meio.
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc\data-action.json:178
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc\data-action.json:178
 
-### ListAppend (assinatura ambigua)
+### ListAppend (ambiguous signature)
 
-`armadilha`
+`trap`
 
 No ODC ListAppend existe como IClientActionSignature E como IServerActionSignature. A forma do job do SS11 ('IActionSignature:ListAppend') acerta na do cliente e o no de servidor recusa-a.
 
@@ -899,11 +899,11 @@ Prova:
 find sobre a fixture: [('IClientActionSignature','ListAppend'), ('IServerActionSignature','ListAppend'), ('IExecuteClientActionNode','ListAppend'), ...]. Recusa: "op #30 (set Action): InvalidOperationException: Cannot set OutSystems.Model.Logic.Nodes.IExecuteServerActionNode.Action to 'ListAppend' (OutSystems.Model.IObject): the value is not valid in this context". Correcao: "IServerActionSignature:ListAppend".
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:399-418; jobs tests\jobs-odc\data-action.json:64 e structure-list-type.json:42
+Seen in: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:399-418; jobs tests\jobs-odc\data-action.json:64 and structure-list-type.json:42
 
-### Timer: agendamento (CronSchedule)
+### Timer: scheduling (CronSchedule)
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 O SS11 tem so Schedule:String; o ODC tem CronSchedule mais o filho ScheduleConfiguration (ISchedule com ScheduleItems tipados). E o cron do ODC e de CINCO campos, nao seis: a forma Quartz e recusada.
 
@@ -913,11 +913,11 @@ Prova:
 "error": "op #4 (set CronSchedule): InvalidOperationException: Invalid cron expression provided: 0 15 3 * * ?" at ServiceStudio.Model.Schedule.FromCronExpression(String cronExpression). Escrever CronSchedule preenche os dois lados: get mostra "CronSchedule": "15 3 * * *" E "Schedule": "03:15". Fonte: ServiceStudio.Model/Schedule.cs concatena Minute Hour DayOfMonth Month DayOfWeek.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:381-397; tests\jobs-odc\timer-action.json:2 e timer-lifecycle.json:27
+Seen in: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:381-397; tests\jobs-odc\timer-action.json:2 and timer-lifecycle.json:27
 
-### UnusedUserAction em server action sem consumidor
+### UnusedUserAction on a server action without a consumer
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 No ODC uma server action sem consumidor recebe o aviso UnusedUserAction; no SS11 nao. Marcar a action Public evita o aviso sem precisar declara-lo.
 
@@ -927,13 +927,13 @@ Prova:
 Verify do ODC: "UnusedUserAction ... is never used". Declaracao no job: why = "a action e criada para provar get/assign/if headless no ODC e nao tem consumidor; o ODC avisa sobre actions sem uso (o SS11 nao)". Uma IServiceAction a zero consumidores NAO leva o aviso, porque o consumidor dela e remoto por definicao (usages=0, 0 mensagens novas).
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc\logic-action.json:9; ws1-diferencas.md:28; service-action.json:162
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc\logic-action.json:9; ws1-diferencas.md:28; service-action.json:162
 
-### ServerActionInScreenAccessibleByEveryone (tolerancia do kernel)
+### ServerActionInScreenAccessibleByEveryone (kernel tolerance)
 
-`limite-do-kernel`
+`kernel-limit`
 
-> **OBSOLETO** (passagem adversarial, 2026-09-17)
+> **OBSOLETE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** O campo `tolerated` NAO sai sempre 0 na faixa ODC e o job ja NAO tem de declarar o aviso com why. Hoje o kernel tolera as duas formas: no ODC pelo id proprio ServerActionInScreenAccessibleByEveryone, no O11 pelo balde CustomObjectWarning + a frase `Consider removing the Anonymous Role from this Screen.`; nas duas exige-se a frase comum `You're exposing a Server Action for public access and without authentication.`, e o balde generico nunca e tolerado so pelo id. O item deve ir para a seccao de `ja corrigido`, como o IsDerived (linha 1385) e o EntityIndex (linha 1161).
 > 
@@ -950,13 +950,13 @@ Prova:
 Predicado: src/Anvil.Core/Kernel/MessageExpectations.cs:72 exige message.Id == "CustomObjectWarning" E Detail contendo "Consider removing the Anonymous Role from this Screen.". Catalogo do ODC Studio instalado (anvil-odc verify-catalog): {"Id": "ServerActionInScreenAccessibleByEveryone", "Severity": "Warning", "Detail": "You're exposing a Server Action for public access and without authentication. Consider restricting Screen accessibility to Authenticated Users."} e {"Id": "CustomObjectWarning", "Title": "{0}", "Detail": "{1}"} -- no ODC o CustomObjectWarning e so o gabarito generico.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\cobertura-c-relatorio.md:204-237
+Seen in: C:\Users\andre\Anvil\docs\tasks\cobertura-c-relatorio.md:204-237
 
-### Registo de exemplo de entidade (SampleRecord vs IRecord)
+### Entity sample record (SampleRecord vs IRecord)
 
-`diferenca-entre-faixas`
+`lane-difference`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Trocar "Ponto de classificacao: Verbs.cs:977 (IsDerived)" por "Verbs.cs:1042-1050 (IsDerived), corrigido em 7642caa". O resto do item mantem-se, incluindo a nota de que ja esta corrigido.
 > 
@@ -973,11 +973,11 @@ Prova:
 "op #46 (delete ): InvalidOperationException: delete: refused, IEntityAttribute 'Body' is used by 1 consumer(s): IServerEntity:WfProofNotice/IRecord/IRecordAttributeValue (list them with usages, fix or remove those usages, or pass \"force\": true to break them)" -- com os tres consumidores reais ja removidos. Ponto de classificacao: Verbs.cs:977 (IsDerived). Ja corrigido: tests\jobs-odc\delete-attribute-no-consumers.json e a regressao que prova que hoje passa SEM force.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\cobertura-a-relatorio.md:319-336; lab\cobertura-a\BLOCKER.md
+Seen in: C:\Users\andre\Anvil\docs\tasks\cobertura-a-relatorio.md:319-336; lab\cobertura-a\BLOCKER.md
 
-### Tipo devolvido para expressoes (usages e mensagens)
+### Type returned for expressions (usages and messages)
 
-`armadilha`
+`trap`
 
 Onde a faixa O11 devolve IExpression, o ODC devolve ITextBasedExpression (mesmo papel, mesmo text). Um expectError escrito para as duas faixas nao pode casar o nome do tipo. O mesmo vale para o registo de static entity: IRecord no O11, IStaticEntityRecord no ODC.
 
@@ -987,11 +987,11 @@ Prova:
 cobertura-a-relatorio.md:338-342 ('Onde a faixa O11 devolve IExpression ... o ODC devolve ITextBasedExpression'); tests\jobs-odc\static-entity.json:28 e :60 ('o type do create e IRecord nas duas faixas, mas o objeto que volta no dump e IRecord na O11 e IStaticEntityRecord no ODC'; 'cada valor guardado num ITextBasedExpression (na O11 o mesmo lugar aparece como IExpression)').
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\cobertura-a-relatorio.md:338-342; tests\jobs-odc\static-entity.json:28,60
+Seen in: C:\Users\andre\Anvil\docs\tasks\cobertura-a-relatorio.md:338-342; tests\jobs-odc\static-entity.json:28,60
 
-### IStaticEntityRecord e o verbo rename
+### IStaticEntityRecord and the rename verb
 
-`recusa-da-plataforma`
+`platform-refusal`
 
 No ODC o registo de static entity nao publica Name, por isso o verbo rename recusa; renomear exige escrever a propriedade Identifier, que chama SetName -- e o SetName sufixa colisoes em SILENCIO, ao contrario do rename, que as recusa.
 
@@ -1001,11 +1001,11 @@ Prova:
 Recusa do verbo: "IStaticEntityRecord UnderReview has no Name". O setter de Identifier chama SetName, o mesmo que a grelha do Studio chama, e cai em AbstractObject.NameClash (sufixo silencioso). Comparar com a recusa do rename, identica nas duas faixas: "op #2 (rename Title): InvalidOperationException: rename: 'Title' clashes with an existing name in that scope (the Studio would use 'Title2'); pick another name".
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc\static-entity-lifecycle.json:26; cobertura-r-relatorio.md:262-270; tests\jobs-odc-negative\rename-name-clash.json
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc\static-entity-lifecycle.json:26; cobertura-r-relatorio.md:262-270; tests\jobs-odc-negative\rename-name-clash.json
 
 ### IUserException.Description
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 No ODC uma excecao de utilizador nao tem Description gravavel: as unicas propriedades de escrita sao CreatedBy, LastModifiedBy, LastModifiedDate e Name. O nome e tudo o que ela leva.
 
@@ -1015,11 +1015,11 @@ Prova:
 _why do job: 'no ODC um IUserException nao tem Description gravavel (as gravaveis sao CreatedBy, LastModifiedBy, LastModifiedDate e Name), por isso o nome e tudo o que ele leva' -- registado nos dois jobs que criam excecoes na faixa.
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc\exception-lifecycle.json:56 e service-action.json:106
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc\exception-lifecycle.json:56 and service-action.json:106
 
-### ESpace.DefaultScreen e o delete de tela
+### ESpace.DefaultScreen and screen delete
 
-`armadilha`
+`trap`
 
 No ODC o ESpace guarda DefaultScreen, e a primeira tela criada headless fica com esse papel sozinha. O delete dessa tela e recusado por um consumidor cujo CAMINHO E VAZIO (o ESpace nao tem caminho), o que so o usages explica.
 
@@ -1029,11 +1029,11 @@ Prova:
 expectError provado: "delete: refused", "IMobileScreen 'WfCovTaskDetail' is used by 3 consumer(s)", ... "list them with usages, fix or remove those usages, or pass \"force\": true to break them" -- dos tres consumidores, dois sao OnClick e o terceiro sai com caminho vazio. Contorno provado: set @espace DefaultScreen para outra tela antes do delete.
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc-negative\delete-screen-in-use.json; tests\jobs-odc\delete-screen.json:45
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc-negative\delete-screen-in-use.json; tests\jobs-odc\delete-screen.json:45
 
-### FK e tipo Record gerados pela plataforma ODC
+### FK and Record type generated by the ODC platform
 
-`armadilha`
+`trap`
 
 No ODC cada FK nasce com o seu proprio indice (AutoIndex_<Attr>) que nenhum job escreveu, e cada entidade traz um tipo Record anonimo que aponta de volta para ela -- e esse Record sobrevive ao delete da entidade como lixo silencioso que o Verify nao assinala.
 
@@ -1043,11 +1043,11 @@ Prova:
 usages do atributo FK: real=2, e so um e do autor -- IX_WfCovTask_ProjectDone (declarado no job) e AutoIndex_ProjectId (que nenhum job escreveu). usages da entidade antes: real=1, e IAnonymousStructure:WfCovProject Record/IAttribute:WfCovProject. Depois do delete: real=0 e nenhuma mensagem do Verify o lembra.
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc\delete-entity-whole.json:9, :13 e :26
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc\delete-entity-whole.json:9, :13 and :26
 
-### IImage de modulo (create com byte[])
+### IImage of the module (create with byte[])
 
-`limite-do-kernel`
+`kernel-limit`
 
 Imagem de modulo nao e exprimivel pela linguagem de jobs em NENHUMA das duas faixas: o unico construtor pede byte[] e o Convert do kernel nao sabe converter JsonValue para byte[]. Explicitamente NAO e diferenca de plataforma -- a assinatura e identica nos dois catalogos.
 
@@ -1057,11 +1057,11 @@ Prova:
 "error": "op #0 (create WfProbeImage): InvalidOperationException: Image binary cannot be null: Object not set". Assinatura nas duas faixas: CreateImage(byte[] binary, string originalPath, string name = null, IKey key = null). Convert (Verbs.cs) so sabe string, bool, int, long, decimal, enum, ITypeSignature, interface do modelo e ExpressionDefinition.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:512-528
+Seen in: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:512-528
 
-### IResource.ResourceContent (bytes do recurso)
+### IResource.ResourceContent (resource bytes)
 
-`limite-do-kernel`
+`kernel-limit`
 
 Os bytes de um recurso nao entram por job em NENHUMA das duas faixas: na Model API V1 o membro e so de leitura e o descriptor nasce isReadOnly. Entram pelo Studio (Import Resource).
 
@@ -1071,11 +1071,11 @@ Prova:
 Recusa do verbo: "IResource X has no writable property or setter ResourceContent. Writable: CreatedBy, DeployAction, Description, Folder, LastModifiedBy, LastModifiedDate, Name, Public, Shareable, TargetDirectory". Fonte nas DUAS faixas: byte[] ResourceContent { get; }, e Resource.ResourceContentProperty e um UnderlyingModelProperty com setter null (BinaryPropertyDescriptor nasce isReadOnly).
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc\resource-script-lifecycle.json:26
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc\resource-script-lifecycle.json:26
 
-### CSS do tema (set de StyleSheet)
+### Theme CSS (StyleSheet set)
 
-`armadilha`
+`trap`
 
 CORRIGE UMA CONCLUSAO ANTIGA: a separacao do CSS do tema NAO e diferenca entre O11 e ODC -- depende de o tema ter CSS do Theme Editor (a fixture do ODC tem, a do O11 nao). O que vale nas duas faixas e que o StyleSheet e DERIVADO: ler da gerada+autor, escrever grava so a metade do autor, e a leitura seguinte nao mostra o que se escreveu.
 
@@ -1085,13 +1085,13 @@ Prova:
 Medido na fixture do tenant pessoal (sonda do INT, 2026-09-17): antes StyleSheet 45320 chars = GeneratedStyleSheet 884 + CRLF + UserStyleSheet 44434; set StyleSheet "<53 chars>" -> {"set":"StyleSheet","via":"property"} (sucesso, sem nota); depois UserStyleSheet 53 chars (os 44 434 caracteres de CSS do autor foram substituidos) e StyleSheet 45320 chars INALTERADA.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:34 e :36-61; tests\jobs-odc\theme-css-halves.json
+Seen in: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:34 and :36-61; tests\jobs-odc\theme-css-halves.json
 
-### Nomes de interface ambiguos entre namespaces do ODC
+### Ambiguous interface names across ODC namespaces
 
-`armadilha`
+`trap`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Trocar `IStaticEntity/IEntity/IStructure tambem em Extensions e ExternalLibraries` por: IEntity/IStaticEntity/IStructure tambem em OutSystems.Model.Extensions, e IStructure tambem em OutSystems.Model.ExternalLibraries. O resto do item fica como esta.
 > 
@@ -1108,13 +1108,13 @@ Prova:
 "spec op #0 (create WfProofStatus on @espace): ArgumentException: Couldn't find any concrete class implementing OutSystems.Model.Extensions.IStaticEntity"; "op #23 (create ): Nodes of type IEndNode are not allowed in IMobileScreen or eSpaces of type CrossDevice". Contorno no kernel: FindCreateCore.Rank despromove esses namespaces e Create passa ao candidato seguinte (usando GetBaseException()).
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:22
+Seen in: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:22
 
-### Superficie de API != funcionalidade do produto (BPT)
+### API surface != product functionality (BPT)
 
-`inalcancavel`
+`unreachable`
 
-> **REFUTADO** (passagem adversarial, 2026-09-17)
+> **REFUTED** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Trocar 'Processo (BPT) nao existe no produto ODC' por: 'Processo/BPT no ODC existe com outro nome e noutro sitio -- e o asset Workflow, feito no Workflow Editor do Portal; o ODC Studio recusa abrir esses ficheiros. Nao ha caminho conhecido para o criar a partir de um modulo de Studio, e isso continua por medir.' Este item e o #1 e o #3 dizem a mesma coisa tres vezes: valem um item so.
 > 
@@ -1131,13 +1131,13 @@ Prova:
 Superficie: OutSystems.Model.V1/OutSystems.Model/IESpace.cs (CreateBusinessProcess). Confirmacao do dono em 2026-09-17, registada em ws1-diferencas.md:82-86 e repetida em PLANO-COBERTURA.md:161 ('a API tem CreateBusinessProcess, o produto nao tem a funcionalidade'). E o mesmo padrao do ISessionVariable, esse sim com recusa viva colada.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:82-86; cobertura-t-relatorio.md:502; SSAM-Hybrid-ODC\docs\PLANO-COBERTURA.md:161
+Seen in: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:82-86; cobertura-t-relatorio.md:502; SSAM-Hybrid-ODC\docs\PLANO-COBERTURA.md:161
 
-### ModelFeature_WriteableSiteProperties (gravar uma Setting numa action)
+### ModelFeature_WriteableSiteProperties (writing a Setting in an action)
 
-`armadilha`
+`trap`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Apagar este item e deixar so o de NAO-DA.md:236. Se ficar, a causa passa a: "a marca nasce Stable no registo do Studio (ServiceStudio.ModelFeatures\ModelFeatures.cs:1514) com checkEnvironmentCompatibility: true; headless o `serverModelFeaturesInfo` vem nulo (ModelFeatures.cs:772-789) e o gate SitePropertyScopeEntry.IsReadOnly (Variables.cs:37895-37904) deixa passar -- so o estado `Removed` vindo do ambiente gera a mensagem (ModelFeatures.cs:1060). `Undefined` e a copia da API V1 (V1\ModelFeatures.cs:1440), que nao e quem decide."
 > 
@@ -1154,11 +1154,11 @@ Prova:
 Catalogo do ODC Studio instalado: {"Id": "ModelFeature_WriteableSiteProperties_Removed", "Severity": "Error", "Detail": "Cannot change the value of a {0} within an action..."}. MAS a sonda que grava Settings.WfProbeLimit num IAssignNode passou limpa: "probe-setting-write.json: ok=True {'ops': 17, 'objects': 59293, 'isValid': True, 'messages': 55, 'applyMs': 17}" com validation new:0, unexpected:0, accepted=True. Causa provavel: as marcas nascem ModelFeatureStatus.Undefined com checkEnvironmentCompatibility:true e a corrida e headless, sem ambiente. Confirmar exige o Studio ligado ao tenant.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:448-482
+Seen in: C:\Users\andre\Anvil\docs\tasks\cobertura-t-relatorio.md:448-482
 
-### Eventos de bloco (comportamento)
+### Block events (behavior)
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 RESULTADO NEGATIVO UTIL: nao ha NENHUMA diferenca de comportamento entre O11 e ODC em eventos de bloco. Contrato, tipos compostos (lista e registo), obrigatoriedade, propagacao bloco-dentro-de-bloco e recusa do delete respondem igual. Nao vale gastar rodada a procurar diferenca aqui.
 
@@ -1168,11 +1168,11 @@ Prova:
 Paridade completa medida: 5 jobs positivos + 1 negativo em cada faixa. IsMandatory sem handler e ERRO do Verify (EventHandlerRequiredAction) nas duas, cobrado por INSTANCIA -- duas instancias sem handler dao dois erros com caminhos diferentes (declarado em block-events-mandatory.json:6-7). Recusa do delete provada nas duas, com o handler vindo da autoria visual no ODC.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\cobertura-e-relatorio.md:283-288; tests\jobs-odc\block-events-mandatory.json:6-7; tests\jobs-odc-negative\delete-block-event-in-use.json
+Seen in: C:\Users\andre\Anvil\docs\tasks\cobertura-e-relatorio.md:283-288; tests\jobs-odc\block-events-mandatory.json:6-7; tests\jobs-odc-negative\delete-block-event-in-use.json
 
-### move e duplicate (reordenar e copiar)
+### move and duplicate (reorder and copy)
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 RESULTADO NEGATIVO UTIL: nenhuma diferenca. A superficie extra de mover que o IObject do ODC tem (MoveToEnd, MoveBefore, MoveAfter, MoveAfterSibling, MoveBeforeSibling, MoveToNewAbsoluteIndex, MoveToNewRelativeIndex) NAO e usada e nao deve ser -- o kernel usa os da ISequence, que existem nas duas. Nao 'adapte' o verbo a API extra do ODC.
 
@@ -1182,11 +1182,11 @@ Prova:
 Medido lado a lado (tests/jobs/refactor-move.json e tests/jobs-odc/refactor-move.json): a order devolvida por cada op e IDENTICA nas quatro direcoes, sobre atributos, widgets, parametros de entrada e variaveis de tela, mais o x/y de um no. duplicate idem (Body -> Body2, copia no fim do mesmo pai, sem consumidores). Recusa identica nas duas: 'move only REORDERS inside the same parent' -- sem ela a plataforma cai na mesma assercao interna 'Condition is false' nas DUAS faixas.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:88-97; tests\jobs-odc-negative\move-foreign-sibling.json
+Seen in: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:88-97; tests\jobs-odc-negative\move-foreign-sibling.json
 
-### Diff e merge de tres vias (IModelServices)
+### Three-way diff and merge (IModelServices)
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 O ODC publica comparacao de tres vias headless com arvore, detalhe por propriedade e MergeAction gravavel; o O11 so tem bool Merge(meu, outro, base) -- sem arvore, sem detalhe, sem controlo. E por isso que o kernel carrega o seu proprio MergeProbe, excluido do build ODC.
 
@@ -1196,13 +1196,13 @@ Prova:
 Medido por OdcDiff.Compare sobre a fixture InsuranceApp (teste TheOdcApiDiffsTwoModelsHeadlessAndSeesTheChangeOfAJob): 59 419 comparacoes, 138 objetos so no candidato, 0 conflitos, com valor local e estrangeiro de cada propriedade que difere. Superficie ODC: IModelServices.Diff(local, foreign, base) -> IMatchTree com MatchType, DifferenceType, MergeAction gravavel por objeto E por propriedade, Dump() e Merge().
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\2026-09-17-api-nativa-o11-odc.md:16-33; src/Anvil.Core.Odc/Adapters.ODC/OdcDiff.cs
+Seen in: C:\Users\andre\Anvil\docs\tasks\2026-09-17-api-nativa-o11-odc.md:16-33; src/Anvil.Core.Odc/Adapters.ODC/OdcDiff.cs
 
-### Transacao (ITransactionsManager)
+### Transaction (ITransactionsManager)
 
-`diferenca-entre-faixas`
+`lane-difference`
 
-> **CONFIRMADO** (passagem adversarial, 2026-09-17)
+> **CONFIRMED** (passagem adversarial, 2026-09-17)
 > 
 > **Como se soube:** Metade ODC: ESpaceTransactionsManager.cs:283-305 (assincrona/oculta/descartavel -> `throw new NotImplementedException("Only implemented by the Model Versioning strategy")`), :103 e :137 (eSpace nao registado -> `return func(arg1: false, null)`), :100-135 a sobrecarga com `Guid transactionGroupId`, :74-76 `CanUndo`/`CanRedo`, :84-86 eventos `TransactionCompleted`/`UndoCompleted`/`RedoCompleted`, :224/:260 `UndoManager.Undo/Redo` (o rollback e o UndoManager do Studio). Metade O11: zero ocorrencias de `ITransactionsManager` em C:\Users\andre\ODC3\decompiled\o11, e a unidade e mesmo o Command do framework com o literal citado -- o11\ServiceStudio.Framework\ServiceStudio.Commands\UnrecoverableException.cs:7-10 `public class UnrecoverableException : Exception { public UnrecoverableException(Exception innerException, IEnumerable<ESpace> eSpaces) : base("Unrecoverable Exception", innerException)` e Command.cs:1018 `throw new UnrecoverableException(originalException, enumerable);`. As QUATRO contagens do item batem certo ao ficheiro: odc\OutSystems.Model = 2073 .cs, odc\OutSystems.Model.V1 = 1254 ficheiros, o11\ServiceStudio.Framework = 1749 .cs, o11\OutSystems.Model.V1 = 435 .cs. Citacao confere (docs\tasks\2026-09-17-api-nativa-o11-odc.md:161-171).
 > 
@@ -1217,13 +1217,13 @@ Prova:
 Levantamento de 2026-09-17 sobre C:\Users\andre\ODC3\decompiled (ODC: modelo com 2 073 arquivos, API publica com 1 254; O11: framework com 1 749, API publica com 435). ODC: ITransactionsManager.ExecuteTransaction com Undo, Redo, CanUndo, transactionGroupId e eventos TransactionCompleted; rollback e o UndoManager do Studio. O11: Command do framework, com UnrecoverableException quando o proprio rollback falha.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\2026-09-17-api-nativa-o11-odc.md:161-171 e :1-11
+Seen in: C:\Users\andre\Anvil\docs\tasks\2026-09-17-api-nativa-o11-odc.md:161-171 and :1-11
 
-### Consumidores (Referrers) e endereco textual
+### Consumers (Referrers) and textual address
 
-`diferenca-entre-faixas`
+`lane-difference`
 
-> **CONFIRMADO** (passagem adversarial, 2026-09-17)
+> **CONFIRMED** (passagem adversarial, 2026-09-17)
 > 
 > **Como se soube:** Conferido no Studio decompilado, item a item. ODC publico: C:\Users\andre\ODC3\decompiled\odc\OutSystems.Model.V1\OutSystems.Model\IModelObject.cs:28 `IEnumerable<IModelObject> Referrers { get; }`; C:\Users\andre\ODC3\decompiled\odc\OutSystems.Model.V1\OutSystems.Model.Factory\FactoryExtensions.cs:255 `public static string GetTargetPath(this IModelObject obj)` (:274-280 empilha `collectionDescriptor.Name` + identificador e junta com '\\') e :289 `public static IModelObject ResolveTargetPath(this IModelObject root, string path)` -- a assinatura (root, path) do item esta certa. O11: varri os 435 ficheiros .cs de C:\Users\andre\ODC3\decompiled\o11\OutSystems.Model.V1 com `Referrers|Referers|TargetPath` e deu ZERO; o IObjectSignature.cs dessa pasta tem ObjectKey, GlobalKey, Parent, Children, WasDeleted, IsValid, Digest, GetESpace, GetAllDescendantsOfType, Delete, GetInterface, GetValidationMessages -- e mais nada. O cast que o item descreve esta mesmo la: C:\Users\andre\Anvil\src\Anvil.Core\Kernel\Verbs.cs:1030 `var ao = target as ServiceStudio.Model.AbstractObject ?? throw ...` e :1032 `foreach (var r in ao.Referers)`. A tabela citada bate a letra: C:\Users\andre\Anvil\docs\tasks\2026-09-17-api-nativa-o11-odc.md:40 e :42.
 > 
@@ -1238,13 +1238,13 @@ Prova:
 Tabela de comparacao ODC x O11: 'Quem usa este objeto' -> ODC: IModelObject.Referrers PUBLICO; O11: nao existe na API, so AbstractObject.Referers do framework. 'Endereco textual estavel' -> ODC: GetTargetPath()/ResolveTargetPath -> Entities\Order\Attributes\Id, com Tipo[n] para anonimos; O11: nao existe.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\2026-09-17-api-nativa-o11-odc.md:36-46
+Seen in: C:\Users\andre\Anvil\docs\tasks\2026-09-17-api-nativa-o11-odc.md:36-46
 
-### Compilar o mesmo kernel contra as duas faixas
+### Compiling the same kernel against both lanes
 
-`diferenca-entre-faixas`
+`lane-difference`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** O corpo do item contradiz a sua propria Prova ao eleger "os tres maiores". Por contagem, os tres maiores sao: IObjectSignature.Parent/Children a devolverem IModelObject (CS1503, 36 pontos), EntityIndexes/NativePerformanceCapture/BridgeCallException neutros mas alojados em ficheiros SS11 (CS0103, 29) e IExpression noutro namespace (CS0246, 25). A ausencia de OutSystems.Model.IParameter e CS0234 e vale UM ponto, nao um dos tres maiores. Tudo o resto do item (105 erros em 19 arquivos, todos mecanicos, nenhum #if, resolvidos por adaptador ou ramo neutro) confirma-se.
 > 
@@ -1261,13 +1261,13 @@ Prova:
 Primeiro build real: 105 erros em 19 arquivos -> 0. Por causa: CS1503 'nao e possivel converter de OutSystems.Model.IModelObject para OutSystems.Model.IObjectSignature' (36 pontos); CS0246 'O nome do tipo IExpression nao pode ser encontrado' (25); CS0103 'O nome EntityIndexes nao existe' (29); CS0234 'IParameter nao existe no namespace OutSystems.Model'; CS1061 'nao contem uma definicao para IsVisibleInServerQueries'.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:7-16; SSAM-Hybrid-ODC\docs\PROGRESSO-UNIFICACAO.md:130-136
+Seen in: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:7-16; SSAM-Hybrid-ODC\docs\PROGRESSO-UNIFICACAO.md:130-136
 
-### Custo por chamada de cada faixa
+### Cost per call of each lane
 
-`diferenca-entre-faixas`
+`lane-difference`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Os tempos conferem, mas a ultima frase atribui mal a causa. "Os ~2,7 s que sobram sao a carga do OML de 6,5 MB" nao se sustenta: no worker quente de hoje a carga e ~1,1-1,8 s (cerca de metade) e o resto e o apply, que varia com o numero de ops e nao com o tamanho do OML. Texto certo: "...pedidos seguintes ~3 s, dos quais ~1,1-1,8 s sao a carga do OML (6,5 MB / ~59 800 objetos, refeita a cada apply por desenho) e o resto e o apply, proporcional aos ops." O resto do item mantem-se, incluindo a conclusao de que a faixa ODC e estruturalmente mais lenta por chamada.
 > 
@@ -1284,11 +1284,11 @@ Prova:
 Mesmo job (html-visual-alert sobre o InsuranceApp, 59 667 objetos), um comando so pela fachada: ssam job --lane o11 = 2 s (22 ops, isValid, 0 mensagens, via worker) contra ssam job --lane odc = 14 s (processo frio). Depois do worker residente da faixa ODC: frio 13-14 s toda vez; primeiro pedido num worker novo ~15 s; pedidos seguintes ~3 s (5 s quando o job encadeia outro job como base); faixa O11 intacta em 1,4 s. Os ~2,7 s que sobram sao a carga do OML de 6,5 MB, por desenho.
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\docs\PROGRESSO-UNIFICACAO.md:274-293
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\docs\PROGRESSO-UNIFICACAO.md:274-293
 
-### base: "job:<nome>" na faixa ODC
+### base: "job:<name>" in the ODC lane
 
-`limite-do-kernel`
+`kernel-limit`
 
 **JA NAO E VERDADE -- consertado.** Verificado em 2026-09-17 contra o codigo e contra o repositorio: hoje funciona.
 `JobRunner.ResolveJobFile` junta TRES candidatos, nao dois -- a pasta do proprio job, a pasta irma sem o sufixo
@@ -1307,13 +1307,13 @@ Prova (historica, de uma worktree `Anvil-cov-b`, com o codigo anterior):
 "error": "FileNotFoundException: jobs: parte nao encontrada: job:block-events (procurado em C:\\Users\\andre\\Anvil-cov-b\\tests\\jobs-odc-negative\\block-events.json, C:\\Users\\andre\\Anvil-cov-b\\tests\\jobs\\block-events.json)" -- a nota esta escrita no proprio job negativo.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\cobertura-e-relatorio.md:291-300; tests\jobs-odc-negative\delete-block-event-in-use.json (campo description)
+Seen in: C:\Users\andre\Anvil\docs\tasks\cobertura-e-relatorio.md:291-300; tests\jobs-odc-negative\delete-block-event-in-use.json (description field)
 
-### studio_open da bridge ODC
+### studio_open of the ODC bridge
 
-`armadilha`
+`trap`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Fundir os tres itens num so (poupa 2 dos "100") e corrigir o rider: a versao carregada nunca e substituida, mas uma versao NOVA anexa-se ao Studio aberto em ~2 s; perde-se o estado em memoria da anterior, nao a sessao.
 > 
@@ -1330,13 +1330,13 @@ Prova:
 'Sinal ClientUITheme' vira modulo 'Sinal' + caminho local 'ClientUITheme' e recusa com "Local model not found: C:\ProgramData\...". Ponto exato: studio\bridge\StartupHook.cs:878 (argument.Split(' ', 2)). Contorno: studio_open module: "qclhM3yjX06Cr_HZbsHyZw" abre "Sinal ClientUITheme". Armadilha irma: nome de ASSET != nome de MODULO (o asset 'Sinal ClientUITheme' contem o modulo 'SinalClientUITheme').
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\docs\ENTREGA-AGORA.md:30-46
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\docs\ENTREGA-AGORA.md:30-46
 
-### Download de assets ODC por bridge (tenant clienttenant)
+### Download of ODC assets by bridge (tenant clienttenant)
 
-`inalcancavel`
+`unreachable`
 
-> **REFUTADO** (passagem adversarial, 2026-09-17)
+> **REFUTED** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** "Sete assets do clienttenant nao confirmaram abertura dentro do limite de 180 s do `open` da bridge (Template Web App, CriptoAES, Firebase Cloud Messaging Plugin, InAppBrowser Plugin, MobileUI, OutSystems UI, template_Agent) e custaram 3m43s de relogio cada; os outros 16 abriram em ~10s. A operacao nao foi cancelada, portanto nao esta provado que NAO abrem - so que passam dos 180 s. O tipo de asset nao explica o resultado: OutSystems UI e LowCodeLibrary e falhou, Device Diagnostic e MobileLibrary e abriu em 1.8 s. ExtensionLibrary, ExternalConnection e AIModelConnection nunca foram tentados. Para varrer o tenant, o caminho barato continua a ser a API publica (AssetRepository_ListAssets + AssetRepository_GetAssetRevisionSourceCode), que exige um API client com 'Asset management > Open'."
 > 
@@ -1353,13 +1353,13 @@ Prova:
 Medido e registado no tenants.json em 2026-09-17 (206 assets): '~10s por modulo e 3m43s por asset SEM modelo low-code (plugins Cordova, WidgetLibrary, ExternalLibrary, ExtensionLibrary, ExternalConnection, AIModelConnection nao abrem)'. Alternativa: AssetRepository_ListAssets + AssetRepository_GetAssetRevisionSourceCode.
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\tenants.json:30 (tenant clienttenant.outsystems.dev, readOnly: true)
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\tenants.json:30 (tenant clienttenant.outsystems.dev, readOnly: true)
 
-### Abrir um modulo num tenant movimentado
+### Opening a module on a busy tenant
 
-`armadilha`
+`trap`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > A primeira passagem tinha dito `confirmado`; caiu na reconferencia.
 > 
 > **Correccao:** Fundir os dois itens num so, ficando com este (:962), que ja traz o discard. E substituir o `Prova:` (:971) pela medicao: "aberto Client Portal as 17:40:04.684 (operations.jsonl:720); snapshot as 17:40:17.939 com `modified: false` e dependencia `BeneficiarioIS` na revisao 410 (snapshots\ClientPortal-D59BAA28...oml.json); 42,7 s depois, sem nenhum comando entre as duas linhas do diario, o close recusa: `Copy of ClientPortal is modified; refusing to close it without --discard.` (:723). Saida segura provada: close com --discard, recibo journal\discard-20260917174121.json (StartupHook.cs:637-643). Aconteceu em 5 dos 16 modulos clienttenant dessa sessao. A causa (subida da referencia para r411) e inferencia, nao registo." Apagar o duplicado de :1259. Isso poupa 1 dos "100" e a contagem da tabela de ancoragem (NAO-DA.md:18-22) tem de descer 1 na linha "so relatorios ou notas".
@@ -1383,14 +1383,14 @@ Prova:
 Observado em 2026-09-17: aberto ClientPortal com BeneficiarioIS r410; minutos depois o Studio tinha atualizado a referencia para r411 sozinho e marcado o modulo como modified: true. Saida segura: studio_close com discard: true (tira copia de seguranca e fecha sem gravar nada no servidor).
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\docs\ENTREGA-AGORA.md:48-51
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\docs\ENTREGA-AGORA.md:48-51
 
 
-## Armadilhas e limites do kernel Anvil e das ferramentas SSAM-Hybrid-ODC: enderecamento do contrato de dados, ordem de ops, aliases locais ao job, escolha de sobrecarga, nomes com espaco, catalogo de tenants, workers e pastas de trabalho (varrido em 2026-09-17)
+## Traps and limits of the Anvil kernel and the SSAM-Hybrid-ODC tools: data contract addressing, op order, job-local aliases, overload choice, names with spaces, tenant catalog, workers and work folders (swept on 2026-09-17)
 
-### create ISessionVariable (faixa ODC)
+### create ISessionVariable (ODC lane)
 
-`recusa-da-plataforma`
+`platform-refusal`
 
 Session Variable nao existe no produto ODC: a API publica ainda oferece ISessionVariable e IESpace.CreateSessionVariable, mas a fabrica recusa na hora. Estado de sessao no ODC faz-se com client variable.
 
@@ -1400,13 +1400,13 @@ Prova:
 expectError: ["create WfCovSessionState", "Session Variable objects can't be children of App objects"] — recusa fixada como regressao e corrida por OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc-negative\session-variable-not-in-odc.json; tabela em C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:498
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc-negative\session-variable-not-in-odc.json; table in C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:498
 
-### create IImage (recurso de modulo) — as DUAS faixas
+### create IImage (module resource) — BOTH lanes
 
-`inalcancavel`
+`unreachable`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Tipo certo: `limite-do-kernel`, nao `inalcancavel` (o Studio cria imagens; quem nao chega la e a linguagem de jobs). E "o unico construtor exige byte[]" -> "as duas sobrecargas de CreateImage exigem byte[] binary". Alem disso o facto esta TRIPLICADO em NAO-DA.md:278, :729 e :993 com tipos inconsistentes -- fundir numa entrada so, senao a contagem de '100 factos' esta inflada e o leitor ve o mesmo item a contradizer-se.
 > 
@@ -1423,11 +1423,11 @@ Prova:
 "error": "op #0 (create WfProbeImage): InvalidOperationException: Image binary cannot be null: Object not set"; assinatura `IImage CreateImage(byte[] binary, string originalPath, string name = null, IKey key = null)`; Convert so aceita string, bool, int, long, decimal, enum, ITypeSignature, interface do modelo e ExpressionDefinition
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:512-531
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:512-531
 
-### Tipos que existem na API do ODC mas nao se criam a partir do modulo
+### Types that exist in the ODC API but cannot be created from the module
 
-`inalcancavel`
+`unreachable`
 
 ILocalStorageEntity nao existe (o tipo certo e IClientEntity); ISystemRole e IExposedAction nao tem metodo Create; IService e abstrato sem classe concreta. O REST exposto de verdade e IRestService; o role de autor e IRole -> IAppRole.
 
@@ -1437,13 +1437,13 @@ Prova:
 "KeyNotFoundException: unknown Model API type: ILocalStorageEntity (not in OutSystems.Model.V1 nor in the Studio plugins)"; "IESpace 'InsuranceApp' cannot create ISystemRole (no Create method in the API)"; "ArgumentException: Couldn't find any concrete class implementing OutSystems.Model.Logic.Integrations.IService"
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:499-501; template da mensagem em C:\Users\andre\Anvil\src\Anvil.Core\Kernel\Verbs.cs:883
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:499-501; message template in C:\Users\andre\Anvil\src\Anvil.Core\Kernel\Verbs.cs:883
 
-### Superficie de API nao e prova de funcionalidade (BPT / CreateBusinessProcess)
+### API surface is not proof of functionality (BPT / CreateBusinessProcess)
 
-`inalcancavel`
+`unreachable`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Guardar a regra ('antes de escrever job para um tipo que so se viu na API, confirmar que o produto o oferece') e deitar fora o exemplo. Ironia util para a pagina: este item e ele proprio o erro simetrico -- concluiu-se a AUSENCIA no produto sem ir ver o produto. A regra completa e: nem a presenca na API prova a funcionalidade, nem a ausencia de job prova a ausencia no produto; ve-se no produto (Studio decompilado + contrato da API publica), que e leitura barata e esta em disco. Exemplo com recusa viva para pos no lugar: ISessionVariable ('Session Variable objects can't be children of App objects').
 > 
@@ -1460,11 +1460,11 @@ Prova:
 Confirmado pelo dono em 2026-09-17; a unica prova documental e o ficheiro decompilado `OutSystems.Model.V1/OutSystems.Model/IESpace.cs`. ATENCAO: nao ha recusa viva colada para este caso (ao contrario da session variable) — item registado como afirmacao sem mensagem de plataforma.
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:82-86 e C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:502
+Seen in: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:82-86 and C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:502
 
-### delete com consumidores
+### delete with consumers
 
-`recusa-da-plataforma`
+`platform-refusal`
 
 O delete recusa quando o alvo tem consumidores reais e a mensagem NOMEIA cada um pelo caminho; usos derivados nao contam. Quatro recusas estao fixadas como jobs negativos na faixa ODC.
 
@@ -1474,11 +1474,11 @@ Prova:
 "delete: refused, IEntityAttribute 'Body' is used by 2 consumer(s): IAggregateNode:ReadNotices/DataTable/ICombineSourcesOperation:WfProofNotices/IFilter; IServerAction:WfProof_Digest/IAssignNode/IAssignment (list them with usages, fix or remove those usages, or pass "force": true to break them)" — texto gerado em Verbs.cs:596-597
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc-negative\delete-data-in-use.json, delete-logic-in-use.json, delete-screen-in-use.json, delete-block-event-in-use.json; C:\Users\andre\Anvil\src\Anvil.Core\Kernel\Verbs.cs:589-601
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc-negative\delete-data-in-use.json, delete-logic-in-use.json, delete-screen-in-use.json, delete-block-event-in-use.json; C:\Users\andre\Anvil\src\Anvil.Core\Kernel\Verbs.cs:589-601
 
-### rename com colisao de nome
+### rename with a name collision
 
-`recusa-da-plataforma`
+`platform-refusal`
 
 O rename recusa quando o nome novo ja existe no mesmo escopo, porque o Studio sufixaria em silencio e o modulo ficaria com um nome diferente do pedido.
 
@@ -1488,11 +1488,11 @@ Prova:
 expectError: ["rename: 'Title' clashes with an existing name in that scope", "pick another name"]; forma completa no guia: "rename: 'X' clashes with an existing name in that scope (the Studio would use 'X2'); pick another name"
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc-negative\rename-name-clash.json; C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-r-relatorio.md:280-281
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc-negative\rename-name-clash.json; C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-r-relatorio.md:280-281
 
-### move nao reparenta
+### move does not reparent
 
-`recusa-da-plataforma`
+`platform-refusal`
 
 move so REORDENA dentro do mesmo pai. before/after de um irmao de outro pai e recusado pelo kernel; sem essa recusa a plataforma cai numa assercao interna inutil, igual nas duas faixas. Tambem recusa filho que o pai nao guarda em sequencia (ex.: screen actions de uma tela).
 
@@ -1502,13 +1502,13 @@ Prova:
 expectError: ["move before:", "is not a sibling of", "IContainer:WfBoxB", "IContainer:WfBoxA", "move only REORDERS inside the same parent", "create the object at the new parent and delete the old one"]; sem a recusa a plataforma da `Condition is false`
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\jobs-odc-negative\move-foreign-sibling.json; C:\Users\andre\Anvil\AGENTS.md:354-364
+Seen in: C:\Users\andre\Anvil\tests\jobs-odc-negative\move-foreign-sibling.json; C:\Users\andre\Anvil\AGENTS.md:354-364
 
-### Ordem de ops: forward reference
+### Op order: forward reference
 
-`armadilha`
+`trap`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** "O kernel detecta e lista os forward-refs do op que falhou e ate 8 outros (`Also out of order:`)" -- nao todos. E o `Visto em:` deve passar para tests/jobs-negative/destination-before-screen.json (grupo 'job', nao 'so notas'); AGENTS.md:625-628 fica como leitura de apoio e tem a mesma exageracao ("lista todos os outros forward-refs do job").
 > 
@@ -1525,11 +1525,11 @@ Prova:
 "op #4 (set Destination): ... IMobileScreen:Catalog does not exist yet at this point of the job: it is created at op #6 ..." seguido de "Also out of order: ..." (exemplo negativo tests/jobs-negative/destination-before-screen.json)
 ```
 
-Visto em: C:\Users\andre\Anvil\AGENTS.md:625-628
+Seen in: C:\Users\andre\Anvil\AGENTS.md:625-628
 
-### Ordem de ops: referencias de extensao congeladas e job composto
+### Op order: frozen extension references and composite job
 
-`armadilha`
+`trap`
 
 Uma ordem rigida mais: um job composto usa 'jobs' OU 'ops', nunca os dois (o base das partes e ignorado; vale o do composto). As referencias .avsig deixaram de ser ordem rigida (pacote 2026-10-05, C09): uma referencia congelada escrita depois das edicoes e importada antes da transacao e informada em hoistedReferences, nunca recusada.
 
@@ -1539,11 +1539,11 @@ Prova:
 `throw new InvalidOperationException("job composto: use 'jobs' OU 'ops', nao os dois")` em JobRunner.cs:268; o hoist das referencias congeladas em JobRunner.cs:28-32 (teste NativeReferenceImportTests.AFrozenReferenceAfterTheEditsIsHoistedAndLeavesTheBaseUntouched)
 ```
 
-Visto em: kernel/src/Anvil.Core/Kernel/JobRunner.cs:28-32 e :268
+Seen in: kernel/src/Anvil.Core/Kernel/JobRunner.cs:28-32 and :268
 
-### Aliases $x sao locais ao job (nao atravessam `base: job:`)
+### $x aliases are local to the job (they do not cross `base: job:`)
 
-`armadilha`
+`trap`
 
 Com `base: job:x`, o job x e construido num OML separado, gravado, e o job atual carrega esse ficheiro numa ModelSession NOVA — o dicionario de handles nasce vazio, logo nenhum $alias do job base existe. Num job COMPOSTO ('jobs': [...]) os ops sao concatenados numa unica transacao e os aliases valem. Por isso os jobs negativos enderecam por Tipo:Nome.
 
@@ -1553,11 +1553,11 @@ Prova:
 `unresolved reference '<ref>' (use $alias, @key or Type:Name)` em Verbs.cs:797; handles por sessao em Verbs.cs:115 (`_handles[alias] = obj`); JobRunner.cs:222 constroi o job base noutro OML e JobRunner.cs:30-32 faz `host.Load(...)` + `new ModelSession(espace)`. Uso real: `"base": "job:screen-list"` + `{"op":"delete","target":"IMobileScreen:WfCovTaskDetail"}` (Tipo:Nome, nao alias)
 ```
 
-Visto em: C:\Users\andre\Anvil\src\Anvil.Core\Kernel\JobRunner.cs:214-227 e :19-32; C:\Users\andre\Anvil\tests\jobs-odc-negative\delete-screen-in-use.json
+Seen in: C:\Users\andre\Anvil\src\Anvil.Core\Kernel\JobRunner.cs:214-227 and :19-32; C:\Users\andre\Anvil\tests\jobs-odc-negative\delete-screen-in-use.json
 
-### Resolucao de `job:<nome>` por faixa
+### Resolution of `job:<nome>` per lane
 
-`armadilha`
+`trap`
 
 `job:<nome>` procura na pasta do proprio job, depois na pasta POSITIVA da mesma faixa (um job de tests/jobs-odc-negative alcanca tests/jobs-odc) e so entao em tests/jobs — a pasta positiva vem antes para que uma faixa nunca herde por engano o job da outra.
 
@@ -1567,11 +1567,11 @@ Prova:
 JobRunner.cs:168-183 (comentario + `if (folder.EndsWith("-negative"...)` acrescenta a pasta positiva antes de `tests/jobs`); conserto registado como commit c56af06. CUIDADO com fonte desatualizada: a `description` de tests/jobs-odc-negative/delete-block-event-in-use.json ainda diz "o `job:` so procura na pasta do proprio job e em tests/jobs - nao em tests/jobs-odc" — isso ja nao e verdade.
 ```
 
-Visto em: C:\Users\andre\Anvil\src\Anvil.Core\Kernel\JobRunner.cs:168-183; C:\Users\andre\SSAM-Hybrid-ODC\docs\PROGRESSO-UNIFICACAO.md:317
+Seen in: C:\Users\andre\Anvil\src\Anvil.Core\Kernel\JobRunner.cs:168-183; C:\Users\andre\SSAM-Hybrid-ODC\docs\PROGRESSO-UNIFICACAO.md:317
 
-### Enderecamento do contrato de dados: propriedades assimetricas na leitura
+### Data contract addressing: asymmetric properties on read
 
-`armadilha`
+`trap`
 
 Ha propriedades que NAO devolvem o que se escreveu estando a escrita correcta, e por isso estao fora da vigilancia do contrato: StyleSheet, UserStyleSheet, GeneratedStyleSheet e Label. Value/Text de expressao escreve-se texto e le-se um ExpressionDefinition — a comparacao certa e a do texto.
 
@@ -1581,11 +1581,11 @@ Prova:
 `private static readonly HashSet<string> AssimetricasNaLeitura = new(StringComparer.Ordinal) { "StyleSheet", "UserStyleSheet", "GeneratedStyleSheet", "Label" };` com a medicao no comentario: "escrever 53 caracteres devolve 45 320"
 ```
 
-Visto em: C:\Users\andre\Anvil\src\Anvil.Core\Kernel\DataAssertions.cs:13-24
+Seen in: C:\Users\andre\Anvil\src\Anvil.Core\Kernel\DataAssertions.cs:13-24
 
-### Enderecamento do contrato de dados: so identidade estavel
+### Data contract addressing: stable identity only
 
-`limite-do-kernel`
+`kernel-limit`
 
 O contrato so vigia tipos de dados e elementos nomeados de topo que sobrevivem a corrida com a mesma chave. A plataforma RECRIA a maquinaria interna quando o contrato muda (argumentos de ITriggerNode, IContent dentro de um botao, IEventHandler de instancia de bloco, widgets): lembrar esses por chave garante falso positivo.
 
@@ -1595,11 +1595,11 @@ Prova:
 Comentario medido: "medido ao alargar o contrato sem esta lista, o job block-events-types encheu-se de 'KeyNotFoundException: no object with key ...' sobre escritas correctas"; lista IdentidadeEstavel com 20 tipos (ITheme, IMobileTheme, IServerAction, IMobileScreen, IRestService, ...)
 ```
 
-Visto em: C:\Users\andre\Anvil\src\Anvil.Core\Kernel\DataAssertions.cs:26-45
+Seen in: C:\Users\andre\Anvil\src\Anvil.Core\Kernel\DataAssertions.cs:26-45
 
-### Enderecamento do contrato de dados: atributos de EntityIndex por CHAVE (bug ja corrigido)
+### Data contract addressing: EntityIndex attributes by KEY (bug already fixed)
 
-`armadilha`
+`trap`
 
 CORRIGIDO — nao voltar a reportar. O contrato guardava os atributos de um EntityIndex pelo NOME e recusava a entrega ao renomear um atributo indexado, com isValid=True e o indice certo no modelo. Hoje guarda AttributeKeys (por chave) e renomear um atributo indexado no mesmo job que cria o indice e entrega valida.
 
@@ -1609,13 +1609,13 @@ Prova:
 Sintoma medido entao: "data mismatch: {'element': 'Headless_CS (ESpace) / Notice (ServerEntity) / IX_Notice_Body (EntityIndex)', 'property': 'Attributes', 'expected': ['Body'], 'actual': ['Message']}" com "== probe-index-rename.json: ok=True {... 'isValid': True ...} accepted= False". Conserto: `RememberData(target, "AttributeKeys", ...)` com o comentario "Por CHAVE, nao por nome" (commit 8ab8529)
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-r\BLOCKER.md:12-64; conserto em C:\Users\andre\Anvil\src\Anvil.Core\Kernel\DataAssertions.cs:137-144
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-r\BLOCKER.md:12-64; fix in C:\Users\andre\Anvil\src\Anvil.Core\Kernel\DataAssertions.cs:137-144
 
-### CSS de tema: tres metades, leitura != escrita
+### Theme CSS: three halves, read != write
 
-`armadilha`
+`trap`
 
-> **CONFIRMADO** (passagem adversarial, 2026-09-17)
+> **CONFIRMED** (passagem adversarial, 2026-09-17)
 > 
 > **Como se soube:** Verificado nas DUAS faixas no Studio decompilado, nao so inferido. ODC: C:\Users\andre\ODC3\decompiled\odc\OutSystems.Model\ServiceStudio.Model\WebStyleSheet.cs:1185 `SetCssSource(text + "\r\n" + (UserCssSource?.GetText() ?? string.Empty));` (CalculateFinalCssSource, :1180) e :1213-1224 `public void SetCorrectCssSource(string value) { if (IsGeneratedEffectiveValueInUse()) { ... SetUserCssSource(userCssSource); }`. O11: C:\Users\andre\ODC3\decompiled\o11\ServiceStudio.Framework\ServiceStudio.Model\WebStyleSheet.cs:2209 e :2237-2248 -- codigo identico, incluindo o mesmo gate :2261 `IsGeneratedEffectiveValueInUse()` => `IsThemeEditorActive()`. Os numeros do item fecham: 884 + 2 (CRLF) + 44434 = 45320. Kernel: C:\Users\andre\Anvil\src\Anvil.Core\Kernel\ThemeCss.cs:52 `sheet.SetCssSource(generated + "\r\n" + (sheet.UserEffectiveValue ?? ""));` e :17-19 "o `get` seguinte devolvia o texto antigo ... escrita destrutiva invisivel na leitura" (o conserto ja la esta). Unica ressalva, que nao derruba o item: ha SIM uma diferenca de faixa do lado da LEITURA -- ThemeCss.cs:80-81 "as metades que o Model API do O11 nao tem (o do ODC ja as publica como somente-leitura)".
 > 
@@ -1630,13 +1630,13 @@ Prova:
 Medido no InsuranceApp: "antes StyleSheet 45320 chars = GeneratedStyleSheet 884 + CRLF + UserStyleSheet 44434 / set StyleSheet \"<53 chars>\" -> {\"set\":\"StyleSheet\",\"via\":\"property\"} (sucesso, sem nota) / depois UserStyleSheet 53 chars <- os 44 434 caracteres de CSS do autor foram substituidos / StyleSheet 45320 chars <- INALTERADA"
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:36-61; C:\Users\andre\Anvil\AGENTS.md:366-375; C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-r\BLOCKER.md:68-101
+Seen in: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:36-61; C:\Users\andre\Anvil\AGENTS.md:366-375; C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-r\BLOCKER.md:68-101
 
-### rename de action/no/saida: expressao `<No>.<Saida>`
+### rename of action/node/output: expression `<No>.<Saida>`
 
-`diferenca-entre-faixas`
+`lane-difference`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 >
 > **Correccao:** "Na faixa O11 a expressao `<No>.<Saida>` NAO e reescrita e o modulo cai com
 > ExpressionUnknownObject; na faixa ODC religa sozinha. Nas DUAS faixas esse rename devolve
@@ -1662,13 +1662,13 @@ Prova:
 "Error ExpressionUnknownObject: Invalid Expression | Can't identify 'Slug_Make' element in expression. @ Headless_UI (ESpace) / MainFlow (MobileFlow) / SlugProbe (MobileScreen) / Go (ScreenAction) / Keep (AssignNode) / Assignment" junto de "rename {\"renamed\": \"IServerAction 'Slug_Build'\", \"from\": \"Slug_Make\", \"to\": \"Slug_Build\", \"consumers\": 1, \"expressionsRewritten\": 0}"
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-r-relatorio.md:140-154 e :290-292
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-r-relatorio.md:140-154 and :290-292
 
-### rename de metodo/input de REST exposto muda a URL publica
+### rename of a method/input of an exposed REST changes the public URL
 
-`armadilha`
+`trap`
 
-> **CONFIRMADO** (passagem adversarial, 2026-09-17)
+> **CONFIRMED** (passagem adversarial, 2026-09-17)
 > 
 > **Como se soube:** Medido, e nas duas faixas (o item cita so a medicao O11). C:\Users\andre\Anvil\tests\jobs\rename-logic-propagation.json:132 `{"op": "set", "target": "$m", "prop": "URLPath", "value": "/GetSlug/{Text}"}` seguido de :149 rename do metodo e :151 rename do input, com o `_why` :149 "o URLPath NAO e texto parado -- o segmento com o nome do metodo e reescrito e a URL publica do endpoint muda sozinha". Leitura de volta em C:\Users\andre\Anvil\docs\tasks\cobertura-r-relatorio.md:159-160 `"URLPath": "/SlugOf/{Text}"` / `"/SlugOf/{Term}"`, e a mesma coisa na faixa ODC em :334-343 "### B. O `URLPath` de REST exposto acompanha -- igual nas duas faixas" (sonda .local/probe/probe-rest-odc.json). Tentei derrubar por "o URLPath era so o default derivado do nome": nao cola -- o default documentado e `/<Nome>` (C:\Users\andre\Anvil\docs\mapa\2026-09-04-rest-investigacao.md:177 "`URLPath` (\"URL Path\", default `/<Nome>`...") e o valor medido era `/GetSlug/{Text}`, escrito a mao e diferente do default.
 > 
@@ -1683,11 +1683,11 @@ Prova:
 "get IRestServiceAction SlugOf ... \"URLPath\": \"/SlugOf/{Text}\"  <- depois de renomear o metodo GetSlug -> SlugOf" e "\"URLPath\": \"/SlugOf/{Term}\"  <- depois de renomear o input Text -> Term"
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-r-relatorio.md:156-161 e :284-286
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-r-relatorio.md:156-161 and :284-286
 
-### Escolha de sobrecarga no create: CreateSibling e ranking de namespaces
+### Overload choice in create: CreateSibling and namespace ranking
 
-`armadilha`
+`trap`
 
 O mesmo nome de interface existe em varios namespaces do ODC, e o IObject do ODC tem CreateSibling* (o SS11 nao). Sem guarda, o FindCreate escolhia CreateSibling num IContainer e o widget nascia como IRMAO do container, em ordem inversa, fora do Content — e so o gate de equivalencia do merge apanhou. O kernel hoje ignora CreateSibling*, despromove Extensions/ExternalLibraries/Processes/BusinessProcesses e lista a sobrecarga com parametro Type antes da generica.
 
@@ -1697,13 +1697,13 @@ Prova:
 `AllMethods(parent).Where(m => m.Name.StartsWith("Create") && !m.Name.StartsWith("CreateSibling"))` com o comentario "CreateSibling (ODC IObject) creates BESIDE the object, not inside it: never a way to create a child" (Verbs.cs:892-893) e a funcao Rank em Verbs.cs:888-891. Sintoma original: gate de equivalencia deu `WF_PinNotFoundBanner ChangedInLocal por EffectiveMarginLeft em tres widgets`; erros irmaos: "ArgumentException: Couldn't find any concrete class implementing OutSystems.Model.Extensions.IStaticEntity" e "Nodes of type IEndNode are not allowed in IMobileScreen or eSpaces of type CrossDevice"
 ```
 
-Visto em: C:\Users\andre\Anvil\src\Anvil.Core\Kernel\Verbs.cs:875-899; C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:22-24 e :63-67
+Seen in: C:\Users\andre\Anvil\src\Anvil.Core\Kernel\Verbs.cs:875-899; C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:22-24 and :63-67
 
-### Nome com espaco: studio_open corta no primeiro espaco
+### Name with a space: studio_open cuts at the first space
 
-`armadilha`
+`trap`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Igual ao item irmao: a bridge anexa uma versao nova ao Studio EM EXECUCAO (`odc attach`, 2 s medidos em lab\int-integracao.md:12). O que nao se recupera e o estado em memoria da versao antiga, nao a sessao do Studio.
 > 
@@ -1720,13 +1720,13 @@ Prova:
 `var parts = argument.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries); ... var module = parts[0]; var localPath = parts.Length == 2 ? Path.GetFullPath(parts[1]) : null;` (StartupHook.cs:878-880); recusa observada: "Local model not found: C:\ProgramData\..."; contorno: `studio_open module: "qclhM3yjX06Cr_HZbsHyZw" -> abre "Sinal ClientUITheme"`
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\studio\bridge\StartupHook.cs:877-880; C:\Users\andre\SSAM-Hybrid-ODC\docs\ENTREGA-AGORA.md:32-42
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\studio\bridge\StartupHook.cs:877-880; C:\Users\andre\SSAM-Hybrid-ODC\docs\ENTREGA-AGORA.md:32-42
 
-### Nome de asset != nome de modulo
+### Asset name != module name
 
-`armadilha`
+`trap`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > A primeira passagem tinha dito `confirmado`; caiu na reconferencia.
 > 
 > **Correccao:** Trocar a frase final por: "Usar o nome de asset num studio_snapshot (e no studio_deliver, que o encadeia) cai no gate `scope` com \"Expected exactly one open <X>; found 0.\" (StartupHook.cs:742-743). No studio_close cai noutro sitio: \"No open copy of <X>.\" (StartupHook.cs:629), que a Journal.Gate nao classifica -- sai gate `none`. Os tres aceitam o NOME DE MODULO ou a CHAVE; so o nome de ASSET e que nao serve (excepto no `open`, onde e o nome de asset ou a chave que servem)." Trocar o `Visto em:` de ENTREGA-AGORA.md:44-46 e :93 para journal\operations.jsonl:709 e :711 (17:35:52 vs 17:36:08, mesma key), e NAO citar :706 nem o catalogo como prova de nomes.
@@ -1756,13 +1756,13 @@ Prova:
 "O asset chama-se `Sinal ClientUITheme`; o modulo dentro dele e `SinalClientUITheme`"; vocabulario do gate: "`scope` = modulo errado ou nome errado (quase sempre a armadilha 2)". Depois de abrir, rodar studio_status e usar o nome de `modules[].name`.
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\docs\ENTREGA-AGORA.md:44-46 e :93
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\docs\ENTREGA-AGORA.md:44-46 and :93
 
-### Abrir um modulo nao e operacao de leitura
+### Opening a module is not a read operation
 
-`armadilha`
+`trap`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > A primeira passagem tinha dito `confirmado`; caiu na reconferencia.
 > 
 > **Correccao:** Prova: substituir por medicao. "snapshots\ClientPortal-D59BAA28...oml.json regista `capturedAt 2026-09-17T17:40:17.939` com `modified: false` e `{\"Name\": \"BeneficiarioIS\", \"Revision\": \"410\"}`; 42,7 s depois, sem nenhum comando entre as duas linhas do diario, o close recusa com `Copy of ClientPortal is modified; refusing to close it without --discard.` (operations.jsonl:723). Repetiu-se em 5 dos 16 modulos clienttenant abertos nessa sessao (recibos journal\discard-*.json de 17:41:21, 17:41:51, 18:25:58, 18:46:59, 18:47:10), enquanto 11 fecharam limpos. O QUE o Studio mexeu nao esta medido: a subida da referencia para r411 e inferencia, nao registo." Tirar "minutos depois" (foram 56 s do open, 43 s do snapshot) e marcar a causa como nao provada, no mesmo tom da NOTA DE HONESTIDADE que a pagina ja usa no item do BPT.
@@ -1790,13 +1790,13 @@ Prova:
 "Abri `ClientPortal` com `BeneficiarioIS r410`; minutos depois o Studio tinha atualizado a referencia para `r411` sozinho e marcado o modulo como `modified: true`, sem ninguem tocar nele"
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\docs\ENTREGA-AGORA.md:48-51
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\docs\ENTREGA-AGORA.md:48-51
 
-### Catalogo de tenants: raiz do catalogo x sessao do Studio
+### Tenant catalog: catalog root x Studio session
 
-`armadilha`
+`trap`
 
-> **OBSOLETO** (passagem adversarial, 2026-09-17)
+> **OBSOLETE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** "O `open` NAO exige que a raiz do catalogo seja o tenant da sessao - isso era verdade antes da bridge v28 e esta consertado. Hoje `ResolveKey(modulo, host)` (StartupHook.cs:822-846) procura primeiro na seccao do tenant da sessao, depois em todas as seccoes de snapshots\\modules.json (raiz + otherTenants), depois nos outros snapshots\\*.json, e por fim trata o argumento como chave. O que se mantem: modules.json e um so ficheiro com seccoes por tenant, editar a mao ja perdeu a seccao pessoal, e a verdade e a listagem nativa `assets <host>`, que reescreve a seccao em ~1 s."
 > 
@@ -1813,13 +1813,13 @@ Prova:
 "29. Catalogo editado a mao. O tenant raiz do catalogo nao e a sessao do Studio; a sessao e o snapshot dizem o tenant. Trocar seccoes a mao perdeu a seccao pessoal; `assets <host>` reconstroi em 1 s." Estado em disco no dia: "raiz diz `insuranceapp` (57 modulos); o clienttenant esta em `otherTenants` com 206 assets"
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\REPORT.md:268-269, :204-205 e :235-236; C:\Users\andre\SSAM-Hybrid-ODC\docs\ENTREGA-AGORA.md:25
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\REPORT.md:268-269, :204-205 and :235-236; C:\Users\andre\SSAM-Hybrid-ODC\docs\ENTREGA-AGORA.md:25
 
-### Catalogo de tenants: politica por tenant e custo de leitura do clienttenant
+### Tenant catalog: per-tenant policy and read cost of clienttenant
 
-`armadilha`
+`trap`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Separar as duas metades. Politica: "clienttenant e SOMENTE LEITURA por CONVENCAO declarada em tenants.json:25/29; nenhum gate da bridge le `readOnly`, so o operador e que o cumpre." Custo: manter "~10s por asset que abre" e "3m43s por asset que nao abre" (ambos reconfirmados no diario), mas trocar a causa de "asset SEM modelo low-code" por "asset que estoura o limite de 180 s do `open` da bridge".
 > 
@@ -1836,11 +1836,11 @@ Prova:
 tenants.json: "206 assets. O download pela bridge custa ~10s por modulo e 3m43s por asset SEM modelo low-code (plugins Cordova, WidgetLibrary, ExternalLibrary, ExtensionLibrary, ExternalConnection, AIModelConnection nao abrem). O caminho rapido e a API publica: AssetRepository_ListAssets + AssetRepository_GetAssetRevisionSourceCode". Nota de honestidade: os numeros sao a medicao registada pela propria sessao no tenants.json; nao ha log separado citado.
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\tenants.json:24-31 (o ENTREGA-AGORA.md:102 diz que o tenant nao tinha politica declarada — ja tem, foi acrescentada no mesmo dia)
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\tenants.json:24-31 (ENTREGA-AGORA.md:102 says the tenant had no declared policy — it now has one, added the same day)
 
-### Workers: a porta e da FAIXA, a pasta .local e do WORKTREE
+### Workers: the port belongs to the LANE, the .local folder belongs to the WORKTREE
 
-`armadilha`
+`trap`
 
 Cada worktree deriva `.local` do seu proprio ROOT, mas a porta do worker nao: e por faixa, com default fixo no script. Duas frentes na mesma faixa fazem uma rodar os jobs no worker da OUTRA, com o codigo e os ficheiros da outra, sem avisar. Contorno provado: processo frio (ANVIL_WORKER='0' e ANVIL_ODC_NO_WORKER='1'), ao custo de ~8 s por job na O11 e ~13 s na ODC contra ~0,4 s com worker quente.
 
@@ -1850,13 +1850,13 @@ Prova:
 `ROOT = pathlib.Path(__file__).resolve().parents[1]` e `LOCAL = ROOT / ".local" / "lane-odc"` mas `PORT = int(os.environ.get("ANVIL_ODC_PORT", "4547"))` (odc_worker.py:23,28-29); `PORT = int(os.environ.get("ANVIL_WORKER_PORT", str(LANE.worker)))` (anvil_cli.py:23). Acidente medido: "Get-NetTCPConnection -LocalPort 4547 -> 4547 Listen 32720" e "ProcessId : 32720 CommandLine : dotnet C:\Users\andre\Anvil\.local\lane-odc\cli\anvil-odc.dll serve --port 4547" — worker do repositorio principal, nao do worktree da frente
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-a\BLOCKER.md:9-46; C:\Users\andre\Anvil\scripts\odc_worker.py:23,28-29; C:\Users\andre\Anvil\scripts\anvil_cli.py:23; C:\Users\andre\SSAM-Hybrid-ODC\docs\PLANO-COBERTURA.md:43-53
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-a\BLOCKER.md:9-46; C:\Users\andre\Anvil\scripts\odc_worker.py:23,28-29; C:\Users\andre\Anvil\scripts\anvil_cli.py:23; C:\Users\andre\SSAM-Hybrid-ODC\docs\PLANO-COBERTURA.md:43-53
 
-### Worker de pe segura a DLL e faz o build falhar
+### A running worker holds the DLL and makes the build fail
 
-`armadilha`
+`trap`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > A primeira passagem tinha dito `confirmado`; caiu na reconferencia.
 > 
 > **Correccao:** O facto e verdadeiro e vale nas DUAS faixas, mas o remedio esta mais largo que a prova. Texto certo: "`dotnet build` solto com um worker .NET de pe falha: o processo segura o Anvil.Core*.dll (MSB3027). Usar build.py/build_odc.py -- MAS eles so param o worker da porta CORRENTE: um worker orfao noutra porta ou de outro worktree continua a segurar a DLL e faz o PROPRIO build_odc.py falhar (medido em 4567 e 4557). Nesse caso, parar o orfao pelo caminho limpo (odc_worker.stop(<porta>) / worker_process.recover_unresponsive), nunca com kill."
@@ -1874,13 +1874,13 @@ Prova:
 "MSB3027 ... O arquivo e bloqueado por: \".NET Host (55536)\"" — worker ODC orfao da porta 4567 segurando `.local/lane-odc/cli/Anvil.Core.Odc.dll`; AGENTS.md:135: "`dotnet build` solto falha com o worker de pe"
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:545-549; C:\Users\andre\Anvil\AGENTS.md:134-137
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:545-549; C:\Users\andre\Anvil\AGENTS.md:134-137
 
-### Smart App Control bloqueia todo binario novo desta maquina
+### Smart App Control blocks every new binary on this machine
 
-`armadilha`
+`trap`
 
-> **OBSOLETO** (passagem adversarial, 2026-09-17)
+> **OBSOLETE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** O Smart App Control CONTINUA em imposicao (o registo bate ao caracter), mas ja NAO bloqueia binario novo desta maquina: parou de bloquear as 08:31 de 2026-09-17 e desde entao build.py/build_odc.py constroem E o worker sobe. Alem disso a afirmacao sempre foi mais larga do que a prova -- todos os bloqueios registados sao de DLLs do worktree C:\Users\andre\Anvil-cov-b, nenhum do repositorio principal. Texto certo: "Entre as ~08:28 e as 08:31 de 2026-09-17 o Smart App Control bloqueou as DLLs recem-construidas no worktree Anvil-cov-b (build.py compilava com 0 erros e o worker morria no arranque, 0x800711C7). O SAC continua ligado em imposicao, mas desde as 08:31 nao ha um unico bloqueio novo e os builds das 11:38 e das 20:42 do mesmo dia correram. Nao tratar como bloqueio sem reler o log de Code Integrity primeiro."
 > 
@@ -1897,13 +1897,13 @@ Prova:
 "RuntimeError: worker startup failed (exit 3762504530)" e "System.IO.FileLoadException: Could not load file or assembly ... Uma politica de Controle de Aplicativo bloqueou este arquivo. (0x800711C7)"; CodeIntegrity 3077 (Policy ID:{0283ac0f-fff1-49ae-ada1-8a933130cad6}) e 3118. Registo lido agora por esta sessao: VerifiedAndReputablePolicyState : 1 / SAC_PreviousState : 2 / SAC_EnforcementReason : 1
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-b\BLOCKER.md (ficheiro inteiro); releitura de HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy nesta sessao
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-b\BLOCKER.md (whole file); re-read of HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy in this session
 
-### Pastas de trabalho: tests/jobs* e varrido pelos GuideTests
+### Work folders: tests/jobs* is swept by the GuideTests
 
-`armadilha`
+`trap`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > A primeira passagem tinha dito `confirmado`; caiu na reconferencia.
 > 
 > **Correccao:** Duas bordas estao mais largas do que o codigo. (1) Nao e "qualquer pasta debaixo de tests/": `Directory.GetDirectories(Path.Combine(Root,"tests"),"jobs*")` so apanha filhas DIRETAS de tests/ (nao ha SearchOption.AllDirectories na chamada de pastas; so na de ficheiros). Uma tests/archive/jobs-old NAO e varrida. (2) A recusa de sufixo de versao vale em tests/ EXCETO tests/jobs-cold. Texto certo: "Qualquer pasta filha DIRETA de tests/ cujo nome comece por 'jobs' entra nos GuideTests ... o runner recusa nome de job com sufixo de versao dentro de tests/, exceto em tests/jobs-cold".
@@ -1921,11 +1921,11 @@ Prova:
 `foreach (var dir in Directory.GetDirectories(Path.Combine(Root, "tests"), "jobs*"))` em GuideTests.cs:55 e :82; "A pasta nao pode chamar-se `jobs*`: GuideTests.NoJobPointsAtMutableOml e EveryJobHasAValidMessageContract varrem `tests\jobs*`"; recusa de nome: "job 'x-v2' has a version suffix ..."
 ```
 
-Visto em: C:\Users\andre\Anvil\tests\Anvil.Tests\GuideTests.cs:55,82; C:\Users\andre\SSAM-Hybrid-ODC\docs\PROGRESSO-UNIFICACAO.md:250-254; C:\Users\andre\Anvil\AGENTS.md:121-125
+Seen in: C:\Users\andre\Anvil\tests\Anvil.Tests\GuideTests.cs:55,82; C:\Users\andre\SSAM-Hybrid-ODC\docs\PROGRESSO-UNIFICACAO.md:250-254; C:\Users\andre\Anvil\AGENTS.md:121-125
 
-### Pastas de trabalho: produtores sem cache entre corridas
+### Work folders: producers without a cache between runs
 
-`limite-do-kernel`
+`kernel-limit`
 
 Cada corrida cria uma pasta de produtores nova (GUID) debaixo do WorkDirectory e nunca reutiliza saidas de outra corrida. Dentro da mesma corrida um job base e construido uma vez. Consequencia: `base: job:x` recompila x a cada corrida — nao contar com cache, e nunca apontar uma base para um ficheiro de trabalho em .local (foi essa a causa de 24 falhas da suite).
 
@@ -1935,13 +1935,13 @@ Prova:
 `private readonly string work = Path.Combine(host.WorkDirectory, "producers", Guid.NewGuid().ToString("N"));` com o comentario "Cache e deteccao de ciclos por execucao; nunca reutiliza saidas de outra corrida" (JobRunner.cs:200-204); falha tipica: "base 'C:\Users\andre\Anvil\.local\work\deliver\<chave>\foreign.oml' points to an OML outside tests/fixtures (a file another run rewrites)" (24 testes)
 ```
 
-Visto em: C:\Users\andre\Anvil\src\Anvil.Core\Kernel\JobRunner.cs:200-227; C:\Users\andre\SSAM-Hybrid-ODC\lab\ws4-html-visual\BLOCKER.md:32-36
+Seen in: C:\Users\andre\Anvil\src\Anvil.Core\Kernel\JobRunner.cs:200-227; C:\Users\andre\SSAM-Hybrid-ODC\lab\ws4-html-visual\BLOCKER.md:32-36
 
-### Suite completa O11: o que 'verde' significa hoje
+### Full O11 suite: what 'green' means today
 
-`armadilha`
+`trap`
 
-> **CONFIRMADO** (passagem adversarial, 2026-09-17)
+> **CONFIRMED** (passagem adversarial, 2026-09-17)
 > 
 > **Como se soube:** Todos os quatro numeros citados existem literalmente onde o item diz. (1) Base: C:\Users\andre\SSAM-Hybrid-ODC\lab\ws4-html-visual\BLOCKER.md:25 e C:\Users\andre\Anvil\docs\tasks\ws4-relatorio.md:15: "Com falha! - Com falha:   151, Aprovado:  1005, Ignorado:     0, Total:  1156, Duracao: 25 m 27 s - Anvil.Tests.dll (net8.0)". (2) A regra de aceitacao esta escrita: mesmo BLOCKER.md:11-13 "A regra 1.8 ... redefine \"verde\" como o mesmo conjunto de falhas do `anvil`, nenhuma nova". (3) Pos-arquivamento: C:\Users\andre\SSAM-Hybrid-ODC\docs\PROGRESSO-UNIFICACAO.md:255-257 "suite completa -> 1111 testes, 58 falhas (eram 1207 e 151): sobraram 52 ScreenCoverageTests ... e 6 de catalogo/C# temporal". (4) Pos-consertos de 11:40: PROGRESSO-UNIFICACAO.md:333-335 "suite O11 completa antes destes consertos 1134 testes, 6 falhas ... e depois deles 4 falhas, todas no tradutor de C#". (5) Os grupos das 151 batem a soma 90+52+3+6=151 em C:\Users\andre\SSAM-Hybrid-ODC\lab\int-vermelhos.md:8-13. (6) O .gitignore e mesmo deliberado: linhas 11-13 de C:\Users\andre\Anvil\.gitignore sao "!tests/**/fixtures/*.oml" / "# Local OutSystems UI producer libraries" / "/tests/fixtures/outsystems-ui.oml" / "/tests/fixtures/outsystems-ui-web.oml" -- re-ignoradas logo DEPOIS da excecao; `git check-ignore -v` devolve ".gitignore:12" e ".gitignore:13" para as duas e `git ls-files tests/fixtures/` nao as lista. (7) "o teste falha em vez de dizer que a fixture nao veio" continua verdade no codigo de hoje: tests\Anvil.Tests\ScreenCoverageTests.cs nao tem uma unica ocorrencia de Skip nem de File.Exists -- a linha :30 monta o caminho da fixture e :37/:44 entregam-no ao JobRunner, que atira. NAO RE-CORRI A SUITE (instrucao de leitura apenas), por isso o numero de hoje e o de :334 (4 falhas), nao uma medicao minha -- e e exatamente isso que o item manda fazer. Nota util a acrescentar, que nao contradiz nada: as duas fixtures JA ESTAO nesta maquina (CreationTime 9/17/2026 9:28:22 AM, 4,9 MB e 3,54 MB), e e isso que explica ao caracter o 58 -> 6; quem vier procurar os 52 vermelhos aqui nao os encontra.
 > 
@@ -1956,11 +1956,11 @@ Prova:
 "Com falha! - Com falha: 151, Aprovado: 1005, Ignorado: 0, Total: 1156, Duracao: 25 m 27 s" (WS4, base); depois do arquivamento dos 96 jobs incidents-*/inspect-*: "suite completa -> 1111 testes, 58 falhas (eram 1207 e 151)"; apos os consertos de 11:40: "suite O11 completa antes destes consertos 1134 testes, 6 falhas ... e depois deles 4 falhas, todas no tradutor de C#". Grupos das 151: 90 JobTests corpus incidents-*, 52 ScreenCoverageTests por fixture ausente, 3 GuideTests, 6 catalogo/C# temporal
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\ws4-html-visual\BLOCKER.md:9-49; C:\Users\andre\SSAM-Hybrid-ODC\lab\int-vermelhos.md:1-13 e :29-32; C:\Users\andre\SSAM-Hybrid-ODC\docs\PROGRESSO-UNIFICACAO.md:241, :255-257 e :333-335
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\ws4-html-visual\BLOCKER.md:9-49; C:\Users\andre\SSAM-Hybrid-ODC\lab\int-vermelhos.md:1-13 and :29-32; C:\Users\andre\SSAM-Hybrid-ODC\docs\PROGRESSO-UNIFICACAO.md:241, :255-257 and :333-335
 
-### IsDerived e o registo de exemplo do ODC (bug ja corrigido)
+### IsDerived and the ODC sample record (bug already fixed)
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 CORRIGIDO — nao voltar a reportar. O registo de exemplo de uma entidade chama-se SampleRecord no O11 e IRecord/IRecordAttributeValue no ODC; sem a linha equivalente, na faixa ODC nenhum atributo de entidade podia ser apagado sem force, mesmo sem um unico consumidor de autoria.
 
@@ -1970,13 +1970,13 @@ Prova:
 Sintoma entao: "op #46 (delete ): InvalidOperationException: delete: refused, IEntityAttribute 'Body' is used by 1 consumer(s): IServerEntity:WfProofNotice/IRecord/IRecordAttributeValue (list them with usages, fix or remove those usages, or pass \"force\": true to break them)". Conserto presente: `return t.Contains("AttributeReference") || t.Contains("SampleRecord") || t.Contains("RecordAttributeValue") || ...` (Verbs.cs:1049)
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-a\BLOCKER.md:50-89; conserto em C:\Users\andre\Anvil\src\Anvil.Core\Kernel\Verbs.cs:1042-1050
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-a\BLOCKER.md:50-89; fix in C:\Users\andre\Anvil\src\Anvil.Core\Kernel\Verbs.cs:1042-1050
 
-### Vocabulario: o nome da API nao e o nome do produto (ODC)
+### Vocabulary: the API name is not the product name (ODC)
 
-`diferenca-entre-faixas`
+`lane-difference`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Cortar `, e no ODC nao e aviso, e ERRO`. O que muda entre faixas e SO o vocabulario: mesma id, mesma severidade (Error), texto `public`/`Invalid Public Action` no O11 e `shareable`/`Invalid Shareable Action` no ODC. Precisao menor no mesmo paragrafo: o nome do produto para UMA Site Property e `Setting` (singular); `Settings` e a pasta da scope tree e o prefixo da expressao. E `ModelFeature_WriteableSiteProperties_Removed` nao e uma marca de modelo ao lado das outras -- e um VerifyMessageId (VerifyMessageId.cs:1116), mapeado para a marca em ModelFeaturesVerifyMessagesManager.cs:53.
 > 
@@ -1993,13 +1993,13 @@ Prova:
 Marca de modelo `ModelFeature_SitePropertiesRefactoredToSettings` na OutSystems.Model.dll do ODC Studio, ao lado de `ModelFeature_SitePropertiesSupportsSecretsO11` e `ModelFeature_WriteableSiteProperties_Removed`; mensagem do Verify: "InvalidPublic_ActionParameterNotPublic: ... is shareable but its parameter ... is not shareable"
 ```
 
-Visto em: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:69-80
+Seen in: C:\Users\andre\Anvil\docs\tasks\2026-09-17-ws1-diferencas.md:69-80
 
-### Aggregate com nome padrao do Studio e renomeado sozinho
+### An aggregate with the Studio default name is renamed on its own
 
-`armadilha`
+`trap`
 
-> **CONFIRMADO** (passagem adversarial, 2026-09-17)
+> **CONFIRMED** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** Trocar a `Prova:` (citacao do AGENTS.md) pelo codigo. E afinar dois pontos: (a) o gatilho nao e so o nome padrao -- a condicao e `HasDefaultName() || Name == "Get" + <PluralBonito>`, logo bate tambem num aggregate baptizado a mao com exatamente esse nome; (b) o filtro tem de ser `<atributo> <op> <expressao>` (IsFilterByAttribute, Nodes.cs:6096-6118) e, se o atributo filtrado for o IDENTIFICADOR da entidade, o nome novo usa o SINGULAR: Get<Entidade>By<Id>, nao o plural.
 > 
@@ -2016,13 +2016,13 @@ Prova:
 AGENTS.md:280-281: "Nao de ao aggregate o nome padrao do Studio (`Get<Entidade>s`, ex. GetTeamMembers): ao receber filtro ele e renomeado sozinho (GetTeamMembersByTeamId) e as expressoes que o citam quebram"
 ```
 
-Visto em: C:\Users\andre\Anvil\AGENTS.md:280-281
+Seen in: C:\Users\andre\Anvil\AGENTS.md:280-281
 
-### Funcoes de expressao: so as 121 do catalogo do Studio
+### Expression functions: only the 121 in the Studio catalog
 
-`recusa-da-plataforma`
+`platform-refusal`
 
-> **IMPRECISO** (passagem adversarial, 2026-09-17)
+> **IMPRECISE** (passagem adversarial, 2026-09-17)
 > 
 > **Correccao:** "So as funcoes do catalogo do Studio CARREGADO: 121 no SS11 11.55.87 (docs/functions.md), 128 no ODC Studio -- as mesmas 121 mais NullFile, Size, MIMEType, IsTemp, IsOwnedByCurrentApp (File), GetAppName (Organization) e CheckEndUserRole (Roles). docs/functions.md e o catalogo do O11 e nao serve de lista fechada para um job ODC." A mesma correccao e devida em AGENTS.md:266 ("SO as 121 de docs/functions.md").
 > 
@@ -2039,13 +2039,13 @@ Prova:
 "Hint UnknownFunction: 'X(' nao existe ...; parecidas: A, B" (checagem deterministica contra o catalogo de funcoes lido do proprio Studio); exemplo negativo tests/jobs-negative/unknown-function.json
 ```
 
-Visto em: C:\Users\andre\Anvil\AGENTS.md:266-269 e :140-141
+Seen in: C:\Users\andre\Anvil\AGENTS.md:266-269 and :140-141
 
-### Widget nasce com texto padrao e icone precisa de Weight
+### A widget is born with default text and an icon needs a Weight
 
-`armadilha`
+`trap`
 
-> **CONFIRMADO** (passagem adversarial, 2026-09-17)
+> **CONFIRMED** (passagem adversarial, 2026-09-17)
 > 
 > **Como se soube:** As duas metades estao no codigo, nao so na nota. C:\Users\andre\SSAM-Hybrid-ODC\studio\shared\AuthoringUi.cs:15-19, literal: "// ---- Captions. A button, link or label created by CreateWidget already carries a default Text widget // (\"Button\", \"Save\", \"label\"); the caption replaces that text instead of adding a second one beside it. // Lesson from 16/09: an Expression added next to the default text rendered as \"Button Drop pin here\"." + `var caption = content.Children.OfType<ITextWidget>().FirstOrDefault() ?? Widget<ITextWidget>(content, "Text");`. E AuthoringUi.cs:108-111: "// Icon names are Phosphor 2.0 names (...); the weight is part of the lookup, so it is // never left empty: without it the Studio reports \"Non Existing Icon\" (live warning seen on 16/09)." + `public static W.IIcon Icon(IObject parent, string name, string icon, string css = "", string weight = "regular")`. O REPORT.md citado confere: :197 "botão com \"Button Drop pin here\"", :266-267 e :274-276.
 > 
@@ -2060,7 +2060,7 @@ Prova:
 REPORT.md:266-267: "Botao, link e label criados por `CreateWidget` ja tem um `TextWidget` (\"Button\", \"Save\", \"label\"); `Caption` o substitui. Sem renderizacao, o defeito so aparece na tela do usuario"; REPORT.md:274-276: "sem ele o Studio emite \"Non Existing Icon\" ao vivo, e o gate de validacao recusa o merge por um aviso que o builder headless nao ve". Resultado errado observado: botao com "Button Drop pin here"
 ```
 
-Visto em: C:\Users\andre\SSAM-Hybrid-ODC\lab\REPORT.md:196-208 e :266-277
+Seen in: C:\Users\andre\SSAM-Hybrid-ODC\lab\REPORT.md:196-208 and :266-277
 
 
 
@@ -2100,14 +2100,14 @@ Client.*", e usei isso para declarar o limite. Isso nao provava nada -- ela nao 
 nunca leria o que quer que fosse. Declarar um limite a partir da ausencia de um exemplo e o erro; a sonda de um
 minuto e a interface decompilada sao a prova.
 
-Visto em: sessao ODC3/Quotes de 2026-09-18, ao tentar mover a moldagem de dados da tela Options para Data
+Seen in: ODC3/Quotes session of 2026-09-18, when trying to move the data shaping of the Options screen to Data
 Actions. Registado tambem em SSAM-Hybrid-ODC\docs\FRICCAO-QUOTES-REFACTOR.md problema 17.
 
-## Piloto de contratos partilhados (fase 2, 2026-09-23): static entities, registos, structures e atributos, medido nas DUAS faixas
+## Shared contracts pilot (phase 2, 2026-09-23): static entities, records, structures and attributes, measured in BOTH lanes
 
-### Apagar uma static entity: sem force e recusada (provado); com force e um comportamento observado com integridade NAO comprovada, nao a via normal (as duas faixas)
+### Deleting a static entity: without force it is refused (proven); with force it is an observed behavior with UNPROVEN integrity, not the normal route (both lanes)
 
-`armadilha`
+`trap`
 
 Mesmo sem nenhum consumidor de autor, uma static entity (como qualquer entidade) traz o IAnonymousStructure `<Nome> Record`
 gerado pela plataforma, cujo IAttribute a cita; o kernel nao o classifica como derivado, por isso o `delete` sem force e
@@ -2123,11 +2123,11 @@ Prova:
 ODC: "delete: refused, IStaticEntity 'WfClaimStage' is used by 2 consumer(s): IAnonymousStructure:WfClaimStage Record/IAttribute:WfClaimStage; IServerEntity:WfClaimFile/IEntityAttribute:StageId/ITextBasedExpression (...)". O11: "delete: refused, IStaticEntity 'ContactStatus2' is used by 1 consumer(s): IAnonymousStructure:ContactStatus2 Record/IAttribute:ContactStatus2". Depois do force (O11): get IAttribute:ContactStatus2 -> WasDeleted False, DataType null; validation.unexpected [].
 ```
 
-Visto em: tests/jobs-odc-negative/delete-static-entity-in-use.json; tests/jobs-odc/static-record-refactor.json (ops 5d-6); tests/jobs/static-record-refactor.json (ops 18-20)
+Seen in: tests/jobs-odc-negative/delete-static-entity-in-use.json; tests/jobs-odc/static-record-refactor.json (ops 5d-6); tests/jobs/static-record-refactor.json (ops 18-20)
 
-### Registos de static entity nao se movem: a ordem de leitura e o valor de Order (as duas faixas)
+### Static entity records do not move: the read order is the Order value (both lanes)
 
-`recusa-da-plataforma`
+`platform-refusal`
 
 `IStaticEntity.Records` nao e uma ISequence; o verbo `move` recusa e lista as sequencias do pai (Attributes, Metadata). No O11 o
 `dump` enumera os registos numa ordem que muda entre corridas. A alternativa provada e `set <registo>/Order prop Value`.
@@ -2138,11 +2138,11 @@ Prova:
 ODC: "move: IStaticEntity 'WfClaimStage' does not keep IStaticEntityRecord 'Closed' in an ordered sequence, so there is no order to change (the Studio lists that kind by itself). Sequences of this parent: Attributes, Metadata". O11: a mesma mensagem com IRecord 'Active'.
 ```
 
-Visto em: tests/jobs-odc-negative/move-static-record.json; tests/jobs-negative/move-static-record.json
+Seen in: tests/jobs-odc-negative/move-static-record.json; tests/jobs-negative/move-static-record.json
 
-### O rename de um registo de static entity e recusado (IStaticEntityRecord no ODC, IRecord no O11); `set Identifier` em colisao sufixava em silencio e o kernel recusa desde 2026-09-23
+### Renaming a static entity record is refused (IStaticEntityRecord in ODC, IRecord in O11); `set Identifier` on a collision used to add a suffix silently and the kernel has refused it since 2026-09-23
 
-`recusa-da-plataforma`
+`platform-refusal`
 
 O nome de um registo de static entity e a propriedade Identifier (o `rename` recusa com "has no Name" nas duas faixas: IStaticEntityRecord
 no ODC, IRecord no O11). O setter nativo chama SetName, que passa por AbstractObject.NameClash e sufixa (Received2) sem avisar. O kernel
@@ -2154,11 +2154,11 @@ Prova:
 ODC: "set Identifier: 'Received' clashes with an existing name in that scope (the Studio would use 'Received2'); pick another identifier". O11: "set Identifier: 'Active' clashes with an existing name in that scope (the Studio would use 'Active2'); pick another identifier". Rename: ODC "IStaticEntityRecord 'UnderReview' has no Name"; O11 "IRecord 'Active' has no Name".
 ```
 
-Visto em: src/Anvil.Core/Kernel/Verbs.cs (Set, guarda de Identifier); tests/jobs-odc-negative/set-identifier-clash.json; tests/jobs-negative/set-identifier-clash.json; tests/jobs-odc-negative/rename-static-record.json; tests/jobs-negative/rename-static-record.json
+Seen in: src/Anvil.Core/Kernel/Verbs.cs (Set, Identifier guard); tests/jobs-odc-negative/set-identifier-clash.json; tests/jobs-negative/set-identifier-clash.json; tests/jobs-odc-negative/rename-static-record.json; tests/jobs-negative/rename-static-record.json
 
-### `replace` de uma structure reaponta ate o registo anonimo, e o delete da origem deixa um registo anonimo orfao (as duas faixas)
+### `replace` of a structure repoints all the way to the anonymous record, and deleting the source leaves an orphan anonymous record (both lanes)
 
-`armadilha`
+`trap`
 
 Reapontar `IStructure:A -> B` reescreve os consumidores tipados (parametros, atributos aninhados) E o IAttribute do `A Record` anonimo,
 por isso A fica com 0 consumidores e apaga-se sem force. O `A Record` sobrevive ao delete de A, renomeado `B Record`, a apontar para B:
@@ -2172,11 +2172,11 @@ Prova:
 ODC: replace consumers 7 rewired 7 stillPointingAtFrom 0 consumersOfTo 11; usages WfCovLocation count 0; delete brokenConsumers 0; usages WfCovSite byType {IAttribute:2, ...}. O11: replace consumers 4 rewired 4 consumersOfTo 5; delete ProductCard brokenConsumers 0; find 'ProductCardCopy' -> IStructure + 2 IAttribute.
 ```
 
-Visto em: tests/jobs-odc/structure-refactor.json (ops 3b-4d); tests/jobs/structure-refactor.json (ops 14-27)
+Seen in: tests/jobs-odc/structure-refactor.json (ops 3b-4d); tests/jobs/structure-refactor.json (ops 14-27)
 
-### Contrato de dados: valor de registo escrito antes de mudar o Identifier desse registo no mesmo job
+### Data contract: record value written before changing the Identifier of that record in the same job
 
-`limite-do-kernel`
+`kernel-limit`
 
 Uma assercao do contrato de dados ancora o primeiro segmento por chave e re-resolve o resto pelo NOME no fim do job. Um `set` em
 `IStaticEntity:E/Registo/Label` seguido de `set Identifier` desse registo faz o job reprovar no contrato com o modelo correcto.
@@ -2188,11 +2188,11 @@ Prova:
 O11: "Data property mismatch: ... expected \"Not active\", actual: unavailable: KeyNotFoundException: IStaticEntity 'ContactStatus' has no child 'Inactive'" (primeira corrida, accepted=false); com IRecord:Inactive/Label o contrato aceita (9 assercoes).
 ```
 
-Visto em: tests/jobs/static-entity-lifecycle.json (ops 16-17, 25-28); src/Anvil.Core/Kernel/DataAssertions.cs (DataAssertionReference)
+Seen in: tests/jobs/static-entity-lifecycle.json (ops 16-17, 25-28); src/Anvil.Core/Kernel/DataAssertions.cs (DataAssertionReference)
 
-### Diferencas medidas entre faixas na familia (2026-09-23)
+### Measured differences between lanes in the family (2026-09-23)
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 (1) O registo e IStaticEntityRecord no ODC e IRecord no O11 (o job pede IRecord nas duas); o valor do registo e uma ExpressionDefinition
 gravavel no ODC (liga por chave) e um IExpression so de leitura no O11 (o kernel escreve o Text). (2) `get` de um IStructureAttribute no
@@ -2207,13 +2207,13 @@ Prova:
 O11 structure-refactor: duplicate -> Public True, Description copiada; get Sku sem IndexInParent; move -> order ["Sku","Title","Price"]. ODC structure-refactor: get WfCountry IndexInParent 4 -> 0; get WfCovLocation2 Public True Shareable True.
 ```
 
-Visto em: tests/jobs/structure-refactor.json; tests/jobs-odc/structure-refactor.json; tests/jobs-negative/delete-structure-in-use.json
+Seen in: tests/jobs/structure-refactor.json; tests/jobs-odc/structure-refactor.json; tests/jobs-negative/delete-structure-in-use.json
 
-## Lote de dados (fase 3, 2026-09-23): entidades, atributos, identificadores e indices, medido nas DUAS faixas
+## Data batch (phase 3, 2026-09-23): entities, attributes, identifiers and indexes, measured in BOTH lanes
 
-### Toda FK nasce com um AutoIndex_<Atributo>; reapontar a FK arrasta o AutoIndex antigo e o Verify recusa os dois indices iguais (as duas faixas)
+### Every FK is born with an AutoIndex_<Atributo>; repointing the FK drags the old AutoIndex along and Verify refuses the two identical indexes (both lanes)
 
-`armadilha`
+`trap`
 
 A plataforma cria um indice `AutoIndex_<Atributo>` para cada atributo `<Entidade> Identifier`. Esse indice conta como consumidor do
 atributo (o `delete` da FK e recusado ate o AutoIndex sair; sem force, primeiro `delete EntityIndex:AutoIndex_<Atributo>`). Um
@@ -2227,11 +2227,11 @@ Prova:
 ODC entity-refactor: replace PriorityId -> PriorityId2 rewired 2 (o filtro E o AutoIndex); find AutoIndex_PriorityId ainda existe sobre PriorityId2; delete EntityIndex:AutoIndex_PriorityId brokenConsumers 0; so entao delete IServerEntity:WfCovTask/PriorityId. O11 entity-refactor: o mesmo com StatusId -> StatusId2 e AutoIndex_StatusId. Recusa: "delete: refused, IEntityAttribute 'PriorityId' is used by ... EntityIndex:AutoIndex_PriorityId" (tests/jobs-*-negative/delete-fk-attribute-autoindex.json).
 ```
 
-Visto em: tests/jobs-odc/entity-refactor.json (2); tests/jobs/entity-refactor.json (2); tests/jobs-odc-negative/delete-fk-attribute-autoindex.json; tests/jobs-negative/delete-fk-attribute-autoindex.json; sonda index-promotes-autoindex (ODC)
+Seen in: tests/jobs-odc/entity-refactor.json (2); tests/jobs/entity-refactor.json (2); tests/jobs-odc-negative/delete-fk-attribute-autoindex.json; tests/jobs-negative/delete-fk-attribute-autoindex.json; probe index-promotes-autoindex (ODC)
 
-### Nome de indice com mais de 28 caracteres e truncado em silencio pelo Studio (as duas faixas); o kernel recusa desde 2026-09-23
+### An index name longer than 28 characters is silently truncated by Studio (both lanes); the kernel has refused it since 2026-09-23
 
-`recusa-do-kernel`
+`kernel-refusal`
 
 `IX_WfCovTask_ThisNameIsTooLongForOdc` (36) vira `IX_WfCovTask_ThisNameIsTooLo` no modelo sem aviso, tanto no create como no rename; o
 contrato de dados apanhava-o como divergencia de Name. `EntityIndexes.CheckName` recusa nomes acima de 28 e colisoes (sem distincao
@@ -2243,11 +2243,11 @@ Prova:
 "EntityIndex name 'IX_WfCovTask_ThisNameIsTooLongForOdc' has 36 characters; the Studio truncates index names to 28 (it would become 'IX_WfCovTask_ThisNameIsTooLo'); pick a shorter name". O11: o mesmo com 'IX_Contact_Email_Name_Status30' (30). Sonda index-name-28 aceite, index-name-30 truncada.
 ```
 
-Visto em: src/Anvil.Core/Kernel/EntityIndexes.cs (MaxNameLength, CheckName); tests/jobs-odc-negative/index-name-too-long.json; tests/jobs-negative/index-name-too-long.json; tests/jobs-*-negative/index-name-clash.json
+Seen in: src/Anvil.Core/Kernel/EntityIndexes.cs (MaxNameLength, CheckName); tests/jobs-odc-negative/index-name-too-long.json; tests/jobs-negative/index-name-too-long.json; tests/jobs-*-negative/index-name-clash.json
 
-### Um indice nao se move, nao se duplica e nao se reaponta; os atributos do indice reordenam-se no ODC e NAO no O11
+### An index cannot be moved, duplicated or repointed; the index attributes can be reordered in ODC and NOT in O11
 
-`recusa-da-plataforma`
+`platform-refusal`
 
 `move EntityIndex:X` e recusado nas duas faixas (os indices nao sao uma sequencia de autor). `duplicate` de um indice e recusado pelo
 kernel porque a plataforma recusa dois indices com a mesma composicao ("Condition is false" no Studio). `replace` nao se aplica (um
@@ -2261,11 +2261,11 @@ Prova:
 ODC entity-refactor: move EntityIndex:IX_WfCovTask_Subj_Due/DueOn first -> Attributes ["DueOn","Subject"]. O11: "move: EntityIndex 'IX_Contact_NameEmail' does not keep EntityIndexAttribute '' in an ordered sequence, so there is no order to change". Duplicate: "duplicate: EntityIndex 'IX_WfCovTask_ProjectDone' cannot be duplicated (the platform refuses two indexes with the same attributes); create another EntityIndex with a different composition".
 ```
 
-Visto em: tests/jobs-odc/entity-refactor.json (4); tests/jobs-negative/move-index-attribute.json; tests/jobs-*-negative/move-index.json; tests/jobs-*-negative/duplicate-index.json; tests/jobs-*-negative/index-duplicate-composition.json
+Seen in: tests/jobs-odc/entity-refactor.json (4); tests/jobs-negative/move-index-attribute.json; tests/jobs-*-negative/move-index.json; tests/jobs-*-negative/duplicate-index.json; tests/jobs-*-negative/index-duplicate-composition.json
 
-### Renomear um indice: o ODC tem Name nativo, o O11 diz "has no Name"; o kernel renomeia pela classe nativa (SetName) nas duas faixas
+### Renaming an index: ODC has a native Name, O11 says "has no Name"; the kernel renames through the native class (SetName) in both lanes
 
-`diferenca-entre-faixas`
+`lane-difference`
 
 No O11 o `EntityIndex` nao expoe `Name` pelo Model API V1 (o kernel sintetiza o tipo sobre a classe nativa `ServiceStudio.Model.EntityIndex`),
 por isso o `rename` generico recusava. Desde 2026-09-23 `EntityIndexes.Rename` escreve pelo `SetName` da classe nativa nas duas faixas,
@@ -2277,11 +2277,11 @@ Prova:
 ODC/O11 entity-refactor: rename EntityIndex:IX_..._MailName -> IX_..._Mail_Name; get -> nome novo, Unique, Attributes iguais. Ledger: ServiceStudio.Model.EntityIndex {create, rename, set, delete} no O11; OutSystems.Model.Data.IEntityIndex no ODC.
 ```
 
-Visto em: src/Anvil.Core/Kernel/EntityIndexes.cs (Rename); src/Anvil.Core/Kernel/Verbs.cs (Rename); tests/jobs-odc/entity-refactor.json (4); tests/jobs/entity-refactor.json (4)
+Seen in: src/Anvil.Core/Kernel/EntityIndexes.cs (Rename); src/Anvil.Core/Kernel/Verbs.cs (Rename); tests/jobs-odc/entity-refactor.json (4); tests/jobs/entity-refactor.json (4)
 
-### `replace` entre entidades e recusado pelo kernel: os consumidores ligam-se aos filhos (tipo identificador, atributos, registo anonimo, tipo lista), que o replace nao mapeia
+### `replace` between entities is refused by the kernel: the consumers bind to the children (identifier type, attributes, anonymous record, list type), which replace does not map
 
-`recusa-do-kernel`
+`kernel-refusal`
 
 Medido antes da recusa: no ODC `replace IServerEntity:A -> B` deixava o eSpace em `InvalidGlobalStateException 6 - eSpace has missing
 Anonymous Structures`; no O11 "native replacement was incomplete". Desde 2026-09-23 o kernel recusa de frente e aponta o caminho:
@@ -2294,11 +2294,11 @@ Prova:
 "replace: IServerEntity 'WfCovOrganization' is an entity and cannot be repointed: its consumers bind to its children (identifier type, attributes, anonymous record, list type), which replace does not map. Rename it, or move the consumers to the other entity by hand (attributes can be replaced one by one)". O11: o mesmo com IServerEntity 'Contact'.
 ```
 
-Visto em: src/Anvil.Core/Kernel/Verbs.cs (Replace); tests/jobs-odc-negative/replace-entity.json; tests/jobs-negative/replace-entity.json; tests/jobs-*/entity-refactor.json (1)
+Seen in: src/Anvil.Core/Kernel/Verbs.cs (Replace); tests/jobs-odc-negative/replace-entity.json; tests/jobs-negative/replace-entity.json; tests/jobs-*/entity-refactor.json (1)
 
-### Mudar o tipo de uma FK que tem DefaultValue faz o Verify do Studio lancar "Condition is false"; o kernel exige limpar o default primeiro (as duas faixas)
+### Changing the type of an FK that has a DefaultValue makes the Studio Verify throw "Condition is false"; the kernel requires clearing the default first (both lanes)
 
-`recusa-do-kernel`
+`kernel-refusal`
 
 `set DataType` num atributo `<E> Identifier` com `DefaultValue` (por exemplo `Entities.WfCovPriority.Normal`) executa, mas o Verify do
 Studio lanca uma excecao interna ("Condition is false") em vez de uma mensagem. O kernel recusa antes: limpar (`set DefaultValue ""`),
@@ -2311,11 +2311,11 @@ Prova:
 "set DataType on IEntityAttribute 'PriorityId': the attribute has a DefaultValue (Entities.WfCovPriority.Normal) typed by an identifier; clear it first (set DefaultValue \"\"), then change the type (the Studio's own validation fails otherwise), or replace the attribute by a new one". Sonda type-change-fk-cleared: accepted, contrato de dados sem diferencas (DefaultValue vazio le-se null: o contrato trata "" e null como iguais desde 2026-09-23).
 ```
 
-Visto em: src/Anvil.Core/Kernel/Verbs.cs (Set, guarda de DataType); tests/jobs-odc-negative/fk-type-change-with-default.json; tests/jobs-negative/fk-type-change-with-default.json; tests/jobs-*/entity-refactor.json (3)
+Seen in: src/Anvil.Core/Kernel/Verbs.cs (Set, DataType guard); tests/jobs-odc-negative/fk-type-change-with-default.json; tests/jobs-negative/fk-type-change-with-default.json; tests/jobs-*/entity-refactor.json (3)
 
-### Apagar uma entidade de servidor sem consumidores de autor e recusado sem force (registo anonimo `<E> Record` e, no O11, `<E> List`); com force e comportamento observado, integridade nao comprovada
+### Deleting a server entity with no author consumers is refused without force (anonymous record `<E> Record` and, in O11, `<E> List`); with force it is observed behavior, integrity unproven
 
-`armadilha`
+`trap`
 
 Como na static entity (fase 2): o `IAnonymousStructure <E> Record` cita a entidade pelo `IAttribute` e, no O11, o `IListType <E> List`
 tambem, mesmo sem nenhum consumidor de autor. Sem force a recusa esta provada nas duas faixas; com force o delete e aceite e sobram
@@ -2329,7 +2329,7 @@ Prova:
 O11 entity-refactor (5): usages $DcScratch real 2 (IAttribute do `DcScratch Record`, `DcScratch List`); delete force brokenConsumers 2; find 'DcScratch' -> IAttribute orfao; find 'DcScratch Record' -> IAnonymousStructure sobrevive. Recusa: "delete: refused, IServerEntity 'WfCovOrganization' is used by ... IAnonymousStructure:WfCovOrganization Record/IAttribute:WfCovOrganization ..." (tests/jobs-*-negative/delete-entity-in-use.json).
 ```
 
-> **OBSOLETO** (cobertura testada, fase 2, 2026-10-03)
+> **OBSOLETE** (cobertura testada, fase 2, 2026-10-03)
 >
 > O registo anonimo `<E> Record`, o tipo `<E> List` e a excecao `Not <Role>` so contam enquanto alguem fora do alvo os usa; sem
 > consumidor de autor a entidade (e a static, a structure, o role) apaga-se sem force nas duas faixas e o Verify nao muda
@@ -2337,11 +2337,11 @@ O11 entity-refactor (5): usages $DcScratch real 2 (IAttribute do `DcScratch Reco
 > Em troca o delete passou a olhar os consumidores dos FILHOS: a FK que cita `<E> Identifier`, o Execute de uma action de
 > entidade (tests/jobs-negative/delete-entity-fk-in-use.json, tests/jobs-*-negative/delete-entity-in-use.json).
 
-Visto em: tests/jobs/entity-refactor.json (5); tests/jobs-odc/entity-refactor.json (5); tests/jobs-odc-negative/delete-entity-in-use.json; tests/jobs-negative/delete-entity-in-use.json
+Seen in: tests/jobs/entity-refactor.json (5); tests/jobs-odc/entity-refactor.json (5); tests/jobs-odc-negative/delete-entity-in-use.json; tests/jobs-negative/delete-entity-in-use.json
 
-### `usages` de uma entidade sub-reporta as FKs: elas ligam-se ao filho `<E> Identifier` (IIdentifierType), nao a entidade
+### `usages` of an entity under-reports the FKs: they bind to the child `<E> Identifier` (IIdentifierType), not to the entity
 
-`armadilha`
+`trap`
 
 O tipo identificador e um filho gerado pela plataforma (`IServerEntity:<E>/#IIdentifierType`, so leitura). As FKs de outras
 entidades apontam para ELE, por isso `usages IServerEntity:<E>` conta o registo anonimo e as expressoes, mas nao as FKs; para saber
@@ -2353,11 +2353,11 @@ Prova:
 ODC delete-entity-whole: usages da entidade real 1 (registo anonimo) enquanto duas FKs a citam; get IServerEntity:WfCovTask/#IIdentifierType devolve o IIdentifierType (entity-lifecycle, as duas faixas).
 ```
 
-Visto em: tests/jobs-odc/delete-entity-whole.json; tests/jobs-odc/entity-lifecycle.json; tests/jobs/entity-lifecycle.json
+Seen in: tests/jobs-odc/delete-entity-whole.json; tests/jobs-odc/entity-lifecycle.json; tests/jobs/entity-lifecycle.json
 
-### Contrato de dados: uma assercao segue o objeto pela identidade (chave) e absorve o que a plataforma reescreve de forma legitima; um valor errado continua a reprovar
+### Data contract: an assertion follows the object by identity (key) and absorbs what the platform legitimately rewrites; a wrong value still fails
 
-`limite-do-kernel`
+`kernel-limit`
 
 Desde 2026-09-23 as assercoes ancoram cada segmento por chave (`@<registo>/@<atributo>` para valores de registo) e, em volta de
 `rename`, `set Identifier`, `replace` e `move`, o contrato tira uma fotografia antes e depois: um valor que batia antes do verbo e mudou
@@ -2371,4 +2371,4 @@ Prova:
 tests/jobs-*/data-contract-identity.json: 7 reescritas absorvidas (Identifier Closed->Done reescreve `Entities.DcStage.Closed` no DefaultValue e no filtro; rename da entidade e dos atributos), contrato aceite. DataContractIdentityScenarios: valor escrito fora do job ("Outra coisa") reprovado depois de dois renames, sem platformRewrites; os valores do registo seguem o registo depois de `set Identifier`.
 ```
 
-Visto em: src/Anvil.Core/Kernel/DataAssertions.cs (ResolveAssertion, SnapshotAssertions, AbsorbPlatformRewrites); tests/Shared/DataContractIdentityScenarios.cs; tests/jobs/data-contract-identity.json; tests/jobs-odc/data-contract-identity.json
+Seen in: src/Anvil.Core/Kernel/DataAssertions.cs (ResolveAssertion, SnapshotAssertions, AbsorbPlatformRewrites); tests/Shared/DataContractIdentityScenarios.cs; tests/jobs/data-contract-identity.json; tests/jobs-odc/data-contract-identity.json

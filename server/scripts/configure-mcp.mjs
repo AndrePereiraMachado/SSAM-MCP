@@ -1,3 +1,4 @@
+import { parseMcpProfile } from '../platforms/odc/facade/server-profiles.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -31,12 +32,16 @@ export function mcpServers({ root = workspace, layout = workspaceLayout, execPat
 const samePath = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
 export function rootEntryOf(server, root) {
   const args = Array.isArray(server?.args) ? server.args.map(String) : [];
-  return args.length >= 2 && args.at(-1) === 'mcp' && !args.includes('package') && args.some(a => /ssam\.mjs$/i.test(a) && samePath(a, path.join(root, 'facade', 'ssam.mjs')));
+  const at = args.indexOf('mcp');
+  if (at < 1 || args.includes('package')) return false;
+  try { if (parseMcpProfile(args.slice(at + 1), {}) === 'debug') return false; } catch { return false; }
+  return args.some(a => /ssam\.mjs$/i.test(a) && samePath(a, path.join(root, 'facade', 'ssam.mjs')));
 }
 
 // Merges the servers into each folder's .mcp.json (the root and the ODC folder by default). In a development worktree the
 // name `ssam` is removed, whatever it pointed to.
-export function writeMcpConfig({ root = workspace, layout = workspaceLayout, execPath = process.execPath, env = process.env, folders } = {}) {
+export function writeMcpConfig({ root = workspace, layout = workspaceLayout, execPath = process.execPath, env = process.env, folders, debug = false } = {}) {
+  if (debug) return writeDebugMcpConfig({ root, execPath, env });
   const servers = mcpServers({ root, layout, execPath, env });
   const name = serverName(root);
   const dev = isDevWorktree(root);
@@ -56,8 +61,17 @@ export function writeMcpConfig({ root = workspace, layout = workspaceLayout, exe
   return { ok: true, name, dev, files: written };
 }
 
+export function writeDebugMcpConfig({ root = workspace, execPath = process.execPath, env = process.env } = {}) {
+  const file = path.join(root, 'debug.mcp.json');
+  const tenant = env.SSAM_HYBRID_ODC_TENANT ? { SSAM_HYBRID_ODC_TENANT: env.SSAM_HYBRID_ODC_TENANT } : {};
+  const name = serverName(root) + '-debug';
+  const config = { mcpServers: { [name]: { command: execPath, args: [path.join(root, 'facade', 'ssam.mjs'), 'mcp', '--profile', 'debug'], env: tenant } } };
+  fs.writeFileSync(file, JSON.stringify(config, null, 2) + '\n');
+  return { ok: true, name, files: [file] };
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const result = writeMcpConfig();
+  const result = writeMcpConfig({ debug: process.argv.includes('--debug') });
   if (result.ok) console.log('MCP ' + result.name + ' configured for ' + workspace);
   else console.log(result.error + ' Keep using "' + result.existing + '".');
 }

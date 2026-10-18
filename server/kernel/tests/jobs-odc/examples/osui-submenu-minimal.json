@@ -1,5 +1,5 @@
 {
- "description": "Submenu do OSUI: a instancia com empty (o item de exemplo traz um Link sem destino).",
+ "description": "Submenu of OSUI: the instance with empty (the sample item brings a Link without a target).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,3 +1,4 @@
+import { originalProfile } from '../../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -72,7 +73,7 @@ test('Recorded excerpt proves repeated Claude ids have one output total',()=>{
  assert.equal(result.tokens,[...ids.values()].reduce((n,u)=>n+u.out,0));assert.equal(result.reasoningTokens,[...ids.values()].reduce((n,u)=>n+u.thinking,0));
 });
 
-const realClaude=path.join(os.homedir(),`.claude/projects/C--Users-${path.basename(os.homedir())}-SSAM-Hybrid-proto/7427c081-1701-4dd3-a1a7-c966a91e7d8d.jsonl`);
+const realClaude=path.join(originalProfile.home,`.claude/projects/C--Users-${path.basename(originalProfile.home)}-SSAM-Hybrid-proto/7427c081-1701-4dd3-a1a7-c966a91e7d8d.jsonl`);
 test('Real Claude context and both recorded and estimated reasoning reproduce owner criteria', {skip:process.env.BENCH_REAL_TRANSCRIPTS!=='1'||!fs.existsSync(realClaude)},()=>{
  const sources=[{rows:fs.readFileSync(realClaude,'utf8').split('\n').filter(Boolean).map(JSON.parse)}];
  const all=measureContext(sources,{client:'claude'});
@@ -88,7 +89,7 @@ test('Real Claude context and both recorded and estimated reasoning reproduce ow
 
 const beforeRatios='C:/t/lacunas/contexto/saida/estimativas.json';
 test('Faithful source ratios reproduce 54.1/55.1/47.4 and every saved fracoes.fRep value', {skip:process.env.BENCH_REAL_TRANSCRIPTS!=='1'||!fs.existsSync(beforeRatios)||!fs.existsSync(realClaude)},()=>{
- const archives=path.join(os.homedir(),'.codex/archived_sessions');
+ const archives=path.join(originalProfile.home,'.codex/archived_sessions');
  const names=['rollout-2026-10-13T11-57-13-01a135c4-8333-7190-b72c-bb2c32460f1d.jsonl','rollout-2026-10-13T12-32-45-01a135e5-0c3a-7f00-8449-ee61552717cc.jsonl','rollout-2026-10-13T12-33-01-01a135e5-4985-7972-915e-944230ba9c6c.jsonl','rollout-2026-10-13T12-33-18-01a135e5-8a28-7a11-9f74-d72ba82fe3e3.jsonl'];
  const load=file=>fs.readFileSync(file,'utf8').split('\n').filter(Boolean).map(JSON.parse);
  const codexRows=names.map(n=>load(path.join(archives,n))),claudeRows=load(realClaude);

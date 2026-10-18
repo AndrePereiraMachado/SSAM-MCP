@@ -1,5 +1,5 @@
 {
- "description": "Animate do OSUI: o input obrigatorio AnimationType (static entity do OSUI) e um texto animado no Content.",
+ "description": "Animate of OSUI: the required input AnimationType (a static entity of OSUI) and an animated text in the Content.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

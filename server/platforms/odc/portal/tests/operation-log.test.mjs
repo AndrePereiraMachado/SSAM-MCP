@@ -2,6 +2,7 @@
 // schemas: deployments-api-v1 publish-operations/{key}/messages and deployment-operations/{key}/messages
 // (StringMessageDetailsV1TaskProgressMessagePagedListResponse {page, results[MessageDetailsV1TaskProgressMessage]}) and
 // build-operations-api-v1 build-operations/{key}/log-messages (BuildFeedbackDetailsResponse {results[BuildFeedbackDetails]}).
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { elementCandidates, fixContinuation, logOf, normalizeMessage, portalMessages, stageOf, withOperationLog } from '../runtime/operation-log.mjs';
@@ -47,7 +48,7 @@ test('a failed publish/build/deployment status carries log and the fix; a runnin
   const withModule = fixContinuation({ module: 'GameStore', messages: failed.log.messages });
   assert.deepEqual(withModule.arguments, { lane: 'odc', target: 'GameStore', name: 'GetTopSellers' });
   const deploy = withOperationLog({ ok: true, kind: 'deployment', status: 'FinishedWithError', failed: true, messages: { results: [{ severity: 'Error', message: 'Stage QA has no configuration for setting ApiUrl' }] } });
-  assert.match(deploy.continuation.why, /implante de novo/);
+  assert.match(deploy.continuation.why, /deploy again/);
   const running = { ok: true, kind: 'publish', status: 'Running', failed: false, continuation: { tool: 'odc_operation_status' } };
   assert.equal(withOperationLog(running), running, 'no messages read: unchanged');
   const analysis = { ok: true, kind: 'code-analysis', messages: [] };

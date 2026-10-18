@@ -1,6 +1,7 @@
 // Observe an automatic BPT flow or Timer while invoking its ORIGINAL published REST/SOAP
 // launcher. Launch response, observed background frames and instance ownership
 // are independent evidence. An activity is never invoked as an ordinary action.
+import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -182,11 +183,11 @@ export async function runO11BptOriginalLaunch(args) {
     await prepareServerInspection({ lane:'o11',moduleKey:owner.target.moduleKey,source:owner.snapshot,functionKey:activity.key });
   }
   if (input.op === 'prepare') { report.state = 'prepared'; return { uncertain: false }; }
-  if (input.op !== 'run' || typeof input.words !== 'string' || !input.words.trim()) fail(kind, 'explicit_authorization_required');
+  if (input.op !== 'run' || !wordsGiven(input.words)) fail(kind, 'explicit_authorization_required'); // CX15 r7: one predicate
   // Persist the approval text before either scheduler activity or the launch request.
   const authorization = path.join(directory, 'background-authorization.json');
   fs.writeFileSync(authorization, JSON.stringify({ operationId, contextMode: 'native-background',
-    launchContextMode: expectedContext, words: input.words, plan: observation }, null, 2), { flag: 'wx' });
+    launchContextMode: expectedContext, wordsSha256: sha(input.words), plan: observation }, null, 2), { flag: 'wx' }); // CX15 r5 (N-3): never the words
   report.background.authorizationWordsSha256 = sha(input.words);
   let descriptor, debugSession, uncertain = false, timerBaseline = null, stopping = null;
   const outcome = { uncertain: false };

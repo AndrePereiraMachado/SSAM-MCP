@@ -1,4 +1,5 @@
 // Fidelity measure (docs/PROTOTIPO-NATIVO.md 4.4 step 3, 7.1 test 13): structural diff and selector match sets.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { measureFidelity, splitSelectors } from '../prototype/fidelity.mjs';

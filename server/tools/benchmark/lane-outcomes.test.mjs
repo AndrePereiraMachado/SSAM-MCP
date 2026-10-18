@@ -1,3 +1,4 @@
+import '../../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -18,6 +19,8 @@ test('one classifier recognizes each recorded response family on either lane', (
     [{ ok: true, result: 'entregue' }, 'accepted'],
     [{ ok: true, result: 'entregue e publicado' }, 'accepted'],
     [{ ok: true, result: 'delivered' }, 'accepted'],
+    [{ ok: true, result: 'delivered and published' }, 'accepted'],
+    [{ ok: false, result: 'delivered', failed: 'publish' }, 'accepted'],
     [{ ok: true, outcome: 'delivered' }, 'accepted'],
     [{ ok: false, result: 'entregue', failed: 'publish' }, 'accepted'],
     [{ ok: false, code: 'OTHER_FAILURE' }, 'failed'],

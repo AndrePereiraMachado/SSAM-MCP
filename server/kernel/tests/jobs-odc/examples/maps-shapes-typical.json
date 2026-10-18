@@ -1,5 +1,5 @@
 {
- "description": "Formas do OutSystemsMaps num LeafletMap: Circle com raio ligado a variavel, Rectangle e Polygon, cada uma com OnClick guardando qual zona foi clicada.",
+ "description": "Shapes of OutSystemsMaps in a LeafletMap: a Circle with its radius bound to a variable, a Rectangle and a Polygon, each with an OnClick keeping which zone was clicked.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

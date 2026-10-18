@@ -1,5 +1,5 @@
 {
- "description": "TimelineItem do OSUI: um item com titulo e conteudo.",
+ "description": "TimelineItem of OSUI: one item with a title and content.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

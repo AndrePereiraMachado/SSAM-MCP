@@ -200,7 +200,8 @@ public sealed class BaseModelCache<TModel> where TModel : class
         var jobPath = Path.GetFullPath(args[job + 1]);
         var spec = JsonNode.Parse(File.ReadAllText(jobPath)) is JsonObject o ? o["base"]?.GetValue<string>() : null;
         spec ??= "tests/fixtures/blank-service.oml";
-        if (spec.StartsWith("job:", StringComparison.Ordinal) || JobSources.IsBindingName(spec)) return null;
+        // A name (fix/system-reference round 2: anything but .oml, .avsig or job:) is a binding, never a file to warm.
+        if (spec.StartsWith("job:", StringComparison.Ordinal) || !JobSources.IsPathSpec(spec)) return null;
         return JobSources.FixturePath(spec, Path.GetDirectoryName(jobPath)!, "base");
     }
 

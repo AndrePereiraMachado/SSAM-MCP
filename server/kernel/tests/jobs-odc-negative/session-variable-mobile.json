@@ -1,5 +1,5 @@
 {
- "description": "ODC (contexto): Session Variable continua recusada mesmo numa app Mobile em branco. A recusa e a mesma numa app CrossDevice e em Service, BusinessProcess e AIAgent; numa biblioteca e 'children of Library objects'. Medido com create-blank: so um modulo WebResponsive (Traditional Web, que o ODC nao publica) aceita a variavel de sessao.",
+ "description": "ODC (context): Session Variable is still refused even in a blank Mobile app. The refusal is the same as in a CrossDevice app and in Service, BusinessProcess and AIAgent; in a library it is 'children of Library objects'. Measured with create-blank: only a WebResponsive module (Traditional Web, which ODC does not publish) accepts the session variable.",
  "base": "tests/fixtures/odc/blank-mobile.oml",
  "expectError": "Session Variable objects can't be children of App objects",
  "ops": [

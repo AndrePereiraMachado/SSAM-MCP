@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import crypto from 'node:crypto';import path from 'node:path';
 import {OdcAccess} from '../runtime/access.mjs';import {KB_CREATE} from '../runtime/knowledge-base.mjs';import {KB_UPLOAD} from '../runtime/knowledge-file-upload.mjs';
 const host='personal-test.outsystems.dev',uuid=()=>crypto.randomUUID();

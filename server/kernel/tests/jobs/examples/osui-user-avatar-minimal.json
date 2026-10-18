@@ -1,5 +1,5 @@
 {
- "description": "UserAvatar (OutSystemsUI, Content) minimo: instancia como o Studio cria ao arrastar o bloco.",
+ "description": "Minimal UserAvatar (OutSystemsUI, Content): an instance as the Studio creates it when the block is dragged.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

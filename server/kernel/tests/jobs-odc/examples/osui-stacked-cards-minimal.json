@@ -1,5 +1,5 @@
 {
- "description": "StackedCards do OSUI: a instancia com empty (a List de exemplo do Content nasce sem Source).",
+ "description": "StackedCards of OSUI: the instance with empty (the sample List of the Content is born without a Source).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

@@ -1,5 +1,5 @@
 {
- "description": "NEGATIVO (primeira-certa, A2): um job com erros de quatro fases recebe UMA recusa com todos, cada um com fase e ponteiro: regra do preflight (EXPR_UNKNOWN_IDENTIFIER; DEFAULT_LITERAL_INVALID com patch), checagem da base (REFERENCE_UNRESOLVED), falha do apply (filho inexistente numa action criada pelo job) e Verify (Text atribuido a Integer). Nada e salvo.",
+ "description": "NEGATIVE (primeira-certa, A2): a job with errors from four phases receives ONE refusal with all of them, each one with phase and pointer: preflight rule (EXPR_UNKNOWN_IDENTIFIER; DEFAULT_LITERAL_INVALID with patch), base check (REFERENCE_UNRESOLVED), apply failure (non-existent child in an action created by the job) and Verify (Text assigned to Integer). Nothing is saved.",
  "base": "tests/fixtures/blank-service.oml",
  "expectError": [
   "[EXPR_UNKNOWN_IDENTIFIER]: can't identify 'LowStockThreshold'",

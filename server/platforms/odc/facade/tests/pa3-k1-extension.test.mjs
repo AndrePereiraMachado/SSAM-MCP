@@ -1,6 +1,7 @@
 // Atritos 3, lane K1-f (docs/PACOTE-ATRITOS-3.md): what `xif check` accepted in another shape (sources, references or
 // resources as one object) reaches the o11_extension receipt as specNormalized. Fake bridge, fake kernel and fake Service
 // Center engine (as o11-extension.test.mjs); every folder is temporary.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

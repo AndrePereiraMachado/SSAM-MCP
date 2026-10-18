@@ -2,6 +2,7 @@
 // 2026-10-12: text/babel scripts read statically, screens switched by state five levels down, a bottom sheet mounted by a
 // click, classless buttons, a constant list as configuration, other versions in the folder. The fixture react-babel stands
 // in for React and Babel (no CDN, no 3 MB vendor): its Babel is the identity with the inline source map the real one writes.
+import './fixtures/isolated-profile.mjs';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

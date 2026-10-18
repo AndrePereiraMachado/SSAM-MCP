@@ -1,5 +1,5 @@
 {
- "description": "SQL preflight contra a base: {Prodcut} nao e entidade do job, da base nem das referencias. Recusado com op, linha e motivo antes da primeira mutacao (o Verify so diria isto depois do apply).",
+ "description": "SQL preflight against the base: {Prodcut} is not an entity of the job, of the base or of the references. Refused with op, line and reason before the first mutation (Verify would only say this after the apply).",
  "base": "job:sql-input-output",
  "expectError": ["op #0 (SQL IServerAction:Product_Search/SearchProducts, line 2): {Prodcut} is not an entity of this job, of the base module or of its references"],
  "ops": [

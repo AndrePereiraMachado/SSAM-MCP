@@ -1,5 +1,5 @@
 {
- "description": "DisplayOnDevice do OSUI: um conteudo diferente para desktop, tablet e telefone, com o telefone mostrando so o resumo.",
+ "description": "DisplayOnDevice of OSUI: a different content for desktop, tablet and phone, with the phone showing only the summary.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

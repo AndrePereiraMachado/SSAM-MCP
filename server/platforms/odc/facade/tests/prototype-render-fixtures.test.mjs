@@ -1,4 +1,5 @@
 // Prototype capture over the other prototype shapes (docs/PROTOTIPO-NATIVO.md 7.1 tests 9, 10 and 11).
+import './fixtures/isolated-profile.mjs';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

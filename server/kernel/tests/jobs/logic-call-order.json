@@ -1,5 +1,5 @@
 {
- "description":"Duas actions declaradas em ordem inversa: o compilador cria a dependencia antes da chamadora.",
+ "description":"Two actions declared in reverse order: the compiler creates the dependency before the caller.",
  "base":"tests/fixtures/blank-service.oml",
  "expectValid":true,
  "ops":[{"op":"logic","data":{"actions":[

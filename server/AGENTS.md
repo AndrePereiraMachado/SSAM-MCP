@@ -4,9 +4,6 @@ Sessão de app (criar ou mudar apps OutSystems O11 ou ODC): tudo pelas ferrament
 Não leia guias nem código do SSAM: `ssam_discover` e `ssam_reference` respondem por eles.
 Sem shell, `python`, `dotnet`, `.ps1`, `.\ssam` ou `.\odc`: a CLI e os scripts são do desenvolvedor.
 
-Carregue as ferramentas centrais num só ToolSearch (troque `ssam` pelo nome deste servidor no seu cliente):
-`select:mcp__ssam__ssam_doctor,mcp__ssam__ssam_connect,mcp__ssam__ssam_discover,mcp__ssam__ssam_map,mcp__ssam__ssam_reference,mcp__ssam__ssam_evidence,mcp__ssam__ssam_task,mcp__ssam__o11_inspect,mcp__ssam__o11_deliver,mcp__ssam__o11_publish,mcp__ssam__o11_studio,mcp__ssam__studio_deliver,mcp__ssam__studio_inspect,mcp__ssam__studio_status`
-
 ## Como trabalhar
 
 - Comece por `ssam_doctor`. `ssam_connect` (sem lane) anexa os Studios já abertos. Nunca feche, salve, publique ou reabra para conectar.
@@ -19,7 +16,7 @@ Carregue as ferramentas centrais num só ToolSearch (troque `ssam` pelo nome des
   Pergunta transversal (onde um texto ou elemento é usado, quem chama, impacto de mudar, usos entre módulos): uma chamada `ssam_map` com `view:"search"` `{text}` ou `view:"uses"` `{element}`, `target` a captura ou a lista dos módulos do app.
   Uma tela ou bloco inteiro como a sua fonte em HTML (expressões, os dois ramos de todo If, eventos, `k` por elemento): `ssam_map {lane, target, view:"html", screen}`.
   Corrigir essa tela é uma entrega com a op `html` na forma edição: só os elementos que mudaram, cada um inteiro com o seu `k` (novo sem `k`; filho que some é removido), e o `basedOn` da leitura; `continuations.edit` traz a chamada pronta. Condição é `<div if>`, nunca `os-Visible` novo.
-- Mudar um módulo: uma chamada, `o11_deliver` ou `studio_deliver`, com TODAS as mudanças do pedido para aquele módulo num job só (exceções, site properties, estruturas, entidades e todas as actions juntas; jobs separados só por módulo, nunca uma action ou um passo por chamada). "entregue" já traz o resumo do que o job criou (cada action com inputs e outputs): sem `ssam_map` depois. Recusa: vem uma vez, com todos os problemas de todas as fases e os patches certos; corrija tudo numa chamada com `patch` + `basedOn {job, sha256}`; nunca reenvie o job inteiro.
+- Mudar um módulo: uma chamada, `o11_deliver` ou `studio_deliver`, com TODAS as mudanças do pedido para aquele módulo num job só (exceções, site properties, estruturas, entidades e todas as actions juntas; jobs separados só por módulo, nunca uma action ou um passo por chamada). "delivered" já traz o resumo do que o job criou (cada action com inputs e outputs): sem `ssam_map` depois. Recusa: vem uma vez, com todos os problemas de todas as fases e os patches certos; corrija tudo numa chamada com `patch` + `basedOn {job, sha256}`; nunca reenvie o job inteiro.
   Toda resposta traz `nextBasedOn` (o job usado). No patch, o caminho pode usar nomes: `actions/<Ação>/steps/<as>/assign/<Var>` (a recusa já traz `patchByName`). Ou mande em `job` só as actions/entidades alteradas ou novas, com o mesmo `basedOn`: o mesmo nome substitui, nome novo entra; remover só com `patch` (`remove`).
 - Evidência JSON (recibos, `result.json`, diários): `ssam_evidence`, nunca script.
   Resposta paginada já traz as listas como tabelas (`paged.tables`); o que falta vem numa chamada só (`continuation`, `table:true`).

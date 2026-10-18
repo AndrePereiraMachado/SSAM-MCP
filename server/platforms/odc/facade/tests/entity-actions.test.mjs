@@ -1,6 +1,7 @@
 // The op entity-actions in the facade: its receipt in a delivery answer (entity-actions.mjs), its card in ssam_code grammar
 // and in the work packet's text route, and its contract line in ssam_reference. The kernel side (the generator, the corpus
 // battery, the proof jobs) is tested in kernel/tests (EntityActionsExpanderTests, EntityActionsCorpusTests, jobs entity-actions).
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { entityActionsOf } from '../entity-actions.mjs';

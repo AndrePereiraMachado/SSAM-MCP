@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { APP_USER_FIELDS, APP_USER_HEADERS, createJob, jobType } from '../debug-wrapper.mjs';

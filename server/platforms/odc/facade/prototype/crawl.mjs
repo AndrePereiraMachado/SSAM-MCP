@@ -680,7 +680,7 @@ export function viewsFromCrawl(session, crawl) {
     if (!canonicalState) {
       // A template rendered only as fallback in every state: not a view (an error page), unless it was named.
       const named = readmeByTemplate.has(template) || (session.mapping.routes ?? []).some(route => routeTemplate(String(route).replace(/^#/, ''), dataIds) === template);
-      if (named) problems.push({ code: 'PROTOTYPE_AMBIGUOUS', key: 'states', view: template, message: 'a vista ' + template + ' só renderiza o fallback em todos os estados explorados', fallbackText: visibleText(mountOf(renders.get('S0|' + info.routes[0])?.body ?? {})).slice(0, 120) });
+      if (named) problems.push({ code: 'PROTOTYPE_AMBIGUOUS', key: 'states', view: template, message: 'the view ' + template + ' renders only the fallback in every explored state', fallbackText: visibleText(mountOf(renders.get('S0|' + info.routes[0])?.body ?? {})).slice(0, 120) });
       continue;
     }
     views.push({ template, info, state: canonicalState });
@@ -712,7 +712,7 @@ export function viewsFromCrawl(session, crawl) {
   if (!defaultView && initial && sections) { const shown = sectionOf(initial.body); defaultView = views.find(view => view.info.section === shown) ?? null; }
   if (!defaultView && initial) { const landed = currentRoute(initial, kind); if (landed) defaultView = views.find(view => view.info.routes.includes(landed)) ?? null; }
   if (!defaultView && views.length && initial) {
-    problems.push({ code: 'PROTOTYPE_AMBIGUOUS', key: 'default', message: 'nenhuma rota renderiza o mesmo que a página inicial (hash vazio)', value: views[0].template });
+    problems.push({ code: 'PROTOTYPE_AMBIGUOUS', key: 'default', message: 'no route renders the same as the start page (empty hash)', value: views[0].template });
   }
   // Names: mapping.screens > README table > PascalCase of the route without parameters.
   const taken = new Set();
@@ -956,7 +956,7 @@ async function mappedViews(session, s0, clicks) {
 function viewsOfStates(states) {
   const taken = new Set();
   const views = states.map((entry, index) => {
-    const label = entry.label || firstHeading(entry.snap.body) || (index === 0 ? 'inicio' : 'tela ' + (index + 1));
+    const label = entry.label || firstHeading(entry.snap.body) || (index === 0 ? 'start' : 'screen ' + (index + 1));
     let name = pascal(label) || 'View' + (index + 1);
     while (taken.has(name)) name += String(index + 1);
     taken.add(name);

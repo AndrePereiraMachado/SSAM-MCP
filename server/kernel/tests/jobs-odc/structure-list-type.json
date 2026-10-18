@@ -1,12 +1,12 @@
 {
- "description": "ODC (cobertura T): STRUCTURE ANONIMA e LIST TYPE, os dois tipos de dados que nenhum job nomeia porque a plataforma os cria sozinha. Espelha tests/jobs/aggregate-sum-calc.json: um aggregate com group by, agregacao Count e coluna calculada devolve linhas de uma STRUCTURE ANONIMA (IAnonymousStructure, por IESpace.GetOrCreateAnonymousStructure) - por isso se le GetX.List.Current.<Coluna> sem o alias da entidade; e uma variavel e um output de tipo '<Structure> List' fazem o kernel pedir o LIST TYPE (IESpace.GetOrCreateListType) que ainda nao existia no modulo. No ODC o Count do aggregate e Long Integer, por isso a coluna de destino tambem e.",
+ "description": "ODC (coverage T): ANONYMOUS STRUCTURE and LIST TYPE, the two data types that no job names because the platform creates them on its own. Mirrors tests/jobs/aggregate-sum-calc.json: an aggregate with group by, Count aggregation and a calculated column returns rows of an ANONYMOUS STRUCTURE (IAnonymousStructure, via IESpace.GetOrCreateAnonymousStructure) - which is why GetX.List.Current.<Column> is read without the entity alias; and a variable and an output of type '<Structure> List' make the kernel ask for the LIST TYPE (IESpace.GetOrCreateListType) that did not yet exist in the module. In ODC the aggregate Count is Long Integer, so the target column is too.",
  "base": "job:data-full-model",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCovProject_Rollup (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCovProject_Rollup (ServerAction)", "why": "ODC: an app (CrossDevice) does not expose a public server action (the live Studio gives an error); the action stays private and without a consumer in this proof job"}],
  "ops": [
   {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfCovProject_Rollup", "as": "$act"},
   {"op": "create", "parent": "$act", "type": "IOutputParameter", "name": "Summaries", "as": "$out"},
-  {"op": "set", "target": "$out", "prop": "DataType", "value": "WfCovProjectSummary List", "_why": "aqui nasce o LIST TYPE: o modulo ainda nao tinha lista desta structure"},
+  {"op": "set", "target": "$out", "prop": "DataType", "value": "WfCovProjectSummary List", "_why": "the LIST TYPE is born here: the module did not yet have a list of this structure"},
   {"op": "create", "parent": "$act", "type": "ILocalVariable", "name": "Row", "as": "$row"},
   {"op": "set", "target": "$row", "prop": "DataType", "value": "WfCovProjectSummary"},
 
@@ -17,10 +17,10 @@
   {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "WfCovTask.IsDone = False"}},
   {"op": "create", "parent": "$agg", "type": "IGroupByAttribute", "name": "ProjectId", "as": "$groupBy"},
   {"op": "set", "target": "$groupBy", "prop": "Attribute", "value": "WfCovTask.ProjectId"},
-  {"op": "create", "parent": "$agg", "type": "IAggregatedAttribute", "name": "OpenCount", "as": "$count", "_why": "NOME DIFERENTE do SS11: la o tipo e IAggregateAttribute, no ODC e IAggregatedAttribute (o DisplayName 'Aggregate Attribute' e o mesmo nas duas)"},
+  {"op": "create", "parent": "$agg", "type": "IAggregatedAttribute", "name": "OpenCount", "as": "$count", "_why": "DIFFERENT NAME from SS11: there the type is IAggregateAttribute, in ODC it is IAggregatedAttribute (the DisplayName 'Aggregate Attribute' is the same in both)"},
   {"op": "set", "target": "$count", "prop": "Attribute", "value": "WfCovTask.Id"},
   {"op": "set", "target": "$count", "prop": "AggregationType", "value": "Count"},
-  {"op": "create", "parent": "$agg", "type": "ICalculatedAttribute", "name": "ProjectLabel", "as": "$calc", "_why": "a coluna calculada entra no ICombineSourcesOperation, que corre ANTES do group by: por isso ela NAO aparece na linha agrupada (ler GetTaskRollup.List.Current.ProjectLabel da Error ExpressionUnknownObject) e o IGroupByOperation nao tem Create para ela. O job do SS11 (aggregate-sum-calc) tambem so le as colunas agregadas"},
+  {"op": "create", "parent": "$agg", "type": "ICalculatedAttribute", "name": "ProjectLabel", "as": "$calc", "_why": "the calculated column enters the ICombineSourcesOperation, which runs BEFORE the group by: so it does NOT appear in the grouped row (reading GetTaskRollup.List.Current.ProjectLabel gives Error ExpressionUnknownObject) and the IGroupByOperation has no Create for it. The SS11 job (aggregate-sum-calc) also only reads the aggregated columns"},
   {"op": "set", "target": "$calc", "prop": "Value", "value": "\"Task: \" + WfCovTask.Title"},
   {"op": "set", "target": "$agg", "prop": "MaxRecords", "value": "100"},
 
@@ -32,13 +32,13 @@
   {"op": "set", "target": "$fill", "prop": "Label", "value": "FillRow"},
   {"op": "create", "parent": "$fill", "type": "IAssignment", "as": "$f1"},
   {"op": "set", "target": "$f1", "prop": "Variable", "value": "Row.ProjectName"},
-  {"op": "set", "target": "$f1", "prop": "Value", "value": "\"Project #\" + LongIntegerToText(GetTaskRollup.List.Current.ProjectId)", "_why": "COM group by le-se a coluna direto (ProjectId), sem o alias WfCovTask.: e a structure anonima da linha"},
+  {"op": "set", "target": "$f1", "prop": "Value", "value": "\"Project #\" + LongIntegerToText(GetTaskRollup.List.Current.ProjectId)", "_why": "WITH group by the column is read directly (ProjectId), without the alias WfCovTask.: it is the anonymous structure of the row"},
   {"op": "create", "parent": "$fill", "type": "IAssignment", "as": "$f2"},
   {"op": "set", "target": "$f2", "prop": "Variable", "value": "Row.OpenTasks"},
-  {"op": "set", "target": "$f2", "prop": "Value", "value": "GetTaskRollup.List.Current.OpenCount", "_why": "no ODC o Count do aggregate e Long Integer, por isso OpenTasks e Long Integer"},
+  {"op": "set", "target": "$f2", "prop": "Value", "value": "GetTaskRollup.List.Current.OpenCount", "_why": "in ODC the aggregate Count is Long Integer, so OpenTasks is Long Integer"},
 
   {"op": "create", "parent": "$act", "type": "IExecuteServerActionNode", "name": "AppendRow", "as": "$append"},
-  {"op": "set", "target": "$append", "prop": "Action", "value": "IServerActionSignature:ListAppend", "_why": "no ODC o ListAppend existe como IClientActionSignature E como IServerActionSignature; 'IActionSignature:ListAppend' (a forma do job do SS11) acerta na do cliente e o IExecuteServerActionNode recusa-a"},
+  {"op": "set", "target": "$append", "prop": "Action", "value": "IServerActionSignature:ListAppend", "_why": "in ODC the ListAppend exists as an IClientActionSignature AND as an IServerActionSignature; 'IActionSignature:ListAppend' (the form from the SS11 job) hits the client one and the IExecuteServerActionNode refuses it"},
   {"op": "set", "target": "$append/List", "prop": "Value", "value": "Summaries"},
   {"op": "set", "target": "$append/Element", "prop": "Value", "value": "Row"},
 
@@ -51,10 +51,10 @@
   {"op": "link", "from": "$each", "to": "$s9"},
   {"op": "layout", "target": "$act"},
 
-  {"op": "get", "target": "$out", "_why": "prova o output tipado pelo LIST TYPE recem-criado"},
-  {"op": "get", "target": "$count", "_why": "prova o tipo do Count do aggregate: no ODC e Long Integer, no SS11 e Integer"},
+  {"op": "get", "target": "$out", "_why": "proves the output typed by the newly created LIST TYPE"},
+  {"op": "get", "target": "$count", "_why": "proves the type of the aggregate Count: in ODC it is Long Integer, in SS11 it is Integer"},
   {"op": "dump", "target": "$agg", "depth": 4, "_why": "prova as colunas da structure anonima: group by, Count (IAggregatedAttribute) e coluna calculada"},
-  {"op": "usages", "target": "IStructure:WfCovProjectSummary", "_why": "prova o LIST TYPE: a structure e consumida pela variavel local (registo) E pelo output (lista), e a lista so existe porque o kernel a pediu ao GetOrCreateListType neste job"},
-  {"op": "dump", "target": "$append", "depth": 3, "_why": "prova o ListAppend com a lista e o elemento do tipo certo"}
+  {"op": "usages", "target": "IStructure:WfCovProjectSummary", "_why": "proves the LIST TYPE: the structure is consumed by the local variable (record) AND by the output (list), and the list only exists because the kernel asked GetOrCreateListType for it in this job"},
+  {"op": "dump", "target": "$append", "depth": 3, "_why": "proves ListAppend with the list and the element of the right type"}
  ]
 }

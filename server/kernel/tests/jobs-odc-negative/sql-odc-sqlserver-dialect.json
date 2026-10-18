@@ -1,5 +1,5 @@
 {
- "description": "ODC: SQL escrito em dialeto SQL Server (TOP, ISNULL, GETDATE). O ODC Studio aceita (o TrueChange confere entidades, atributos e parametros, nao o dialeto) e o PostgreSQL do ODC recusa ao executar a query. O preflight SQL da faixa ODC recusa antes de carregar o modelo, com op, linha e a troca PostgreSQL. Roda em OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane.",
+ "description": "ODC: SQL written in the SQL Server dialect (TOP, ISNULL, GETDATE). The ODC Studio accepts it (the TrueChange checks entities, attributes and parameters, not the dialect) and the PostgreSQL of ODC refuses it when executing the query. The SQL preflight of the ODC lane refuses before loading the model, with op, line and the PostgreSQL replacement. Runs in OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane.",
  "base": "job:data-full-model",
  "expectValid": true,
  "expectError": [

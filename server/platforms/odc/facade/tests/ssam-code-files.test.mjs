@@ -47,7 +47,7 @@ async function liveServer(t) {
       publish: z.boolean().optional(), authorize: z.string().optional(),
     }).strict() }, async args => {
       seen.push(args);
-      const answer = { ok: true, result: 'entregue' };
+      const answer = { ok: true, result: 'delivered' };
       return { content: [{ type: 'text', text: JSON.stringify(answer) }], structuredContent: answer };
     });
     return fake;

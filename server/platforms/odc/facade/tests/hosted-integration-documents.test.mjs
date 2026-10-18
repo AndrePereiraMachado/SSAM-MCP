@@ -9,6 +9,7 @@
 // copy the pinning writes elsewhere keeps naming the files its job:<name> base and producers and its relative documents
 // named from the job's folder (the kernel would go on to the server's repository), and a pinned import never lands
 // outside <localRoot>/documents/<sha256>/ (a name like x/../../../evil.xsd). A fake fetch and lookup: no network.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

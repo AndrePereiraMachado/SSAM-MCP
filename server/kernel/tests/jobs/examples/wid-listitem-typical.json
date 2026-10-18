@@ -1,11 +1,11 @@
 {
- "description": "ListItem tipico: List de tarefas com ListItem; a acao de deslizar que nasce no RightActions ganha texto e OnClick que conclui a tarefa da linha (Task_SetDone) e recarrega a lista; o clique no item mostra o titulo.",
+ "description": "Typical ListItem: a List of tasks with a ListItem; the swipe action born in RightActions gets a text and an OnClick that completes the task of the row (Task_SetDone) and reloads the list; the click on the item shows the title.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
   {"op": "logic", "data": {"actions": [
-   {"name": "Task_SetDone", "kind": "server", "description": "Marca uma tarefa como concluida",
+   {"name": "Task_SetDone", "kind": "server", "description": "Marks a task as done",
     "inputs": [{"name": "TaskId", "type": "Task Identifier"}],
     "vars": [{"name": "Item", "type": "Task"}],
     "steps": [
@@ -16,12 +16,12 @@
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
   {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "not Task.Done"}},
   {"op": "logic", "data": {"actions": [
-   {"name": "CompleteTask", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Conclui a tarefa deslizada e recarrega",
+   {"name": "CompleteTask", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Completes the swiped task and reloads",
     "inputs": [{"name": "TaskId", "type": "Task Identifier"}],
     "steps": [
      {"call": "Task_SetDone", "as": "MarkDone", "args": {"TaskId": "TaskId"}},
      {"node": "IRefreshDataNode", "as": "RefreshOpen", "properties": {"DataSource": "IScreenAggregate:GetOpenTasks"}}]},
-   {"name": "ShowTask", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Mostra o titulo da tarefa tocada",
+   {"name": "ShowTask", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Shows the title of the tapped task",
     "inputs": [{"name": "TaskTitle", "type": "Text"}],
     "steps": [{"node": "IMessageNode", "as": "TitleMessage", "properties": {"Message": "TaskTitle", "Type": "Info"}}]}]}},
   {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IList", "name": "OpenTaskList", "as": "$list"},

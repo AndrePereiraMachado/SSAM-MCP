@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import crypto from 'node:crypto';
 import {alternateConnectionsInput as input,alternateConnectionsResult as result} from '../runtime/alternate-connections.mjs';
 const scope=()=>({portfolioKey:crypto.randomUUID(),offset:0,search:''});

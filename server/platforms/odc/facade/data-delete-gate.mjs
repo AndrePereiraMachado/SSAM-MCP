@@ -18,7 +18,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
   DESTRUCTIVE_BRIDGE_COMMANDS, OWNER_REPLY, OperationRunning, beginOperation, currentSignal, checkExecute, createPreview, dedicatedToolRefusal, endOperation, markItem, noteWords, parseToken,
-  noBackupNote, readOperation, readPreview, storeBackup, summarizeOperation, withPreviewNote, wordsSha256, hashedWords, withoutWords,
+  noBackupNote, readOperation, readPreview, storeBackup, summarizeOperation, withPreviewNote, wordsSha256, hashedWords, withoutWords, wordsGiven, wordsRequired,
 } from './destructive-operations.mjs';
 import { namesWhole } from './service-center/auth.mjs';
 import { codeFromText, isCode } from './refusal-codes.mjs';
@@ -42,6 +42,19 @@ const rowId = row => (row && typeof row === 'object' ? text(Object.values(row)[0
 const tokenIn = op => text(op?.confirmationToken).trim() !== '';
 export const dataOps = request => (Array.isArray(request?.batch) ? request.batch : request && typeof request === 'object' ? [request] : []);
 export const hasDataDelete = request => dataOps(request).some(op => op?.operation === 'delete');
+// CX15 r6 (M-1): every insert/update of an o11_data request needs the owner's words (its own authorization, else the
+// batch's): missing, a marker, a <template> or a sha256 is WORDS_REQUIRED before anything (a delete op's words are the
+// owner's reply the destructive guard checks). -> the refusal, or null.
+export function dataWordsRefusal(request) {
+  const batch = Array.isArray(request?.batch), fields = new Map();
+  dataOps(request).forEach((op, i) => {
+    if (!['insert', 'update'].includes(op?.operation)) return;
+    const own = batch && op.authorization !== undefined, at = own ? `request/batch/${i}/authorization` : 'request/authorization';
+    const value = own ? op.authorization : request.authorization;
+    if (!wordsGiven(value) && !fields.has(at)) fields.set(at, { path: at, value });
+  });
+  return fields.size ? wordsRequired([...fields.values()], { tool: 'o11_data' }) : null;
+}
 
 // One item per record found, in the order of the ids; $ref ids (a record an earlier insert of the batch creates) are items
 // with nothing to back up. complete: the read covered the whole table, so a missing id is absent (else unverified).

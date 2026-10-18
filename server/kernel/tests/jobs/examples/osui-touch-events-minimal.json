@@ -1,5 +1,5 @@
 {
- "description": "TouchEvents (OutSystemsUI, Utilities) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios WidgetId com valores simples.",
+ "description": "Minimal TouchEvents (OutSystemsUI, Utilities): an instance as the Studio creates it when the block is dragged; required inputs WidgetId with simple values.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

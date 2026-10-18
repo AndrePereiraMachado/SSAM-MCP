@@ -923,7 +923,7 @@ export async function analyzeInteractions(session, { decided }) {
         if (one && (one.obs.diff.length || one.obs.navigated)) {
           const fallback = fallbackValue(meta, attr(node, 'name'), perturb.controlInfo(node).current);
           accepted.set(node, fallback ?? perturb.controlInfo(node).current);
-          records.outOfScope.push({ what: 'validação de script sem restrição de atributo em ' + attr(node, 'name'), message: message(valid), where: entry.form.name, why: 'a perturbação não alcança a regra; a escrita acontece sem ela' });
+          records.outOfScope.push({ what: 'script validation without an attribute restriction on ' + attr(node, 'name'), message: message(valid), where: entry.form.name, why: 'the perturbation does not reach the rule; the write happens without it' });
         }
       }
     }

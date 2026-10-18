@@ -14,7 +14,7 @@ namespace Anvil.Core;
 /// The text is the one the reading writes (ScreenHtml, C1): every attribute is a property of the table or os-&lt;Property&gt;
 /// with the value as the model keeps it, every reference a name the reading's rules resolve (the document's own elements
 /// first, then the module, the references and the types), every event Destination(Param = expression, ...). A property the
-/// text does not name is the table's default (ScreenHtml.DefaultOf): the defaults a new widget is born with are reset, so
+/// text does not name is at its default (ScreenDefaults, the installed Studio's): what a new widget is born with is reset, so
 /// what the document says is what the model holds. Every problem (syntax, names, the owner's rules) is collected and the
 /// op fails once with all of them; nothing of a failed op is kept (the apply discards the candidate).
 /// </summary>
@@ -30,6 +30,9 @@ public sealed partial class ModelSession
         /// <summary>k -> ObjectKey of the reading the document is based on: an element with one of these k exists, so what
         /// it has (Visible, JavaScript, JSON) is kept and listed, never refused.</summary>
         public IReadOnlyDictionary<string, string>? ReadKeys;
+        /// <summary>The text of that reading, when the store keeps it: an element with k keeps only the markers of the engine it
+        /// was read with (review 2, M4).</summary>
+        public string? ReadHtml;
         /// <summary>Runs after the root and its data exist, before the widgets and the events (actions that the document
         /// names and does not create are declared here: the job's logic ops, the recreation's move).</summary>
         public Action<IObjectSignature>? BeforeContent;
@@ -102,8 +105,11 @@ public sealed partial class ModelSession
         var html = data["html"]!.GetValue<string>();
         var options = new DocumentOptions { Css = data["css"] is JsonValue css && css.TryGetValue<string>(out var cssText) ? cssText : null };
         if (data["basedOn"] is JsonObject basedOn && basedOn["capture"]?.ToString() is { Length: > 0 } capture && basedOn["html"]?.ToString() is { Length: > 0 } htmlSha
-            && ModuleIndexStore.Default()?.LoadHtmlKeys(capture, htmlSha, BaseSha256)?["keys"] is JsonObject keys)
+            && ModuleIndexStore.Default()?.LoadHtmlKeys(capture, htmlSha, BaseSha256) is { } stored && stored["keys"] is JsonObject keys)
+        {
             options.ReadKeys = keys.Where(k => k.Value is JsonValue).ToDictionary(k => k.Key, k => k.Value!.ToString(), StringComparer.Ordinal);
+            options.ReadHtml = stored["html"] is JsonValue readHtml && readHtml.TryGetValue<string>(out var readText) ? readText : null;
+        }
         var inJob = _applyOps != null && _applyIndex < _applyOps.Count && ReferenceEquals(_applyOps[_applyIndex], op);
         var job = inJob ? HtmlJob.From(_applyOps, _applyIndex) : null;
         var shells = new JsonArray();
@@ -160,6 +166,7 @@ public sealed partial class ModelSession
             if (suggestion != null) { warning["suggestion"] = suggestion; report["classesWithoutRule"]!["suggestion"] = suggestion.DeepClone(); }
             Report("highWarnings", warning);
         }
+        if (compiler.VisualCheck() is { } visual) VisualReport(report, visual, inJob ? _applyIndex : null);   // CX17 F8: one warning per family per job
         return report;
     }
 
@@ -415,6 +422,8 @@ public sealed partial class ModelSession
     {
         private readonly KernelModelReader r = new();
         private ScreenHtmlModule<IObjectSignature> index = null!;
+        // The defaults of the page compiled: those of its UI flow (ScreenHtmlModule.DefaultsIn).
+        private ScreenDefaults defaults = ScreenDefaults.None;
         private readonly List<ScreenDocument.Problem> problems = [];
         private readonly JsonArray preserved = [];
         private readonly JsonArray readOnly = [];
@@ -462,6 +471,15 @@ public sealed partial class ModelSession
             var indexWatch = Stopwatch.StartNew();
             index = ScreenHtml.Module((IObjectSignature)s._espace, r);
             var indexMs = indexWatch.ElapsedMilliseconds;
+            // Without the installed Studio's defaults what the text leaves out has no value to take (a Visible would be written
+            // empty and the platform refuses it later, without the reason): refused with the reason, before the model is touched.
+            // Here the module's (a new UI flow's: a module where the Studio makes no page has none); the flow's, once it is known.
+            if (index.DefaultsIn(null).Note is { Length: > 0 } moduleNote)
+            {
+                Problem(ScreenDocument.DefaultsMissing, top, "the installed Studio's defaults could not be measured in this module: " + moduleNote,
+                    "a document needs them; write it in a module where the Studio creates pages (a UI module), or fix what the reason names");
+                throw Refuse();
+            }
             // What the document writes in HTML that has one native reading (ScreenHtmlNative: an inline svg, an image by URL, a style
             // with a binding or a decimal), written in it before any check: an element of the reading keeps what it had.
             // Integration 24-1 familias (review): the module's image names (a file name in src), the attributes of a record (the type
@@ -493,7 +511,8 @@ public sealed partial class ModelSession
                 if (k != null && !read)
                     Problem(ScreenDocument.KeyForeign, node, $"k=\"{k}\" is not a key of the reading this document is based on" + (options.ReadKeys == null ? " (no basedOn reading)" : ""),
                         "remove k from a new element (k comes only from ssam_map view html, with basedOn {capture, html})");
-                foreach (var p in ScreenDocument.RuleProblems(node, read, (attribute, value) => preserved.Add(new JsonObject { ["k"] = k, ["attribute"] = attribute, ["value"] = value, ["line"] = node.Line })))
+                foreach (var p in ScreenDocument.RuleProblems(node, read, (attribute, value) => preserved.Add(new JsonObject { ["k"] = k, ["attribute"] = attribute, ["value"] = value, ["line"] = node.Line }),
+                             read ? ReadNode(k!) : null, top.Tag == "block"))
                     problems.Add(p);
             }
             // Where every <style> goes, the CSS the theme does not render, the bindings that are not bindings (the same checks
@@ -512,6 +531,15 @@ public sealed partial class ModelSession
             rootKind = top.Tag == "screen" ? "MobileScreen" : "MobileBlock";
             var flow = Flow(top);
             if (flow == null) throw Refuse();
+            // The defaults of the page: those of its UI flow (what a fresh element is born with there: the theme of the flow decides
+            // part of it).
+            defaults = index.DefaultsIn(flow);
+            if (defaults.Note.Length > 0)
+            {
+                Problem(ScreenDocument.DefaultsMissing, top, "the installed Studio's defaults could not be measured for the UI flow " + TypeResolver.Name(flow) + ": " + defaults.Note,
+                    "a document needs them; write it in a flow whose theme the reason does not name, or fix what the reason names");
+                throw Refuse();
+            }
             if (flow.Children.OfType<IObjectSignature>().FirstOrDefault(c => c != options.Exclude && (Is(c, "IMobileScreen") || Is(c, "IMobileBlock") || Is(c, "IWebScreen") || Is(c, "IWebBlock"))
                     && string.Equals(TypeResolver.Name(c), name, StringComparison.OrdinalIgnoreCase)) is { } existing)
             {
@@ -583,6 +611,7 @@ public sealed partial class ModelSession
             // The theme's part, last: a refused document never touches the theme (Discard puts it back if a later check fails).
             var theme = options.CheckExpressions ? null : InstallTheme(top);
             if (problems.Count > 0) throw Refuse();
+            NativeVisualDone();   // CX17: the visual notes and the native layout block of the theme (F3/F6)
             var iconSelectors = iconsConverted && !options.CheckExpressions ? WidenThemeIcons() : null;
             var keys = new JsonObject();
             foreach (var (k, o) in byK.OrderBy(k => k.Key, StringComparer.Ordinal)) if (o is IObjectSignature sig) keys[k] = sig.ObjectKey?.ToString();
@@ -1067,6 +1096,7 @@ public sealed partial class ModelSession
             else if (kind == "MobileBlockInstanceWidget") Slots(widget, node, k, owner);
             else Children(widget, node.Children.ToList(), k, owner);
             if (lost) return;
+            NativeVisual(widget, kind, node, tagText, written);   // CX17: F2 class and F1 rows of a new widget, before its Reset
             events.Add(() => Events(widget, kind, node));
             events.Add(() => Reset(widget, kind, written));
         }
@@ -1150,6 +1180,9 @@ public sealed partial class ModelSession
             foreach (var (attribute, value) in ordered)
             {
                 if (skipped.Contains(attribute)) continue;
+                // CX17 review 3, M6: a marker of the engine in the text is never written as it is: NativeVisual decides it on the
+                // widget (and says when its decision is not the text's); one the reading did not have is refused (review 2, M4).
+                if (mode == ScreenHtmlModuleMode.Widget && ScreenVisual.MarkerOf(attribute) != null && DecidesMarkers(node)) continue;
                 // An extended property (ext:<name>, or on a widget an attribute no table names): the rule the preflight checks the
                 // bindings of (ScreenDocument.ExtendedName), so a brace pair that is no binding is in its refusal already.
                 if (ScreenDocument.ExtendedName(attribute, reverse, mode == ScreenHtmlModuleMode.Widget) is { } extended) { Extended(target, extended, value, node, attribute); continue; }
@@ -1683,10 +1716,14 @@ public sealed partial class ModelSession
             catch (Exception error) { Problem(ScreenDocument.Invalid, node, $"{attribute}: {Unwrap(error)}"); }
         }
 
-        // ---- what the text does not say is the table's default ---------------------------------------------------------
-        /// <summary>Every property the reading counts as a fact of the element and the text does not name is set to the
-        /// table's default (ScreenHtml.DefaultOf): a new widget is born with values of its own (a button's classes, a margin)
-        /// that the read element did not have.</summary>
+        // ---- what the text does not say is at its default ---------------------------------------------------------------
+        /// <summary>Every property the reading counts as a fact of the element and the text does not name is set to its
+        /// default (the reading's ScreenDefaults, the installed Studio's): a new widget is born with values of its own that the
+        /// read element did not have; a value the Studio gives it that is a default stays (writing it is a no-op). One exception,
+        /// the owner's decision D1 of 2026-10-17 (F2): the class of a new widget without k and without class is the one the
+        /// Studio gives it, or its trimmed form (ScreenVisual.StudioClassOf, decided in NativeVisual before this runs, which puts
+        /// Style in <paramref name="written"/>), as in the edit forms and the fragment; the class of an element with k is the
+        /// one its text says.</summary>
         private void Reset(IObjectSignature element, string kind, HashSet<string> written, bool inPopup = false) { var t = Stopwatch.GetTimestamp(); try { ResetCore(element, kind, written, inPopup); } finally { Spent("Reset", t); } }
         private void ResetCore(IObjectSignature element, string kind, HashSet<string> written, bool inPopup)
         {
@@ -1723,7 +1760,7 @@ public sealed partial class ModelSession
                 }
                 // A text Style that repeats StyleClasses (or is empty) is not a fact of the reading: the two are kept together.
                 if (name == "Style" && type == 't' && (FindProperty(element, "StyleClasses") is { } classes ? Text(SafeGet(classes, element)) == text : text.Length == 0)) continue;
-                var wanted = ScreenHtml.DefaultOf(kind, name, type, inPopup);
+                var wanted = defaults.DefaultOf(kind, name, type, inPopup);
                 if (text == wanted) continue;
                 try
                 {

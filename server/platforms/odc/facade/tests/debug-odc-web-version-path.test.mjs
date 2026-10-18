@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {qualifyOdcWebVersionPath} from '../debug-odc-module-dispatch.mjs';
 const input=()=>({sdkSha256:'1dbfad22bdf417ed43aa1ac716b3a0b402345f4608efbb4025e0be4acdfeb40d',homeModuleKey:'12345678-1234-4234-8234-123456789abc',

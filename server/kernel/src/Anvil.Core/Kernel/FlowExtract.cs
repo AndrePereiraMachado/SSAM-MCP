@@ -15,7 +15,11 @@ namespace Anvil.Reading;
 //  - defaults: a value equal to the property's default (False for a boolean unless listed below). The defaults are the
 //    values both Studios give a new element of each kind (measured 2026-10-11 by creating every node kind, parameter and
 //    action headless: every boolean is False but IsMandatory, AbortTransaction and LogError, and a service action's
-//    Public and Shareable, which the text always states).
+//    Public and Shareable, which the text always states). Open, the same family as the screen reading before
+//    StudioDefaults (2026-10-14): this is a table measured once, not what the installed Studio gives (a Studio update that
+//    changes a default of a node changes the text silently). The way: measure the born values of every node, parameter
+//    and action kind per Studio identity in a disposable copy (StudioBornValues' recipe, through the logic op), keyed by
+//    kind and property, then raise the flow extractor and run the logic batteries; until then the table stays.
 // Everything else an element holds is a property of the text: with a word of its own, or as @{Name=value}.
 internal static class FlowRules
 {

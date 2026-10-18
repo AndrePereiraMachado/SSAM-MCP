@@ -1,5 +1,5 @@
 {
- "description": "TimePicker do OSUI: o Input de exemplo ligado a uma variavel Time e o evento obrigatorio OnSelected guardando a hora.",
+ "description": "TimePicker of OSUI: the sample Input bound to a Time variable and the required event OnSelected keeping the time.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

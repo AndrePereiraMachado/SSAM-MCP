@@ -19,7 +19,7 @@ const sha = text => createHash('sha256').update(text, 'utf8').digest('hex');
 const durable = payload => { const text = JSON.stringify(payload); return JSON.stringify({ format: 1, sha256: sha(text), payload: text }); };
 const readPayload = file => { const doc = JSON.parse(fs.readFileSync(file, 'utf8')); assert.equal(doc.sha256, sha(doc.payload), 'the envelope checks'); return JSON.parse(doc.payload); };
 const HOLDER = 'a471638cb0484920a6d0c0166b6f8a46';
-const RELEASE_ARGS = file => ({ lane: 'o11', release: { reservation: file, authorize: '<palavras do usuário>' } });
+const RELEASE_ARGS = file => ({ lane: 'o11', release: { reservation: file, authorize: "<the user's own words>" } });
 
 function sandbox(t) {
   const box = fs.mkdtempSync(path.join(os.tmpdir(), 'pa2-f7b-res-'));
@@ -77,7 +77,7 @@ test('a reservation of this root whose task ended not-sent is stale: ssam_task c
   const report = listed(s);
   const a = byFile(report, stale), b = byFile(report, active), c = byFile(report, left);
   assert.equal(a.state, 'stale'); assert.equal(a.processAlive, false);
-  assert.deepEqual([a.next.tool, a.next.arguments], ['ssam_task', { id: notSent, close: { reason: '<motivo>' } }]);
+  assert.deepEqual([a.next.tool, a.next.arguments], ['ssam_task', { id: notSent, close: { reason: '<reason>' } }]);
   assert.equal(b.state, 'active'); assert.equal(b.processAlive, true);
   assert.deepEqual([b.next.tool, b.next.arguments], ['ssam_task', { id: uncertain }]);
   // A task already closed frees nothing by closing again: its leftover is released like an orphan.
@@ -136,10 +136,13 @@ test('release without words is WORDS_REQUIRED and changes nothing; a placeholder
   const file = s.reserve({ owner: HOLDER, environment: 'env', moduleKey: 'k' });
   const before = fs.readFileSync(file, 'utf8');
   const { call } = await serve(s, t);
-  for (const release of [{ reservation: file }, { reservation: file, authorize: '   ' }, { reservation: file, authorize: '<palavras do usuário>' }]) {
+  for (const release of [{ reservation: file }, { reservation: file, authorize: '   ' }, { reservation: file, authorize: "<the user's own words>" }]) {
     const value = await call({ lane: 'o11', release });
     assert.equal(value.code, 'WORDS_REQUIRED', JSON.stringify(value));
-    assert.deepEqual([value.continuation.tool, value.continuation.arguments], ['ssam_doctor', RELEASE_ARGS(file)]);
+    // CX15 r7 (converted): a server text as the words is refused by the hub's one rule before the tool runs (askOwner names the
+    // field); missing or blank words keep the tool's own refusal and its ssam_doctor continuation.
+    if (release.authorize?.trim()) assert.deepEqual(value.askOwner?.fields, ['release/authorize']);
+    else assert.deepEqual([value.continuation.tool, value.continuation.arguments], ['ssam_doctor', RELEASE_ARGS(file)]);
   }
   assert.equal(fs.readFileSync(file, 'utf8'), before);
 });
@@ -154,7 +157,7 @@ test('release never frees a reservation a task of this root can resume or close,
   const words = 'libere';
   const refused = await call({ lane: 'o11', release: { reservation: owned, authorize: words } });
   assert.equal(refused.code, 'RESERVATION_HAS_TASK', JSON.stringify(refused));
-  assert.deepEqual([refused.continuation.tool, refused.continuation.arguments], ['ssam_task', { id: notSent, close: { reason: '<motivo>' } }]);
+  assert.deepEqual([refused.continuation.tool, refused.continuation.arguments], ['ssam_task', { id: notSent, close: { reason: '<reason>' } }]);
   assert.equal(readPayload(owned).owner, notSent);
   if (process.platform === 'win32') {
     // The kernel's lease (DurableJson.Lease: FileShare.None on <file>.lock) while a delivery runs.

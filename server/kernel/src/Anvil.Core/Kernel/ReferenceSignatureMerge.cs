@@ -107,7 +107,8 @@ public static class ReferenceSignatureMerge
 
     /// <summary>Runs the native structural merge and pending reference selections sequentially
     /// inside the caller's existing Command. The delegate must synchronously merge the supplied
-    /// tree (Bridge uses CompareAndMergeCommands.Merge; headless uses tree.Merge). The helper owns
+    /// tree inside that Command, on its thread (the bridge and headless both call tree.Merge(); never
+    /// CompareAndMergeCommands.Merge, fix-ext-refs 2026-10-16). The helper owns
     /// both trees and disposes each before constructing the next. Exceptions must escape the
     /// caller's Command so native rollback restores the complete operation.</summary>
     public static ReferenceSignatureMergeResult MergeInCurrentCommand(ESpace local, ESpace foreign, ESpace basis,

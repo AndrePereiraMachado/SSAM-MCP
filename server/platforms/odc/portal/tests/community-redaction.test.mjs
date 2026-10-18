@@ -1,6 +1,7 @@
 // The community sign-in (OutSystems ID, id.outsystems.com) inside the redaction boundary: every credential the sign-in
 // brings into this process (the Portal callback code, the OutSystems ID tokens, the Portal session cookies set while the
 // code is processed) is masked when a later Portal read echoes it. Synthetic values only; no network.
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';

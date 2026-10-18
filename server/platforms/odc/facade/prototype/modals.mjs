@@ -82,8 +82,8 @@ export function targetGuards(observations, records) {
     entry.confirmed = closesOnSelf && !closesOnChild;
     if (entry.confirmed) {
       entry.event = 'modal:click';
-      entry.why = 'fecha pelo clique no fundo; IPopup nativo não tem esse evento';
-      records.outOfScope.push({ what: 'fechamento do modal pelo clique no fundo', where: entry.handler, why: 'listener com guarda de alvo no contêiner; o IPopup nativo não tem esse evento' });
+      entry.why = 'closes by the click on the backdrop; the native IPopup has no such event';
+      records.outOfScope.push({ what: 'closing the modal by the click on the backdrop', where: entry.handler, why: 'a listener with a target guard on the container; the native IPopup has no such event' });
     }
   }
   records.targetGuarded = records.targetGuarded.filter(item => item.confirmed);

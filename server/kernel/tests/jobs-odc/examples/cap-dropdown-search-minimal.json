@@ -1,5 +1,5 @@
 {
- "description": "DropdownSearch do OSUI: OptionsList com uma lista literal de opcoes e o evento obrigatorio OnChanged ligado a uma screen action que guarda o valor escolhido.",
+ "description": "DropdownSearch of OSUI: OptionsList with a literal list of options and the required event OnChanged bound to a screen action that keeps the chosen value.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -8,14 +8,14 @@
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "ChosenValue", "as": "$chosen"},
   {"op": "set", "target": "$chosen", "prop": "DataType", "value": "Text"},
-  {"op": "logic", "_why": "o handler declara so o input que usa; o argumento liga-o ao parametro do evento", "data": {"actions": [
+  {"op": "logic", "_why": "the handler declares only the input it uses; the argument binds it to the parameter of the event", "data": {"actions": [
    {"name": "CategoryChosen", "kind": "screen", "owner": "IMobileScreen:PickCategory",
     "inputs": [{"name": "Selection", "type": "DropdownOption List"}],
     "steps": [{"assign": {"ChosenValue": "If(Selection.Empty, \"\", Selection[0].Value)"}, "as": "KeepChoice"}]}]}},
 
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "CategorySearch", "source": "IMobileBlock:DropdownSearch", "as": "$dd"},
-  {"op": "set", "target": "$dd/OptionsList", "prop": "Value", "value": "[{Value: \"B\", Label: \"Books\"}, {Value: \"G\", Label: \"Games\"}]", "_why": "input obrigatorio do tipo DropdownOption List: uma lista literal serve"},
-  {"op": "set", "target": "$dd/OnChanged", "prop": "Handler", "value": "IMobileScreen:PickCategory/CategoryChosen", "_why": "OnChanged e obrigatorio: sem handler o Verify da erro EventHandlerRequiredAction"},
+  {"op": "set", "target": "$dd/OptionsList", "prop": "Value", "value": "[{Value: \"B\", Label: \"Books\"}, {Value: \"G\", Label: \"Games\"}]", "_why": "a required input of type DropdownOption List: a literal list will do"},
+  {"op": "set", "target": "$dd/OnChanged", "prop": "Handler", "value": "IMobileScreen:PickCategory/CategoryChosen", "_why": "OnChanged is required: without a handler the Verify gives the error EventHandlerRequiredAction"},
   {"op": "set", "target": "$dd/OnChanged/Selection", "prop": "Value", "value": "SelectedOptionList"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$show"},
   {"op": "set", "target": "$show", "prop": "Value", "value": "\"Chosen: \" + ChosenValue"}

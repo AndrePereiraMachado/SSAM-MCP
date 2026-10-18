@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';
 import {GROUP_ROLE_ASSIGNMENT,groupRoleAssignmentApproval,groupRoleAssignmentObservation} from '../runtime/group-role-assignment-approval.mjs';
 import {ASSET_CREATE} from '../runtime/asset-creation-approval.mjs';import {GROUP_CREATE} from '../runtime/group-approval.mjs';import {USER_CREATE} from '../runtime/inactive-user-approval.mjs';

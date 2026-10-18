@@ -6,6 +6,7 @@
 // checked before the request and again at connect time by the default client (DNS rebinding), redirects followed one by
 // one and re-checked. DOCUMENT_HOST_NOT_PUBLIC, and nothing is requested there. Local use is unchanged. A fake lookup and a
 // fake fetch, and one HTTP server on 127.0.0.1 that must never be reached in hosted use.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

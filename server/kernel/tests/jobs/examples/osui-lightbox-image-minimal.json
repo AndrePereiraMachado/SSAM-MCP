@@ -1,5 +1,5 @@
 {
- "description": "LightboxImage (OutSystemsUI, Interaction) minimo: instancia como o Studio cria ao arrastar o bloco; a Image de exemplo passa a External com Url.",
+ "description": "Minimal LightboxImage (OutSystemsUI, Interaction): an instance as the Studio creates it when the block is dragged; the sample Image becomes External with a Url.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

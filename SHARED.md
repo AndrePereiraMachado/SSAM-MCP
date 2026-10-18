@@ -12,7 +12,8 @@ combinada mudou de novo 2: `docs/FASE2-AGENTE.md` (Service Studio 11.55.92, a se
 `docs/PROVAS-AO-VIVO.md` (Service Studio 11.55.92). O `41e538f0` mudou `docs/FASE2-AGENTE.md` de novo (a faixa desligada
 recusa também as ferramentas só do servidor e esvazia os caches dela). A branch `feat/studio-build-identity` (A-M1) mudou
 `docs/FASE2-AGENTE.md` de novo (seção 7: identidade do Studio pelo build de 4 números, uma recusa por direção, avisos
-`studioBuildDiffers` e `studioNotServed`).
+`studioBuildDiffers` e `studioNotServed`). A `server/r27-marco-a7` levou às duas caixas o `docs/FASE2-AGENTE.md` da linha
+`fase4-26/marco-a7` (`7b14280a`): a classificação das ferramentas do marco-a5 e os textos dos marcos a6 e a7.
 
 ## A regra
 
@@ -68,7 +69,7 @@ Sem saída, está tudo igual.
 | Arquivo (relativo à caixa) | sha256 (conteúdo com fim de linha LF) |
 | --- | --- |
 | `docs/DISTRIBUICAO.md` | `bc87ebe53ef2230f89d4ceb1162e5e84b9eecc0e2563e93905eccb78fbc9d5b1` |
-| `docs/FASE2-AGENTE.md` | `1de4db6644da594364bb03113ca0f131bb6835cbf93c7a2662bca8400b6bd82b` |
+| `docs/FASE2-AGENTE.md` | `6691fb0ef1e281de844fc1c4a5fba684cd8e6ede20063199dfac731e59c85d46` |
 | `docs/O11-BRIDGE-FINA.md` | `c7f24e4ad0e2b537394a537d103ad5b0654745c4c692965cdec5cc8fcc80a25d` |
 | `docs/PROVAS-AO-VIVO.md` | `b66c259ac7cb293fbc7c7165794885ac6462598a2e65e2753c85f3646d99979a` |
 | `docs/exemplos/mcp-cliente-hospedado.json` | `cabbe38805716878f03def98527dd5234b2dcfd9187df8c773305f80d8d6fa28` |
@@ -135,8 +136,9 @@ Sem saída, está tudo igual.
 Diferença de propósito desde `server/r26-marco-a6` (decisão D5 do dono, 15/10/2026): `o11-bridge.mjs` não é igual nas
 duas caixas, e a checagem acima não o lista.
 
-- `server/`: o da linha `fase4-26/marco-a6` (`75c8940c`). A CX14 reescreveu o `bridgeRequest` (chamada vigiada com sondas,
-  só local) e, no hospedado, o manifesto da bridge vai pelo agente (`executor.call('o11.bridge')`).
+- `server/`: o da linha `fase4-26/marco-a6` (`75c8940c`), com os mesmos bytes na `fase4-26/marco-a7` (`7b14280a`). A CX14
+  reescreveu o `bridgeRequest` (chamada vigiada com sondas, só local) e, no hospedado, o manifesto da bridge vai pelo agente
+  (`executor.call('o11.bridge')`).
 - `agent/`: o do pacote atual (`C:\t\pack-comb\ssam-agent.zip`, linha `b58be727`). É o arquivo que tem o bloco congelado de
   `agent/lib/o11-wire.mjs`, e o `agent/tests/drift.test.mjs` desta caixa compara com ele. A linha guarda o mesmo arquivo em
   `agent/tests/fixtures/o11-bridge.pack.mjs`, com o sha256 fixado no teste dela. O zip não muda.

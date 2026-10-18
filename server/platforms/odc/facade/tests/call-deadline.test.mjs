@@ -40,14 +40,14 @@ test('environment deadline is capped and clamps below minimum', () => {
 });
 test('joins running calls, resumes undelivered final, then allows a fresh operation', async t => {
   const {deadline}=setup(t); let calls=0;
-  const run=deadline.wrap('studio_deliver',async () => { calls++; await sleep(350); return text({ok:true,result:'entregue'}); });
+  const run=deadline.wrap('studio_deliver',async () => { calls++; await sleep(350); return text({ok:true,result:'delivered'}); });
   const first=await run({feature:'M'}); const joined=await run({feature:'M'});
   assert.equal(value(joined).joined,true); assert.equal(calls,1);
   // A separate operation finishes detached, without a continuation delivery.
   const second=await run({feature:'N'}); await sleep(180);
   const resumed=await run({feature:'N'}); assert.equal(value(resumed).resumedFrom,value(second).task.id);
   await finish(run,await run({feature:'N'})); assert.equal(calls,3);
-  assert.deepEqual(await run(value(first).continuation.arguments),text({ok:true,result:'entregue'}));
+  assert.deepEqual(await run(value(first).continuation.arguments),text({ok:true,result:'delivered'}));
 });
 test('continuations refuse all extras, unknown ids, mismatches and orphaned writes', async t => {
   const {root,deadline}=setup(t);
@@ -102,7 +102,7 @@ test('MCP ODC proxy and a tool registered afterwards both use the deadline; cont
   const identity={root,release:{head:'a',facadeSha256:'a',catalogSha256:'a'}};
   const server=await createSsamServer({o11:false,odc:true,deps:{answersRoot:root,callDeadlineMs:200,identity:{read:()=>({root,release:{head:"a",facadeSha256:"a",catalogSha256:"a"}})},identity:{read:()=>changed?{...identity,release:{...identity.release,facadeSha256:'b'}}:identity,cacheMs:0},
     writeLock:async(_,fn)=>{locks++;return fn();},lock:{o11Root:root,odcRoot:root,connection:()=>null},odcRoot:root,
-    odcFacade:async()=>{const s=new McpServer({name:'fake',version:'1'});s.registerTool('studio_deliver',{inputSchema:z.object({feature:z.string()})},async()=>{calls++;await sleep(450);return text({ok:true,result:'entregue'});});return s;}}});
+    odcFacade:async()=>{const s=new McpServer({name:'fake',version:'1'});s.registerTool('studio_deliver',{inputSchema:z.object({feature:z.string()})},async()=>{calls++;await sleep(450);return text({ok:true,result:'delivered'});});return s;}}});
   server.registerTool('local_probe',{inputSchema:z.object({delay:z.number(),lane:z.string().optional()})},async args=>{await sleep(args.delay);return text({ok:true});});
   const [a,b]=InMemoryTransport.createLinkedPair();const client=new Client({name:'test',version:'1'});await Promise.all([server.connect(a),client.connect(b)]);
   t.after(async()=>{await client.close();await server.close();});
@@ -112,7 +112,7 @@ test('MCP ODC proxy and a tool registered afterwards both use the deadline; cont
 });
 test('local O11, shared lane, ssam_job and nested ssam_code write all leave through one deadline', async t => {
   const root=setup(t).root; const counts=new Map(); let delay=100;
-  const record=async name=>{counts.set(name,(counts.get(name)??0)+1);await sleep(delay);return text({ok:true,result:'entregue',payload:'same'});};
+  const record=async name=>{counts.set(name,(counts.get(name)??0)+1);await sleep(delay);return text({ok:true,result:'delivered',payload:'same'});};
   const server=await createSsamServer({o11:false,odc:true,deps:{answersRoot:root,callDeadlineMs:200,identity:{read:()=>({root,release:{head:"a",facadeSha256:"a",catalogSha256:"a"}})},
     writeLock:async(_,fn)=>fn(),lock:{o11Root:root,odcRoot:root,connection:()=>null},odcRoot:root,
     jobTool:async()=>value(await record('ssam_job')),

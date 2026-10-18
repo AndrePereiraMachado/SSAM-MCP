@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import crypto from 'node:crypto';
 import {environmentDefaultsPlan,environmentDefaultsObservation} from '../runtime/environment-defaults.mjs';
 const environmentKey=crypto.randomUUID(),row={key:'Name',isSecret:false,dataType:'Text',value:'Original',defaultValue:'Default',valueOrigin:'EnvironmentLevelOverride'};

@@ -1,5 +1,5 @@
 {
- "description": "BPT com atividade humana e timer sobre o CRUD Traditional: processo ApproveContact (input ContactId) com Start -> Human Activity Review (destino ContactDetailWeb com argumento) -> End; server action Contacts_Cleanup ligada a um Timer",
+ "description": "BPT with human activity and timer over the Traditional CRUD: process ApproveContact (input ContactId) with Start -> Human Activity Review (destination ContactDetailWeb with argument) -> End; server action Contacts_Cleanup linked to a Timer",
  "base": "job:screen-crud-traditional",
  "expectValid": true,
  "ops": [

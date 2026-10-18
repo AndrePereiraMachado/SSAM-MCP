@@ -1,5 +1,5 @@
 {
- "description": "Swipe action: o List Item ja nasce com uma IListItemAction em RightActions; ela ganha legenda e um OnClick que abre outra tela.",
+ "description": "Swipe action: the List Item is already born with an IListItemAction in RightActions; it gets a caption and an OnClick that opens another screen.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -15,6 +15,6 @@
   {"op": "create", "parent": "$item/Content", "type": "IExpression", "as": "$name"},
   {"op": "set", "target": "$name", "prop": "Value", "value": "GetContacts.List.Current.Contact.FullName"},
   {"op": "set", "target": "$item/RightActions/#IListItemAction/#ITextWidget", "prop": "Text", "value": "Profile"},
-  {"op": "set", "target": "$item/RightActions/#IListItemAction/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile", "_why": "a swipe action de exemplo so precisa de destino para ficar valida"}
+  {"op": "set", "target": "$item/RightActions/#IListItemAction/OnClick", "prop": "Destination", "value": "IMobileScreen:UserProfile", "_why": "the sample swipe action only needs a target to be valid"}
  ]
 }

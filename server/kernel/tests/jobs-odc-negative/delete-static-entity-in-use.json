@@ -1,5 +1,5 @@
 {
- "description": "ODC: a RECUSA do delete de uma static entity com consumidores. A WfClaimStage e o tipo da FK WfClaimFile.StageId (a FK liga-se ao tipo identificador, filho da static) e o default dela cita Entities.WfClaimStage.Received; sem force o delete e recusado e a mensagem nomeia o atributo (o default esta dentro dele e nao se repete). O registo anonimo 'WfClaimStage Record' que a plataforma gera ja nao conta enquanto ninguem o usar: uma static sem consumidores de autor apaga-se sem force (tests/jobs-odc/delete-generated-companions.json).",
+ "description": "ODC: the REFUSAL of the delete of a static entity with consumers. WfClaimStage is the type of the FK WfClaimFile.StageId (the FK is bound to the identifier type, a child of the static) and its default cites Entities.WfClaimStage.Received; without force the delete is refused and the message names the attribute (the default is inside it and is not repeated). The anonymous record 'WfClaimStage Record' that the platform generates no longer counts as long as nobody uses it: a static without author consumers is deleted without force (tests/jobs-odc/delete-generated-companions.json).",
  "base": "job:static-entity",
  "expectValid": true,
  "expectError": [

@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA de apagar um evento de bloco, a outra metade de tests/jobs/block-events-delete-reactive.json. Sobre job:block-events-reactive nasce ainda uma segunda instancia SEM handler, e so entao se tenta apagar IBlockEvent:OnRate. O delete tem de ser recusado e a mensagem tem de nomear os TRES consumidores: o ITriggerNode que dispara (dentro do bloco), o IEventHandler da instancia que tem handler e o IEventHandler da instancia que NAO tem - porque o IEventHandler nasce com a instancia mesmo vazio, e um evento sem um unico handler ligado continua sem poder ser apagado. Roda com `python scripts/run_job.py tests/jobs-negative/delete-block-event-in-use.json`: tem de dar ok=False (NegativeJobTests.JobFailsWithTheTeachingMessage).",
+ "description": "The REFUSAL of deleting a block event, the other half of tests/jobs/block-events-delete-reactive.json. Over job:block-events-reactive a second instance WITHOUT a handler is also born, and only then is the delete of IBlockEvent:OnRate attempted. The delete has to be refused and the message has to name the THREE consumers: the ITriggerNode that fires (inside the block), the IEventHandler of the instance that has a handler and the IEventHandler of the instance that does NOT - because the IEventHandler is born with the instance even if empty, and an event without a single handler linked still cannot be deleted. Runs with `python scripts/run_job.py tests/jobs-negative/delete-block-event-in-use.json`: it has to give ok=False (NegativeJobTests.JobFailsWithTheTeachingMessage).",
  "base": "job:block-events-reactive",
  "expectValid": true,
  "expectError": [
@@ -11,7 +11,7 @@
   "pass \"force\": true to break them"
  ],
  "ops": [
-  {"op": "create", "parent": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RatingPicker2", "as": "$i2", "source": "IMobileBlock:RatingPicker", "_why": "instancia sem handler: mesmo assim conta como consumidor do evento"},
+  {"op": "create", "parent": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "RatingPicker2", "as": "$i2", "source": "IMobileBlock:RatingPicker", "_why": "instance without a handler: it still counts as a consumer of the event"},
   {"op": "set", "target": "$i2/Caption", "prop": "Value", "value": "\"Sem handler, e mesmo assim consumidor\""},
   {"op": "usages", "target": "IBlockEvent:OnRate"},
   {"op": "delete", "target": "IBlockEvent:OnRate"}

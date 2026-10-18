@@ -2,6 +2,7 @@
 // (integration-documents.mjs sampleRestConsume) and the sample pinned in the op; the kernel never reads the network.
 // A local HTTP stub on 127.0.0.1 only: the url path end to end, offline. When the worktree's O11 CLI is built
 // (kernel/.local/cli/anvil.dll) the pinned job is also applied to the blank service module and must be accepted.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

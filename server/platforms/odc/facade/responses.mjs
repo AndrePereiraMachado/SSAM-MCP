@@ -20,10 +20,11 @@
 
 import { addNextSteps } from './next-steps.mjs';
 import { isCode, refusalCode } from './refusal-codes.mjs';
+import { RESULT, resultIs, resultValue } from './result-values.mjs';
 
-export const NOT_BUILT_WHY ='componente não compilado: o integrador/usuário compila';
-const DIALOG_WHY = 'fecha só janela com dono, pelo título; diálogo web (recuperação, Manage Dependencies): peça à pessoa para responder no Studio e repita';
-const PROMPT_WHY = 'a ferramenta abre sozinha a janela privada do Windows quando nada está guardado; a pessoa digita lá, nunca no chat; depois repita a chamada';
+export const NOT_BUILT_WHY ='component not built: the integrator/user builds it';
+const DIALOG_WHY = 'closes only a window with an owner, by its title; a web dialog (recovery, Manage Dependencies): ask the person to answer it in the Studio and repeat';
+const PROMPT_WHY = 'the tool opens the private Windows prompt by itself when nothing is stored; the person types there, never in the chat; then repeat the call';
 
 // `tool {key:"value", n:1}`: the notation the tool descriptions already use.
 export function formatCall(tool, args = {}) {
@@ -177,14 +178,14 @@ function commandFor(group, head, opts) {
     const verb = group === 'api' ? 'api' : head.split(/\s+/).pop();
     if (verb === 'signature') return { spec: { positional: 1 }, build: a => ({ tool: 'o11_job',
       arguments: { job: '<job.json>', captureProducers: [one(a.flags, 'producer', 'module', 'name') ?? a.positionals[0] ?? '<Producer>'].map(String) },
-      why: 'a assinatura do produtor é capturada pelo o11_job (captureProducers), só leitura, pelo Studio logado' }) };
+      why: 'the producer signature is captured by o11_job (captureProducers), read-only, through the signed-in Studio' }) };
     if (verb === 'functions') return { spec: { positional: 1 }, build: a => ({ tool: 'ssam_reference',
-      arguments: { lane, kind: 'functions', query: one(a.flags, 'find', 'name') ?? a.positionals[0] ?? '<name>' }, why: 'catálogo de funções embutidas da faixa' }) };
+      arguments: { lane, kind: 'functions', query: one(a.flags, 'find', 'name') ?? a.positionals[0] ?? '<name>' }, why: 'built-in function catalog of the lane' }) };
     return { spec: {}, build: a => {
       const name = one(a.flags, 'name'); const op = one(a.flags, 'op');
       if (group === 'api' && name === undefined && typeof op !== 'string') return null; // `api --op` named as a source, not a call
       return { tool: 'ssam_reference', arguments: { lane, kind: 'api', query: typeof name === 'string' ? name : typeof op === 'string' ? { op } : '<Interface>' },
-        why: 'contrato da Model API / das ops do kernel da faixa' };
+        why: 'contract of the Model API / of the kernel ops of the lane' };
     } };
   }
   const [, verbRaw] = /^(?:\.[\\/]{1,2})?(?:ssam|odc)(?:\.cmd)?\s+(.+)$/.exec(head) ?? [];
@@ -208,8 +209,8 @@ function commandFor(group, head, opts) {
       // The CLI rehearsal of the prototype import: the model makes the one MCP call of the import (docs/PROTOTIPO-NATIVO.md 1.1).
       case 'prototype': return { spec: { positional: 1, bool: new Set(['dry']) }, build: a => {
         const l = one(a.flags, 'lane') ?? lane;
-        const job = { ops: [{ op: 'prototype', data: { source: a.positionals[0] ?? '<pasta do protótipo>' } }] };
-        const module = typeof one(a.flags, 'module') === 'string' ? one(a.flags, 'module') : '<módulo aberto>';
+        const job = { ops: [{ op: 'prototype', data: { source: a.positionals[0] ?? '<prototype folder>' } }] };
+        const module = typeof one(a.flags, 'module') === 'string' ? one(a.flags, 'module') : '<open module>';
         return l === 'odc' ? { tool: 'studio_deliver', arguments: { module, job, publish: true, authorize: "<the user's own words>" } }
           : { tool: 'o11_deliver', arguments: { module, job, publish: true, authorize: "<the user's own words>" } };
       } };
@@ -342,20 +343,23 @@ const NEXT = ['nextBasedOn', 'partial', 'summary', 'normalizations'];
 // ForcedDeleteRule) is delivered, with each normalized element (at most 20).
 // `phases` (lane wp of the atritos 3 package, studio-write-lock.mjs): a delivery that built outside the Studio lock,
 // {buildMs, queuedMs, applyMs, buildQueue?, moduleQueue?, rebased?}.
-// `highWarnings` (data-access rules of 2026-10-09: QUERY_IN_LOOP legacy/allowed, AGGREGATES_MERGEABLE): the HIGH warnings,
-// also first in `warnings`; they never block (A03) but are always shown, on "entregue" and on a refusal alike.
+// `highWarnings` (data-access rules of 2026-10-09: QUERY_IN_LOOP legacy/allowed, AGGREGATES_MERGEABLE): complete HIGH warnings;
+// the source also puts them first in `warnings`; the output policy removes that duplication. They never block (A03).
 // `removed` (ssam_code, 2026-10-12): what an action text or a screen edit of the job removed (the lines and elements it left
 // out), at most 20 plus removedTotal; a deletion is never silent.
 // `entityActions` (op entity-actions, entity-actions.mjs): the generated standard actions by entity, the unchanged count, the
 // kept ones with why, and the notes.
 // `preview` (C04, servidor/fase4): the structural preview of the delivered html (preview/fragment.mjs).
 export const DELIVERY_FIELDS = ['publish', 'lastPublication', 'leftovers', 'leftoversTotal', 'screenRoles', 'screenRolesTotal', 'authorization', 'integration', 'integrationTotal', 'entityActions',
-  'highWarnings', 'warnings', 'warningsTotal', 'queue', 'equivalence', 'normalized', 'normalizedTotal', 'phases', 'preview', 'removed', 'removedTotal'];
+  'highWarnings', 'warnings', 'warningsTotal', 'queue', 'equivalence', 'normalized', 'normalizedTotal', 'phases', 'preview', 'removed', 'removedTotal',
+  // fix/system-reference: a producer taken under the name the Studio lists it by ("System" -> "(System)") says so; a name the
+  // consumer session does not offer answers the producers it offers.
+  'producerNotes', 'available', 'availableTotal'];
 // I8: a refusal that says the merge already reached the Studio (merged:true, uncertain) is read, never delivered again.
 const mergedReading = (value, args) => (typeof value.evidence === 'string' && value.evidence
-  ? { tool: 'ssam_evidence', arguments: { file: value.evidence.replace(/[\\/]+$/, '') + (/\\/.test(value.evidence) || !/\//.test(value.evidence) ? '\\' : '/') + 'deliver-result.json' }, why: 'o merge já foi integrado; leia o recibo dele e não repita a entrega' }
-  : { tool: 'studio_status', arguments: Number.isInteger(args?.pid) ? { pid: args.pid } : {}, why: 'o merge já foi integrado; leia o estado do Studio e não repita a entrega' });
-const RESULTS = new Set(['entregue', 'entregue e publicado']);
+  ? { tool: 'ssam_evidence', arguments: { file: value.evidence.replace(/[\\/]+$/, '') + (/\\/.test(value.evidence) || !/\//.test(value.evidence) ? '\\' : '/') + 'deliver-result.json' }, why: 'the merge is already integrated; read its receipt and do not repeat the delivery' }
+  : { tool: 'studio_status', arguments: Number.isInteger(args?.pid) ? { pid: args.pid } : {}, why: 'the merge is already integrated; read the Studio state and do not repeat the delivery' });
+const RESULTS = { has: value => resultIs(value, 'delivered', 'deliveredAndPublished') };
 const sharedFields = value => Object.fromEntries(DELIVERY_FIELDS.filter(key => value[key] != null).map(key => [key, value[key]]));
 // The prototype importer (docs/PROTOTIPO-NATIVO.md 1.4): the receipt (report.prototype as `prototype`) on a success and on
 // a refusal after the build; a refusal of the prototype keeps its combined patch, the corrected call, ssamDefect and the
@@ -380,7 +384,7 @@ export function compactDelivery(tool, args, value) {
       ...(value.code ? { code: value.code } : {}), ...(value.outcome ? { outcome: value.outcome } : {}), ...(value.gate ? { gate: value.gate } : {}),
       // Delivered but the publish of the same call failed or is uncertain: the delivery is never repeated, so the answer
       // keeps that it was delivered and what the publish said.
-      ...(RESULTS.has(value.result) ? { result: value.result } : {}), ...sharedFields(value),
+      ...(RESULTS.has(value.result) ? { result: resultValue(value.result) } : {}), ...sharedFields(value),
       // The refusal of a job (I2, primeira-certa A3): every problem of every phase over the capture with its phase, op,
       // pointer, code, fix and patch, the whole list in one answer (grouped only to fit it), whether the Verify ran and
       // the phases; the patches go back with patch + basedOn.
@@ -389,6 +393,10 @@ export function compactDelivery(tool, args, value) {
       ...correction, ...prototypeFields(value),
       // A module name that reached no open module (or several): the open modules are the fix.
       ...(Array.isArray(value.openModules) ? { openModules: value.openModules } : {}), ...(Array.isArray(value.candidates) ? { candidates: value.candidates } : {}),
+      // fix/unpublished-library: what each producer's published revision lacks, what its open model says, and the sequence.
+      ...(Array.isArray(value.unpublished) ? { unpublished: value.unpublished } : {}), ...(Array.isArray(value.sequence) ? { sequence: value.sequence } : {}),
+      // Round 2 (A5): whether the job-alone check ran on that refusal and what it said.
+      ...(value.jobCheck && typeof value.jobCheck === 'object' ? { jobCheck: value.jobCheck } : {}),
       ...(Array.isArray(diagnostics) && diagnostics.length ? { diagnostics } : {}), ...(errors ? { validationErrors: errors } : {}),
       ...(value.discovery ? { discovery: value.discovery } : {}),
       // I8: merged:true on a refusal (an uncertain merge the bridge or the evidence says was integrated) keeps merged and
@@ -412,9 +420,9 @@ export function compactDelivery(tool, args, value) {
     if (merged === true && (strictlyEqual === true || value.equivalence === 'normalized')) {
       // The manifest stays, and a delivery that did not publish names its publication (2026-10-06: a session asked later to
       // publish had to list the lab folders for the manifest). studio_publish {module} finds this merge by itself.
-      const published = value.result === 'entregue e publicado' || value.publish?.outcome === 'published';
+      const published = resultIs(value.result, 'deliveredAndPublished') || value.publish?.outcome === 'published';
       const module = typeof value.module === 'string' && value.module ? value.module : args?.module;
-      return { ok: true, result: RESULTS.has(value.result) ? value.result : 'entregue', ...sharedFields(value), ...prototypeFields(value), ...inputFields(value),
+      return { ok: true, result: RESULTS.has(value.result) ? resultValue(value.result) : RESULT.delivered, ...sharedFields(value), ...prototypeFields(value), ...inputFields(value),
         ...Object.fromEntries(NEXT.filter(key => value[key] != null).map(key => [key, value[key]])),
         ...(typeof value.manifest === 'string' && value.manifest ? { manifest: value.manifest } : {}),
         ...(!published && typeof module === 'string' && module ? { continuation: { tool: 'studio_publish', arguments: { module, ...(Number.isInteger(args?.pid) ? { pid: args.pid } : {}) },

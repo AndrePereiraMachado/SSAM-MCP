@@ -1,6 +1,7 @@
 // gen-screen/1 (kernel ScreenGenerator): the standard list, detail and form screens of entities are one op, never written by
 // hand. The ssam_code html card and the work packet's text section for a new screen carry that op, three lines, on both lanes,
 // while gen-screen is approved (generators.mjs GENERATOR_APPROVAL; pending, neither carries it: tests/generators.test.mjs).
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { grammarCard, generateScreensCall, GENERATE_SCREENS_OP, GENERATE_SCREENS_RULE } from '../ssam-code.mjs';

@@ -57,8 +57,8 @@ def stop(port: int, wait: float = 10, exit_wait: float = 10) -> int:
         # Aceitou o shutdown e segue vivo: o mesmo processo que o ping nomeou para esta porta.
         anvil_cli.worker_process.terminate_known(pid, birth)
         if not _wait_exit(pid, birth, exit_wait):
-            raise TimeoutError(f"worker pid {pid} aceitou o shutdown, foi encerrado e ainda nao saiu; o build tem de esperar")
-        print(f"worker encerrado: pid {pid} aceitou o shutdown e seguia vivo apos {wait:g} s"); return 0
+            raise TimeoutError(f"worker pid {pid} accepted the shutdown, was ended and has not exited yet; the build has to wait")
+        print(f"worker ended: pid {pid} accepted the shutdown and was still alive after {wait:g} s"); return 0
     print(f"worker parado: {env.get('data')}"); return 0
 
 

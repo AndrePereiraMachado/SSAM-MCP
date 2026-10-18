@@ -18,6 +18,7 @@
 //                                       overlay scripts/release/overlay/kernel/src/Anvil.Core/Kernel/ of this repository
 //   SSAM_RESPONSES / --responses <file> responses.mjs of the front "MCP completo e velocidade" (default: the one in this
 //                                       repository, once merged)
+import '../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -265,7 +266,8 @@ function toolsNamed(text) {
 }
 
 test('guides: one ssam://guide resource per topic, in MCP terms only', () => {
-  assert.deepEqual(GUIDES.map(g => g.topic), ['lifecycle', 'o11', 'odc', 'refusals', 'rules', 'padroes']);
+  // The topic padroes is standards since 16/10 (English only; 'padroes' stays an input alias of ssam_reference).
+  assert.deepEqual(GUIDES.map(g => g.topic), ['lifecycle', 'o11', 'odc', 'refusals', 'rules', 'standards']);
   const all = new Set(); const problems = [];
   for (const g of GUIDES) {
     assert.equal(g.uri, 'ssam://guide/' + g.topic);

@@ -35,6 +35,7 @@ import { classifyWindow, isErrorReportTitle, withoutTypedText, cleanStall } from
 import { stallRecovery } from './studio-recovery.mjs';
 export { classifyWindow } from './bridge-stall.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
+import { hostedContext } from './executor.mjs';
 import { assertSelectedO11 } from './studio-connect.mjs';
 import { resolveOpenModule, systemModuleName } from './studio-module.mjs';
 import { studioWriteHolder, withStudioWriteLock } from './studio-write-lock.mjs';
@@ -43,17 +44,17 @@ import { rememberCapture } from './o11-capture-store.mjs';
 import { lastModuleCreation, refreshInventory } from './o11-environment.mjs';
 
 export const COMMANDS = ['status', 'wait', 'open-module', 'close-module', 'snapshot', 'errors', 'publish-log', 'windows', 'dismiss-dialog', 'login', 'refresh-references'];
-export const ASK_PERSON = 'peça à pessoa para responder o diálogo no Studio';
+export const ASK_PERSON = 'ask the person to answer the dialog in the Studio';
 
 const TRANSPORT = new Set(['BRIDGE_NOT_LISTENING', 'BRIDGE_TRANSPORT', 'BRIDGE_PROTOCOL', 'BRIDGE_NO_REPLY']);
 const UNTRUSTED = /trusted Hybrid controller/i;
 const HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/; // ScGuard.Host of the bridge
 const call = (command, args) => ({ tool: 'o11_studio', arguments: { command, ...(args ? { args } : {}) } });
-const CONNECT = { tool: 'ssam_connect', arguments: { lane: 'o11' }, why: 'conecte o Service Studio aberto nesta faixa' };
+const CONNECT = { tool: 'ssam_connect', arguments: { lane: 'o11' }, why: 'connect the Service Studio open on this lane' };
 const WAIT_NO_DIALOGS = { ...call('wait', { condition: 'no-dialogs' }), why: ASK_PERSON };
 const STATUS = why => ({ ...call('status'), why });
 const dismissCall = title => ({ ...call('dismiss-dialog', { title }),
-  why: 'fecha a janela como o X (Cancelar), só se a pessoa concordar; senão ' + ASK_PERSON });
+  why: 'closes the window like the X (Cancel), only if the person agrees; otherwise ' + ASK_PERSON });
 const mcp = (command, args) => 'o11_studio ' + JSON.stringify({ command, ...(args ? { args } : {}) });
 
 // ---- Arguments: one strict schema per command; unknown keys are refused before anything runs.
@@ -76,7 +77,10 @@ const SHAPES = {
   'dismiss-dialog': { title, type: name.optional() },
   login: { host, timeoutSeconds: int(1, 1800, 300) },
   // module: the consumer (the active module when absent); producers: reference names or producer keys (all when absent).
-  'refresh-references': { module: name.optional(), producers: z.array(name).min(1).max(64).optional(), timeoutSeconds: int(10, 1800, 600) },
+  // fix-ext-refs: add (the elements to add, by producer, as a job's reference op names them) and published (bring each named
+  // producer to its published signature) run the Studio's own Manage Dependencies (bridge capability refresh_references:add).
+  'refresh-references': { module: name.optional(), producers: z.array(name).min(1).max(64).optional(), timeoutSeconds: int(10, 1800, 600),
+    add: z.array(z.object({ producer: name, elements: z.array(name).max(200).default([]) }).strict()).min(1).max(64).optional(), published: z.boolean().optional() },
   // C22: the tab of a module, by name (module is the alias) and, when two tabs share it, by key.
   'close-module': { name, moduleKey: name.optional() },
 };
@@ -156,7 +160,7 @@ const correctedCall = (command, args) => {
   const fixed = correctedArgs(command, args);
   const guess = Object.values(fixed).some(v => typeof v === 'string' && /^<.*>$/.test(v));
   return { ...call(command, Object.keys(fixed).length ? fixed : undefined),
-    why: guess ? 'a mesma chamada com os argumentos que este comando aceita; troque cada <valor> pelo real' : 'a mesma chamada com os argumentos que este comando aceita' };
+    why: guess ? 'the same call with the arguments this command accepts; replace each <value> with the real one' : 'the same call with the arguments this command accepts' };
 };
 const badArgs = (command, error, args) => ({ ok: false, code: 'BAD_ARGS', command,
   error: error.issues.map(i => (i.path.length ? i.path.join('.') + ': ' : '') + i.message).join('; '), allowed: Object.keys(SHAPES[command]),
@@ -167,7 +171,7 @@ export function systemModuleRefusal(requested) {
   const module = systemModuleName(requested) ?? String(requested);
   return { ok: false, code: 'SYSTEM_MODULE_NOT_OPENABLE', name: requested, module, outcome: 'not-sent',
     error: module + ' is a system module: it is never opened in the Studio; its published OML is read without a tab. Nothing was opened.',
-    continuation: { tool: 'ssam_map', arguments: { lane: 'o11', target: module }, why: 'lê o OML publicado de ' + module + ' sem abrir aba, com o @key de cada elemento' } };
+    continuation: { tool: 'ssam_map', arguments: { lane: 'o11', target: module }, why: 'reads the published OML of ' + module + ' without opening a tab, with the @key of each element' } };
 }
 // The module a command would open, when it is a system one (open-module, snapshot, wait open, refresh-references).
 const systemOpen = (command, args) => {
@@ -256,24 +260,24 @@ function uiBusy(error, module) {
   return { ok: false, code: 'UI_BUSY', ...(module ? { module } : {}), method: error?.method ?? null, what: data.what ?? null,
     outcome: notSent ? 'not-sent' : 'unknown', ...(notSent ? { executed: false } : {}),
     error: 'The Service Studio UI thread is busy or blocked: ' + String(error?.message ?? '').replace(/^[^:]+:\s*/, ''),
-    continuation: STATUS('a interface do Studio não respondeu a tempo; leia o estado (uiResponsive) antes de qualquer nova escrita') };
+    continuation: STATUS('the Studio interface did not answer in time; read the state (uiResponsive) before any new write') };
 }
 function failure(error, originalCall) {
   if (TRANSPORT.has(error?.code)) return notConnected();
   if (UNTRUSTED.test(error?.message ?? ''))
-    return { ok: false, code: 'O11_NOT_AUTHORIZED', error: 'the bridge does not trust this controller key', continuation: { ...CONNECT, why: 'selecione o Studio de novo para renovar a chave da ponte' } };
+    return { ok: false, code: 'O11_NOT_AUTHORIZED', error: 'the bridge does not trust this controller key', continuation: { ...CONNECT, why: 'select the Studio again to renew the bridge key' } };
   if (error?.code === 'BRIDGE_STALLED' || error?.code === 'STUDIO_ERROR_DIALOG_OPEN') {
     const stalled = cleanStall(error.stall ?? error.reply?.data?.stall);
     const notSent = error.executed === false;
-    const next = notSent && originalCall ? { ...originalCall, why: 'repita a mesma chamada depois de fechar o relatório; nada foi enviado' }
-      : STATUS('reconcilie o estado da operação antes de qualquer nova escrita; nada foi repetido');
+    const next = notSent && originalCall ? { ...originalCall, why: 'repeat the same call after closing the report; nothing was sent' }
+      : STATUS('reconcile the state of the operation before any new write; nothing was repeated');
     const recovery = stallRecovery(stalled, next);
     return { ok: false, code: error.code, method: error.method, outcome: notSent ? 'not-sent' : 'unknown',
       ...(notSent ? { executed: false } : {}), stalled, recovery, continuation: recovery[0], error: error.message };
   }
   if (error?.code === 'BRIDGE_TIMEOUT')
     return { ok: false, code: 'BRIDGE_TIMEOUT', method: error.method, outcome: error.executed === false ? 'not-sent' : 'unknown',
-      continuation: STATUS('o Studio pode estar ocupado; leia o estado antes de repetir') };
+      continuation: STATUS('the Studio may be busy; read the state before repeating') };
   if (error?.code === 'UI_BUSY') return uiBusy(error);
   return { ok: false, ...(error?.code ? { code: error.code } : {}), ...(error?.method ? { method: error.method } : {}),
     ...(error?.executed === false ? { executed: false } : {}), error: translateDialogHint(error?.message ?? String(error)) };
@@ -281,7 +285,7 @@ function failure(error, originalCall) {
 // The default check of studio-connect.mjs speaks of a shell command; the refusal names the MCP call instead.
 const notSelected = error => ({ ok: false, code: 'O11_NOT_SELECTED',
   error: String(error?.message ?? error).split(/(?<=\.)\s+/).filter(s => !/ssam connect|connect again/i.test(s)).join(' ') || 'the selected Studio changed',
-  continuation: { ...CONNECT, why: 'a sessão do Studio selecionada mudou; conecte de novo' } });
+  continuation: { ...CONNECT, why: 'the selected Studio session changed; connect again' } });
 // The same refusals for the readers of a live O11 module (module-map.mjs captureO11Module).
 export { failure as studioFailure, notSelected as notSelectedRefusal };
 // A read used while waiting: transport loss and a refused key end the wait; anything else is "not yet".
@@ -314,7 +318,7 @@ const abortable = (promise, signal) => !signal ? promise : new Promise(resolve =
 });
 export const CANCELLED = Object.freeze({ code: 'CANCELLED', outcome: 'uncertain' });
 const cancelled = (extra = {}) => ({ ok: false, ...CANCELLED, error: 'The call was cancelled; it stopped waiting. Read the Studio state before repeating it.',
-  ...extra, continuation: STATUS('a chamada foi cancelada; veja o estado do Studio antes de repetir') });
+  ...extra, continuation: STATUS('the call was cancelled; see the Studio state before repeating') });
 const readTimeout = remaining => ({ timeoutMs: Math.max(1500, Math.min(remaining, 10000)) });
 const openingOf = modules => (modules ?? []).filter(m => m.serverSilentMode === true || m.hasOpenedActiveESpace === false).map(m => m.name ?? null);
 // A server operation (publish, upload) running for a module: list_open_modules/get_active_module serverOperation
@@ -352,6 +356,19 @@ export function allDialogs(active, listed) {
 // capability is read (bridge_manifest) only when a dialog that may be it was seen; an older bridge keeps the dialog for
 // the person, as before. A refresh that fails answers REFERENCES_REFRESH_FAILED with the module and the next call.
 export const DEPENDENCIES_CAPABILITY = 'dialogs:dependencies_auto';
+// fix-ext-refs: refresh_references with add/published runs the Studio's own Manage Dependencies (RefreshReferencesHandler.Manage).
+export const MANAGE_DEPENDENCIES_CAPABILITY = 'refresh_references:add';
+// servidor/fase4-26 (a7, E1): hosted, the customer's Service Studio runs the O11 bridge of the SSAM agent package, which does
+// not run the Studio's Manage Dependencies yet; reopening the Studio loads the same bridge, so the hosted refusal names the
+// agent package (nothing is sent), never the local shortcut.
+export const MANAGE_DEPENDENCIES_HOSTED_PENDING = 'MANAGE_DEPENDENCIES_HOSTED_PENDING';
+export function manageDependenciesHostedPending(module) {
+  return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: MANAGE_DEPENDENCIES_HOSTED_PENDING, module, executed: false, outcome: 'not-sent',
+    error: 'Hosted: the O11 bridge of the SSAM agent package does not run the Studio\'s own Manage Dependencies yet (capability '
+      + MANAGE_DEPENDENCIES_CAPABILITY + '); nothing was sent, added or refreshed. Reopening the Service Studio loads the same bridge; a new agent package brings it.',
+    continuation: { tool: 'ssam_doctor', arguments: { lane: 'o11' },
+      why: 'Shows the agent package and the O11 bridge of this account. Without add and published, refresh-references runs the Studio\'s own Refresh References (it adds no element).' } };
+}
 export const MODULE_KEY_CAPABILITY = 'merge_from_oml:module_key';
 const manifests = new WeakMap();
 // Whether the bridge offers a capability; a bridge that cannot answer bridge_manifest offers none. One read per client.
@@ -394,7 +411,7 @@ export async function refreshAllReferences(bridge, { module, key, environment, a
     return { ok: false, code: 'REFERENCES_REFRESH_FAILED', module: module ?? null, outcome: error?.executed === false ? 'not-sent' : 'uncertain', ...dialogs,
       error: 'The Studio showed the dependencies dialog for ' + (module ?? 'the module') + ' (answered: Cancel) and the Refresh References of its producers failed: '
         + translateDialogHint(String(error?.message ?? error).replace(/^\w+Exception:\s*/, '')),
-      continuation: { ...call('refresh-references', module ? { module } : undefined), why: 'o Refresh References do próprio Studio para os produtores do módulo; depois repita a chamada' } };
+      continuation: { ...call('refresh-references', module ? { module } : undefined), why: 'the Studio\'s own Refresh References for the producers of the module; then repeat the call' } };
   }
 }
 // The open tab of a module in ANY Studio window (list_open_modules), for a call whose module is not the selected tab: with
@@ -412,7 +429,7 @@ export async function moduleTab(bridge, module, { listed } = {}) {
   return {};
 }
 export const tabAmbiguous = (module, tabs, why) => ({ ok: false, code: 'MODULE_TAB_AMBIGUOUS', module, tabs, outcome: 'not-sent',
-  error: 'More than one Studio tab is named ' + module + '; nothing was done.', continuation: STATUS(why ?? 'mostra as abas abertas; feche a duplicada no Studio') });
+  error: 'More than one Studio tab is named ' + module + '; nothing was done.', continuation: STATUS(why ?? 'shows the open tabs; close the duplicate in the Studio') });
 // The dependencies dialog seen in a read: closed, then the module's references refreshed. module/key/environment name the
 // module of the call; without them, the dialog's own tab (its owner window) or the active one. null when nothing was answered.
 async function answerDependencies(bridge, options = {}) {
@@ -432,7 +449,7 @@ export async function refreshAfterDialog(bridge, closed, { module, key, environm
   }
   if (!target.key) return { ok: false, code: 'REFERENCES_REFRESH_FAILED', module: target.name, dependenciesDialog: { answered: closed.answered }, outcome: 'not-sent',
     error: 'The dependencies dialog was answered (Cancel), but its module is not open in any Studio tab; nothing was refreshed.',
-    continuation: STATUS('veja os módulos abertos; depois refresh-references {module}') };
+    continuation: STATUS('see the open modules; then refresh-references {module}') };
   return refreshAllReferences(bridge, { module: target.name, key: target.key, environment: target.environment, answered: closed.answered, signal });
 }
 export { answerDependencies as answerDependenciesDialog };
@@ -494,7 +511,7 @@ async function status(bridge, args, ctx) {
   for (const r of [list, active, alive]) if (r.status === 'rejected' && abortsWait(r.reason)) throw r.reason;
   const pid = ping.value.pid;
   if (Number.isInteger(bridge.target?.pid) && bridge.target.pid !== pid)
-    return { ok: false, code: 'O11_STUDIO_CHANGED', pid, selectedPid: bridge.target.pid, continuation: { ...CONNECT, why: 'outro Studio responde na porta da faixa; conecte de novo' } };
+    return { ok: false, code: 'O11_STUDIO_CHANGED', pid, selectedPid: bridge.target.pid, continuation: { ...CONNECT, why: 'another Studio answers on the port of the lane; connect again' } };
   const a = active.status === 'fulfilled' ? active.value : null;
   const listed = list.status === 'fulfilled' ? list.value : null;
   if (manifest.status === 'fulfilled' && bridge && typeof bridge === 'object' && typeof bridge.manifest !== 'function' && !manifests.has(bridge))
@@ -507,7 +524,7 @@ async function status(bridge, args, ctx) {
     const exclusive = ctx?.exclusive ?? (fn => fn());
     let ran = false;
     const outcome = await exclusive(async () => { ran = true; return answerDependencies(bridge); });
-    if (!ran) deferred = { pending: true, holder: outcome?.holder ?? null, why: 'uma escrita segura este Studio: ela responde o diálogo; ou repita o status quando ela terminar' };
+    if (!ran) deferred = { pending: true, holder: outcome?.holder ?? null, why: 'a write holds this Studio: it answers the dialog; or repeat the status when it ends' };
     else if ((answered = outcome)) {
       if (answered.ok === false) return answered;
       dialogs = await readDialogs(bridge);
@@ -542,21 +559,21 @@ async function wait(bridge, args, ctx) {
   if (outcome.cancelled) return cancelled({ condition: args.condition, waitedMs: outcome.waitedMs, ...(outcome.view ? { last: outcome.view } : {}) });
   return { ok: false, code: 'WAIT_TIMEOUT', condition: args.condition, waitedMs: outcome.waitedMs, last: outcome.view, ...dependenciesFields(dependencies),
     continuation: args.condition === 'no-dialogs' ? WAIT_NO_DIALOGS
-      : args.condition === 'signed-in' ? { ...call('wait', { condition: 'signed-in', host: args.host }), why: 'a pessoa ainda precisa concluir o login no Studio' }
-        : STATUS('o Studio continua ocupado; veja o estado') };
+      : args.condition === 'signed-in' ? { ...call('wait', { condition: 'signed-in', host: args.host }), why: 'the person still has to finish the sign-in in the Studio' }
+        : STATUS('the Studio is still busy; see the state') };
 }
 
 function openFailure(error, args) {
   const message = error?.message ?? '';
   if (!error?.reply || TRANSPORT.has(error?.code)) return failure(error, call('open-module', args));
-  const login = args.environment ? { ...call('login', { host: args.environment }), why: 'abre o login do próprio Studio; a pessoa entra lá (senha ou SSO)' }
-    : STATUS('veja environments e chame login com o host do ambiente');
+  const login = args.environment ? { ...call('login', { host: args.environment }), why: 'opens the Studio\'s own sign-in; the person signs in there (password or SSO)' }
+    : STATUS('see environments and call login with the host of the environment');
   if (/not logged in/i.test(message)) return { ok: false, code: 'STUDIO_NOT_SIGNED_IN', name: args.name, error: 'the Studio has no signed-in session for this environment', continuation: login };
   if (/no Studio window connected to the requested environment/i.test(message))
     return { ok: false, code: 'ENVIRONMENT_NOT_CONNECTED', name: args.name, environment: args.environment, error: 'no Studio window is connected to that environment', continuation: login };
   if (/did not become active/i.test(message))
     return { ok: false, code: 'OPEN_TIMEOUT', name: args.name, error: translateDialogHint(message.replace(/\s*\(check windows and ui_alive\)/, '')),
-      continuation: STATUS('veja diálogos e se a UI do Studio responde') };
+      continuation: STATUS('see the dialogs and whether the Studio UI answers') };
   return failure(error, call('open-module', args));
 }
 
@@ -648,13 +665,13 @@ async function resolveModuleName(bridge, args, ctx) {
     }
   }
   const refresh = { tool: 'o11_environment', arguments: { action: 'inventory', ...(inventory.host ? { host: inventory.host } : {}) },
-    why: 'se o módulo foi criado depois do inventário de ' + inventory.at + ', leia o inventário de novo' };
+    why: 'if the module was created after the inventory of ' + inventory.at + ', read the inventory again' };
   if (found.ambiguous) return { ok: false, code: 'MODULE_AMBIGUOUS', name: args.name, candidates: found.ambiguous,
     error: 'Several modules of the environment match ' + args.name + '; nothing was opened.',
-    continuation: { ...call('open-module', { name: found.ambiguous[0] }), why: 'abra um dos candidatos pelo nome exato' } };
+    continuation: { ...call('open-module', { name: found.ambiguous[0] }), why: 'open one of the candidates by its exact name' } };
   return { ok: false, code: 'MODULE_NOT_FOUND', name: args.name, suggestions: found.suggestions, inventoryAt: inventory.at, ...(inventory.host ? { host: inventory.host } : {}),
     error: 'No module named ' + args.name + ' in the environment inventory' + (inventory.host ? ' of ' + inventory.host : '') + '; nothing was opened.',
-    continuation: found.suggestions.length ? { ...call('open-module', { name: found.suggestions[0] }), why: 'o nome mais próximo do inventário; ou ' + refresh.why } : refresh };
+    continuation: found.suggestions.length ? { ...call('open-module', { name: found.suggestions[0] }), why: 'the closest name of the inventory; or ' + refresh.why } : refresh };
 }
 
 async function openModule(bridge, args, ctx) {
@@ -702,7 +719,7 @@ async function snapshot(bridge, args, ctx) {
     // A tab of the Studio's second window is never the active module: captured by its key (merge_from_oml:module_key).
     const found = await moduleTab(bridge, args.module);
     if (found.ambiguous) return tabAmbiguous(args.module, found.ambiguous);
-    if (!found.tab) return { ok: false, code: 'MODULE_NOT_ACTIVE', module: args.module, active: active.name, continuation: { ...call('open-module', { name: args.module }), why: 'selecione o módulo antes da captura' } };
+    if (!found.tab) return { ok: false, code: 'MODULE_NOT_ACTIVE', module: args.module, active: active.name, continuation: { ...call('open-module', { name: args.module }), why: 'select the module before the capture' } };
     active = { name: found.tab.name, key: found.tab.key, environment: found.tab.environment ?? null };
   }
   const file = args.path ?? path.join(o11LaneOf(ctx.lane, { root: ctx.root, env: ctx.env }).local, 'snapshots',
@@ -728,10 +745,10 @@ const elementOf = e => (e ? { ...(e.name ? { name: e.name } : {}), ...(e.key ? {
 export function publishFixContinuation(log, module) {
   const first = (log?.messages ?? []).find(m => m?.type === 'Error');
   const target = log?.module ?? module;
-  const where = first?.element?.name ? ' em ' + first.element.name : '';
-  const why = 'A publicação de ' + (target ?? 'o módulo') + ' falhou' + (log?.failedStage ? ' na etapa ' + log.failedStage : '')
+  const where = first?.element?.name ? ' in ' + first.element.name : '';
+  const why = 'The publication of ' + (target ?? 'the module') + ' failed' + (log?.failedStage ? ' at stage ' + log.failedStage : '')
     + (first ? ': ' + clip(first.text, 200) + (first.detail ? ' (' + clip(first.detail, 200) + ')' : '') : '')
-    + '. Corrija' + where + ' no módulo e publique de novo (a pessoa no Studio, ou o11_publish com as palavras do usuário).';
+    + '. Fix it' + where + ' in the module and publish again (the person in the Studio, or o11_publish with the user\'s words).';
   if (first?.element?.name && target) return { tool: 'ssam_map', arguments: { lane: 'o11', target, name: first.element.name }, why };
   return { ...call('publish-log', target ? { module: target } : undefined), why };
 }
@@ -783,7 +800,7 @@ export function lastPublishSummary(data) {
     .map(m => ({ stage: m.stage, text: clip(m.text, 300), ...(m.detail ? { detail: clip(m.detail, 300) } : {}), ...(m.element ? { element: elementOf(m.element) } : {}) }));
   return { found: true, status: data.status, ...(data.failedStage ? { failedStage: data.failedStage } : {}), at: data.endedAt ?? data.startedAt ?? null,
     triggeredBy: data.triggeredBy ?? null, errors: data.errors ?? 0, warnings: data.warnings ?? 0, ...(firstErrors.length ? { firstErrors } : {}),
-    next: { ...call('publish-log', data.module ? { module: data.module } : undefined), why: 'todas as mensagens da última publicação, com etapa e elemento' } };
+    next: { ...call('publish-log', data.module ? { module: data.module } : undefined), why: 'every message of the last publication, with stage and element' } };
 }
 
 async function publishLog(bridge, args) {
@@ -793,10 +810,10 @@ async function publishLog(bridge, args) {
     const message = error?.message ?? '';
     if (!TRANSPORT.has(error?.code) && OLD_BRIDGE.test(message))
       return { ok: false, code: 'BRIDGE_OUTDATED', error: 'this Service Studio bridge has no publish_log yet; the person still sees the publish messages in the Studio',
-        continuation: { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'mostra a versão da ponte O11; a ponte nova vale no próximo Studio aberto' } };
+        continuation: { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'shows the version of the O11 bridge; the new bridge applies to the next Studio opened' } };
     if (!TRANSPORT.has(error?.code) && NOT_OPEN.test(message))
       return { ok: false, code: 'MODULE_NOT_OPEN', module: args.module, error: translateDialogHint(message.replace(/^\w+Exception:\s*/, '')),
-        continuation: STATUS('veja os módulos abertos; o log é o da aba do módulo no Studio') };
+        continuation: STATUS('see the open modules; the log is the one of the module tab in the Studio') };
     throw error;
   }
   return publishLogView(data, args);
@@ -811,13 +828,13 @@ async function errorsTarget(bridge, module) {
   const tabs = (listed?.modules ?? []).filter(m => m && m.hasESpace !== false && typeof m.name === 'string' && m.name && typeof m.key === 'string' && m.key);
   const resolved = resolveOpenModule(module, { open: tabs, lane: 'o11' });
   if (resolved.ok !== true) return { refusal: { ...resolved, module,
-    continuation: { ...call('errors', { module: resolved.candidates?.[0] ?? module }), why: 'repita com o nome exato de um dos módulos abertos' } } };
+    continuation: { ...call('errors', { module: resolved.candidates?.[0] ?? module }), why: 'repeat with the exact name of one of the open modules' } } };
   const named = tabs.filter(m => m.name === resolved.module || m.key === resolved.module);
   if (resolved.via !== 'unresolved' && named.length === 1) return { tab: named[0] };
   if (systemModuleName(module)) return { refusal: systemModuleRefusal(module) };
   return { refusal: { ok: false, code: 'MODULE_NOT_OPEN', module, openModules: tabs.map(m => m.name), outcome: 'not-sent',
     error: module + ' is not open in the Studio; its errors are read from its tab. Nothing was opened.',
-    continuation: { ...call('open-module', { name: module }), why: 'abre o módulo no Studio; depois repita errors {module}' } } };
+    continuation: { ...call('open-module', { name: module }), why: 'opens the module in the Studio; then repeat errors {module}' } } };
 }
 async function errors(bridge, args) {
   let tab = null;
@@ -833,7 +850,7 @@ async function errors(bridge, args) {
   } catch (error) {
     if (tab && !TRANSPORT.has(error?.code) && NOT_TARGET.test(error?.message ?? ''))
       return { ok: false, code: 'MODULE_NOT_ACTIVE', module: tab.name, outcome: 'not-sent', error: 'This Studio bridge reads the errors of the selected tab only; nothing was read.',
-        continuation: { ...call('open-module', { name: tab.name }), why: 'seleciona a aba do módulo; depois repita errors {module}' } };
+        continuation: { ...call('open-module', { name: tab.name }), why: 'selects the tab of the module; then repeat errors {module}' } };
     throw error;
   }
   const lastPublish = last.value ? lastPublishSummary(last.value)
@@ -859,7 +876,7 @@ async function dismissDialog(bridge, args) {
   if (!matches.length)
     return { ok: false, code: 'DIALOG_NOT_FOUND', title: args.title,
       open: (listing.windows ?? []).filter(w => w.isVisible && (w.isModal || String(w.type).includes('DialogWindow'))).map(w => ({ title: w.title, type: w.type })),
-      continuation: STATUS('veja os diálogos pendentes e seus títulos') };
+      continuation: STATUS('see the pending dialogs and their titles') };
   if (!matches.some(w => w.isModal === true)) {
     const web=matches.some(w=>w.contentKind==='web'||String(w.type).includes('DialogWindow'));
     if(web) {
@@ -870,7 +887,7 @@ async function dismissDialog(bridge, args) {
   const data = await bridge.ok('close_dialog', { title: args.title, ...(args.type ? { type: args.type } : {}) });
   const closed = data?.closed ?? [];
   if (closed.some(c => String(c).startsWith('FAILED'))) return { ok: false, code: 'DIALOG_CLOSE_FAILED', closed, continuation: WAIT_NO_DIALOGS };
-  if (!closed.length) return { ok: false, code: 'DIALOG_NOT_FOUND', title: args.title, continuation: STATUS('o diálogo já não está aberto; veja o estado') };
+  if (!closed.length) return { ok: false, code: 'DIALOG_NOT_FOUND', title: args.title, continuation: STATUS('the dialog is no longer open; see the state') };
   return { ok: true, closed };
 }
 
@@ -881,7 +898,7 @@ async function login(bridge, args, ctx) {
   const opened = await bridge.ok('studio_login', { host: args.host, waitMs: Math.min(5000, timeoutMs) });
   if (opened?.signedIn === true) return { ok: true, host: args.host, signedIn: true, dialogOpened: opened.dialogOpened === true, waitedMs: ctx.now() - started };
   if (opened?.pending !== true && opened?.accepted === false)
-    return { ok: false, code: 'LOGIN_NOT_COMPLETED', host: args.host, continuation: { ...call('login', { host: args.host }), why: 'o login foi cancelado no Studio; repita só se a pessoa quiser' } };
+    return { ok: false, code: 'LOGIN_NOT_COMPLETED', host: args.host, continuation: { ...call('login', { host: args.host }), why: 'the sign-in was cancelled in the Studio; repeat only if the person wants to' } };
   let idle = 0; // two reads in a row with no pending sign-in and no session: the person closed it
   const outcome = await poll(async remaining => {
     const state = await CHECKS['signed-in'](bridge, args, remaining);
@@ -890,9 +907,9 @@ async function login(bridge, args, ctx) {
   }, Math.max(0, timeoutMs - (ctx.now() - started)), ctx);
   if (outcome.done) return { ok: true, ...outcome.view, waitedMs: ctx.now() - started };
   if (outcome.stop) return { ok: false, code: 'LOGIN_NOT_COMPLETED', host: args.host, last: outcome.view,
-    continuation: { ...call('login', { host: args.host }), why: 'o login foi fechado no Studio sem entrar; repita só se a pessoa quiser' } };
+    continuation: { ...call('login', { host: args.host }), why: 'the sign-in was closed in the Studio without signing in; repeat only if the person wants to' } };
   return { ok: false, code: 'WAIT_TIMEOUT', condition: 'signed-in', waitedMs: ctx.now() - started, last: outcome.view,
-    continuation: { ...call('wait', { condition: 'signed-in', host: args.host }), why: 'a pessoa ainda precisa concluir o login no Studio' } };
+    continuation: { ...call('wait', { condition: 'signed-in', host: args.host }), why: 'the person still has to finish the sign-in in the Studio' } };
 }
 
 // ---- refresh-references (C26): the Studio's own Refresh References on the open consumer, through the bridge verb
@@ -910,12 +927,21 @@ async function refreshReferences(bridge, args, ctx) {
     // A tab of the Studio's second window is never the active module: refreshed by its key (merge_from_oml:module_key).
     const found = await moduleTab(bridge, args.module);
     if (found.ambiguous) return tabAmbiguous(args.module, found.ambiguous);
-    if (!found.tab) return { ok: false, code: 'MODULE_NOT_ACTIVE', module: args.module, active: active.name, continuation: { ...call('open-module', { name: args.module }), why: 'selecione o módulo antes do refresh' } };
+    if (!found.tab) return { ok: false, code: 'MODULE_NOT_ACTIVE', module: args.module, active: active.name, continuation: { ...call('open-module', { name: args.module }), why: 'select the module before the refresh' } };
     active = { name: found.tab.name, key: found.tab.key, environment: found.tab.environment ?? null };
   }
+  // fix-ext-refs: add/published are the Studio's own Manage Dependencies; a bridge without it would run the plain Refresh
+  // References and add nothing, so the call is refused before anything is sent, with the exact continuation.
+  const manage = Array.isArray(args.add) || args.published === true;
+  if (manage && !(await bridgeOffers(bridge, MANAGE_DEPENDENCIES_CAPABILITY)))
+    return hostedContext() ? manageDependenciesHostedPending(active.name) : { ok: false, code: 'BRIDGE_OUTDATED', module: active.name, executed: false, outcome: 'not-sent',
+      error: 'The Service Studio runs a bridge without the Studio\'s own Manage Dependencies (capability ' + MANAGE_DEPENDENCIES_CAPABILITY + '); nothing was sent, added or refreshed.',
+      continuation: { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'Shows the O11 bridge version; the current bridge loads with the next Service Studio opened (the "Service Studio (SSAM)" shortcut). Then repeat this call.' } };
+  const producers = manage ? [...new Set([...(args.producers ?? []), ...(args.add ?? []).map(a => a.producer)])] : args.producers;
   let data, closed = null;
   const refresh = () => bridge.ok('refresh_references', { module_key: active.key, ...(active.environment ? { environment: active.environment } : {}),
-    ...(args.producers ? { producers: args.producers } : {}), timeout: args.timeoutSeconds }, { ...(ctx.signal ? { signal: ctx.signal } : {}) });
+    ...(producers?.length ? { producers } : {}), ...(manage && args.add ? { add: args.add.map(a => ({ producer: a.producer, elements: a.elements })) } : {}),
+    ...(manage && args.published ? { published: true } : {}), timeout: args.timeoutSeconds }, { ...(ctx.signal ? { signal: ctx.signal } : {}) });
   try {
     try { data = await refresh(); }
     catch (error) {
@@ -928,12 +954,23 @@ async function refreshReferences(bridge, args, ctx) {
     const message = error?.message ?? '';
     if (!TRANSPORT.has(error?.code) && OLD_REFRESH.test(message))
       return { ok: false, code: 'BRIDGE_OUTDATED', module: active.name, error: 'this Service Studio bridge has no refresh_references yet; nothing was refreshed',
-        continuation: { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'mostra a versão da ponte O11; a ponte nova vale no próximo Studio aberto (até lá, Refresh References no Manage Dependencies do Studio)' } };
+        continuation: { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'shows the version of the O11 bridge; the new bridge applies to the next Studio opened (until then, Refresh References in the Manage Dependencies of the Studio)' } };
     if (error?.reply && error?.code && error.code !== 'BRIDGE_ERROR' && error.code !== 'BRIDGE_REFUSED')
       return { ok: false, code: error.code, module: active.name, ...(error.executed === false ? { executed: false } : {}), error: translateDialogHint(message.replace(/^\w+Exception:\s*/, '')),
-        continuation: STATUS('veja o Studio; nada foi publicado') };
+        continuation: STATUS('see the Studio; nothing was published') };
     throw error;
   }
+  // fix-ext-refs: a Manage Dependencies the Studio refused committed nothing: one refusal with every problem and its fix.
+  if (manage && data?.committed === false)
+    return { ok: false, code: data?.code ?? 'REFERENCES_NOT_ADDED', module: data?.module ?? active.name, outcome: 'not-applied', command: data?.command ?? 'Manage Dependencies',
+      error: 'The Studio\'s Manage Dependencies added nothing; the module is unchanged' + (Array.isArray(data?.problems) && data.problems.length
+        ? ': ' + data.problems.map(p => p?.message + (p?.fix ? ' Fix: ' + p.fix : '')).join(' ') : data?.error ? ': ' + data.error : '.'),
+      ...(Array.isArray(data?.problems) ? { problems: data.problems } : {}), ...(data?.stage ? { stage: data.stage } : {}),
+      continuation: STATUS('the Studio is unchanged; follow the fix of each problem, then repeat this call') };
+  if (manage) return { ok: true, module: data?.module ?? active.name, command: data?.command ?? 'Manage Dependencies', committed: data?.committed === true, changed: data?.changed === true,
+    added: data?.added ?? [], ...(data?.alreadyReferenced?.length ? { alreadyReferenced: data.alreadyReferenced } : {}), references: data?.references ?? [],
+    refreshed: data?.refreshed ?? [], ...(Number.isInteger(data?.newErrors) ? { newErrors: data.newErrors } : {}), ...(data?.undo ? { undo: data.undo } : {}),
+    ...(closed ? { dependenciesDialog: { answered: closed.answered } } : {}) };
   return { ok: true, module: data?.module ?? active.name, changed: data?.changed === true, refreshed: data?.refreshed ?? [], ...(data?.upToDate?.length ? { upToDate: data.upToDate } : {}),
     ...(data?.missing?.length ? { missing: data.missing } : {}), ...(Number.isInteger(data?.newErrors) ? { newErrors: data.newErrors } : {}),
     ...(data?.undo ? { undo: data.undo } : {}), ...(closed ? { dependenciesDialog: { answered: closed.answered } } : {}) };
@@ -959,16 +996,16 @@ async function closeModule(bridge, args) {
     if (error?.code === MODULE_BUSY) {
       const busy = error.reply?.data?.busy ?? null;
       return { ok: false, code: MODULE_BUSY, module: args.name, busy, executed: false, outcome: 'not-sent', error: message.replace(/^close_module:\s*/, ''),
-        continuation: { ...call('wait', { condition: 'idle', timeoutSeconds: 120 }), why: 'a aba ainda termina trabalho do Studio (publicação, refresh); espere ficar ociosa e feche de novo com close-module' } };
+        continuation: { ...call('wait', { condition: 'idle', timeoutSeconds: 120 }), why: 'the tab is still finishing Studio work (publication, refresh); wait until it is idle and close it again with close-module' } };
     }
     if (error?.code === UI_BUSY) return uiBusy(error, args.name);
     if (CLOSE_GUARD.test(message))
       return { ok: false, code: 'MODULE_TAB_NOT_CLOSABLE', module: args.name, executed: false, outcome: 'not-sent',
         error: 'The tab of ' + args.name + ' has unsaved changes, is still opening or has a pending operation; nothing was closed.',
-        continuation: { tool: 'o11_publish', arguments: { module: args.name }, why: 'o publish salva o módulo (com as palavras do usuário); depois feche a aba. Um diálogo pendente a pessoa responde no Studio; ou espere a operação em andamento' } };
+        continuation: { tool: 'o11_publish', arguments: { module: args.name }, why: 'the publish saves the module (with the user\'s words); then close the tab. A pending dialog: the person answers it in the Studio; or wait for the running operation' } };
     if (/multiple matching tabs/i.test(message))
       return { ok: false, code: 'MODULE_TAB_AMBIGUOUS', module: args.name, executed: false, outcome: 'not-sent', error: 'More than one tab is named ' + args.name + '; nothing was closed.',
-        continuation: STATUS('mostra as abas abertas com a key de cada uma; passe moduleKey da aba a fechar') };
+        continuation: STATUS('shows the open tabs with the key of each; pass the moduleKey of the tab to close') };
     throw error;
   }
   return { ok: true, module: data?.name ?? args.name, closed: data?.closed !== false, ...(data?.alreadyClosed ? { alreadyClosed: true } : {}) };

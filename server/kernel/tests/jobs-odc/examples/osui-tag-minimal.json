@@ -1,5 +1,5 @@
 {
- "description": "Tag do OSUI: a instancia com o texto no placeholder Tag.",
+ "description": "Tag of OSUI: the instance with the text in the Tag placeholder.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

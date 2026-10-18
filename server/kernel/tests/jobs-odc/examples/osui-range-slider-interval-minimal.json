@@ -1,5 +1,5 @@
 {
- "description": "RangeSliderInterval do OSUI: minimo, maximo, os dois valores iniciais e o evento obrigatorio OnValueChange guardando o intervalo.",
+ "description": "RangeSliderInterval of OSUI: the minimum, the maximum, the two starting values and the required event OnValueChange keeping the interval.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

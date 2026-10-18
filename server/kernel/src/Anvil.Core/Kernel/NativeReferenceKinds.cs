@@ -27,7 +27,11 @@ public static class NativeReferenceKinds
         new Family("web-screen", "ReferenceWebScreen", "IWebScreenSignature", "IWebScreen"),
         new Family("mobile-screen", "NewRuntime.ReferenceWebScreen", "IMobileScreenSignature", "IScreenSignature", "IScreen", "IMobileScreen")
     });
-    public static Family? ForType(string type) => All.SingleOrDefault(f => f.Interface == type || f.Aliases.Contains(type));
+    // fix/system-reference: a type written without its Model API "I" ("ClientAction:ListAppendAll", the form of the incident
+    // of 15/10) is the family of the interface with it, as KindNames.Normalize reads every other target of a job.
+    public static Family? ForType(string type) => Exact(type)
+        ?? (type.Length > 0 && char.IsUpper(type[0]) && !(type.Length > 1 && type[0] == 'I' && char.IsUpper(type[1])) ? Exact("I" + type) : null);
+    private static Family? Exact(string type) => All.SingleOrDefault(f => f.Interface == type || f.Aliases.Contains(type));
     public static Family? ForTag(string tag) => All.SingleOrDefault(f => f.Tag == tag);
     public static Family ForKind(string kind) => All.SingleOrDefault(f => f.Kind == kind)
         ?? throw new ArgumentException("Unsupported producer element kind: " + kind);

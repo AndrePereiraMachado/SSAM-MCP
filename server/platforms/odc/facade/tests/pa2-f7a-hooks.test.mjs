@@ -3,6 +3,7 @@
 // 'ssam') they are listed only with SSAM_APP_HOOK_TOOLS=1; the app profile server (surface 'ssam_hybrid', the default)
 // always lists them. Real case: a Codex session called status and got "The trusted client hook did not authorize this
 // exact tool call". In-process servers, no host call.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { McpServer, InMemoryTransport } from '@modelcontextprotocol/server';

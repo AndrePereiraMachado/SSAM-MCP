@@ -51,7 +51,7 @@ const BIND_THEN = /^(refresh [A-Za-z][A-Za-z0-9_]*|message(=| )[\s\S]+|download)
 export const MAPPING_KEYS = Object.freeze(['screens', 'default', 'routes', 'shell', 'states', 'modals', 'data', 'vendor', 'events', 'ignore', 'names', 'version']);
 // The facade fills these; the model never writes them.
 export const FACADE_KEYS = Object.freeze(['capture', 'captureSha256']);
-export const WORDS_MARKER = '<palavras do usuário>'; // the marker of o11-cycle.mjs and next-steps.mjs
+export const WORDS_MARKER = "<the user's own words>"; // the marker of o11-cycle.mjs and next-steps.mjs
 // The sentence the delivery tools (o11_deliver, studio_deliver) carry about the op; catalog/tools.json routes its verb
 // "prototype" by it (selector documented).
 export const PROTOTYPE_DELIVER_TEXT = 'A prototype folder (HTML/CSS/JS/JSX) or its .zip becomes native screens in ONE call: job {ops:[{op:"prototype", data:{source:"<absolute folder or .zip>"}}]} '
@@ -982,11 +982,11 @@ export function receiptWithSeed(receipt, seed) {
 }
 
 // ---- the ready call (1.1), for the discover route, the guides and the CLI
-export function prototypeCall({ lane = 'o11', source = '<pasta do protótipo>', module = '<módulo aberto>', prefix = null, rehearsal = false } = {}) {
+export function prototypeCall({ lane = 'o11', source = '<prototype folder>', module = '<open module>', prefix = null, rehearsal = false } = {}) {
   const job = { ops: [{ op: 'prototype', data: { source } }] };
   if (lane === 'odc') {
-    const p = prefix ?? '<Prefixo>';
-    return { tool: 'studio_deliver', arguments: { feature: 'Protótipo ' + p, module, job, owners: [p], changes: ['Protótipo ' + p + ' importado como telas nativas'],
+    const p = prefix ?? '<Prefix>';
+    return { tool: 'studio_deliver', arguments: { feature: 'Prototype ' + p, module, job, owners: [p], changes: ['Prototype ' + p + ' imported as native screens'],
       ...(rehearsal ? { until: 'preview' } : { publish: true, authorize: WORDS_MARKER }) } };
   }
   return { tool: 'o11_deliver', arguments: { module, job, ...(rehearsal ? { until: 'apply' } : { publish: true, authorize: WORDS_MARKER }) } };
@@ -998,9 +998,9 @@ export function prototypeDeliveryDefaults(document, args = {}) {
   const prefixes = [...new Set(list.map(({ op }) => inferPrefix(op.data ?? {}).prefix).filter(Boolean))];
   if (!prefixes.length) return null;
   const name = prefixes.join(', ');
-  return { ...(typeof args.feature === 'string' && args.feature.trim() ? {} : { feature: 'Protótipo ' + name }),
+  return { ...(typeof args.feature === 'string' && args.feature.trim() ? {} : { feature: 'Prototype ' + name }),
     ...(Array.isArray(args.owners) && args.owners.length ? {} : { owners: prefixes }),
-    ...(Array.isArray(args.changes) && args.changes.length ? {} : { changes: prefixes.map(p => 'Protótipo ' + p + ' importado como telas nativas') }) };
+    ...(Array.isArray(args.changes) && args.changes.length ? {} : { changes: prefixes.map(p => 'Prototype ' + p + ' imported as native screens') }) };
 }
 
 // ---- CLI: ssam prototype <folder> --lane o11|odc --module <M> [--base <oml>] [--dry] [--prefix P] [--entry E] [--out <oml>]
@@ -1028,9 +1028,9 @@ export async function prototypeCli(argv, deps = {}) {
   catch (error) { return { ok: false, code: 'INPUT_INVALID', error: error.message }; }
   const data = { source: request.source, ...(request.entry ? { entry: request.entry } : {}), ...(request.prefix ? { prefix: request.prefix } : {}),
     ...(request.clock ? { clock: request.clock } : {}), ...(request.tz ? { tz: request.tz } : {}) };
-  const call = prototypeCall({ lane: request.lane, source: request.source, module: request.module ?? '<módulo aberto>', prefix: request.prefix ?? inferPrefix(data).prefix });
+  const call = prototypeCall({ lane: request.lane, source: request.source, module: request.module ?? '<open module>', prefix: request.prefix ?? inferPrefix(data).prefix });
   if (!request.dry) return { ok: false, code: 'DELIVERY_NEEDS_WORDS', lane: request.lane,
-    error: 'The CLI only rehearses (--dry with --base <oml>): the import into a Studio is ONE MCP call with the owner\'s words, which also publish and load the demo data.', continuation: { ...call, why: 'the one call of the import; authorize: as palavras do usuário no lugar do marcador' } };
+    error: 'The CLI only rehearses (--dry with --base <oml>): the import into a Studio is ONE MCP call with the owner\'s words, which also publish and load the demo data.', continuation: { ...call, why: 'the one call of the import; authorize: the user\'s words in place of the marker' } };
   if (!request.base) return { ok: false, code: 'INPUT_INVALID', error: '--dry needs --base <oml>: the local OML the rehearsal applies the import to.' };
   if (!isFile(request.base)) return { ok: false, code: 'FILE_NOT_FOUND', error: 'No base OML at ' + request.base };
   const run = deps.runJob ?? (await import('./job-runner.mjs')).runJob;

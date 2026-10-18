@@ -1,9 +1,9 @@
 {
- "description": "Refatoracao real: uma action nova substitui a antiga em TODOS os chamadores (op replace, que usa o mesmo ReplaceReferences do proprio Studio), e a antiga fica sem consumidores e pode ser apagada. Prova o ciclo criar -> repontar -> apagar sem quebrar a tela que chamava.",
+ "description": "Real refactoring: a new action replaces the old one in ALL callers (replace op, which uses the same ReplaceReferences as the Studio itself), and the old one is left without consumers and can be deleted. It proves the cycle create -> re-point -> delete without breaking the screen that called it.",
  "base": "job:screen-form-reactive",
  "expectValid": true,
  "ops": [
-  {"op": "usages", "target": "IServerAction:Contact_Save", "_why": "quem chama hoje: a screen action Save da tela"},
+  {"op": "usages", "target": "IServerAction:Contact_Save", "_why": "who calls it today: the screen action Save of the screen"},
 
   {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "Contact_Store", "as": "$new"},
   {"op": "set", "target": "$new", "prop": "Description", "value": "Substitui Contact_Save: mesma assinatura, gravacao com auditoria"},
@@ -20,10 +20,10 @@
 
   {"op": "replace", "from": "IServerAction:Contact_Save", "to": "$new"},
 
-  {"op": "usages", "target": "IServerAction:Contact_Save", "_why": "tem de ficar sem consumidores reais"},
-  {"op": "usages", "target": "$new", "_why": "os consumidores passaram para ca"},
+  {"op": "usages", "target": "IServerAction:Contact_Save", "_why": "it must be left without real consumers"},
+  {"op": "usages", "target": "$new", "_why": "the consumers moved over here"},
 
-  {"op": "delete", "target": "IServerAction:Contact_Save", "_why": "sem consumidores, o delete nao precisa de force"},
+  {"op": "delete", "target": "IServerAction:Contact_Save", "_why": "without consumers, the delete does not need force"},
   {"op": "find", "name": "Contact_Store"}
  ]
 }

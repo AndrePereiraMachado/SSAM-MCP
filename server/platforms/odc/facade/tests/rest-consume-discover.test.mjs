@@ -4,6 +4,7 @@
 // next.generator, no rest-consume op, the capability's text of 8ddf39da); approved, the packet delivers the generator op
 // in next.deliver with its card in next.generator, and integration.rest-consume leads with it. Needs the lane CLI (the
 // index reads `api --op` and the jobs); each state builds its own index (the states are part of its identity).
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

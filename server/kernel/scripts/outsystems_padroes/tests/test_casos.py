@@ -278,7 +278,7 @@ class RegrasDocTest(unittest.TestCase):
     def test_rules_table(self):
         rows = self.rows()
         self.assertEqual(sorted(rows), sorted(P.RULE_ORDER))
-        cls_text = {"automatica": "automática", "parcial": "parcial", "manual": "manual"}
+        cls_text = {"automatica": "automatic", "parcial": "partial", "manual": "manual"}
         for rule, cells in rows.items():
             _, statement, checking, stages, platforms = cells[:5]
             self.assertTrue(statement, rule)
@@ -286,7 +286,7 @@ class RegrasDocTest(unittest.TestCase):
             want_stages = [s for s in ("job", "truechange", "oml", "runtime") if rule in P.IMPLEMENTED[s]]
             got_stages = [s.strip() for s in stages.split(",") if s.strip() and s.strip() != "—"]
             self.assertEqual(got_stages, want_stages, rule)
-            want_plat = "O11 e ODC" if P.RULE_PLATFORMS[rule] == ("O11", "ODC") else "só O11"
+            want_plat = "O11 and ODC" if P.RULE_PLATFORMS[rule] == ("O11", "ODC") else "O11 only"
             self.assertEqual(platforms, want_plat, rule)
 
 

@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';
 import {nativeMobileBuildApproval,NATIVE_MOBILE_BUILD} from '../runtime/native-mobile-build-approval.mjs';
 import {mobileConfigurationHash,mobileConfigurationStateHash} from '../runtime/mobile-configuration-approval.mjs';

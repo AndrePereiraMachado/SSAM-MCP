@@ -1,5 +1,5 @@
 {
- "description": "ODC (cobertura C): o screen-form-reactive.json espelhado na faixa ODC sobre o modelo do data-full-model. Server action wrapper que chama a entity action CreateOrUpdate, tela com input parameter, aggregate filtrado pelo input, Form com Inputs ligados ao registro do aggregate e botao ligado a uma screen action que chama o wrapper.",
+ "description": "ODC (C coverage): the screen-form-reactive.json mirrored in the ODC lane over the model of data-full-model. Wrapper server action that calls the entity action CreateOrUpdate, screen with input parameter, aggregate filtered by the input, Form with Inputs bound to the record of the aggregate and a button linked to a screen action that calls the wrapper.",
  "base": "job:data-full-model",
  "expectValid": true,
  "expectedMessages": [],

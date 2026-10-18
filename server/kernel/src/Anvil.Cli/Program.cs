@@ -144,7 +144,7 @@ public static class Program
         var after = GC.GetTotalMemory(true) >> 20;
         var byName = names.GroupBy(n => n).OrderByDescending(g => g.Count()).ToDictionary(g => g.Key, g => g.Count());
         return new { loadedModules = retained, cachedModules = BaseModelCache.Held, byName, heapBeforeMB = before, heapAfterGcMB = after, workingSetMB = Environment.WorkingSet >> 20, served = _served,
-            verdict = retained > 1 ? "FUGA: modulos retidos pelo registo estatico do Studio (falta ESpace.Close)" : after > 512 ? "heap alto sem modulos retidos: lixo por recolher ou outra raiz" : "ok" };
+            verdict = retained > 1 ? "LEAK: modules retained by the static registry of the Studio (ESpace.Close missing)" : after > 512 ? "high heap without retained modules: garbage not collected yet or another root" : "ok" };
     }
 
     /// <summary>Um comando -> um objeto (null = comando desconhecido). O mesmo Dispatch serve o processo frio (Main) e o worker (Serve).</summary>
@@ -918,7 +918,7 @@ public static class Program
             return new { name = enumeration["Namespace"] + "." + enumeration["Name"], values = enumeration["Values"]!.DeepClone() };
         var hits = doc["Interfaces"]!.AsArray().Where(i => string.Equals(i!["Name"]!.GetValue<string>(), name, StringComparison.OrdinalIgnoreCase)
             || string.Equals(i!["Name"]!.GetValue<string>().Split('.').Last(), name, StringComparison.OrdinalIgnoreCase)).ToList();
-        if (hits.Count == 0) return new { notFound = name, hint = "use o nome curto (IForEachNode) ou completo; veja tambem 'find' num job" };
+        if (hits.Count == 0) return new { notFound = name, hint = "use the short name (IForEachNode) or the full one; see also 'find' in a job" };
         var creatables = doc["Creatables"]!.AsArray();
         return hits.Select(i =>
         {
@@ -1161,7 +1161,7 @@ public static class Program
     private static object FunctionsCmd(string[] args)
     {
         if (Opt(args, "--name") is { } name)
-            return FunctionCatalog.Get(name) is { } f ? f : new { notFound = name, closest = FunctionCatalog.Closest(name), hint = "veja docs/functions.md ou --find <parte do nome>" };
+            return FunctionCatalog.Get(name) is { } f ? f : new { notFound = name, closest = FunctionCatalog.Closest(name), hint = "see docs/functions.md or --find <part of the name>" };
         if (Opt(args, "--find") is { } find)
             return FunctionCatalog.Find(find).Select(x => new { x.Name, x.Signature, x.Group, x.Logic, x.ClientSide, x.ServerAggregates, x.Description }).ToList();
         var outPath = Opt(args, "--out");

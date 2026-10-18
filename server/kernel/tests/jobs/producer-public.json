@@ -1,5 +1,5 @@
 {
- "description": "Modulo produtor (service): entidade Product publica e server action Product_GetById publica, para ser referenciado por outro modulo",
+ "description": "Producer module (service): public entity Product and public server action Product_GetById, to be referenced by another module",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "ops": [

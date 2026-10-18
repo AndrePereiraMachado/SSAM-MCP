@@ -32,9 +32,14 @@ public static class DurableJson
         WriteBytes(path, Encoding.UTF8.GetBytes(envelope.ToJsonString()));
     }
 
+    /// <summary>Test processes only (kernel/tests/Shared/TestProfileIsolation.cs): told the full path of every file about to be
+    /// written, before its folder is created; it refuses a write under the user's profile by throwing. Null everywhere else.</summary>
+    internal static Action<string>? WritingForTests;
+
     public static void WriteBytes(string path, byte[] bytes)
     {
         path = Path.GetFullPath(path);
+        WritingForTests?.Invoke(path);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try

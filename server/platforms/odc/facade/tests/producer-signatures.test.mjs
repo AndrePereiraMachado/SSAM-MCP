@@ -2,6 +2,7 @@
 // kernel (ProducerLedger.cs, ProducerCache.cs), the publication record every SSAM publication leaves, what each o11_deliver
 // answer says it reused, the PRODUCER_CHANGED continuation and, F6, the producers section of the work packet. Temporary
 // folders only; no Studio, no CLI.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -120,12 +121,12 @@ test('each o11_deliver answer says what it reused and how each producer was obse
     { binding: 'VisitaCerta_IS', producer: 'VisitaCerta_IS', versionId: 6773, signature: 'reused', observed: 'ledger', observedAtUtc: '2026-10-13T00:13:34Z' },
     { binding: 'System', producer: '(System)', advertisedSignatureHash: 'h', signature: 'captured', observed: 'capture', observedAtUtc: '2026-10-13T00:14:00Z', owner: 'VisitaCerta_CS' },
     { producer: 'Lib', versionId: 3, signature: 'bound', observed: 'server' }]);
-  assert.match(value.producersNote, /1 de 3 reaproveitadas/);
-  assert.match(value.producersNote, /1 sem chamada ao servidor/);
+  assert.match(value.producersNote, /1 of 3 reused/);
+  assert.match(value.producersNote, /1 without a call to the server/);
   // A delivery says it too, with the server observation of the merge.
   const delivered = deliverOutcome({ envelope: { ok: true, data: { ...state, delivered: true, writeState: 'applied', validation: { newErrors: 0 },
     producerAttestationBeforeMerge: [{ path: 'C:\\w\\producers\\VisitaCerta_IS.avsig', by: 'server', attested: true }] } } }, { trackId: 't', work: 'C:\\w', job: 'C:\\j.json' });
-  assert.equal(delivered.result, 'entregue');
+  assert.equal(delivered.result, 'delivered');
   assert.equal(delivered.producers[0].beforeMerge, 'server');
   // Without producers nothing is added (the answers of before stay byte for byte).
   assert.equal(producerSignaturesOf({}).producers, undefined);
@@ -143,7 +144,8 @@ test('PRODUCER_CHANGED: nothing written, and the same delivery again (closing th
   assert.equal(value.continuation.tool, 'o11_deliver');
   assert.deepEqual(value.continuation.arguments, { module: 'VisitaCerta_CS', job: 'C:\\jobs\\j.json', captureProducers: ['VisitaCerta_IS'], expectedEnvironment: HOST,
     closePrevious: TASK, authorize: WORDS_MARKER });
-  assert.match(value.continuation.why, /captura a versão nova/);
+  assert.match(value.continuation.why, /captures the new version/);
+  assert.match(value.continuation.why, /nothing was merged/);
 });
 
 test('F6: the packet lists the cached signatures the intent needs, with the reference op, deterministically', t => {
@@ -325,7 +327,7 @@ test('o11_job: a round built on a reused signature says it is not valid for a di
   const saved = { ok: true, data: { accepted: true, isValid: true }, capturedProducers: [{ producer: 'VisitaCerta_IS', versionIdBefore: 6773, reused: true, observed: { by: 'ledger' }, mergeReady: false }] };
   const value = summarize({ lane: 'o11', job: 'j.json', out: 'o.oml', resultFile: 'r.json', saved });
   assert.deepEqual([value.capturedProducers[0].reused, value.capturedProducers[0].mergeReady], [true, false]);
-  assert.match(value.capturedProducersNote, /não vale para merge direto/);
+  assert.match(value.capturedProducersNote, /does not hold for a direct merge/);
   const fresh = summarize({ lane: 'o11', job: 'j.json', out: 'o.oml', resultFile: 'r.json', saved: { ...saved, capturedProducers: [{ producer: 'VisitaCerta_IS', versionIdBefore: 6773 }] } });
   assert.equal(fresh.capturedProducersNote, undefined);
 });

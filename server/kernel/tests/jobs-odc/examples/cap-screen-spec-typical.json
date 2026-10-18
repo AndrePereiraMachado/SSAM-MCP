@@ -1,5 +1,5 @@
 {
- "description": "Tres telas por arquetipo numa op screen: tabela com busca e filtro por categoria e botao Novo, detalhe com abas e formulario de edicao (cards fica de fora: falha no ODC).",
+ "description": "Three screens by archetype in one screen op: a table with a search, a category filter and a New button, a detail with tabs, and an edit form (cards is left out: it fails on ODC).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -12,7 +12,7 @@
     {"name": "Price", "type": "Currency"},
     {"name": "InStock", "type": "Boolean"},
     {"name": "CategoryId", "type": "Category Identifier"}]}]}},
-  {"op": "screen", "_why": "as telas de uma op nascem antes das navegacoes, em qualquer ordem", "data": {"screens": [
+  {"op": "screen", "_why": "the screens of one op are born before the navigations, in any order", "data": {"screens": [
    {"name": "ProductTable", "kind": "table", "title": "Products",
     "source": {"entity": "Product", "as": "GetProducts", "sort": [["Product.Title", "Ascending"]]},
     "search": {"field": "Title", "label": "Search products"},

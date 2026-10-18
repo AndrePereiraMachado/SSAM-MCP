@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {connectOdcWorkerBrowser} from '../debug-odc-worker-browser.mjs';
 const capability={url:'ws://127.0.0.1:45678/devtools/page/ABCDEF123',scope:'owned-browser-process',purpose:'preparation-only',expiresAt:new Date(Date.now()+60000).toISOString()};

@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {observeNativeBrowserRender,compareNativeRenderEvidence} from '../debug-native-browser-render-observation.mjs';
 const url='https://fixture.example/App/';

@@ -1,5 +1,6 @@
 // The original Portal Timer action, qualified against immutable public assets.
 // A wake schedules native background work. It carries no application-user identity.
+import { wordsGiven } from '../../facade/destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -125,8 +126,8 @@ export function createOdcTimerPortalAdapter({ broker, root, now = Date.now, veri
     },
     async run(plan, { operationId, context, authorizationWords, inputs = {}, signal } = {}) {
       const state = prepared.get(plan); if (!state) fail('unprepared');
-      if (!GUID.test(operationId ?? '') || context !== 'native-background' || typeof authorizationWords !== 'string' ||
-          !authorizationWords.trim() || authorizationWords.length > 8192 || !record(inputs) || Object.keys(inputs).length) fail('explicit_authorization_required');
+      if (!GUID.test(operationId ?? '') || context !== 'native-background' || !wordsGiven(authorizationWords) || // CX15 r7: one predicate
+          authorizationWords.length > 8192 || !record(inputs) || Object.keys(inputs).length) fail('explicit_authorization_required');
       if (!broker.authenticated || now()-Date.parse(plan.nativePreparation.preparedAt) > 300000) fail('preparation_expired');
       const bindingHash = hash('odc|' + plan.binding.runtimeUrl + '|' + plan.binding.moduleKey);
       const base = path.join(root,'.local','debugger'), dir = path.join(base,'native-background','odc',operationId);
@@ -149,7 +150,8 @@ export function createOdcTimerPortalAdapter({ broker, root, now = Date.now, veri
       try {
         write(lock,{operationId,state:'sending'},true); owns=true;
         // Record the user's exact authorization with the immutable intent before the business request.
-        write(path.join(dir,'authorization.json'),{operationId,context,words:authorizationWords,identity:state.identity,at:report.at},true);
+        // CX15 r5 (N-3): the sha256 of the words, never the words (the request below carries no words).
+        write(path.join(dir,'authorization.json'),{operationId,context,wordsSha256:hash(authorizationWords),identity:state.identity,at:report.at},true);
         write(file,report,true); reserved=true;
         const response = await broker.request(broker.origin+'/apps/screenservices/'+meta.action,{method:'POST',signal,
           headers:{Origin:broker.origin,Referer:broker.origin+'/apps/','outsystems-client-env':'browser','x-csrftoken':csrf},

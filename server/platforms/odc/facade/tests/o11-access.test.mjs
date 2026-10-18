@@ -1,5 +1,6 @@
 // o11_access on a real McpServer over InMemoryTransport, with a fake Anvil CLI. No Studio, no dotnet, no Python, no
 // socket (the bridge port of the connection record is only a number in the argv); every folder is temporary.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -156,7 +157,7 @@ test('apply executes exactly once whatever the words say', async t => {
   for (const [i, words] of all.entries()) {
     const result = await call({ action: 'apply', manifestPath: box.manifest, words });
     assert.equal(result.isError, undefined, words + ': ' + result.content[0].text);
-    assert.equal(result.content[0].text, 'entregue');
+    assert.equal(result.content[0].text, 'delivered');
     assert.equal(box.runAnvil.calls.length, i + 1, 'exactly one CLI run per call: ' + words);
     const argv = box.runAnvil.calls[i].args;
     assert.deepEqual(argv.slice(-2), ['--words', words], 'the words are the last token: ' + words);
@@ -226,13 +227,13 @@ test('a relative or missing manifestPath is refused before the CLI', async t => 
   assert.deepEqual(box.events, []);
 });
 
-test('all deliveries delivered: only "entregue"; the journal and the task keep the sha256 of the words, never the words', async t => {
+test('all deliveries delivered: only "delivered"; the journal and the task keep the sha256 of the words, never the words', async t => {
   const box = setup(t);
   const { call, close } = await serve(box.deps); t.after(close);
   const result = await call({ action: 'apply', manifestPath: box.manifest, words: WORDS });
   assert.equal(result.isError, undefined);
-  assert.equal(result.content[0].text, 'entregue');
-  assert.deepEqual(result.structuredContent, { ok: true, result: 'entregue' });
+  assert.equal(result.content[0].text, 'delivered');
+  assert.deepEqual(result.structuredContent, { ok: true, result: 'delivered' });
   const argv = box.runAnvil.calls[0].args;
   const operationId = argv[argv.indexOf('--operation-id') + 1];
   assert.match(operationId, /^[0-9a-f]{32}$/);
@@ -254,7 +255,7 @@ test('all deliveries delivered: only "entregue"; the journal and the task keep t
   // nothing left to deliver (the kernel answers "unchanged") is no error either
   const unchanged = setup(t, { apply: args => forCall(envelopes.applyUnchanged, args) });
   const second = await serve(unchanged.deps); t.after(second.close);
-  assert.equal((await second.call({ action: 'apply', manifestPath: unchanged.manifest, words: WORDS })).content[0].text, 'entregue');
+  assert.equal((await second.call({ action: 'apply', manifestPath: unchanged.manifest, words: WORDS })).content[0].text, 'delivered');
 });
 
 test('verifier errors come back, short, and nothing is reported about what was delivered beyond the module names', async t => {

@@ -76,19 +76,19 @@ export function logOf(messages, state = null) {
 // What to fix, from the first error (else the first warning of a failed operation): the element by key (studio_inspect),
 // by name (ssam_map) or, without an element or a module, the intent (ssam_discover). Never a write: the fix is a new
 // delivery and a new publication or deployment with the user's own words.
-export function fixContinuation({ module = null, messages = [], failed = true, retry = 'publique de novo' } = {}) {
+export function fixContinuation({ module = null, messages = [], failed = true, retry = 'publish again' } = {}) {
   const target = messages.find(m => m.type === 'error') ?? (failed ? messages.find(m => m.type === 'warning') : null);
   if (!target) return null;
   const where = target.stage && target.stage !== 'unknown' ? ' (' + target.stage + ')' : '';
-  const then = `corrija com studio_deliver (patch sobre o job da recusa, quando houver) e ${retry} com as palavras do usuário; nunca repita sem mudança`;
+  const then = `fix it with studio_deliver (a patch over the job of the refusal, when there is one) and ${retry} with the user's words; never repeat without a change`;
   const quote = '"' + clip(target.text, 240) + '"';
   const el = target.element;
   if (el?.key && module) return { tool: 'studio_inspect', arguments: { target: module, path: '@' + el.key, depth: 3 },
-    why: `falhou${where}: ${quote}. Leia ${el.name}${el.kind ? ' (' + el.kind + ')' : ''}, ${then}.` };
+    why: `failed${where}: ${quote}. Read ${el.name}${el.kind ? ' (' + el.kind + ')' : ''}, ${then}.` };
   if (el?.name && module) return { tool: 'ssam_map', arguments: { lane: 'odc', target: module, name: el.name },
-    why: `falhou${where}: ${quote}. Ache ${el.name} no mapa (a @key leva ao studio_inspect), ${then}.` };
-  return { tool: 'ssam_discover', arguments: { intent: 'corrigir erro de publicação ODC: ' + clip(target.text, 300), lane: 'odc' },
-    why: `falhou${where}: ${quote}${el?.name ? ' (cita ' + el.name + ')' : ''}. Descubra a operação que corrige, ${then}.` };
+    why: `failed${where}: ${quote}. Find ${el.name} in the map (the @key leads to studio_inspect), ${then}.` };
+  return { tool: 'ssam_discover', arguments: { intent: 'fix ODC publication error: ' + clip(target.text, 300), lane: 'odc' },
+    why: `failed${where}: ${quote}${el?.name ? ' (names ' + el.name + ')' : ''}. Discover the operation that fixes it, ${then}.` };
 }
 
 // An operationStatus answer (portal/runtime/access.mjs) -> + log for publish, build and deployment; a failed one also
@@ -99,7 +99,7 @@ export function withOperationLog(value, { module = null } = {}) {
   const log = logOf(portalMessages(value.messages), value.status ?? null);
   const out = { ...value, log };
   if (value.failed && !value.continuation) {
-    const fix = fixContinuation({ module, messages: log.messages, failed: true, retry: value.kind === 'deployment' ? 'implante de novo' : 'publique de novo' });
+    const fix = fixContinuation({ module, messages: log.messages, failed: true, retry: value.kind === 'deployment' ? 'deploy again' : 'publish again' });
     if (fix) out.continuation = fix;
   }
   return out;

@@ -57,7 +57,7 @@ public sealed class FamDepsDialogTests
         Assert.Equal(DialogPolicy.Recovery, recovery.Kind);
         Assert.False(recovery.Certain);
         Assert.Contains("Recover unsaved changes?", recovery.Question);
-        Assert.Contains("Open ou Discard", recovery.Question);
+        Assert.Contains("Open or Discard", recovery.Question);
 
         var question = OperationDialogPolicy.Decide(new("w", "MessageBox", "Save changes", ["Do you want to save?", "[Button] Yes", "[Button] No"], null, false));
         Assert.Equal(OperationDialogPolicy.Question, question.Kind);
@@ -66,7 +66,7 @@ public sealed class FamDepsDialogTests
 
         var signIn = OperationDialogPolicy.Decide(new("w", "DialogWindow", "Sign in", ["[Button] Viewbox"], "Sign in to personal-2qqw9srv. Password", true));
         Assert.Equal((OperationDialogPolicy.SignIn, false), (signIn.Kind, signIn.Certain));
-        Assert.Contains("nunca digita senha", signIn.Question);
+        Assert.Contains("never types a password", signIn.Question);
 
         var unreadable = OperationDialogPolicy.Decide(new("w", "DialogWindow", "Something", ["[Button] Viewbox"], null, true));
         Assert.Equal((OperationDialogPolicy.Unreadable, false), (unreadable.Kind, unreadable.Certain));
@@ -123,7 +123,7 @@ public sealed class FamDepsDialogTests
         var outcome = await OperationDialogLoop.Watch(merge.Task, surface, TimeSpan.FromSeconds(20), TimeSpan.FromMilliseconds(20), before: new HashSet<string>());
         Assert.Equal("blocked", outcome.State);
         Assert.Equal("Recover", outcome.Blocked!["title"]!.ToString());
-        Assert.Contains("Open ou Discard", outcome.Blocked["question"]!.ToString());
+        Assert.Contains("Open or Discard", outcome.Blocked["question"]!.ToString());
         Assert.Empty(surface.Closed);
         Assert.False(merge.Task.IsCompleted);
         Assert.True(outcome.ElapsedMs < 5000, "blockedBy in seconds, never at the end of the bound: " + outcome.ElapsedMs);
@@ -152,7 +152,7 @@ public sealed class FamDepsDialogTests
         surface.OnList = s => s.Open["crash"] = UnexpectedError();
         var outcome = await OperationDialogLoop.Watch(new TaskCompletionSource<string>().Task, surface, TimeSpan.FromSeconds(20), TimeSpan.FromMilliseconds(20), before: new HashSet<string>());
         Assert.Equal("blocked", outcome.State);
-        Assert.Contains("Feche-o no Studio", outcome.Blocked!["question"]!.ToString());
+        Assert.Contains("Close it in the Studio", outcome.Blocked!["question"]!.ToString());
     }
 
     [Fact]

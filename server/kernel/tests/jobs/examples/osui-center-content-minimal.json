@@ -1,5 +1,5 @@
 {
- "description": "CenterContent (OutSystemsUI, Utilities) minimo: instancia como o Studio cria ao arrastar o bloco.",
+ "description": "Minimal CenterContent (OutSystemsUI, Utilities): an instance as the Studio creates it when the block is dragged.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

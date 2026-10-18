@@ -1,5 +1,5 @@
 {
- "description": "ODC (cobertura T): SESSION VARIABLE nao existe no ODC. A API publica ainda a oferece - OutSystems.Model.Data.ISessionVariable e IESpace.CreateSessionVariable(bool isReadOnly, name, key), exatamente como no SS11 - mas o produto nao tem a funcionalidade e a fabrica recusa na hora: e o mesmo padrao do CreateBusinessProcess (API sim, produto nao). No SS11 a session variable e Traditional Web; o ODC nao tem Traditional Web. Quem procurar estado de sessao no ODC usa client variable (tests/jobs-odc/security-settings.json). Roda em OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane.",
+ "description": "ODC (T coverage): SESSION VARIABLE does not exist in ODC. The public API still offers it - OutSystems.Model.Data.ISessionVariable and IESpace.CreateSessionVariable(bool isReadOnly, name, key), exactly as in SS11 - but the product does not have the feature and the factory refuses on the spot: it is the same pattern as CreateBusinessProcess (API yes, product no). In SS11 the session variable is Traditional Web; ODC has no Traditional Web. Whoever looks for session state in ODC uses a client variable (tests/jobs-odc/security-settings.json). Runs in OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectError": [

@@ -1,5 +1,5 @@
 {
- "description": "APAGAR, sem force, elementos cujo unico consumidor e o que a plataforma gera junto com eles (cobertura testada, fase 2). Cada entidade, static entity, client entity, structure (tambem as de REST e SOAP) nasce com o registo anonimo `<X> Record`, e cada role com a excecao `Not <Role>`; o delete contava-os como consumidores e recusava um elemento recem-criado. Agora o tipo gerado so conta quando alguem fora do alvo o usa (a recusa entao nomeia quem o usa: tests/jobs-negative/delete-entity-list-type-in-use.json e delete-role-exception-in-use.json). O usages mostra o registo anonimo com derived true e real 0. Verify sem mensagens novas.",
+ "description": "DELETE, without force, elements whose only consumer is what the platform generates together with them (tested coverage, phase 2). Each entity, static entity, client entity, structure (also those of REST and SOAP) is born with the anonymous record `<X> Record`, and each role with the exception `Not <Role>`; the delete counted them as consumers and refused a freshly created element. Now the generated type only counts when someone outside the target uses it (the refusal then names who uses it: tests/jobs-negative/delete-entity-list-type-in-use.json and delete-role-exception-in-use.json). The usages shows the anonymous record with derived true and real 0. Verify with no new messages.",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -10,7 +10,7 @@
     "structures": [{"name": "DelGenSummary", "attributes": [{"name": "Title", "type": "Text"}]}]}},
   {"op": "create", "parent": "@espace", "type": "IClientEntity", "name": "DelGenLocal", "as": "$local"},
   {"op": "create", "parent": "@espace", "type": "IRole", "name": "DelGenRole", "as": "$role"},
-  {"op": "usages", "target": "$DelGenSummary", "_why": "count 1, real 0: o IAttribute do registo anonimo 'DelGenSummary Record', derived true"},
+  {"op": "usages", "target": "$DelGenSummary", "_why": "count 1, real 0: the IAttribute of the anonymous record 'DelGenSummary Record', derived true"},
   {"op": "usages", "target": "$role", "_why": "count 1, real 0: a IRoleException 'Not DelGenRole', derived true"},
 
   {"op": "create", "parent": "@espace", "type": "IRestClient", "name": "DelGenApi", "as": "$api"},
@@ -28,13 +28,13 @@
   {"op": "create", "parent": "$api", "type": "IRestStructure", "name": "DelGenRestSpare", "as": "$restSpare"},
   {"op": "create", "parent": "$api", "type": "IRestStaticEntity", "name": "DelGenRestStatic", "as": "$restStatic"},
 
-  {"op": "create", "parent": "@espace", "type": "ISOAPClient", "name": "DelGenSoap", "as": "$soap", "allowSoapWithoutImport": {"why": "lab: mede o delete das structures SOAP geradas; um cliente SOAP feito por verbos nunca e entregue (CompileCheck, COMPILE_SOAP_DEFINITION)"}},
+  {"op": "create", "parent": "@espace", "type": "ISOAPClient", "name": "DelGenSoap", "as": "$soap", "allowSoapWithoutImport": {"why": "lab: measures the delete of the generated SOAP structures; a SOAP client made by verbs is never delivered (CompileCheck, COMPILE_SOAP_DEFINITION)"}},
   {"op": "create", "parent": "$soap", "type": "ISOAPStructure", "name": "DelGenSoapStructure", "as": "$soapStructure"},
   {"op": "create", "parent": "$soap", "type": "ISOAPStructurePolymorphic", "name": "DelGenSoapPolymorphic", "as": "$soapPoly"},
   {"op": "create", "parent": "$soap", "type": "ISOAPStaticEntity", "name": "DelGenSoapStatic", "as": "$soapStatic"},
   {"op": "create", "parent": "$soap", "type": "ISOAPStaticEntityPolymorphic", "name": "DelGenSoapStaticPolymorphic", "as": "$soapStaticPoly"},
 
-  {"op": "delete", "target": "$DelGenEntity", "_why": "sem force: brokenConsumers 0"},
+  {"op": "delete", "target": "$DelGenEntity", "_why": "without force: brokenConsumers 0"},
   {"op": "delete", "target": "$DelGenStatus"},
   {"op": "delete", "target": "$DelGenSummary"},
   {"op": "delete", "target": "$local"},
@@ -45,7 +45,7 @@
   {"op": "delete", "target": "$soapPoly"},
   {"op": "delete", "target": "$soapStatic"},
   {"op": "delete", "target": "$soapStaticPoly"},
-  {"op": "find", "name": "Not DelGenRole", "_why": "lista vazia: a excecao saiu com o role"},
-  {"op": "find", "name": "DelGenEntity Record", "_why": "o registo anonimo fica orfao no modelo em memoria (como com force antes); o OML gravado ja nao o tem: um job sobre job:delete-generated-companions nao o encontra"}
+  {"op": "find", "name": "Not DelGenRole", "_why": "empty list: the exception left with the role"},
+  {"op": "find", "name": "DelGenEntity Record", "_why": "the anonymous record is left orphaned in the in-memory model (as with force before); the saved OML no longer has it: a job over job:delete-generated-companions does not find it"}
  ]
 }

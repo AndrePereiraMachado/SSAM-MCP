@@ -1,5 +1,5 @@
 {
- "description": "Table com ordenacao e link por linha: o OnSort guarda a coluna clicada, a coluna Nome tem um Link para o detalhe com o Id, e Preco formatado.",
+ "description": "A Table with sorting and a link per row: OnSort keeps the clicked column, the Name column has a Link to the detail with the Id, and a formatted Price.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -26,7 +26,7 @@
 
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "ITableRecords", "name": "ProductTable", "as": "$tbl"},
   {"op": "set", "target": "$tbl", "prop": "Source", "value": "GetProducts.List"},
-  {"op": "set", "target": "$tbl/OnSort", "prop": "Destination", "value": "IMobileScreen:PriceTable/SortChanged", "_why": "o OnSort da tabela tem o parametro ClickedColumn"},
+  {"op": "set", "target": "$tbl/OnSort", "prop": "Destination", "value": "IMobileScreen:PriceTable/SortChanged", "_why": "the OnSort of the table has the parameter ClickedColumn"},
   {"op": "set", "target": "$tbl/OnSort/Column", "prop": "Value", "value": "ClickedColumn", "_why": "o argumento Column do handler recebe o parametro ClickedColumn do evento"},
 
   {"op": "create", "parent": "$tbl/HeaderRow", "type": "IHeaderCell", "name": "NameHeader", "as": "$h1"},

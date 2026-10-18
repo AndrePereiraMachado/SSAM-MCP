@@ -1,5 +1,5 @@
 {
- "description": "Tickets: service actions para portais e integracoes (create, comment, change status, get)",
+ "description": "Tickets: service actions for portals and integrations (create, comment, change status, get)",
  "base": "job:tickets-07-read",
  "expectValid": true,
  "expectedMessages": [],

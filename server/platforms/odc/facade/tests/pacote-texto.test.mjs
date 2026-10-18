@@ -9,6 +9,7 @@
 //      table:true).
 // The classifier, the sections and the paging need nothing but this checkout; the packets over the real index need the
 // lane CLI, and the owner's captures (C:\t\vel\fixtures) are used when present.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';
@@ -18,10 +19,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyTextRoute } from '../text-routes.mjs';
 import { packetTextSection, textExamples, coveredBy, TEXT_PACKET_SCHEMA } from '../text-packet.mjs';
-import { workPacket, PACKET_ORDER, PACKET_BUDGET } from '../work-packet.mjs';
+import { workPacket as workPacketAtBudget, PACKET_ORDER, PACKET_BUDGET } from '../work-packet.mjs';
 import { environmentComponents, componentNeeds, asksEnvironment, signatureLine, fitComponents, cacheFile, COMPONENTS_SCHEMA } from '../environment-components.mjs';
 import { pagedShape, missingCall, opaqueColumns } from '../paged-answer.mjs';
 import { pageAnswer } from '../ssam.mjs';
+import { ANSWER_CEILING_BYTES, EXPANSION_DEFAULT_BYTES } from '../context-budget.mjs';
 import { createEvidenceReader } from '../ssam-evidence.mjs';
 import { laneSources } from '../discovery.mjs';
 import { snapshotSources } from './fixtures/discovery-results.mjs';
@@ -29,6 +31,9 @@ import { discoverAll } from '../tool-routing.mjs';
 import { DIGEST_EXTRACTOR, DIGEST_SECTIONS } from '../module-digest.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+// These established cases inspect content at the maximum explicit budget.
+// The default 8KB and executable section recovery are covered by context-budget-packet.
+const workPacket = (input, options = {}) => workPacketAtBudget(input, { budgetBytes: PACKET_BUDGET, ...options });
 const bytes = v => Buffer.byteLength(JSON.stringify(v), 'utf8');
 const temp = (t, prefix) => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix)); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; };
 const OWNER_TABLES = 'crie as tabelas propostas no módulo _CS';
@@ -68,6 +73,17 @@ test('the owner\'s words reach their text route: tables are entities without a s
   assert.equal(classifyTextRoute('inserir 5 registros de teste na entidade Cliente'), null);
 });
 
+// Review odc-defaults-4 (R4-2): the screen grammar of the packet says what an <input> or a block <event> without mandatory is
+// (optional, whatever the Studio gives a fresh one) and how a mandatory one is written.
+test('packet text, screens: an input or a block event without mandatory is optional, mandatory="True" makes it mandatory', () => {
+  for (const lane of ['odc', 'o11']) {
+    const s = packetTextSection({ lane, intent: 'criar a tela Pedidos com uma tabela dos pedidos do cliente', found: null, slice });
+    const grammar = s.value['ssam-html/1'].grammar;
+    assert.ok(grammar.some(g => g.includes('<input name type default/>') && /without mandatory is optional/.test(g) && g.includes('mandatory="True"')), lane);
+    assert.ok(grammar.some(g => g.includes('<event name/> in a block') && /without mandatory is optional/.test(g)), lane);
+  }
+});
+
 test('packet text, the owner\'s tables on the empty module: no read (and why), the exact call, the grammar, the proven example, rules one line each', () => {
   const s = packetTextSection({ lane: 'o11', intent: OWNER_TABLES, found: found({ entities: false, actions: false }), slice });
   const v = s.value;
@@ -102,7 +118,7 @@ test('packet text, the owner\'s actions: flow and data forms, exceptions before 
   for (const construct of ['JOIN Inner <A>~<B> ON', 'START <s>', 'in <Param>: <Type>', '[abort] [log]', 'ListAppendAll(List=<Dest>, SourceList=<Source> mapTo'])
     assert.ok(flow.grammar.some(g => g.includes(construct)), construct);
   assert.ok(!flow.grammar.some(g => g.includes('JOIN <Other> ON')));
-  assert.deepEqual(flow.example.exceptions, ['PedidoNaoEncontrado']);
+  assert.deepEqual(flow.example.exceptions, ['OrderNotFound']);
   assert.ok(flow.rules.some(r => /QUERY_IN_LOOP/.test(r)) && flow.rules.some(r => /T1\/T2/.test(r)) && flow.rules.some(r => /IUserException/.test(r)));
   // An edit of an action the intent names: the read of that action on the capture, the call with the textSha basedOn.
   const edit = packetTextSection({ lane: 'o11', intent: 'corrigir a action GetColaboradorAtual para devolver o colaborador ativo', found: found(), slice }).value;
@@ -112,8 +128,8 @@ test('packet text, the owner\'s actions: flow and data forms, exceptions before 
   // ODC: studio_deliver, the setting of the lane, no public server action in the example.
   const odc = packetTextSection({ lane: 'odc', intent: OWNER_ACTIONS, found: null, slice }).value;
   assert.equal(odc.call.tool, 'studio_deliver');
-  assert.match(odc['ssam-ddl/1'].example.text, /\nsetting LimitePedidos/);
-  assert.doesNotMatch(odc['ssam-flow/1'].example.text, /server action ObterPedidoResumo public/);
+  assert.match(odc['ssam-ddl/1'].example.text, /\nsetting OrderLimit/);
+  assert.doesNotMatch(odc['ssam-flow/1'].example.text, /server action GetOrderSummary public/);
   // No route, no section.
   assert.equal(packetTextSection({ lane: 'o11', intent: 'publicar o módulo', found: found(), slice }), null);
 });
@@ -168,20 +184,20 @@ test('the owner\'s two requests on FolhaPonto_CS: the first answer holds the rea
   // Two answers compared byte for byte: the index reads the committed results snapshot, not the stamped results a kernel
   // suite rewrites in this checkout meanwhile (fixtures/discovery-results.mjs).
   const sources = snapshotSources('o11');
-  const tables = await discoverAll({ lane: 'o11', intent: OWNER_TABLES, app: EMPTY, packet: true, sources });
+  const tables = await discoverAll({ lane: 'o11', intent: OWNER_TABLES, app: EMPTY, packet: true, budgetBytes: PACKET_BUDGET, sources });
   assert.equal(tables.text.id, 'data.ddl');
   assert.equal(tables.text['ssam-ddl/1'].read, null); assert.match(tables.text['ssam-ddl/1'].readWhy, /^FolhaPonto_CS has no entities/);
   assert.equal(tables.text.call.arguments.module, 'FolhaPonto_CS');
   assert.ok(tables.text['ssam-ddl/1'].grammar.length >= 6 && tables.text['ssam-ddl/1'].example.text.includes('create static entity'));
   assert.ok(tables.size.bytes <= PACKET_BUDGET && !tables.cuts.some(c => c.section === 'text'));
-  const actions = await discoverAll({ lane: 'o11', intent: OWNER_ACTIONS, app: WITH_TABLES, packet: true, sources });
+  const actions = await discoverAll({ lane: 'o11', intent: OWNER_ACTIONS, app: WITH_TABLES, packet: true, budgetBytes: PACKET_BUDGET, sources });
   assert.equal(actions.text.id, 'logic.flow'); assert.deepEqual(actions.text.forms, ['ssam-ddl/1', 'ssam-flow/1']);
   assert.equal(actions.text['ssam-flow/1'].read, null);
   assert.equal(actions.text['ssam-flow/1'].readToChange.arguments.expectedSourceSha256, actions.module.sourceSha256, 'the read is bound to the capture the packet read');
   assert.ok(actions.module.entities.some(e => e.startsWith('entity Colaborador')), 'the entities the texts reference');
   assert.ok(actions.size.bytes <= PACKET_BUDGET);
   assert.equal(actions.example.ops, undefined, 'no JSON job inline');
-  assert.equal(JSON.stringify(actions), JSON.stringify(await discoverAll({ lane: 'o11', intent: OWNER_ACTIONS, app: WITH_TABLES, packet: true, sources })), 'the same bytes');
+  assert.equal(JSON.stringify(actions), JSON.stringify(await discoverAll({ lane: 'o11', intent: OWNER_ACTIONS, app: WITH_TABLES, packet: true, budgetBytes: PACKET_BUDGET, sources })), 'the same bytes');
 });
 
 // ---- 2. what the environment offers
@@ -246,7 +262,7 @@ const o11Skip = !fs.existsSync(laneSources('o11').cli) && 'the o11 CLI is not bu
 test('ssam_discover: the packet carries the environment of the need; a direct question answers it after intent, within the budget', { skip: o11Skip, timeout: 900000 }, async t => {
   const root = temp(t, 'components-discover-');
   const components = input => environmentComponents(input, fakeSources(root, []));
-  const packet = await discoverAll({ lane: 'o11', intent: 'criar a action GerarEspelhoPDF que gera o espelho mensal em PDF', packet: true, components });
+  const packet = await discoverAll({ lane: 'o11', intent: 'criar a action GerarEspelhoPDF que gera o espelho mensal em PDF', packet: true, budgetBytes: PACKET_BUDGET, components });
   assert.equal(packet.environment.ok, true); assert.deepEqual(packet.environment.needs, ['pdf']);
   assert.equal(packet.environment.components[0].name, 'HtmlToPdfExt');
   assert.ok(packet.size.bytes <= PACKET_BUDGET && bytes(packet) === packet.size.bytes);
@@ -258,7 +274,7 @@ test('ssam_discover: the packet carries the environment of the need; a direct qu
   assert.ok(wireBytes(direct, { budgetBytes: 40960 }) <= 40960, String(bytes(direct)));
   if (direct.size?.bytes != null) assert.equal(direct.size.bytes, bytes(direct));
   // Without a need: no environment; the ODC lane: none.
-  assert.equal((await discoverAll({ lane: 'o11', intent: 'criar actions de cadastro', packet: true, components })).environment, null);
+  assert.equal((await discoverAll({ lane: 'o11', intent: 'criar actions de cadastro', packet: true, budgetBytes: PACKET_BUDGET, components })).environment, null);
 });
 
 // ---- 3. the pages of a paged answer
@@ -270,26 +286,40 @@ function producerListing(n = 452) {
   return { ok: true, lane: 'o11', verb: 'dependencies', line: 'dotnet anvil.dll dependencies producers', exitCode: 0, result: { ok: true, command: 'dependencies', elapsedMs: 961, data }, stderr: ['connected through the Studio', n + ' referenceable producers'] };
 }
 
-test('a paged listing comes back as a table of every row without its opaque columns, and ONE call returns those columns', t => {
-  const full = producerListing();
+test('a paged listing keeps every row inline and bounded evidence pages recover every omitted column exactly', t => {
+  // Preserve the original 452-row fixture: the new global ceiling requires exact
+  // evidence pagination for columns that previously fitted the 64KB response.
+  const rowCount = 452;
+  const full = producerListing(rowCount);
   assert.ok(bytes(full) > 80000);
   const root = temp(t, 'paged-');
   const paged = pageAnswer({ content: [{ type: 'text', text: JSON.stringify(full) }], structuredContent: full }, { root }).structuredContent;
-  assert.ok(bytes(paged) <= 40960, String(bytes(paged)));
+  assert.ok(bytes(paged) <= ANSWER_CEILING_BYTES, String(bytes(paged)));
   assert.equal(paged.ok, true); assert.deepEqual(paged.stderr, full.stderr);
   assert.deepEqual(paged.result, { ok: true, command: 'dependencies', elapsedMs: 961 }, 'the object around the rows, without them');
   const [table] = paged.paged.tables;
   assert.equal(table.at, '/result/data'); assert.deepEqual(table.columns, ['Name', 'Kind', 'IsSystem']); assert.deepEqual(table.omitted, ['Key', 'SignatureHash', 'ApplicationKey']);
-  assert.equal(table.rows.length, 452, 'every row inline'); assert.deepEqual(table.rows[0], ['Pdf_0', 'Extension', true]);
+  assert.equal(table.rows.length, rowCount, 'every row inline'); assert.deepEqual(table.rows[0], ['Pdf_0', 'Extension', true]);
   assert.equal(paged.paged.complete, false);
-  assert.deepEqual(paged.continuation.arguments, { file: paged.paged.file, pointer: '/result/data', table: true, fields: ['Name', 'Key', 'SignatureHash', 'ApplicationKey'], max: 452, budgetBytes: 65536 });
-  // The one call answers every row of those columns.
+  assert.deepEqual(paged.continuation.arguments, { file: paged.paged.file, pointer: '/result/data', table: true, fields: ['Name', 'Key', 'SignatureHash', 'ApplicationKey'], max: rowCount, budgetBytes: EXPANSION_DEFAULT_BYTES });
+  // The exact call starts pagination; each next offset advances without loss or duplication.
   const reader = createEvidenceReader({ roots: [path.join(root, '.local')] });
-  const rest = reader.read(paged.continuation.arguments);
-  assert.equal(rest.ok, true, JSON.stringify(rest).slice(0, 300));
-  assert.deepEqual(rest.columns, ['Name', 'Key', 'SignatureHash', 'ApplicationKey']); assert.equal(rest.rows.length, 452); assert.equal(rest.next, undefined);
-  assert.deepEqual(rest.rows[1], ['Module_1', full.result.data[1].Key, full.result.data[1].SignatureHash, full.result.data[1].ApplicationKey]);
-  assert.ok(bytes(rest) <= 65536);
+  const recovered = [], offsets = new Set();
+  let args = paged.continuation.arguments;
+  while (true) {
+    const offset = args.offset ?? 0;
+    assert.ok(!offsets.has(offset), 'no continuation loop'); offsets.add(offset);
+    const rest = reader.read(args);
+    assert.equal(rest.ok, true, JSON.stringify(rest).slice(0, 300));
+    assert.deepEqual(rest.columns, ['Name', 'Key', 'SignatureHash', 'ApplicationKey']);
+    assert.ok(bytes(rest) <= EXPANSION_DEFAULT_BYTES); recovered.push(...rest.rows);
+    if (rest.next === undefined) break;
+    assert.ok(rest.next > offset && rest.next === recovered.length);
+    args = { ...args, offset: rest.next };
+  }
+  assert.equal(recovered.length, rowCount);
+  assert.deepEqual(recovered, full.result.data.map(row => [row.Name, row.Key, row.SignatureHash, row.ApplicationKey]));
+  t.diagnostic(`all ${rowCount} rows and four columns recovered in ${offsets.size} bounded evidence pages`);
   // A filtered table names each row's index; a budget too small pages with next.
   const pdf = reader.read({ file: paged.paged.file, pointer: '/result/data', table: true, where: 'Name~Pdf', fields: ['Name', 'Kind'] });
   assert.deepEqual(pdf.columns, ['#', 'Name', 'Kind']); assert.equal(pdf.rows.length, 65); assert.deepEqual(pdf.rows[1], ['7', 'Pdf_7', 'eSpace']);
@@ -297,13 +327,19 @@ test('a paged listing comes back as a table of every row without its opaque colu
   assert.ok(small.rows.length > 0 && small.next === small.rows.length && bytes(small) <= 2000);
 });
 
-test('paged parts: what fits whole is inline, every table is said in the outline, nothing missing means no continuation', () => {
+test('paged parts: what fits is inline and the shortened note has an exact executable continuation', t => {
   const rows = Array.from({ length: 30 }, (_, i) => ({ id: 'W' + i, detail: 'detail ' + i + ' ' + 'd'.repeat(60) }));
   const full = { ok: true, warnings: rows, prototype: { score: 0.97, states: Array.from({ length: 120 }, (_, i) => ({ state: "s" + i, score: 0.9 })) }, note: 'n'.repeat(3000) };
-  const shape = pagedShape(full, { roomBytes: 39000 });
+  const shape = pagedShape(full, { roomBytes: EXPANSION_DEFAULT_BYTES });
   assert.deepEqual(shape.tables.map(t => t.at), ['/prototype/states', '/warnings'], 'the largest first');
   assert.deepEqual(shape.top.prototype, { score: 0.97 }, 'the part around a table, inline');
   assert.equal(shape.top.note.length, 501);
-  assert.deepEqual(shape.missing, []); assert.equal(missingCall('C:\\a.json', shape.missing), null);
+  assert.deepEqual(shape.missing, [{ at: '/note' }], 'the shortened string remains explicitly recoverable');
+  const root = temp(t, 'paged-parts-'), file = path.join(root, 'note.json');
+  fs.writeFileSync(file, JSON.stringify(full));
+  const recovery = missingCall(file, shape.missing);
+  assert.equal(recovery.tool, 'ssam_evidence'); assert.equal(recovery.arguments.pointer, '/note');
+  const rest = createEvidenceReader({ roots: [root] }).read(recovery.arguments);
+  assert.equal(rest.value, full.note); assert.ok(bytes(rest) <= EXPANSION_DEFAULT_BYTES);
   assert.deepEqual(opaqueColumns([{ a: 'uXCIR2Atc0+es3zYuZSnNw', b: 'Name One' }], ['a', 'b']), ['a']);
 });

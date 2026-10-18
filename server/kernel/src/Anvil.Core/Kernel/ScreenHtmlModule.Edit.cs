@@ -7,7 +7,8 @@ namespace Anvil.Reading;
 
 // C2 of the plan "Texto do SSAM" (ScreenHtmlEdit): the edit of one reading, planned over this module and applied through an
 // IScreenHtmlWriter. The plan is the difference element by element (k) between the reading's canonical form and the edited
-// text's; nothing outside the elements the edit changed is written.
+// text's; nothing outside the elements the edit changed is written, but the markers of the engine on a screen of the op (CX17
+// review 3, M6: the gap marker follows the parent's space, decided again on every link, button and form of the page).
 public sealed partial class ScreenHtmlModule<T>
 {
     // The same module after a change confined to the root of `rootKey`: only that root's subtree is walked again.
@@ -19,7 +20,10 @@ public sealed partial class ScreenHtmlModule<T>
 
     // The plan of an edit of `reading` (read from this module): merged, decoded and checked. Refused when it has problems;
     // otherwise Apply writes it and Verify compares what the module reads back with the edited text.
-    public EditPlan Edit(ScreenHtmlDocument reading, IReadOnlyList<string> edits, string pointer = "/edit") => new(this, reading, edits, pointer);
+    // theme: the theme the page shows (CX17 review 3, M6/M7), which lets the plan decide the markers of the engine again on a
+    // screen of the op; null: no marker is decided (as before).
+    public EditPlan Edit(ScreenHtmlDocument reading, IReadOnlyList<string> edits, string pointer = "/edit", Anvil.Core.ScreenVisual.PageTheme? theme = null)
+        => new(this, reading, edits, pointer, theme: theme);
 
     // What uses the element at `index` (or anything under it) from outside the removed set `gone`: the paths, for
     // HTML_DELETE_IN_USE (and the battery, which removes only what nothing uses).
@@ -105,6 +109,9 @@ public sealed partial class ScreenHtmlModule<T>
         private readonly string pointer;
         public readonly ScreenHtmlEditResult Result = new();
         public bool Refused => Result.Problems.Count > 0;
+        /// <summary>The page as the plan writes it carries a marker of the engine (CX17 review 4, N2: every edit of such a page puts the
+        /// native layout block in the theme the page shows now, whoever wrote the markers; not only a marker the plan adds).</summary>
+        public bool CarriesMarkers { get; private set; }
         // The merged text: the reading with every edit in place of the element it names.
         private ScreenHtml.Node merged = new();
         private readonly HashSet<ScreenHtml.Node> editedNodes = new(ReferenceEqualityComparer.Instance);
@@ -117,11 +124,15 @@ public sealed partial class ScreenHtmlModule<T>
         private Dictionary<string, (string Parent, string Segment)> modelParents = [], editedParents = [];
         private readonly HashSet<string> recreated = new(StringComparer.Ordinal), deleted = new(StringComparer.Ordinal), moved = new(StringComparer.Ordinal);
         private readonly bool patches;
+        private readonly Anvil.Core.ScreenVisual.PageTheme? theme;
         private readonly Stopwatch clock = Stopwatch.StartNew();
+        // The defaults of the page edited: those of the UI flow it is in (what a fresh element is born with there).
+        private ScreenDefaults? defaults;
+        private ScreenDefaults Defaults => defaults ??= m.DefaultsOfRoot(state.Root);
 
-        internal EditPlan(ScreenHtmlModule<T> m, ScreenHtmlDocument reading, IReadOnlyList<string> edits, string pointer, bool patches = true)
+        internal EditPlan(ScreenHtmlModule<T> m, ScreenHtmlDocument reading, IReadOnlyList<string> edits, string pointer, bool patches = true, Anvil.Core.ScreenVisual.PageTheme? theme = null)
         {
-            this.m = m; this.reading = reading; this.edits = edits; this.pointer = pointer; this.patches = patches;
+            this.m = m; this.reading = reading; this.edits = edits; this.pointer = pointer; this.patches = patches; this.theme = theme;
             state = reading.State as ReadingState ?? throw new InvalidOperationException("ssam-html edit: the reading has no state of this module");
             Result.Root = reading.Root; Result.RootKey = reading.RootKey; Result.RootKind = reading.RootKind; Result.BasedOnHtml = reading.HtmlSha256;
             foreach (var (k, objectKey) in reading.Keys) keys[k] = objectKey;
@@ -130,12 +141,20 @@ public sealed partial class ScreenHtmlModule<T>
             model = reading.Canon;
             if (reading.RootKind is "WebScreen" or "WebBlock") { Problem("HTML_TRADITIONAL", null, null, reading.Root + " is a Traditional Web " + reading.RootKind + ": its widgets have no ssam-html/1 form before the D2 stage (they read as os-opaque)", "use the native verbs (ui.traditional-widget) for it"); return; }
             if (reading.Problems.Count > 0) { Problem(ScreenHtmlEdit.Invalid, null, null, "the reading of " + reading.Root + " has problems of its own: " + string.Join("; ", reading.Problems.Take(5)), "edit another screen; this one is read only"); return; }
+            // Without the installed Studio's defaults a property the text leaves out has no value to take (a Visible would be
+            // written empty): refused with the reason, before anything is planned.
+            if (Defaults.Note.Length > 0) { Problem(ScreenHtmlEdit.DefaultsMissing, null, null, "the installed Studio's defaults could not be measured in " + m.ModuleName + ": " + Defaults.Note, "an ssam-html edit needs them; read the module where the Studio creates pages (a UI module), or fix what the reason names"); return; }
             Merge();
             if (Refused) { Result.PlanMs = clock.Elapsed.TotalMilliseconds; return; }
             Normalize();
             if (Refused) { Result.PlanMs = clock.Elapsed.TotalMilliseconds; return; }
+            // CX17 review 3, M6: the markers of the engine decided again on the merged page (a screen of the op only), written in
+            // the text the plan decodes and writes, then taken out again: the checks and the patches read the author's text.
+            engineMarks = DecideMarkers();
+            EngineText(true);
             Decode(state.Shapes);
             Result.EditedHtml = ScreenHtmlText.Write(merged);
+            EngineText(false);
             Check();
             Result.PlanMs = clock.Elapsed.TotalMilliseconds;
         }
@@ -163,6 +182,8 @@ public sealed partial class ScreenHtmlModule<T>
         private readonly Dictionary<JsonObject, string> corrections = new(ReferenceEqualityComparer.Instance);
         private readonly List<ScreenHtml.Node> scriptElements = [];
         private readonly List<(ScreenHtml.Node Node, string Attribute, string? Restore)> scriptAttributes = [];
+        // A marker of the engine an edit wrote (CX17 review 2, M4): removed, or put back to the reading's value.
+        private readonly List<(ScreenHtml.Node Node, string Attribute, string? Restore)> markerAttributes = [];
         private readonly List<(ScreenHtml.Node Node, string Attribute, string Source, string? Alias)> iterations = [];
         // os-Visible written in another case: the element, the attribute as written and its condition (null: True, removed only).
         private readonly List<(ScreenHtml.Node Node, string Attribute, string? Condition)> visibleVariants = [];
@@ -331,6 +352,108 @@ public sealed partial class ScreenHtmlModule<T>
             Result.Normalized.Add(new JsonObject { ["code"] = ScreenHtmlNative.SvgMask, ["element"] = "style", ["note"] = outcome.Css.Count + " mask rule(s) in the page's style sheet" + (IconsConverted ? "; its svg and span selectors also match the icon spans (:is(svg, :where(.ssam-icon)), span:not(:where(.ssam-icon)))" : "") });
         }
 
+        // ---- the markers of the engine, decided again (CX17 review 3, M6) -----------------------------------------------
+        /// <summary>On a screen of the op (its reading carries a marker of the engine; a screen made in the Studio carries none
+        /// and nothing is marked there, review 1, A1), F3 decided again on every link, button and form of the merged page, by
+        /// the one reading of the parent's space (ScreenVisual.SpacingReader over OutSystems UI, the themes the page shows and
+        /// the page's style sheet as edited): the gap marker written or removed where the decision is not the text's, a gutter
+        /// note for each element the edit wrote or whose marker changes, and HTML_MARKER_DECIDED for each element with k whose
+        /// marker is not the one of its text or of its reading. Answers the elements whose attributes it changed, with the
+        /// author's attributes to put back once the plan is decoded.</summary>
+        private List<(ScreenHtml.Node Node, List<KeyValuePair<string, string>> Author, List<KeyValuePair<string, string>> Engine)> engineMarks = [];
+        // The merged text with the markers the engine decided (what is decoded and written), or with the author's (what is checked
+        // and patched).
+        private void EngineText(bool engine)
+        {
+            foreach (var (node, author, decided) in engineMarks) { node.Attributes.Clear(); node.Attributes.AddRange(engine ? decided : author); }
+        }
+
+        private List<(ScreenHtml.Node Node, List<KeyValuePair<string, string>> Author, List<KeyValuePair<string, string>> Engine)> DecideMarkers()
+        {
+            var changed = new List<(ScreenHtml.Node, List<KeyValuePair<string, string>>, List<KeyValuePair<string, string>>)>();
+            if (theme == null || !OpRoot()) return changed;
+            var top = merged.Children.First(c => !c.IsText);
+            var style = top.Children.FirstOrDefault(c => c.Tag == "style");
+            var sheet = style == null ? null : string.Concat(style.Children.Select(c => c.Text));
+            var map = new Dictionary<ScreenHtml.Node, Anvil.Core.DomNode>(ReferenceEqualityComparer.Instance);
+            Anvil.Core.ScreenVisual.AuthorDom(top, map);
+            // One spacing reader per theme the page is shown with (a block: each theme of the screens that show it, review 4, N1).
+            var readers = new Dictionary<Anvil.Core.ScreenVisual.PageTheme, Anvil.Core.ScreenVisual.SpacingReader>(ReferenceEqualityComparer.Instance);
+            var spacing = new Dictionary<(Anvil.Core.ScreenVisual.PageTheme, Anvil.Core.DomNode), Anvil.Core.ScreenVisual.Spacing>();
+            Anvil.Core.ScreenVisual.Spacing SpacingOf(Anvil.Core.ScreenVisual.PageTheme shown, Anvil.Core.DomNode parent)
+            {
+                if (spacing.TryGetValue((shown, parent), out var s)) return s;
+                if (!readers.TryGetValue(shown, out var reader)) readers[shown] = reader = Anvil.Core.ScreenVisual.PageSpacing(shown, [sheet]);
+                return spacing[(shown, parent)] = reader.Of(parent);
+            }
+            var notes = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+            JsonObject? decided = null;
+            foreach (var (node, element) in map) {
+                var k = node.Get("k");
+                // Review 4, N2: where no theme the page shows carries the block (a theme of another module, set after the marks),
+                // the page and rows markers have no effect: decided again (removed), said.
+                var dropped = theme.Reachable ? [] : new[] { Anvil.Core.ScreenVisual.PageMarker, Anvil.Core.ScreenVisual.RowsMarker }.Where(m => Anvil.Core.ScreenVisual.CarriesMarker(node, m)).ToList();
+                foreach (var marker in dropped) {
+                    if (decided == null) { decided = Anvil.Core.ScreenVisual.MarkerDecidedNote(); Result.Normalized.Add(decided); }
+                    Anvil.Core.ScreenVisual.AddDecided(decided, k != null ? "k=\"" + k + "\"" : "a new <" + node.Tag + "> at line " + node.Line.ToString(CultureInfo.InvariantCulture), marker, false,
+                        $"the theme the page shows ({theme.Name}) carries no native layout block: {theme.Why}");
+                }
+                var kind = node.Tag switch { "a" => "Link", "button" => "Button", "form" => "Form", _ => null };
+                if (kind == null) {
+                    if (dropped.Count > 0) changed.Add((node, node.Attributes.ToList(), node.Attributes.Where(a => !dropped.Contains(Anvil.Core.ScreenVisual.MarkerOf(a.Key) ?? "")).ToList()));
+                    continue;
+                }
+                var gap = Anvil.Core.ScreenVisual.GapDecision(element, SpacingOf, theme);
+                if (gap?.Diverge is { } pages)
+                    Problem(Anvil.Core.ScreenVisual.BlockPagesDiverge, AtNode(node), k, Anvil.Core.ScreenVisual.DivergeMessage(kind, reading.Root, pages), Anvil.Core.ScreenVisual.DivergeFix);
+                var marked = gap is { Marked: true };
+                var text = Anvil.Core.ScreenVisual.CarriesMarker(node, Anvil.Core.ScreenVisual.GapMarker);
+                var read = k != null && ReadNode(k) is { } was && Anvil.Core.ScreenVisual.CarriesMarker(was, Anvil.Core.ScreenVisual.GapMarker);
+                if (marked != text || dropped.Count > 0) {
+                    var decidedAttributes = node.Attributes.Where(a => Anvil.Core.ScreenVisual.MarkerOf(a.Key) is not { } m || (m == Anvil.Core.ScreenVisual.GapMarker ? marked == text : !dropped.Contains(m))).ToList();
+                    if (marked && !text) decidedAttributes.Add(new(Anvil.Core.ScreenVisual.GapMarker, "1"));
+                    changed.Add((node, node.Attributes.ToList(), decidedAttributes));
+                }
+                // The note of the gutter: for what the edit wrote, and for an element whose marker changes.
+                if (gap is { } d && (editedNodes.Contains(node) || marked != read)) {
+                    var code = Anvil.Core.ScreenVisual.GutterCode(d);
+                    if (!notes.TryGetValue(code + "|" + kind, out var note)) {
+                        notes[code + "|" + kind] = note = new JsonObject { ["code"] = code, ["element"] = kind, ["count"] = 0, ["lines"] = new JsonArray(),
+                            ["note"] = Anvil.Core.ScreenVisual.GutterNote(code, kind, theme.Name) };
+                        // Review 4, N1: a block shown on pages without the native layout block (or on none yet) says them.
+                        if (d.Marked) Anvil.Core.ScreenVisual.Caveat(note, theme);
+                        Result.Normalized.Add(note);
+                    }
+                    note["count"] = note["count"]!.GetValue<int>() + 1;
+                    if (note["lines"]!.AsArray().Count < 10) note["lines"]!.AsArray().Add(k != null ? "k=\"" + k + "\"" : "a new " + kind + " at line " + node.Line.ToString(CultureInfo.InvariantCulture));
+                    if (d.Spacing.Always.Horizontal) {
+                        if (note["gaps"] is not JsonArray gaps) note["gaps"] = gaps = new JsonArray();
+                        var from = d.Spacing.Always.Describe();
+                        if (gaps.Count < 10 && !gaps.Any(x => x!.ToString() == from)) gaps.Add(from);
+                    }
+                }
+                // An element with k whose marker is not its text's or its reading's: said, never in silence.
+                if (k != null && (marked != text || marked != read)) {
+                    if (decided == null) { decided = Anvil.Core.ScreenVisual.MarkerDecidedNote(); Result.Normalized.Add(decided); }
+                    Anvil.Core.ScreenVisual.AddDecided(decided, "k=\"" + k + "\"", Anvil.Core.ScreenVisual.GapMarker, marked,
+                        Anvil.Core.ScreenVisual.GapWhy(gap, theme) + (marked != text ? (text ? "; the edit's text had it" : "; the edit's text did not have it") : "")
+                        + (marked != read ? (read ? "; the reading had it" : "; the reading did not have it") : ""));
+                }
+            }
+            // Review 4, N2: the page as written carries a marker of the engine (the theme it shows needs the block).
+            var engineOf = new Dictionary<ScreenHtml.Node, List<KeyValuePair<string, string>>>(ReferenceEqualityComparer.Instance);
+            foreach (var (node, _, engine) in changed) engineOf[node] = engine;
+            CarriesMarkers = map.Keys.Any(n => (engineOf.TryGetValue(n, out var attributes) ? attributes : n.Attributes).Any(a => Anvil.Core.ScreenVisual.MarkerOf(a.Key) != null));
+            return changed;
+        }
+
+        // A screen or block of the op: its reading carries a marker of the engine (only the html op writes them, review 2, M4).
+        private bool OpRoot()
+        {
+            ReadNode("");
+            return readNodes!.Values.Any(n => Anvil.Core.ScreenVisual.EngineMarkers.Any(marker => Anvil.Core.ScreenVisual.CarriesMarker(n, marker)));
+        }
+
         // ---- decode -----------------------------------------------------------------------------------------------------
         private void Decode(Dictionary<string, Shape> shapes)
         {
@@ -383,6 +506,14 @@ public sealed partial class ScreenHtmlModule<T>
                     continue;
                 }
                 var read = node.Get("k") is { } k ? ReadNode(k) : null;
+                // CX17 review 2, M4: the markers of the native layout block are the engine's (ScreenVisual.AuthorMarkers, the one
+                // rule of the three text forms): one the reading did not have on this element goes, or goes back to the reading's.
+                foreach (var (name, value, restore) in Anvil.Core.ScreenVisual.AuthorMarkers(node, read)) {
+                    if (ProblemOnce(Anvil.Core.ScreenVisual.ReservedMarker, AtNode(node), node.Get("k"), Anvil.Core.ScreenVisual.ReservedMarkerMessage(name, value, false, read != null),
+                            Anvil.Core.ScreenVisual.ReservedMarkerFix(name, restore)) is { } markerProblem)
+                        corrections[markerProblem] = "marker";
+                    markerAttributes.Add((node, name, restore));
+                }
                 foreach (var (name, value) in node.Attributes.ToList()) {
                     // os-Visible in another case (OS-VISIBLE, Os-Visible, os-visible): the new Visible it means, with its If patch,
                     // never an inert attribute nor a setter error without a patch (the review of round 2: he1, he2, he9).
@@ -567,13 +698,13 @@ public sealed partial class ScreenHtmlModule<T>
         // it fail (a source the module does not have), the rest goes without them.
         private void PatchVisible()
         {
-            if (!patches || visibleWraps == null && visibleVariants.Count == 0 && scriptElements.Count == 0 && scriptAttributes.Count == 0 && iterations.Count == 0) return;
+            if (!patches || visibleWraps == null && visibleVariants.Count == 0 && scriptElements.Count == 0 && scriptAttributes.Count == 0 && iterations.Count == 0 && markerAttributes.Count == 0) return;
             var withIterations = iterations.Count > 0;
             var corrected = WrapVisible(visibleWraps ?? [], withIterations);
             if (corrected == null && withIterations) { withIterations = false; corrected = WrapVisible(visibleWraps ?? [], false); }
             if (corrected == null) return;
             foreach (var problem in Result.Problems.Where(p => p["code"]?.ToString() == ScreenHtmlEdit.Visible
-                         || corrections.TryGetValue(p, out var kind) && (kind is "script" or "visible" || kind == "iteration" && withIterations))) {
+                         || corrections.TryGetValue(p, out var kind) && (kind is "script" or "visible" or "marker" || kind == "iteration" && withIterations))) {
                 problem["fix"] = problem["fix"] + " (the patch replaces the edit list with that)";
                 problem["patch"] = new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = pointer, ["value"] = corrected.DeepClone() });
             }
@@ -595,7 +726,7 @@ public sealed partial class ScreenHtmlModule<T>
                 var roots = new HashSet<ScreenHtml.Node>(ReferenceEqualityComparer.Instance);
                 foreach (var (node, _) in ScreenHtmlText.Elements(merged)) if (editedNodes.Contains(node) && (!parents.TryGetValue(map[node], out var p) || !editedNodes.Contains(Original(p)))) roots.Add(map[node]);
                 ScreenHtml.Node Original(ScreenHtml.Node c) => map.First(x => ReferenceEquals(x.Value, c)).Key;
-                foreach (var (node, attribute, restore) in scriptAttributes) {
+                foreach (var (node, attribute, restore) in scriptAttributes.Concat(markerAttributes)) {
                     var target = map[node];
                     var at = target.Attributes.FindIndex(a => a.Key == attribute);
                     if (at < 0) continue;
@@ -649,9 +780,9 @@ public sealed partial class ScreenHtmlModule<T>
                 var outer = roots.Where(r => !roots.Any(o => !ReferenceEquals(o, r) && ScreenHtmlText.Elements(o).Any(x => ReferenceEquals(x.Node, r)))).ToList();
                 var ordered = ScreenHtmlText.Elements(copy).Select(x => x.Node).Where(n => outer.Contains(n)).ToList();
                 var texts = ordered.Select(ScreenHtmlText.Write).ToList();
-                var check = new EditPlan(m, reading, texts, pointer, patches: false);
+                var check = new EditPlan(m, reading, texts, pointer, patches: false, theme: theme);
                 bool Fixed(JsonObject p) => p["code"]?.ToString() == ScreenHtmlEdit.Visible
-                    || corrections.TryGetValue(p, out var kind) && (kind is "script" or "visible" || kind == "iteration" && withIterations);
+                    || corrections.TryGetValue(p, out var kind) && (kind is "script" or "visible" or "marker" || kind == "iteration" && withIterations);
                 var known = new HashSet<string>(Result.Problems.Where(p => !Fixed(p)).Select(Signature), StringComparer.Ordinal);
                 return check.Result.Problems.Any(p => p["code"]?.ToString() == ScreenHtmlEdit.Visible || !known.Contains(Signature(p))) ? null
                     : new JsonArray(texts.Select(t => (JsonNode)t).ToArray());
@@ -814,16 +945,19 @@ public sealed partial class ScreenHtmlModule<T>
             var sw = Stopwatch.StartNew();
             try {
                 Create("");
+                StudioClasses();    // F2 (D1 of 2026-10-17): the class of every new widget without class, read on the widget just created
                 // The facts of new elements are decoded with the shapes of what was created (types, native events, slots).
+                EngineText(true);   // CX17 review 3, M6: what the plan writes is the text with the markers the engine decided
                 if (newShapes.Count > 0) {
                     var shapes = new Dictionary<string, Shape>(state.Shapes, StringComparer.Ordinal);
                     foreach (var (id, shape) in newShapes) shapes[id] = shape;
                     Decode(shapes);
                     CheckNames();
                     CheckLiterals(created: true);
-                    if (Refused) return;
+                    if (Refused) { EngineText(false); return; }
                 }
                 Result.EditedHtml = ScreenHtmlText.Write(merged);
+                EngineText(false);
                 foreach (var (id, element) in edited.Elements) Facts(id, element);
                 foreach (var (id, element) in edited.Elements) if (!IsNew(id) && model.Elements.ContainsKey(id)) Runs(id, element);
                 foreach (var id in edited.Elements.Keys.Where(moved.Contains).OrderBy(Depth)) Move(id);
@@ -980,6 +1114,37 @@ public sealed partial class ScreenHtmlModule<T>
             }
         }
 
+        // ---- F2 on the widgets the edit creates (the owner's decision D1 of 2026-10-17; M1 of the review of the CX17 merge) ------
+        /// <summary>Every widget the edit creates without k and without class is born with the class the Studio gave the widget it
+        /// just created, or with its trimmed form: ScreenVisual.StudioClassOf, the one rule of the forms that create a widget (the
+        /// document form, these edit forms, the fragment; not the page form). The class goes in the text the plan decodes and writes as an attribute of
+        /// the engine (as the markers: the checks and the patches read the author's text), so a trim is written once, a kept class
+        /// not at all, the Verify reads it back and the edited text carries it; each is said in normalized (STYLE_STUDIO_CLASS_KEPT /
+        /// STYLE_STUDIO_CLASS_TRIMMED, counted per kind). An element with k keeps the class its text says, the author's class
+        /// always wins, and no marker comes with it (a screen made in the Studio gets the class of the new widget only).</summary>
+        private void StudioClasses()
+        {
+            var notes = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+            foreach (var (id, _) in objects.ToList()) {
+                if (!id.StartsWith('+') || IsStructural(id) || !idNodes.TryGetValue(id, out var node) || !edited.Elements.TryGetValue(id, out var element)) continue;
+                var kind = element.Kind;
+                if (Anvil.Core.ScreenVisual.DecisionFor(kind) == null) continue;
+                var reverse = ScreenHtmlTables.Reverse(kind, ScreenHtmlModuleMode.Widget);
+                if (node.Attributes.Any(a => a.Key == "os-Style" || reverse.GetValueOrDefault(a.Key) == "Style")) continue;   // the author's class
+                var born = CurrentFacts(id, kind).GetValueOrDefault("p:Style") is { Length: > 1 } fact && fact[0] == 'e' ? fact[2..] : "";
+                if (Anvil.Core.ScreenVisual.StudioClassOf(kind, born) is not { } studio) continue;
+                var attribute = new KeyValuePair<string, string>(ScreenHtmlTables.AttributeOf(kind, "Style", ScreenHtmlModuleMode.Widget, false), ScreenHtml.Sugar(studio.Expression));
+                var at = engineMarks.FindIndex(e => ReferenceEquals(e.Node, node));
+                if (at >= 0) {
+                    var engine = new List<KeyValuePair<string, string>>(engineMarks[at].Engine) { attribute };
+                    engineMarks[at] = (node, engineMarks[at].Author, engine);
+                }
+                else engineMarks.Add((node, node.Attributes.ToList(), new List<KeyValuePair<string, string>>(node.Attributes) { attribute }));
+                if (Anvil.Core.ScreenVisual.CountStudioClass(notes, studio, "a new " + studio.Kind + " at line " + node.Line.ToString(CultureInfo.InvariantCulture)) is { } note)
+                    Result.Normalized.Add(note);
+            }
+        }
+
         // ---- facts --------------------------------------------------------------------------------------------------------
         private void Facts(string id, ScreenHtmlCanon.Element element)
         {
@@ -1048,7 +1213,7 @@ public sealed partial class ScreenHtmlModule<T>
                 if (property == "Transition") shapeType = 'v';
                 if (shapeType is 'r' or '?') return new ScreenHtmlValue<T>('?', "");
                 if (shapeType == 'l') return new ScreenHtmlValue<T>('l', "", Targets: []);
-                return new ScreenHtmlValue<T>(shapeType, ScreenHtml.DefaultOf(kind, property, shapeType, inPopup));
+                return new ScreenHtmlValue<T>(shapeType, Defaults.DefaultOf(kind, property, shapeType, inPopup));
             }
             var t = fact[0]; var text = fact.Length > 2 ? fact[2..] : "";
             if (t == 'r') return Reference(text, raw);
@@ -1090,7 +1255,7 @@ public sealed partial class ScreenHtmlModule<T>
             var read = m.FactsOf(node, "widget", "new " + kind, new HashSet<T>(m.r.ChildrenOf(node), ReferenceEqualityComparer.Instance), m.r.ParentOf(node), _ => false, shape, [], out _);
             if (kind == "TextWidget") { var text = read.FirstOrDefault(f => f.Name == "Text"); read.RemoveAll(f => f.Name == "Value" && text.Name != null && f.Text == text.Text); }
             foreach (var f in read) {
-                if (IsDefault(kind, f) || f.Name == "Style" && f.Type == 't' && Writer.Redundant(read, f)) continue;
+                if (ScreenHtmlModule<T>.IsDefault(Defaults, kind, f) || f.Name == "Style" && f.Type == 't' && Writer.Redundant(read, f)) continue;
                 if (kind == "TextWidget" && f.Name == "Text") { facts["text"] = f.Text; continue; }
                 if (kind == "List" && f.Name == "Tag") { if (f.Text != "div") facts["p:Tag"] = "t:" + f.Text; continue; }
                 facts["p:" + f.Name] = f.Type + ":" + f.Text;
@@ -1200,15 +1365,23 @@ public sealed partial class ScreenHtmlModule<T>
         }
 
         // Whether a fact the edit wrote (a property of the element, p:X, or of one of its events, ev:E:p:X) holds the default of that
-        // property where the element sits (ScreenHtml.DefaultOf: inside a Popup an event's Transition is Fade).
+        // property where the element sits (ScreenDefaults: inside a Popup an event's Transition is what the Studio gives it there).
         private bool WrittenDefault(string id, string kind, string fact, string? value)
         {
             if (value is not { Length: > 1 } || value[1] != ':') return false;
             if (fact.StartsWith("p:", StringComparison.Ordinal))
-                return ScreenHtml.DefaultOf(kind, fact[2..], value[0], false) == value[2..];
+                return Defaults.DefaultOf(kind, fact[2..], value[0], false) == value[2..];
             if (fact.StartsWith("ev:", StringComparison.Ordinal) && fact.IndexOf(":p:", 3, StringComparison.Ordinal) is var at and > 3)
-                return ScreenHtml.DefaultOf("BuiltinEvent", fact[(at + 3)..], value[0], InPopup(id)) == value[2..];
+                return Defaults.DefaultOf(EventKind(id, fact[3..at]), fact[(at + 3)..], value[0], InPopup(id)) == value[2..];
             return false;
+        }
+
+        // The kind of the native event an element holds under that property (OnClick: a BuiltinEvent on ODC, a UILifeCycleEvent on
+        // O11), as the model has it; "" when the element or the event is gone.
+        private string EventKind(string id, string property)
+        {
+            try { return m.r.PropertyOf(Obj(id), property)?.Invoke() is T evt ? m.r.KindOf(evt) : ""; }
+            catch (Exception) { return ""; }
         }
 
         // Whether an element of the edited page is a Popup or sits inside one (through slots and contents).
@@ -1239,7 +1412,7 @@ public sealed partial class ScreenHtmlModule<T>
                 var facts = m.FactsOf(evt, "event", "settle event", new HashSet<T>(m.r.ChildrenOf(evt), ReferenceEqualityComparer.Instance), node, _ => false, eventShape, [], out _);
                 if (!eventShape.Types.ContainsKey("Transition")) continue;
                 var now = facts.FirstOrDefault(f => f.Name == "Transition");
-                var wanted = ScreenHtml.DefaultOf(eventKind, "Transition", 'v', inPopup);
+                var wanted = Defaults.DefaultOf(eventKind, "Transition", 'v', inPopup);
                 if ((now.Name == null ? "" : now.Text) == wanted || now.Name == null && wanted.Length == 0) continue;
                 current = id.StartsWith('+') ? null : id;
                 Write(evt, "Transition", new ScreenHtmlValue<T>('v', wanted), id, fact);

@@ -1,6 +1,7 @@
 // Atritos 3, lane K1-c (docs/PACOTE-ATRITOS-3.md): o11_environment download and downloadModule (I11) pass the lane's
 // published-OML cache to the CLI and answer cached. The fake CLI keeps the CLI's own rule (PublishedOmlCache, proven by
 // Pa3K1CacheTests): a version in <cache>/<key>/<versionId>.oml is copied to the call's folder, any other is downloaded once.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

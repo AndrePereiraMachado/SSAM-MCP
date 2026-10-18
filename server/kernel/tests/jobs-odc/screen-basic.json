@@ -1,5 +1,5 @@
 {
- "description": "ODC (WS1): tela Reactive no MainFlow do InsuranceApp (layout LayoutTopMenu do proprio modulo) com container, expressao, input ligado a uma variavel local e botao ligado a uma screen action (assign).",
+ "description": "ODC (WS1): Reactive screen in the MainFlow of the InsuranceApp (the module's own LayoutTopMenu layout) with a container, an expression, an input bound to a local variable and a button bound to a screen action (assign).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "ops": [

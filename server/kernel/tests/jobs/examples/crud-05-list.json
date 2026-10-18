@@ -1,5 +1,5 @@
 {
- "description": "CRUD back-office, parte 5 de 5 (lista, tabela primeiro): ProductList com pesquisa, filtro por categoria, tabela paginada (join com a static para o nome da categoria), Link do codigo para ProductEdit, botao New, e apagar com confirmacao num Popup nativo (Confirm chama Product_Delete e recarrega; Cancel fecha).",
+ "description": "Back-office CRUD, part 5 of 5 (list, table first): ProductList with a search, a category filter, a paged table (join with the static for the category name), a Link of the code to ProductEdit, a New button, and delete with a confirmation in a native Popup (Confirm calls Product_Delete and reloads; Cancel closes).",
  "base": "job:crud-04-edit",
  "expectValid": true,
  "expectedMessages": [],
@@ -39,7 +39,7 @@
   {"op": "create", "parent": "$aggCat", "type": "IAliasedSource", "args": {"dataSource": "IStaticEntity:ProductCategory"}},
 
   {"op": "logic", "data": {"actions": [
-   {"name": "FiltersChanged", "kind": "screen", "owner": "IMobileScreen:ProductList", "description": "Filtro mudou: primeira pagina e nova consulta",
+   {"name": "FiltersChanged", "kind": "screen", "owner": "IMobileScreen:ProductList", "description": "The filter changed: first page and a new query",
     "steps": [
      {"assign": {"StartIndex": "0"}, "as": "FirstPage"},
      {"node": "IRefreshDataNode", "as": "RefreshProducts", "properties": {"DataSource": "IScreenAggregate:GetProductPage"}}]},
@@ -51,9 +51,9 @@
    {"name": "AskDelete", "kind": "screen", "owner": "IMobileScreen:ProductList", "description": "Guarda o produto e abre a confirmacao",
     "inputs": [{"name": "ProductId", "type": "Product Identifier"}, {"name": "ProductName", "type": "Text"}],
     "steps": [{"assign": {"PendingDeleteId": "ProductId", "PendingDeleteName": "ProductName", "ShowDeleteConfirm": "True"}, "as": "OpenConfirm"}]},
-   {"name": "CancelDelete", "kind": "screen", "owner": "IMobileScreen:ProductList", "description": "Fecha a confirmacao sem apagar",
+   {"name": "CancelDelete", "kind": "screen", "owner": "IMobileScreen:ProductList", "description": "Closes the confirmation without deleting",
     "steps": [{"assign": {"ShowDeleteConfirm": "False", "PendingDeleteId": "NullIdentifier()"}, "as": "CloseConfirm"}]},
-   {"name": "ConfirmDelete", "kind": "screen", "owner": "IMobileScreen:ProductList", "description": "Apaga pelo wrapper, fecha e recarrega",
+   {"name": "ConfirmDelete", "kind": "screen", "owner": "IMobileScreen:ProductList", "description": "Deletes through the wrapper, closes and reloads",
     "steps": [
      {"call": "Product_Delete", "as": "DeleteProduct", "args": {"ProductId": "PendingDeleteId"}},
      {"assign": {"ShowDeleteConfirm": "False", "PendingDeleteId": "NullIdentifier()"}, "as": "CloseConfirm"},

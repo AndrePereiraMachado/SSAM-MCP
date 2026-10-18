@@ -7,6 +7,7 @@
 // fits the 12000-byte budget. Also: every ODC role of the compact job, the runtime provenance of every native, English
 // intents, and hijack probes (intents of other fronts that share words with the theme must not select it). Needs the
 // lane CLIs built (the index is built from them); skips otherwise.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';

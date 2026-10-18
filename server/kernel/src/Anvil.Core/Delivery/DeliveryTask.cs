@@ -116,6 +116,9 @@ public sealed class DeliveryTask : IDisposable
             // with the hash proof.
             settledBy = CountingBridge.Wrap(bridge);
             settledBy.Settled.AddRange(SettlePendingUi(state));
+            // Review round 4 (N1): the idle proof is the evidence that the Studio commands of the task's runs ended.
+            Delivery.BeginStudioWritesRun(state);
+            Delivery.EndStudioWrites(state, "idle");
             task.Save("pending-ui-settled");
             bridge = settledBy;
         }
@@ -281,9 +284,11 @@ public sealed class DeliveryTask : IDisposable
             var method = call?["method"]?.ToString();
             var entry = new JsonObject { ["method"] = method, ["moduleKey"] = call?["moduleKey"]?.DeepClone(), ["stall"] = stall?.DeepClone(),
                 ["idleProof"] = state["pendingUiProof"]?.DeepClone(), ["settledAt"] = DateTimeOffset.UtcNow.ToString("O") };
+            // Review round 3 (L7): the Studio command the stopped refresh_references was (Delivery.RecordStall).
+            if (call?["command"]?.ToString() is { Length: > 0 } command) entry["command"] = command;
             // CX14 N6: the note is finished when the call that settled it ends (FinishSettledNotes): what that call sent again
             // and whether the merge was ever sent are facts of its end, not of this moment. Until then it says what may happen.
-            if (method == "refresh_references") { entry["note"] = RefreshNoteFor(null, state["writeState"]?.ToString()); entry["noteOpen"] = true; }
+            if (method == "refresh_references") { entry["note"] = RefreshNoteFor(null, state["writeState"]?.ToString(), entry["command"]?.ToString()); entry["noteOpen"] = true; }
             added.Add(entry);
             return entry;
         }
@@ -315,7 +320,7 @@ public sealed class DeliveryTask : IDisposable
     /// it may still send); else what that call sent again after its proof, by the delivery's normal steps (MB2 when the
     /// dependencies dialog comes back, C26 when the task captured producers, the open and the tab close). "Never sent" only
     /// while the task's writeState is not-sent.</summary>
-    internal static string RefreshNoteFor(JsonObject? sentAgain, string? writeState)
+    internal static string RefreshNoteFor(JsonObject? sentAgain, string? writeState, string? command = null)
     {
         string again;
         if (sentAgain == null) again = MaySendAgain;
@@ -326,7 +331,11 @@ public sealed class DeliveryTask : IDisposable
                 ? " After that proof the call that settled it sent again, as the delivery's normal steps do: " + string.Join(", ", sent) + "; merge_from_oml is sent at most once per task."
                 : " After that proof the call that settled it sent none of refresh_references, open_module or close_module again.";
         }
-        return RefreshNote + again + (writeState == "not-sent" ? " The merge of this task was never sent." : "");
+        // Review round 3 (L7): a stopped Manage Dependencies is named as itself, with what it may have done.
+        var note = command == Delivery.ManageDependenciesCommand
+            ? "The Studio's Manage Dependencies of this task stopped and then ended (two idle reads proved it): it may have added elements and changed the module's references, and Ctrl+Z in the Studio undoes it."
+            : RefreshNote;
+        return note + again + (writeState == "not-sent" ? " The merge of this task was never sent." : "");
     }
 
     /// <summary>CX14 N7: what an answer of a delivery or a close says of repetition. "nothing was repeated" only when the
@@ -363,7 +372,7 @@ public sealed class DeliveryTask : IDisposable
             }
         }
         foreach (var entry in (state["settledBridgeOperations"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().Where(e => e["method"]?.ToString() == "refresh_references"))
-            entry["note"] = RefreshNoteFor(entry["noteOpen"] == null ? entry["sentAgain"] as JsonObject : null, state["writeState"]?.ToString());
+            entry["note"] = RefreshNoteFor(entry["noteOpen"] == null ? entry["sentAgain"] as JsonObject : null, state["writeState"]?.ToString(), entry["command"]?.ToString());
     }
 
     /// <summary>CX14 N3: the UI call of this task that may still run in the Studio (its method), or null: the pending call

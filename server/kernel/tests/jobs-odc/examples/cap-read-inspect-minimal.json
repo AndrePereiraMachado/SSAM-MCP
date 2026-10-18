@@ -1,5 +1,5 @@
 {
- "description": "Leitura do modulo dentro de um job: find lista as telas do app pelo tipo, sem mudar nada.",
+ "description": "A read of the module inside a job: find lists the screens of the app by type, without changing anything.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

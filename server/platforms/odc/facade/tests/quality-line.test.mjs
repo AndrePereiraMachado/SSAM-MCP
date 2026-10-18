@@ -3,6 +3,7 @@
 // SERVER copies it to platforms/odc/facade/tests/quality-line.test.mjs, CONSOLE to server/deploy/console/tests/quality-line.test.mjs,
 // each with FIXTURES pointing at its own copy of this folder (tests/fixtures/quality/).
 // Server lane copy: the module is ../quality-line.mjs, the fixtures tests/fixtures/quality/; the last test is the parity check (D9).
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -141,5 +142,5 @@ test('fitLine: a line above the cap loses detail in the fixed order and keeps it
 // D9: this lane's copy of the contract is the shared one, byte for byte (CRLF read as LF), so writer and reader never disagree.
 test('parity: platforms/odc/facade/quality-line.mjs is the shared ssam-quality/1 contract', () => {
   const text = fs.readFileSync(fileURLToPath(new URL('../quality-line.mjs', import.meta.url)), 'utf8').replace(/\r\n/g, '\n');
-  assert.equal(createHash('sha256').update(text, 'utf8').digest('hex'), '2e4458df28f3e10f94b3639c855dbaf3fe0f481a10cd743a3f8e3437fd8f5edd');
+  assert.equal(createHash('sha256').update(text, 'utf8').digest('hex'), 'b818179632ddceca3522c4dcb20dbe47e8faa806237da843ffffb02dfc28fb26'); // servidor/fase4-26 a7: OPS gains tool (CX11); phase 2: REFERENCE_DAY_LIMIT, REFERENCE_NOT_SERVED; phase 3: ANSWER_ORIGIN_UNKNOWN and the server root variables (registry --write)
 });

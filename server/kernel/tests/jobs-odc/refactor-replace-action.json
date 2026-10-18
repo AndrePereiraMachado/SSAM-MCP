@@ -1,5 +1,5 @@
 {
- "description": "ODC: a mesma refatoracao da faixa O11 (op replace). Tres actions: uma antiga, uma nova de assinatura igual, e uma que chama a antiga. Depois do replace, quem chamava passa a apontar para a nova, a antiga fica sem consumidores e e apagada sem force.",
+ "description": "ODC: the same refactor as the O11 lane (replace op). Three actions: an old one, a new one with the same signature, and one that calls the old one. After the replace, the caller now points to the new one, the old one is left without consumers and is deleted without force.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "ops": [
@@ -29,23 +29,23 @@
   {"op": "link", "from": "$call", "to": "$c9"},
   {"op": "layout", "target": "$caller"},
 
-  {"op": "usages", "target": "$old", "_why": "um consumidor real: o no do WfProof_Caller"},
+  {"op": "usages", "target": "$old", "_why": "a real consumer: the node of WfProof_Caller"},
   {"op": "replace", "from": "$old", "to": "$new"},
-  {"op": "usages", "target": "$old", "_why": "tem de ficar em zero"},
-  {"op": "usages", "target": "$new", "_why": "o consumidor passou para ca, com a mesma chave"},
-  {"op": "delete", "target": "$old", "_why": "sem consumidores, sem force"},
+  {"op": "usages", "target": "$old", "_why": "it has to end at zero"},
+  {"op": "usages", "target": "$new", "_why": "the consumer moved here, with the same key"},
+  {"op": "delete", "target": "$old", "_why": "without consumers, without force"},
   {"op": "find", "name": "WfProof_New"}
  ],
  "expectedMessages": [
   {
    "id": "UnusedUserAction",
    "element": "InsuranceApp (ESpace) / WfProof_Caller (ServerAction)",
-   "why": "a action que chama e criada so para dar um consumidor ao replace; ninguem a chama, e o Verify do ODC avisa sobre actions sem uso."
+   "why": "the calling action is created only to give a consumer to the replace; nobody calls it, and the ODC Verify warns about actions without use."
   },
   {
    "id": "UnusedElement",
    "element": "InsuranceApp (ESpace) / WfProof_New (ServerAction) / Label (InputParameter)",
-   "why": "a action nova tem a MESMA assinatura da antiga, que e o que faz o replace ser seguro, mas o corpo dela e so Start/End: o parametro existe para casar a assinatura e nao e lido."
+   "why": "the new action has the SAME signature as the old one, which is what makes the replace safe, but its body is only Start/End: the parameter exists to match the signature and is not read."
   }
  ]
 }

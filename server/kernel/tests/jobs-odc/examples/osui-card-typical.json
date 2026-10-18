@@ -1,5 +1,5 @@
 {
- "description": "Card do OSUI por linha de uma List: UsePadding desligado, foto externa e nome/preco do produto no Content.",
+ "description": "Card of OSUI per row of a List: UsePadding off, an external photo and the name/price of the product in the Content.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

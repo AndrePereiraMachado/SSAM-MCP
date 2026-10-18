@@ -1,8 +1,8 @@
 {
- "description": "ODC (cobertura C): o logic-spec-services.json espelhado na faixa ODC sobre o modelo do data-full-model. Uma action publica com TODAS as formas de passo (get com where e sort, if com raise, foreach com assign, save e call, assign final) e a helper que ela chama, para provar tambem a ordem por dependencia do compilador.",
+ "description": "ODC (C coverage): the logic-spec-services.json mirrored in the ODC lane over the model of data-full-model. A public action with ALL the step forms (get with where and sort, if with raise, foreach with assign, save and call, final assign) and the helper that it calls, to also prove the compiler's order by dependency.",
  "base": "job:data-full-model",
  "expectValid": true,
- "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCov_Project_CloseOpenTasks (ServerAction)", "why": "ODC: um app (CrossDevice) nao expoe server action publica (o Studio ao vivo da erro); a action fica privada e sem consumidor neste job de prova"}],
+ "expectedMessages": [{"id": "UnusedUserAction", "element": "InsuranceApp (ESpace) / WfCov_Project_CloseOpenTasks (ServerAction)", "why": "ODC: an app (CrossDevice) does not expose a public server action (the live Studio gives an error); the action stays private and without a consumer in this proof job"}],
  "ops": [
   {"op": "create", "parent": "@espace", "type": "IUserException", "name": "WfCovNotFound", "as": "$exc"},
   {"op": "logic", "data": {"actions": [
@@ -38,6 +38,6 @@
    }
   ]}},
   {"op": "find", "name": "WfCov_Project_CloseOpenTasks"},
-  {"op": "usages", "target": "IServerAction:WfCov_Task_Describe", "_why": "a helper tem de ter o consumidor criado dentro do foreach"}
+  {"op": "usages", "target": "IServerAction:WfCov_Task_Describe", "_why": "the helper has to have the consumer created inside the foreach"}
  ]
 }

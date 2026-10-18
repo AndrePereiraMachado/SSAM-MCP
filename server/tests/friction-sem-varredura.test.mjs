@@ -4,6 +4,7 @@
 // (20:27:28 -> 20:35:39), no call of that session reached the server meanwhile, and the next delivery entered 33.8 s
 // after the client sent it. A read of the relay is bounded by what it names (the tail of the index, the operations it
 // links or the task holds), never by the size of the queue. Synthetic queue folders; fs is watched, not replaced.
+import '../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

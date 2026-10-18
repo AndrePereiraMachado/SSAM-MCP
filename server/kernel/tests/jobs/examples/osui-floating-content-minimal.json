@@ -1,5 +1,5 @@
 {
- "description": "FloatingContent (OutSystemsUI, Content) minimo: instancia como o Studio cria ao arrastar o bloco; inputs obrigatorios Position com valores simples.",
+ "description": "Minimal FloatingContent (OutSystemsUI, Content): an instance as the Studio creates it when the block is dragged; required inputs Position with simple values.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

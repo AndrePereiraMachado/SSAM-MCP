@@ -1,6 +1,7 @@
 // The documents of the integration ops (integration-documents.mjs, interface I6): a WSDL or OpenAPI document is read
 // once with its imports, pinned under <localRoot>/documents/<sha256>/ and the op rewritten to {path, sha256, source};
 // the limits (5 MB, DTD/ENTITY, schemes) refuse before anything else. A fake fetch only: no network.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

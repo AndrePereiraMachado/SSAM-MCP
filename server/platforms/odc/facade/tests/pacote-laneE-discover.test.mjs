@@ -4,6 +4,7 @@
 // byte floor (present at 8 KB), with the catalog synonyms (deck -> StackedCards, slider -> RangeSlider) and in the ui.*
 // expansions; a minimal answer that never passes its budget; no route or capability that sends a normal request to a proof
 // before the delivery; the fragment form of a dropdown, a block instance and nested lists. Index checks need the lane CLI.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { wireBytes } from './fixtures/answer-wire.mjs';
@@ -11,7 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { discover, laneSources, applyBudget, stepKindsOf, valuesFor, osuiFloor } from '../discovery.mjs';
+import { discover, laneSources, applyBudget, DEFAULT_BUDGET_BYTES, stepKindsOf, valuesFor, osuiFloor, answerCeiling } from '../discovery.mjs';
 import { namedPatterns, osuiExpansion, osuiSection, isScreenIntent, APP_TYPES } from '../osui-catalog.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -112,8 +113,22 @@ test('no catalog <select> reads the Current of its options in value or label; th
   assert.doesNotMatch(dropdown.route.operation + dropdown.summary, /\.Current\./);
 });
 
-test('o11: a timer that runs every hour answers the O11 Schedule with the whole proven job (C07)', { skip: cliSkip('o11'), timeout: 900000 }, async () => {
-  const a = await discover({ lane: 'o11', intent: 'criar timer que roda a cada hora', sources: sourcesOf('o11') });
+test('o11: an hourly timer keeps its Schedule and exact whole-job reference at the new default, and the whole proven job at its original engine budget (C07)', { skip: cliSkip('o11'), timeout: 900000 }, async () => {
+  const request = { lane: 'o11', intent: 'criar timer que roda a cada hora', sources: sourcesOf('o11') };
+  // INT-3 (CX11 onto CX15): without a ceiling the model part stays as the budget gave it, and nothing leaves in silence:
+  // a C07 section with no room is named in size.truncated (c07), whose recover raises the budget.
+  const bare = await discover(request);
+  for (const k of ['provenExample', 'values']) if (bare[k] == null)
+    assert.ok((bare.size.truncated ?? []).some(t => t.section === 'c07' && new RegExp('left out by the budget: [^;]*\\b' + k + '\\b').test(t.recover)), k + ' left out without a word');
+  // The entry (ssam_discover: discoverAll passes its answer ceiling) keeps them at the default budget: the model part goes
+  // under the budget less their floor, lower-priority model detail first.
+  const first = await discover({ ...request, ceilingBytes: answerCeiling() });
+  assert.equal(first.ok, true);
+  assert.equal(first.size.budgetBytes, DEFAULT_BUDGET_BYTES);
+  assert.equal(first.size.bytes, bytes(first));
+  assert.ok(wireBytes(first, { budgetBytes: DEFAULT_BUDGET_BYTES }) <= DEFAULT_BUDGET_BYTES);
+  // Preserve the old engine premise explicitly; the shared MCP ceiling is proved by B5.
+  const a = await discover({ ...request, budgetBytes: 40960 });
   assert.equal(a.ok, true);
   assert.ok(a.matches.some(m => m.id === 'timer.schedule' && m.via === 'match'), JSON.stringify(a.matches.map(m => m.id)));
   assert.equal(a.provenExample.job, 'pacote-laneE-timer-schedule');
@@ -125,6 +140,34 @@ test('o11: a timer that runs every hour answers the O11 Schedule with the whole 
   const route = a.matches.find(m => m.id === 'timer.schedule').route?.operation ?? '';
   assert.match(route, /O11: set Schedule "00:00 01:00 02:00 03:00 04:00 05:00 06:00 07:00 08:00 09:00 10:00 11:00 12:00 13:00 14:00 15:00 16:00 17:00 18:00 19:00 20:00 21:00 22:00 23:00"/);
   assert.ok(wireBytes(a) <= a.size.budgetBytes);
+
+  assert.ok(first.matches.some(m => m.id === 'timer.schedule' && m.via === 'match'));
+  assert.equal(first.provenExample.job, a.provenExample.job);
+  assert.deepEqual(first.provenExample.reference, a.provenExample.reference);
+  assert.deepEqual(first.values.find(v => v.property === 'Schedule'), a.values.find(v => v.property === 'Schedule'));
+  assert.equal(first.matches.find(m => m.id === 'timer.schedule').route?.operation, route);
+  if (first.provenExample.whole !== true) {
+    assert.match(first.provenExample.note, /FRAGMENT|reduced by budget/i, 'the reduced example declares its cut');
+    assert.match(first.provenExample.note, /whole job by its id/i);
+  }
+  // Execute exactly the returned tool and arguments through its real registered handler.
+  // The example reader uses suite JSON files, not the CLI or a Studio operation.
+  const { registerSsamReference } = await import('../ssam-reference.mjs');
+  const handlers = new Map();
+  registerSsamReference({ registerTool: (name, _config, handler) => handlers.set(name, handler) }, {
+    root: request.sources.kernel, runAnvil: async () => assert.fail('example recovery must never invoke a CLI'),
+  });
+  const recovery = first.provenExample.reference;
+  assert.ok(handlers.has(recovery.tool));
+  const result = await handlers.get(recovery.tool)(recovery.arguments);
+  const whole = result.structuredContent;
+  assert.equal(whole.ok, true);
+  assert.equal(whole.id, 'jobs/' + a.provenExample.job); // canonical example-reader id includes its suite folder
+  assert.ok(whole.data?.ops, 'the declared example reference returns the whole suite job inline');
+  const expectedJob = JSON.parse(fs.readFileSync(path.join(request.sources.kernel, a.provenExample.path), 'utf8').replace(/^\uFEFF/, ''));
+  assert.deepEqual(whole.data, expectedJob);
+  assert.deepEqual(whole.data.ops, a.provenExample.ops);
+  assert.deepEqual(whole.data.ops.filter(op => op.op === 'set' && op.prop === 'Schedule').map(op => op.value), schedules);
 });
 
 for (const lane of ['odc', 'o11']) {

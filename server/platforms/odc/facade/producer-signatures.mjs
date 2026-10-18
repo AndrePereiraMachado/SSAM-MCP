@@ -22,6 +22,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { canonicalKeyOf, sameProducer } from './producer-names.mjs';
 
 export const PUBLISHED_SCHEMA = 'ssam-producer-published/1';
 const sha256 = data => createHash('sha256').update(data).digest('hex');
@@ -174,7 +175,9 @@ const publishedSince = (dir, environment, producer, at) => at <= unsafeUntil(dir
 
 // The reference snapshot of the producer in this environment that the workspace acquired lately, copied to target, when the
 // window holds and no publication of it was recorded since: {sha256, producerKey, revision, observedAtUtc}; else null.
-export function reuseOdcReference(dir, { environment, producer, target, now = new Date(), window = windowMs() } = {}) {
+// Round 3 (M5): accept({studioName, producerKey, resolvedFrom}) says whether the observation is of the producer the job needs
+// (the listed producer its text resolves to): a capture of a twin that shares the key is never taken.
+export function reuseOdcReference(dir, { environment, producer, target, now = new Date(), window = windowMs(), accept = null } = {}) {
   try {
     if (!dir || !environment || !producer || !(window > 0)) return null;
     const files = odcFiles(dir, environment, producer);
@@ -183,24 +186,128 @@ export function reuseOdcReference(dir, { environment, producer, target, now = ne
     const at = Date.parse(record.observedAtUtc);
     if (!Number.isFinite(at) || at > now.getTime() + SKEW_MS || now.getTime() - at > window || publishedSince(dir, environment, producer, at)) return null;
     if (!isFile(files.avsig) || sha256(fs.readFileSync(files.avsig)) !== record.sha256) return null;
+    const studioName = typeof record.studioName === 'string' && record.studioName ? record.studioName : record.producer;
+    const resolvedFrom = Array.isArray(record.resolvedFrom) ? record.resolvedFrom.filter(n => typeof n === 'string') : [];
+    if (accept && !accept({ studioName, producerKey: record.producerKey ?? null, resolvedFrom })) return null;
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(files.avsig, target);
-    return { sha256: record.sha256, producerKey: record.producerKey ?? null, revision: record.revision ?? null, observedAtUtc: new Date(at).toISOString() };
+    return { sha256: record.sha256, producerKey: record.producerKey ?? null, revision: record.revision ?? null, observedAtUtc: new Date(at).toISOString(),
+      studioName, ...(resolvedFrom.length ? { resolvedFrom } : {}), source: 'ledger' };
   } catch { return null; }
 }
 
 // A reference snapshot just acquired (its bytes verified by the caller) becomes the workspace's observation of the producer.
-export function rememberOdcReference(dir, { environment, producer, file, sha256: digest, producerKey = null, revision = null, now = new Date() } = {}) {
+// fix/system-reference: producer is the binding key (System); studioName the name the Studio lists it by ((System)).
+// Round 3 (M5): resolvedFrom, the texts a job wrote that the listing resolved to studioName ("OutSystemsUI" for "OutSystems UI").
+export function rememberOdcReference(dir, { environment, producer, studioName = null, file, sha256: digest, producerKey = null, revision = null, resolvedFrom = null, now = new Date() } = {}) {
   try {
     if (!dir || !environment || !producer || !isFile(file)) return false;
     const files = odcFiles(dir, environment, producer);
     fs.mkdirSync(path.dirname(files.json), { recursive: true });
     fs.copyFileSync(file, files.avsig + '.tmp'); fs.renameSync(files.avsig + '.tmp', files.avsig);
     const temporary = files.json + '.' + randomUUID().replace(/-/g, '') + '.tmp';
-    fs.writeFileSync(temporary, JSON.stringify({ schema: ODC_SCHEMA, environment, producer, producerKey, revision, sha256: digest ?? sha256(fs.readFileSync(file)), observedAtUtc: now.toISOString() }));
+    fs.writeFileSync(temporary, JSON.stringify({ schema: ODC_SCHEMA, environment, producer, ...(studioName && studioName !== producer ? { studioName } : {}),
+      ...(Array.isArray(resolvedFrom) && resolvedFrom.length ? { resolvedFrom: [...new Set(resolvedFrom.map(String))] } : {}), producerKey, revision,
+      sha256: digest ?? sha256(fs.readFileSync(file)), observedAtUtc: now.toISOString() }));
     fs.renameSync(temporary, files.json);
     return true;
   } catch { return false; }
+}
+
+// ---- fix/system-reference (b, d): the captures of a producer the ODC lane already has, found by the producer's name.
+// The capture folder of the lane is <odcRoot>/snapshots (kernel JobSources.IsCapturePath): studio_reference_snapshot writes
+// its .avsig there (an envelope {FormatVersion, Environment, ModuleKey, Name, SignatureHash, Revision, ...}). Its identity
+// is the envelope's; the name matches by binding key ("(System)" is the producer System).
+// Round 2 (H1): the one rule of producer names (producer-names.mjs): "OutSystems UI" is the producer OutSystemsUI.
+const keyOfName = name => canonicalKeyOf(name);
+const sameName = (a, b) => sameProducer(a, b);
+export function odcSignatureIdentity(file) {
+  const envelope = readJson(file);
+  if (!envelope || typeof envelope !== 'object' || typeof envelope.Name !== 'string' || typeof envelope.ModuleKey !== 'string') return null;
+  return { environment: envelope.Environment ?? null, producer: envelope.Name, producerKey: envelope.ModuleKey, signatureHash: envelope.SignatureHash ?? null,
+    revision: envelope.Revision == null || envelope.Revision === '' ? null : String(envelope.Revision) };
+}
+// One published signature: the same environment, producer key, signature hash and revision.
+export const sameOdcIdentity = (a, b) => !!a && !!b && lower(a.environment) === lower(b.environment) && a.producerKey === b.producerKey
+  && lower(a.signatureHash) === lower(b.signatureHash) && (a.revision ?? null) === (b.revision ?? null);
+const avsigsUnder = (dir, depth = 3) => {
+  const out = [];
+  const walk = (d, left) => { let entries; try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) { const p = path.join(d, e.name); if (e.isDirectory() && left > 0) walk(p, left - 1); else if (e.isFile() && /\.avsig$/i.test(e.name)) out.push(p); } };
+  walk(dir, depth); return out;
+};
+// Every intact capture of the producer, newest first: the delivery cache's (<cache>/odc, source "ledger") and the
+// .avsig files of <odcRoot>/snapshots (source "snapshots"), optionally of one environment:
+// [{path, sha256, environment, producer (the name the Studio lists), producerKey, revision, observedAtUtc, source}].
+export function odcCaptures(odcRoot, { producer, environment = null, cache = odcRoot ? path.join(odcRoot, '.local', 'producer-cache') : null } = {}) {
+  const out = [];
+  if (!producer) return out;
+  let names = [];
+  try { names = cache ? fs.readdirSync(path.join(cache, 'odc')).filter(n => /\.json$/i.test(n)) : []; } catch { names = []; }
+  for (const name of names) {
+    const record = readJson(path.join(cache, 'odc', name)), file = path.join(cache, 'odc', name.replace(/\.json$/i, '.avsig'));
+    if (!record?.producer || !(sameName(record.producer, producer) || sameName(record.studioName, producer))) continue;
+    if (environment && lower(record.environment) !== lower(environment)) continue;
+    try { if (!isFile(file) || sha256(fs.readFileSync(file)) !== record.sha256) continue; } catch { continue; }
+    out.push({ path: file, sha256: record.sha256, environment: record.environment, producer: record.studioName ?? record.producer, producerKey: record.producerKey ?? null,
+      revision: record.revision ?? null, observedAtUtc: record.observedAtUtc ?? null, source: 'ledger' });
+  }
+  for (const file of odcRoot ? avsigsUnder(path.join(odcRoot, 'snapshots')) : []) {
+    const identity = odcSignatureIdentity(file);
+    if (!identity || !sameName(identity.producer, producer)) continue;
+    if (environment && lower(identity.environment) !== lower(environment)) continue;
+    let stat, digest;
+    try { stat = fs.statSync(file); digest = sha256(fs.readFileSync(file)); } catch { continue; }
+    out.push({ path: path.resolve(file), sha256: digest, environment: identity.environment, producer: identity.producer, producerKey: identity.producerKey,
+      revision: identity.revision, observedAtUtc: stat.mtime.toISOString(), source: 'snapshots' });
+  }
+  return out.sort((a, b) => (Date.parse(b.observedAtUtc) || 0) - (Date.parse(a.observedAtUtc) || 0) || a.path.localeCompare(b.path));
+}
+// A studio_reference_snapshot answer {ok, path, sha256, environment, producer, producerKey, revision} becomes the
+// workspace's observation of the producer, by its binding key, when the file still has the bytes the bridge reported:
+// the next delivery (and the offline check) finds it by the producer's name. Never throws; false when nothing was kept.
+export function rememberOdcCaptureAnswer(dir, answer, { now = new Date() } = {}) {
+  try {
+    if (!dir || answer?.ok !== true || typeof answer.path !== 'string' || typeof answer.sha256 !== 'string') return false;
+    const key = keyOfName(answer.producer);
+    if (!key || !isFile(answer.path) || sha256(fs.readFileSync(answer.path)) !== answer.sha256.toLowerCase()) return false;
+    return rememberOdcReference(dir, { environment: answer.environment, producer: key, studioName: answer.producer, file: answer.path, sha256: answer.sha256.toLowerCase(),
+      producerKey: answer.producerKey ?? null, revision: answer.revision ?? null, now });
+  } catch { return false; }
+}
+
+// The delivery cache's observation of the producer: {at, identity} of its intact capture, or null.
+function supersededBy(dir, environment, producer) {
+  try {
+    if (!dir) return null;
+    const files = odcFiles(dir, environment, producer);
+    const record = readJson(files.json);
+    const at = Date.parse(record?.observedAtUtc);
+    if (record?.schema !== ODC_SCHEMA || !Number.isFinite(at) || !isFile(files.avsig) || sha256(fs.readFileSync(files.avsig)) !== record.sha256) return null;
+    const identity = odcSignatureIdentity(files.avsig);
+    return identity ? { at, identity } : null;
+  } catch { return null; }
+}
+
+// F5 over the capture folder: the newest studio_reference_snapshot capture of the producer in this environment, copied to
+// target, when it is recent (the same window as the delivery cache) and no publication of it was recorded since; the
+// delivery acquires it again before the merge and compares the identity. {sha256, producerKey, revision, observedAtUtc,
+// studioName, source:"snapshots", from} or null.
+export function reuseOdcCapture(odcRoot, dir, { environment, producer, target, now = new Date(), window = windowMs(), accept = null } = {}) {
+  try {
+    if (!odcRoot || !environment || !producer || !(window > 0)) return null;
+    // Round 2 (M1): a capture the workspace already proved out of date is never reused: the delivery cache holds a later
+    // observation of the producer (a PRODUCER_CHANGED keeps the version it acquired) with another identity.
+    const superseded = supersededBy(dir, environment, producer);
+    const found = odcCaptures(odcRoot, { producer, environment, cache: null })
+      .find(c => { const at = Date.parse(c.observedAtUtc); return Number.isFinite(at) && at <= now.getTime() + SKEW_MS && now.getTime() - at <= window && !(dir && publishedSince(dir, environment, producer, at))
+        && !(superseded && superseded.at >= at && !sameOdcIdentity(superseded.identity, odcSignatureIdentity(c.path)))
+        && (!accept || accept({ studioName: c.producer, producerKey: c.producerKey, resolvedFrom: [] })); });
+    if (!found) return null;
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.copyFileSync(found.path, target);
+    return { sha256: found.sha256, producerKey: found.producerKey, revision: found.revision, observedAtUtc: found.observedAtUtc, studioName: found.producer, source: 'snapshots', from: found.path };
+  } catch { return null; }
 }
 
 // The producer changed: its observation goes, the next delivery acquires it again.
@@ -238,8 +345,8 @@ export function producerSignaturesOf(state) {
   if (!rows.length) return {};
   const reused = rows.filter(r => r.signature === 'reused').length, serverless = rows.filter(r => r.observed === 'ledger').length;
   return { producers: rows.slice(0, 12), ...(rows.length > 12 ? { producersTotal: rows.length } : {}),
-    producersNote: 'assinaturas de produtor: ' + reused + ' de ' + rows.length + ' reaproveitadas do cache, ' + serverless
-      + ' sem chamada ao servidor (mesma versão publicada vista há pouco, sem publicação desde então); antes de gravar, o merge confere a versão de cada produtor no servidor' };
+    producersNote: 'producer signatures: ' + reused + ' of ' + rows.length + ' reused from the cache, ' + serverless
+      + ' without a call to the server (the same published version seen a moment ago, no publication since); before writing, the merge checks the version of each producer on the server' };
 }
 
 // ---- F6, the work packet: the cached signatures of the producers the intent needs. Deterministic: the same cache gives the

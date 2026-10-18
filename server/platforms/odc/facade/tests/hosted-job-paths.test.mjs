@@ -8,6 +8,7 @@
 // is rewritten to the absolute workspace path the kernel reads); the JSON text of a job is the job only on a job pointer;
 // the prototype op and the composite rule still hold for inline text. A fake link, context and executor; no hub, agent,
 // kernel or Studio.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

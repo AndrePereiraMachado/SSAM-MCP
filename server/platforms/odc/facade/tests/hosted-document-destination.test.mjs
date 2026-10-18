@@ -13,6 +13,7 @@
 // DNS and transport are stubs: a fake lookup, node:http/https request replaced by a recorder that resolves through the
 // lookup the client hands it and answers from a table, globalThis.fetch replaced for local use, net.connect spied.
 // Nothing leaves this process.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

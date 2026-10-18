@@ -1,5 +1,5 @@
 {
- "description": "ChatMessage do OSUI: o input obrigatorio MessageStatus (static entity do OSUI) e o texto no Content.",
+ "description": "ChatMessage of OSUI: the required input MessageStatus (a static entity of OSUI) and the text in the Content.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

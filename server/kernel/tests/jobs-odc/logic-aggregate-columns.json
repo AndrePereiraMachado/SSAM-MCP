@@ -1,12 +1,12 @@
 {
- "description": "ODC (integrador, lote de kernel INT-T2-002, suspeita da frente A): get compacto da spec de logica com colunas agregadas (Group, Count, Max), sobre o modelo do data-full-model. No ODC a interface da coluna agregada chama-se IAggregatedAttribute (no SS11, IAggregateAttribute; o DisplayName e o mesmo); o expansor emitia sempre o nome do SS11. O contrato de dados le as colunas de volta pelo nome da faixa.",
+ "description": "ODC (integrator, kernel batch INT-T2-002, suspicion of front A): compact get of the logic spec with aggregated columns (Group, Count, Max), over the data-full-model model. In ODC the aggregated column interface is called IAggregatedAttribute (in SS11, IAggregateAttribute; the DisplayName is the same); the expander always emitted the SS11 name. The data contract reads the columns back by the lane's name.",
  "base": "job:data-full-model",
  "expectValid": true,
  "expectedMessages": [
   {
    "id": "UnusedUserAction",
    "element": "InsuranceApp (ESpace) / WfCov_Tasks_ByProject (ServerAction)",
-   "why": "a action existe para provar a expansao das colunas agregadas e nao tem consumidor; o Verify do ODC avisa sobre actions sem uso (o SS11 nao)."
+   "why": "the action exists to prove the expansion of the aggregated columns and has no consumer; the ODC Verify warns about unused actions (SS11 does not)."
   }
  ],
  "ops": [
@@ -23,6 +23,6 @@
     ]}
   ]}},
   {"op": "dump", "target": "IServerAction:WfCov_Tasks_ByProject", "depth": 4},
-  {"op": "find", "name": "OpenTasks", "_why": "a coluna Count existe com o tipo da faixa (IAggregatedAttribute no ODC)"}
+  {"op": "find", "name": "OpenTasks", "_why": "the Count column exists with the lane's type (IAggregatedAttribute in ODC)"}
  ]
 }

@@ -12,7 +12,7 @@ import { anvilRoot } from './workspace.mjs';
 export const NONBLOCKING = 'nonblocking';
 export const HIGH = 'high';
 export const WARNINGS_MAX = 20;
-export const UNUSED_FIX = 'Remova o elemento ou use-o.';
+export const UNUSED_FIX = 'Remove the element or use it.';
 
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const oneLine = (text, limit = 200) => {
@@ -143,9 +143,9 @@ export function groupWarnings(list) {
   return out;
 }
 
-// The answer fields: warnings (equal ones grouped, at most WARNINGS_MAX entries, the HIGH ones first) and warningsTotal
-// (every warning) when the entries shown do not count them all; the HIGH ones also in highWarnings, so a compacted answer
-// (compactDelivery keeps the DELIVERY_FIELDS) always shows them; nothing when there is none.
+// Source fields: warnings (equal ones grouped, at most WARNINGS_MAX, HIGH first), warningsTotal when entries do not count
+// every warning, and highWarnings for A03. The shared output policy removes warnings entries repeated in highWarnings;
+// source consumers retain the original fields. Nothing when there is none.
 export function warningFields(list, max = WARNINGS_MAX) {
   const all = Array.isArray(list) ? list.filter(Boolean) : [];
   if (!all.length) return {};

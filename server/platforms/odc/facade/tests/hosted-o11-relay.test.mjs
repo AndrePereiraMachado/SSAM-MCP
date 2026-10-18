@@ -1,6 +1,7 @@
 // hosted/o11-relay.mjs through the AgentExecutor (docs/FASE2-AGENTE.md 4.6, 10.7): a client shaped like the kernel's
 // BridgeClient (one JSON line {method, params, authorization} per connection: bridgeRequest of o11-bridge.mjs) reaches
 // THIS customer's agent only with THIS customer's relay key. Fake AgentLink; loopback ports only.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

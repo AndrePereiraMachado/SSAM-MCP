@@ -1,5 +1,5 @@
 {
- "description": "Form: um IForm com um Input dentro, ligado a uma variavel local da tela.",
+ "description": "Form: an IForm with an Input inside, bound to a local variable of the screen.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

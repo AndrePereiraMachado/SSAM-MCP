@@ -70,7 +70,7 @@ for(const mode of ['live','reloaded'])for(const outcome of ['rolledback','delive
       assert.equal(box.counts.fresh,2,'reconciled rollback releases the corresponding facade guard');assert.equal(after.ok,true);
     } else {
       assert.equal(box.counts.fresh,1,'confirmed delivery must never run a second merge');
-      assert.equal(after.ok,true);assert.equal(after.result,'entregue');
+      assert.equal(after.ok,true);assert.equal(after.result,'delivered');
       assert.equal(after.code,'TASK_DELIVERED');assert.match(after.message??'',/entregue|delivered/i);
       assert.doesNotMatch(after.code??'',/UNCERTAIN/);
       assert.doesNotMatch(after.error??after.message??'',/no definitive outcome/i);

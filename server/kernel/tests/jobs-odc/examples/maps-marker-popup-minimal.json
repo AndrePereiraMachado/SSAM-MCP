@@ -1,5 +1,5 @@
 {
- "description": "MarkerPopup do OutSystemsMaps: marcador com Position (obrigatorio) e o texto do balao no placeholder Popup.",
+ "description": "MarkerPopup of OutSystemsMaps: a marker with a Position (required) and the text of the balloon in the Popup placeholder.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

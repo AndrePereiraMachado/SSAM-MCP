@@ -1,5 +1,5 @@
 {
- "description": "Card de produto clicavel numa Gallery: o onclick do Container chama uma screen action que recebe o Id da linha e navega para o detalhe passando esse Id.",
+ "description": "A clickable product card in a Gallery: the onclick of the Container calls a screen action that receives the Id of the row and navigates to the detail passing that Id.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -8,7 +8,7 @@
    {"name": "Name", "type": "Text", "length": 100, "mandatory": true},
    {"name": "Price", "type": "Currency"}]}]}},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductDetail", "as": "$detail", "_why": "1. a tela de destino nasce antes de quem navega para ela"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ProductDetail", "as": "$detail", "_why": "1. the target screen is born before whoever navigates to it"},
   {"op": "set", "target": "$detail/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$detail", "type": "IInputParameter", "name": "ProductId", "as": "$pid"},
   {"op": "set", "target": "$pid", "prop": "DataType", "value": "Product Identifier"},
@@ -23,12 +23,12 @@
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetProducts", "as": "$agg"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Product"}},
-  {"op": "logic", "_why": "o handler de um evento estendido tem de ser uma screen action (a tela direto e recusada pela plataforma); ela navega com IDestinationNode", "data": {"actions": [
+  {"op": "logic", "_why": "the handler of an extended event has to be a screen action (the screen directly is refused by the platform); it navigates with IDestinationNode", "data": {"actions": [
    {"name": "OpenProduct", "kind": "screen", "owner": "IMobileScreen:ProductGrid",
     "inputs": [{"name": "ProductId", "type": "Product Identifier"}],
     "steps": [{"node": "IDestinationNode", "as": "GoToDetail", "properties": {"Destination": "IMobileScreen:ProductDetail"}, "args": {"ProductId": "ProductId"}}]}]}},
 
-  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Grid", "source": "IMobileBlock:Gallery", "empty": true, "as": "$gal", "_why": "empty tira a List de exemplo com que a Gallery nasce"},
+  {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "Grid", "source": "IMobileBlock:Gallery", "empty": true, "as": "$gal", "_why": "empty removes the sample List the Gallery is born with"},
   {"op": "create", "parent": "$gal/Content", "type": "IList", "name": "ProductList", "as": "$list"},
   {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},
   {"op": "create", "parent": "$list", "type": "IContainer", "name": "ProductCard", "as": "$card"},
@@ -41,7 +41,7 @@
   {"op": "create", "parent": "$card", "type": "IEvent", "as": "$click", "_why": "3. o clique do card: evento estendido onclick no Container"},
   {"op": "set", "target": "$click", "prop": "Event", "value": "onclick"},
   {"op": "set", "target": "$click", "prop": "Handler", "value": "IMobileScreen:ProductGrid/OpenProduct"},
-  {"op": "set", "target": "$click/ProductId", "prop": "Value", "value": "GetProducts.List.Current.Product.Id", "_why": "o argumento leva o nome do input da screen action"},
+  {"op": "set", "target": "$click/ProductId", "prop": "Value", "value": "GetProducts.List.Current.Product.Id", "_why": "the argument takes the name of the input of the screen action"},
 
   {"op": "get", "target": "$click"},
   {"op": "usages", "target": "IMobileScreen:ProductGrid/OpenProduct", "_why": "o IEvent do card e o consumidor da screen action"}

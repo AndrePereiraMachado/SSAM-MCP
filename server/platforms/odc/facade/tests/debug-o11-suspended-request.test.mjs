@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {isO11NativeSuspensionCheck} from '../debug-o11-suspended-request.mjs';

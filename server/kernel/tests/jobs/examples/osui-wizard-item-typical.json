@@ -1,5 +1,5 @@
 {
- "description": "WizardItem (OutSystemsUI, Navigation) tipico; dentro de um Wizard vazio (placeholder Content); inputs obrigatorios Status ligados a variaveis da tela; placeholders Label, Icon com dados do aggregate de tarefas; eventos OnClick tratados por screen actions que guardam os parametros em variaveis.",
+ "description": "Typical WizardItem (OutSystemsUI, Navigation); inside an empty Wizard (placeholder Content); required inputs Status bound to screen variables; placeholders Label, Icon with data of the tasks aggregate; events OnClick handled by screen actions that keep the parameters in variables.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],
@@ -11,7 +11,7 @@
   {"op": "set", "target": "$vOnClickCount", "prop": "DataType", "value": "Integer"},
   {"op": "create", "parent": "IMobileScreen:Showcase", "type": "IScreenAggregate", "name": "GetShowcaseTasks", "as": "$tasks"},
   {"op": "create", "parent": "$tasks", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
-  {"op": "logic", "data": {"actions": [{"name": "WizardItemDemoOnClick", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Conta as vezes que OnClick disparou", "inputs": [],"steps": [{"assign": {"OnClickCount": "OnClickCount + 1"},"as": "KeepOnClick"}]}]}},
+  {"op": "logic", "data": {"actions": [{"name": "WizardItemDemoOnClick", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Counts the times OnClick fired", "inputs": [],"steps": [{"assign": {"OnClickCount": "OnClickCount + 1"},"as": "KeepOnClick"}]}]}},
   {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "WizardDemo", "source": "IMobileBlock:Wizard", "empty": true,"as": "$parent"},
   {"op": "create", "parent": "$parent/Content", "type": "IMobileBlockInstanceWidget", "name": "WizardItemDemo", "source": "IMobileBlock:WizardItem", "as": "$b"},
   {"op": "set", "target": "$b/Status", "prop": "Value", "value": "StatusValue"},

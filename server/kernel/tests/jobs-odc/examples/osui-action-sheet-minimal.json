@@ -1,5 +1,5 @@
 {
- "description": "ActionSheet do OSUI: o input obrigatorio IsOpen ligado a uma variavel Boolean.",
+ "description": "ActionSheet of OSUI: the required input IsOpen bound to a Boolean variable.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

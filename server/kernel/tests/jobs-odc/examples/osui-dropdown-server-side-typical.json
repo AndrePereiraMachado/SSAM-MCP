@@ -1,5 +1,5 @@
 {
- "description": "DropdownServerSide do OSUI: busca no balao ligada a SearchText com Refresh Data, um DropdownServerSideItem por linha da List e OnSelected gravando o item escolhido.",
+ "description": "DropdownServerSide of OSUI: a search in the balloon bound to SearchText with Refresh Data, one DropdownServerSideItem per row of the List and OnSelected saving the chosen item.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -25,7 +25,7 @@
   {"op": "set", "target": "$in/OnChange", "prop": "Destination", "value": "IMobileScreen:ServerSideCategory/SearchChanged"},
   {"op": "create", "parent": "$ds/BalloonContent", "type": "IList", "name": "CategoryList", "as": "$list"},
   {"op": "set", "target": "$list", "prop": "Source", "value": "LoadCategories.List"},
-  {"op": "create", "parent": "$list", "type": "IMobileBlockInstanceWidget", "name": "CategoryItem", "source": "IMobileBlock:DropdownServerSideItem", "empty": true, "as": "$item", "_why": "o conteudo de exemplo do item cita um GetData que o app nao tem"},
+  {"op": "create", "parent": "$list", "type": "IMobileBlockInstanceWidget", "name": "CategoryItem", "source": "IMobileBlock:DropdownServerSideItem", "empty": true, "as": "$item", "_why": "the sample content of the item cites a GetData the app does not have"},
   {"op": "set", "target": "$item/ItemId", "prop": "Value", "value": "IntegerToText(LoadCategories.List.Current.Category.Id)"},
   {"op": "set", "target": "$item/IsSelected", "prop": "Value", "value": "LoadCategories.List.Current.Category.Label = ChosenLabel"},
   {"op": "set", "target": "$item/OnSelected", "prop": "Handler", "value": "IMobileScreen:ServerSideCategory/ItemSelected"},

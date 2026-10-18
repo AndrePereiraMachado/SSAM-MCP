@@ -1,5 +1,5 @@
 {
- "description": "Imagem externa por URL: um Image com Type External e Url escrita como expressao de texto.",
+ "description": "An external image by URL: an Image with Type External and the Url written as a text expression.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -7,8 +7,8 @@
   {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "ExternalImage", "as": "$scr"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IImage", "name": "Banner", "as": "$img"},
-  {"op": "set", "target": "$img", "prop": "Type", "value": "External", "_why": "External = URL; Static = imagem do modulo (Image); Binary = conteudo binario (ImageContent)"},
-  {"op": "set", "target": "$img", "prop": "Url", "value": "\"https://picsum.photos/640/240\"", "_why": "Url e expressao: o texto literal vai entre aspas"},
+  {"op": "set", "target": "$img", "prop": "Type", "value": "External", "_why": "External = URL; Static = an image of the module (Image); Binary = binary content (ImageContent)"},
+  {"op": "set", "target": "$img", "prop": "Url", "value": "\"https://picsum.photos/640/240\"", "_why": "Url is an expression: the literal text goes between quotes"},
   {"op": "get", "target": "$img"}
  ]
 }

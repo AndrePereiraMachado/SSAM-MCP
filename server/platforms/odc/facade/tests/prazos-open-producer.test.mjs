@@ -160,7 +160,7 @@ test('ENVIRONMENT_CALL_CUT answers what was cut, that nothing was written and wh
   assert.equal(value.continuation.tool, 'o11_deliver');
   assert.equal(value.continuation.arguments.closePrevious, TASK);
   assert.equal(value.continuation.arguments.resume, undefined);
-  assert.match(value.continuation.why, /Não repita às cegas/);
+  assert.match(value.continuation.why, /Do not repeat it blindly/); // English since 17/10 (servidor/fase4-26 a7)
   assert.match(value.continuation.why, /FolhaPonto_CS aberto e sem alterações/);
   // Through the tool: the same answer, with the job named for the next call.
   const runAnvil = fakeAnvil({ deliver: () => ({ ok: false, command: 'deliver', data: cutState }) });

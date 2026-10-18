@@ -1,5 +1,5 @@
 {
- "description": "Pagination do OSUI: os tres inputs obrigatorios e o evento obrigatorio OnNavigate guardando o novo inicio.",
+ "description": "Pagination of OSUI: the three required inputs and the required event OnNavigate keeping the new start.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

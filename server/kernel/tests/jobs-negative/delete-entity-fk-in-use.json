@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA do delete de uma entidade citada por uma FK: DelFkChild.ParentId e do tipo 'DelFkParent Identifier', que e um FILHO da entidade (o usages direto nao o ve). O delete olha os consumidores de tudo o que esta dentro do alvo e nomeia a FK. Antes so o registo anonimo `DelFkParent Record` recusava este delete (escondendo a FK); ele deixou de contar sozinho, e esta e a guarda que o substitui. Cobertura testada, fase 2.",
+ "description": "The REFUSAL of the delete of an entity cited by a FK: DelFkChild.ParentId is of type 'DelFkParent Identifier', which is a CHILD of the entity (the direct usages does not see it). The delete looks at the consumers of everything that is inside the target and names the FK. Before, only the anonymous record `DelFkParent Record` refused this delete (hiding the FK); it stopped counting by itself, and this is the guard that replaces it. Tested coverage, phase 2.",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "expectError": [
@@ -11,7 +11,7 @@
   {"op": "spec", "data": {"entities": [
     {"name": "DelFkParent", "attributes": [{"name": "Title", "type": "Text"}]},
     {"name": "DelFkChild", "attributes": [{"name": "ParentId", "type": "DelFkParent Identifier"}]}]}},
-  {"op": "usages", "target": "$DelFkParent", "_why": "direto: so o registo anonimo (derived true); a FK liga-se ao tipo identificador"},
+  {"op": "usages", "target": "$DelFkParent", "_why": "direct: only the anonymous record (derived true); the FK links to the identifier type"},
   {"op": "delete", "target": "$DelFkParent"}
  ]
 }

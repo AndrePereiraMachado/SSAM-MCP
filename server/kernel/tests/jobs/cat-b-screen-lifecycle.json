@@ -1,5 +1,5 @@
 {
- "description": "Frente B (catalogo abrangente): ciclo de vida de TELA e de BLOCO ligado a screen actions na faixa O11 Reactive, a lacuna que nenhum job da suite O11 cobria (so jobs-live, fora da suite). A tela CatBLifeDemo liga OnInitialize, OnReady e OnDestroy a tres screen actions sem outputs que escrevem uma variavel local; o bloco CatBLifeBadge liga OnParametersChanged a uma screen action do proprio bloco; a tela instancia o bloco passando a variavel. O job le de volta cada evento (Destination) e os consumidores das actions. Mesmo cenario, por desenho, que tests/jobs-odc/cat-b-screen-lifecycle.json; resultados independentes por faixa.",
+ "description": "Front B (broad catalog): SCREEN and BLOCK lifecycle linked to screen actions in the O11 Reactive lane, the gap that no job of the O11 suite covered (only jobs-live, outside the suite). The screen CatBLifeDemo links OnInitialize, OnReady and OnDestroy to three screen actions without outputs that write a local variable; the block CatBLifeBadge links OnParametersChanged to a screen action of the block itself; the screen instantiates the block passing the variable. The job reads back each event (Destination) and the consumers of the actions. Same scenario, by design, as tests/jobs-odc/cat-b-screen-lifecycle.json; independent results per lane.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -10,7 +10,7 @@
    "type": "IMobileBlock",
    "name": "CatBLifeBadge",
    "as": "$blk",
-   "_why": "1. o bloco: um input e uma variavel que o OnParametersChanged mantem"
+   "_why": "1. the block: an input and a variable that the OnParametersChanged maintains"
   },
   {
    "op": "create",
@@ -63,7 +63,7 @@
    "type": "IScreenAction",
    "name": "LabelChanged",
    "as": "$pc",
-   "_why": "2. o handler do OnParametersChanged: screen action do proprio bloco, sem outputs"
+   "_why": "2. the OnParametersChanged handler: a screen action of the block itself, without outputs"
   },
   {
    "op": "create",
@@ -126,7 +126,7 @@
    "target": "$blk/OnParametersChanged",
    "prop": "Destination",
    "value": "$pc",
-   "_why": "3. a ligacao do ciclo de vida do bloco: o mesmo verbo e a mesma propriedade de um OnClick"
+   "_why": "3. the link of the block lifecycle: the same verb and the same property as an OnClick"
   },
   {
    "op": "create",
@@ -134,7 +134,7 @@
    "type": "IMobileScreen",
    "name": "CatBLifeDemo",
    "as": "$scr",
-   "_why": "4. a tela e os seus tres eventos de ciclo de vida"
+   "_why": "4. the screen and its three lifecycle events"
   },
   {
    "op": "set",
@@ -361,7 +361,7 @@
    "target": "$scr/OnInitialize",
    "prop": "Destination",
    "value": "$init",
-   "_why": "5. as tres ligacoes de ciclo de vida da tela"
+   "_why": "5. the three lifecycle links of the screen"
   },
   {
    "op": "set",
@@ -394,7 +394,7 @@
    "name": "Badge",
    "source": "IMobileBlock:CatBLifeBadge",
    "as": "$inst",
-   "_why": "6. a instancia do bloco recebe a variavel da tela: cada mudanca dispara o OnParametersChanged do bloco"
+   "_why": "6. the block instance receives the screen variable: each change fires the OnParametersChanged of the block"
   },
   {
    "op": "set",
@@ -405,7 +405,7 @@
   {
    "op": "get",
    "target": "$scr/OnInitialize",
-   "_why": "7. LER DE VOLTA: cada evento aponta para a sua action"
+   "_why": "7. READ BACK: each event points to its action"
   },
   {
    "op": "get",
@@ -422,12 +422,12 @@
   {
    "op": "usages",
    "target": "$ready",
-   "_why": "o consumidor da action e o evento de ciclo de vida da tela"
+   "_why": "the consumer of the action is the lifecycle event of the screen"
   },
   {
    "op": "usages",
    "target": "$pc",
-   "_why": "o consumidor da action do bloco e o OnParametersChanged"
+   "_why": "the consumer of the block action is the OnParametersChanged"
   },
   {
    "op": "dump",

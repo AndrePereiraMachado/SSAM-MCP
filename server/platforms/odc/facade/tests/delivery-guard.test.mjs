@@ -1,6 +1,7 @@
 // Feature-path delivery (studio_deliver without a job): a Studio step that throws has an unknown result. During the
 // merge that is `uncertain` with the instruction to reconcile by receipt (request C-009, front C); before it, a plain
 // failure with nothing merged. Pure: no Studio, no bridge.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { guardDeliveryStep } from '../lib.mjs';

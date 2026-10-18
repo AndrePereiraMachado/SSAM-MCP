@@ -1,5 +1,5 @@
 {
- "description": "Text Area: um ITextArea ligado a uma variavel Text, com quatro linhas visiveis.",
+ "description": "Text Area: an ITextArea bound to a Text variable, with four visible lines.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

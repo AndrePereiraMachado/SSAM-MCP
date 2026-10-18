@@ -6,7 +6,7 @@
 // inside run(context, fn), and the answer loses the evidence of third-party jobs (evidence.mjs; an ssam_discover answer
 // also loses the client names of the owner's catalogs, not those of the customer's own module: scrubDiscover) and is
 // presented: workspace paths become ws:<rel>, other paths
-// of this server become <servidor>. Nothing here touches a Studio or the agent by itself, except bringing an
+// of this server become <server> (SERVER_MARK). Nothing here touches a Studio or the agent by itself, except bringing an
 // agent:<rel> the LLM named (executor.pullFile).
 // A-M1 + E2 (C:\t\multiver\minimo\PROPOSTA.md; studio-identity.mjs): a Studio the server does not serve is ONE refusal by
 // direction (incompatible); every answer of a lane whose Studio is another build served with a warning carries
@@ -38,8 +38,9 @@ import { agentReadable, agentSegments, insideVisible } from './mirror.mjs';
 import { agentPath, outsideWorkspaceRefusal } from '../agent-paths.mjs';
 import { JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesGenerator, namesPrototype, namesVerifiedPatch, outside, parseJobTexts } from './job-paths.mjs';
 import { generatorApproval, offered } from '../generators.mjs';
-import { studioIdentity, studioRefusal, studioWarningOf } from '../studio-identity.mjs';
+import { causeOf, studioIdentity, studioRefusal, studioWarningOf } from '../studio-identity.mjs';
 import { destructiveUnavailable, hostedDestructive, hostedDestructiveFiles } from './destructive.mjs';
+import { withStudioScope } from './studio-scope.mjs';
 
 export const TOOLS_FILE = fileURLToPath(new URL('./tools.json', import.meta.url));
 let loaded = null;
@@ -95,8 +96,8 @@ export function agentNotConnected(info, { now = Date.now(), tool = null, args = 
     const age = sinceSeen(info, now);
     const seconds = Math.round(age / 1000);
     const why = age < RESTART_AFTER_MS
-      ? 'o agente SSAM reconecta sozinho (perdeu a conexão há ' + seconds + ' s): repita a mesma chamada em ' + RETRY_AFTER_SECONDS + ' s; não peça ao usuário para reiniciar nada'
-      : 'o agente está sem contato há ' + seconds + ' s: repita em ' + RETRY_AFTER_SECONDS + ' s e, se continuar, peça ao usuário para conferir a janela do agente (agent\\ssam-agent.ps1 status) e iniciá-lo só se ele tiver parado';
+      ? 'the SSAM agent reconnects by itself (it lost the connection ' + seconds + ' s ago): repeat the same call in ' + RETRY_AFTER_SECONDS + ' s; do not ask the user to restart anything'
+      : 'the agent has been out of contact for ' + seconds + ' s: repeat in ' + RETRY_AFTER_SECONDS + ' s and, if it goes on, ask the user to check the agent window (agent\\ssam-agent.ps1 status) and to start it only if it has stopped';
     return { ok: false, code: 'AGENT_RECONNECTING', retryAfterSeconds: RETRY_AFTER_SECONDS, lastSeenSecondsAgo: seconds,
       error: 'The SSAM agent of this account lost its connection ' + seconds + ' s ago and is reconnecting by itself; nothing ran on the user\'s machine.',
       continuation: tool ? { tool, arguments: args ?? {}, why } : doctor(why) };
@@ -125,8 +126,9 @@ export function incompatible(lane, compat, info) {
   const agentStudio = info?.studios?.[lane]?.installed?.version ?? null;
   const studio = STUDIO[lane];
   // A-M1: a Studio this server does not serve (another version, or another build under studioBuildPolicy "refuse"): ONE
-  // refusal with the direction (cause), both builds, what still works and "nothing ran", in pt-BR (userMessage) and English
-  // (error). It replaces the old continuation "install the Studio at the server's version", impossible for the ODC Studio.
+  // refusal with the direction (cause), both builds, what still works and "nothing ran", in English for the user (userMessage)
+  // and for the model (error; B3 of round 3, owner rule of 2026-10-15: every SSAM text in English, no bilingual line). It
+  // replaces the old continuation "install the Studio at the server's version", impossible for the ODC Studio.
   const notServed = compat.code === 'STUDIO_VERSION_MISMATCH' ? studioRefusal(studioOf(lane, compat, info), { stillWorks: serverOnlyTools(lane) }) : null;
   if (notServed) return { ...notServed, serverKernel, agentStudio };
   if (compat.cause === 'KERNEL_VERSION_MISSING') return { ok: false, code: compat.code, cause: compat.cause, lane, serverKernel, agentStudio,
@@ -201,8 +203,7 @@ export { namesPrototype };
 export function prototypeUnavailable(name, lane) {
   return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'PROTOTYPE_SOURCE_LOCAL', policy: 'HOSTED_PROTOTYPE_OP', tool: name, outcome: 'not-sent',
     error: 'The prototype import (op "prototype") is available only in local use for now: on a hosted server its source folder and the capture '
-      + 'of its JavaScript would run on the server machine. Nothing ran. / O importador de protótipo (op "prototype") por enquanto só funciona '
-      + 'no uso local: no servidor hospedado a pasta dele e a captura do seu JavaScript rodariam na máquina do servidor. Nada rodou.',
+      + 'of its JavaScript would run on the server machine. Nothing ran.',
     continuation: { tool: 'ssam_discover', arguments: { intent: 'port an approved prototype screen 1:1 with the html op and its style in the theme', lane: lane === 'odc' ? 'odc' : 'o11' },
       why: 'Builds the same screens with the ops this server runs (html op plus its <style>), without the prototype op; or import the prototype with an SSAM installed on the user\'s own machine.' } };
 }
@@ -220,10 +221,10 @@ export const pendingGenerator = id => id === 'unreadable' || (typeof id === 'str
 export function generatorUnavailable(name, lane, generator) {
   const approval = generatorApproval(generator);
   return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'GENERATOR_PENDING', policy: 'HOSTED_GENERATOR_OPS', tool: name, generator, outcome: 'not-sent',
-    ...(approval ? { state: approval.state } : {}),
-    error: 'The generator op ' + JSON.stringify(generator) + ' is not available on a hosted SSAM server: it still waits for its independent blind test, '
-      + 'so this server never runs it. Nothing ran. / O gerador ' + JSON.stringify(generator) + ' não está disponível no servidor hospedado: ele ainda '
-      + 'espera o teste cego independente, e este servidor não o roda. Nada rodou.',
+    // a7 (no-internals list item 16): the state a licensee reads is the exposure rule's seal (not offered), and the text
+    // names no internal reason; the approval itself stays in generators.mjs.
+    ...(approval ? { state: approval.state === 'approved' ? 'approved' : 'not offered' } : {}),
+    error: 'The generator op ' + JSON.stringify(generator) + ' is not offered on a hosted SSAM server yet, so this server never runs it. Nothing ran.',
     continuation: { tool: 'ssam_discover', arguments: { intent: generator === 'rest-consume' ? 'consume a REST API' : generator === 'gen-screen' ? 'create list and detail screens' : 'create the CRUD actions of an entity', lane: lane === 'odc' ? 'odc' : 'o11' },
       why: 'Lists the ops this server runs for the same request, written in the job by hand, without the pending generator.' } };
 }
@@ -239,9 +240,7 @@ export function verifiedPatchUnavailable(name, lane, args, at = '/patch') {
   const callArgs = at === '/query/patch' ? { ...args, query: rest } : rest;
   return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'VERIFIED_PATCH_LOCAL', policy: 'HOSTED_VERIFIED_PATCH', tool: name, pointer: at, outcome: 'not-sent',
     error: 'patch "verified" is available only in local use for now: on a hosted server the gate does not read the verified patches kept beside '
-      + 'the job of basedOn, so it cannot check the job they make. Nothing ran. / O patch "verified" por enquanto só funciona no uso local: no '
-      + 'servidor hospedado o portão não lê os patches verificados guardados ao lado do job de basedOn e não consegue conferir o job que eles '
-      + 'montam. Nada rodou.',
+      + 'the job of basedOn, so it cannot check the job they make. Nothing ran.',
     continuation: { tool: name, arguments: callArgs, add: { [at === '/query/patch' ? 'query.patch' : 'patch']: 'the JSON Patch operations themselves: the patch of each problem of that refusal (at most 50), or a partial job as job' },
       why: 'The same call with the explicit patch: the gate checks the job it makes over basedOn, and the handler applies it.' } };
 }
@@ -279,6 +278,10 @@ const pathOnlyWhen = (name, entry, pointer, args, value) => {
   if (isJsonText(value) && jobTextPointers(name, args).includes(pointer)) return false;
   if (entry.agent?.when === 'module-target' && (pointer === '/' + entry.agent.arg || pointer === '/' + entry.agent.arg + '/*')) return looksLikePath(value);
   if (name === 'studio_command' && pointer === '/args/*') return looksLikePath(value);
+  // servidor/fase4-26 a7: a producer binding is the path of a capture or OML, or the word "published" (the producer's published
+  // signature, captured from the user's session), which is no path (o11_deliver, ssam_job/o11_job and, since the a7 merge,
+  // studio_deliver).
+  if (pointer === '/producers/*' && value === 'published') return false;
   if (name === 'ssam_reference' && pointer === '/query') return ['check-job', 'check-delivery'].includes(args?.kind);
   if (name === 'ssam_reference' && pointer === '/query/basedOn/job') return patchedQuery(args);
   if (name === 'ssam_reference' && pointer === '/query/job') return patchedQuery(args);
@@ -347,7 +350,7 @@ const SEP = '[\\\\/]+';
 // A folder whose absolute path starts with a separator (POSIX, and Windows UNC) keeps that separator in its pattern, and
 // its match must start a path, not continue another one. Without both, on Linux (server/Dockerfile) /data/server/... lost
 // its leading "/": the workspace came out as "/ws:odc/..." (a path no tool takes back) and a short server root such as
-// HOME=/tmp turned any ".../tmp/..." into "<servidor>". A Windows drive path (C:\...) keeps its pattern as before.
+// HOME=/tmp turned any ".../tmp/..." into "<server>". A Windows drive path (C:\...) keeps its pattern as before.
 const PATH_START = `(?<![^\\s"'<>|*?,;:=()[\\]{}])`;
 const prefixSource = (dir, api = path) => {
   const abs = api.resolve(dir);
@@ -359,17 +362,32 @@ const END = `(?=$|[\\\\/\\s"'<>|*?,;)\\]}])`;
 
 // The server's own data roots that may live outside the checkout and the profile (servidor/fase4-22): the module index
 // store, where the 22nd release also keeps the module digest (ssam_map index.file and store.file), and the readers' copy.
-export const serverDataRoots = (env = process.env) => [env.SSAM_MODULE_INDEX_ROOT, env.SSAM_READER_CACHE_ROOT]
-  .filter(root => typeof root === 'string' && root.trim()).map(root => path.resolve(root));
+// a7 phase 3 (review vps-a7-2 B4, the family "a folder of the server's layout"): every folder the server's environment
+// names, so the layout of the Linux image never leaves in any field (docker/ssam-server/Dockerfile and the SSAM-MCP image:
+// /data/server with the customers' workspaces, tokens and logs, /data/friction, /data/odc-features, /data/cache, the Studio
+// folders /studio/o11 and /studio/odc). The presenter resolves each one with its own path flavor.
+export const SERVER_ROOT_VARIABLES = Object.freeze(['SSAM_MODULE_INDEX_ROOT', 'SSAM_READER_CACHE_ROOT', 'SSAM_SERVER_DIR', 'SSAM_FRICTION_DIR',
+  'ANVIL_STUDIO_DIR', 'ANVIL_ODC_STUDIO_DIR', 'ANVIL_ODC_FEATURES_DIR']);
+export const serverDataRoots = (env = process.env) => SERVER_ROOT_VARIABLES.map(name => env[name])
+  .filter(root => typeof root === 'string' && root.trim()).map(root => root.trim());
+// Every root of this server: the code (workspaceRoot: /app in the image), the home and the temp folder of the process (HOME
+// and os.tmpdir(): /tmp in the image) and the folders of its environment. The customer's workspace, which lives under
+// SSAM_SERVER_DIR, is matched first (presenter) and stays ws:<rel>.
+export const serverRoots = ({ env = process.env, code = workspaceRoot, home = os.homedir(), tmp = os.tmpdir() } = {}) =>
+  [...new Set([code, home, tmp, ...serverDataRoots(env)].filter(root => typeof root === 'string' && root.trim()))];
+// The marker of a value of the server a hosted answer withholds (owner rule of 15/10: every text SSAM emits is English; the
+// exposure rule writes the same marker, exposure.mjs MARK). Before phase 3 of the a7 line it was a Portuguese word: nothing reads
+// either marker as input (tests and documents only).
+export const SERVER_MARK = '<server>';
 // pathApi: the path flavor of this server (path.posix in a test of the Linux image's paths).
-export function presenter({ workspace, serverRoots = [workspaceRoot, os.homedir(), ...serverDataRoots()], pathApi = path }) {
+export function presenter({ workspace, serverRoots: given = serverRoots(), pathApi = path }) {
   const ws = pathApi.resolve(workspace);
   const wsSource = prefixSource(ws, pathApi);
-  const roots = [...new Set(serverRoots.filter(Boolean).map(r => pathApi.resolve(r)))].sort((a, b) => b.length - a.length);
+  const roots = [...new Set(given.filter(Boolean).map(r => pathApi.resolve(r)))].sort((a, b) => b.length - a.length);
   const rootSources = roots.map(root => prefixSource(root, pathApi));
   const asWs = rest => {
     const segments = rest.split(/[\\/]+/).filter(Boolean);
-    return segments.length && ['odc', 'o11', 'inbox'].includes(segments[0].toLowerCase()) ? 'ws:' + segments.join('/') : '<servidor>';
+    return segments.length && ['odc', 'o11', 'inbox'].includes(segments[0].toLowerCase()) ? 'ws:' + segments.join('/') : SERVER_MARK;
   };
   const wholeWs = new RegExp(`^${wsSource}${END}(.*)$`, 'is');
   const wholeServer = rootSources.map(source => new RegExp(`^${source}${END}`, 'i'));
@@ -378,9 +396,9 @@ export function presenter({ workspace, serverRoots = [workspaceRoot, os.homedir(
   const string = text => {
     const whole = wholeWs.exec(text);
     if (whole) return asWs(whole[1]);
-    if (wholeServer.some(re => re.test(text))) return '<servidor>';
+    if (wholeServer.some(re => re.test(text))) return SERVER_MARK;
     let out = text.replace(embeddedWs, (match, rest) => asWs(rest));
-    for (const re of embeddedServer) out = out.replace(re, '<servidor>');
+    for (const re of embeddedServer) out = out.replace(re, SERVER_MARK);
     return out;
   };
   const value = node => typeof node === 'string' ? string(node)
@@ -407,19 +425,96 @@ export function presenter({ workspace, serverRoots = [workspaceRoot, os.homedir(
 // studioBuildDiffers: the server serves another build of the user's Studio (kernel.json studioBuildPolicy "warn"), in every
 // answer of the lane. studioNotServed: a server-only tool or a state report ran with the server's kernel while the user's
 // Studio is not served (the Studio tools are refused). Both from studio-identity.mjs studioWarningOf.
+// Round 2 of the review (C:\t\revisoes\studio-build-id\REVISAO.md):
+//   - A2: a tool of the lane "none" touches the lanes HIDDEN_LANES names (ssam_task: its tasks are the O11 work folder,
+//     and close runs the O11 kernel against the Service Studio), or every lane of the token (ssam_connect without lane
+//     attaches them all; ssam_doctor reports them all). Each touched lane is judged; the warnings of all of them come back
+//     (studioWarning the first, studioWarnings all when more than one).
+//   - A1: a lane's identity is the worse of the hub's (the Studio installed on disk) and the one of the process that runs:
+//     the connected Service Studio record (o11.connect/o11.selected studioVersion) for O11; for ODC the AgentExecutor
+//     judges each call's pid and records it in the call's scope (studio-scope.mjs).
+const HIDDEN_LANES = Object.freeze({ ssam_task: Object.freeze(['o11']) });
+export const touchedLanes = (name, lane, lanes = []) => (LANED.has(lane) ? [lane] : (HIDDEN_LANES[name] ?? ['odc', 'o11']).filter(l => lanes.includes(l)));
+const rank = identity => (!identity ? 0 : causeOf(identity) ? 2 : identity.warn ? 1 : 0);
+const worse = (hub, running) => (running && rank(running) >= rank(hub) ? running : hub ?? running);
+// ssam_connect makes the connection, so before its handler the record of the previous one is not judged for it (the hub's
+// verdict is, and the executor judges the process it attaches). B1 (round 3): after its handler (after: true) the record
+// is the connection it made, judged like the record of any other O11 call.
+function laneStudio(name, lane, info, context, { after = false } = {}) {
+  const compat = info?.compatible?.[lane];
+  const hub = compat ? studioOf(lane, compat, info) : null;
+  let record = null;
+  if (lane === 'o11' && (after || name !== 'ssam_connect')) { try { record = context?.executor?.o11Connection?.() ?? null; } catch { record = null; } }
+  return worse(hub, record?.studioVersion ? studioIdentity('o11', { version: record.studioVersion }, info?.kernel ?? {}) : null);
+}
+const refusalBody = (identity, info) => {
+  const body = studioRefusal(identity, { stillWorks: serverOnlyTools(identity?.lane) });
+  return body ? { ...body, serverKernel: info?.kernel?.[identity.lane] ?? null, agentStudio: info?.studios?.[identity.lane]?.installed?.version ?? null } : null;
+};
+const oneRefusal = bodies => (bodies.length > 1 ? { ...bodies[0], lanes: bodies } : bodies[0]);
+// Before the handler of a tool that needs the agent: the refusals of the lanes it touches (each named once in the log).
+// ssam_connect without lane runs with the lanes that are served and says which it skipped (studioSkipped); with none
+// served it is one refusal with every lane (lanes). -> {refusal} | {args, skipped} | {}.
+export function studioGate({ name, lane, args, info, context, lanes, link }) {
+  const touched = touchedLanes(name, lane, lanes);
+  const bodies = [];
+  for (const l of touched) {
+    const identity = laneStudio(name, l, info, context);
+    const body = refusalBody(identity, info);
+    if (!body) continue;
+    try { link?.studioUnserved?.(l, identity, body.cause); } catch { /* the refusal stands without its log line */ }
+    bodies.push(body);
+  }
+  if (!bodies.length) return {};
+  const served = touched.filter(l => !bodies.some(b => b.lane === l));
+  if (name === 'ssam_connect' && !LANED.has(lane) && served.length === 1) return { args: { ...args, lane: served[0] }, skipped: bodies };
+  return { refusal: oneRefusal(bodies) };
+}
+// After the handler: the warnings of the lanes the tool touched (the process's verdict wins for its lane), the lanes
+// skipped before it, and the Studio calls the executor refused during it. A tool that needs the agent (need always) whose
+// every Studio call was refused (none went out) answers with that refusal itself; otherwise (a state report, or a call
+// that sent other Studio calls) the refused ones come back in studioSkipped.
+export function studioVerdict({ name, lane, need = 'always', info, context, lanes, scope, skipped = [], link = null }) {
+  const byLane = new Map();
+  // B1: the Service Studio ssam_connect has just connected, when the server does not serve it (the executor refuses the
+  // attach itself; this is the record of a bridge the call found already loaded), comes back as the lane's refusal.
+  const connected = [];
+  for (const l of touchedLanes(name, lane, lanes)) {
+    if (skipped.some(b => b.lane === l)) continue;
+    const identity = laneStudio(name, l, info, context, { after: true });
+    if (name === 'ssam_connect' && causeOf(identity)) {
+      connected.push(identity);
+      try { link?.studioUnserved?.(l, identity, causeOf(identity)); } catch { /* the refusal stands without its log line */ }
+      continue;
+    }
+    const warning = studioWarningOf(identity);
+    if (warning) byLane.set(l, warning);
+  }
+  for (const identity of scope?.warned ?? []) byLane.set(identity.lane, studioWarningOf(identity));
+  const refusedNow = [...new Map([...(scope?.refused ?? []), ...connected].map(identity => [identity.lane + ':' + identity.installed, identity])).values()]
+    .map(identity => refusalBody(identity, info)).filter(Boolean);
+  for (const body of refusedNow) byLane.delete(body.lane);
+  if (need === 'always' && refusedNow.length && !scope.sent && !skipped.length) return { refusal: oneRefusal(refusedNow) };
+  const warnings = [...byLane.values()];
+  const all = [...skipped, ...refusedNow];
+  return { fields: { ...(warnings.length ? { studioWarning: warnings[0] } : {}), ...(warnings.length > 1 ? { studioWarnings: warnings } : {}),
+    ...(all.length ? { studioSkipped: all } : {}) } };
+}
+// Kept for its callers: the lane's warning of the hub alone.
 export function studioNotice(lane, info) {
   if (!LANED.has(lane)) return null;
   const compat = info?.compatible?.[lane];
   return compat ? studioWarningOf(studioOf(lane, compat, info)) : null;
 }
-// The answer with studioWarning: in structuredContent and in the text that mirrors it; an answer without structured
-// content (or whose text is another rendering) gets one more text item. The tool's own fields, warnings included, stay.
-export function withStudioWarning(answer, warning) {
-  if (!warning || !answer || typeof answer !== 'object') return answer;
+// The answer with the Studio fields (studioWarning, studioWarnings, studioSkipped): in structuredContent and in the text
+// that mirrors it; an answer without structured content (or whose text is another rendering) gets one more text item. The
+// tool's own fields, warnings included, stay.
+export function withStudioFields(answer, fields) {
+  if (!fields || !Object.keys(fields).length || !answer || typeof answer !== 'object') return answer;
   const original = answer.structuredContent;
   const content = Array.isArray(answer.content) ? answer.content : [];
   if (original && typeof original === 'object' && !Array.isArray(original)) {
-    const structuredContent = { ...original, studioWarning: warning };
+    const structuredContent = { ...original, ...fields };
     const mirror = JSON.stringify(original);
     let mirrored = false;
     const items = content.map(item => {
@@ -427,10 +522,11 @@ export function withStudioWarning(answer, warning) {
       mirrored = true;
       return { ...item, text: JSON.stringify(structuredContent) };
     });
-    return { ...answer, structuredContent, content: mirrored ? items : [...items, { type: 'text', text: JSON.stringify({ studioWarning: warning }) }] };
+    return { ...answer, structuredContent, content: mirrored ? items : [...items, { type: 'text', text: JSON.stringify(fields) }] };
   }
-  return { ...answer, content: [...content, { type: 'text', text: JSON.stringify({ studioWarning: warning }) }] };
+  return { ...answer, content: [...content, { type: 'text', text: JSON.stringify(fields) }] };
 }
+export const withStudioWarning = (answer, warning) => withStudioFields(answer, warning ? { studioWarning: warning } : null);
 
 // ---- the gate
 // wrapHostedTool(name, config, handler, {context, link, lanes, run, argsOf}) -> the handler to register. run(context, fn)
@@ -472,7 +568,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
     const need = agentNeed(entry.agent, args);
     // O.6.1: a lane the image refused at start is off for every tool but the state reports, before the agent and any path.
     if (LANED.has(lane) && need !== 'report' && kernelRefused?.[lane]) return refusal(kernelLaneOff(lane, kernelRefused[lane]));
-    let info = null;
+    let info = null, skipped = [];
     try { info = link?.info?.() ?? null; } catch { info = null; }
     if (need === 'always') {
       let connected = false;
@@ -486,6 +582,10 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
       const compat = LANED.has(lane) ? info?.compatible?.[lane] : null;
       if (compat && compat.ok === false) return refusal(incompatible(lane, compat, info));
       if (lane === 'o11' && name !== 'ssam_connect' && !context.executor?.o11Connection?.()) return refusal(o11NotConnected());
+      // A1 + A2 (review round 2): the process each touched lane runs (O11 record) and the lanes a tool without a lane touches.
+      const studio = studioGate({ name, lane, args, info, context, lanes, link });
+      if (studio.refusal) return refusal(studio.refusal);
+      if (studio.args) ({ args, skipped } = studio);
     }
     if ((need === 'always' || (entry.paths?.out ?? []).length) && context.executor?.quota?.full?.()) return refusal(workspaceFull());
     let resolved = args;
@@ -522,10 +622,12 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
         if (files) return refusal(destructiveUnavailable(name, files));
       }
     }
-    const result = await run(context, () => handler(...(hasArgs ? [resolved, ...params.slice(1)] : params)));
+    const { scope, result } = await withStudioScope(() => run(context, () => handler(...(hasArgs ? [resolved, ...params.slice(1)] : params))));
     if (result?.resultType === 'input_required') return result;
-    // A-M1 + E2: the lane's Studio as the hub judged it before the call (info), never silent when it is not the server's build.
-    return withStudioWarning(present.result(name === 'ssam_discover' ? scrubDiscover(result, thirdPartyJobs()) : scrubEvidence(result, thirdPartyJobs())),
-      studioNotice(lane, info));
+    // A-M1 + E2, round 2 (A1, A2): the Studio of every lane the call touched, never silent when it is not the server's build.
+    const verdict = studioVerdict({ name, lane, need, info, context, lanes, scope, skipped, link });
+    if (verdict.refusal) return refusal(verdict.refusal);
+    return withStudioFields(present.result(name === 'ssam_discover' ? scrubDiscover(result, thirdPartyJobs()) : scrubEvidence(result, thirdPartyJobs())),
+      verdict.fields);
   };
 }

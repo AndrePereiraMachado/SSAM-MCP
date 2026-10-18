@@ -100,7 +100,11 @@ public sealed class Pa3Mb2DependenciesDialogTests
         Assert.False(result["delivered"]!.GetValue<bool>());
         Assert.Equal(Delivery.ReferencesRefreshFailedCode, result["code"]!.ToString());
         Assert.Contains("Consumer", result["error"]!.ToString());
-        Assert.Contains("refresh-references", result["error"]!.ToString());
+        // fix-ext-refs round 4 (N2): this refresh failed after it was sent ("its outcome is unknown"): it may still run in the
+        // Studio, so the answer declares it as unknown and sends the resume (idle proof first), never a second refresh now.
+        Assert.Contains("resume this task", result["error"]!.ToString());
+        Assert.Equal("unknown", Assert.Single(result["studioWrites"]!.AsArray())!["outcome"]!.ToString());
+        Assert.NotNull(result["pendingBridgeOperation"]?["outcomeUnknown"]);
         var failed = result["referencesRefreshFailed"]!;
         Assert.Equal("Consumer", failed["module"]!.ToString());
         Assert.Equal("refresh-references", failed["next"]!["arguments"]!["command"]!.ToString());

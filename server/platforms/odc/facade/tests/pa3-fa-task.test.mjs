@@ -48,7 +48,7 @@ test('C37: the next call follows the close state of the kernel task; an unknown 
   s.kernelTask(delivered, { writeState: 'applied', stage: 'done', delivered: true, updatedAt: '2026-10-06T05:52:00Z' });
   const closing = await s.ask({ id: refused.toUpperCase() });
   assert.equal(closing.kernelTask.closeState, 'refused');
-  assert.deepEqual(closing.continuation.arguments, { id: refused, close: { reason: '<motivo>' } });
+  assert.deepEqual(closing.continuation.arguments, { id: refused, close: { reason: '<reason>' } });
   assert.deepEqual((await s.ask({ id: uncertain })).continuation.arguments, { resume: uncertain });
   const done = await s.ask({ id: delivered });
   assert.equal(done.ok, true); assert.equal(done.kernelTask.closeState, 'delivered'); assert.equal(done.continuation, undefined); assert.match(done.note, /ssam_doctor/);

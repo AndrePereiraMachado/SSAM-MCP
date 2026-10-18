@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {connectionDeleteObservation} from '../runtime/connection-delete-observation.mjs';
 const target={connectionId:'owned-id',connectionName:'Own',providerId:'a2a'};

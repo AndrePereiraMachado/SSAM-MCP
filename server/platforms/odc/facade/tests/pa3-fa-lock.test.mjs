@@ -24,7 +24,7 @@ const locks = deps => (fs.existsSync(path.join(deps.o11Root, '.local', 'locks'))
 test('C07: an o11_data insert runs while an o11_deliver holds the Studio; it has its own lane plus the module', async () => {
   const deps = depsFor(tmp());
   const gate = deferred();
-  const delivery = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'Orders', job: [{ op: 'x' }] }, lane: 'o11', deps }, async () => { await gate.promise; return 'entregue'; });
+  const delivery = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'Orders', job: [{ op: 'x' }] }, lane: 'o11', deps }, async () => { await gate.promise; return 'delivered'; });
   await new Promise(r => setImmediate(r));
   const data = await withStudioWriteLock({ tool: 'o11_data', args: insert('Orders'), lane: 'o11', deps: { ...deps, queueMs: 0 } }, async () => ({ ok: true, inserted: 1 }));
   assert.deepEqual(data, { ok: true, inserted: 1 }, 'the record write never waits behind the delivery');
@@ -32,7 +32,7 @@ test('C07: an o11_data insert runs while an o11_deliver holds the Studio; it has
     { lane: 'o11-data-ss4', id: 'm-' + tag('Orders'), dir: path.join(deps.o11Root, '.local', 'locks') });
   assert.equal(studioWriteTarget({ tool: 'o11_data', args: { request: { operation: 'insert' } }, deps }).id, null, 'no module: the whole data lane');
   gate.resolve();
-  assert.equal(await delivery, 'entregue');
+  assert.equal(await delivery, 'delivered');
 });
 
 test('C07: two record writes of the same module stay in series; another module runs beside them', async () => {
@@ -58,7 +58,7 @@ test('C07, I2: after narrowStudioWrite({module:"A"}) a write of module B runs an
     assert.deepEqual(lock.narrowStudioWrite({ module: 'A' }), answer, 'idempotent');
     narrowed.resolve();
     await gate.promise;
-    return 'publicado';
+    return 'published';
   });
   await narrowed.promise;
   assert.equal(answer.narrowed, true);
@@ -71,7 +71,7 @@ test('C07, I2: after narrowStudioWrite({module:"A"}) a write of module B runs an
     'a write that names no module conflicts with every module lock');
   const afterwards = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'A', job: [] }, lane: 'o11', deps }, async () => 'A entregue');
   gate.resolve();
-  assert.equal(await publish, 'publicado');
+  assert.equal(await publish, 'published');
   assert.equal(await afterwards, 'A entregue');
   assert.deepEqual(locks(deps), [], 'the end of the call released the module lock');
 });
@@ -103,7 +103,7 @@ test('C07: a write of module B passes an earlier write of module A that only wai
   const deps = depsFor(tmp());
   const narrowed = deferred(); const gate = deferred(); const order = [];
   const publish = withStudioWriteLock({ tool: 'o11_publish', args: { module: 'A' }, lane: 'o11', deps }, async () => {
-    lock.narrowStudioWrite({ module: 'A' }); narrowed.resolve(); await gate.promise; order.push('publish A'); return 'publicado';
+    lock.narrowStudioWrite({ module: 'A' }); narrowed.resolve(); await gate.promise; order.push('publish A'); return 'published';
   });
   await narrowed.promise;
   const waitingA = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'A', job: [] }, lane: 'o11', deps }, async () => { order.push('deliver A'); return 'A'; });

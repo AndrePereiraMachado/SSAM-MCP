@@ -1,5 +1,5 @@
 {
- "description": "CRUD back-office, parte 1 de 5 (dados): static ProductCategory, entidade Product com indice unico no Code, role ProductManager e as excecoes do dominio. As partes seguintes usam base job:crud-0N; crud-all junta tudo numa transacao.",
+ "description": "Back-office CRUD, part 1 of 5 (data): static ProductCategory, entity Product with a unique index on Code, role ProductManager and the domain exceptions. The next parts use base job:crud-0N; crud-all joins everything in one transaction.",
  "base": "reactive-ui.oml",
  "expectValid": true,
  "expectedMessages": [],

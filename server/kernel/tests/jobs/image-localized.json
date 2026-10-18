@@ -1,5 +1,5 @@
 {
- "description": "O11 (Traditional Web): imagem de modulo e a sua versao localizada criadas pelos verbos. O conteudo da imagem (Byte[] binary de CreateImage e CreateLocalizedImage) vai nos args como texto base64: um PNG de 1x1. O locale vem do unico factory que o Model API tem para ele, IESpace.GetOrCreateLocale(Culture): `create ILocale` com args.culture. A imagem localizada so existe no runtime Traditional: em Reactive, Mobile e no ODC a plataforma recusa ('Localized Image objects can't be children of Image objects'; prova em tests/jobs-odc-negative/localized-image-reactive.json). O get le de volta Width/Height 1 e OriginalFormat Png, ou seja, a plataforma leu o binario.",
+ "description": "O11 (Traditional Web): module image and its localized version created by the verbs. The image content (Byte[] binary of CreateImage and CreateLocalizedImage) goes in the args as base64 text: a 1x1 PNG. The locale comes from the only factory that the Model API has for it, IESpace.GetOrCreateLocale(Culture): `create ILocale` with args.culture. The localized image only exists in the Traditional runtime: in Reactive, Mobile and in ODC the platform refuses ('Localized Image objects can't be children of Image objects'; proof in tests/jobs-odc-negative/localized-image-reactive.json). The get reads back Width/Height 1 and OriginalFormat Png, that is, the platform read the binary.",
  "base": "tests/fixtures/traditional-ui.oml",
  "expectValid": true,
  "ops": [
@@ -12,7 +12,7 @@
   {"op": "get", "target": "$imgPt", "_why": "Locale e o $pt; OriginalFormat Png"},
   {"op": "set", "target": "$img", "prop": "Description", "value": "Logo de prova (1x1)"},
   {"op": "rename", "target": "$img", "name": "CovBrandLogo"},
-  {"op": "duplicate", "target": "$img", "as": "$copy", "_why": "a copia leva a imagem localizada (LocalizedImages 1)"},
+  {"op": "duplicate", "target": "$img", "as": "$copy", "_why": "the copy takes the localized image (LocalizedImages 1)"},
   {"op": "get", "target": "$copy"}
  ]
 }

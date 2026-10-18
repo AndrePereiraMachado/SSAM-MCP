@@ -1,5 +1,5 @@
 {
- "description": "Aggregate com agregacoes e coluna calculada: group by CustomerName, IAggregateAttribute Sum/Max/Min/Avg (AggregationType pelo nome), ICalculatedAttribute com Value (expressao), IFilter com input da action, MaxRecords; leitura dos resultados em Assign: com group by/agregacao e `GetX.List.Current.<NomeDaColuna>` (SEM o alias Order.), e `GetX.List.Length`",
+ "description": "Aggregate with aggregations and a calculated column: group by CustomerName, IAggregateAttribute Sum/Max/Min/Avg (AggregationType by name), ICalculatedAttribute with Value (expression), IFilter with the action's input, MaxRecords; reading of the results in Assign: with group by/aggregation it is `GetX.List.Current.<NomeDaColuna>` (WITHOUT the alias Order.), and `GetX.List.Length`",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "ops": [

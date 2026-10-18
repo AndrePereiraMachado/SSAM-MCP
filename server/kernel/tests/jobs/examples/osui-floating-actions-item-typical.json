@@ -1,5 +1,5 @@
 {
- "description": "FloatingActionsItem (OutSystemsUI, Interaction) tipico; dentro de um FloatingActions vazio (placeholder Items); placeholders Label, Item com dados do aggregate de tarefas.",
+ "description": "Typical FloatingActionsItem (OutSystemsUI, Interaction); inside an empty FloatingActions (placeholder Items); placeholders Label, Item with data of the tasks aggregate.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],

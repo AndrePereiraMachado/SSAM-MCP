@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createOdcSdkBindingReader} from '../debug-odc-native-sdk-binding.mjs';
 const file='_oschunk-SDK.js',dependency={file:'./'+file,export:'x',member:'read'};

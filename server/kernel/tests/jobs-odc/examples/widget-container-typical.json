@@ -1,5 +1,5 @@
 {
- "description": "Container com dados: classe dinamica por expressao, Visible condicionado ao registro e filhos com os campos de cada linha de uma List.",
+ "description": "A Container with data: a dynamic class by an expression, Visible conditioned on the record and children with the fields of each row of a List.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -16,8 +16,8 @@
   {"op": "set", "target": "$list", "prop": "Source", "value": "GetTasks.List"},
 
   {"op": "create", "parent": "$list", "type": "IContainer", "name": "TaskRow", "as": "$row"},
-  {"op": "set", "target": "$row", "prop": "Style", "value": "\"padding-s \" + If(GetTasks.List.Current.Task.IsDone, \"text-neutral-6\", \"text-neutral-10\")", "_why": "classe fixa + classe que depende do registro"},
-  {"op": "set", "target": "$row", "prop": "Visible", "value": "not GetTasks.List.Current.Task.IsArchived", "_why": "Visible e expressao do proprio Container"},
+  {"op": "set", "target": "$row", "prop": "Style", "value": "\"padding-s \" + If(GetTasks.List.Current.Task.IsDone, \"text-neutral-6\", \"text-neutral-10\")", "_why": "a fixed class + a class that depends on the record"},
+  {"op": "set", "target": "$row", "prop": "Visible", "value": "not GetTasks.List.Current.Task.IsArchived", "_why": "Visible is an expression of the Container itself"},
   {"op": "create", "parent": "$row", "type": "IExpression", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "GetTasks.List.Current.Task.Title"},
   {"op": "get", "target": "$row"}

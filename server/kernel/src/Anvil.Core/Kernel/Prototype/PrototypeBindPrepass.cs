@@ -26,7 +26,16 @@ internal static class PrototypeBindPrepass
             var loadProblems = new List<PrototypeCapture.Problem>();
             var capture = PrototypeCapture.Load(data, loadProblems);
             if (capture == null || loadProblems.Count > 0 || data["_producer"]?.ToString() is not { } file) continue; // the op refuses with them
-            var producer = Surface(host, baseBytes, file, bind["producer"]!.ToString(), loadProducer, log);
+            PrototypeProducer producer;
+            try { producer = Surface(host, baseBytes, file, bind["producer"]!.ToString(), loadProducer, log); }
+            catch (InvalidOperationException ex) when (ex.Message.Contains(JobRunner.OutdatedReference, StringComparison.Ordinal))
+            {
+                // fix/system-reference round 4 (M3-R): the module references the producer at another signature than its capture.
+                // Met here (the surface read imports the capture into a scratch copy of the base), it is the same coded refusal a
+                // reference op gets (JobRunner.ReferenceProblems): REFERENCE_OUTDATED at this op, with its one continuation.
+                var reference = new JsonObject { ["producer"] = bind["producer"]!.ToString(), ["elements"] = new JsonArray() };
+                throw new KernelRefusalException("REFERENCE_OUTDATED", ex.Message, JobRunner.ReferenceProblems(ex, reference, i, opsPointer ?? "/ops"));
+            }
             var applied = PrototypeBind.Apply(capture, bind, producer, file);
             if (applied.Problems.Count > 0) continue; // names the producer or the capture lack: the op refuses with the closest ones
             if (applied.Unbound.Count == 0 && PrototypeBind.HasBindings(bind))

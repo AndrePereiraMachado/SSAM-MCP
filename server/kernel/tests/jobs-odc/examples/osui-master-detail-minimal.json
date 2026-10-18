@@ -1,5 +1,5 @@
 {
- "description": "MasterDetail do OSUI: a instancia com empty (a lista de exemplo do LeftContent nasce sem Source).",
+ "description": "MasterDetail of OSUI: the instance with empty (the sample list of LeftContent is born without a Source).",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

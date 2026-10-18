@@ -72,7 +72,7 @@ export async function probeO11(port) {
 // an older bridge kept the process running) is never the lane's Studio. lanes.studioProcesses says so (window:false, read
 // from the system only); SSAM never closes or ends a Studio.
 export const STUDIO_WINDOWLESS = 'STUDIO_WINDOWLESS';
-export const WINDOWLESS_FIX = 'o SSAM ignora este processo; o Studio com janela é o da lane. Sem a janela principal ele termina sozinho quando a janela do Service Center fecha (bridge novo); um bridge antigo o mantém vivo e segurando a porta da lane: encerre-o pelo Gerenciador de Tarefas. O SSAM nunca fecha nem encerra um Studio.';
+export const WINDOWLESS_FIX = 'SSAM ignores this process; the Studio with a window is the one of the lane. Without its main window it ends by itself when the Service Center window closes (new bridge); an old bridge keeps it alive and holding the port of the lane: end it in the Task Manager. SSAM never closes nor ends a Studio.';
 export const isWindowless = process => process?.window === false;
 // Pattern 5 of the UI freeze (2026-10-08, 4-5 Studio restarts): after a restart a ServiceStudio.exe without a window stayed.
 // Precisely: a windowless process younger than STARTING_MS is a Studio still opening (its main window comes later): state
@@ -93,9 +93,9 @@ export function windowlessFacts(p, { now = Date.now(), heldPid = null } = {}) {
     ...(p?.startedAt ? { startedAt: p.startedAt } : {}), ...(ageSeconds != null ? { ageSeconds } : {}), ...(holds ? { holdsLanePort: true } : {}),
     fix: WINDOWLESS_FIX,
     next: starting
-      ? 'O Service Studio ' + p.pid + ' ainda está abrindo (sem janela há ' + ageSeconds + ' s): espere a janela aparecer e conecte de novo (ssam_connect {lane:"o11"}).'
-      : 'Encerre o processo ServiceStudio.exe de PID ' + p.pid + (at ? ' (aberto às ' + at + ')' : '') + ' no Gerenciador de Tarefas > Detalhes: ele não tem janela'
-        + (holds ? ' e segura a porta da faixa O11' : '') + '. Depois conecte de novo (ssam_connect {lane:"o11"}). O SSAM nunca encerra um Studio.' };
+      ? 'The Service Studio ' + p.pid + ' is still opening (without a window for ' + ageSeconds + ' s): wait for the window to appear and connect again (ssam_connect {lane:"o11"}).'
+      : 'End the ServiceStudio.exe process with PID ' + p.pid + (at ? ' (opened at ' + at + ')' : '') + ' in the Task Manager > Details: it has no window'
+        + (holds ? ' and holds the port of the O11 lane' : '') + '. Then connect again (ssam_connect {lane:"o11"}). SSAM never ends a Studio.' };
 }
 export const windowlessOf = (processes, options) => (processes ?? []).filter(isWindowless).map(p => windowlessFacts(p, options));
 const windowlessError = (pid, process) => {
@@ -354,6 +354,11 @@ function defaultO11Side() {
     probe: async () => probeO11(await port()),
     record: () => { try { return readConnection(entry.root, entry.lane); } catch { return null; } },
     connect: pid => connectO11({ pid }),
+    // B1 (round 3 of studio-build-identity, C:\t\revisoes\studio-build-id-2\REVISAO.md): hosted, the Service Studio this
+    // call would attach, judged by the executor from the listing just made (studio-identity.mjs, the rule of the hub) before
+    // any bridge call: the refusal of a build the server does not serve, or null (served; a warning goes in the call's scope).
+    // Locally there is nothing to judge (this machine's Studio is the kernel's own), and the side has no judge at all.
+    ...(localSeam() ? {} : { judge: async pid => (await currentExecutor().judgeStudio?.('o11', pid)) ?? null }),
     // The environment the Studio is signed into (list_open_modules.environments) and its user (sc_session), with the
     // controller key of the connection; a read the bridge answers at once. Unknown stays null.
     // Hosted: the agent puts its own key, so no key file of this machine is read.
@@ -400,6 +405,11 @@ async function connectO11Studios(o11, { pid, onlyLane }) {
   if (!all.length) return [];
   // D5: a windowless Studio is listed as such and never selected; the record that names it is stale.
   const processes = all.filter(p => !isWindowless(p));
+  // B1: the Studio this call attaches (the pid asked for, else the only one) is judged before the probe and the connect:
+  // a build the server does not serve gets no bridge call at all, and the lane answers nothing here (the gate puts the one
+  // refusal in the answer: the refusal itself, or studioSkipped beside the lanes that connected).
+  const chosen = pid !== undefined ? (processes.some(p => p.pid === pid) ? pid : null) : processes.length === 1 ? processes[0].pid : null;
+  if (chosen != null && typeof o11.judge === 'function' && await o11.judge(chosen)) return [];
   const probe = await o11.probe().catch(error => ({ connected: false, error: message(error) }));
   const heldByWindowless = probe.connected === true && all.some(p => p.pid === probe.pid && isWindowless(p)) ? probe.pid : null;
   const served = probe.connected === true && processes.some(p => p.pid === probe.pid) ? probe.pid : null;

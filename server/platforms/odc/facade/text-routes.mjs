@@ -14,6 +14,7 @@
 // one section; the matches, contracts and tools of an answer stay what they were. Pure: no index, no I/O.
 import { normalize } from './catalog.mjs';
 import { codeCall } from './ssam-code.mjs';
+import { hostedContext } from './executor.mjs';
 const codeGrammar = (lane, part) => ({ tool: 'ssam_code', arguments: { lane, action: 'grammar', part } });
 
 export const TEXT_ROUTE_SCHEMA = 'ssam-text-route/1';
@@ -393,7 +394,7 @@ const ROUTES = {
     readWhy: 'the data text with an -- @key on every element (without element: every block, in pages); new elements need no read, changes do',
     op: () => ({ op: 'spec', data: { basedOn: '<sourceSha256 of the read>', ddl: '<only the statements that change, as read, with their -- @key; new ones without a key>' } }),
     names: { feature: '<Entity>', owners: ['<Entity>'], changes: ['<what changes in the data>'] },
-    slots: { ddl: 'create entity / create static entity ... values / type X = {...} / create unique index / site property / client variable / timer, OutSystems types and values (Text(120), Pedido Identifier, "Novo"); drop <what> <Name>; -- @key deletes' },
+    slots: { ddl: 'create entity / create static entity ... values / type X = {...} / create unique index / site property / client variable / timer, OutSystems types and values (Text(120), Order Identifier, "New"); drop <what> <Name>; -- @key deletes' },
     rules: ['The same @key with another name is a rename (never delete and create); a statement without a key is new; an attribute or record left out of a statement sent whole is deleted.',
       'Never create an entity implicitly: a name that does not exist is refused with the nearest one.',
       'A delete of an element in use is refused with its uses (DELETE_HAS_CONSUMERS); renaming keeps the type (typeKept).',
@@ -431,7 +432,9 @@ export function sectionOf(route, lane, { slice = () => undefined, cardBytes = 40
     read: r.read(lane), readWhy: r.readWhy,
     call: wired ? deliverCall(lane, r.op(), r.names) : null,
     // The same read and delivery as ONE tool with one word for both (ssam_code, ssam-code.mjs): what a model calls.
-    ...(wired ? { code: { read: route.id === 'ui.screen-html' ? codeGrammar(lane, 'html') : codeCall(r.read(lane)), write: codeCall(deliverCall(lane, r.op(), r.names)) } } : {}),
+    // a7 (review B1, the family of K1): ssam_code is unavailable on the hosted server (SSAM_CODE_HOSTED_PENDING), so a hosted
+    // route names only the read and the delivery call of its lane (read, call), never the code form.
+    ...(wired && !hostedContext() ? { code: { read: route.id === 'ui.screen-html' ? codeGrammar(lane, 'html') : codeCall(r.read(lane)), write: codeCall(deliverCall(lane, r.op(), r.names)) } } : {}),
     ...(wired ? {} : { note: 'only reading: the way back of this text is not wired in the MCP (the cut rule of the plan: its fixed point did not close at 100%); write with the JSON op of the matches' }),
     slots: r.slots, rules: [...r.rules, ...COMMON_RULES],
     contract: card ? { pointer: r.pointer, card } : { pointer: r.pointer, expand: `ssam_discover {lane:"${lane}", expand:"contract:${r.pointer}"}` },

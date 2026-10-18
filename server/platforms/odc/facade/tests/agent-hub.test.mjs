@@ -851,6 +851,8 @@ test('C03: a call while a recently seen agent reconnects waits for its Hello; wi
     assert.equal(late.error.executed, false);
     assert.equal(late.error.retryAfterSeconds, 15);
     assert.equal(late.error.continuation.tool, 'ssam_doctor');
+    // B3 (round 3 of studio-build-identity, owner rule of 2026-10-15): every text SSAM emits is English
+    assert.match(late.error.continuation.why, /^the agent reconnects by itself: repeat the same call in 15 s/);
     assert.ok(Date.now() - started >= 280, 'it waited for the Hello first');
     // The Hello comes while a call waits: the call runs.
     const waiting = link.call('studio.processes', { image: 'ODCStudio.exe' });

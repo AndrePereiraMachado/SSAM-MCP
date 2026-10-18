@@ -6,7 +6,7 @@ import {privacyIssues,privateField} from './privacy.mjs';
 export {privacyIssues} from './privacy.mjs';
 
 const enumKeys=new Set(['type','role','name','tool','server','code','outcome','result','ok','failed','status','lane','step','phase','subtype','kind','action','command','view','until']);
-const outcomes=new Set(['entregue','entregue e publicado','delivered','published','refused','uncertain','completed','failed','succeeded','write','read','o11','odc']);
+const outcomes=new Set(['entregue','entregue e publicado','delivered','delivered and published','published','refused','uncertain','completed','failed','succeeded','write','read','o11','odc']);
 const identifierKeys=/^(id|uuid|.*_id|.*Id|call_id|tool_use_id|parent_thread_id|forked_from_id)$/;
 export const MAX_FIXTURE_BYTES=64*1024;
 export const MAX_FIXTURE_TOTAL_BYTES=512*1024;

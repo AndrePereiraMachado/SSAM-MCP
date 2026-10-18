@@ -29,7 +29,7 @@ export function refusedArguments(schema) {
 }
 
 test('every refusal of every tool of createSsamServer carries an UPPER_SNAKE code (input violations included)', async t => {
-  const server = await createSsamServer({ deps: { relayTimeoutMs: 5000 } });
+  const server = await createSsamServer({ profile: 'all', deps: { relayTimeoutMs: 5000 } });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'pa2-f7a-codes-contract', version: '1.0.0' });
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);

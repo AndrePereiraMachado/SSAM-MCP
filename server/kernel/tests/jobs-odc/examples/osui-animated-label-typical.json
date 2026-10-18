@@ -1,5 +1,5 @@
 {
- "description": "AnimatedLabel do OSUI: o rotulo E-mail no placeholder Label, o Input de exemplo ligado a variavel Email com InputType Email e um OnChange.",
+ "description": "AnimatedLabel of OSUI: the label E-mail in the Label placeholder, the sample Input bound to the variable Email with InputType Email and an OnChange.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

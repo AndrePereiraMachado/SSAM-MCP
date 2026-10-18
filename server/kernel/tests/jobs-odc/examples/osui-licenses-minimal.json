@@ -1,5 +1,5 @@
 {
- "description": "Licenses do OSUI: a instancia, que lista as licencas das bibliotecas do OutSystems UI.",
+ "description": "Licenses of OSUI: the instance, which lists the licenses of the OutSystems UI libraries.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

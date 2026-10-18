@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fixContinuation } from '../portal/runtime/operation-log.mjs';
 import { resolveOpenModule } from './studio-module.mjs';
+import { hashedWords, wordsGiven, wordsRequired } from './destructive-operations.mjs';
 import { recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
 
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -24,13 +25,13 @@ export function shapePublishLog(value) {
   if (!isObject(value) || value.ok !== true) return value;
   if (value.found === false) return { ...value, continuation: { tool: 'odc_read',
     arguments: { operationId: 'deployments-api-v1:get:/publish-operations', query: { assetKey: '<asset key of ' + (value.module ?? 'the app') + '>', limit: 5 } },
-    why: 'nenhuma publicação deste módulo nesta sessão do Studio: as feitas em outro lugar estão nas publish-operations do Portal; depois odc_operation_status {kind:"publish", operationKey, messages:true}' } };
+    why: 'no publication of this module in this Studio session: the ones made elsewhere are in the publish-operations of the Portal; then odc_operation_status {kind:"publish", operationKey, messages:true}' } };
   const lp = value.lastPublish;
   if (!isObject(lp)) return value;
   const extra = lp.publicationKey ? { serverLog: { tool: 'odc_operation_status', arguments: { kind: 'publish', operationKey: lp.publicationKey, messages: true },
-    why: 'as mesmas mensagens direto do Portal, com stepId e horário de cada uma' } } : {};
+    why: 'the same messages straight from the Portal, with the stepId and the time of each' } } : {};
   if (lp.running) return { ...value, ...extra, continuation: { tool: 'studio_wait', arguments: { condition: 'published', module: value.module },
-    why: 'a publicação ainda está em andamento; espere e leia o log de novo (studio_command publish-log)' } };
+    why: 'the publication is still running; wait and read the log again (studio_command publish-log)' } };
   const fix = fixContinuation({ module: value.module, messages: Array.isArray(lp.messages) ? lp.messages : [], failed: lp.failed === true });
   return { ...value, ...extra, ...(fix ? { continuation: fix } : {}) };
 }
@@ -135,6 +136,27 @@ export async function resolveDeliveryManifest({ module, pid } = {}, { studio, la
   return { ok: true, manifest: last.manifest, module: name, resolvedFrom: from, merge: last };
 }
 
+// Round 3 (review C:\t\revisoes\unpublished-lib-2, N2): whether studio_publish {module} would take the module now, read only:
+// the status and the lab evidence resolveDeliveryManifest reads (NO_DELIVERY_TO_PUBLISH, LAST_DELIVERY_NOT_CLEAN,
+// ALREADY_PUBLISHED, PUBLISH_ALREADY_REQUESTED, DELIVERY_IN_OTHER_STUDIO), then the bridge's own dispatch check against the
+// hash of the open module the caller captured (openSha256): it must equal the merge receipt's (MODULE_CHANGED_SINCE_DELIVERY).
+// Nothing is written. -> {ok:true, manifest} | {ok:false, code, error}.
+export async function publishPrecheck({ module, pid, openSha256 = null } = {}, { studio, lab, root, catalog = () => null }) {
+  let target;
+  try { target = await resolveDeliveryManifest({ module, pid }, { studio, lab, root, catalog }); }
+  catch (error) { return { ok: false, code: 'PUBLISH_PRECHECK_FAILED', error: 'the delivery evidence of ' + module + ' could not be read (' + error.message + ')' }; }
+  // Round 4 (N4): the handler's own continuation goes with its refusal (read the receipt, the publish log, the status).
+  if (target?.ok !== true) return { ok: false, code: target?.code ?? 'STUDIO_STATUS_UNAVAILABLE', error: target?.error ?? 'studio_publish would refuse ' + module,
+    ...(target?.continuation && typeof target.continuation === 'object' ? { continuation: target.continuation } : {}) };
+  const receipt = readJsonOrNull(path.join(target.merge.evidence, 'receipt.json'));
+  if (receipt?.created === true) return { ok: true, manifest: target.manifest };
+  const expected = typeof receipt?.sha256 === 'string' && receipt.sha256 ? receipt.sha256 : null;
+  if (!expected || !openSha256 || expected.toLowerCase() !== String(openSha256).toLowerCase())
+    return { ok: false, code: 'MODULE_CHANGED_SINCE_DELIVERY', error: 'The module ' + module + ' open in the Studio ' + (openSha256 ? 'differs from' : 'could not be compared with') + ' its last SSAM merge ('
+      + path.basename(target.merge.dir) + '): an edit in the Studio, a reference refresh or another merge since; SSAM publishes only what it verified.' };
+  return { ok: true, manifest: target.manifest };
+}
+
 // The bridge's own check at the dispatch (StartupHook.cs PublishDispatch): the open module must hash to the merge receipt.
 const CHANGED = /Open module differs from the merged receipt/;
 function changedSinceDelivery(value, merge, module, pid) {
@@ -165,19 +187,25 @@ export async function publishWithGrant({ manifest, module: requested, authorize,
   try { const m = readManifest(manifest); module = m?.module ?? null; tenant = typeof m?.tenant === 'string' && m.tenant ? m.tenant : null; recorded = typeof m?.publishAuthorization === 'string' && m.publishAuthorization.trim() ? m.publishAuthorization : null; }
   catch { /* the bridge reads the manifest itself and refuses what it cannot read */ }
   let authorization = null;
+  // CX15 r6 (M-1): words that are a marker, a <template> or a sha256 of the server are refused, before anything.
+  if (typeof authorize === 'string' && authorize.trim() && !wordsGiven(authorize)) return wordsRequired([{ path: 'authorize', value: authorize }], { tool: 'studio_publish' });
   if (typeof authorize === 'string' && authorize.trim()) {
-    const written = await studio(['authorize', manifest, 'publish', authorize.trim()], pid);
+    // CX15 r5 (N-2): the manifest, the bridge evidence and the answer keep sha256:<hex> of the words, never the words.
+    const written = await studio(['authorize', manifest, 'publish', hashedWords(authorize.trim())], pid);
     if (written?.ok !== true) return { ok: false, code: 'PUBLISH_AUTHORIZATION_FAILED', error: written?.error ?? 'authorize refused', authorization: { source: 'words' } };
     authorization = { source: 'words' };
   } else if (!recorded && module) {
     const { publishAuthorization } = await import('./kernel-delivery.mjs');
     const found = await publishAuthorization({ module }, grants !== undefined ? grants : await import('./standing-grants.mjs').catch(() => null));
     if (found?.authorization?.source === 'standing-grant') {
-      const written = await studio(['authorize', manifest, 'publish', found.words], pid);
+      const written = await studio(['authorize', manifest, 'publish', hashedWords(found.words)], pid);
       if (written?.ok !== true) return { ok: false, code: 'PUBLISH_AUTHORIZATION_FAILED', error: written?.error ?? 'authorize refused', authorization: found.authorization };
       authorization = found.authorization;
     }
   } else if (recorded) authorization = { source: 'words' };
+  // CX15 r7 (M-3, SA-1): no words, no recorded authorization and no standing grant: WORDS_REQUIRED, and the publish line never
+  // crosses the bridge (before: the bridge refused it).
+  if (!authorization) return wordsRequired([{ path: 'authorize', value: authorize }], { tool: 'studio_publish' });
   // F5 (producer-signatures.mjs): the module may be a producer; no reference snapshot of it acquired before the end of this
   // publication is reused. Without wait (or uncertain) the end is not known: it stays running for the ledger.
   const publication = module && root ? recordPublished(path.join(root, '.local', 'producer-cache'), { environment: tenant ?? '*', module, source: 'studio_publish' }) : false;

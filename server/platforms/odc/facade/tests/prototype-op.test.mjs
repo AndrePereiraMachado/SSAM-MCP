@@ -61,7 +61,7 @@ test('rule 1: the entry and the prefix come from the folder (index.html, the <ti
   const r = resolveSource({ source: two });
   assert.equal(r.ok, false); assert.equal(r.problem.code, 'PROTOTYPE_SOURCE_INVALID'); assert.deepEqual(r.problem.patch, [{ op: 'add', path: '/entry', value: 'a.html' }]);
   // The ODC delivery fields the prefix implies.
-  assert.deepEqual(prototypeDeliveryDefaults(jobOf(source), { module: 'Haiku' }), { feature: 'Protótipo FarmaVirtual', owners: ['FarmaVirtual'], changes: ['Protótipo FarmaVirtual importado como telas nativas'] });
+  assert.deepEqual(prototypeDeliveryDefaults(jobOf(source), { module: 'Haiku' }), { feature: 'Prototype FarmaVirtual', owners: ['FarmaVirtual'], changes: ['Prototype FarmaVirtual imported as native screens'] });
   assert.equal(prototypeDeliveryDefaults({ ops: [{ op: 'get' }] }), null);
 });
 
@@ -115,7 +115,7 @@ test('rule 2: the refusal reaches no build and no Studio: ssam_job runs no apply
   // studio_deliver
   const calls = [];
   const odc = path.join(dir, 'odc'); fs.mkdirSync(odc, { recursive: true }); fs.writeFileSync(path.join(odc, 'job.json'), JSON.stringify(jobOf(source)));
-  const report = await deliverKernel({ module: 'Haiku', feature: 'Protótipo FarmaVirtual', job: 'job.json', owners: ['FarmaVirtual'], changes: ['x'], publish: true, authorize: WORDS },
+  const report = await deliverKernel({ module: 'Haiku', feature: 'Prototype FarmaVirtual', job: 'job.json', owners: ['FarmaVirtual'], changes: ['x'], publish: true, authorize: WORDS },
     { root: odc, studio: async args => { calls.push(args[0]); return { ok: true }; }, apply: async () => { throw new Error('no build'); }, journal: () => {}, guide: null, prefetch: () => {}, cache: null, grants: null,
       catalog: () => null, nextLabDir: () => path.join(odc, 'lab', '01'), prepareManifest: async () => ({ ok: true }), prepareIntegrationJob: async () => ({ ok: true }), capturePrototype: fakeCapture({ problems: ambiguous }) });
   assert.equal(report.ok, false); assert.equal(report.code, 'PROTOTYPE_AMBIGUOUS'); assert.equal(report.failed, 'prototype');
@@ -278,7 +278,7 @@ function odcFixture(t, { publish = true, nativeDom = true, seedRows = 0 } = {}) 
     prepareManifest: async ({ output }) => { fs.mkdirSync(output, { recursive: true }); fs.writeFileSync(path.join(output, 'manifest.json'), '{}'); return { ok: true, manifest: path.join(output, 'manifest.json') }; },
     publishStep: async () => ({ publish: { requested: true, outcome: 'published', version: 3 }, lastPublication: { at: '2026-10-10T22:00:00Z', status: 'succeeded' } }),
     capturePrototype: fakeCapture(), measureFidelity: fakeMeasure(), prototypeWriter: writer };
-  const input = { module: 'Haiku', feature: 'Protótipo FarmaVirtual', job: 'job.json', owners: ['FarmaVirtual'], changes: ['Protótipo FarmaVirtual importado como telas nativas'],
+  const input = { module: 'Haiku', feature: 'Prototype FarmaVirtual', job: 'job.json', owners: ['FarmaVirtual'], changes: ['Prototype FarmaVirtual imported as native screens'],
     ...(publish ? { publish: true, authorize: WORDS } : {}) };
   return { root, deps, input, calls, writes };
 }
@@ -286,7 +286,7 @@ function odcFixture(t, { publish = true, nativeDom = true, seedRows = 0 } = {}) 
 test('studio_deliver: the receipt after the build (fidelity, links), the seed only after a clean publication, the timings of merge, publication and seed', async t => {
   const f = odcFixture(t, { seedRows: 5 });
   const report = await deliverKernel(f.input, f.deps);
-  assert.equal(report.ok, true, JSON.stringify(report).slice(0, 600)); assert.equal(report.result, 'entregue e publicado');
+  assert.equal(report.ok, true, JSON.stringify(report).slice(0, 600)); assert.equal(report.result, 'delivered and published');
   const p = report.prototype;
   assert.equal(p.fidelity.score, 1); assert.equal(p.screens[0].url, 'https://tenant.test/Haiku/Catalogo');
   assert.equal(p.seed.ran, true); assert.deepEqual(p.seed.skippedNotEmpty, ['FarmaVirtualPedido'], 'a table with rows is never written');
@@ -304,7 +304,7 @@ test('studio_deliver: the receipt after the build (fidelity, links), the seed on
   // A failed publication keeps the delivery (PUBLISH_FAILED, the studio_publish continuation) and seeds nothing.
   const h = odcFixture(t);
   const failed = await deliverKernel(h.input, { ...h.deps, publishStep: async () => ({ publish: { requested: true, outcome: 'failed', error: 'Compilation failed' } }) });
-  assert.equal(failed.ok, false); assert.equal(failed.code, 'PUBLISH_FAILED'); assert.equal(failed.result, 'entregue'); assert.equal(failed.continuation.tool, 'studio_publish');
+  assert.equal(failed.ok, false); assert.equal(failed.code, 'PUBLISH_FAILED'); assert.equal(failed.result, 'delivered'); assert.equal(failed.continuation.tool, 'studio_publish');
   assert.equal(h.writes.length, 0); assert.equal(failed.prototype.seed.ran, false); assert.match(failed.prototype.seed.reason, /publish/);
 });
 
@@ -340,9 +340,9 @@ test('o11_deliver: the expanded job is delivered, the receipt carries the screen
   const dir = tmp(t); const source = farmaFolder(dir);
   const writes = [];
   const writer = async request => { writes.push(request); return { ok: true, results: request.batch.map(op => (op.operation === 'insert' ? { ok: true, inserted: op.records.length } : { ok: true, count: 0 })) }; };
-  const h = await o11Harness(t, { publish: { ok: true, result: 'publicado', version: 9 }, writer });
+  const h = await o11Harness(t, { publish: { ok: true, result: 'published', version: 9 }, writer });
   const value = await h.call({ module: 'Orders', job: h.job(jobOf(source)), publish: true, authorize: WORDS });
-  assert.equal(value.ok, true, JSON.stringify(value).slice(0, 600)); assert.equal(value.result, 'entregue e publicado');
+  assert.equal(value.ok, true, JSON.stringify(value).slice(0, 600)); assert.equal(value.result, 'delivered and published');
   const delivered = h.runAnvil.calls.find(c => c.args[0] === 'deliver');
   const file = delivered.args[delivered.args.indexOf('--job') + 1];
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).ops[0].data.captureSha256.length, 64, 'the delivery runs the expanded job');
@@ -402,9 +402,9 @@ test('rule 8: the CLI process of this checkout runs the same rehearsal (without 
 
 test('the ready call of 1.1 for both lanes', () => {
   const o11 = prototypeCall({ lane: 'o11', source: 'C:\\p\\farmavirtual', module: 'Haiku_UI' });
-  assert.deepEqual(o11, { tool: 'o11_deliver', arguments: { module: 'Haiku_UI', job: { ops: [{ op: 'prototype', data: { source: 'C:\\p\\farmavirtual' } }] }, publish: true, authorize: '<palavras do usuário>' } });
+  assert.deepEqual(o11, { tool: 'o11_deliver', arguments: { module: 'Haiku_UI', job: { ops: [{ op: 'prototype', data: { source: 'C:\\p\\farmavirtual' } }] }, publish: true, authorize: "<the user's own words>" } });
   const odc = prototypeCall({ lane: 'odc', source: 'C:\\p\\farmavirtual', module: 'Haiku', prefix: 'FarmaVirtual' });
-  assert.deepEqual(odc.arguments.owners, ['FarmaVirtual']); assert.equal(odc.arguments.feature, 'Protótipo FarmaVirtual'); assert.equal(odc.arguments.until, undefined);
+  assert.deepEqual(odc.arguments.owners, ['FarmaVirtual']); assert.equal(odc.arguments.feature, 'Prototype FarmaVirtual'); assert.equal(odc.arguments.until, undefined);
   assert.equal(prototypeCall({ lane: 'odc', rehearsal: true }).arguments.until, 'preview'); assert.equal(prototypeCall({ lane: 'o11', rehearsal: true }).arguments.until, 'apply');
   assert.deepEqual(strictPatch({ ops: [{ op: 'prototype', data: { source: 'a' } }] }, { ops: [{ op: 'prototype', data: { source: 'a', mapping: { default: 'x' } } }] }),
     [{ op: 'add', path: '/ops/0/data/mapping', value: { default: 'x' } }]);

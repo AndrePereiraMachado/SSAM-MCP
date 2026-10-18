@@ -18,6 +18,8 @@ import { Mirror, createQuota, QUOTA_BYTES } from './mirror.mjs';
 import { stageOdcPipe } from './odc-stage.mjs';
 import { stageO11Bridge } from './o11-stage.mjs';
 import { startRelay } from './o11-relay.mjs';
+import { studioIdentity, studioRefusal } from '../studio-identity.mjs';
+import { studioScope } from './studio-scope.mjs';
 
 // The machine kinds of 4.4 this executor forwards; file.* stay between the mirror and the agent.
 export const AGENT_KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected']);
@@ -70,6 +72,10 @@ const DEADLINES = {
 };
 
 const coded = (code, message, executed) => Object.assign(new Error(message), { code, executed });
+// A1 (review of studio-build-identity, round 2): the Studio image of each lane, for the process versions of studio.processes.
+const STUDIO_IMAGE = Object.freeze({ odc: 'ODCStudio.exe', o11: 'ServiceStudio.exe' });
+// The Studio calls a hosted tool call may send: counted in the call's studio scope once they pass the identity check.
+const STUDIO_KINDS = new Set(['odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected']);
 // What a hub error says beyond its code (C03: AGENT_RECONNECTING carries retryAfterSeconds and the call to repeat).
 const carried = (target, error) => Object.assign(target, Number.isFinite(error?.retryAfterSeconds) ? { retryAfterSeconds: error.retryAfterSeconds } : {},
   error?.continuation ? { continuation: error.continuation } : {});
@@ -107,6 +113,9 @@ export class AgentExecutor {
     this.relay = null;
     this.record = null;
     this.seenInfo = undefined;
+    // A1: `${image}:${pid}` -> the ProductVersion the agent reported for that process (null: unreadable), from the last
+    // studio.processes listing of that image (lib.mjs lists before the Studio calls and keeps its pids for 30 s).
+    this.processVersions = new Map();
   }
 
   // Reads this customer's relay key and opens the O11 relay.
@@ -152,17 +161,80 @@ export class AgentExecutor {
     if (kind === 'odc.attach') params = this.bridgeVersionFor(params ?? {});
     if (kind === 'o11.bridge') return this.bridge(params ?? {}, options);
     if (!AGENT_KINDS.includes(kind)) throw coded('KIND_NOT_ALLOWED', 'Call kind not allowed through the hosted executor: ' + kind, false);
+    // A1, and B1 of round 3 (C:\t\revisoes\studio-build-id-2\REVISAO.md): an attach is judged by the process it attaches,
+    // the o11.connect like the odc.attach. An o11.connect without pid is judged by the only Service Studio the agent would
+    // choose (kinds.mjs o11ConnectKind: one candidate, else STUDIO_NOT_SELECTED, which the agent answers itself).
+    if (kind === 'odc.attach' || kind === 'o11.connect') {
+      const lane = kind === 'odc.attach' ? 'odc' : 'o11';
+      const pid = lane === 'o11' && (params?.pid === undefined || params?.pid === null) ? await this.onlyProcess('o11') : params?.pid;
+      const refused = await this.judgeStudio(lane, pid);
+      if (refused) throw Object.assign(coded('STUDIO_VERSION_MISMATCH', refused.error, false), { sent: false, continuation: refused.continuation });
+    }
+    this.sentToStudio(kind);
     let value;
     try { value = await this.link.call(kind, params ?? {}, { timeoutMs: options.timeoutMs ?? DEADLINES[kind](params) }); }
     catch (error) { throw carried(coded(error?.code ?? 'AGENT_ERROR', error?.message ?? String(error), undelivered(error) ? false : null), error); }
     if (kind === 'o11.connect' || kind === 'o11.selected') this.remember(value);
+    if (kind === 'studio.processes') this.rememberProcesses(params?.image, value);
     return value;
+  }
+
+  // A1 (review of studio-build-identity, round 2): the versions of the processes of one Studio image, as the agent listed them.
+  rememberProcesses(image, value) {
+    if (!Object.values(STUDIO_IMAGE).includes(image) || !Array.isArray(value?.processes)) return;
+    for (const key of [...this.processVersions.keys()]) if (key.startsWith(image + ':')) this.processVersions.delete(key);
+    for (const p of value.processes) {
+      const pid = Number(p?.pid);
+      if (Number.isSafeInteger(pid) && pid > 0) this.processVersions.set(image + ':' + pid, typeof p.version === 'string' && p.version ? p.version : null);
+    }
+  }
+  knowsProcess(lane, pid) { return this.processVersions.has(STUDIO_IMAGE[lane] + ':' + Number(pid)); }
+  // B1: the pid of the only process of the lane's Studio image, listed now; null with none or several (no verdict: the
+  // agent refuses STUDIO_NOT_SELECTED) or when the listing fails (the agent lists again and answers for it).
+  async onlyProcess(lane) {
+    const image = STUDIO_IMAGE[lane];
+    try { await this.call('studio.processes', { image }); } catch { return null; }
+    const pids = [...this.processVersions.keys()].filter(key => key.startsWith(image + ':'));
+    return pids.length === 1 ? Number(pids[0].slice(image.length + 1)) : null;
+  }
+  sentToStudio(kind) { const scope = studioScope(); if (scope && STUDIO_KINDS.has(kind)) scope.sent++; }
+  // The identity of the PROCESS a Studio call goes to (studio-identity.mjs, the rule of the hub): a pid this executor has
+  // not seen listed is listed once. Not served -> the refusal (the call is not sent), recorded in the tool call's scope and
+  // named once in the server log (studio-version-unserved); another build served with a warning -> recorded for the
+  // answer. A pid the agent does not list, or a lane without a kernel, has no verdict: the agent answers for it.
+  // list:false judges only a process already listed (no agent call: the local refusals of a pipe come first).
+  async judgeStudio(lane, pid, { list = true } = {}) {
+    const number = Number(pid);
+    if (!Number.isSafeInteger(number) || number < 1) return null;
+    const key = STUDIO_IMAGE[lane] + ':' + number;
+    if (!this.processVersions.has(key)) {
+      if (!list) return null;
+      try { await this.call('studio.processes', { image: STUDIO_IMAGE[lane] }); } catch { return null; }
+    }
+    if (!this.processVersions.has(key)) return null;
+    let info = null; try { info = this.link?.info?.() ?? null; } catch { info = null; }
+    const identity = studioIdentity(lane, { version: this.processVersions.get(key) }, info?.kernel ?? {});
+    const scope = studioScope();
+    const refusal = studioRefusal(identity);
+    if (refusal) {
+      scope?.refused.push(identity);
+      try { this.link?.studioUnserved?.(lane, identity, refusal.cause); } catch { /* the refusal stands without its log line */ }
+      return refusal;
+    }
+    if (identity?.warn) scope?.warned.push(identity);
+    return null;
   }
 
   async pipe(params, options) {
     const command = String(params?.args?.[0] ?? '');
     if (HOSTED_REFUSED_COMMANDS.includes(command))
       throw Object.assign(new PipeError(privateTransport('The bridge command ' + command), { code: HOSTED_ONLY_SESSION, sent: false }), { executed: false });
+    // A1: the process this command goes to must be a Studio this server serves: judged before anything is staged when the
+    // executor already listed it, else right after the local checks of staging, and always before the command is sent.
+    const studioRefused = refused => Object.assign(new PipeError(refused.error, { code: 'STUDIO_VERSION_MISMATCH', sent: false }), { executed: false, continuation: refused.continuation });
+    const known = this.knowsProcess('odc', params?.pid);
+    const early = known ? await this.judgeStudio('odc', params?.pid) : null;
+    if (early) throw studioRefused(early);
     const studioVersion = this.odcStudioVersion();
     const broken = bridgeApiBreak(params, studioVersion);
     if (broken)
@@ -170,6 +242,9 @@ export class AgentExecutor {
     let staged;
     try { staged = await stageOdcPipe(params, this.mirror); }
     catch (error) { throw pipeError(error, 'before'); }
+    const late = known ? null : await this.judgeStudio('odc', params?.pid);
+    if (late) throw studioRefused(late);
+    this.sentToStudio('odc.pipe');
     let value;
     try { value = await this.link.call('odc.pipe', staged.params, { timeoutMs: options.timeoutMs ?? DEADLINES['odc.pipe'](staged.params) }); }
     catch (error) { throw pipeError(error, 'link'); }
@@ -186,6 +261,7 @@ export class AgentExecutor {
     try { staged = await stageO11Bridge({ method, params: inner }, this.mirror); }
     catch (error) { throw bridgeError(error, method, 'before'); }
     const request = { method, params: staged.params, ...(timeoutMs ? { timeoutMs } : {}) };
+    this.sentToStudio('o11.bridge');
     let value;
     try { value = await this.link.call('o11.bridge', request, { timeoutMs: options.timeoutMs ?? DEADLINES['o11.bridge'](request) }); }
     catch (error) { throw bridgeError(error, method, 'link'); }

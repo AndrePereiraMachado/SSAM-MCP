@@ -1,5 +1,5 @@
 {
- "description": "O11: a RECUSA do rename num tipo que nao tem nome nenhum. O filtro de um aggregate (IFilter) nao tem Name, Label nem Identifier, nem na interface nem na classe concreta (ServiceStudio.Model.Filter so tem DisplayName e o Name herdado, so de leitura); o mesmo vale para Sort, Join, GroupBy, Assignment, Start, End, Raise Exception e os itens de agenda. O rename recusa com uma frase curta, em vez do antigo \"Cannot find handler for object CovSEntity.Title <> \"\" of type Filter\". Os internos de aggregate que TEM nome (a fonte IAliasedSource, colunas calculadas e agrupadas) renomeiam-se por Name: tests/jobs/rename-name-property.json.",
+ "description": "O11: the REFUSAL of rename on a type that has no name at all. The filter of an aggregate (IFilter) has no Name, Label or Identifier, neither in the interface nor in the concrete class (ServiceStudio.Model.Filter only has DisplayName and the inherited Name, read-only); the same holds for Sort, Join, GroupBy, Assignment, Start, End, Raise Exception and the schedule items. The rename refuses with a short sentence, instead of the old \"Cannot find handler for object CovSEntity.Title <> \"\" of type Filter\". The aggregate internals that DO have a name (the IAliasedSource source, calculated and grouped columns) are renamed by Name: tests/jobs/rename-name-property.json.",
  "base": "tests/fixtures/blank-service.oml",
  "expectValid": true,
  "expectError": [
@@ -17,6 +17,6 @@
   {"op": "link", "from": "$fs", "to": "$agg"},
   {"op": "link", "from": "$agg", "to": "$fe"},
   {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "RnNote.Title <> \"\""}, "as": "$filter"},
-  {"op": "rename", "target": "$filter", "name": "RnOnlyTitled", "_why": "recusado: um filtro e uma condicao, nao tem nome"}
+  {"op": "rename", "target": "$filter", "name": "RnOnlyTitled", "_why": "refused: a filter is a condition, it has no name"}
  ]
 }

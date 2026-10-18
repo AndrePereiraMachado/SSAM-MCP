@@ -1,5 +1,5 @@
 {
- "description": "A RECUSA do op html quando um <a> contem outro controlo (<button>): os filhos de <a>/<button> viram widgets filhos do Link/Button, mas um Link/Button dentro de outro nao e compilado. O compilador diz o elemento, a posicao, o <a> de fora e o que fazer, em vez de achatar o conteudo em texto. O caso valido (card com div, icone e bindings dentro do link) e tests/jobs/html-if-links-reactive.json.",
+ "description": "THE REFUSAL of the html op when an <a> contains another control (<button>): the children of <a>/<button> become child widgets of the Link/Button, but a Link/Button inside another is not compiled. The compiler says the element, the position, the outer <a> and what to do, instead of flattening the content into text. The valid case (card with div, icon and bindings inside the link) is tests/jobs/html-if-links-reactive.json.",
  "base": "tests/fixtures/reactive-ui.oml",
  "expectValid": true,
  "expectError": [

@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -102,7 +103,7 @@ test('MCP contract explains headless setup and safe troubleshooting without conv
 });
 test('real stdio MCP discovers debugger and rejects incomplete start without Studio or tenant calls', async () => {
   const client = new Client({ name: 'headless-debug-test', version: '1' });
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(new URL('../ssam.mjs', import.meta.url)), 'mcp'], stderr: 'ignore' }));
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(new URL('../ssam.mjs', import.meta.url)), 'mcp', '--profile', 'debug'], stderr: 'ignore' }));
   try {
     const tool = (await client.listTools()).tools.find(t => t.name === 'ssam_debug');
     assert.ok(tool); assert.ok(!JSON.stringify(tool.inputSchema).includes('pid'));

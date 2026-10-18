@@ -1,14 +1,14 @@
 {
- "description": "ODC: renomear LOGICA e ler de volta o texto que ficou para tras, o espelho de tests/jobs/rename-logic-propagation.json. Script, client action, server action, screen action, parametros do no JavaScript e variavel de tela sao renomeados um a um, com get depois de cada um. Serve para comparar as duas plataformas na pergunta que interessa: quando a action e renomeada, a expressao que le a saida do NO consumidor (<No>.<Saida>) acompanha ou nao?",
+ "description": "ODC: rename LOGIC and read back the text that was left behind, the mirror of tests/jobs/rename-logic-propagation.json. Script, client action, server action, screen action, JavaScript node parameters and screen variable are renamed one by one, with a get after each. It serves to compare the two platforms on the question that matters: when the action is renamed, does the expression that reads the output of the consumer NODE (<Node>.<Output>) follow or not?",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "create", "parent": "@espace", "type": "IScript", "name": "WfRenFormatting", "as": "$script", "_why": "1. o script: o global que ele declara e texto dentro do corpo"},
+  {"op": "create", "parent": "@espace", "type": "IScript", "name": "WfRenFormatting", "as": "$script", "_why": "1. the script: the global it declares is text inside the body"},
   {"op": "set", "target": "$script", "prop": "JavaScript", "value": "window.WfRenFormatting = { slug: function (s) { return String(s || \"\").toLowerCase().trim().replace(/[^a-z0-9]+/g, \"-\"); } };"},
   {"op": "set", "target": "$script", "prop": "Description", "value": "Helpers do WfRenFormatting"},
 
-  {"op": "create", "parent": "@espace", "type": "IClientAction", "name": "WfRen_Slugify", "as": "$ca", "_why": "2. client action com no JavaScript"},
+  {"op": "create", "parent": "@espace", "type": "IClientAction", "name": "WfRen_Slugify", "as": "$ca", "_why": "2. client action with a JavaScript node"},
   {"op": "set", "target": "$ca", "prop": "Function", "value": true},
   {"op": "create", "parent": "$ca", "type": "IInputParameter", "name": "Text", "as": "$caIn"},
   {"op": "set", "target": "$caIn", "prop": "DataType", "value": "Text"},
@@ -33,7 +33,7 @@
   {"op": "link", "from": "$caAs", "to": "$c9"},
   {"op": "layout", "target": "$ca"},
 
-  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfRen_Slug_Save", "as": "$sv", "_why": "3. server action chamada pela tela"},
+  {"op": "create", "parent": "@espace", "type": "IServerAction", "name": "WfRen_Slug_Save", "as": "$sv", "_why": "3. server action called by the screen"},
   {"op": "create", "parent": "$sv", "type": "IInputParameter", "name": "Slug", "as": "$svIn"},
   {"op": "set", "target": "$svIn", "prop": "DataType", "value": "Text"},
   {"op": "create", "parent": "$sv", "type": "IOutputParameter", "name": "Stored", "as": "$svOut"},
@@ -49,7 +49,7 @@
   {"op": "link", "from": "$vAs", "to": "$v9"},
   {"op": "layout", "target": "$sv"},
 
-  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfRenSlugDemo", "as": "$scr", "_why": "4. a tela consumidora"},
+  {"op": "create", "parent": "IMobileFlow:MainFlow", "type": "IMobileScreen", "name": "WfRenSlugDemo", "as": "$scr", "_why": "4. the consumer screen"},
   {"op": "set", "target": "$scr/#IMobileBlockInstanceWidget", "prop": "SourceBlock", "value": "IMobileBlock:LayoutTopMenu"},
   {"op": "link", "from": "$scr", "connector": "RequiredScripts", "to": "$script"},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/Title", "type": "IExpression", "as": "$title"},
@@ -90,20 +90,20 @@
   {"op": "usages", "target": "$ca"},
 
   {"op": "rename", "target": "$script", "name": "WfRenTextHelpers", "_why": "6. o script"},
-  {"op": "get", "target": "$script", "_why": "LER DE VOLTA: o corpo ainda declara window.WfRenFormatting"},
+  {"op": "get", "target": "$script", "_why": "READ BACK: the body still declares window.WfRenFormatting"},
   {"op": "get", "target": "$js"},
 
-  {"op": "rename", "target": "$ca", "name": "WfRen_TextToSlug", "_why": "7. a client action: a pergunta central da comparacao entre plataformas"},
-  {"op": "get", "target": "$call", "_why": "o no consumidor passou a chamar-se WfRen_TextToSlug, como no O11"},
-  {"op": "get", "target": "$saA1", "_why": "DIFERENCA DE PLATAFORMA: aqui a expressao passou a WfRen_TextToSlug.Slug sozinha; na faixa O11 o mesmo rename deixa 'WfRen_Slugify.Slug' e o Verify acusa ExpressionUnknownObject"},
+  {"op": "rename", "target": "$ca", "name": "WfRen_TextToSlug", "_why": "7. the client action: the central question of the comparison between platforms"},
+  {"op": "get", "target": "$call", "_why": "the consumer node is now named WfRen_TextToSlug, as in O11"},
+  {"op": "get", "target": "$saA1", "_why": "PLATFORM DIFFERENCE: here the expression became WfRen_TextToSlug.Slug on its own; in the O11 lane the same rename leaves 'WfRen_Slugify.Slug' and Verify reports ExpressionUnknownObject"},
 
-  {"op": "rename", "target": "$caOut", "name": "SlugText", "_why": "8. o output da client action: no ODC vem com consumers 2 e expressionsRewritten 2"},
-  {"op": "get", "target": "$saA1", "_why": "de novo sem conserto a mao: WfRen_TextToSlug.SlugText"},
+  {"op": "rename", "target": "$caOut", "name": "SlugText", "_why": "8. the client action output: in ODC it comes with consumers 2 and expressionsRewritten 2"},
+  {"op": "get", "target": "$saA1", "_why": "again with no manual fix: WfRen_TextToSlug.SlugText"},
 
-  {"op": "rename", "target": "$jsIn", "name": "Term", "_why": "9. parametros do no JavaScript: o corpo em JavaScript e reescrito ($parameters.Text -> $parameters.Term), igual ao O11"},
+  {"op": "rename", "target": "$jsIn", "name": "Term", "_why": "9. JavaScript node parameters: the JavaScript body is rewritten ($parameters.Text -> $parameters.Term), same as O11"},
   {"op": "rename", "target": "$jsOut", "name": "Handle"},
-  {"op": "get", "target": "$js", "_why": "o corpo ja diz $parameters.Handle e $parameters.Term; so o global window.WfRenFormatting (nome antigo do Script) ficou"},
-  {"op": "get", "target": "$caA1", "_why": "e aqui, ao contrario do O11, a expressao MakeSlug.Slug ja foi reescrita para MakeSlug.Handle"},
+  {"op": "get", "target": "$js", "_why": "the body already says $parameters.Handle and $parameters.Term; only the global window.WfRenFormatting (old name of the Script) remained"},
+  {"op": "get", "target": "$caA1", "_why": "and here, unlike O11, the expression MakeSlug.Slug has already been rewritten to MakeSlug.Handle"},
   {"op": "set", "target": "$js", "prop": "JavaScript", "value": "$parameters.Handle = window.WfRenTextHelpers ? window.WfRenTextHelpers.slug($parameters.Term) : $parameters.Term;", "_why": "conserto A MAO do unico resto: o global do script"},
   {"op": "set", "target": "$script", "prop": "JavaScript", "value": "window.WfRenTextHelpers = { slug: function (s) { return String(s || \"\").toLowerCase().trim().replace(/[^a-z0-9]+/g, \"-\"); } };"},
   {"op": "get", "target": "$js"},
@@ -116,7 +116,7 @@
   {"op": "get", "target": "$btn/OnClick"},
   {"op": "get", "target": "$btn/#ITextWidget"},
 
-  {"op": "rename", "target": "$vT", "name": "SourceText", "_why": "12. a variavel da tela"},
+  {"op": "rename", "target": "$vT", "name": "SourceText", "_why": "12. the screen variable"},
   {"op": "get", "target": "$out"},
 
   {"op": "dump", "target": "$scr", "depth": 6},

@@ -50,7 +50,7 @@ export function buildQueueMs(env = process.env) {
   return DEFAULT_BUILD_QUEUE_MS;
 }
 
-export const BUILD_WHY = 'o pool de build desta máquina ficou ocupado além do limite; nada desta entrega rodou: o doctor mostra a faixa, e a mesma entrega pode ser repetida';
+export const BUILD_WHY = 'the build pool of this machine stayed busy past the limit; none of this delivery ran: the doctor shows the lane, and the same delivery may be repeated';
 export class BuildQueueRefused extends Error {
   constructor(refusal) { super(refusal.error); this.name = 'BuildQueueRefused'; this.code = refusal.code; this.refusal = refusal; }
 }

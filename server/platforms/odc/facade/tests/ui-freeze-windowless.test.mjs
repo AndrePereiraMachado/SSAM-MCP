@@ -2,6 +2,7 @@
 // connect and doctor now say precisely what it is: a Studio still opening (STUDIO_STARTING: wait, connect again) or an
 // orphan (STUDIO_WINDOWLESS) named by pid, start time and whether it holds the lane port, with the exact next step for the
 // person. SSAM never starts a Studio, so it never ends one either. Fake process lists only; no process is touched.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseStudioProcesses, studioProcessScript } from '../lanes.mjs';
@@ -25,10 +26,10 @@ test('the process list carries the start time (system information only, never se
 test('an orphan is named exactly (pid, start time, the lane port it holds) with the step for the person; a young one is still opening', () => {
   const orphan = windowlessFacts(ORPHAN, { now: NOW, heldPid: 33652 });
   assert.equal(orphan.code, STUDIO_WINDOWLESS); assert.equal(orphan.state, 'orphan'); assert.equal(orphan.holdsLanePort, true);
-  assert.match(orphan.next, /PID 33652/); assert.match(orphan.next, /03:33Z/); assert.match(orphan.next, /Gerenciador de Tarefas/);
-  assert.match(orphan.next, /segura a porta da faixa O11/); assert.match(orphan.next, /nunca encerra/);
+  assert.match(orphan.next, /PID 33652/); assert.match(orphan.next, /03:33Z/); assert.match(orphan.next, /Task Manager/);
+  assert.match(orphan.next, /holds the port of the O11 lane/); assert.match(orphan.next, /never ends/);
   const young = windowlessFacts({ ...ORPHAN, startedAt: new Date(NOW - 30000).toISOString() }, { now: NOW });
-  assert.equal(young.code, STUDIO_STARTING); assert.equal(young.state, 'starting'); assert.match(young.next, /ainda está abrindo/);
+  assert.equal(young.code, STUDIO_STARTING); assert.equal(young.state, 'starting'); assert.match(young.next, /is still opening/);
   const unknown = windowlessFacts({ pid: 9, window: false }, { now: NOW });
   assert.equal(unknown.state, 'orphan', 'without a start time it is reported as the windowless process it is');
 });

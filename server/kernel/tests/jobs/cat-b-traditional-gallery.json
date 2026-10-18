@@ -1,15 +1,15 @@
 {
- "description": "Frente B (catalogo abrangente): Traditional Web, os widgets web que nenhum job de suite criava, sobre job:screen-crud-traditional (entidade Contact). As formas vem dos contratos tests/contracts/screen-coverage/traditional-ui-*.json, que passaram nativamente em INT-T2-001 mas nao tem carimbo; aqui viram ops de job. Cria um web flow proprio com um web block (texto) e, na tela CatBWebGallery do MainFlow: input password com label web, input filename, checkbox, combo box ligado a entidade, dois radio buttons, texto web, If web com os dois ramos, table/row/cell, list records, show record e edit record (linha com celula de legenda e de valor), form web, editable table com celulas de cabecalho e linha e os eventos OnRowSave/OnRowDelete, a instancia do web block e o botao Submit. Tipos de nome curto ambiguo com o Reactive (ITextWidget, IIfWidget, IForm, ILabel) vao qualificados.",
+ "description": "Front B (broad catalog): Traditional Web, the web widgets that no suite job created, over job:screen-crud-traditional (entity Contact). The forms come from the contracts tests/contracts/screen-coverage/traditional-ui-*.json, which passed natively in INT-T2-001 but have no stamp; here they become job ops. It creates a web flow of its own with a web block (text) and, on the screen CatBWebGallery of the MainFlow: password input with web label, filename input, checkbox, combo box bound to the entity, two radio buttons, web text, web If with both branches, table/row/cell, list records, show record and edit record (row with a caption cell and a value cell), web form, editable table with header cells and a row and the OnRowSave/OnRowDelete events, the web block instance and the Submit button. Types with a short name that is ambiguous with Reactive (ITextWidget, IIfWidget, IForm, ILabel) are qualified.",
  "base": "job:screen-crud-traditional",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "create", "parent": "@espace", "type": "IWebFlow", "name": "CatBWebFlow", "as": "$flow", "_why": "1. web flow proprio (IESpace.CreateWebFlow) com um web block (IWebFlow.CreateBlock)"},
+  {"op": "create", "parent": "@espace", "type": "IWebFlow", "name": "CatBWebFlow", "as": "$flow", "_why": "1. web flow of its own (IESpace.CreateWebFlow) with a web block (IWebFlow.CreateBlock)"},
   {"op": "create", "parent": "$flow", "type": "IWebBlock", "name": "CatBWebCard", "as": "$blk"},
   {"op": "create", "parent": "$blk", "type": "OutSystems.Model.UI.Web.Widgets.ITextWidget", "name": "CardText", "as": "$blkText"},
   {"op": "set", "target": "$blkText", "prop": "Text", "value": "Card from a web block"},
 
-  {"op": "create", "parent": "IWebFlow:MainFlow", "type": "IWebScreen", "name": "CatBWebGallery", "as": "$scr", "_why": "2. a tela, as variaveis e as screen actions dos eventos"},
+  {"op": "create", "parent": "IWebFlow:MainFlow", "type": "IWebScreen", "name": "CatBWebGallery", "as": "$scr", "_why": "2. the screen, the variables and the screen actions of the events"},
   {"op": "create", "parent": "$scr/#IWebBlockInstanceWidget/Title", "type": "IExpressionWidget", "as": "$title"},
   {"op": "set", "target": "$title", "prop": "Value", "value": "\"Web widgets\""},
   {"op": "create", "parent": "$scr", "type": "ILocalVariable", "name": "Password", "as": "$vPwd"},
@@ -37,7 +37,7 @@
   {"op": "create", "parent": "$deleteRow", "type": "IEndNode", "as": "$d9"},
   {"op": "link", "from": "$d0", "to": "$d9"},
 
-  {"op": "create", "parent": "$scr/#IWebBlockInstanceWidget/MainContent", "type": "IContainerWidget", "name": "Inputs", "as": "$c1", "_why": "3. widgets de valor"},
+  {"op": "create", "parent": "$scr/#IWebBlockInstanceWidget/MainContent", "type": "IContainerWidget", "name": "Inputs", "as": "$c1", "_why": "3. value widgets"},
   {"op": "create", "parent": "$c1", "type": "OutSystems.Model.UI.Web.Widgets.ITextWidget", "name": "IntroText", "as": "$intro"},
   {"op": "set", "target": "$intro", "prop": "Text", "value": "Web widgets gallery"},
   {"op": "create", "parent": "$c1", "type": "IInputPasswordWidget", "name": "Password_Input", "as": "$pwd"},
@@ -112,7 +112,7 @@
   {"op": "set", "target": "$etable/OnRowSave", "prop": "Destination", "value": "$saveRow"},
   {"op": "set", "target": "$etable/OnRowDelete", "prop": "Destination", "value": "$deleteRow"},
 
-  {"op": "create", "parent": "$scr/#IWebBlockInstanceWidget/MainContent", "type": "IWebBlockInstanceWidget", "name": "Card1", "source": "IWebBlock:CatBWebCard", "as": "$inst", "_why": "5. a instancia do web block do flow novo e o botao Submit"},
+  {"op": "create", "parent": "$scr/#IWebBlockInstanceWidget/MainContent", "type": "IWebBlockInstanceWidget", "name": "Card1", "source": "IWebBlock:CatBWebCard", "as": "$inst", "_why": "5. the instance of the new flow's web block and the Submit button"},
   {"op": "create", "parent": "$scr/#IWebBlockInstanceWidget/MainContent", "type": "IButtonWidget", "name": "Submit_Button", "as": "$btn"},
   {"op": "set", "target": "$btn", "prop": "Label", "value": "\"Submit\""},
   {"op": "set", "target": "$btn/OnClick", "prop": "Destination", "value": "$submit"},
@@ -123,7 +123,7 @@
   {"op": "get", "target": "$pwdLabel"},
   {"op": "get", "target": "$etable"},
   {"op": "get", "target": "$edit"},
-  {"op": "usages", "target": "$blk", "_why": "o web block tem 1 consumidor: a instancia Card1"},
+  {"op": "usages", "target": "$blk", "_why": "the web block has 1 consumer: the instance Card1"},
   {"op": "dump", "target": "$scr", "depth": 8}
  ]
 }

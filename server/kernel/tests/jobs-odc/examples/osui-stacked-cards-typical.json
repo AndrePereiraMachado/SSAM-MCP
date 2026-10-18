@@ -1,5 +1,5 @@
 {
- "description": "StackedCards do OSUI: List de produtos no Content, um card por linha, e OnRightSwipe/OnLeftSwipe contando curtidas e descartes.",
+ "description": "StackedCards of OSUI: a List of products in the Content, one card per row, and OnRightSwipe/OnLeftSwipe counting likes and discards.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

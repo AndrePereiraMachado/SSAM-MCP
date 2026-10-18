@@ -1,5 +1,5 @@
 {
- "description": "AccordionItem do OSUI: um item com Title e Content dentro de um Accordion vazio.",
+ "description": "AccordionItem of OSUI: one item with a Title and a Content inside an empty Accordion.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

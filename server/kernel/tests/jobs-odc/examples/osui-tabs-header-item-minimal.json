@@ -1,5 +1,5 @@
 {
- "description": "TabsHeaderItem do OSUI: um cabecalho de aba com texto, no Header de um Tabs vazio.",
+ "description": "TabsHeaderItem of OSUI: a tab header with a text, in the Header of an empty Tabs.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],

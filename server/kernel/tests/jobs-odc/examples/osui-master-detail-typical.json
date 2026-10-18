@@ -1,5 +1,5 @@
 {
- "description": "MasterDetail do OSUI: lista de produtos no LeftContent, o clique escolhe o produto, o RightContent mostra o escolhido e o DetailClose limpa a escolha.",
+ "description": "MasterDetail of OSUI: a list of products in LeftContent, the click chooses the product, RightContent shows the chosen one and DetailClose clears the choice.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectedMessages": [],
@@ -21,7 +21,7 @@
   {"op": "logic", "data": {"actions": [{"name": "CloseDetail", "kind": "screen", "owner": "IMobileScreen:ProductBrowser", "steps": [{"assign": {"SelectedName": "\"\""}, "as": "Clear"}]}]}},
   {"op": "create", "parent": "$scr/#IMobileBlockInstanceWidget/MainContent", "type": "IMobileBlockInstanceWidget", "name": "MasterDetail1", "source": "IMobileBlock:MasterDetail", "empty": true, "as": "$md"},
   {"op": "set", "target": "$md/LeftPercentage", "prop": "Value", "value": "40"},
-  {"op": "set", "target": "$md/OpenedOnPhone", "prop": "Value", "value": "SelectedName <> \"\"", "_why": "no telefone o detalhe abre quando ha escolha"},
+  {"op": "set", "target": "$md/OpenedOnPhone", "prop": "Value", "value": "SelectedName <> \"\"", "_why": "on the phone the detail opens when there is a choice"},
   {"op": "set", "target": "$md/DetailClose", "prop": "Handler", "value": "IMobileScreen:ProductBrowser/CloseDetail"},
   {"op": "create", "parent": "$md/LeftContent", "type": "IList", "name": "ProductList", "as": "$list"},
   {"op": "set", "target": "$list", "prop": "Source", "value": "GetProducts.List"},

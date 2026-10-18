@@ -1,5 +1,5 @@
 ﻿{
- "description": "ODC: a RECUSA do delete de logica. WfProof_Save e chamada por outra server action (WfProof_Import) e pela screen action SaveIt da tela WfProofScreen. Sem force o delete tem de ser recusado E a mensagem tem de nomear os dois chamadores. Roda com `python scripts/run_job.py tests/jobs-odc-negative/delete-logic-in-use.json --lane odc`: tem de dar ok=False com a mensagem de expectError (roda em OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane. O caminho limpo, com replace, esta em tests/jobs-odc/delete-logic-consumers.json.",
+ "description": "ODC: the REFUSAL of the delete of logic. WfProof_Save is called by another server action (WfProof_Import) and by the screen action SaveIt of the screen WfProofScreen. Without force the delete must be refused AND the message must name the two callers. Runs with `python scripts/run_job.py tests/jobs-odc-negative/delete-logic-in-use.json --lane odc`: it must give ok=False with the expectError message (runs in OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane. The clean path, with replace, is in tests/jobs-odc/delete-logic-consumers.json.",
  "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
  "expectValid": true,
  "expectError": [

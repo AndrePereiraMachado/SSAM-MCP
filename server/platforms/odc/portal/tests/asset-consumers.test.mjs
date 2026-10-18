@@ -1,3 +1,4 @@
+import '../../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {readAssetConsumers} from '../runtime/asset-consumers.mjs';
 const ok=data=>({ok:true,status:200,data});

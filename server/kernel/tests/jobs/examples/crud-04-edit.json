@@ -1,5 +1,5 @@
 {
- "description": "CRUD back-office, parte 4 de 5 (formulario): ProductEdit le o produto pelo input, Form com Labels ligados, Inputs obrigatorios, Dropdown da categoria, Checkbox; Save valida no cliente, chama Product_Save com o record, trata ProductInvalid com mensagem e volta para ProductList; Cancel volta sem gravar.",
+ "description": "Back-office CRUD, part 4 of 5 (form): ProductEdit reads the product by the input, a Form with bound Labels, required Inputs, a Dropdown of the category, a Checkbox; Save validates on the client, calls Product_Save with the record, handles ProductInvalid with a message and goes back to ProductList; Cancel goes back without saving.",
  "base": "job:crud-03-screens",
  "expectValid": true,
  "expectedMessages": [],
@@ -60,7 +60,7 @@
   {"op": "set", "target": "$lActive", "prop": "TargetWidget", "value": "$chkActive"},
 
   {"op": "logic", "data": {"actions": [
-   {"name": "SaveOnClick", "kind": "screen", "owner": "IMobileScreen:ProductEdit", "description": "Valida, grava pelo wrapper e volta a lista",
+   {"name": "SaveOnClick", "kind": "screen", "owner": "IMobileScreen:ProductEdit", "description": "Validates, saves through the wrapper and goes back to the list",
     "steps": [
      {"if": "GetProductById.List.Current.Product.Price < 0", "label": "NegativePrice?",
       "then": [{"assign": {"Price_Input.Valid": "False", "Price_Input.ValidationMessage": "\"Price cannot be negative\""}, "as": "MarkPriceInvalid"}]},

@@ -1,22 +1,22 @@
 {
- "description": "Mudanca de CONTRATO de um evento de bloco ja consumido, sobre job:block-events-reactive: OnRate ganha o parametro RatedAt e passa a obrigatorio (IsMandatory true). Prova o que acontece com quem ja consumia: a instancia da tela mantem a MESMA chave de handler, o argumento novo nasce vazio no consumidor (o get do IEventHandler mostra Arguments 3) e tem de ser preenchido dos dois lados - no produtor (o ITriggerNode) e no consumidor (o input novo do handler) - senao o Verify recusa com RequiredPropertyValue_Value; obrigatorio nao quebra quem ja tinha handler ligado.",
+ "description": "CONTRACT change of an already consumed block event, on top of job:block-events-reactive: OnRate gains the parameter RatedAt and becomes mandatory (IsMandatory true). It proves what happens to whoever already consumed it: the screen instance keeps the SAME handler key, the new argument is born empty in the consumer (the get of the IEventHandler shows Arguments 3) and has to be filled in on both sides - in the producer (the ITriggerNode) and in the consumer (the new input of the handler) - otherwise Verify refuses with RequiredPropertyValue_Value; mandatory does not break whoever already had a handler linked.",
  "base": "job:block-events-reactive",
  "expectValid": true,
  "expectedMessages": [],
  "ops": [
-  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "estado antes: o trigger do bloco e o handler da tela"},
-  {"op": "get", "target": "IBlockEvent:OnRate", "_why": "contrato antigo: 2 parametros, IsMandatory ausente"},
+  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "state before: the trigger of the block and the handler of the screen"},
+  {"op": "get", "target": "IBlockEvent:OnRate", "_why": "old contract: 2 parameters, IsMandatory absent"},
 
-  {"op": "create", "parent": "IBlockEvent:OnRate", "type": "IInputParameter", "name": "RatedAt", "as": "$evRatedAt", "_why": "1. acrescentar parametro ao contrato"},
+  {"op": "create", "parent": "IBlockEvent:OnRate", "type": "IInputParameter", "name": "RatedAt", "as": "$evRatedAt", "_why": "1. add a parameter to the contract"},
   {"op": "set", "target": "$evRatedAt", "prop": "DataType", "value": "Date Time"},
-  {"op": "set", "target": "IBlockEvent:OnRate", "prop": "IsMandatory", "value": true, "_why": "2. tornar o evento obrigatorio para quem instancia o bloco"},
+  {"op": "set", "target": "IBlockEvent:OnRate", "prop": "IsMandatory", "value": true, "_why": "2. make the event mandatory for whoever instantiates the block"},
 
-  {"op": "get", "target": "IMobileBlock:RatingPicker/Rate/RaiseOnRate", "_why": "o produtor ja ve 3 argumentos; o novo esta por preencher"},
-  {"op": "get", "target": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent/RatingPicker1/#IEventHandler", "_why": "o consumidor mantem a chave do handler e passa a ter 3 argumentos, o novo vazio"},
+  {"op": "get", "target": "IMobileBlock:RatingPicker/Rate/RaiseOnRate", "_why": "the producer already sees 3 arguments; the new one is still to be filled in"},
+  {"op": "get", "target": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent/RatingPicker1/#IEventHandler", "_why": "the consumer keeps the handler key and now has 3 arguments, the new one empty"},
 
-  {"op": "set", "target": "IMobileBlock:RatingPicker/Rate/RaiseOnRate/RatedAt", "prop": "Value", "value": "CurrDateTime()", "_why": "3. migrar o produtor: quem dispara passa a mandar o valor novo"},
+  {"op": "set", "target": "IMobileBlock:RatingPicker/Rate/RaiseOnRate/RatedAt", "prop": "Value", "value": "CurrDateTime()", "_why": "3. migrate the producer: whoever triggers now sends the new value"},
 
-  {"op": "create", "parent": "IMobileScreen:RatingDemo", "type": "ILocalVariable", "name": "LastRatedAt", "as": "$vRatedAt", "_why": "4. migrar o consumidor: o handler recebe e usa o parametro novo"},
+  {"op": "create", "parent": "IMobileScreen:RatingDemo", "type": "ILocalVariable", "name": "LastRatedAt", "as": "$vRatedAt", "_why": "4. migrate the consumer: the handler receives and uses the new parameter"},
   {"op": "set", "target": "$vRatedAt", "prop": "DataType", "value": "Date Time"},
   {"op": "create", "parent": "IScreenAction:RatingPicker1_OnRate", "type": "IInputParameter", "name": "RatedAt", "as": "$hRatedAt"},
   {"op": "set", "target": "$hRatedAt", "prop": "DataType", "value": "Date Time"},
@@ -25,12 +25,12 @@
   {"op": "set", "target": "$hA3", "prop": "Value", "value": "RatedAt"},
   {"op": "set", "target": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent/RatingPicker1/OnRate/RatedAt", "prop": "Value", "value": "RatedAt", "_why": "o argumento do handler, no escopo do evento"},
 
-  {"op": "create", "parent": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$echoAt", "_why": "5. a tela usa o dado novo, senao o parametro fica sem uso"},
+  {"op": "create", "parent": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent", "type": "IExpression", "as": "$echoAt", "_why": "5. the screen uses the new data, otherwise the parameter is left unused"},
   {"op": "set", "target": "$echoAt", "prop": "Value", "value": "\"Quando: \" + DateTimeToText(LastRatedAt)"},
 
-  {"op": "get", "target": "IBlockEvent:OnRate", "_why": "contrato novo: 3 parametros e IsMandatory True"},
-  {"op": "get", "target": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent/RatingPicker1/#IEventHandler", "_why": "depois da migracao: a MESMA chave de handler, agora com os 3 argumentos preenchidos"},
-  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "estado depois: os mesmos dois consumidores, nenhum perdido"},
+  {"op": "get", "target": "IBlockEvent:OnRate", "_why": "new contract: 3 parameters and IsMandatory True"},
+  {"op": "get", "target": "IMobileScreen:RatingDemo/#IMobileBlockInstanceWidget/MainContent/RatingPicker1/#IEventHandler", "_why": "after the migration: the SAME handler key, now with the 3 arguments filled in"},
+  {"op": "usages", "target": "IBlockEvent:OnRate", "_why": "state after: the same two consumers, none lost"},
   {"op": "dump", "target": "IMobileScreen:RatingDemo", "depth": 7}
  ]
 }

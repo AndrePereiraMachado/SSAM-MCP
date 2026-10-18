@@ -1,6 +1,7 @@
 // Lane E of the 2026-10-05 package (C07): ssam_reference serves the proven examples by id (kind example): the jobs of
 // the lane suite and the html sources of tests/html, on both lanes, from the files themselves (no CLI); and ODC answers
 // recipe from its suite instead of KIND_NOT_IN_LANE (62a884e8, 2026-10-04 22:09). The examples are the real suite files.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

@@ -1,5 +1,5 @@
 {
- "description": "Checkbox tipico: Label ligado ao Checkbox por TargetWidget, variavel ShowDone usada no filtro do aggregate e OnChange que refaz a consulta.",
+ "description": "Typical Checkbox: a Label bound to the Checkbox by TargetWidget, the variable ShowDone used in the filter of the aggregate and an OnChange that runs the query again.",
  "base": "job:ex-base",
  "expectValid": true,
  "expectedMessages": [],
@@ -10,7 +10,7 @@
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "IServerEntity:Task"}},
   {"op": "create", "parent": "$agg", "type": "IFilter", "args": {"condition": "ShowDone or not Task.Done"}},
   {"op": "logic", "data": {"actions": [
-   {"name": "ShowDoneOnChange", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Refaz a lista com ou sem as concluidas",
+   {"name": "ShowDoneOnChange", "kind": "screen", "owner": "IMobileScreen:Showcase", "description": "Runs the list again with or without the done ones",
     "steps": [{"node": "IRefreshDataNode", "as": "RefreshVisible", "properties": {"DataSource": "IScreenAggregate:GetVisibleTasks"}}]}]}},
   {"op": "create", "parent": "IMobileScreen:Showcase/#IMobileBlockInstanceWidget/MainContent", "type": "ICheckbox", "name": "ShowDoneCheckbox", "as": "$chk"},
   {"op": "set", "target": "$chk", "prop": "Variable", "value": "ShowDone"},
