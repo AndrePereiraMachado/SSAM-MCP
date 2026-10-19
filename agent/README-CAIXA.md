@@ -107,3 +107,15 @@ Pedido do dono de 19/10: instalar no Mac com UM comando, sem decompilar nada. Pl
   `SHASUMS256.txt` oficial) e sem valores nulos; o tar.gz sai de `scripts\tar-gz.mjs` (0755 nos `.sh`) e a árvore lida de
   volta passa pela mesma varredura de PI. Montagem a partir do pack3: `C:\t\agent-mac\scripts\prep-mac.ps1`.
 - **Servidor.** `fase4-26/a8-mac` (C26 e os textos com a pasta POSIX do agente). Só entra na próxima imagem, com OK do dono.
+- **Rodada 2 (depois da revisão `C:\t\revisoes\agent-mac\REVISAO.md`).** Agente `0.3.3` (o servidor só mostra e registra a
+  versão; no Windows é o mesmo agente do `0.3.2`).
+  - `uninstall` nunca apaga através de link (lstat componente a componente a partir da raiz real) e tira de `private/` só
+    o que o registro do setup lista (`private/installed.json`); `install.sh` e o `setup` recusam `/`, o próprio `$HOME`,
+    pastas de sistema, `~/Library` e pasta com conteúdo que não seja do pacote (M1, M2).
+  - O gancho O11 só recebe a hora de leitores que acertaram os microssegundos em processos do próprio agente
+    (`calibrateReaders`); sem nenhum, recusa antes de tocar o Studio (M4).
+  - B1 a B7 e B9: pipe Unix sem corrida no fim do prazo, pacote do Mac com LF em qualquer checkout, grafia exata da raiz
+    em caminho absoluto, `--credential-file` fora de pastas guardadas com lembrete de apagar, doctor com Studio fechado,
+    Node gravado em `private/node` e conferido, `runtimeconfig.json` ilegível para o attach.
+  - Pacote `pack-20261019-072205` (`C:\t\agent-mac\pack2`, sha256 `ea3e459c…d4b7`), mesmos binários do pack3, varredura
+    de PI sem achados. O pacote da rodada 1 (`C:\t\agent-mac\pack`) fica como está.
