@@ -137,6 +137,7 @@ node C:\SSAM-Agent\agent\ssam-agent.mjs doctor
   During the Manage Dependencies the bridge closes only the Studio's error report, the dependencies dialog and a box
   with only OK. Any other window (a sign-in, a question, a window you opened in another tab) stays as it is: the call
   then answers `STUDIO_DIALOG_PENDING` with its title. Answer it in the Studio, then repeat the call.
+- Agent 0.3.3: on Windows the same agent as 0.3.2; it adds the Mac ([AGENTE-MAC.md](AGENTE-MAC.md)).
 - In the foreground, to see errors on screen:
   `node --use-env-proxy --use-system-ca C:\SSAM-Agent\agent\ssam-agent.mjs run --root C:\SSAM-Agent`.
 - `doctor` checks the Node options, the folder, the integrity of the pack (`pack.json`), the configuration, the

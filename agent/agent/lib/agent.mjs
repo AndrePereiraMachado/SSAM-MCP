@@ -32,7 +32,10 @@ import { AgentError } from './errors.mjs';
 // 0.3.1 (servidor/fase4-24): 0.3.0 and 0.2.1 together, plus the net.probe kind for ssam_doctor {network:true}.
 // 0.3.2 (servidor/fase4-26 a8, the next agent pack): the English agent (server/english-agent) with the O11 thin bridge that
 // runs the Studio's own Manage Dependencies by code (refresh_references:add); the kinds and the wire are those of 0.3.1.
-export const AGENT_VERSION = '0.3.2';
+// 0.3.3 (server/agent-mac): the macOS side (bundles, the diagnostic IPC attach, the Unix bridge pipe, POSIX paths,
+// install.sh and ssam-agent.sh); Windows, the kinds and the wire are those of 0.3.2. The server only shows and logs this
+// version (agent-hub.mjs info().agentVersion and agent-connected, 87e12565): no server change.
+export const AGENT_VERSION = '0.3.3';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const STUDIOS_REFRESH_MS = 5 * 60000;
