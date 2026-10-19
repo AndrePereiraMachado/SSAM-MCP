@@ -1,7 +1,7 @@
 // The folder rules on macOS (lib/workspace.mjs, platform 'darwin'): the same roles, prefixes and segment grammar as
-// Windows, with POSIX absolute paths, links resolved (a link that leaves its prefix is refused), names compared without
-// case and in NFC (APFS by default). The file system is a model in memory (lstat and realpath only), so the rules are
-// tested on any system.
+// Windows, with POSIX absolute paths, links resolved (a link that leaves its prefix is refused), names in NFC; an agent:
+// path takes any case of a prefix, an absolute path only the exact spelling of the root and the prefix (mac-case.test.mjs).
+// The file system is a model in memory (lstat and realpath only), so the rules are tested on any system.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -84,8 +84,9 @@ test('darwin: a link that leaves its prefix is refused, at any depth; a link tha
 test('darwin: absolute paths of a bridge line: only under the root (as given or real), in a prefix for the role, without .., NUL or another form', () => {
   const ws = workspace();
   assert.equal(ws.checkAbsolute(ROOT + '/odc/lab/m.json', 'write'), ROOT + '/odc/lab/m.json');
-  assert.equal(ws.checkAbsolute('/users/ANA/ssam-agent/odc/lab/m.json', 'read'), ROOT + '/odc/lab/m.json');
-  for (const text of [ROOT + '/odc/lab/../../private/credential', ROOT + '/private/credential', ROOT, ROOT + '/', '/Users/ana/SSAM-Agent2/odc/lab/x',
+  // The root and the prefix in another case are refused: on a case-sensitive volume that is another folder (review B3,
+  // mac-case.test.mjs).
+  for (const text of ['/users/ANA/ssam-agent/odc/lab/m.json', ROOT + '/ODC/lab/m.json', ROOT + '/odc/lab/../../private/credential', ROOT + '/private/credential', ROOT, ROOT + '/', '/Users/ana/SSAM-Agent2/odc/lab/x',
     '/etc/hosts', 'odc/lab/x', 'C:\\SSAM-Agent\\odc\\lab\\x', '//server/share/x', ROOT + '/odc/lab/a\u0000b', ROOT + '/inbox/x'])
     code(() => ws.checkAbsolute(text, 'write'), 'PATH_FORBIDDEN');
   // A root reached through a link (/var -> /private/var): both spellings are the root.
@@ -105,8 +106,9 @@ test('darwin: NFC and NFD spellings of a name are the same name (APFS)', () => {
 test('darwin: replies are relativized (only readable prefixes, prefix spelled canonically), json:"agent-paths" both ways', () => {
   const ws = workspace();
   const paths = [];
-  const reply = ws.relativize({ ok: true, evidence: ROOT + '/ODC/Lab/run/e.json', key: ROOT + '/private/credential', list: [ROOT + '/inbox/a.oml', 'agent:odc/lab/x', 'plain'], n: 3 }, paths);
-  assert.deepEqual(reply, { ok: true, evidence: 'agent:odc/lab/run/e.json', key: ROOT + '/private/credential', list: ['agent:inbox/a.oml', 'agent:odc/lab/x', 'plain'], n: 3 });
+  // A prefix in another case is not the prefix (review B3): it stays as it is.
+  const reply = ws.relativize({ ok: true, evidence: ROOT + '/odc/lab/Run/e.json', other: ROOT + '/ODC/Lab/run/e.json', key: ROOT + '/private/credential', list: [ROOT + '/inbox/a.oml', 'agent:odc/lab/x', 'plain'], n: 3 }, paths);
+  assert.deepEqual(reply, { ok: true, evidence: 'agent:odc/lab/Run/e.json', other: ROOT + '/ODC/Lab/run/e.json', key: ROOT + '/private/credential', list: ['agent:inbox/a.oml', 'agent:odc/lab/x', 'plain'], n: 3 });
   assert.deepEqual(paths, [['evidence'], ['list', 0]]);
   const manifest = ws.agentPathsIn({ BasePath: 'agent:odc/snapshots/b.oml', evidenceDir: 'agent:odc/lab/ev', module: 'M' });
   assert.deepEqual(manifest, { BasePath: ROOT + '/odc/snapshots/b.oml', evidenceDir: ROOT + '/odc/lab/ev', module: 'M' });

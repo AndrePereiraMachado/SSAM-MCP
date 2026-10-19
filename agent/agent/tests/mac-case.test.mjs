@@ -49,7 +49,8 @@ const refused = (fn, label) => assert.throws(fn, error => { assert.equal(error.c
 
 test('darwin: an absolute path is the agent folder only when the root and the prefix are spelled exactly (another case is another folder on a case-sensitive volume)', () => {
   for (const caseSensitive of [true, false]) {
-    const files = apfs({ ...base, '/Users/ana/ssam-agent/odc/lab/x.json': 'file' }, { caseSensitive });
+    // Case-sensitive: a sibling folder of another case; default APFS: the same folder (the file under the root's spelling).
+    const files = apfs({ ...base, [caseSensitive ? '/Users/ana/ssam-agent/odc/lab/x.json' : ROOT + '/odc/lab/x.json']: 'file' }, { caseSensitive });
     const ws = createWorkspace(ROOT, { platform: 'darwin', files });
     assert.equal(ws.checkAbsolute(ROOT + '/odc/lab/x.json', 'read'), ROOT + '/odc/lab/x.json');
     assert.equal(ws.toAgent(ROOT + '/odc/lab/Run/x.json'), 'agent:odc/lab/Run/x.json', 'inside the prefix the case of a name is kept as it is');
