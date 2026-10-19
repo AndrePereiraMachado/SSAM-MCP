@@ -2,8 +2,11 @@
 # Installs the SSAM agent on this Mac (docs/AGENTE-MAC.md). One command, after the pack arrived by a private channel:
 #   mkdir -p ~/SSAM-Agent && tar -xzf ssam-agent-mac.tar.gz -C ~/SSAM-Agent && bash ~/SSAM-Agent/install.sh
 # Options: --server <https://...> (default: the one already set up, else https://mcp.ssam.pro)
-#          --credential-file <file> (else the credential is asked on the terminal, without echo)
+#          --credential-file <file> (else the credential is asked on the terminal, without echo; never a file in
+#          Desktop, Documents, Downloads, iCloud Drive or a cloud folder; delete the file afterwards)
 #          --o11-port <port>   --node <path of a Node 24>
+# The folder must be the pack's own: not /, not your home folder, not ~/Library or a folder of macOS or of the
+# applications, and holding nothing but this pack (or a folder set up before by it).
 # What it does, all inside this folder and without administrator rights:
 #   1. checks macOS (13.5 or newer; ODC Studio wants 14) and the processor (Apple silicon or Intel);
 #   2. removes the download quarantine from this folder only;
@@ -12,7 +15,8 @@
 #      bin/node and LICENSE in agent/node/;
 #   4. runs the agent setup (the credential never goes as an argument, is never shown and stays in private/), unless this
 #      folder is already set up (a new pack over the same folder keeps its credential);
-#   5. starts the agent (stopping the old one first), runs the doctor and shows the next step.
+#   5. records the Node it chose in private/node, starts the agent (stopping the old one first), runs the doctor and
+#      shows the next step.
 # Nothing starts by itself at login (as on Windows): ~/SSAM-Agent/agent/ssam-agent.sh start. Written for bash 3.2.
 set -u
 
@@ -32,7 +36,7 @@ while [ "$#" -gt 0 ]; do
     --credential-file) [ "$#" -ge 2 ] || fail "missing value for --credential-file"; CREDENTIAL_FILE="$2"; shift 2 ;;
     --o11-port) [ "$#" -ge 2 ] || fail "missing value for --o11-port"; O11_PORT="$2"; shift 2 ;;
     --node) [ "$#" -ge 2 ] || fail "missing value for --node"; NODE_OPTION="$2"; shift 2 ;;
-    -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"; exit 0 ;;
     *) fail "unknown option: $1 (see bash $0 --help)" ;;
   esac
 done
@@ -91,6 +95,15 @@ for entry in "$ROOT"/* "$ROOT"/.[!.]* "$ROOT"/..?*; do
 done
 [ -z "$FOREIGN" ] || fail "the folder $ROOT already holds files that are not of an SSAM agent pack: ${FOREIGN#, }. Extract the pack to a new folder of its own, such as $HOME/SSAM-Agent"
 [ -f "$ROOT/pack.json" ] && [ -f "$ROOT/agent/ssam-agent.mjs" ] || fail "this folder is not an extracted SSAM agent pack (pack.json or agent/ssam-agent.mjs is missing)"
+# --credential-file: never from a folder macOS guards or syncs to the cloud (setup checks it again).
+if [ -n "$CREDENTIAL_FILE" ]; then
+  case "$CREDENTIAL_FILE" in /*) CREDENTIAL_PATH="$CREDENTIAL_FILE" ;; *) CREDENTIAL_PATH="$PWD/$CREDENTIAL_FILE" ;; esac
+  LOWER_CREDENTIAL="$(printf '%s' "$CREDENTIAL_PATH" | tr '[:upper:]' '[:lower:]')"
+  for guarded in Desktop Documents Downloads "Library/Mobile Documents" Library/CloudStorage; do
+    lower="$(printf '%s' "$LOWER_HOME/$guarded" | tr '[:upper:]' '[:lower:]')"
+    case "$LOWER_CREDENTIAL" in "$lower"/*) fail "the credential file $CREDENTIAL_FILE is inside $HOME/$guarded, which macOS guards or syncs to the cloud: move it to your home folder, or run install.sh without --credential-file and paste the credential when it asks" ;; esac
+  done
+fi
 
 # ---- 2. the quarantine of this folder only (files that came by a browser or a chat carry it)
 xattr -dr com.apple.quarantine "$ROOT" 2>/dev/null || true
@@ -169,6 +182,10 @@ else
 fi
 
 # ---- 5. start, doctor, next step
+# The Node chosen here is the one agent/ssam-agent.sh takes later, even when a new Terminal has another node first on
+# its PATH (it checks it is still a Node 24).
+if printf '%s\n' "$NODE" > "$ROOT/private/node"; then chmod 600 "$ROOT/private/node" 2>/dev/null || true
+else say "Warning: could not write $ROOT/private/node; agent/ssam-agent.sh will look for a Node 24 itself."; fi
 export SSAM_NODE="$NODE"
 bash "$ROOT/agent/ssam-agent.sh" stop >/dev/null 2>&1 || true
 bash "$ROOT/agent/ssam-agent.sh" start
@@ -185,4 +202,5 @@ say "  Claude Code:  claude mcp add --transport http ssam $SERVER_NOW/mcp --head
 say "  Or a .mcp.json:  {\"mcpServers\":{\"ssam\":{\"type\":\"http\",\"url\":\"$SERVER_NOW/mcp\",\"headers\":{\"Authorization\":\"Bearer \${SSAM_TOKEN}\"}}}}"
 say "Then, in the MCP client: ssam_doctor, studio_attach (ODC Studio) and ssam_connect {lane:\"o11\"} (Service Studio)."
 say "Agent: $ROOT/agent/ssam-agent.sh start|status|stop|doctor|uninstall. Guide: $ROOT/docs/AGENTE-MAC.md"
+if [ -n "$CREDENTIAL_FILE" ]; then say "Delete $CREDENTIAL_FILE now: the credential is saved in private/credential (rm \"$CREDENTIAL_FILE\")."; fi
 exit "$STARTED"

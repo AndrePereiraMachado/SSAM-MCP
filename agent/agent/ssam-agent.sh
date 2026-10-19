@@ -14,12 +14,20 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd -P)"
 ROOT="$(dirname "$HERE")"
 
-# The node of the installer (agent/node/node), SSAM_NODE, or the node on the PATH.
+# A Node 24 with both options answers the word below (any other program, or another Node, does not); install.sh uses the
+# same check.
+node_ok() {
+  [ -n "$1" ] && [ -x "$1" ] || return 1
+  [ "$("$1" -e 'const major = Number(process.versions.node.split(".")[0]); const flags = process.allowedNodeEnvironmentFlags; process.stdout.write(major === 24 && flags.has("--use-env-proxy") && flags.has("--use-system-ca") ? "ssam-node-24" : "no")' 2>/dev/null)" = "ssam-node-24" ]
+}
+# SSAM_NODE, the Node install.sh chose (private/node), the Node it downloaded (agent/node/node), else the node on the
+# PATH: the first one that is a Node 24 (a new Terminal may put another node first on the PATH).
 find_node() {
-  for candidate in "$HERE/node/node" "${SSAM_NODE:-}"; do
-    if [ -n "$candidate" ] && [ -x "$candidate" ]; then printf '%s\n' "$candidate"; return 0; fi
+  RECORDED=""
+  if [ -f "$ROOT/private/node" ]; then IFS= read -r RECORDED < "$ROOT/private/node" || true; fi
+  for candidate in "${SSAM_NODE:-}" "$RECORDED" "$HERE/node/node" "$(command -v node 2>/dev/null)"; do
+    if node_ok "$candidate"; then printf '%s\n' "$candidate"; return 0; fi
   done
-  if command -v node >/dev/null 2>&1; then command -v node; return 0; fi
   return 1
 }
 
@@ -34,7 +42,7 @@ case "$ACTION" in
 esac
 shift
 
-NODE="$(find_node)" || { echo "Node not found: run install.sh again (docs/AGENTE-MAC.md) or set SSAM_NODE."; exit 1; }
+NODE="$(find_node)" || { echo "No Node 24 with --use-env-proxy and --use-system-ca found (SSAM_NODE, private/node, agent/node/node, the PATH): run install.sh again (docs/AGENTE-MAC.md), or set SSAM_NODE to a Node 24."; exit 1; }
 
 if [ "$ACTION" = "doctor" ]; then
   exec "$NODE" --use-env-proxy --use-system-ca "$HERE/ssam-agent.mjs" doctor --root "$ROOT" "$@"
