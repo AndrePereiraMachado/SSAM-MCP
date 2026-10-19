@@ -53,8 +53,10 @@ function attachFor(m, { ps, info = pid => ({ pid, clrVersion: '8.0.31+abc', arch
     if (file === '/usr/sbin/lsof') { if (lsof instanceof Error) throw lsof; return lsof.map(f => 'n' + f).join('\n') + '\n'; }
     throw new Error('unexpected tool ' + file);
   };
+  const chosen = readers ?? { fake: async () => ({ sec: START, usec: 123456 }) };
+  // Every reader here passed the check on processes of the agent (mac-start-check.test.mjs covers that check).
   const attach = createMacAttach({ run, env: { TMPDIR: m.tmp }, home: m.home, ps: typeof ps === 'function' ? ps : async () => ps,
-    readers: readers ?? { fake: async () => ({ sec: START, usec: 123456 }) },
+    readers: chosen, calibrate: async () => ({ trusted: Object.keys(chosen), results: Object.keys(chosen).map(name => ({ name, ok: true, offsetsMs: [0.5], error: null })) }),
     ipc: { processInfo2: async (endpoint) => { calls.info++; return info(Number(/dotnet-diagnostic-(\d+)-/.exec(endpoint)[1])); },
       applyStartupHook: async (endpoint, file) => { calls.apply.push([endpoint, file]); return apply(endpoint, file); } } });
   return { attach, calls };

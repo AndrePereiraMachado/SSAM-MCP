@@ -2,11 +2,12 @@
 // when it is missing. Nothing is installed, changed or attached here; the one request to a Studio is ProcessInfo2 over its
 // .NET diagnostic socket (read only: the pid, the runtime and the architecture). The read-only checks of the Mac study
 // (application bundles, Info.plist, Mach-O architectures, runtimeconfig.json, entitlements, the diagnostic socket) are
-// here so the person runs nothing by hand. deps: {run, fs, env, home, readers, ipc, arch, startedMs, now}.
+// here so the person runs nothing by hand. deps: {run, fs, env, home, readers, ipc, arch, calibrate, spawnChild, clock,
+// sleep} (the last four: the check of the start time readers on processes of the agent, macos.mjs calibrateReaders).
 import fs from 'node:fs';
 import path from 'node:path';
 import { installedBundles, studioProcesses, tempFolders, START_READERS, machOArchs, runTool, TOOLS, homeOf, officialBundle, MAC_STUDIOS,
-  parsePs, psText, openFiles, bundleOfExe } from './macos.mjs';
+  parsePs, psText, openFiles, bundleOfExe, calibrateReaders } from './macos.mjs';
 import { unixEndpoints, processInfo2 } from './dotnet-ipc.mjs';
 import { unixPipeName, UNIX_PATH_MAX } from './odc-pipe-unix.mjs';
 
@@ -42,20 +43,13 @@ export async function macDoctor({ pack = {}, deps = {} } = {}) {
   const same = userTemp && env.TMPDIR && userTemp.replace(/\/+$/, '') === String(env.TMPDIR).replace(/\/+$/, '');
   add(Boolean(same) || !env.TMPDIR, 'temporary folder', same ? `${env.TMPDIR} (the one macOS gives the apps)` : `TMPDIR is ${env.TMPDIR ?? '(unset)'}, the user temporary folder is ${userTemp ?? '(unknown)'}; the agent looks in both and in /tmp`);
 
-  // ---- the start time with microseconds (the O11 runtime hook compares it), proven on the agent's own process
-  const ownPid = deps.pid ?? process.pid;
-  const startedMs = deps.startedMs ?? (Date.now() - process.uptime() * 1000);
-  const own = [];
-  for (const [name, read] of Object.entries(readers)) {
-    try {
-      const value = await read(ownPid, { run });
-      const ms = value.sec * 1000 + value.usec / 1000;
-      const delta = Math.round(Math.abs(ms - startedMs));
-      own.push({ name, ok: Number.isSafeInteger(value.sec) && value.usec >= 0 && value.usec < 1000000 && delta < 5000, deltaMs: delta, usec: value.usec });
-    } catch (error) { own.push({ name, ok: false, error: firstLine(error) }); }
-  }
-  facts.startTimeReaders = own;
-  const working = own.filter(r => r.ok);
+  // ---- the start time with microseconds (the O11 runtime hook compares it): each reader checked on processes the agent
+  // starts itself, the same check the Service Studio connection makes (macos.mjs calibrateReaders, review M4).
+  const calibration = await (deps.calibrate ?? (() => calibrateReaders({ readers, run, ...(deps.spawnChild ? { spawnChild: deps.spawnChild } : {}),
+    ...(deps.clock ? { now: deps.clock } : {}), ...(deps.sleep ? { sleep: deps.sleep } : {}) })))()
+    .catch(error => ({ trusted: [], results: Object.keys(readers).map(name => ({ name, ok: false, offsetsMs: [], error: firstLine(error) })) }));
+  facts.startTimeReaders = calibration.results;
+  const working = calibration.trusted;
 
   // ---- installed Studios
   let bundles = [];
@@ -86,7 +80,8 @@ export async function macDoctor({ pack = {}, deps = {} } = {}) {
   for (const lane of lanes) if (!bundles.some(b => b.kind === lane))
     add(false, MAC_STUDIOS[lane].name, `not found in /Applications or ~/Applications (an application bundle whose Contents hold ${MAC_STUDIOS[lane].requires.join(' and ')})`);
   const o11Installed = bundles.some(b => b.kind === 'o11');
-  add(working.length > 0, 'start time with microseconds (Service Studio hook)', own.map(r => r.ok ? `${r.name} ok (${r.deltaMs} ms from the agent start)` : `${r.name} failed: ${r.error ?? 'out of range (' + r.deltaMs + ' ms)'}`).join('; ')
+  add(working.length > 0, 'start time with microseconds (Service Studio hook)', calibration.results.map(r => (r.ok
+    ? `${r.name} ok (${r.offsetsMs.map(ms => ms.toFixed(3)).join(' and ')} ms after the start of processes the agent started)` : `${r.name} failed: ${r.error}`)).join('; ')
     + (working.length ? '' : '. Without it the Service Studio lane cannot connect; send this doctor --json to the server owner'), lanes.includes('o11') && o11Installed);
 
   // ---- running Studios
@@ -115,13 +110,17 @@ export async function macDoctor({ pack = {}, deps = {} } = {}) {
           notes.push(fact.bridgeAttached ? `bridge ${pack.odcBridge} attached` : `bridge ${pack.odcBridge} not attached yet`);
         }
         if (lane === 'o11') {
-          const good = []; const bad = [];
+          // Only the readers that passed the check count; those must match the kernel seconds and agree to the microsecond.
+          const good = []; const bad = []; const usec = {};
           for (const [readerName, read] of Object.entries(readers)) {
-            try { const v = await read(p.pid, { run }); (v.sec === fact.socketKey ? good : bad).push(readerName + (v.sec === fact.socketKey ? '' : ` (${v.sec} s)`)); }
+            if (!working.includes(readerName)) { bad.push(readerName + ': did not pass the check on processes of the agent'); continue; }
+            try { const v = await read(p.pid, { run }); if (v.sec === fact.socketKey) { good.push(readerName); usec[readerName] = v.usec; } else bad.push(`${readerName} (${v.sec} s)`); }
             catch (error) { bad.push(readerName + ': ' + firstLine(error)); }
           }
-          fact.startReaders = { good, bad };
-          if (!good.length) { ok = false; notes.push('no start time reader matches the kernel: ' + bad.join('; ')); }
+          const agree = new Set(Object.values(usec)).size <= 1;
+          fact.startReaders = { good, bad, agree, usec };
+          if (!good.length) { ok = false; notes.push('no checked start time reader matches the kernel: ' + bad.join('; ')); }
+          else if (!agree) { ok = false; notes.push('the start time readers disagree in the microseconds (' + Object.entries(usec).map(([n, u]) => `${n} ${u}`).join(', ') + '): the Service Studio connection refuses; send this doctor --json to the server owner'); }
           try { const files = await openFiles(p.pid, { run }); fact.mappedDlls = files.filter(x => /\.dll$/i.test(x)).length; fact.anvilLoaded = files.filter(x => /\/Anvil\.(Bridge|Core)\.dll$/i.test(x));
             if (!fact.mappedDlls) { ok = false; notes.push('lsof lists no managed DLL of it'); } }
           catch (error) { ok = false; notes.push('lsof failed: ' + firstLine(error)); }

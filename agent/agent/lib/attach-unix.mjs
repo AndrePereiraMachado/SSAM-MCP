@@ -8,27 +8,39 @@
 //     seconds, and the ps start);
 //   - the runtime is .NET 8 or later (ProcessInfo2) and the endpoint answers for that very pid;
 //   - O11 only: no Anvil bridge or core assembly mapped in the process yet (lsof), and startedUtc is the exact text
-//     the runtime hook compares (macos.mjs dotnetStartTimeText).
+//     the runtime hook compares (macos.mjs dotnetStartTimeText), read only by readers that read the microseconds right
+//     on processes the agent started itself (macos.mjs calibrateReaders; review M4).
 // Every refusal comes before the startup hook is sent (executed:false); a failure after it was sent is unknown (null).
 import fs from 'node:fs';
 import path from 'node:path';
 import { AgentError } from './errors.mjs';
 import { applyStartupHook, processInfo2, unixEndpoints, runtimeMajor } from './dotnet-ipc.mjs';
-import { studioProcesses, tempFolders, startTime, dotnetStartTimeText, openFiles, MAC_STUDIOS, runTool } from './macos.mjs';
+import { studioProcesses, tempFolders, startTime, dotnetStartTimeText, openFiles, MAC_STUDIOS, runTool, START_READERS, calibrateReaders, calibrationText } from './macos.mjs';
 
 const fail = (message, executed = false) => new AgentError('ATTACH_FAILED', message, { executed });
 const ODC_NOTE = 'Run status before any other command; a bridge stays loaded until the Studio closes.';
 
-// deps: {run, fs, env, home, ps, readers, ipc: {processInfo2, applyStartupHook}, now}
+// deps: {run, fs, env, home, ps, readers, ipc: {processInfo2, applyStartupHook}, now, calibrate, spawnChild, clock, sleep}
+// (calibrate replaces the check of the readers; spawnChild, clock and sleep go to calibrateReaders).
 export function createMacAttach(deps = {}) {
   const f = deps.fs ?? fs;
   const run = deps.run ?? runTool;
   const ipc = { processInfo2, applyStartupHook, ...(deps.ipc ?? {}) };
+  const readers = deps.readers ?? START_READERS;
   const startCache = new Map(); // `${pid}:${seconds}` -> {sec, usec, readers}
   // The temporary folders change only with the session: read again after a minute (odc.pipe asks on every command).
   let temp = null; let tempAt = 0;
   const now = deps.now ?? Date.now;
   const folders = async () => { if (!temp || now() - tempAt > 60000) { temp = await tempFolders({ env: deps.env ?? process.env, run }); tempAt = now(); } return temp; };
+  // The readers that read the microseconds right on processes of the agent (macos.mjs calibrateReaders, review M4): once
+  // per agent run; when none passed, checked again after a minute. Only Service Studio needs them (never the ODC lane).
+  let calibration = null; let calibratedAt = 0;
+  const calibrate = deps.calibrate ?? (() => calibrateReaders({ readers, run, ...(deps.spawnChild ? { spawnChild: deps.spawnChild } : {}),
+    ...(deps.clock ? { now: deps.clock } : {}), ...(deps.sleep ? { sleep: deps.sleep } : {}) }));
+  async function trustedReaders() {
+    if (!calibration || (calibration.trusted.length === 0 && now() - calibratedAt > 60000)) { calibration = await calibrate(); calibratedAt = now(); }
+    return calibration;
+  }
 
   async function processOf(lane, pid) {
     const number = Number(pid);
@@ -73,7 +85,12 @@ export function createMacAttach(deps = {}) {
   // The exact Process.StartTime text of .NET for this process (cached per pid and start second).
   async function exactStart(pid, seconds) {
     const key = pid + ':' + seconds;
-    if (!startCache.has(key)) startCache.set(key, await startTime(pid, { expectedSeconds: seconds, readers: deps.readers, run }));
+    if (!startCache.has(key)) {
+      const check = await trustedReaders();
+      const trusted = Object.fromEntries(Object.entries(readers).filter(([name]) => check.trusted.includes(name)));
+      if (Object.keys(trusted).length === 0) throw new Error(`no start time reader read the microseconds right on a process the agent started itself (${calibrationText(check)})`);
+      startCache.set(key, await startTime(pid, { expectedSeconds: seconds, readers: trusted, run }));
+    }
     const value = startCache.get(key);
     return { text: dotnetStartTimeText(value.sec, value.usec), readers: value.readers };
   }
@@ -84,7 +101,10 @@ export function createMacAttach(deps = {}) {
     const { p, endpoint, startSeconds, runtime } = await identify('o11', pid, { requireEndpoint: false });
     let start;
     try { start = await exactStart(p.pid, startSeconds); }
-    catch (error) { throw fail(`Service Studio ${p.pid}: ${error.message}. The O11 runtime hook compares this time, so nothing is sent without it; agent/ssam-agent.sh doctor shows which reader failed.`); }
+    catch (error) {
+      throw fail(`Service Studio ${p.pid}: ${error.message}. The O11 runtime hook compares this time to the microsecond and a wrong one could only be tried again after a restart of Service Studio, `
+        + 'so nothing was sent and the Studio was not touched. Next step: run agent/ssam-agent.sh doctor --json and send it to the server owner (it shows which reader failed and why).');
+    }
     let files;
     try { files = await openFiles(p.pid, { run }); }
     catch (error) { throw fail(`The files of Service Studio ${p.pid} cannot be listed (lsof: ${String(error.message).split('\n')[0]}), so the agent cannot tell whether another Anvil bridge is loaded. Nothing was sent.`); }

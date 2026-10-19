@@ -11,11 +11,12 @@
 //   processes  ps (C locale): a Studio process runs exactly <bundle>/Contents/MacOS/<CFBundleExecutable>.
 //   start time the microseconds the O11 runtime hook compares (Process.StartTime of .NET on macOS: pbi_start_tvsec and
 //              pbi_start_tvusec of proc_pidinfo), read by perl (sysctl kern.proc), osascript (proc_pidinfo) or
-//              sysctl -b, each checked against the whole seconds of the kernel.
+//              sysctl -b, each checked against the whole seconds of the kernel; a reader counts only after it read the
+//              microseconds right on processes the agent started itself (calibrateReaders).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { productVersionOf } from './pe-version.mjs';
 
@@ -275,6 +276,49 @@ export async function startTime(pid, { expectedSeconds = null, readers = START_R
   if (other) throw Object.assign(new Error(`the start time readers of process ${pid} disagree (${first.name} ${first.sec}.${first.usec}, ${other.name} ${other.sec}.${other.usec})`), { failures });
   return { sec: first.sec, usec: first.usec, readers: good.map(g => g.name), failures };
 }
+
+// A process of the agent's own, for calibrateReaders: /bin/sleep, ended right after the readers read it.
+export function startProbeProcess() {
+  const child = spawn('/bin/sleep', ['30'], { stdio: 'ignore' });
+  child.on('error', () => {});
+  if (!Number.isSafeInteger(child.pid)) throw new Error('/bin/sleep did not start');
+  return { pid: child.pid, kill: () => { try { child.kill('SIGKILL'); } catch { /* gone */ } } };
+}
+
+// Which start time readers read the microseconds right (review M4). The O11 runtime hook compares the start time to the
+// microsecond and runs once per process, so a reader that reads the right seconds but wrong microseconds would cost a
+// restart of Service Studio; the kernel seconds cannot tell. Here each reader reads processes the agent starts itself
+// (children, gapMs apart, so at different moments of a second): the start the kernel records is taken inside the spawn
+// call, so it lies between Date.now() before and after it (plus slackMs). A reader counts only when it lands in that
+// window for every child. Nothing of a Studio is touched. -> {trusted: [names], results: [{name, ok, offsetsMs, error}]}.
+export async function calibrateReaders({ readers = START_READERS, run = runTool, spawnChild = startProbeProcess, now = Date.now,
+  sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), children = 2, gapMs = 150, slackMs = 3 } = {}) {
+  const results = Object.keys(readers).map(name => ({ name, ok: true, offsetsMs: [], error: null }));
+  const failAll = reason => { for (const r of results) if (r.ok) { r.ok = false; r.error = reason; } };
+  for (let i = 0; i < children && results.some(r => r.ok); i++) {
+    if (i > 0) await sleep(gapMs);
+    let child;
+    const before = now();
+    try { child = spawnChild(); } catch (error) { failAll('a process of the agent could not be started to check it (' + String(error?.message ?? error).split('\n')[0] + ')'); break; }
+    const after = now();
+    try {
+      for (const r of results) {
+        if (!r.ok) continue;
+        try {
+          const value = await readers[r.name](child.pid, { run });
+          if (!valid(value?.sec, value?.usec)) { r.ok = false; r.error = 'not a time'; continue; }
+          const offset = (value.sec * 1000 + value.usec / 1000) - before;
+          r.offsetsMs.push(Number(offset.toFixed(3)));
+          if (offset < -slackMs || offset > after - before + 1 + slackMs)
+            { r.ok = false; r.error = `${offset.toFixed(3)} ms from the start the agent measured for its own process (expected 0 to ${after - before + 1} ms): its microseconds are not the kernel's`; }
+        } catch (error) { r.ok = false; r.error = String(error?.message ?? error).split('\n')[0].slice(0, 160); }
+      }
+    } finally { try { child.kill(); } catch { /* gone */ } }
+  }
+  return { trusted: results.filter(r => r.ok).map(r => r.name), results };
+}
+// The words of a calibration for a message: "perl ok; osascript: <why>".
+export const calibrationText = calibration => calibration.results.map(r => (r.ok ? `${r.name} ok` : `${r.name}: ${r.error}`)).join('; ');
 
 const EPOCH_TICKS = 621355968000000000n;
 // The text .NET writes for Process.GetCurrentProcess().StartTime.ToUniversalTime().ToString("O") on macOS (Process.OSX.cs:

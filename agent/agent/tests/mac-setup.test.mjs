@@ -111,6 +111,11 @@ function macHome() {
 const START = 1760872353;
 const psLine = (pid, seconds, exe) => { const d = new Date(seconds * 1000); return `${pid} ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]} ${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')} ${d.getFullYear()} ${exe}`; };
 
+function probes() {
+  const clock = [START * 1000 + 120, START * 1000 + 121, START * 1000 + 420, START * 1000 + 421];
+  let tick = 0; let pid = 9001;
+  return { clock: () => clock[Math.min(tick++, clock.length - 1)], sleep: async () => {}, spawnChild: () => ({ pid: pid++, kill() {} }) };
+}
 function macDeps(h, { readers, socket = true, sw = '15.5' } = {}) {
   if (socket) { fs.writeFileSync(`${h.tmp}/dotnet-diagnostic-501-${START}-socket`, ''); fs.writeFileSync(`${h.tmp}/dotnet-diagnostic-601-${START}-socket`, ''); }
   const run = async (file, args) => {
@@ -122,8 +127,9 @@ function macDeps(h, { readers, socket = true, sw = '15.5' } = {}) {
     throw new Error('unexpected ' + file);
   };
   return { platform: 'darwin', env: { HOME: h.home, TMPDIR: h.tmp }, flags: new Set(['--use-env-proxy', '--use-system-ca']), fetch: async () => ({ ok: true, status: 200 }),
-    mac: { run, env: { HOME: h.home, TMPDIR: h.tmp }, home: h.home, pid: 4242, startedMs: START * 1000 + 100,
-      readers: readers ?? { perl: async pid => ({ sec: START, usec: pid === 4242 ? 90000 : 123456 }), osascript: async () => { throw new Error('ObjC bridge refused'); } },
+    // The check of the readers runs on two processes of the agent (pids 9001 and 9002, started at START.120 and START.420).
+    mac: { run, env: { HOME: h.home, TMPDIR: h.tmp }, home: h.home, ...probes(),
+      readers: readers ?? { perl: async pid => ({ sec: START, usec: { 9001: 120400, 9002: 420300 }[pid] ?? 123456 }), osascript: async () => { throw new Error('ObjC bridge refused'); } },
       ps: async () => [psLine(501, START, h.odcExe), psLine(601, START, h.o11Exe), psLine(777, START, '/Applications/OutSystems Thing.app/Contents/MacOS/Thing')].join('\n'),
       ipc: { processInfo2: async endpoint => ({ pid: Number(/diagnostic-(\d+)-/.exec(endpoint)[1]), clrVersion: '8.0.31+abc', arch: 'arm64', os: 'MacOS' }) } } };
 }
@@ -140,7 +146,7 @@ test('doctor on macOS: no .NET needed, each Studio bundle and running Studio wit
     assert.match(text, /\[ok\] macOS: 15\.5 on arm64/);
     assert.match(text, /\[ok\] ODC Studio: 1\.7\.28\.10873 in .*ODC Studio\.app \(arm64; managed DLLs in Contents\/MacOS; version from ProductVersion of ODCStudio\.dll\)/);
     assert.match(text, /\[ok\] Service Studio: 11\.55\.92\.65269/);
-    assert.match(text, /\[ok\] start time with microseconds \(Service Studio hook\): perl ok \(10 ms from the agent start\); osascript failed: ObjC bridge refused/);
+    assert.match(text, /\[ok\] start time with microseconds \(Service Studio hook\): perl ok \(0\.400 and 0\.300 ms after the start of processes the agent started\); osascript failed: ObjC bridge refused/);
     assert.match(text, /\[ok\] ODC Studio 501 running: \.NET 8\.0\.31\+abc \(arm64\); bridge v97 not attached yet/);
     assert.match(text, /\[ok\] Service Studio 601 running: \.NET 8\.0\.31\+abc \(arm64\)/);
     assert.match(text, /\[warn\] unrecognized Studio processes: 777 \/Applications\/OutSystems Thing\.app/);
@@ -150,7 +156,7 @@ test('doctor on macOS: no .NET needed, each Studio bundle and running Studio wit
     const report = JSON.parse(json.text());
     assert.equal(report.platform, 'darwin'); assert.equal(report.ok, true); assert.equal(report.pack.odcBridge, 'v97');
     assert.deepEqual(report.mac.running.map(r => [r.lane, r.pid, r.runtime, r.socketKey]), [['odc', 501, '8.0.31+abc', START], ['o11', 601, '8.0.31+abc', START]]);
-    assert.deepEqual(report.mac.running[1].startReaders, { good: ['perl'], bad: ['osascript: ObjC bridge refused'] });
+    assert.deepEqual(report.mac.running[1].startReaders, { good: ['perl'], bad: ['osascript: did not pass the check on processes of the agent'], agree: true, usec: { perl: 123456 } });
     assert.equal(report.mac.studios.length, 2);
     assert.equal(json.text().includes(CREDENTIAL), false);
   } finally { h.remove(); }
