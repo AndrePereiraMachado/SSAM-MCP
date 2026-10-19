@@ -405,6 +405,17 @@ try {
 
   # Last check over the whole tree, then pack.json with the sha256 of every file.
   $base = (Resolve-Path -LiteralPath $tree).Path.TrimEnd('\')
+  if ($mac) {
+    # macOS: the guides, the scripts and the agent code with LF only, whatever line ends the checkout gave them (docs\ has
+    # no eol attribute, so a core.autocrlf checkout writes the guides with CRLF): the same bytes from any checkout. The
+    # binaries and their .deps.json stay the bytes of the prebuilt.
+    foreach ($file in Get-ChildItem -LiteralPath $base -Recurse -File -Force | Where-Object { $_.Extension -in '.md', '.mjs', '.sh' }) {
+      $bytes = [IO.File]::ReadAllBytes($file.FullName)
+      if ([Array]::IndexOf($bytes, [byte]13) -ge 0) {
+        [IO.File]::WriteAllText($file.FullName, [Text.Encoding]::UTF8.GetString($bytes).Replace("`r`n", "`n"), (New-Object Text.UTF8Encoding($false)))
+      }
+    }
+  }
   $files = @()
   foreach ($file in Get-ChildItem -LiteralPath $base -Recurse -File -Force | Sort-Object FullName) {
     $rel = $file.FullName.Substring($base.Length + 1)
@@ -427,7 +438,7 @@ try {
     if ($o11BuiltFor) { $pack.o11BuiltFor = $o11BuiltFor; $pack.o11Hook = $Hook; $pack.o11Bridge = [ordered]@{ path = $o11Bridge.path; sha256 = $o11Bridge.sha256 } }
     $pack.node = $node
     $pack.files = $files
-    [IO.File]::WriteAllText((Join-Path $tree 'pack.json'), ($pack | ConvertTo-Json -Depth 5), $utf8)
+    [IO.File]::WriteAllText((Join-Path $tree 'pack.json'), ($pack | ConvertTo-Json -Depth 5).Replace("`r`n", "`n"), $utf8)
     Write-PackTar $base $Out $pack.id $laneList
     return
   }

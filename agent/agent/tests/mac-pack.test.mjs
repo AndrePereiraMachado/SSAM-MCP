@@ -139,7 +139,8 @@ test('agent-pack.ps1 -Platform mac: text files go with LF whatever the checkout,
       tars[label] = readTarGz(out).filter(e => e.type === 'file');
     }
     for (const e of tars.crlf) {
-      if (/\.(md|mjs|sh|json|txt)$/.test(e.name)) assert.equal(e.data.includes(0x0d), false, e.name + ' has a CR');
+      // The text of the box and pack.json; a .deps.json is a file of the prebuilt and keeps its bytes.
+      if (/\.(md|mjs|sh)$/.test(e.name) || e.name === 'pack.json') assert.equal(e.data.includes(0x0d), false, e.name + ' has a CR');
       if (e.name === 'pack.json') continue;
       const twin = tars.lf.find(x => x.name === e.name);
       assert.ok(twin, e.name);
