@@ -455,10 +455,21 @@ public sealed partial class ScreenHtmlModule<T>
         }
 
         // ---- decode -----------------------------------------------------------------------------------------------------
+        // The actions= and data-actions= the text wrote, when Decode took the module's list for them.
+        private readonly Dictionary<string, string?> listedInText = new(StringComparer.Ordinal);
         private void Decode(Dictionary<string, Shape> shapes)
         {
             var decoder = new Decoder(m, state.Scope, shapes);
             edited = decoder.Run(merged);
+            // The actions the text lists, all of them the module's, are the module's list (an action created since the reading
+            // stays listed; Check says it in normalized and refuses only a name the module lacks).
+            if (edited.Elements.GetValueOrDefault("") is { } root && model.Elements.GetValueOrDefault("") is { } read)
+                foreach (var list in new[] { "actions", "data-actions" })
+                    if (read.Facts.TryGetValue(list, out var has) && root.Facts.GetValueOrDefault(list) is var says && says != has
+                        && (says ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries).All(n => has.Split('\n').Contains(n, StringComparer.Ordinal))) {
+                        listedInText[list] = says;
+                        root.Facts[list] = has;
+                    }
             nodeIds = decoder.NodeIds;
             idNodes.Clear();
             foreach (var (node, id) in nodeIds) idNodes[id] = node;
@@ -505,6 +516,7 @@ public sealed partial class ScreenHtmlModule<T>
                     scriptElements.Add(node);
                     continue;
                 }
+                if (node.Tag == "table" && ScreenHtmlTables.NativeTable(node) is { } table) TableRules(node, table);
                 var read = node.Get("k") is { } k ? ReadNode(k) : null;
                 // CX17 review 2, M4: the markers of the native layout block are the engine's (ScreenVisual.AuthorMarkers, the one
                 // rule of the three text forms): one the reading did not have on this element goes, or goes back to the reading's.
@@ -569,6 +581,8 @@ public sealed partial class ScreenHtmlModule<T>
                 }
             }
             foreach (var problem in edited.Problems) {
+                // Half a column of a native Table or an attribute of its parts, said above with the Table's k and its patch (TableRules).
+                if (ScreenHtmlTables.IsTableProblem(problem) && Result.Problems.Any(p => p["code"]?.ToString() is ScreenHtmlEdit.TableColumn or Anvil.Core.ScreenDocument.TableColspan or Anvil.Core.ScreenDocument.TablePart)) continue;
                 // The same event, said above with its element, its k and its fix.
                 if (EventProblem.Match(problem) is { Success: true } said && scriptEvents.Contains(said.Groups[1].Value + "\u0001" + said.Groups[2].Value)) continue;
                 var script = problem.Contains("is not Destination(", StringComparison.Ordinal) && LooksLikeScript(problem);
@@ -576,13 +590,30 @@ public sealed partial class ScreenHtmlModule<T>
                     script ? "an event names its destination: onclick=\"Save\" or onclick=\"Open(Id = Row.Id)\"; JavaScript is not written in the page (logic is native)"
                     : "write the element as the reading writes it (ScreenHtml.Contract: elements, attributes, events)");
             }
-            // Root: the actions are the logic text's.
+            // Root: the actions are the logic text's; the page lists them. The list as read is accepted as it is: an action the
+            // module has now and the text does not list (created since the reading, by an earlier op of the job or in the Studio, or
+            // left out by the text) stays, said in normalized (the page never removes one; the note says no more than that, the
+            // plan cannot know which of the two it was: review of round 2, A8), so the edit of 2026-10-18 written before its job's
+            // logic op created ShowChainPage is no refusal. A name the module does not have is the one refusal, with the logic op as
+            // its fix.
             var root = edited.Elements.GetValueOrDefault("");
             if (root != null)
-                foreach (var list in new[] { "actions", "data-actions" })
-                    if (model.Elements[""].Facts.GetValueOrDefault(list) != root.Facts.GetValueOrDefault(list))
-                        Problem(ScreenHtmlEdit.ActionsListed, AtId(""), null, "the " + list + " of " + reading.Root + " changed; the page lists them, the logic op creates, renames and removes them",
-                            "leave " + list + " as read; a new screen action is a logic op in the same job (the page names it in its events)");
+                foreach (var list in new[] { "actions", "data-actions" }) {
+                    var has = (model.Elements[""].Facts.GetValueOrDefault(list) ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                    var says = ((listedInText.TryGetValue(list, out var text) ? text : root.Facts.GetValueOrDefault(list)) ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                    var unknown = says.Except(has, StringComparer.Ordinal).ToList();
+                    if (unknown.Count > 0) {
+                        Problem(ScreenHtmlEdit.ActionsListed, AtId(""), null, list + "=\"…\" of " + reading.Root + " names " + string.Join(", ", unknown) + ", which " + reading.Root + " does not have; the page lists the "
+                            + (list == "actions" ? "screen actions" : "data actions") + ", the logic op creates, renames and removes them",
+                            "create " + string.Join(", ", unknown) + " with a logic op placed before this html op in the same job (" + (list == "actions" ? "action " : "data action ") + reading.Root + "." + unknown[0]
+                            + "), or take " + (unknown.Count == 1 ? "it" : "them") + " out of " + list + "=");
+                        continue;
+                    }
+                    var kept = has.Except(says, StringComparer.Ordinal).ToList();
+                    if (kept.Count == 0) continue;
+                    Result.Normalized.Add(new JsonObject { ["k"] = null, ["property"] = list, ["kept"] = new JsonArray(kept.Select(n => (JsonNode)n).ToArray()),
+                        ["note"] = "listed as the module has them now: the text did not list " + string.Join(", ", kept) + ", which " + (kept.Count == 1 ? "stays" : "stay") + " (the page never removes an action; the logic op does)" });
+                }
             foreach (var (id, element) in edited.Elements) {
                 var before = model.Elements.GetValueOrDefault(id);
                 if (!id.StartsWith('+') && before == null && !IsStructural(id))
@@ -606,6 +637,7 @@ public sealed partial class ScreenHtmlModule<T>
             CheckOpaque();
             CheckVisible();
             CheckNames();
+            CheckFixedNames();
             CheckLiterals();
             CheckNewData();
             PatchVisible();
@@ -637,6 +669,52 @@ public sealed partial class ScreenHtmlModule<T>
                         "a new or moved " + element.Kind + " inside the " + kind + (p.StartsWith('+') ? " the edit adds" : " k=\"" + p + "\"") + ": the platform takes no input inside a link or a button",
                         "put it beside the " + kind.ToLowerInvariant() + ", inside their common container");
                     break;
+                }
+            }
+        }
+
+        // HTML_NAME_FIXED (the session of 2026-10-18: "the platform refused set Name: Widget does not support name changing"): a
+        // name the Studio gives and never lets change (ScreenHtmlTables.FixedName) is never written. A slot's name is its
+        // placeholder's: a text that writes another one (os-Name on a <slot>, of an instance with k or of a new one) is refused here,
+        // before anything is written, once per slot, with the patch that writes the slot as read; a <content name> of an element
+        // with k is one of the Contents it has. The other names follow one rule in Facts: an element whose text writes no name keeps
+        // the one it has.
+        private readonly List<(ScreenHtml.Node Node, string Attribute, string? Restore)> nameAttributes = [];
+        // The elements whose name the edit lets go (id=""), cleared before any name is written (Apply).
+        private readonly HashSet<string> namesLetGo = new(StringComparer.Ordinal);
+        private void CheckFixedNames()
+        {
+            foreach (var (id, element) in edited.Elements) {
+                if (!ScreenHtmlTables.FixedName(element.Kind) || !IsStructural(id)) continue;
+                var cut = element.Kind == "Content" ? id.IndexOf("/content:", StringComparison.Ordinal) : id.LastIndexOf('/');
+                if (cut <= 0) continue;
+                var owner = id[..cut];
+                var ofOwner = IsNew(owner) ? "the new <" + (idNodes.TryGetValue(owner, out var made) ? made.Tag : edited.Elements.GetValueOrDefault(owner)?.Kind) + ">" + (made != null ? " at line " + made.Line.ToString(CultureInfo.InvariantCulture) : "")
+                    : "k=\"" + owner + "\"";
+                if (element.Kind == "Content") {
+                    if (IsNew(owner) || model.Elements.ContainsKey(id)) continue;
+                    var name = id[(cut + "/content:".Length)..];
+                    var names = model.Elements.Keys.Where(e => e.StartsWith(owner + "/content:", StringComparison.Ordinal)).Select(e => e[(owner.Length + "/content:".Length)..]).Order(StringComparer.Ordinal).ToList();
+                    ProblemOnce(ScreenHtmlEdit.NameFixed, AtId(owner), owner,
+                        "<content name=\"" + name + "\"> is not a Content of " + ofOwner + ": " + (names.Count == 0 ? "its widgets are written without <content>" : "its Contents are " + string.Join(", ", names))
+                        + "; the Studio names a Content and does not let the name change",
+                        names.Count == 0 ? "write the widgets inside " + ofOwner + " without <content>" : "keep <content name> as read: " + string.Join(", ", names.Select(n => "<content name=\"" + n + "\">")));
+                    continue;
+                }
+                if (!element.Facts.TryGetValue("p:Name", out var value)) continue;
+                var slot = id[(cut + 1)..];
+                var given = IsNew(id) ? null : model.Elements.GetValueOrDefault(id)?.Facts.GetValueOrDefault("p:Name");
+                // The name it has, its placeholder's, or none (os-Name="", as the reading writes a slot whose Name is null): the name
+                // stays the Studio's, never written (review of round 2, A4: the copy of a block read with os-Name="" slots).
+                if (value == given || value == "t:" + slot || value == "?:") continue;
+                var node = idNodes.TryGetValue(owner, out var block) ? block.Children.FirstOrDefault(c => !c.IsText && c.Tag == "slot" && c.Get("name") == slot) : null;
+                var restore = IsNew(owner) ? null : ReadNode(owner)?.Children.FirstOrDefault(c => !c.IsText && c.Tag == "slot" && c.Get("name") == slot)?.Get("os-Name");
+                var written = node?.Get("os-Name") ?? (value.Length > 2 ? value[2..] : "");
+                if (ProblemOnce(ScreenHtmlEdit.NameFixed, AtId(owner), IsNew(owner) ? null : owner,
+                        "os-Name=\"" + written + "\" on <slot name=\"" + slot + "\"> of " + ofOwner + ": the name of a slot is its placeholder's (" + slot + "), which the Studio does not let change (Widget does not support name changing)",
+                        restore != null ? "the patch puts back os-Name=\"" + restore + "\", the reading's" : "write the slot without os-Name; the patch writes it as read") is { } problem && node != null) {
+                    corrections[problem] = "name";
+                    nameAttributes.Add((node, "os-Name", restore));
                 }
             }
         }
@@ -698,17 +776,149 @@ public sealed partial class ScreenHtmlModule<T>
         // it fail (a source the module does not have), the rest goes without them.
         private void PatchVisible()
         {
-            if (!patches || visibleWraps == null && visibleVariants.Count == 0 && scriptElements.Count == 0 && scriptAttributes.Count == 0 && iterations.Count == 0 && markerAttributes.Count == 0) return;
+            if (!patches || visibleWraps == null && visibleVariants.Count == 0 && scriptElements.Count == 0 && scriptAttributes.Count == 0 && iterations.Count == 0 && markerAttributes.Count == 0 && columnCells.Count == 0 && nameAttributes.Count == 0) return;
             var withIterations = iterations.Count > 0;
             var corrected = WrapVisible(visibleWraps ?? [], withIterations);
             if (corrected == null && withIterations) { withIterations = false; corrected = WrapVisible(visibleWraps ?? [], false); }
             if (corrected == null) return;
             foreach (var problem in Result.Problems.Where(p => p["code"]?.ToString() == ScreenHtmlEdit.Visible
-                         || corrections.TryGetValue(p, out var kind) && (kind is "script" or "visible" or "marker" || kind == "iteration" && withIterations))) {
+                         || corrections.TryGetValue(p, out var kind) && (kind is "script" or "visible" or "marker" or "column" or "name" || kind == "iteration" && withIterations))) {
                 problem["fix"] = problem["fix"] + " (the patch replaces the edit list with that)";
                 problem["patch"] = new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = pointer, ["value"] = corrected.DeepClone() });
+                problem["patchRule"] = "OWNER_RULE_REWRITE";
             }
         }
+        // Half a column of a native Table (a header cell without its row cell, or the other way): the platform removes and adds the
+        // two together (deleting a header cell deletes its column), so the edit is refused once, with the Table's k. When the reading
+        // pairs every cell the edit kept by its k, the patch removes the other half of each column the edit removed: the whole
+        // column goes. A new cell without its pair has no certain patch (the fix says what to write).
+        private void TableColumns(ScreenHtml.Node node, ScreenHtmlTables.NativeTableShape table)
+        {
+            var k = node.Get("k");
+            List<ScreenHtml.Node>? others = null;
+            if (k != null && ReadNode(k) is { } readTable && ScreenHtmlTables.NativeTable(readTable) is { } before && before.HeaderCells.Count == before.RowCells.Count) {
+                var kept = new HashSet<string>(table.HeaderCells.Concat(table.RowCells).Select(c => c.Get("k")).OfType<string>(), StringComparer.Ordinal);
+                var gone = Enumerable.Range(0, before.HeaderCells.Count).Where(i => !kept.Contains(before.HeaderCells[i].Get("k") ?? "") || !kept.Contains(before.RowCells[i].Get("k") ?? "")).ToList();
+                var pairs = gone.SelectMany(i => new[] { before.HeaderCells[i].Get("k"), before.RowCells[i].Get("k") }).OfType<string>().ToHashSet(StringComparer.Ordinal);
+                others = table.HeaderCells.Concat(table.RowCells).Where(c => c.Get("k") is { } key && pairs.Contains(key)).ToList();
+                if (others.Count == 0 || table.HeaderCells.Count(c => !others.Contains(c)) != table.RowCells.Count(c => !others.Contains(c))) others = null;
+            }
+            var message = "the native Table" + (k != null ? " k=\"" + k + "\"" : "") + " has " + table.HeaderCells.Count + " header cells and " + table.RowCells.Count
+                + " row cells: a column of a Table is one <th> in the header row and one <td> in the template row, removed and added together (the platform deletes the whole column with either of its cells)";
+            var fix = others != null
+                ? "remove the whole column: the patch removes " + string.Join(", ", others.Select(c => "<" + c.Tag + " k=\"" + c.Get("k") + "\">")) + " too"
+                : "write one <th> and one <td> per column: remove or add both cells of a column";
+            if (ProblemOnce(ScreenHtmlEdit.TableColumn, AtNode(node), k, message, fix) is { } p && others != null) {
+                corrections[p] = "column";
+                columnCells.AddRange(others.Select(c => (c, (string?)null, (List<ScreenHtml.Node>?)null, (string?)null)));
+            }
+        }
+        // The certain corrections of the rules of a native Table (TableRules, TableColumns, CellsLeftOut), which the patch makes: a
+        // cell removed (no attribute: the other half of a column the edit removed), an attribute of a part removed, colspan removed
+        // from a cell with the cells of the columns it spanned written after it, or an attribute written (Value: the k of a column's
+        // own cell on the new one in its place).
+        private readonly List<(ScreenHtml.Node Node, string? Attribute, List<ScreenHtml.Node>? After, string? Value)> columnCells = [];
+
+        // The family of half a column with the rows still as many (probes C1, C3, C4 of round 3): a cell of the reading the edit leaves
+        // out while the other cell of its column stays, a new one written in its place. The platform deletes the whole column with
+        // either of its cells, so the other one went too and the Verify kept nothing ("2 children read back, the edit has 3"). Refused
+        // once per column, with the patch that gives the new cell of that column (in the same place of its row) the k of the
+        // column's own: the same column, its content the edit's.
+        private void CellsLeftOut(ScreenHtml.Node node, ScreenHtmlTables.NativeTableShape table)
+        {
+            var k = node.Get("k");
+            if (k == null || ReadNode(k) is not { } readTable || ScreenHtmlTables.NativeTable(readTable) is not { } before || before.HeaderCells.Count != before.RowCells.Count) return;
+            var written = new HashSet<string>(table.HeaderCells.Concat(table.RowCells).Select(c => c.Get("k")).OfType<string>(), StringComparer.Ordinal);
+            var heads = table.HeaderCells.Select(c => c.Get("k")).ToList();
+            var rows = table.RowCells.Select(c => c.Get("k")).ToList();
+            for (var i = 0; i < before.HeaderCells.Count; i++) {
+                if (before.HeaderCells[i].Get("k") is not { } head || before.RowCells[i].Get("k") is not { } row || written.Contains(head) == written.Contains(row)) continue;
+                var headGone = written.Contains(row);
+                var (gone, kept) = headGone ? (head, row) : (row, head);
+                var (tag, keptTag) = headGone ? ("th", "td") : ("td", "th");
+                var at = headGone ? rows.IndexOf(row) : heads.IndexOf(head);
+                var cells = headGone ? table.HeaderCells : table.RowCells;
+                var cell = at >= 0 && at < cells.Count && cells[at].Get("k") == null ? cells[at] : null;
+                if (ProblemOnce(ScreenHtmlEdit.TableColumn, AtNode(node), k,
+                        "<" + tag + " k=\"" + gone + "\"> of the native Table k=\"" + k + "\" is left out while its column's <" + keptTag + " k=\"" + kept + "\"> stays: "
+                        + "the platform deletes the whole column with either of its cells",
+                        cell != null ? "keep the column's own cell: the patch writes k=\"" + gone + "\" on the new <" + tag + "> of that column (its content the edit's)"
+                            : "keep <" + tag + " k=\"" + gone + "\"> (its content can change) or remove the whole column, both cells") is { } p && cell != null) {
+                    corrections[p] = "column";
+                    columnCells.Add((cell, "k", null, gone));
+                }
+            }
+        }
+
+        // The rules of a native Table the edit writes, the document's (ScreenDocument.TableProblems) with the Table's k and the patch
+        // of the edit list (the review of round 2, M-A, M-B, L1): an attribute of its <thead>, <tbody> or <tr> it has no property for
+        // is refused with the patch that removes it; the class of a section joins its row's and the List's own classes and attributes
+        // where the list is are left out, said in normalized; half a column that colspan explains is refused with the patch that
+        // writes the cell without colspan and one empty cell per column it spanned, where a column the reading has keeps its own cell,
+        // emptied, with its k (the platform deletes the whole column with either of its cells: a new one in its place would take
+        // the column of data with it); any other half a column is TableColumns. A cell spans one column and one row (the owner's
+        // decision of 2026-10-19, ScreenHtmlTables.Spans): each other colspan and rowspan it writes new is refused with the patch that
+        // removes it; what the reading has (the cell's own, by its k) stays, as the Visible.
+        private void TableRules(ScreenHtml.Node node, ScreenHtmlTables.NativeTableShape table)
+        {
+            var k = node.Get("k");
+            var what = k != null ? "the native Table k=\"" + k + "\"" : "the new native Table at line " + node.Line.ToString(CultureInfo.InvariantCulture);
+            if (ScreenHtmlTables.Folded(table) is { Count: > 0 } folded)
+                Result.Normalized.Add(new JsonObject { ["code"] = "TABLE_NATIVE", ["k"] = k, ["element"] = "TableRecords", ["note"] = what + ": " + string.Join("; ", folded) });
+            foreach (var header in new[] { true, false })
+                foreach (var (part, attribute) in ScreenHtmlTables.PartAttributes(table, header)) {
+                    if (ProblemOnce(Anvil.Core.ScreenDocument.TablePart, AtNode(node), k, "<" + part.Tag + " " + attribute + "=\"" + Clip(part.Get(attribute) ?? "") + "\"> of " + what + ": "
+                            + ScreenHtmlTables.PartAttributeWhy, "the patch removes it") is { } p)
+                        corrections[p] = "column";
+                    columnCells.Add((part, attribute, null, null));
+                }
+            foreach (var (cells, row) in new[] { (table.HeaderCells, "header row"), (table.RowCells, "template row") })
+                for (var i = 0; i < cells.Count; i++) {
+                    var cell = cells[i];
+                    var read = cell.Get("k") is { } ck ? ReadNode(ck) : null;
+                    foreach (var (attribute, value) in ScreenHtmlTables.Spans(cell).ToList()) {
+                        if (ScreenHtmlTables.SpanExplained(table, cell, attribute) || read?.Get(attribute) == value) continue;
+                        if (ProblemOnce(Anvil.Core.ScreenDocument.TableColspan, AtNode(node), k,
+                                "<" + cell.Tag + (cell.Get("k") is { } ek ? " k=\"" + ek + "\"" : "") + " " + attribute + "=\"" + Clip(value) + "\">, cell " + (i + 1).ToString(CultureInfo.InvariantCulture)
+                                + " of the " + row + " of " + what + ": " + ScreenHtmlTables.SpanWhy(attribute, cell.Tag), "the patch removes " + attribute) is { } p)
+                            corrections[p] = "column";
+                        columnCells.Add((cell, attribute, null, null));
+                    }
+                }
+            if (table.HeaderCells.Count == table.RowCells.Count) { CellsLeftOut(node, table); return; }
+            if (!ScreenHtmlTables.SpanExplains(table)) { TableColumns(node, table); return; }
+            // The reading's Table, its columns paired (header cell i with row cell i): the cell of a column whose other cell the edit
+            // keeps, and that the edit writes nowhere, is that column's own.
+            var before = k != null && ReadNode(k) is { } readTable && ScreenHtmlTables.NativeTable(readTable) is { } b && b.HeaderCells.Count == b.RowCells.Count ? b : null;
+            var written = new HashSet<string>(table.HeaderCells.Concat(table.RowCells).Select(c => c.Get("k")).OfType<string>(), StringComparer.Ordinal);
+            var spansHeader = table.HeaderCells.Count < table.RowCells.Count;
+            var (fewer, more) = spansHeader ? (table.HeaderCells, table.RowCells) : (table.RowCells, table.HeaderCells);
+            var position = 0;
+            foreach (var cell in fewer) {
+                var span = ScreenHtmlTables.Span(cell);
+                if (span > 1) {
+                    var cells = new List<ScreenHtml.Node>();
+                    for (var column = position + 1; column < position + span; column++) {
+                        var empty = new ScreenHtml.Node { Tag = cell.Tag, Line = cell.Line, Column = cell.Column };
+                        if (before != null && more[column].Get("k") is { } pair) {
+                            var index = (spansHeader ? before.RowCells : before.HeaderCells).ToList().FindIndex(c => c.Get("k") == pair);
+                            if (index >= 0 && (spansHeader ? before.HeaderCells : before.RowCells)[index] is var own && own.Get("k") is { } ownK && !written.Contains(ownK))
+                                empty.Attributes.AddRange(own.Attributes);
+                        }
+                        cells.Add(empty);
+                    }
+                    if (ProblemOnce(Anvil.Core.ScreenDocument.TableColspan, AtNode(node), k,
+                            "<" + cell.Tag + (cell.Get("k") is { } ck ? " k=\"" + ck + "\"" : "") + " colspan=\"" + cell.Get("colspan") + "\"> of " + what + ": " + Anvil.Core.ScreenDocument.ColspanWhy,
+                            "the patch writes the <" + cell.Tag + "> without colspan and after it one empty cell per column it spanned: "
+                            + string.Concat(cells.Select(c => "<" + c.Tag + (c.Get("k") is { } ek ? " k=\"" + ek + "\"" : "") + "></" + c.Tag + ">"))
+                            + (cells.Any(c => c.Get("k") != null) ? " (a column of the reading keeps its own cell, emptied: the platform deletes the whole column with either of its cells)" : "")) is { } p)
+                        corrections[p] = "column";
+                    columnCells.Add((cell, "colspan", cells, null));
+                }
+                position += span;
+            }
+        }
+
         private static string Signature(JsonObject problem) => problem["code"] + "|" + (problem["k"]?.ToString() ?? problem["message"]?.ToString());
 
         // The corrected edits: each element with a new Visible wrapped in <div if>, the edit widened to the element's parent when
@@ -726,16 +936,32 @@ public sealed partial class ScreenHtmlModule<T>
                 var roots = new HashSet<ScreenHtml.Node>(ReferenceEqualityComparer.Instance);
                 foreach (var (node, _) in ScreenHtmlText.Elements(merged)) if (editedNodes.Contains(node) && (!parents.TryGetValue(map[node], out var p) || !editedNodes.Contains(Original(p)))) roots.Add(map[node]);
                 ScreenHtml.Node Original(ScreenHtml.Node c) => map.First(x => ReferenceEquals(x.Value, c)).Key;
-                foreach (var (node, attribute, restore) in scriptAttributes.Concat(markerAttributes)) {
+                foreach (var (node, attribute, restore) in scriptAttributes.Concat(markerAttributes).Concat(nameAttributes)) {
                     var target = map[node];
                     var at = target.Attributes.FindIndex(a => a.Key == attribute);
-                    if (at < 0) continue;
+                    // A name let go (id="" on the element that keeps it, HTML_NAME_TAKEN of a moved name): written where it was not.
+                    if (at < 0) { if (restore != null && nameAttributes.Any(x => ReferenceEquals(x.Node, node) && x.Attribute == attribute)) target.Attributes.Add(new(attribute, restore)); continue; }
                     if (restore != null) target.Attributes[at] = new(attribute, restore); else target.Attributes.RemoveAt(at);
                 }
                 foreach (var node in scriptElements) {
                     var target = map[node];
                     if (roots.Contains(target) || !parents.TryGetValue(target, out var parent)) return null;   // the edit was the script alone
                     parent.Children.Remove(target);
+                }
+                // The corrections of the rules of a native Table: the other half of each column the edit removed, an attribute of a
+                // part, colspan with the cells of the columns it spanned after the cell, the k of a column's own header cell.
+                foreach (var (node, attribute, after, value) in columnCells) {
+                    var target = map[node];
+                    if (attribute == null) {
+                        if (roots.Contains(target) || !parents.TryGetValue(target, out var row)) return null;
+                        row.Children.Remove(target);
+                        continue;
+                    }
+                    target.Attributes.RemoveAll(a => a.Key == attribute);
+                    if (value != null) { target.Attributes.Insert(0, new(attribute, value)); continue; }
+                    if (after == null) continue;
+                    if (!parents.TryGetValue(target, out var holder)) return null;
+                    holder.Children.InsertRange(holder.Children.IndexOf(target) + 1, after.Select(c => { var made = new ScreenHtml.Node { Tag = c.Tag }; made.Attributes.AddRange(c.Attributes); return made; }));
                 }
                 if (withIterations)
                     foreach (var (node, attribute, source, alias) in iterations)
@@ -782,7 +1008,7 @@ public sealed partial class ScreenHtmlModule<T>
                 var texts = ordered.Select(ScreenHtmlText.Write).ToList();
                 var check = new EditPlan(m, reading, texts, pointer, patches: false, theme: theme);
                 bool Fixed(JsonObject p) => p["code"]?.ToString() == ScreenHtmlEdit.Visible
-                    || corrections.TryGetValue(p, out var kind) && (kind is "script" or "visible" or "marker" || kind == "iteration" && withIterations);
+                    || corrections.TryGetValue(p, out var kind) && (kind is "script" or "visible" or "marker" or "column" or "name" || kind == "iteration" && withIterations);
                 var known = new HashSet<string>(Result.Problems.Where(p => !Fixed(p)).Select(Signature), StringComparer.Ordinal);
                 return check.Result.Problems.Any(p => p["code"]?.ToString() == ScreenHtmlEdit.Visible || !known.Contains(Signature(p))) ? null
                     : new JsonArray(texts.Select(t => (JsonNode)t).ToArray());
@@ -885,17 +1111,39 @@ public sealed partial class ScreenHtmlModule<T>
                     "create it with a logic op in the same job; the page then names it");
             }
             // A widget name is unique in its screen: a new or renamed one takes a free name (the platform would rename it in silence).
+            // An element whose text writes no name keeps its own, which stays taken. The name of a slot, an If branch or a Content is
+            // the Studio's (a slot's is its placeholder's, the same in every instance of the block): never a widget name of the
+            // screen (the review of round 2, A4: a copy of a block whose slots read os-Name="" was refused id="" twice). No name
+            // (id="") is no name taken.
             var taken = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var keptUnwritten = new HashSet<string>(StringComparer.Ordinal);
             foreach (var (id, element) in model.Elements)
-                if (!IsData(element.Kind) && element.Facts.TryGetValue("p:Name", out var name) && edited.Elements.TryGetValue(id, out var still) && !IsNew(id)
-                    && still.Facts.GetValueOrDefault("p:Name") == name) taken[name[2..]] = id;
+                if (!IsData(element.Kind) && !ScreenHtmlTables.FixedName(element.Kind) && element.Facts.TryGetValue("p:Name", out var name) && name.Length > 2
+                    && edited.Elements.TryGetValue(id, out var still) && !IsNew(id) && (still.Facts.GetValueOrDefault("p:Name") ?? name) == name) {
+                    taken[name[2..]] = id;
+                    if (!still.Facts.ContainsKey("p:Name")) keptUnwritten.Add(id);
+                }
             foreach (var (id, element) in edited.Elements) {
-                if (IsData(element.Kind) || !element.Facts.TryGetValue("p:Name", out var value)) continue;
+                if (IsData(element.Kind) || ScreenHtmlTables.FixedName(element.Kind) || !element.Facts.TryGetValue("p:Name", out var value) || value.Length <= 2) continue;
                 var name = value[2..];
                 if (!IsNew(id) && model.Elements.GetValueOrDefault(id)?.Facts.GetValueOrDefault("p:Name") == value) continue;
                 if (taken.TryGetValue(name, out var owner) && owner != id) {
                     var free = name; for (var n = 2; taken.ContainsKey(free); n++) free = name + n.ToString(CultureInfo.InvariantCulture);
-                    Problem(ScreenHtmlEdit.NameTaken, AtId(id), id.StartsWith('+') ? null : id, "id=\"" + name + "\" is already the name of k=\"" + owner + "\" in " + reading.Root, "id=\"" + free + "\"");
+                    // The review of round 2, A2: a name moved from one element to another (A written without its id, B with A's name).
+                    // A text that leaves an id out keeps the name (the session of 2026-10-18 left every id out of the elements it
+                    // edited, eb863ad2): that alone never says A lets the name go, so the move is refused, once, saying why A still has
+                    // the name, with the patch that lets it go (id="" on A, checked) and the other way out (another id here).
+                    if (keptUnwritten.Contains(owner) && idNodes.TryGetValue(owner, out var ownerNode)) {
+                        var attribute = ScreenHtmlTables.AttributeOf(model.Elements[owner].Kind, "Name", ScreenHtmlModuleMode.Widget, model.Elements[owner].Facts.ContainsKey("p:StyleClasses"));
+                        if (Problem(ScreenHtmlEdit.NameTaken, AtId(id), id.StartsWith('+') ? null : id,
+                                "id=\"" + name + "\" is the name k=\"" + owner + "\" keeps in " + reading.Root + ": its text writes no " + attribute + ", and an element with k whose text leaves its "
+                                + attribute + " out keeps the name it has (" + attribute + "=\"\" clears it)",
+                                "to move the name here, write " + attribute + "=\"\" on k=\"" + owner + "\" (the patch); to leave it there, give this element another one: id=\"" + free + "\"") is { } taking) {
+                            corrections[taking] = "name";
+                            nameAttributes.Add((ownerNode, attribute, ""));
+                        }
+                    }
+                    else Problem(ScreenHtmlEdit.NameTaken, AtId(id), id.StartsWith('+') ? null : id, "id=\"" + name + "\" is already the name of k=\"" + owner + "\" in " + reading.Root, "id=\"" + free + "\"");
                 }
                 taken[name] = id;
             }
@@ -958,6 +1206,16 @@ public sealed partial class ScreenHtmlModule<T>
                 }
                 Result.EditedHtml = ScreenHtmlText.Write(merged);
                 EngineText(false);
+                // A name let go (id="") is cleared before any element takes a name: a name moved to another element is free when
+                // that one takes it, whatever their order in the text (the platform renames a duplicate in silence, which the Verify
+                // then refuses: the move of the review of round 2, A2).
+                foreach (var (id, element) in edited.Elements)
+                    if (!IsNew(id) && !recreated.Contains(id) && element.Facts.GetValueOrDefault("p:Name") == "t:" && !IsData(element.Kind) && !ScreenHtmlTables.FixedName(element.Kind)
+                        && element.Kind is not ("os-opaque" or "Content") && model.Elements.GetValueOrDefault(id)?.Facts.GetValueOrDefault("p:Name") is { Length: > 2 }) {
+                        current = id;
+                        SetFact(id, element.Kind, "p:Name", "t:", element);
+                        namesLetGo.Add(id);
+                    }
                 foreach (var (id, element) in edited.Elements) Facts(id, element);
                 foreach (var (id, element) in edited.Elements) if (!IsNew(id) && model.Elements.ContainsKey(id)) Runs(id, element);
                 foreach (var id in edited.Elements.Keys.Where(moved.Contains).OrderBy(Depth)) Move(id);
@@ -1062,6 +1320,10 @@ public sealed partial class ScreenHtmlModule<T>
                     currentOp = "create " + kind;
                     var node = w.Create(Container(id, segment), kind, block);
                     objects[child] = node;
+                    // The rows of a new native Table (its HeaderRow and Row, whatever the platform calls them): the groups of its text.
+                    if (kind == "TableRecords")
+                        foreach (var row in new[] { "HeaderRow", "Row" })
+                            if (m.r.PropertyOf(node, row)?.Invoke() is T held) objects[child + "/content:" + row] = held;
                     Result.Ops.Add(new JsonObject { ["op"] = "create", ["k"] = child.StartsWith('+') ? null : child, ["kind"] = kind, ["parent"] = id.Length == 0 ? reading.Root : id });
                     if (recreated.Contains(child)) Result.KeyChanged.Add(new JsonObject { ["k"] = child, ["from"] = keys.GetValueOrDefault(child), ["why"] = "its element changed (" + model.Elements[child].Kind + " -> " + kind + ")" });
                     newShapes[child] = ShapeOfNew(node, kind);
@@ -1153,8 +1415,11 @@ public sealed partial class ScreenHtmlModule<T>
             var before = isNew ? CurrentFacts(id, element.Kind) : model.Elements.GetValueOrDefault(id)?.Facts ?? new SortedDictionary<string, string>(StringComparer.Ordinal);
             if (!isNew && !model.Elements.ContainsKey(id)) return;
             if (element.Kind == "PlaceholderContentWidget" && IsStructural(id)) {
-                // A slot: its own properties only (os-*), never its placeholder.
-                foreach (var fact in element.Facts.Keys.Union(before.Keys).Where(f => f.StartsWith("p:", StringComparison.Ordinal)).ToList())
+                // A slot: its own properties only (os-*), never its placeholder, and never its name, the placeholder's (the Studio
+                // names the slots of a new instance after their placeholders; a text that changes one is HTML_NAME_FIXED). The facts
+                // a new slot is born with are read as the reading reads a slot (WriteSlot): its Placeholder and its Name are no
+                // property of the text, so neither is written back empty.
+                foreach (var fact in element.Facts.Keys.Union(before.Keys).Where(f => f.StartsWith("p:", StringComparison.Ordinal) && f is not ("p:Name" or "p:Placeholder")).ToList())
                     if (element.Facts.GetValueOrDefault(fact) != before.GetValueOrDefault(fact)) SetFact(id, element.Kind, fact, element.Facts.GetValueOrDefault(fact), element);
                 return;
             }
@@ -1165,8 +1430,10 @@ public sealed partial class ScreenHtmlModule<T>
                 var now = element.Facts.GetValueOrDefault(fact); var was = before.GetValueOrDefault(fact);
                 if (now == was) continue;
                 if (fact == "p:SourceBlock" && isNew) continue;
-                // The name the platform gives a new widget it must name (an input) stays when the edit writes none.
-                if (fact == "p:Name" && isNew && now == null) continue;
+                // An element keeps the name it has when its text writes none: the one the platform gives a new widget it must name (an
+                // input), the one an element with k was read with (Div16, the name the html op generated: the edit of 2026-10-18 that
+                // left the ids out wrote Name ""). A name the Studio does not let change is never written (HTML_NAME_FIXED).
+                if (fact == "p:Name" && (now == null || ScreenHtmlTables.FixedName(element.Kind) || namesLetGo.Contains(id))) continue;
                 SetFact(id, element.Kind, fact, now, element);
             }
             var arguments = element.Facts.Keys.Union(before.Keys).Where(f => f.StartsWith("a:", StringComparison.Ordinal)).Distinct().ToList();
@@ -1611,9 +1878,14 @@ public sealed partial class ScreenHtmlModule<T>
         {
             var kindName = m.r.KindOf(node);
             if (kindName is "Content" or "IfBranchWidget" or "PlaceholderContentWidget" or "ExtendedProperty" or "Argument" or "EventHandler" or "Event") return false;
+            // The rows of a native Table (O11 lists its HeaderRow and Row as MobileWidgets of it): its contents, as a Content is.
+            if (IsTableRow(node)) return false;
             var role = ModuleIndex.Roles[ModuleIndex.RoleOf(kindName, new HashSet<string>(m.r.KindNamesOf(node), StringComparer.Ordinal))];
             return role == "widget";
         }
+        private bool IsTableRow(T node) =>
+            m.r.ParentOf(node) is T table && m.r.KindOf(table) == "TableRecords"
+            && (ReferenceEquals(m.r.PropertyOf(table, "HeaderRow")?.Invoke(), node) || ReferenceEquals(m.r.PropertyOf(table, "Row")?.Invoke(), node));
         // The positions of the longest increasing subsequence: the children that stay where they are.
         private static HashSet<int> Increasing(List<int> values)
         {
@@ -1648,12 +1920,29 @@ public sealed partial class ScreenHtmlModule<T>
                     foreach (var fact in want.Facts.Keys.Union(got.Facts.Keys).Distinct()) {
                         var a = want.Facts.GetValueOrDefault(fact); var b = got.Facts.GetValueOrDefault(fact);
                         if (a == b || Followed(a) == b) continue;
+                        // The name of a slot (an If branch, a Content) is the Studio's: Facts never writes it, and a text that asks for
+                        // another one was refused before anything was written (HTML_NAME_FIXED). Its placeholder's name, written or not,
+                        // reads back absent (review of round 2, A3: os-Name="Previous" passed the plan and failed here); os-Name="" (a
+                        // lane whose slots have a null Name) reads back as the name the Studio gave, said in normalized.
+                        if (fact == "p:Name" && ScreenHtmlTables.FixedName(want.Kind)) {
+                            var slotName = e[(e.LastIndexOf('/') + 1)..];
+                            string? Own(string? v) => v == "t:" + slotName ? null : v;
+                            if (Own(a) != Own(b))
+                                Result.Normalized.Add(new JsonObject { ["k"] = e.StartsWith('+') ? null : e, ["property"] = "Name", ["value"] = b is { Length: > 2 } ? b[2..] : slotName,
+                                    ["note"] = "the name of a slot is the Studio's (its placeholder's): never written" });
+                            continue;
+                        }
                         // A value the edit wrote that is the default where the element sits reads back absent (a reading writes no
                         // default): the same value (os-onclick.Transition="Fade" inside a Popup, os-Visible="True").
                         if (b == null && WrittenDefault(e, want.Kind, fact, a)) continue;
                         // A new widget the platform must name (an input) takes the name it gives when the edit wrote none.
                         if (fact == "p:Name" && a == null && b != null && IsNew(e)) {
                             Result.Normalized.Add(new JsonObject { ["k"] = null, ["property"] = "Name", ["value"] = b[2..], ["note"] = "the platform named the new " + want.Kind + " (an id the edit did not write)" });
+                            continue;
+                        }
+                        // An element with k whose text writes no name keeps the one it was read with (Facts writes none).
+                        if (fact == "p:Name" && a == null && b != null && model.Elements.GetValueOrDefault(e)?.Facts.GetValueOrDefault("p:Name") == b) {
+                            Result.Normalized.Add(new JsonObject { ["k"] = e, ["property"] = "Name", ["value"] = b.Length > 2 ? b[2..] : "", ["note"] = "kept the name it has: the edit wrote no id for it (an element with k keeps its name)" });
                             continue;
                         }
                         // The click of a new widget on a screen action takes the validations the platform gives it (ValidateAndContinue)

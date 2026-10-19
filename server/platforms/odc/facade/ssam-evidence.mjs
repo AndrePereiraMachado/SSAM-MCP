@@ -260,7 +260,7 @@ export function createEvidenceReader({ roots = evidenceRoots(), maxBytes = MAX_F
   const lexicalRoots = roots.map(r => path.resolve(r));
   const realRoots = () => lexicalRoots.map(r => { try { return fs.realpathSync.native(r); } catch { return null; } }).filter(Boolean);
   const outside = () => refusal('OUTSIDE_ROOTS', 'only JSON/JSONL written by SSAM under the lane folders is read',
-    again({ file: '<an out/result/receipt/journal path returned by an SSAM tool>' }, 'evidence lives under one of roots'), { roots: lexicalRoots });
+    again({ file: '<an out/result/receipt/journal path returned by an SSAM tool>' }, 'evidence is a file an SSAM tool returned'), { roots: lexicalRoots });
 
   // The real file behind `file`, or a refusal. Lexical check first (nothing outside is touched), then the real path:
   // a junction or symlink under a root that points elsewhere is refused.

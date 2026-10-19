@@ -20,13 +20,26 @@ public static partial class JobRunner
 
     private static object ApplyResolved(ModelHost host, string basePath, JsonArray ops, string outPath, Action<string>? log,
         IReadOnlyList<ExpectedMessage> expected, bool expectedValid, JsonObject? preflight = null, bool builtBase = false, string? opsPointer = "/ops",
-        IReadOnlyList<JsonObject>? notes = null)
+        IReadOnlyList<JsonObject>? notes = null, bool autoPatch = true, JsonNode? sentJob = null, string? sourceDirectory = null)
     {
-        try { return ApplyResolvedCore(host, basePath, ops, outPath, log, expected, expectedValid, preflight, builtBase, opsPointer, notes, null); }
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        var sentOps = ops.DeepClone().AsArray();
+        try { return ApplyResolvedCore(host, basePath, ops, outPath, log, expected, expectedValid, preflight, builtBase, opsPointer, notes, null,
+            refuseVerifyErrors: autoPatch && expectedValid); }
         // A refusal for an owner's rule goes through the patch round (JobRunner.Probe.cs) once this model is released: the job
         // with its patches applied on a fresh copy of the base says what the refusal could not see and which patch is not good.
         catch (Exception refusal) when (opsPointer != null && PatchRoundApplies(refusal))
         {
+            if (AutoPatchApplies(refusal, autoPatch, expectedValid, opsPointer))
+            {
+                var outcome = AutoPatchLoop(refusal, sentOps, opsPointer,
+                    (applied, probe) => ApplyResolvedCore(host, basePath, applied, outPath, log, expected, expectedValid,
+                        JobPreflight.Analyze(applied, opsPointer.Length == 0 ? applied : new JsonObject { ["ops"] = applied.DeepClone() }),
+                        builtBase, opsPointer, notes, probe), log, sentJob);
+                if (outcome is AutoPatchResult patched) return AutoPatchReceipt(patched, sentJob ?? (opsPointer.Length == 0 ? sentOps : new JsonObject { ["ops"] = sentOps.DeepClone() }),
+                    outPath, Errors.Normalizations(refusal), elapsed.ElapsedMilliseconds, ops, sourceDirectory);
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture((Exception)outcome).Throw();
+            }
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(PatchRound(refusal, host, basePath, ops, log, expected, expectedValid, builtBase, opsPointer)).Throw();
             throw;
         }
@@ -34,7 +47,7 @@ public static partial class JobRunner
 
     private static object ApplyResolvedCore(ModelHost host, string basePath, JsonArray ops, string outPath, Action<string>? log,
         IReadOnlyList<ExpectedMessage> expected, bool expectedValid, JsonObject? preflight, bool builtBase, string? opsPointer,
-        IReadOnlyList<JsonObject>? notes, Probe? probe)
+        IReadOnlyList<JsonObject>? notes, Probe? probe, bool refuseVerifyErrors = false)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var signatures=ops.OfType<JsonObject>().Where(op=>op["op"]?.ToString()=="reference")
@@ -160,6 +173,7 @@ public static partial class JobRunner
                 probe.Normalizations = session.Normalizations();
                 // The patch round reads the refusal of its job with this model still loaded (the keys of the Verify's messages).
                 Classify(probe, session, (Errors.FindCoded(refusal)?.Problems ?? new JsonArray()).OfType<JsonObject>());
+                if (session.EndOfApplyFailure == null) ClassifyUnusedLiterals(probe, MessageDelta.Compute(before, ModelHost.Messages(espace)).New);
                 return probe;
             }
             var sessionApplyMs = sw.ElapsedMilliseconds - phase;
@@ -210,19 +224,59 @@ public static partial class JobRunner
                 catch (Exception ex) { log?.Invoke("  verify problems not mapped: " + Errors.Text(ex)); }
             }
             var detailsMs = sw.ElapsedMilliseconds - phase;
+            var certainVerifyErrors = (verifyProblems ?? new JsonArray()).OfType<JsonObject>()
+                .Where(problem => problem["severity"]?.ToString() != "warning").ToList();
+            if (!accepted)
+            {
+                var unmapped = policy.Diagnostics().Where(message => message.StartsWith("Ambiguous ", StringComparison.Ordinal)
+                    || message.StartsWith("Missing ", StringComparison.Ordinal)).ToList();
+                foreach (var message in policy.Unexpected)
+                    if (!certainVerifyErrors.Any(p => p["code"]?.ToString() == message.Id && (p["key"] == null || p["key"]?.ToString() == message.Key
+                        || p["key"]?.ToString() == message.OwnerKey || p["element"]?.ToString() == message.Path)))
+                        unmapped.Add(message.ToString());
+                if (dataContract["accepted"]!.GetValue<bool>() != true)
+                    unmapped.AddRange(policyMessages.Where(m => m.StartsWith("Data property mismatch:", StringComparison.Ordinal)));
+                if (snap.IsValid != expectedValid && certainVerifyErrors.Count == 0) unmapped.Add($"expectValid={expectedValid}, but Verify isValid={snap.IsValid}");
+                if (unmapped.Count == 0 && certainVerifyErrors.Count == 0) unmapped.AddRange(policyMessages);
+                if (unmapped.Count > 0)
+                {
+                    verifyProblems ??= new JsonArray();
+                    var problem = JobPreflight.Problem(null, opsPointer, "VERIFY_REFUSED", "error", string.Join("; ", unmapped.Distinct()),
+                        "resolve every unmapped validation and policy verdict before saving");
+                    problem["phase"] = "verify"; verifyProblems.Add(JobPreflight.PublicProblem(problem));
+                }
+            }
+            // Preserve the existing saved rejected-result contract for Verify choices and policy failures.
+            // Only a complete certain set enters auto-patching; the final probe remains strict below.
+            // Count after policy aggregation: an unmapped VERIFY_REFUSED must prevent silent promotion.
+            var completeVerifyErrors = (verifyProblems ?? new JsonArray()).OfType<JsonObject>()
+                .Where(problem => problem["severity"]?.ToString() != "warning").ToList();
+            if (probe == null && refuseVerifyErrors && !accepted && completeVerifyErrors.Count > 0
+                && completeVerifyErrors.All(Preflight.PatchCertainty.IsCertain))
+            {
+                var problems = verifyProblems ?? new JsonArray();
+                if (problems.Count == 0) problems.Add(JobPreflight.PublicProblem(JobPreflight.Problem(null, opsPointer,
+                    "VERIFY_REFUSED", "error", string.Join("; ", policyMessages), "resolve the candidate's validation verdict before saving")));
+                var refusal = new JobPreflightException("Verify refused the candidate", problems) {
+                    VerifyRan = true, Phases = preflight == null ? ["base", "apply", "verify"] : ["preflight", "base", "apply", "verify"]
+                };
+                Errors.AttachNormalizations(refusal, session.Normalizations());
+                throw refusal;
+            }
             if (probe != null)
             {
                 probe.Execution = new JsonObject { ["verifyRan"] = true,
                     ["phases"] = preflight == null ? new JsonArray("base", "apply", "verify") : new JsonArray("preflight", "base", "apply", "verify") };
                 probe.Normalizations = session.Normalizations();
                 Classify(probe, session, verifyProblems?.OfType<JsonObject>() ?? []);
-                return probe;
+                ClassifyUnusedLiterals(probe, delta.New);
+                if (!probe.Final || !accepted || verifyProblems is { Count: > 0 } || probe.Found.Count > 0) return probe;
             }
             phase = sw.ElapsedMilliseconds;
             var refactorAssertions = session.RefactorContract();
             var bytes = host.Save(espace);
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outPath))!);
-            File.WriteAllBytes(outPath, bytes);
+            if (probe?.Final != true) File.WriteAllBytes(outPath, bytes);
             // K6: the builder checks the kernel-result.json next to a candidate against these bytes (I10).
             var outSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
             var saveMs = sw.ElapsedMilliseconds - phase;
@@ -234,7 +288,7 @@ public static partial class JobRunner
             phase = sw.ElapsedMilliseconds;
             JsonObject? refactorProof = null;
             if (refactorAssertions.Count > 0) {
-                var reloaded = host.Load(outPath);
+                var reloaded = probe?.Final == true ? host.Load(bytes) : host.Load(outPath);
                 try { refactorProof = new ModelSession(reloaded).CheckRefactorContract(refactorAssertions); }
                 finally { ModelHost.Release(reloaded); }
                 refactorProof["assertions"] = refactorAssertions;
@@ -242,6 +296,18 @@ public static partial class JobRunner
                     accepted = false;
                     policyMessages.Add("Refactor reference sets changed after save/reload: " + refactorProof["differences"]!.ToJsonString());
                 }
+            }
+            if (probe?.Final == true)
+            {
+                if (!accepted)
+                {
+                    var problem = JobPreflight.Problem(null, opsPointer, "REFACTOR_CONTRACT_REFUSED", "error",
+                        string.Join("; ", policyMessages), "resolve the refactor contract before saving");
+                    problem["phase"] = "verify";
+                    probe.Found.Add((problem, null));
+                    return probe;
+                }
+                File.WriteAllBytes(outPath, bytes);
             }
             var timings = new { loadMs, baseAcquireMs = spare?.AcquireMs, verifyBeforeMs, normalizeMs, baseCheckMs, footprintMs, applyMs, sessionApplyMs, dataContractMs, verifyAfterMs, describeMs, detailsMs, saveMs, releaseMs, refactorProofMs = sw.ElapsedMilliseconds - phase, totalMs = sw.ElapsedMilliseconds };
             // Flows whose layout the engine refused keep their geometry; name them in the receipt.
@@ -442,12 +508,34 @@ public static partial class JobRunner
         if (builtins != null && calls.Any(c => !builtins.Contains(c.Name))) try { scope = ExpressionCheck.ScopeFunctions(espace); } catch { }
         if (builtins != null && scope != null)
         {
+            var actionNames = session.BuiltinActionNames();
+            if (actionNames != null)
+                foreach (var reference in ops.OfType<JsonObject>().Where(o => o["op"]?.ToString() == "reference"
+                    && !Path.GetExtension(o["producer"]?.ToString()).Equals(".avsig", StringComparison.OrdinalIgnoreCase)))
+                {
+                    try
+                    {
+                        var producerNames = session.ProducerLoader == null ? null
+                            : new ModelSession(session.ProducerLoader(reference["producer"]!.ToString())).BuiltinActionNames();
+                        if (producerNames == null) { actionNames = null; break; }
+                        actionNames.UnionWith(producerNames);
+                    }
+                    catch { actionNames = null; break; }
+                }
             var declared = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var op in ops.OfType<JsonObject>())
             {
                 if (op["name"] is JsonValue n && n.TryGetValue<string>(out var created)) declared.Add(created);
+                if (op["op"]?.ToString() == "reference")
+                    foreach (var element in (op["elements"] as JsonArray ?? new JsonArray()).OfType<JsonValue>())
+                        if (element.TryGetValue<string>(out var selector) && selector.IndexOf(':') is var colon && colon > 0
+                            && (selector[..colon].EndsWith("Action", StringComparison.Ordinal) || selector[..colon].EndsWith("ActionSignature", StringComparison.Ordinal)))
+                            declared.Add(selector[(colon + 1)..]);
                 foreach (var action in (op["data"]?["actions"] as JsonArray ?? new JsonArray()).OfType<JsonObject>())
                     if (action["name"] is JsonValue a && a.TryGetValue<string>(out var actionName)) declared.Add(actionName);
+                if (op["data"] is JsonObject flowData && flowData.ContainsKey("flow"))
+                    foreach (var text in FlowTextForm.Texts(flowData))
+                        if (FlowTextForm.Header(text.Text) is { } header) declared.Add(header.Name);
                 // The client functions of a page (data.scripts): its bindings call them by name, the page creates them as
                 // <screen>_<name>.
                 if (HtmlPage(op) is { } page)
@@ -464,19 +552,23 @@ public static partial class JobRunner
                 if (builtins.Contains(name) || scope.Contains(name) || declared.Contains(name)) continue;
                 if (!seen.Add(op + "|" + name)) continue;
                 var closest = FunctionCatalog.Closest(name, scope);
-                // primeira-certa A4: the one built-in the call certainly means (a rename with the same arguments, or a typo of
-                // one letter) is the fix, with the patch that renames it in every expression of the op that calls it.
-                var certain = FunctionCatalog.Certain(name) is { } c && !scope.Contains(c) ? c : null;
+                // Only the reviewed rename table is certain. Distance and shadowed action names are suggestions.
+                var whitelist = FunctionCatalog.Certain(name);
+                var candidate = whitelist ?? FunctionCatalog.Nearest(name);
+                var certain = whitelist != null && actionNames != null && !actionNames.Contains(name)
+                    && !actionNames.Contains(whitelist) && !declared.Contains(name) && !scope.Contains(whitelist);
                 var sites = CallSites(ops, op, name, opsPointer);
-                var patch = certain == null || sites.Count == 0 || sites.Any(s => s.Sort) ? null
-                    : new JsonArray(sites.Select(s => (JsonNode)new JsonObject { ["op"] = "replace", ["path"] = s.Pointer, ["value"] = RenameCall(s.Text, name, certain) }).ToArray());
+                var patch = candidate == null || sites.Count == 0 || sites.Any(s => s.Sort) ? null
+                    : new JsonArray(sites.Select(s => (JsonNode)new JsonObject { ["op"] = "replace", ["path"] = s.Pointer, ["value"] = RenameCall(s.Text, name, candidate) }).ToArray());
                 // Without a certain or a close name, the lookup of the built-ins: the facade turns `anvil functions --find X`
                 // into ssam_reference {kind:"functions", query:X} with its continuation (responses.mjs), so the session follows it.
                 var problem = JobPreflight.Problem(op, sites.Count == 1 ? sites[0].Pointer : Pointer(op), "FUNCTION_UNKNOWN", "error",
                     $"'{name}(' is not a built-in function of this Studio ({MessageExpectations.Lane}), nor a function of the module, of its references or of this job",
-                    certain != null ? $"write {certain}(...), the built-in meant here (same arguments)"
+                    candidate != null ? certain ? $"write {candidate}(...), the explicit built-in rename with the same declared arguments"
+                        : $"choose whether the intended call is {candidate}(...); an action call or another operation may be intended"
                         : closest.Count > 0 ? "use one of: " + string.Join(", ", closest)
-                        : $"no built-in, no function of the module or of its references and no action of this job is named like {name}: write the built-in the expression means (ToLower, Substr, If, ...), or call an action of the module marked Function; the built-ins: `anvil functions --find {name}`", patch, "logic");
+                        : $"no built-in, no function of the module or of its references and no action of this job is named like {name}: write the built-in the expression means (ToLower, Substr, If, ...), or call an action of the module marked Function; the built-ins: `anvil functions --find {name}`", patch, "logic",
+                        patchRule: patch == null ? null : certain ? "BUILTIN_FUNCTION_RENAMED" : whitelist != null ? "BUILTIN_FUNCTION_SHADOWED" : "BUILTIN_FUNCTION_NEAREST");
                 problems.Add(problem);
                 lines.Add(JobPreflight.Text(problem));
             }
@@ -708,7 +800,7 @@ public static partial class JobRunner
     }
 
     private static JsonArray CollectOps(JsonNode job, string jobDir, Action<string>? log,
-        Func<string, string, int, string>? resolveProducer, HashSet<string> active, int offset = 0)
+        Func<string, string, int, string, string>? resolveProducer, HashSet<string> active, int offset = 0)
     {
         if (job is JsonArray a) return Prepare(a);
         var obj = job.AsObject();
@@ -725,7 +817,7 @@ public static partial class JobRunner
             {
                 var partJob = JsonNode.Parse(File.ReadAllText(path))!;
                 MessageExpectations.Read(partJob, path); // so esquema; o contrato do composto e exclusivamente o do pai
-                var partOps = CollectOps(partJob, Path.GetDirectoryName(path)!, log, resolveProducer, active, offset + ops.Count);
+                var partOps = CollectOps(partJob, JobSources.DirectoryOf(path), log, resolveProducer, active, offset + ops.Count);
                 foreach (var n in partOps) ops.Add(n!.DeepClone());
                 log?.Invoke($"jobs: {spec}: {partOps.Count} ops");
             }
@@ -741,14 +833,14 @@ public static partial class JobRunner
             for (var i = 0; i < copy.Count; i++)
             {
                 if (copy[i] is JsonObject op && op["op"]?.GetValue<string>() == "reference" && op["producer"] is JsonValue producer)
-                    op["producer"] = resolveProducer(producer.GetValue<string>(), jobDir, offset + i);
+                    op["producer"] = resolveProducer(producer.GetValue<string>(), jobDir, offset + i, "producer");
                 // data.bind of a prototype op (docs/PROTOTIPO-NATIVO.md 2.12): its producer binding, resolved as a reference's; an
                 // unbound producer leaves it out and the op refuses with the binding it lacks
                 if (copy[i] is JsonObject proto && proto["op"]?.GetValue<string>() == "prototype" && proto["data"] is JsonObject data
                     && data["bind"]?["producer"] is JsonValue bound && bound.TryGetValue<string>(out var name) && name.Length > 0)
                 {
-                    try { data["_producer"] = resolveProducer(name, jobDir, offset + i); }
-                    catch (Exception) { data.Remove("_producer"); }
+                    try { data["_producer"] = resolveProducer(name, jobDir, offset + i, "prototype"); }
+                    catch (Exception ex) when (Errors.Diagnosis(ex)?["sourceJob"] == null) { data.Remove("_producer"); }
                 }
             }
             return copy;
@@ -808,27 +900,57 @@ public static partial class JobRunner
         private readonly string work = Path.Combine(host.WorkDirectory, "producers", Guid.NewGuid().ToString("N"));
         private readonly Dictionary<string, string> built = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<string> active = new();
+        private readonly Dictionary<string, JsonObject> builtResults = new(StringComparer.OrdinalIgnoreCase);
+        private readonly List<JsonObject> sourceBuilds = new();
 
         public string Base(string jobPath)
         {
             var job = JsonNode.Parse(File.ReadAllText(jobPath))!;
             return Resolve(job is JsonObject o ? o["base"]?.GetValue<string>() ?? "tests/fixtures/blank-service.oml"
-                : "tests/fixtures/blank-service.oml", Path.GetDirectoryName(Path.GetFullPath(jobPath))!, "base");
+                : "tests/fixtures/blank-service.oml", JobSources.DirectoryOf(jobPath), "base");
         }
 
         private string Resolve(string spec, string jobDir, string role)
         {
             var source = JobSources.Resolve(spec, jobDir, role, bindings);
             if (!source.IsJob) return source.Path;
-            if (built.TryGetValue(source.Path, out var cached)) return cached;
-            var digest = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(source.Path));
+            var cacheKey = source.Path + "|autoPatch=" + (JobPreflight.AutoPatch.Value != false);
+            var digest = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(cacheKey));
             var output = Path.Combine(work, Path.GetFileNameWithoutExtension(source.Path) + "-" + Convert.ToHexString(digest)[..12] + ".oml");
             log?.Invoke($"{role}: building {spec}");
-            var result = System.Text.Json.JsonSerializer.SerializeToNode(Build(source.Path, null, output))!;
-            if (result["isValid"]?.GetValue<bool>() != true || result["accepted"]?.GetValue<bool>() != true)
-                throw new InvalidOperationException($"{role} job '{source.Path}' failed validation: {result["details"]}; {result["policyMessages"]}");
-            built[source.Path] = output;
-            return output;
+            var identity = new JsonObject { ["role"] = role, ["spec"] = spec, ["job"] = source.Path };
+            try
+            {
+                var result = builtResults.TryGetValue(cacheKey, out var previous) ? previous
+                    : System.Text.Json.JsonSerializer.SerializeToNode(Build(source.Path, null, output))!.AsObject();
+                if (result["isValid"]?.GetValue<bool>() != true || result["accepted"]?.GetValue<bool>() != true)
+                {
+                    var problems = result["problems"]?.DeepClone().AsArray() ?? new JsonArray(JobPreflight.PublicProblem(JobPreflight.Problem(null, null,
+                        "VERIFY_REFUSED", "error", string.Join("; ", (result["policyMessages"] as JsonArray ?? new JsonArray()).Select(p => p?.ToString())),
+                        "resolve the source job's validation verdict")));
+                    var refusal = new JobPreflightException($"{role} job '{source.Path}' refused validation", problems) { VerifyRan = true, Phases = ["base", "apply", "verify"] };
+                    Errors.AttachNormalizations(refusal, result["normalizations"] as JsonArray);
+                    throw refusal;
+                }
+                var receipt = identity.DeepClone().AsObject();
+                foreach (var field in new[] { "patchesApplied", "normalizations", "patchedJob", "autoPatch", "accepted", "isValid" })
+                    if (result[field] != null) receipt[field] = result[field]!.DeepClone();
+                receipt["patchesApplied"] ??= new JsonArray();
+                receipt["normalizations"] ??= new JsonArray();
+                if (!receipt.ContainsKey("patchedJob")) receipt["patchedJob"] = null;
+                sourceBuilds.Add(receipt); builtResults[cacheKey] = result; built[cacheKey] = output;
+                return built[cacheKey];
+            }
+            catch (Exception error)
+            {
+                var diagnosis = Errors.Diagnosis(error) ?? new JsonObject();
+                diagnosis["sourceJob"] ??= identity.DeepClone();
+                diagnosis["sourceBuilds"] = new JsonArray(sourceBuilds.Select(p => (JsonNode)p.DeepClone()).ToArray());
+                error.Data[Errors.DiagnosisKey] = diagnosis;
+                if (Errors.FindCoded(error)?.Problems is { } problems)
+                    foreach (var problem in problems.OfType<JsonObject>()) problem["sourceJob"] ??= identity.DeepClone();
+                throw;
+            }
         }
 
         public object Build(string jobPath, string? basePath, string outPath)
@@ -838,9 +960,12 @@ public static partial class JobRunner
             if (active.Contains(jobPath, StringComparer.OrdinalIgnoreCase))
                 throw new ArgumentException($"job dependency cycle: {string.Join(" -> ", active)} -> {jobPath}");
             active.Add(jobPath);
+            var sourceStart = sourceBuilds.Count;
             try
             {
                 var job = JobDocument.Parse(jobPath);
+                var sentJob = job.DeepClone();
+                var jobDirectory = JobSources.DirectoryOf(jobPath);
                 // N3: a malformed expectation is a problem of the preflight below, with every other one (never thrown alone).
                 var expectations = MessageExpectations.Inspect(job, jobPath);
                 var expected = expectations.Expected;
@@ -850,28 +975,42 @@ public static partial class JobRunner
                 // motor2 review: the preflight normalizes a copy. The ops of the apply are read from the job as sent and normalized
                 // again, so the marks of what the kernel inserted (SentJob) are on them and every pointer of the answer, the
                 // base's, the apply's and the Verify's too, is one of the job as sent.
-                var preflight = JobPreflight.Analyze(CollectOps(job.DeepClone(), Path.GetDirectoryName(jobPath)!, null), job, null, jobPath);
+                var preflight = JobPreflight.Analyze(CollectOps(job.DeepClone(), jobDirectory, null), job, null, jobPath);
                 var expectedValid = job is JsonObject obj && obj["expectValid"] is JsonValue ev && ev.TryGetValue<bool>(out var valid) ? valid : true;
+                var autoPatch = JobPreflight.AutoPatch.Value != false && !(job is JsonObject flags && flags["autoPatch"] is JsonValue flag && flag.TryGetValue<bool>(out var enabled) && !enabled);
+                using var inheritedPolicy = JobPreflight.UseAutoPatch(autoPatch);
                 string resolvedBase; JsonArray ops;
                 try
                 {
                     resolvedBase = basePath == null ? Base(jobPath) : Path.GetFullPath(basePath);
-                    ops = CollectOps(job, Path.GetDirectoryName(jobPath)!, log,
-                        (spec, dir, index) =>
+                    ops = CollectOps(job, jobDirectory, log,
+                        (spec, dir, index, role) =>
                         {
-                            try { return Resolve(spec, dir, "producer"); }
+                            try { return Resolve(spec, dir, role); }
                             catch (Exception ex) { throw new InvalidOperationException($"op #{index} (reference): {Errors.Text(ex)}", ex); }
                         }, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { jobPath });
                 }
                 catch (Exception ex) when (preflight["valid"]?.GetValue<bool>() == false)
                 {
-                    JobPreflight.RequireValid(preflight, $"the base or a producer of the job could not be loaded ({Errors.Text(ex)}): only the job was read, so the base check, the apply and the Verify did not run");
+                    try { JobPreflight.RequireValid(preflight, $"the base or a producer of the job could not be loaded ({Errors.Text(ex)}): only the job was read, so the base check, the apply and the Verify did not run"); }
+                    catch (JobPreflightException rootRefusal)
+                    {
+                        if (Errors.FindCoded(ex)?.Problems is { } sourceProblems)
+                            foreach (var problem in sourceProblems) rootRefusal.Problems.Add(problem!.DeepClone());
+                        if (Errors.Diagnosis(ex) is { } sourceDiagnosis) rootRefusal.Data[Errors.DiagnosisKey] = sourceDiagnosis;
+                        throw;
+                    }
                     throw;
                 }
                 try
                 {
-                    return ApplyResolved(host, resolvedBase, ops, outPath, log, expected, expectedValid, preflight,
-                        builtBase: built.ContainsValue(resolvedBase), opsPointer: JobPreflight.OpsPointer(job), notes: expectations.Notes);
+                    sentJob = AutoPatchSource(sentJob, ops, resolvedBase);
+                    var result = ApplyResolved(host, resolvedBase, ops, outPath, log, expected, expectedValid, preflight,
+                        builtBase: built.ContainsValue(resolvedBase), opsPointer: JobPreflight.OpsPointer(job), notes: expectations.Notes, autoPatch: autoPatch, sentJob: sentJob, sourceDirectory: jobDirectory);
+                    if (sourceBuilds.Count == sourceStart) return result;
+                    var answer = System.Text.Json.JsonSerializer.SerializeToNode(result)!.AsObject();
+                    answer["sourceBuilds"] = new JsonArray(sourceBuilds.Skip(sourceStart).Select(s => (JsonNode)s.DeepClone()).ToArray());
+                    return answer;
                 }
                 // A later phase that stops without the union (a base file that does not load, a frozen producer signature
                 // without an element the job names) never hides the preflight's problems: they are refused, with the reason.
@@ -880,6 +1019,16 @@ public static partial class JobRunner
                     JobPreflight.RequireValid(preflight, $"the base check, the apply and the Verify stopped before the refusal ({Errors.Text(ex)}): only the job was read");
                     throw;
                 }
+            }
+            catch (Exception error)
+            {
+                if (sourceBuilds.Count > sourceStart)
+                {
+                    var diagnosis = Errors.Diagnosis(error) ?? new JsonObject();
+                    diagnosis["sourceBuilds"] = new JsonArray(sourceBuilds.Skip(sourceStart).Select(s => (JsonNode)s.DeepClone()).ToArray());
+                    error.Data[Errors.DiagnosisKey] = diagnosis;
+                }
+                throw;
             }
             finally { active.RemoveAt(active.Count - 1); }
         }

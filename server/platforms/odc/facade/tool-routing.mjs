@@ -371,9 +371,111 @@ function fillSlot(compiled, u, positions) {
   return null;
 }
 
+// Word classes of the file-load grammar (readsRecordsAsFile). Normalized words; '@file' stands for a file name.
+const FILE_ROLE = (() => {
+  const set = s => new Set(s.split(/\s+/));
+  return {
+    directional: set('para pra pro pras pros into to onto'),
+    enclosing: set('dentro inside within'),
+    locative: set('em no na nos nas num numa nesta neste nessa nesse naquela naquele in'),
+    representation: set('como as sob'),
+    source: set('de do da dos das desta deste dessa desse of from'),
+    // A participle or a verb of being right before a locative phrase: the phrase says where something IS now.
+    state: set(`estao esta estava estavam ficam fica existem constam are is were was live lives sit sits reside resides
+      stored saved kept located contained held found salvo salva salvos salvas gravado gravada gravados gravadas guardado
+      guardada guardados guardadas armazenado armazenada armazenados armazenadas contido contida contidos contidas
+      localizado localizada localizados localizadas`),
+    // A relation right before any preposition: "belonging to entity Order" names where the records come from.
+    relation: set(`related relating belonging referring linked associated attached pertencentes pertencente relativos
+      relativas referentes ligados ligadas associados associadas vinculados vinculadas`),
+    articles: set('a an the um uma o os as'),
+    formats: set('csv tsv json jsonl ndjson xml xls xlsx excel yaml yml txt'),
+    formatLead: set('a an the um uma o os as formato format forma form de of'),
+    files: new Set([...set(`arquivo arquivos file files ficheiro ficheiros documento documentos document documents planilha planilhas
+      spreadsheet spreadsheets sheet sheets disco disk pasta folder`), '@file']),
+    entities: set('entidade entidades entity entities tabela tabelas table tables'),
+    records: set('registro registros record records linha linhas row rows'),
+    stops: set('e and que that which then depois entao for por pelo pela pelos pelas com with by'),
+    fileName: /(?:[a-z]:)?[a-z0-9_\-./\\]*[a-z0-9_]\.(?:csv|tsv|json|jsonl|ndjson|xml|xlsx?|ya?ml|txt)\b/g,
+  };
+})();
+
+// File-load verbs ("carregar", "load", "import") also ask for a representation of records that already exist:
+// "carregar os registros da entidade Pedido para um novo arquivo", "load the Order records to json". A load writes only
+// when the records go INTO an entity. Read the roles from the raw words, before stopwords and compounds erase them:
+// - file destination: a preposition, up to three free words (article, possessive, adjective, format) and a file noun or
+//   a file name ("para o meu arquivo local", "into a brand new file", "pro arquivo saida.json", "dentro de um arquivo");
+// - format destination: a preposition and a format, also through "formato de", "forma de", "form of" ("pra json",
+//   "em formato de csv", "sob a forma de json", "to the format csv"); and the format OF records ("the json of record 7");
+// - entity target: a preposition before entidade/entity/tabela/table ("na entidade Pedido", "into the Customer entity");
+// - source, never a destination: a source preposition before a file ("do arquivo X", "from orders.json", "a partir de
+//   X.csv"), a file name that no destination holds (the object: "importe o json de registros pedidos.json"), and a
+//   locative phrase after a state or a relation ("que estão no arquivo", "stored in a csv file", "salvos em json",
+//   "belonging to entity Order") or right after a source file ("from the csv file in my folder").
+// Records are read as a file when a file destination, or a directional format destination ("para csv", "into json"),
+// outranks every entity target: a directional or enclosing preposition (para, into, to, dentro de, inside) outranks a
+// locative one (na, em, in) and the later phrase wins a tie. Any other format destination ("em csv", "as json") vetoes
+// only without an entity target and without a source file: beside them it describes the rows being loaded.
+function readsRecordsAsFile(intent) {
+  const R = FILE_ROLE;
+  const t = normalize(intent).replace(R.fileName, ' @file ').replace(/[^a-z0-9_@]+/g, ' ')
+    .replace(/\ba partir (?:de|do|da|dos|das)\b/g, 'from')
+    .replace(/\b(?:(?:para|pra|pro) )?dentro (?:de|do|da|dos|das)\b/g, 'dentro')
+    .replace(/\binside of\b/g, 'inside').replace(/\bout of\b/g, 'from')
+    .split(' ').filter(Boolean);
+  const isPrep = w => R.directional.has(w) || R.enclosing.has(w) || R.locative.has(w) || R.representation.has(w);
+  const isFree = w => w !== undefined && (R.articles.has(w) || !(isPrep(w) || R.source.has(w) || R.entities.has(w)
+    || R.records.has(w) || R.stops.has(w) || R.files.has(w)));
+  // Each reader starts after a preposition and returns the index of the phrase's last word, or -1.
+  const fileAt = i => {
+    let j = i; while (j - i < 3 && isFree(t[j])) j++;
+    if (!R.files.has(t[j])) return -1;
+    while (t[j + 1] === '@file' || R.formats.has(t[j + 1])) j++;
+    return j;
+  };
+  const formatAt = i => { let j = i; while (j - i < 4 && R.formatLead.has(t[j])) j++; return R.formats.has(t[j]) ? j : -1; };
+  const entityAt = i => {
+    let j = i; if (R.articles.has(t[j])) j++;
+    if (!R.entities.has(t[j]) && isFree(t[j]) && !R.formats.has(t[j])) j++;
+    return R.entities.has(t[j]) ? j : -1;
+  };
+  const fileDest = [], formatDest = [], targets = [], sourceEnds = new Set(), held = new Set();
+  let sourceFile = false, formatOfRecords = false;
+  t.forEach((w, i) => {
+    if ((R.formats.has(w) || w === 'fonte' || w === 'source') && R.source.has(t[i + 1])) {
+      const k = R.articles.has(t[i + 2]) ? i + 3 : i + 2;
+      if (R.records.has(t[k])) formatOfRecords = true;
+    }
+    if (R.source.has(w)) { const end = fileAt(i + 1); if (end >= 0) { sourceFile = true; sourceEnds.add(end); } return; }
+    if (!isPrep(w)) return;
+    const directional = R.directional.has(w) || R.enclosing.has(w);
+    const rank = directional ? 2 : 1;
+    const afterSource = sourceEnds.has(i - 1) || (sourceEnds.has(i - 2) && isFree(t[i - 1]) && !R.formats.has(t[i - 1]));
+    const located = R.relation.has(t[i - 1]) || (!R.directional.has(w) && (R.state.has(t[i - 1]) || afterSource));
+    if (!R.representation.has(w) && entityAt(i + 1) >= 0) { if (!located) targets.push({ rank, at: i }); return; }
+    const file = fileAt(i + 1);
+    if (file >= 0) {
+      if (located) { sourceFile = true; sourceEnds.add(file); return; }
+      fileDest.push({ rank, at: i });
+      for (let k = i + 1; k <= file; k++) held.add(k);
+      return;
+    }
+    const format = formatAt(i + 1);
+    if (format >= 0) { if (located) sourceEnds.add(format); else formatDest.push({ rank: directional ? 2 : 0, at: i }); }
+  });
+  if (t.some((w, k) => w === '@file' && !held.has(k))) sourceFile = true;
+  const target = targets.reduce((a, b) => (!a || b.rank > a.rank || (b.rank === a.rank && b.at > a.at) ? b : a), null);
+  const outranks = d => !target || d.rank > target.rank || (d.rank === target.rank && d.at > target.at);
+  if (fileDest.some(outranks)) return true;
+  if (sourceFile) return false;
+  if (target) return formatDest.some(d => d.rank === 2 && outranks(d));
+  return formatDest.length > 0 || formatOfRecords;
+}
+
 // ---- the matcher (pure; no index, no I/O after load)
 export function routeTools({ intent = '', lane = 'odc', unavailable = [] } = {}, compiled = loadToolRoutes()) {
   const u = unitsOf(compiled, intent);
+  const fileRead = readsRecordsAsFile(intent);
   if (!u.seq.length) return { tools: [], covers: null, lanesNamed: [], modelRest: false };
   const tokenSet = new Set(u.seq);
   const has = t => (t.startsWith('@') ? u.concepts.has(t) : tokenSet.has(t));
@@ -472,6 +574,7 @@ export function routeTools({ intent = '', lane = 'odc', unavailable = [] } = {},
   if (!content.length) content = u.seq.map((t, i) => i).filter(notFiller); // "tenants": the one word is also a lane word
   const candidates = [];
   for (const r of compiled.routes) {
+    if (fileRead && r.concepts.has('@carga_arquivo')) continue;
     const named = r.tool && namedTools.has(r.tool);
     let best = null; const matchedTerms = new Set(); const clauseHits = new Set();
     scopes.forEach((s, si) => {

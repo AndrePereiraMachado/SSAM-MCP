@@ -84,6 +84,12 @@ public class PrototypeExpanderOdcTests(ITestOutputHelper output)
 
     private static PrototypeExpander.Seams Seams => new(Element, Css, PrototypeBuilder.ReadBack);
 
+    /// <summary>FarmaVirtual planned on ODC with this class's fakes (ScreenHtmlDataTableOdcTests reads its tables).</summary>
+    internal static PrototypePlan PlanFarmaVirtual() => Plan(FarmaVirtual, "odc");
+
+    /// <summary>A capture planned on ODC with this class's fakes (ScreenHtmlDataTableOdcTests: FarmaVirtual's tables with spans).</summary>
+    internal static PrototypePlan PlanCapture(string capture) => Plan(capture, "odc");
+
     private static PrototypePlan Plan(string capture, string platform)
     {
         var problems = new List<PrototypeCapture.Problem>();

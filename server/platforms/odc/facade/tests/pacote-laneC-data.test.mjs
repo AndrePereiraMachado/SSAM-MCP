@@ -16,7 +16,7 @@ import { wordsSha256 } from '../destructive-operations.mjs';
 async function harness(t, reply) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pacote-c-data-'));
   const calls = [];
-  const runAnvil = async (args, options) => { calls.push({ args, options, request: JSON.parse(fs.readFileSync(args[args.indexOf('--request') + 1], 'utf8')) }); return reply(args); };
+  const runAnvil = async (args, options) => { const request=args.includes('--request')?JSON.parse(fs.readFileSync(args[args.indexOf('--request') + 1], 'utf8')):null;calls.push({args,options,request});if(args.includes('--schema'))return{ok:true,moduleKey:'module-orders',module:'Orders_CS',entities:[{name:'Order',key:'entity-order',identifier:'Id',attributes:[{name:'Id',type:'Order Identifier'},{name:'Number',type:'Text'}]},{name:'OrderLine',key:'entity-order-line',identifier:'Id',attributes:[{name:'Id',type:'OrderLine Identifier'},{name:'OrderId',type:'Order Identifier'},{name:'Qty',type:'Integer'}]}]};return reply(args); };
   const server = await createSsamServer({ odc: false, deps: { runAnvil, dataRoot: root, answersRoot: root, lock: { o11Root: root, odcRoot: root, connection: () => null } } });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'pacote-c-data', version: '1' });
@@ -36,20 +36,22 @@ test('a batch with steps and $ref values is accepted and runs through the O11 ru
     { step: 'read', operation: 'read', entity: 'OrderLine', ids: [{ $ref: 'line#1' }] }] };
   const reply = await client.callTool({ name: 'o11_data', arguments: { ...target, request } });
   assert.notEqual(reply.isError, true, reply.content[0].text);
-  assert.equal(calls.length, 1, 'the whole batch is one CLI command');
-  const { args } = calls[0];
+  const writes=calls.filter(c=>c.request);assert.equal(writes.length,1,'the whole batch is one CLI write command');
+  // CX13 review 6 (converted): with no file load open, the inline batch reads no target identity first (no --schema).
+  assert.equal(calls.some(c=>c.args.includes('--schema')),false);
+  const { args } = writes[0];
   assert.deepEqual(args.slice(0, 7), ['data', '--studio', '--host', 'dev.example.test', '--module', 'Orders_CS', '--oml']);
   assert.ok(args.includes('--request') && args.includes('--work'));
   // CX15 r4 (W-4, converted): steps and $ref intact; the authorization reaches the kernel as sha256:<hex> of the owner's
   // words, never the words (before: the request as sent, words included).
-  assert.deepEqual(calls[0].request, { ...request, authorization: 'sha256:' + wordsSha256(request.authorization) }, 'the request reaches the kernel with steps and $ref intact, the words hashed');
+  assert.deepEqual(writes[0].request, { ...request, authorization: 'sha256:' + wordsSha256(request.authorization) }, 'the request reaches the kernel with steps and $ref intact, the words hashed');
   const value = valueOf(reply);
   assert.deepEqual([value.ok, value.lane, value.verb, value.via, value.wallMs], [true, 'o11', 'data', 'worker', 9]);
   assert.deepEqual(value.result, envelope);
   // One op, as before, is still the request.
   const single = await client.callTool({ name: 'o11_data', arguments: { ...target, request: { operation: 'read-all', entity: 'Order' } } });
   assert.notEqual(single.isError, true, single.content[0].text);
-  assert.equal(calls.length, 2);
+  assert.equal(calls.filter(c=>c.request).length, 2);
 });
 
 test('the schema refuses what the kernel would: an unknown key, an empty batch, a $ref that is not a step name', async t => {

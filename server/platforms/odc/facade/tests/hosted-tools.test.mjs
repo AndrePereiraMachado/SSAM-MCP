@@ -151,7 +151,8 @@ test('the ninth release tools: ssam_grant, ssam_task close, ssam_connect without
     assert.equal(tools[name].class, 'agent'); assert.equal(tools[name].agent, 'always');
     assert.ok(!tools[name].paths.in.includes('/publish') && !tools[name].paths.out.includes('/publish'), name + ': publish is no path');
   }
-  assert.deepEqual(tools.o11_data.paths, { in: ['/oml'], out: [] }, 'a batch adds no path: $ref names records');
+  // (a9: a load by files, CX13, reads request.files, an input path of the gate; a batch still adds none: $ref names records)
+  assert.deepEqual(tools.o11_data.paths, { in: ['/oml', '/request/files/*'], out: [] }, 'a batch adds no path: $ref names records');
 });
 // The 16th release (product 78 tools: 77 of createSsamServer plus ssam_friction): ssam_preview, o11_extension and
 // odc_external_library are unavailable hosted (local preview processes, builds of customer code on the server machine),

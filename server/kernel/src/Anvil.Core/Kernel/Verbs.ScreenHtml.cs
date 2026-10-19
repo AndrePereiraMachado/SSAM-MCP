@@ -74,6 +74,13 @@ public sealed partial class ModelSession
             edits = [applied.Document];
             elementNote = new JsonObject { ["rule"] = "html-element-edits", ["at"] = "/edits", ["from"] = baseHtml![..Math.Min(12, baseHtml.Length)],
                 ["edits"] = elementEdits.Count, ["touched"] = new JsonArray(applied.Touched.Select(k => (JsonNode)k).ToArray()) };
+            // "id": null in a set removes the name (written id=""), as the contract of set says; said here, since the text it makes
+            // writes id="" where the edit wrote null (the review of round 2, A2).
+            var cleared = elementEdits.OfType<JsonObject>().Where(e => e["set"] is JsonValue && e["attributes"] is JsonObject a && a.ContainsKey("id") && a["id"] == null)
+                .Select(e => (JsonNode)e["set"]!.ToString()).ToArray();
+            if (cleared.Length > 0)
+                elementNote["names"] = new JsonObject { ["cleared"] = new JsonArray(cleared),
+                    ["note"] = "\"id\": null removes the name: written id=\"\" (an element whose text leaves its id out keeps the name it has)" };
         }
         try { return HtmlEditPlanned(module, reading, data, basedOn!, baseHtml!, edits, pointer, notes, elementNote); }
         catch (KernelRefusalException refusal) when (elementEdits != null) { throw ForElementEdits(refusal, reading, editOf, baseKeys); }
@@ -156,7 +163,7 @@ public sealed partial class ModelSession
     {
         if (reading.HtmlSha256 != baseHtml) {
             // The screen is not the one the edit was written on: rebased through the key table of that reading.
-            var rebased = Rebase(reading, basedOn!, edits, pointer);
+            var rebased = Rebase(module, reading, basedOn!, data, edits, pointer);
             edits = rebased.Edits;
             foreach (var note in rebased.Notes) notes.Add(note);
         }
@@ -194,11 +201,24 @@ public sealed partial class ModelSession
         return answer;
     }
 
+    // The patch of a plan replaces the edit list at the op's pointer; at /html (the html form: the whole document) that list is the
+    // corrected document, one text, written back as the string the form takes. As an array it made an op the job refused, so a
+    // refusal of the html form never had a patch that passes (round 4 of fix/data-table).
+    private static JsonArray? HtmlFormPatch(JsonNode? patch)
+    {
+        if (patch?.DeepClone() is not JsonArray steps) return null;
+        foreach (var step in steps.OfType<JsonObject>())
+            if (step["op"]?.ToString() == "replace" && step["path"]?.ToString() == "/html" && step["value"] is JsonArray { Count: 1 } list
+                && list[0] is JsonValue text && text.TryGetValue<string>(out var document))
+                step["value"] = document;
+        return steps;
+    }
+
     private static KernelRefusalException Refusal(ScreenHtmlEditResult result)
     {
         var problems = new JsonArray(result.Problems.Select(p => {
             var problem = JobPreflight.Problem(null, p["pointer"]?.ToString(), p["code"]!.ToString(), "error", p["message"]!.ToString(), p["fix"]?.ToString(),
-                p["patch"]?.DeepClone() as JsonArray);
+                HtmlFormPatch(p["patch"]));
             if (p["k"] is JsonValue k) problem["k"] = k.DeepClone();
             return (JsonNode)JobPreflight.PublicProblem(problem);
         }).ToArray());
@@ -242,7 +262,8 @@ public sealed partial class ModelSession
     /// store kept it, or when it is the reading of the job's own capture before its first op (_htmlAtStart; the whole merged
     /// document, in the current k); else each k through the ObjectKey it named (the key table of basedOn, kept beside the
     /// capture's index by ssam_map view html) to the k the current reading gives that object.</summary>
-    private (List<string> Edits, List<JsonObject> Notes) Rebase(ScreenHtmlDocument reading, JsonObject basedOn, List<string> edits, string pointer)
+    private (List<string> Edits, List<JsonObject> Notes) Rebase(ScreenHtmlModule<IObjectSignature> module, ScreenHtmlDocument reading, JsonObject basedOn, JsonObject data,
+        List<string> edits, string pointer)
     {
         var html = basedOn["html"]!.ToString();
         var table = StoredReading(basedOn);
@@ -253,9 +274,33 @@ public sealed partial class ModelSession
             problem["current"] = new JsonObject { ["html"] = reading.HtmlSha256, ["text"] = reading.Html };
             throw new KernelRefusalException(ScreenHtmlEdit.BaseChanged, problem["message"]!.ToString(), new JsonArray(JobPreflight.PublicProblem(problem)));
         }
+        // The edit was written on the capture this job runs on: what changed the screen since is an earlier op of this job.
+        var sameJob = BaseSha256 != null && string.Equals(basedOn["capture"]?.ToString(), BaseSha256, StringComparison.OrdinalIgnoreCase);
+        return RebaseEdits(reading, html, old, table["html"] is JsonValue kept && kept.TryGetValue<string>(out var keptText) ? keptText : null, edits, pointer,
+            data["edits"] as JsonArray, sameJob, BaseSha256,
+            corrected => {
+                // The element edits on the current text, planned (never written): the patch goes only when they plan clean; else their
+                // own problems go in the same refusal (one refusal with everything).
+                var applied = HtmlElementEdits.Apply(reading.Html, corrected, reading.Keys.GroupBy(k => k.Key).ToDictionary(g => g.Key, g => g.First().Value, StringComparer.Ordinal));
+                return applied.Problems.Count > 0 ? null : module.Edit(reading, [applied.Document], "/edits").Result.Problems.ToList();
+            });
+    }
+
+    /// <summary>The rebase of an edit written on an older reading (Rebase, free of the session for its tests): the three-way merge
+    /// with that reading's text when it is kept; else, or when the merge cannot lay the edit over it (ScreenHtmlMerge.Result.Why),
+    /// only an edit of elements (the edit form) moves onto the current text, each k through the ObjectKey it named, the sent
+    /// elements replacing the current ones whole. A whole document written on that reading (the document form, and the one the
+    /// element edits make) is never planned in place of the screen: it would write the reading back over what changed since
+    /// (the review of fix/html-edit-names, A1: with a native Table, the merge gave nothing and the edit undid an earlier op of
+    /// its job). It is HTML_BASE_CHANGED once, with the current text, the next step and, for element edits whose addresses all
+    /// name an element of the screen now, the checked patch that writes them on the current text.</summary>
+    internal static (List<string> Edits, List<JsonObject> Notes) RebaseEdits(ScreenHtmlDocument reading, string html, JsonObject old, string? baseHtml, List<string> edits,
+        string pointer, JsonArray? elementEdits, bool sameJob, string? jobCapture, Func<JsonArray, List<JsonObject>?>? planProblems)
+    {
         var notes = new List<JsonObject>();
+        string? why = null;
         // The three-way merge (plan 3.4): base = that reading's text, local = the screen now, foreign = the base with the edit.
-        if (table["html"] is JsonValue baseText && baseText.TryGetValue<string>(out var baseHtml)) {
+        if (baseHtml != null) {
             var baseKeys = old.Where(p => p.Value is JsonValue).ToDictionary(p => p.Key, p => p.Value!.ToString(), StringComparer.Ordinal);
             var currentKeys = reading.Keys.GroupBy(k => k.Key).ToDictionary(g => g.Key, g => g.First().Value, StringComparer.Ordinal);
             var merged = ScreenHtmlMerge.ThreeWay(baseHtml, baseKeys, reading.Html, currentKeys, edits);
@@ -280,10 +325,14 @@ public sealed partial class ModelSession
                 notes.Add(note);
                 return ([merged.Document], notes);
             }
+            why = merged.Why;
         }
-        // No base text kept (an older store): each k through the ObjectKey it named; the edited elements replace the current ones.
         var byObject = reading.Keys.Where(k => !k.Key.Contains('/') && !k.Key.Contains('.') && !k.Key.Contains('~') && k.Key.Length > 0)
             .GroupBy(k => k.Value).ToDictionary(g => g.Key, g => g.First().Key, StringComparer.Ordinal);
+        var because = why == null ? "that reading's text is not kept here (only its key table)" : "the three-way merge could not lay it over that reading: " + why;
+        // A whole document written on that reading: refused, once, with everything to go on.
+        if (edits.Any(IsWholeDocument)) throw WholeDocumentRebased(reading, html, old, byObject, because, elementEdits, sameJob, jobCapture, planProblems);
+        // An edit of elements: each k through the ObjectKey it named; the edited elements replace the current ones.
         var rebased = new List<string>(); var missing = new List<JsonObject>();
         for (var j = 0; j < edits.Count; j++) {
             ScreenHtml.Node parsed;
@@ -307,8 +356,99 @@ public sealed partial class ModelSession
             foreach (var problem in missing) problem["current"] = new JsonObject { ["html"] = reading.HtmlSha256, ["text"] = reading.Html };
             throw new KernelRefusalException(ScreenHtmlEdit.KeyForeign, string.Join(" | ", missing.Select(p => p["message"])), new JsonArray(missing.Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray()));
         }
-        notes.Add(new JsonObject { ["from"] = html, ["to"] = reading.HtmlSha256, ["note"] = "the screen changed since the reading: the edit was moved onto the current text by key; what changed elsewhere stays" });
+        notes.Add(new JsonObject { ["from"] = html, ["to"] = reading.HtmlSha256, ["merge"] = "by-key", ["because"] = because,
+            ["note"] = "the screen changed since the reading: each element the edit sent replaced the one with its ObjectKey, whole (a change made inside it since is the edit's); what changed in the other elements stays" });
         return (rebased, notes);
+    }
+
+    // The edit is the whole document (<screen> or <block>), not one element of it.
+    private static bool IsWholeDocument(string edit)
+    {
+        try { return ScreenHtml.Parse(edit).Children.FirstOrDefault(c => !c.IsText) is { Tag: "screen" or "block" }; }
+        catch (FormatException) { return false; }
+    }
+
+    private static KernelRefusalException WholeDocumentRebased(ScreenHtmlDocument reading, string html, JsonObject old, Dictionary<string, string> byObject, string because,
+        JsonArray? elementEdits, bool sameJob, string? jobCapture, Func<JsonArray, List<JsonObject>?>? planProblems)
+    {
+        var (form, was) = elementEdits != null ? ("the element edits (the document they make on it)", "were") : ("the whole document", "was");
+        var since = sameJob ? "an earlier op of this job changed it" : "it changed since";
+        var next = new JsonObject { ["capture"] = jobCapture, ["html"] = reading.HtmlSha256 };
+        var problem = JobPreflight.Problem(null, "/basedOn", ScreenHtmlEdit.BaseChanged, "error",
+            $"{reading.Root} is not the reading {html[..Math.Min(12, html.Length)]} {form} {was} written on ({since}; now {reading.HtmlSha256[..12]}), and {because}: "
+            + $"{form} would write that reading back over what changed, so nothing is written",
+            sameJob
+                ? $"when an earlier html op of this job changed {reading.Root}, make this change in that op (one html op per screen and job); else send in 'edit' only the elements it changes, each whole with its k: each replaces the element with its ObjectKey and the rest of the screen stays as the earlier ops left it"
+                : $"write the edit again on the current text (current.text, basedOn {{\"capture\": \"{jobCapture}\", \"html\": \"{reading.HtmlSha256}\"}}), or send in 'edit' only the elements it changes, each whole with its k: each replaces the element with its ObjectKey (a change made inside it since is the edit's) and the rest of the screen stays");
+        var current = new JsonObject { ["html"] = reading.HtmlSha256, ["text"] = reading.Html };
+        var extra = new List<JsonObject>();
+        if (elementEdits != null) {
+            // Each element the edits address, as the screen has it now (by ObjectKey).
+            var elements = new JsonArray();
+            foreach (var (j, address) in HtmlElementEdits.Addresses(elementEdits)) {
+                var objectKey = address.StartsWith('@') ? address[1..] : old[address]?.ToString();
+                var k = objectKey != null && byObject.TryGetValue(objectKey, out var now) ? now : null;
+                elements.Add(new JsonObject { ["address"] = address, ["edit"] = j, ["k"] = k, ["text"] = k == null ? null : HtmlElementEdits.ElementText(reading.Html, k) });
+            }
+            current["elements"] = elements;
+            // The same edits on the current text: each address through its ObjectKey, the k written in a replaced element too. Only
+            // when every one names an element of the screen now, no edit finds a text (the text is the reading's), and they plan clean.
+            if (RebasedElementEdits(elementEdits, old, byObject) is { } corrected && planProblems?.Invoke(corrected) is { } own) {
+                if (own.Count == 0) {
+                    problem["patch"] = new JsonArray(
+                        new JsonObject { ["op"] = "replace", ["path"] = "/basedOn", ["value"] = next.DeepClone() },
+                        new JsonObject { ["op"] = "replace", ["path"] = "/edits", ["value"] = corrected });
+                    problem["fix"] = problem["fix"] + "; the patch writes the same edits on the current text (each address the element with its ObjectKey now), checked to plan clean";
+                } else {
+                    // On the current text the same edits have problems of their own: said now, in this refusal, never after it.
+                    current["edits"] = corrected;
+                    problem["fix"] = problem["fix"] + "; on the current text the same edits (current.edits) have " + own.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        + " problem(s) of their own, listed with this refusal: correct them in the same call";
+                    foreach (var p in own) extra.Add(JobPreflight.Problem(null, "/edits", p["code"]!.ToString(), "error", p["message"]!.ToString(), p["fix"]?.ToString()));
+                }
+            }
+        }
+        problem["current"] = current;
+        problem["next"] = new JsonObject { ["basedOn"] = next };
+        var problems = new JsonArray(JobPreflight.PublicProblem(problem));
+        foreach (var p in extra) problems.Add(JobPreflight.PublicProblem(p));
+        return new KernelRefusalException(ScreenHtmlEdit.BaseChanged, problem["message"]!.ToString(), problems);
+    }
+
+    // Element edits of an older reading written on the current one: every address (and every k a replaced element writes) through
+    // the ObjectKey of the older reading's key table; null when one names no element of the screen now or an edit finds a text.
+    private static JsonArray? RebasedElementEdits(JsonArray edits, JsonObject old, Dictionary<string, string> byObject)
+    {
+        string? Now(string k) => old[k]?.ToString() is { } objectKey && byObject.TryGetValue(objectKey, out var now) ? now : null;
+        string? Address(string address)
+        {
+            if (address == "/" || address.StartsWith('@')) return address;
+            var cut = address.IndexOfAny(['/', '.']);
+            var k = cut < 0 ? address : address[..cut];
+            return Now(k) is { } now ? now + (cut < 0 ? "" : address[cut..]) : null;
+        }
+        var corrected = new JsonArray();
+        foreach (var node in edits) {
+            if (node is not JsonObject edit || edit["find"] != null) return null;
+            var copy = edit.DeepClone().AsObject();
+            foreach (var key in new[] { "set", "replace", "delete", "after", "before", "into", "move" })
+                if (copy[key] is JsonValue v && v.TryGetValue<string>(out var address) && address.Length > 0) {
+                    if (Address(address) is not { } now) return null;
+                    copy[key] = now;
+                }
+            if (copy["replace"] != null && copy["with"] is JsonValue w && w.TryGetValue<string>(out var text)) {
+                ScreenHtml.Node parsed;
+                try { parsed = ScreenHtml.Parse(text); } catch (FormatException) { return null; }
+                foreach (var (element, _) in ScreenHtmlText.Elements(parsed)) {
+                    if (element.Get("k") is not { } k) continue;
+                    if (Now(k) is not { } now) return null;
+                    element.Attributes[element.Attributes.FindIndex(a => a.Key == "k")] = new("k", now);
+                }
+                copy["with"] = ScreenHtmlText.Write(parsed);
+            }
+            corrected.Add(copy);
+        }
+        return corrected;
     }
 
     /// <summary>The native moves of an html edit, through the verbs (each one the op the receipt names): handles for the objects of

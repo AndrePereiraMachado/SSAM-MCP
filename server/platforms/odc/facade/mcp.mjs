@@ -24,6 +24,8 @@ import { codeFromText, isCode } from './refusal-codes.mjs';
 import { phasedDeliver, phasedDeliveryDeps } from './odc-build-phase.mjs';
 import { referenceSnapshot } from './kernel-delivery.mjs';
 import { PHASES_META } from './studio-write-lock.mjs';
+import { runDataLoad, odcDataChannel } from './data-load.mjs';
+import { withInlineDataReservation } from './data-load-lock.mjs';
 import { registerSsamTask } from './ssam-task.mjs';
 import { managedRelayContext } from './relay-lifecycle.mjs';
 
@@ -45,7 +47,7 @@ export const cancelledAnswer = (args = {}) => {
     : { ok: false, code: 'CANCELLED', outcome: 'uncertain',
       error: 'The call was cancelled; the Studio command it started may still run: studio_status shows it and its receipt says how it ended. Never repeat a write blindly.' };
 };
-export const wrap = fn => async (args, ctx) => {
+export const wrap = (fn, {drain} = {}) => async (args, ctx) => {
   const signal = ctx?.mcpReq?.signal;
   try {
     // The unified server owns the caller's deadline and keeps the actual work alive.
@@ -58,7 +60,7 @@ export const wrap = fn => async (args, ctx) => {
     if (signal?.aborted) return result(cancelledAnswer(args), true);
     const work = Promise.resolve().then(() => fn(args, ctx));
     let value;
-    if (signal) {
+    if (signal && !drain?.(args)) {
       let onAbort;
       const aborted = new Promise(resolve => { onAbort = () => resolve(cancelledAnswer(args)); signal.addEventListener('abort', onAbort, { once: true }); });
       work.catch(() => {}); // a late failure after the cancellation has nobody to answer
@@ -78,11 +80,16 @@ export const wrap = fn => async (args, ctx) => {
 };
 // The stages of a delivery as MCP progress notifications when the request asks for them (a progressToken): the relay of
 // ssam.mjs resets its timeout on each one, so a long merge or publication is never cut by a client timeout.
-export function progressNotifier(ctx) {
+export function progressNotifier(ctx, { tool = 'studio_deliver' } = {}) {
   const token = ctx?.mcpReq?._meta?.progressToken;
   if (token == null || typeof ctx?.mcpReq?.notify !== 'function') return undefined;
   let count = 0;
-  return stage => { Promise.resolve().then(() => ctx.mcpReq.notify({ method: 'notifications/progress', params: { progressToken: token, progress: ++count, message: 'studio_deliver: ' + stage } })).catch(() => {}); };
+  return stage => {
+    const batch = stage && typeof stage === 'object' && Number.isFinite(stage.done) && Number.isFinite(stage.total);
+    const params = { progressToken: token, progress: batch ? stage.done : ++count,
+      message: tool + ': ' + (batch ? `${stage.done}/${stage.total} batches completed` : stage), ...(batch ? { total: stage.total } : {}) };
+    Promise.resolve().then(() => ctx.mcpReq.notify({ method: 'notifications/progress', params })).catch(() => {});
+  };
 }
 const pidSchema = z.number().int().positive().optional().describe('ODC Studio process id; detected when there is exactly one.');
 const manifestSchema = z.string().min(1).describe('Absolute path of a manifest.json written by studio_build, studio_manifest or studio_deliver.');
@@ -200,9 +207,47 @@ export async function createFacadeServer({ env = process.env, access, deps = {} 
   server.registerTool('studio_assets', { title: 'List tenant assets natively and refresh the catalog', description: 'The same service the Studio Open dialog uses. Rewrites snapshots/modules.json for the signed-in tenant. Run before any claim about what exists.', inputSchema: z.object({ tenant: z.string().optional().describe('Tenant host when the Studio holds several sessions.'), pid: pidSchema }).strict(), annotations: readOnly }, wrap(({ tenant, pid }) => studio(['assets', ...(tenant ? [tenant] : [])], pid)));
   server.registerTool('studio_consumers', { title: 'Published consumers of a module', description: 'Native GetConsumers with an open flag per consumer.', inputSchema: z.object({ module: z.string().min(1), pid: pidSchema }).strict(), annotations: readOnly }, wrap(({ module, pid }) => studio(['consumers', module], pid)));
   const entitySchema = { module: z.string().min(1).describe('An open module, or the app name the person sees; the entity may be its own or one of its references.'), entity: z.string().min(1), pid: pidSchema };
+  const dataCall = deps.studioData ?? (callArgs => studioData(callArgs, { studio: deps.studio ?? studio })); // CX15 deps.studio reaches the data writes
+  // a9 (the a7 family of odcDataRoots): the plan, journal, reservations and locks of a file load are the ODC data root of the
+  // call (lib.mjs dataPath: the lane root locally, the customer's <ws>/odc hosted, as ssam.mjs waits for them), never the code
+  // root every customer of a hosted server shares. Read at call time, inside the call's context.
+  const loadsRoot = () => dataPath('journal', 'data', 'loads');
+  const loadFields = {
+    // CX13 review 6 (listing budget): the load validates its options itself (one refusal with everything, before any write; delimiter,
+    // files, columns and references only after the schema and the files are read),
+    // so they are listed with their cheapest schema.
+    close: z.unknown().optional(), // {preview:true}, then {previewSha256, authorize}: stated in the tool text
+    confirmUpdates: z.object({previewSha256:z.string().optional(),authorize:z.string().optional()}).optional().describe("Overwrites of existing rows: the updatePreview sha256 and the owner's next message after that preview, verbatim, stating its number of rows."),
+    records: z.array(z.record(z.string(), z.unknown())).optional(), files: z.array(z.string()).optional(),
+    columns: z.unknown().optional(), references: z.unknown().optional(), // objects; the load refuses any other value
+    keys: z.union([z.string(), z.array(z.string())]).optional(), batchSize: z.number().optional(), delimiter: z.string().optional(),
+    dryRun: z.boolean().optional(), deadlineMs: z.number().optional(), operationId: z.string().optional(), authorize: z.string().optional(),
+  };
+  const dataWrite = operation => async (args, ctx) => {
+    if (args.files !== undefined || args.close !== undefined) return runDataLoad({ ...args, lane: 'odc', operation }, odcDataChannel({ studioData: dataCall, module: args.module, entity: args.entity, pid: args.pid, authorize: args.authorize }), {
+      journalRoot: deps.dataRoot ?? loadsRoot(), now: deps.now, progress: progressNotifier(ctx, { tool: `studio_data_${operation}` }),
+      signal: ctx?.mcpReq?.signal, destructive: deps.destructive, // the CX15 store of previews and words seen (review 6)
+      continuation: { tool: `studio_data_${operation}`, arguments: args },
+    });
+    const problems = [];
+    if (!Array.isArray(args.records) || !args.records.length) problems.push({ code: 'INPUT_INVALID', reason: 'exactly one of records or files must be a nonempty list', at: 'records' });
+    for (const key of [...Object.keys(loadFields).filter(key => !['records', 'files', 'authorize'].includes(key)), 'insertMissing']) {
+      if (args[key] !== undefined) problems.push({ code: 'INPUT_INVALID', reason: `${key} requires files`, at: key });
+    }
+    // CX15 r6 (M-1): the inline words are the owner's (wordsGiven: never missing, a marker, a <template> or a sha256), or
+    // WORDS_REQUIRED; with other input problems, one refusal names them all.
+    const noWords = wordsGiven(args.authorize) ? null : wordsRequired([{ path: 'authorize', value: args.authorize }], { tool: `studio_data_${operation}` });
+    if (problems.length) return { ok: false, code: 'INPUT_INVALID', error: `${problems.length + (noWords ? 1 : 0)} input problems before any write`, problemCount: problems.length + (noWords ? 1 : 0), problems: [...problems, ...(noWords?.problems ?? [])], written: 0 };
+    if (noWords) return noWords;
+    const { module, entity, records, authorize, pid } = args;
+    // Review 6: no identity read before an inline write unless a file load of the lane is open (withInlineDataReservation).
+    const identities=async()=>{try{return[await odcDataChannel({studioData:dataCall,module,entity,pid,authorize}).identity()];}catch(error){throw Object.assign(error,{code:error.code??'DATA_TARGET_IDENTITY_REQUIRED',identityFailure:true});}};
+    return withInlineDataReservation({lane:'odc'},identities,{journalRoot:deps.dataRoot ?? loadsRoot()},()=>dataCall({op:operation,module,entity,records,authorize,pid}))
+      .catch(error=>{if(error?.identityFailure)return{ok:false,code:error.code,error:error.message,written:0,outcome:'not-sent'};throw error;});
+  };
   server.registerTool('studio_data', { title: 'Read records of an entity (development database)', description: 'The Studio\'s own data service, the calls behind View data / Edit data, for an entity of the open module or of one of its references. Nothing in the model changes. Values come back as text; the identifier is the first column.', inputSchema: z.object({ ...entitySchema, limit: z.number().int().positive().max(5000).default(100), offset: z.number().int().nonnegative().default(0), fields: z.array(z.string()).optional().describe('Attribute names; default all but the identifier.') }).strict(), annotations: readOnly }, wrap(({ module, entity, limit, offset, fields, pid }) => studioData({ op: 'read', module, entity, limit, offset, fields, pid })));
-  server.registerTool('studio_data_insert', { title: 'Insert records into an entity (development database)', description: 'InsertRecords of the Studio data service. records: objects of Attribute: value; auto-number identifiers are assigned by the server and returned as recordId. Needs the user\'s own authorization words; request and per-record report are kept under journal/data. Corporate tenants only on explicit instruction.', inputSchema: z.object({ ...entitySchema, records: z.array(z.record(z.string(), z.unknown())).min(1), authorize: z.string().min(1) }).strict(), annotations: mutating }, wrap(({ module, entity, records, authorize, pid }) => (wordsGiven(authorize) ? studioData({ op: 'insert', module, entity, records, authorize, pid }, { studio: deps.studio ?? studio }) : wordsRequired([{ path: 'authorize', value: authorize }], { tool: 'studio_data_insert' }))));
-  server.registerTool('studio_data_update', { title: 'Update records of an entity (development database)', description: 'UpdateRecords of the Studio data service. Each record carries the identifier plus the attributes to change. Needs the user\'s own authorization words.', inputSchema: z.object({ ...entitySchema, records: z.array(z.record(z.string(), z.unknown())).min(1), authorize: z.string().min(1) }).strict(), annotations: mutating }, wrap(({ module, entity, records, authorize, pid }) => (wordsGiven(authorize) ? studioData({ op: 'update', module, entity, records, authorize, pid }, { studio: deps.studio ?? studio }) : wordsRequired([{ path: 'authorize', value: authorize }], { tool: 'studio_data_update' }))));
+  server.registerTool('studio_data_insert', { title: 'Insert records into an entity (development database)', description: 'InsertRecords of the Studio data service. records: objects of Attribute: value; auto-number identifiers are assigned by the server and returned as recordId. Needs the user\'s own authorization words; request and per-record report are kept under journal/data. Corporate tenants only on explicit instruction. files:[abs paths] (JSON/JSONL/CSV) need natural keys: equal rows skip, missing rows insert; changed rows stop before writing (updatePreview) until confirmUpdates. Same operationId resumes by reading keys. close:{preview:true}, then close:{previewSha256,authorize} with the owner reply.', inputSchema: z.object({ ...entitySchema, ...loadFields }).strict(), annotations: mutating }, wrap(dataWrite('insert'), { drain: args => args.files !== undefined || args.close !== undefined }));
+  server.registerTool('studio_data_update', { title: 'Update records of an entity (development database)', description: 'UpdateRecords of the Studio data service. Each record carries the identifier plus the attributes to change. Needs the user\'s own authorization words. files:[abs paths] (JSON/JSONL/CSV) need natural keys: equal rows skip, missing rows insert; changed rows stop before writing (updatePreview) until confirmUpdates. Same operationId resumes by reading keys. close:{preview:true}, then close:{previewSha256,authorize} with the owner reply.', inputSchema: z.object({ ...entitySchema, ...loadFields, insertMissing: z.boolean().optional() }).strict(), annotations: mutating }, wrap(dataWrite('update'), { drain: args => args.files !== undefined || args.close !== undefined }));
   server.registerTool('studio_data_delete', { title: 'Delete records of an entity (development database)', description: 'DeleteRecords of the Studio data service by identifier. ' + DESTRUCTIVE_SUFFIX + ' The preview, {module, entity, ids}, lists the records found (read in pages; a missing id is absent, never deleted; the rows are the backup). The execution, {module, entity, confirmationToken, authorize} without ids: the owner\'s reply also names the entity.', inputSchema: z.object({ ...entitySchema, ids: z.array(z.union([z.string(), z.number()])).min(1).optional(), authorize: z.string().min(1).optional(), confirmationToken: z.string().min(1).optional(), ownerRequest: z.string().min(1).optional() }).strict(), annotations: mutating }, wrap(async (args, ctx) => (await import('./data-delete-gate.mjs')).studioDataDelete(args, { studioData: deps.studioData ?? studioData, ...deps.destructive, signal: ctx?.mcpReq?.signal ?? null })));
   server.registerTool('studio_open', { title: 'Open a module from the organization', description: 'Native open that keeps the upload linkage Publish needs. A module opened from a local file cannot be published.', inputSchema: z.object({ module: z.string().min(1), localOml: z.string().optional().describe('Open this local .oml instead (merge experiments only, never to publish).'), pid: pidSchema }).strict(), annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, wrap(async ({ module, localOml, pid }) => {
     const open = resolveOpenTarget(module, readCatalog());
@@ -243,7 +288,7 @@ export async function createFacadeServer({ env = process.env, access, deps = {} 
     description: 'The one call that changes an open ODC module: deliver directly, with no separate proof (ssam_job), preview or merge step. In order: a fresh capture of the module as it is now in the Studio (Studio edits included), the kernel build (an identical delivery reuses it), the candidate checked against that capture (no new errors or warnings; NO_CHANGE when it changes nothing) and the native merge with its equivalence verification. It stops on the first refusal, before any change, with the fix and every problem at once (e.g. ODC_STRUCTURE_PUBLIC_IN_APP, PREFLIGHT_REFUSED): a refused job comes back ONCE with every problem of every phase over the capture (the job alone, the base, the apply, the Verify of the candidate), problems[] with phase, op, pointer, code, message, fix and the patch of each certain fix (identical ones grouped with their pointers) and verifyRan; correct all of them in one call with patch (the patches returned plus your fixes; a path may name elements: actions/<Action>/steps/<as>/...) and basedOn {job, sha256}, or with only the changed or new actions as a partial job plus basedOn; never rewrite the whole job. module: the open module, or the app name the person sees ("QuizLive Web" reaches QuizLiveWeb); otherwise the answer lists openModules. With job: module, owners and changes are required. Producers named by reference ops are captured from the consumer session automatically, system libraries included. until=build|check-base|preview stops before the merge, only when the person asks to review first. publish:true publishes in the same call after a clean merge, with the words of authorize or the standing grant of the app ("delivered and published", publish {outcome, version, messages}); a merge that is not clean skips it; a failed publication answers code PUBLISH_FAILED with the studio_publish continuation, never a new delivery. An uncertain merge lists each divergence and is never retried: read receipts and journal.',
     inputSchema: z.object({ feature: z.string().min(1), module: z.string().min(1).optional(), job: z.string().min(1).optional().describe('Absolute path or relative to the SSAM-Hybrid-ODC root.'),
       owners: z.array(z.string().min(1)).min(1).optional(), changes: z.array(z.string().min(1)).min(1).optional(),
-      output: z.string().min(1).optional(), until: z.enum(['snapshot', 'build', 'check-base', 'preview', 'merge']).default('merge'),
+      autoPatch: z.boolean().optional(), output: z.string().min(1).optional(), until: z.enum(['snapshot', 'build', 'check-base', 'preview', 'merge']).default('merge'),
       publish: z.boolean().optional().describe('Alone: true also publishes after a clean merge (merged and strictlyEqual); any other merge outcome skips it (publish.outcome "skipped"). Requires until "merge".'),
       authorize: z.string().min(8).optional().describe('Alone: the user\'s own words for publish:true, quoted, naming the app; without them the standing grant of the app is used, else the delivery is refused before anything is built.'),
       producers: z.record(z.string(), z.string().min(1)).optional().describe('Producer bindings, as o11_deliver: {Name: absolute path of a capture .avsig (studio_reference_snapshot) or producer .oml, or "published"}; (System) and System are one producer. Without it, each producer is captured from the consumer session.'),

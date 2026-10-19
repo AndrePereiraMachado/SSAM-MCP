@@ -19,7 +19,7 @@ With several ODC Studios open, pass `pid`. Never ask the person to close or rest
 - `studio_open {module}` opens a module from the organization (the upload link Publish needs); `studio_close {module}` closes unmodified copies.
 - `studio_snapshot {module}`, `studio_latest {module}`, `studio_consumers {module}`, `studio_reference_producers {module}` (the producers the open consumer can reference, read only), `studio_reference_snapshot {module, producer, output}`.
 - `ssam_app_url {app, screen}`: the home and screen URLs of an app; it opens nothing.
-- `studio_data {module, entity}`: development database records; writes are `studio_data_insert`, `studio_data_update`, `studio_data_delete` with the user's words.
+- `studio_data {module, entity}`: development database records; writes are `studio_data_insert`, `studio_data_update`, `studio_data_delete` with the user's words. File loads use `files:[absolute paths]` (JSON, JSONL, CSV) and REQUIRE `keys` (unique, non-null natural keys), with `columns`, `references` and `dryRun` (per row: insert, update current -> new, unchanged). Equal rows skip and missing rows insert (an update with `insertMissing:false` refuses absent keys); a key that exists with other values is an overwrite: the call stops before any write with `updatePreview` and writes only with `confirmUpdates {previewSha256, authorize}` carrying the owner's next message, which states that row count. One refusal before any write; the same `operationId` resumes by re-reading the keys (the load's words come from its plan). `close {preview:true}`, then `close {previewSha256, authorize}` with the owner's words stating the rows left unwritten.
 
 ## Change and deliver
 

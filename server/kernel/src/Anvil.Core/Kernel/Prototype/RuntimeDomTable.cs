@@ -108,6 +108,11 @@ public static class RuntimeDomTable
         new("IImage", "img", A(("data-image", "")), "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0),
         new("IRadioGroup", "div", A(("data-radio-group", "")), "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0),
         new("IRadioButton", "input", A(("data-radio-button", ""), ("type", "radio")), "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0),
+        // The native Table (a data table, ScreenHtmlTables.NativeTable): table > thead > tr > th per header cell, tbody > tr > td per
+        // row cell of each record (the renderers write the thead, tbody and rows; PrototypeRender, ScreenVisual.Predict).
+        new("ITableRecords", "table", None, "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0 + "; table > thead > tr > th, tbody > tr > td per record"),
+        new("IHeaderCell", "th", None, "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0),
+        new("IRowCell", "td", None, "name", NoRuntimeClasses, NoWrappers, RuntimeStatus.Inferred, Stage0),
     ];
 
     private static readonly RuntimeDomRow[] O11Rows = Common(RuntimeStatus.Evidence);

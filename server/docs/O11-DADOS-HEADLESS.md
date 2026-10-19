@@ -153,6 +153,155 @@ Para seed repetivel, consulte uma chave natural unica (por exemplo SeedCode),
 insira apenas ausentes e use os IDs retornados nas tabelas filhas. Recibos evitam
 repetir a operacao; nao substituem a unicidade do banco entre pedidos distintos.
 
+## Carga a partir de arquivo
+
+Use uma chamada de `o11_data` com `request.operation:"insert"` ou `"update"`,
+`entity` e `files:[caminhos absolutos]`, no lugar de `records`. Os formatos sao
+JSON (array ou envelope com `records`), JSONL/NDJSON e CSV UTF-8 com cabecalho.
+Limites: 1000 arquivos, 64 MiB por arquivo, 256 MiB no total. O separador CSV
+padrao e virgula; declare `delimiter` para outro, sem deteccao automatica.
+
+`columns` mapeia nomes exatos ou ignora uma coluna com null. Celula CSV vazia
+e atributo ausente: insert usa o default do banco, update nao toca na celula.
+Null explicito so em JSON/JSONL. `references` resolve uma FK pela chave natural
+do pai, somente em entidades do proprio modulo no O11. `keys` declara a chave
+natural obrigatoria do alvo, em toda carga por arquivo, inclusive dryRun.
+Insert e update fazem upsert: chave igual com valores iguais nao escreve;
+chave ausente insere. Valores diferentes numa chave existente sobrescrevem uma
+linha: por decisao do dono de 17/10/2026 (CX13 U1, extensao da regra destrutiva
+da CX15) a chamada para ANTES de qualquer escrita com `updatePreview` (linha,
+identificador, valor atual -> novo, contagens) e so escreve com
+`confirmUpdates:{previewSha256,authorize}`, cujas palavras sao a proxima mensagem
+do dono depois da previa, pela regra unica da CX15 (revisao 6): nunca vistas antes
+no host (nem as da carga, nem as de outra ferramenta destrutiva, nem o `ownerRequest`),
+com o numero exato de linhas, pelo menos 5 s depois da previa, dentro de 30 min; a
+previa e da carga que a fez (operationId e fingerprint) e concede uma vez so. Texto do
+servidor (marcador, `<...>`, `sha256:<hex>`) como palavras e WORDS_REQUIRED antes de
+qualquer leitura. O kernel recebe `sha256:<hex>` das palavras; plano, diario e previas
+guardam so o sha256. Vale para insert que encontra a
+chave, update, rechecagem e reconciliacao que encontram outro valor (inclusive de
+outro escritor). Linhas novas nao pedem palavras. Todo recibo (completo, parcial,
+incerto, closed) guarda `updatedRows` com o valor anterior e o novo. `insertMissing:false` num update recusa a chave
+ausente com DATA_KEY_NOT_FOUND (nunca insere um erro de digitacao); sem ele o
+update continua upsert. O identificador auto-number (gerado pelo servidor) nao
+pode fazer parte de keys nem dos candidatos: DATA_LOAD_KEY_NOT_NATURAL evita
+confundir ID de correlacao com chave persistida. O O11 usa o autoNumber do schema;
+um identificador que nao e auto-number (Integer sem auto-number, Text Code) e a
+chave unica da propria entidade: vale como key e e o primeiro candidato da
+continuation dryRun. No ODC a bridge informa identifierAutoNumber; sem ele, um
+identificador nao inteiro conta como nao gerado e um inteiro continua recusado
+com a saida possivel (outras keys de negocio, ou bridge que informe o dado). Texto e comparado exatamente, incluindo maiusculas.
+
+A carga valida todos os arquivos e todas as operacoes antes do primeiro lote.
+Uma recusa agrega arquivo, linha e coluna; `problemsFile` guarda todos os detalhes.
+Cada grupo tem um pointer por arquivo e coluna; linhas usam a numeracao fisica
+do arquivo, inclusive no CSV com cabecalho ou celulas de varias linhas.
+Arquivos repetidos por caminho ou SHA-256, keys nulas/ausentes/repetidas e linhas
+sem atributos a escrever sao recusados antes de qualquer lote. Sem keys a recusa
+DATA_LOAD_KEYS_REQUIRED agrega candidatos unicos e nao nulos do arquivo e indices
+unicos do esquema. So um indice unico do modelo vira continuation, e sempre como
+dryRun; uma coluna unica so no arquivo nunca e escolhida: e lista para o dono.
+Linhas identicas sem chave natural exigem corrigir a fonte, nunca inventar IDs.
+No update, o identificador sozinho nao conta como atributo a escrever.
+`dryRun:true` retorna as contagens sem autorizacao, operationId ou escrita, e por
+linha insere / atualiza (atual -> novo) / mantem em `rowsPreviewFile`; havendo
+sobrescritas, traz a `updatePreview` que as palavras do dono podem confirmar.
+Cada dryRun refaz o plano e as leituras; nunca reutiliza contagens de outro ensaio.
+Na escrita, forneca as palavras da pessoa e um `operationId` UUID estavel.
+`batchSize`: 1..1000, default 100. `deadlineMs`: 1000..120000, default 60000.
+
+Plano, diario e recibo ficam em `<work>/loads/<operationId>/`. Mesmo id com arquivo
+ou opcoes diferentes recusa; lotes concluidos nao sao reenviados. Se o prazo
+terminar, use a mesma chamada da continuation. Uma resposta perdida e resolvida relendo as keys do lote, inclusive no O11
+quando o recibo nativo e recuperavel; nunca reenvia o lote as cegas. As palavras ficam fixadas no plano e sao usadas byte a byte em cada
+lote; as palavras de cada retomada ficam no diario. O SHA-256 do OML tambem faz
+parte da identidade da carga O11.
+
+Um erro que prova nenhum envio permite retomar o mesmo id de lote. Um relatorio
+completo de falha parcial guarda os IDs escritos e os motivos por linha: a
+retomada envia somente as linhas que falharam, com outro id de lote. Um recibo
+completed do kernel conserva seus IDs, inclusive se a releitura acusou diferenca.
+Perda de transporte ou resultado explicitamente incerto exige reconciliacao;
+releia as keys do lote antes de escrever o que falta ou mudou. Nao ha caminho
+de escrita por arquivo sem keys.
+As respostas parciais contam somente linhas com conclusao registrada, incluem
+written e colocam as faixas de linhas incertas em uncertainRows.
+
+A carga tem uma trava exclusiva com PID; somente um PID encerrado permite
+recuperar uma trava velha. A reserva canonica tem escopo por journalRoot: O11
+normaliza host (minusculas, sem porta padrao/barra final) e usa modulo/entidade
+resolvidos; ODC usa tenant e moduleKey/entityKey do produtor, incluindo referencias.
+Insert/update inline conservam semantica nativa e passam pela mesma reserva.
+Outra carga aberta no mesmo alvo canonico e
+recusada com o id da dona. A retomada relê as chaves ainda nao enviadas; cancelar
+para entre lotes, conservando a trava de escrita ate o lote em voo terminar.
+O recibo lista SHA-256,
+contagens e regras aplicadas; listas grandes ficam no arquivo do recibo.
+
+O ODC oferece as mesmas opcoes em `studio_data_insert` e `studio_data_update`,
+com `authorize`. Seus recibos declaram `readback:"not available"`; lote pendente
+so e reconciliado por chaves, nunca reenviado as cegas.
+O ODC converte Text vazio em null: a regra odc-empty-text-null informa a
+quantidade no plano e no recibo, inclusive no dryRun. Um evidence parcial so e
+aceito quando count e request.records correspondem ao lote; arquivo remoto,
+evidence de outro lote ou relatorio incompleto conservam resultado incerto.
+
+Na resposta ODC, um evidence local valido decide antes de outcome e gate da
+bridge. Uma falha parcial pode vir como gate_refused depois de gravar as linhas
+boas: seus IDs e falhas por linha continuam autoritativos. Timeout com outcome
+uncertain e gate studio_busy, ou native_error sem relatorio, ficam incertos.
+Nao enviado exige prova, como sent:false, submitted:0, Studio ausente ou
+gate_refused sem evidence, desde que o texto nao afirme "N of M records failed".
+Essa afirmacao prova envio mesmo se WithoutStack cortar o caminho do evidence:
+stack "at ...", prosa "at least..." ou valor PostgreSQL ecoado conservam uncertain.
+Success com ID e texto de erro e contraditorio:
+fica incerto nas duas faixas e nunca e reenviado automaticamente, nem por
+reconciliacao de keys na mesma carga.
+
+A reserva por entidade protege cargas que ainda podem progredir, incluindo
+continuacoes por prazo ou cancelamento. `ok:false` sozinho nunca libera a reserva.
+Falhas com linhas restantes, not-submitted, pending apos processo morto, uncertain
+com keys, erros transitorios de leitura/tenant e argumento trocado continuam
+resumable. Uma retomada sem palavras usa as do plano (load-authorization-from-plan).
+A resposta incerta de uma carga com keys declara `outcome:"reconcilable"`: a
+mesma chamada a reconcilia relendo as keys. next e continuation apontam a mesma acao segura
+(retomada original ou previa de encerramento), e outra carga recebe a dona. As keys das linhas failed
+sao relidas antes de retomar, como as de linhas ainda nao enviadas.
+
+Somente completed ou closed libera uma reserva que ja enviou dados. Nao existe
+mais encerramento automatico por incerteza sem keys: arquivos exigem keys.
+Todo estado retomavel tem saida explicita na mesma ferramenta e operationId:
+`close:{preview:true}` lista por arquivo/linha successfulRows, failedRows,
+uncertainRows, notSentRows e unchangedRows, contagens e sha256 do snapshot.
+Depois de revisar, `close:{previewSha256,authorize}` exige as palavras do dono
+dadas depois da previa, nunca vistas antes, com o numero de linhas que ficam sem
+escrita (falhas + incertas + nunca enviadas), pelo menos 5 s depois da previa; a
+continuation da previa nao carrega as palavras da carga. Grava closed e libera a reserva. Previa desatualizada exige revisar nova previa.
+Arquivo editado, falha deterministica, cancelamento e reconciliacao ambigua ou
+contraditoria oferecem esse caminho; nenhuma confirmacao e presumida. Fechar
+nao desfaz dados e nao transforma incerteza em falha. Qualquer retomada closed
+recebe DATA_LOAD_CLOSED com receiptFile e linhas preservadas, sem nova escrita.
+PID morto recupera a trava de execucao, mas nao abandona a reserva resumable.
+Uma reserva sem plano validado e sem envio cujo processo morreu (insert/update
+inline morto na chamada nativa, ou carga morta antes de plan.json) e removida pela
+proxima chamada; com o dono vivo, BUSY diz `ownerHasPlan:false` e a saida e repetir
+a mesma chamada. A maquina
+de estados completa esta em [CX13-CICLO-CARGA.md](CX13-CICLO-CARGA.md).
+
+Reconciliacao bem-sucedida por keys limpa nativeOk, code e error transitorios
+do lote concluido. O historico nativo fica no diario, sem contaminar ok:true
+com DATA_OUTCOME_UNKNOWN ou "do not retry" no recibo final.
+
+Uma recusa na retomada informa written a partir do diario e aponta receiptFile
+da carga original; nao afirma zero escritas quando lotes anteriores ja gravaram.
+Se a carga ainda e resumable, siga a continuation para retomar ou revisar o encerramento;
+nao abra outra carga enquanto a antiga ainda puder escrever. Uma carga closed
+exige inspecao do efeito real antes de uma carga nova com keys. No discover,
+abrir/abra/open/reabrir/reopen nao sao verbos de carga. O insert por arquivo
+exige carregar/load/importar e fonte explicita; formato, destino arquivo e
+fonte de registros sao vetados por gramatica de leitura/exportacao, nao por
+frases prontas. Palavras save/salvar/export como valores de dados nao vetam carga.
+
 ## Usuarios e papeis (pacote de 06/10, A13)
 
 `o11_data` continua recusando os modulos (System) e Users, para leitura e escrita.

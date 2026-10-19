@@ -11,7 +11,9 @@ public static class ScreenHtmlEditBattery
 {
     public sealed record Edit(string Kind, List<string> Edits, string Expected, string Note);
 
-    public static readonly string[] Kinds = ["class", "text", "expression", "child", "remove", "swap", "event"];
+    // column: a whole column of a native Table removed, swapped with the next one or added; table: a new data table (the native
+    // Table) in a container, over a list the page has (the review of round 1, M4). Last, so the edits of the other kinds stay.
+    public static readonly string[] Kinds = ["class", "text", "expression", "child", "remove", "swap", "event", "column", "table"];
     private static readonly HashSet<string> DataTags = new(StringComparer.Ordinal) { "var", "aggregate", "data-action", "action", "event", "style", "slot", "content", "os-opaque" };
 
     // removable: whether nothing outside uses the element k (a removal of a used element is refused, HTML_DELETE_IN_USE).
@@ -34,10 +36,17 @@ public static class ScreenHtmlEditBattery
                 "text" => widgets.Where(n => PlainRuns(n).Count > 0).ToList(),
                 "expression" => widgets.Where(n => ExpressionRuns(n).Count > 0 || n.Get("if") is { Length: > 0 } || n.Attributes.Any(a => a.Key.StartsWith(':') && a.Value.Length > 0)).ToList(),
                 "child" => widgets.Where(n => n.Tag is "div" && n.Get("else") == null || n.Get("html") == null && !ScreenHtml.ReservedTags.Contains(n.Tag) && !ScreenHtml.VoidTags.Contains(n.Tag) && n.Tag != "list" && n.Get("list") == null).ToList(),
+                // A cell of a native Table is half of a column (its header cell and its row cell): removing or moving one alone is a
+                // column change the edit refuses, never a leaf edit.
                 "remove" => widgets.Where(n => !n.Children.Any(c => !c.IsText) && n.Get("else") == null && n.Tag is not ("Block" or "placeholder") && parents.TryGetValue(n, out var p) && p != top
-                    && (removable == null || removable(n.Get("k")!))).ToList(),
-                "swap" => widgets.Where(n => SwapPair(n, parents) != null).ToList(),
+                    && n.NativeKind == null && (removable == null || removable(n.Get("k")!))).ToList(),
+                "swap" => widgets.Where(n => n.NativeKind == null && SwapPair(n, parents) != null).ToList(),
                 "event" => widgets.Where(n => Event(n, actions) != null).ToList(),
+                "column" => widgets.Where(n => n.Tag == "table" && ScreenHtmlTables.NativeTable(n) is { } t && t.HeaderCells.Count > 0 && t.HeaderCells.Count == t.RowCells.Count
+                    && t.HeaderCells.Concat(t.RowCells).All(c => c.Get("k") != null)).ToList(),
+                // A container that holds a List or a Table already takes a Table (a placeholder of a pattern may refuse one, as
+                // in an ODC customer app): the new table goes beside it, over its list.
+                "table" => widgets.Where(n => n.Tag == "div" && n.Attributes.All(a => a.Key is "k" or "class" or "id") && SiblingList(n) != null).ToList(),
                 _ => [],
             };
             var taken = 0;
@@ -159,6 +168,43 @@ public static class ScreenHtmlEditBattery
                 editRoot = node;
                 break;
             }
+            case "column": {
+                // A whole column: its header cell and its row cell together (the platform removes and adds them so).
+                var table = ScreenHtmlTables.NativeTable(node)!;
+                var columns = table.HeaderCells.Count;
+                var i = random.Next(columns);
+                var variant = columns < 2 ? 2 : random.Next(3);
+                var (header, cell) = (table.HeaderCells[i], table.RowCells[i]);
+                if (variant == 0) {
+                    table.HeadRow.Children.Remove(header); table.BodyRow.Children.Remove(cell);
+                    note = "removed the column " + header.Get("k") + "/" + cell.Get("k") + " of " + node.Get("k");
+                } else if (variant == 1) {
+                    var j = i + 1 < columns ? i + 1 : i - 1;
+                    Swap(table.HeadRow, header, table.HeaderCells[j]); Swap(table.BodyRow, cell, table.RowCells[j]);
+                    note = "swapped the columns " + i.ToString(CultureInfo.InvariantCulture) + " and " + j.ToString(CultureInfo.InvariantCulture) + " of " + node.Get("k");
+                } else {
+                    table.HeadRow.Children.Insert(table.HeadRow.Children.IndexOf(header), Element("th", [], "C2"));
+                    table.BodyRow.Children.Insert(table.BodyRow.Children.IndexOf(cell), Element("td", [], "c2"));
+                    note = "added a column before " + header.Get("k") + " in " + node.Get("k");
+                }
+                editRoot = node;
+                break;
+            }
+            case "table": {
+                // A new data table, its classes written (the Studio's would be the reading's otherwise), over a list of the page.
+                for (var p = node; p != null; p = copyParents.TryGetValue(p, out var up) ? up : null) if (p.Tag is "a" or "button" or "label") return null;
+                var source = SiblingList(node)!;
+                var headRow = Element("tr", [new("class", "ssam-c2-head")], null); headRow.Children.Add(Element("th", [], "C2"));
+                var bodyRow = Element("tr", [new("class", "ssam-c2-row")], null); bodyRow.Children.Add(Element("td", [], "c2"));
+                var head = Element("thead", [], null); head.Children.Add(headRow);
+                // As the reading writes it (its list on the table, before its class): the text read back is the text written.
+                var body = Element("tbody", [], null); body.Children.Add(bodyRow);
+                var added = Element("table", [new("list", source), new("class", "ssam-c2-new")], null); added.Children.Add(head); added.Children.Add(body);
+                var places = Enumerable.Range(0, node.Children.Count + 1).Where(i => !(NextElement(node, i - 1) is { } after && after.Get("else") != null && after.Attributes.Count == 1)).ToList();
+                node.Children.Insert(places[random.Next(places.Count)], added);
+                editRoot = node; note = "new data table over " + source + " in " + node.Get("k");
+                break;
+            }
             default: return null;
         }
         // The edit is the element with a k that holds the change (a slot is its block instance's); an If with its else.
@@ -172,6 +218,16 @@ public static class ScreenHtmlEditBattery
             text0 += ScreenHtmlText.Write(elseNode);
         return new Edit(kind, [text0], ScreenHtmlText.WithoutKeys(ScreenHtmlText.Write(copy)), note);
     }
+
+    private static void Swap(ScreenHtml.Node parent, ScreenHtml.Node a, ScreenHtml.Node b)
+    {
+        var ia = parent.Children.IndexOf(a); var ib = parent.Children.IndexOf(b);
+        (parent.Children[ia], parent.Children[ib]) = (parent.Children[ib], parent.Children[ia]);
+    }
+
+    // The list of a List or Table the container holds (its source is in scope there), for a new data table beside it; null without.
+    private static string? SiblingList(ScreenHtml.Node container) =>
+        container.Children.Where(c => !c.IsText).Select(c => c.Get("list")).FirstOrDefault(l => l is { Length: > 0 });
 
     private static ScreenHtml.Node Element(string tag, List<KeyValuePair<string, string>> attributes, string? run)
     {

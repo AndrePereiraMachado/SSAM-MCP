@@ -27,8 +27,11 @@ const opensSystem = a => (O11_STUDIO_OPENS.has(a.command) || (a.command === 'wai
   && typeof namedModule(a) === 'string' && systemModuleName(namedModule(a)) != null;
 const O11_DATA_WRITES = new Set(['insert', 'update', 'delete']);          // o11_data through the Studio's Edit Data
 // o11_data request: one op, or {authorization?, batch:[op]} (contract I12): a batch with any write is a write.
-const o11DataWrites = request => O11_DATA_WRITES.has(request?.operation)
-  || (Array.isArray(request?.batch) && request.batch.some(op => O11_DATA_WRITES.has(op?.operation)));
+// The close preview of a file load (close:{preview:true}, or close without previewSha256) reads its journal and writes
+// no data, like a dryRun (CX13 review 5, F12); its confirmation (close.previewSha256) is a write.
+const closePreviewOnly = a => a?.close != null && typeof a.close === 'object' && (a.close.preview === true || !a.close.previewSha256);
+const o11DataWrites = request => (!request?.dryRun && !closePreviewOnly(request) && O11_DATA_WRITES.has(request?.operation))
+  || (Array.isArray(request?.batch) && request.batch.some(op => !op?.dryRun && O11_DATA_WRITES.has(op?.operation)));
 const SC_SESSION_WRITES = new Set(['sign-in', 'web-sign-in', 'close']);   // Studio login dialog / Service Center window
 // The Service Center deletes (CX15 DESTRUCTIVE_TOOLS): previewed, then executed with the confirmationToken.
 const SC_DESTRUCTIVE = new Set(['delete', 'module-delete', 'extension-delete', 'application-delete', 'solution-delete', 'db-connection-delete']);
@@ -62,7 +65,7 @@ export const STUDIO_WRITE_TOOLS = Object.freeze({
   studio_deliver: a => !ODC_DELIVER_READS.has(a.until ?? 'merge'),
   studio_merge: always, studio_publish: always, studio_create: always, studio_close: always,
   studio_create_app: a => (a.action ?? 'create') === 'create', // templates is a read
-  studio_refresh_references: always, studio_data_insert: always, studio_data_update: always, studio_data_delete: always,
+  studio_refresh_references: always, studio_data_insert: a => !a.dryRun && !closePreviewOnly(a), studio_data_update: a => !a.dryRun && !closePreviewOnly(a), studio_data_delete: always,
   studio_dismiss_dialog: always, studio_open: always,
   // Passthrough of any bridge command (stop included): treated as a write, except publish-log, a read of the messages
   // pane the bridge answers even while another command runs.
@@ -90,8 +93,10 @@ export const PURE_READ_OPERATIONS = Object.freeze({
   o11_extension: actionReads(['read']),
   o11_data: a => {
     const ops = Array.isArray(a.request?.batch) ? a.request.batch : [a.request];
-    return ops.length > 0 && ops.every(op => ['read', 'read-all'].includes(op?.operation));
+    return ops.length > 0 && ops.every(op => ['read', 'read-all'].includes(op?.operation) || (!Array.isArray(a.request?.batch) && (op?.dryRun === true || closePreviewOnly(op))));
   },
+  studio_data_insert: a => a.dryRun === true || closePreviewOnly(a), // CX13 F12: a dryRun and a close preview write no data
+  studio_data_update: a => a.dryRun === true || closePreviewOnly(a),
   o11_studio: a => opensSystem(a) || ['status', 'errors', 'windows'].includes(a.command)
     || (a.command === 'snapshot' && !namedModule(a))
     || (a.command === 'wait' && a.args?.condition === 'signed-in'),

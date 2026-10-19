@@ -45,11 +45,14 @@ export function failureOf(run) {
     const m = OP_FAILURE.exec(error);
     Object.assign(failure, m ? { stage: 'kernel', op: Number(m[1]), verb: m[2], exception: m[3] ?? null, message: m[4].trim() } : { stage: 'runner', message: String(error).trim() });
   }
-  const v = saved?.data?.validation;
-  if (v && saved?.data?.accepted === false) {
+  const receipt = saved?.data ?? saved ?? run?.result?.data ?? run?.result ?? run?.data;
+  const v = receipt?.validation;
+  if (v && receipt?.accepted === false) {
     const pick = list => (list ?? []).map(x => ({ id: x.id, type: x.type ?? null, path: x.path ?? x.element ?? null, detail: x.detail ?? x.why ?? null }));
-    failure.verify = { isValid: saved.data.isValid ?? null, expectedValid: saved.data.expectedValid ?? null, unexpected: pick(v.unexpected), missingExpected: pick(v.missingExpected), ambiguous: pick(v.ambiguous) };
-    if (failure.stage === 'unknown') failure.stage = 'verify';
+    failure.verify = { isValid: receipt.isValid ?? null, expectedValid: receipt.expectedValid ?? null, unexpected: pick(v.unexpected), missingExpected: pick(v.missingExpected), ambiguous: pick(v.ambiguous) };
+    // A summary error does not turn a saved rejected Verify result into a runner
+    // failure. Both auto and off expose the same validation/expectation contract.
+    failure.stage = 'verify';
   }
   return failure;
 }

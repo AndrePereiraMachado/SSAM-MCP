@@ -37,8 +37,10 @@ internal static class StudioBornValues
     private static readonly string[] BlockKinds = ["MobileBlock", "WebBlock"];
 
     /// <summary>The version of the recipe (part of the Studio identity a measurement is kept under): raise it on every change of
-    /// what is created or how. 3: in a fresh UI flow with the theme of the context, never in the first flow of the module.</summary>
-    public const int Recipe = 3;
+    /// what is created or how. 3: in a fresh UI flow with the theme of the context, never in the first flow of the module. 4: the
+    /// native Table and its cells (the element table reads them, ScreenHtml.WidgetTags); a kind may be created in the rows of a
+    /// Table created before it (a header cell in its HeaderRow).</summary>
+    public const int Recipe = 4;
 
     internal sealed record Measured(
         SortedDictionary<string, SortedDictionary<string, string>> Born,
@@ -172,11 +174,17 @@ internal static class StudioBornValues
         var widgetKinds = ScreenHtml.WidgetTags.Keys.Where(k => k is not ("MobileBlockInstanceWidget" or "PlaceholderWidget")).Concat(["List", "AdvancedHtml"])
             .Distinct().Order(StringComparer.Ordinal).ToList();
         // Each kind under the first parent that takes it: the page's container, the screen, then what was created before it
-        // (a radio button in its group, a list item in its list).
+        // (a radio button in its group, a list item in its list) and the rows of a Table (a header cell in its HeaderRow, a row
+        // cell in its Row).
         bool Place(string kind, List<IObjectSignature> parents, string suffix)
         {
             foreach (var parent in parents.ToList())
-                if (Make(parent, kind) is { } made) { Record(made, suffix); parents.Add(made); return true; }
+                if (Make(parent, kind) is { } made) {
+                    Record(made, suffix); parents.Add(made);
+                    foreach (var row in new[] { "HeaderRow", "Row" })
+                        if (r.PropertyOf(made, row)?.Invoke() is IObjectSignature held) parents.Add(held);
+                    return true;
+                }
             return false;
         }
         var parents = new List<IObjectSignature> { page, host };

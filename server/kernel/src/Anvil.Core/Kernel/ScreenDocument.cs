@@ -40,7 +40,7 @@ public static partial class ScreenDocument
         ["form"] = "data.html that starts with <screen name=\"...\"> or <block name=\"...\">: one whole new screen or block in ssam-html/1, the text ssam_map view html reads; no parent",
         ["root"] = "<screen name flow? title roles actions data-actions description os-*> or <block name ...>; flow defaults to the module's one UI flow (or MainFlow); the content goes inside the layout block: <Block name=\"LayoutTopMenu\"><slot name=\"MainContent\">...</slot></Block>",
         ["data"] = "<input name type default/>, <var name type default/>, <aggregate name from=\"Entity\" join=\"Other on <condition>; ...\" where=\"<condition>\" sort=\"Entity.Attr desc, ...\" max=\"50\"/> (or the long form the reading writes: os-AliasedSource, os-Join, os-Filter, os-Sort), <event name> in a block; types by name (Text, Order Identifier, Order List); an <input> or <event> without mandatory is optional, whatever the Studio gives a fresh one: mandatory=\"True\" makes it mandatory; a join is a left join (os-JoinType for another)",
-        ["widgets"] = "the reading's table (ScreenHtml.Contract().elements): div, form, a, button, input, textarea, select (empty, options, value, label), radio-group, switch, button-group/button-group-item, label (for), img (src), i (icon), upload, popup, <x list=\"Source\">, <div if> + <div else>, <Block name :Input @Event> + <slot name>, {{ expression }}, text; any other tag of the platform is an HTML Element; os-<Property> for any other property",
+        ["widgets"] = "the reading's table (ScreenHtml.Contract().elements): div, form, a, button, input, textarea, select (empty, options, value, label), radio-group, switch, button-group/button-group-item, label (for), img (src), i (icon), upload, popup, <x list=\"Source\">, a data table (<table> with one <thead><tr> of <th> and one template <tbody><tr> of <td>, list=\"Source\" on the table, its tbody or its row) is the native Table, one column per <th>/<td> pair, <div if> + <div else>, <Block name :Input @Event> + <slot name>, {{ expression }}, text; any other tag of the platform is an HTML Element; os-<Property> for any other property",
         ["events"] = "on<event>=\"Destination(Param = expression, ...)\" or Destination(expression, ...) by position over its inputs: onclick, onchange, onready... and HTML events (onblur, onkeypress) of an HTML Element or a Container; @Event on a <Block>; os-on<event>.<Property>",
         ["actions"] = "actions=\"A, B\" names the screen actions; a logic op of the same job, after this op, declares each one (a flow text \"action <Name>.A\", or kind screen with owner IMobileScreen:<Name>): born before the content so the events bind, filled in place; data-actions=\"D\" with \"data action <Name>.D\" (or kind data)",
         ["names"] = "every name resolves as the reading's: the page, the module and its references, the other screens, the types; Kind:Name or Owner.Name when one is not enough",
@@ -91,6 +91,49 @@ public static partial class ScreenDocument
     // ---- the owner's rules on what a document writes new (decisions of 2026-10-11) -------------------------------------
     // Visible, JavaScript and JSON already in a screen that was read are kept and listed; a new element never writes them:
     // the refusal brings the pattern (an If around it; the native event; the record or list passed as it is).
+    public const string TablePart = "HTML_TABLE_PART", TableColspan = "HTML_TABLE_COLSPAN", TableColumns = "HTML_TABLE_COLUMNS";
+    internal const string ColspanWhy = ScreenHtmlTables.ColumnSpanWhy;
+
+    /// <summary>The checks of a data table (ScreenHtmlTables.NativeTable) that need no module, each with its certain patch: an
+    /// attribute of its &lt;thead&gt;, &lt;tbody&gt; or &lt;tr&gt; the native Table has no property for (removed; the class of a
+    /// section joins its row's, the List's own attributes beside the list are left out: no refusal); half a column, when colspan
+    /// explains it (the spanned columns written as empty cells), else without patch (which cell is missing is the author's); a cell
+    /// that spans more than one column or row (the owner's decision of 2026-10-19, ScreenHtmlTables.Spans), the patch removing the
+    /// attribute. <paramref name="reading"/>: the table as the reading wrote it (or the table itself, its own reading): what a cell
+    /// of it (its k) has there stays.</summary>
+    internal static IEnumerable<Problem> TableProblems(ScreenHtmlTables.NativeTableShape table, ScreenHtml.Node? reading = null)
+    {
+        foreach (var header in new[] { true, false })
+            foreach (var (part, attribute) in ScreenHtmlTables.PartAttributes(table, header))
+                if (ScreenVisual.MarkerOf(attribute) == null)   // a marker of the engine: its own rule (ReservedMarker)
+                    yield return new(TablePart, part.Line, part.Column, $"<{part.Tag} {attribute}=\"{Clip(part.Get(attribute) ?? "")}\">: {ScreenHtmlTables.PartAttributeWhy}",
+                        "the patch removes it", Correct: new RemoveAttribute(attribute));
+        // A cell spans one column and one row, the edit's rule too (EditPlan.TableRules): every colspan and rowspan written new; a
+        // colspan that explains half a column is below, with the columns it spanned.
+        foreach (var cell in table.HeaderCells.Concat(table.RowCells))
+        {
+            var read = reading != null && cell.Get("k") is { } k ? Descendants(reading).FirstOrDefault(n => n.Get("k") == k) : null;
+            foreach (var (attribute, value) in ScreenHtmlTables.Spans(cell))
+                if (!ScreenHtmlTables.SpanExplained(table, cell, attribute) && read?.Get(attribute) != value)
+                    yield return new(TableColspan, cell.Line, cell.Column, $"{attribute}=\"{Clip(value)}\" on a {(cell.Tag == "th" ? "header" : "row")} cell: {ScreenHtmlTables.SpanWhy(attribute, cell.Tag)}",
+                        $"the patch removes {attribute}", Correct: new RemoveAttribute(attribute));
+        }
+        if (table.HeaderCells.Count == table.RowCells.Count) yield break;
+        // The one rule of colspan, the edit's too (ScreenHtmlTables.SpanExplains; EditPlan.TableRules).
+        if (ScreenHtmlTables.SpanExplains(table))
+        {
+            foreach (var cell in table.HeaderCells.Concat(table.RowCells).Where(c => ScreenHtmlTables.Span(c) > 1))
+                yield return new(TableColspan, cell.Line, cell.Column,
+                    $"colspan=\"{cell.Get("colspan")}\" on a {(cell.Tag == "th" ? "header" : "row")} cell: {ColspanWhy}",
+                    $"the patch writes the <{cell.Tag}> without colspan and {ScreenHtmlTables.Span(cell) - 1} empty <{cell.Tag}></{cell.Tag}> after it, one per column it spanned",
+                    Correct: new SpanToCells("colspan", ScreenHtmlTables.Span(cell)));
+            yield break;
+        }
+        yield return new(TableColumns, table.Table.Line, table.Table.Column,
+            $"the table has {table.HeaderCells.Count} header cells and {table.RowCells.Count} cells in its template row: a column of the native Table is one <th> and one <td>",
+            "give every column one <th> in the header row and one <td> in the template row (an empty <th></th> for a column without a title)");
+    }
+
     private static readonly Regex JsonCall = new(@"\bJSON(Serialize|Deserialize)\s*\(", RegexOptions.Compiled);
 
     public const string ForEach = "HTML_FOREACH";
@@ -113,10 +156,13 @@ public static partial class ScreenDocument
     internal sealed record RewriteStyle(string Css) : Correction;
     /// <summary>data.css written again (the rendered stylesheet of CssCompat); the html stays.</summary>
     internal sealed record RewriteDataCss(string Css) : Correction;
+    /// <summary>A cell that spans columns written as the cells of those columns: the attribute removed and Count - 1 empty cells
+    /// of its tag after it (a native Table has one header cell and one row cell per column).</summary>
+    internal sealed record SpanToCells(string Attribute, int Count) : Correction;
 
     internal sealed record Problem(string Code, int Line, int Column, string Message, string? Fix,
         IReadOnlyList<string>? Candidates = null, (string Attribute, string Wrong, string Right)? Replace = null, JsonArray? Patch = null,
-        Correction? Correct = null, bool InCss = false)
+        Correction? Correct = null, bool InCss = false, string? PatchRule = null, IReadOnlyList<string>? LiteralIdentifiers = null)
     {
         public Correction? Correction => Correct ?? (Replace is { } r ? new ReplaceName(r.Attribute, r.Wrong, r.Right) : null);
     }
@@ -237,19 +283,7 @@ public static partial class ScreenDocument
 
     /// <summary>Whether a value is a script URL: the text, or (an expression {{ ... }}) one of its string literals or their
     /// concatenation, without the spaces and control characters a browser drops, starts with javascript: or vbscript:.</summary>
-    internal static bool ScriptUrl(string value)
-    {
-        static bool Script(string text)
-        {
-            var plain = new string(text.Where(c => c > ' ').ToArray());
-            return plain.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) || plain.StartsWith("vbscript:", StringComparison.OrdinalIgnoreCase);
-        }
-        if (Script(value)) return true;
-        var trimmed = value.Trim();
-        if (!(trimmed.StartsWith("{{", StringComparison.Ordinal) && trimmed.EndsWith("}}", StringComparison.Ordinal))) return false;
-        var literals = Regex.Matches(trimmed[2..^2], "\"((?:[^\"]|\"\")*)\"").Select(m => m.Groups[1].Value.Replace("\"\"", "\"")).ToList();
-        return literals.Any(Script) || literals.Count > 1 && Script(string.Concat(literals));
-    }
+    internal static bool ScriptUrl(string value) => ScreenHtml.ScriptUrl(value);
 
     /// <summary>os-Visible written in another case (OS-VISIBLE, Os-Visible, os-visible): the same property for an author (an
     /// attribute name has no case in HTML), judged as the new Visible it would be (U1), never kept as an inert attribute.</summary>
@@ -261,6 +295,9 @@ public static partial class ScreenDocument
     /// its own reading). <paramref name="block"/>: the document is a block.</summary>
     internal static IEnumerable<Problem> RuleProblems(ScreenHtml.Node node, bool read, Action<string, string>? keep, ScreenHtml.Node? readNode = null, bool block = false)
     {
+        // A data table (the native Table): what its parts say that it cannot hold, and half a column, each with its patch.
+        if (node.Tag == "table" && ScreenHtmlTables.NativeTable(node) is { } table)
+            foreach (var problem in TableProblems(table, read ? readNode ?? node : null)) yield return problem;
         // Review 2, M4: the markers of the native layout block are the engine's (ScreenVisual.AuthorMarkers, the one rule of the
         // three text forms); an element of the reading keeps the one it was read with.
         foreach (var (attribute, value, restore) in ScreenVisual.AuthorMarkers(node, read ? readNode ?? node : null, block))
@@ -350,42 +387,8 @@ public static partial class ScreenDocument
     /// goes through a variable of that type, or the optional input stays empty.</summary>
     internal static bool IsRecordLiteral(string expression) => Regex.IsMatch(expression, @"^\s*\{\s*[A-Za-z_][A-Za-z0-9_]*\s*:", RegexOptions.Singleline);
 
-    // A destination with its arguments: Target, Target(), Target(P = expression, ...) as the reading writes it, or
-    // Target(expression, ...) by position (the inputs of the target in order, as an author writes a call). The target is a
-    // name form of the reading (Name, Kind:Name, Owner.Name, @key); anything else is not a call (JavaScript).
-    private static readonly Regex TargetShape = new(@"^[A-Za-z_@~][A-Za-z0-9_:.@#+/=~\-]*$", RegexOptions.Compiled);
-    private static readonly Regex NamedArgument = new(@"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)\s*(.*)$", RegexOptions.Singleline | RegexOptions.Compiled);
-    internal static bool ParseCall(string text, out string target, out List<(string? Param, string Value)> arguments)
-    {
-        arguments = [];
-        var value = text.Trim();
-        if (value.EndsWith(';')) value = value[..^1].TrimEnd();
-        var open = value.IndexOf('(');
-        target = open < 0 ? value : value[..open].TrimEnd();
-        if (value.Length == 0) return true;
-        if (!TargetShape.IsMatch(target)) return false;
-        if (open < 0) return true;
-        if (!value.EndsWith(')')) return false;
-        var body = value[(open + 1)..^1];
-        if (body.Trim().Length == 0) return true;
-        var parts = new List<string>(); var depth = 0; var inString = false; var start = 0;
-        for (var at = 0; at < body.Length; at++)
-        {
-            var c = body[at];
-            if (inString) { if (c == '"') { if (at + 1 < body.Length && body[at + 1] == '"') at++; else inString = false; } continue; }
-            if (c == '"') inString = true;
-            else if (c is '(' or '[' or '{') depth++;
-            else if (c is ')' or ']' or '}') { if (--depth < 0) return false; }
-            else if (c == ',' && depth == 0) { parts.Add(body[start..at]); start = at + 1; }
-        }
-        if (inString || depth != 0) return false;
-        parts.Add(body[start..]);
-        // Named arguments permit optional spaces around '=' just like the expression-span reader (HtmlText.CallArguments).
-        var named = parts.Select(p => NamedArgument.Match(p)).ToList();
-        if (named.All(m => m.Success)) { arguments.AddRange(named.Select(m => ((string?)m.Groups[1].Value, m.Groups[2].Value))); return true; }
-        foreach (var part in parts) { if (part.Trim().Length == 0) return false; arguments.Add((null, part.Trim())); }
-        return true;
-    }
+    // A destination with its arguments (ScreenHtml.ParseCall: the one call of the text forms, in the file the ODC builder compiles).
+    internal static bool ParseCall(string text, out string target, out List<(string? Param, string Value)> arguments) => ScreenHtml.ParseCall(text, out target, out arguments);
 
     private static string Clip(string text) => text.Length > 80 ? text[..80] + "…" : text;
 
@@ -472,8 +475,15 @@ public static partial class ScreenDocument
         foreach (var p in problems)
         {
             var message = $"{(p.InCss ? "css" : "html")}: line {p.Line} col {p.Column}: {p.Message}";
-            var problem = JobPreflight.Problem(null, p.InCss ? CssPointer(pointer) : pointer, p.Code, "error", message, p.Fix, p.Patch ?? (p.Correction != null ? patch?.DeepClone().AsArray() : null));
+            string? RuleOf(Problem item) => item.PatchRule ?? (item.Code is Script or Visible or Json or "HTML_FOREACH" ? "OWNER_RULE_REWRITE" : null);
+            var problem = JobPreflight.Problem(null, p.InCss ? CssPointer(pointer) : pointer, p.Code, "error", message, p.Fix,
+                p.Patch ?? (p.Correction != null ? patch?.DeepClone().AsArray() : null), patchRule: RuleOf(p));
+            if (p.Patch == null && p.Correction != null && patch != null)
+                problem["patchRules"] = new JsonArray(problems.Where(m => m.Correction != null).Select(m => (JsonNode)JsonValue.Create(
+                    m.Correction is RemoveAttribute or RemoveElement or MoveStyle ? "OWNER_RULE_REWRITE" : RuleOf(m) ?? "")!).ToArray());
             problem["line"] = p.Line; problem["column"] = p.Column;
+            if (p.Correction is SetAttribute attribute) problem["patchFocus"] = new JsonObject { ["attribute"] = attribute.Attribute };
+            if (p.LiteralIdentifiers is { Count: > 0 }) problem["literalIdentifiers"] = new JsonArray(p.LiteralIdentifiers.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray());
             if (p.Candidates is { Count: > 0 }) problem["candidates"] = new JsonArray(p.Candidates.Select(c => (JsonNode)c).ToArray());
             list.Add(JobPreflight.PublicProblem(problem));
         }
@@ -591,6 +601,15 @@ public static partial class ScreenDocument
                 {
                     if (AttributeSpan(tag, attribute) is not var (from, to)) continue;
                     edits.Add((start + from, to - from, " " + attribute + "=" + QuoteAttribute(value), 1));
+                    break;
+                }
+                case SpanToCells(var attribute, var count):
+                {
+                    if (AttributeSpan(tag, attribute) is not var (from, to)) continue;
+                    edits.Add((start + from, to - from, "", 1));
+                    var name = Regex.Match(tag, @"^<([A-Za-z][A-Za-z0-9-]*)").Groups[1].Value;
+                    if (name.Length > 0 && ElementEnd(html, start) is var close and > 0)
+                        edits.Add((close, 0, string.Concat(Enumerable.Repeat("<" + name + "></" + name + ">", count - 1)), 2));
                     break;
                 }
                 case RemoveElement:

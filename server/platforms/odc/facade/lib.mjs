@@ -12,6 +12,7 @@ import { CredentialProfiles } from './credential-profiles.mjs';
 import { readSnapshot, presentReading } from './reader-client.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
+import { agentJoin } from './agent-paths.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { deliverKernel, publishAuthorization, publishDelivered, studioSteps, withMergeCode, withoutStack } from './kernel-delivery.mjs';
 import { resolveApplicationUrls, withAppLinks, appUrlCapability, derivedStageOrigin } from './app-urls.mjs';
@@ -266,15 +267,17 @@ export function busyEvidence({ pid, error, registry = flightRegistry(), lab = da
 const withoutStackText = text => String(text).split(/\r?\n/)[0];
 // Data lane through the bridge: the Studio's own data service (View data / Edit data) on the development
 // database. Records travel in a file under journal\data\requests so JSON never crosses the pipe as words.
-export function recordsFile(records) {
-  const dir = dataPath('journal', 'data', 'requests'); fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, new Date().toISOString().replace(/[:.]/g, '-') + '-' + process.pid + '.json');
+export function recordsFile(records, { name, directory } = {}) {
+  if (name != null && (typeof name !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*\.json$/.test(name) || name.includes('..'))) throw new Error('records file name must be a safe .json basename.');
+  const dir = directory ?? dataPath('journal', 'data', 'requests'); fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, name ?? new Date().toISOString().replace(/[:.]/g, '-') + '-' + process.pid + '.json');
   fs.writeFileSync(file, JSON.stringify(records, null, 2)); return file;
 }
 // CX15 r4 (W-2): a write (insert, update, delete) sends the bridge 'sha256:<hex>' of the owner's words, never the words
 // (the bridge only requires a nonempty --authorize, DataCommands.cs, and keeps it in journal\data and in its report), and
 // the answer drops what the bridge repeats (authorization). deps.studio: the bridge call (tests pass a fake pipe).
-export async function studioData({ op, module, entity, records, ids, fields, limit, offset, out, authorize, pid }, { studio: call = studio } = {}) {
+export async function studioData({ op, module, entity, records, ids, fields, limit, offset, out, authorize, pid, name }, { studio: viaStudio, call: viaCall, writeRecords = recordsFile } = {}) {
+  const call = viaStudio ?? viaCall ?? studio; // CX15 deps.studio and CX13 deps.call: the same bridge call
   const args = [op === 'read' ? 'data' : 'data-' + op, module, entity];
   if (op === 'read') {
     if (limit != null) args.push('--limit', String(limit)); if (offset != null) args.push('--offset', String(offset));
@@ -282,7 +285,7 @@ export async function studioData({ op, module, entity, records, ids, fields, lim
     return call(args, pid);
   }
   if (op === 'delete') { if (!ids?.length) throw new Error('ids are required.'); args.push('--ids', ids.map(String).join(',')); }
-  else { if (!Array.isArray(records) || records.length === 0) throw new Error('records must be a non-empty array of objects.'); args.push('--records-file', recordsFile(records)); }
+  else { if (!Array.isArray(records) || records.length === 0) throw new Error('records must be a non-empty array of objects.'); args.push('--records-file', writeRecords(records, { name })); }
   if (!authorize) throw new Error("authorize is required: the user's own words.");
   args.push('--authorize', hashedWords(authorize));
   return withoutWords(await call(args, pid));
@@ -495,7 +498,7 @@ export async function withFragmentPreview(report) {
         await executor.mirror.put(file, executor.mirror.agentOf(where.rel));
         let agentRoot = null;
         try { agentRoot = executor.link?.info?.()?.agentRoot ?? null; } catch { agentRoot = null; }
-        if (agentRoot) preview.onUserMachine = path.win32.join(agentRoot, ...where.rel.split('/'));
+        if (agentRoot) preview.onUserMachine = agentJoin(agentRoot, ...where.rel.split('/'));
       }
     }
     return { ...report, preview };
@@ -897,7 +900,8 @@ async function hostedDoctor(context) {
   try { info = context.agent?.info?.() ?? null; } catch { info = null; }
   const connected = info?.connected === true;
   check('agent', connected, { agentVersion: info?.agentVersion ?? null, connectedAt: info?.connectedAt ?? null, credential: info?.credential ?? null,
-    ...(connected ? {} : { hint: 'ask the user to start the SSAM agent on their machine (agent\\ssam-agent.ps1 start, docs/AGENTE-CLIENTE.md)' }) });
+    ...(connected ? {} : { hint: info?.agentPlatform === 'darwin' ? 'ask the user to start the SSAM agent on their machine (~/SSAM-Agent/agent/ssam-agent.sh start, docs/AGENTE-MAC.md)'
+      : 'ask the user to start the SSAM agent on their machine (agent\\ssam-agent.ps1 start, docs/AGENTE-CLIENTE.md)' }) });
   const compatible = info?.compatible?.odc ?? null;
   check('versions', compatible?.ok === true, { kernel: info?.kernel?.odc ?? null, bridge: info?.kernel?.odcBridge ?? null,
     studio: info?.studios?.odc?.installed?.version ?? null, ...(compatible && compatible.ok !== true ? { code: compatible.code, hint: compatible.message } : {}) });

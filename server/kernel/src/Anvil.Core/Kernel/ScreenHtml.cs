@@ -32,7 +32,11 @@ public static class ScreenHtml
     // whose default it changes reads at its default (Gap, GridColumns and GridRows of ODC Studio 1.7.28.10873).
     // 4: an event inside a Popup is at the Popup's own default (Transition Fade, the platform's); an expression whose text holds
     // a brace pair of a binding is written whole ({{ text }}), so the decoder never reads it as a binding.
-    public const int Extractor = 8;
+    // 9: a native Table (TableRecords) is the <table> of the language, its list on the table, its HeaderRow the one <tr> of its
+    // <thead> and its Row the one template <tr> of its <tbody> (StyleHeader and StyleRow their class), one <th> and one <td> per
+    // column (HeaderCell, RowCell); 8 wrote it as an os-opaque with its cells inside (the owner's VpBookings bug of 2026-10-18:
+    // a document could not write the native Table, so its data tables were a loose header and a List).
+    public const int Extractor = 9;
 
     public static ScreenHtmlModule<T> Module<T>(T module, ModelReader<T> reader) where T : class => new(module, reader);
 
@@ -44,15 +48,20 @@ public static class ScreenHtml
         ["ButtonGroup"] = "button-group", ["ButtonGroupItem"] = "button-group-item", ["Label"] = "label", ["Image"] = "img", ["Icon"] = "i",
         ["IfWidget"] = "div", ["Popup"] = "popup", ["MobileBlockInstanceWidget"] = "Block", ["PlaceholderWidget"] = "placeholder",
         ["Upload"] = "upload", ["ListItem"] = "list-item", ["Expression"] = "expr", ["TextWidget"] = "text",
+        // A data table (ScreenHtmlTables.NativeTable): the kind of a <table>, <th> and <td> by the shape of the table, never by the tag
+        // alone (an HTML table without a list, or of a reading with a k on its parts, is HTML Elements).
+        ["TableRecords"] = "table", ["HeaderCell"] = "th", ["RowCell"] = "td",
     };
-    // Kinds without a row: written as os-opaque, untouchable (the plan's 1.3: tables and the generic MobileWidget; the
-    // Traditional Web widgets wait for D2). A table keeps its cells' widgets written inside it (OpaqueWithChildren); a
-    // Traditional widget is opaque with its whole subtree.
+    // The kinds of WidgetTags a tag alone never decides (ScreenHtmlTables.KindOf): the shape of the table does.
+    internal static readonly HashSet<string> ShapeKinds = new(StringComparer.Ordinal) { "TableRecords", "HeaderCell", "RowCell" };
+    // Kinds without a row: written as os-opaque, untouchable (the plan's 1.3: the generic MobileWidget; the Traditional Web
+    // widgets wait for D2). A MobileWidget keeps its children's widgets written inside it (OpaqueWithChildren); a Traditional
+    // widget is opaque with its whole subtree.
     internal static readonly HashSet<string> OpaqueKinds = new(StringComparer.Ordinal) {
-        "TableRecords", "HeaderCell", "RowCell", "MobileWidget", "WebBlockInstanceWidget", "WebWidget", "ContainerWidget", "LinkWidget",
+        "MobileWidget", "WebBlockInstanceWidget", "WebWidget", "ContainerWidget", "LinkWidget",
         "ButtonWidget", "CheckBoxWidget", "ExpressionWidget", "InputWidget", "InputPasswordWidget", "ComboBoxWidget", "RadioButtonWidget",
         "TextWidgetWeb", "ImageWidget", "ListRecordsWidget", "EditRecordWidget", "ShowRecordWidget", "UploadWidget", "IfWidgetWeb" };
-    internal static readonly HashSet<string> OpaqueWithChildren = new(StringComparer.Ordinal) { "TableRecords", "HeaderCell", "RowCell", "MobileWidget" };
+    internal static readonly HashSet<string> OpaqueWithChildren = new(StringComparer.Ordinal) { "MobileWidget" };
     // Element names the language spends on its own rows: an HTML Element (AdvancedHtml) whose Tag is one of them carries the
     // html marker; a List with one of the void tags is <list tag>.
     internal static readonly HashSet<string> ReservedTags = new(StringComparer.Ordinal) {
@@ -263,6 +272,9 @@ public static class ScreenHtml
     /// takes an expression; a single word may be a name, so it is never this.</summary>
     internal static bool NotAnExpression(string text)
     {
+        // Native values also carry record literals and record/list mappings. A brace or mapTo outside a literal
+        // announces code structure, even when incomplete: prose and malformed code are then two readings.
+        if (StructuredExpression(text)) return false;
         var operand = false; var i = 0;
         while (i < text.Length) {
             var c = text[i];
@@ -289,6 +301,101 @@ public static class ScreenHtml
             i++;
         }
         return ProseSyntax(text);
+    }
+
+    /// <summary>Whether quoting malformed text has only the prose reading. Scope names and foreign-language markers
+    /// make it a choice, even when the literal patch compiles; syntax rejection alone never proves intent.
+    /// <para>Option B of the owner (2026-10-17): a word of three letters or more one slip from a name the job or the compiled
+    /// page declares (<paramref name="declaredNames"/>: the page's variables, inputs, aggregates, widgets and actions, the
+    /// job's actions and elements) is a choice as well: one letter replaced, removed or added, or two of its letters swapped
+    /// (Hunt, Hnt, Hiint, Hints for Hint; Custmer, Costumer for Customer). A bracket, or an underscore between letters or
+    /// digits, is a code shape (Lista[0], nome_cliente).</para>
+    /// <para>Accepted limit (owner, 2026-10-17): the names of the module and its references (<paramref name="scopeNames"/>)
+    /// count only written exactly or with two neighbouring letters swapped. One letter from a name the job and the page do not
+    /// declare stays certain prose, a System name included (Usr for User, Emal for Email): "Nome" is one letter from System's
+    /// "Name", and no rule of distance alone tells the slip "Nane" from that prose.</para></summary>
+    internal static bool CertainLiteral(string text, IEnumerable<string> scopeNames, IEnumerable<string>? declaredNames = null)
+    {
+        if (!NotAnExpression(text) || text.TrimStart().StartsWith('"') || HoldsBraces(text)
+            || text.IndexOfAny([';', '?', '!', '$', '@', '`', '~', '\\', '(', ')', '"', '+', '-', '*', '/', '=', '<', '>', '&', '[', ']']) >= 0
+            || System.Text.RegularExpressions.Regex.IsMatch(text, @"[\p{L}_][\p{L}\p{Nd}_]*\.[\p{L}_][\p{L}\p{Nd}_]*")
+            || System.Text.RegularExpressions.Regex.IsMatch(text, @"(?<![\p{L}\p{Nd}_])\p{Nd}+[\p{L}_][\p{L}\p{Nd}_]*")
+            || System.Text.RegularExpressions.Regex.IsMatch(text, @"[\p{L}\p{Nd}]_+[\p{L}\p{Nd}]")) return false;
+        var identifiers = LiteralIdentifiers(text);
+        if (identifiers.Count == 0) return false; // Numeric operands with a missing operator are not prose.
+        if (identifiers.Any(n => n.Any(char.IsLower) && n.Skip(1).Any(char.IsUpper))) return false;
+        var scope = new HashSet<string>(scopeNames.SelectMany(n => n.Split('.', StringSplitOptions.RemoveEmptyEntries)), StringComparer.OrdinalIgnoreCase);
+        scope.UnionWith(["True", "False", "and", "or", "not", "like", "mapTo"]);
+        var declared = (declaredNames ?? []).SelectMany(n => n.Split(['.', '/'], StringSplitOptions.RemoveEmptyEntries))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        foreach (var name in identifiers) {
+            if (scope.Contains(name)) return false;
+            var letters = name.ToCharArray();
+            // A transposed known name is still code-intent evidence. A typo must not gain certainty.
+            for (var i = 0; i + 1 < letters.Length; i++) {
+                (letters[i], letters[i + 1]) = (letters[i + 1], letters[i]);
+                if (scope.Contains(new string(letters))) return false;
+                (letters[i], letters[i + 1]) = (letters[i + 1], letters[i]);
+            }
+            // A slip of a name the author has just declared is the realistic typo: never more certain than the name itself.
+            if (name.Length >= 3 && declared.Any(d => OneSlipApart(name, d))) return false;
+        }
+        return true;
+    }
+
+    /// <summary>Whether two words are one slip apart, case ignored: the same word, one letter replaced, removed or added, or
+    /// two of its letters swapped (neighbours, the Damerau transposition, or apart: Costumer for Customer).</summary>
+    internal static bool OneSlipApart(string a, string b)
+    {
+        if (Math.Abs(a.Length - b.Length) > 1) return false;
+        a = a.ToUpperInvariant(); b = b.ToUpperInvariant();
+        if (a.Length == b.Length) {
+            int first = -1, second = -1;
+            for (var i = 0; i < a.Length; i++) {
+                if (a[i] == b[i]) continue;
+                if (first < 0) first = i;
+                else if (second < 0) second = i;
+                else return false;
+            }
+            return second < 0 || a[first] == b[second] && a[second] == b[first];
+        }
+        var (shorter, longer) = a.Length < b.Length ? (a, b) : (b, a);
+        var at = 0;
+        while (at < shorter.Length && shorter[at] == longer[at]) at++;
+        return shorter.AsSpan(at).SequenceEqual(longer.AsSpan(at + 1));
+    }
+
+    /// <summary>Names occurring in the text to be quoted, including inside its strings. Used by the candidate's
+    /// unused-element veto as well as the scope test, without retaining the whole HTML document.</summary>
+    internal static IReadOnlyList<string> LiteralIdentifiers(string text)
+        => System.Text.RegularExpressions.Regex.Matches(text, @"[\p{L}_][\p{L}\p{Nd}_]*")
+            .Select(m => m.Value).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+    private static bool StructuredExpression(string text)
+    {
+        var parentheses = 0;
+        for (var i = 0; i < text.Length;) {
+            var c = text[i];
+            if (c == '"') {
+                i++;
+                while (i < text.Length && !(text[i] == '"' && (i + 1 >= text.Length || text[i + 1] != '"'))) i += text[i] == '"' ? 2 : 1;
+                i++;
+                continue;
+            }
+            if (c == '#') { var end = text.IndexOf('#', i + 1); i = end < 0 ? text.Length : end + 1; continue; }
+            if (c is '{' or '}') return true;
+            if (c == '(') parentheses++;
+            else if (c == ')') parentheses = Math.Max(0, parentheses - 1);
+            else if (c == ':' && parentheses > 0) return true; // Native named call arguments, complete or incomplete.
+            if (char.IsLetter(c) || c == '_') {
+                var start = i++;
+                while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] is '_' or '.')) i++;
+                if (text[start..i].Equals("mapTo", StringComparison.OrdinalIgnoreCase)) return true;
+                continue;
+            }
+            i++;
+        }
+        return false;
     }
 
     // Integration 24-1 familias (review): of what the language's syntax refuses, only what no expression typed wrong can be is
@@ -427,11 +534,18 @@ public static class ScreenHtml
     {
         public string Tag = ""; public List<KeyValuePair<string, string>> Attributes = []; public List<Node> Children = [];
         public string? Text; public int Line, Column;
+        // The kind the shape of its table gives a <th> or <td> of a data table (HeaderCell, RowCell: ScreenHtmlTables.NativeTable).
+        internal string? NativeKind;
         public bool IsText => Text != null;
         public string? Get(string name) { foreach (var a in Attributes) if (a.Key == name) return a.Value; return null; }
     }
 
-    public static Node Parse(string html) => new HtmlParser(html).Document();
+    public static Node Parse(string html)
+    {
+        var document = new HtmlParser(html).Document();
+        ScreenHtmlTables.MarkNativeTables(document);
+        return document;
+    }
 
     private sealed class HtmlParser(string text)
     {
@@ -567,6 +681,61 @@ public static class ScreenHtml
             if (!IsIdentifier(name)) return false;
             arguments.Add((name, part[(eq + 3)..]));
         }
+        return true;
+    }
+
+    /// <summary>Whether a value is a script URL: the text, or (an expression {{ ... }}) one of its string literals or their
+    /// concatenation, without the spaces and control characters a browser drops, starts with javascript: or vbscript:. Here,
+    /// not in ScreenDocument, so the decoder of an edit (ScreenHtmlModule) and the ODC builder that compiles it read the same
+    /// rule.</summary>
+    internal static bool ScriptUrl(string value)
+    {
+        static bool Script(string text)
+        {
+            var plain = new string(text.Where(c => c > ' ').ToArray());
+            return plain.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) || plain.StartsWith("vbscript:", StringComparison.OrdinalIgnoreCase);
+        }
+        if (Script(value)) return true;
+        var trimmed = value.Trim();
+        if (!(trimmed.StartsWith("{{", StringComparison.Ordinal) && trimmed.EndsWith("}}", StringComparison.Ordinal))) return false;
+        var literals = System.Text.RegularExpressions.Regex.Matches(trimmed[2..^2], "\"((?:[^\"]|\"\")*)\"").Select(m => m.Groups[1].Value.Replace("\"\"", "\"")).ToList();
+        return literals.Any(Script) || literals.Count > 1 && Script(string.Concat(literals));
+    }
+
+    // A destination with its arguments: Target, Target(), Target(P = expression, ...) as the reading writes it, or
+    // Target(expression, ...) by position (the inputs of the target in order, as an author writes a call). The target is a
+    // name form of the reading (Name, Kind:Name, Owner.Name, @key); anything else is not a call (JavaScript).
+    private static readonly System.Text.RegularExpressions.Regex TargetShape = new(@"^[A-Za-z_@~][A-Za-z0-9_:.@#+/=~\-]*$", System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex NamedArgument = new(@"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)\s*(.*)$", System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
+    internal static bool ParseCall(string text, out string target, out List<(string? Param, string Value)> arguments)
+    {
+        arguments = [];
+        var value = text.Trim();
+        if (value.EndsWith(';')) value = value[..^1].TrimEnd();
+        var open = value.IndexOf('(');
+        target = open < 0 ? value : value[..open].TrimEnd();
+        if (value.Length == 0) return true;
+        if (!TargetShape.IsMatch(target)) return false;
+        if (open < 0) return true;
+        if (!value.EndsWith(')')) return false;
+        var body = value[(open + 1)..^1];
+        if (body.Trim().Length == 0) return true;
+        var parts = new List<string>(); var depth = 0; var inString = false; var start = 0;
+        for (var at = 0; at < body.Length; at++)
+        {
+            var c = body[at];
+            if (inString) { if (c == '"') { if (at + 1 < body.Length && body[at + 1] == '"') at++; else inString = false; } continue; }
+            if (c == '"') inString = true;
+            else if (c is '(' or '[' or '{') depth++;
+            else if (c is ')' or ']' or '}') { if (--depth < 0) return false; }
+            else if (c == ',' && depth == 0) { parts.Add(body[start..at]); start = at + 1; }
+        }
+        if (inString || depth != 0) return false;
+        parts.Add(body[start..]);
+        // Named arguments permit optional spaces around '=' just like the expression-span reader (HtmlText.CallArguments).
+        var named = parts.Select(p => NamedArgument.Match(p)).ToList();
+        if (named.All(m => m.Success)) { arguments.AddRange(named.Select(m => ((string?)m.Groups[1].Value, m.Groups[2].Value))); return true; }
+        foreach (var part in parts) { if (part.Trim().Length == 0) return false; arguments.Add((null, part.Trim())); }
         return true;
     }
 

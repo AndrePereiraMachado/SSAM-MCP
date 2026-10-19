@@ -68,6 +68,7 @@ public static partial class ScreenVisual
         new("IRadioGroup", "\"radio-group\"", ClassRule.Kept, null, ".radio-group is the group of radio buttons (.form .radio-group)"),
         new("IPopup", "\"popup-dialog\"", ClassRule.Kept, null, ".popup-dialog is the dialog's box (radius, shadow, padding, max-width 500px): without it the popup has no box"),
         new("IForm", "\"form card\"", ClassRule.Trimmed, "\"form\"", ".form is the fields' rhythm (.form label margin-bottom, .form input[data-input]/.dropdown/textarea margin-bottom); .card is a card (background, border, radius, padding) the document did not write"),
+        new("ITableRecords", "\"table\"", ClassRule.Kept, null, ".table is the OutSystems UI table (its borders, the cells' padding, the header's weight); a new native Table without class keeps it, and its header and template rows the Studio's classes, as a dragged Table does"),
         new("IList", "\"list list-group\"", ClassRule.Trimmed, "\"list\"", ".list is the hook of the OutSystems UI patterns (gallery, accordion, carousel) and of the author's CSS; .list.list-group is overflow hidden and position relative around the rows, a box of its own in a table body or a grid"),
     ];
 

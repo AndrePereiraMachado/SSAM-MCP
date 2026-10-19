@@ -89,6 +89,26 @@ public static class JobPreflight
     /// to the CLI as <c>apply --based-on</c>): the CSS loss guard compares the two (StyleSheetRules.CheckPatched).</summary>
     public static readonly AsyncLocal<string?> BasedOn = new();
 
+    /// <summary>The current call's auto-patch override; false disables correction, null uses the job's policy.
+    /// An explicit false in the job always disables correction, including when the call requests true.</summary>
+    public static readonly AsyncLocal<bool?> AutoPatch = new();
+
+    /// <summary>Apply one call's policy without leaking it to a resumed or later request.</summary>
+    public static IDisposable UseAutoPatch(bool? value) => new AutoPatchScope(value);
+
+    private sealed class AutoPatchScope : IDisposable
+    {
+        private readonly bool? previous = AutoPatch.Value;
+        private bool disposed;
+        public AutoPatchScope(bool? value) => AutoPatch.Value = value;
+        public void Dispose()
+        {
+            if (disposed) return;
+            AutoPatch.Value = previous;
+            disposed = true;
+        }
+    }
+
     /// <summary>Without the job document the pointers assume the usual {"ops":[...]} shape.</summary>
     public static JsonObject Analyze(JsonArray ops) => Analyze(ops, (JsonNode?)null);
 
@@ -110,6 +130,8 @@ public static class JobPreflight
         var problems = new List<JsonObject>();
         var warnings = new List<JsonObject>();
         var notes = new JsonArray();
+        foreach (var shape in JobDocument.RootShape(job))
+            problems.Add(Problem(null, shape.Pointer, JobDocument.ShapeCode, "error", shape.Message, shape.Fix, shape.Patch, "job"));
         // lentidao 2026-10-12 (cause 3): the deterministic shape errors the job alone decides (a comma-separated sort, the entity
         // segment of a list of records the job declares) are rewritten in place before any check and listed, never refused. A
         // job that expects an invalid module asks the Verify for that verdict: nothing of it is rewritten.
@@ -342,7 +364,7 @@ public static class JobPreflight
                         }
                         var problem = Problem(i, Pointer(i, "/data" + at), "FLOW_SYNTAX", "error", "logic: " + message,
                             "a branch ends without a terminator before line " + two.Line + " and the engine does not choose between its two readings: either it goes on to the step after its block ("
-                            + two.ThroughEdit + "), or it ends there (" + two.EndsEdit + "); write the one you mean (candidates: the patch of each)", null, kind);
+                            + two.ThroughEdit + "), or it ends there (" + two.EndsEdit + "); write the one you mean (candidates: the patch of each)", null, kind, patchRule: "FLOW_TEXT_READING");
                         problem["candidates"] = new JsonArray(
                             new JsonObject { ["reading"] = "goes on after the block", ["patch"] = Candidate(two.Through) },
                             new JsonObject { ["reading"] = "ends", ["patch"] = Candidate(two.Ends) });
@@ -491,7 +513,7 @@ public static class JobPreflight
     // ---- problems (I2) ------------------------------------------------------------------------------------------------
 
     /// <summary>One problem as I2 describes it. `kind` stays internal (the text form names it).</summary>
-    public static JsonObject Problem(int? op, string? pointer, string code, string severity, string message, string? fix, JsonArray? patch = null, string? kind = null)
+    public static JsonObject Problem(int? op, string? pointer, string code, string severity, string message, string? fix, JsonArray? patch = null, string? kind = null, string? patchRule = null)
     {
         var line = Regex.Replace(message ?? "", @"\s*[\r\n]+\s*", " ").Trim();
         // A kernel exception carries its advice inline; publish it once, in the dedicated fix field.
@@ -503,6 +525,7 @@ public static class JobPreflight
             ["fix"] = fix == null ? null : Regex.Replace(fix, @"\s*[\r\n]+\s*", " ").Trim(), ["patch"] = patch,
         };
         if (kind != null) problem["_kind"] = kind;
+        if (patchRule != null) problem["patchRule"] = patchRule;
         return problem;
     }
 
@@ -520,6 +543,7 @@ public static class JobPreflight
     {
         var copy = p.DeepClone().AsObject();
         copy.Remove("_kind"); copy.Remove("_generic"); copy.Remove("_rule"); copy.Remove("jobPatch"); copy.Remove("_normalization"); copy.Remove("_sentPatch"); copy.Remove("_diagnosisPatch");
+        Preflight.PatchCertainty.Publish(copy);
         return copy;
     }
 

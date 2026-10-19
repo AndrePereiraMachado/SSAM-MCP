@@ -738,6 +738,28 @@ export function jobIdentity(file) {
   return { job, jobSha256: hash, ...(shape ? { jobShape: shape } : {}), ...nextBasedOnOf(job, hash) };
 }
 
+// Record the kernel's corrected job as a descendant of its input. Use only a hash-checked
+// file; the original is kept intact, and G16 can follow both identities after delivery.
+export function appliedJobIdentity(patchedJob, original, { journalDir, tool, now = () => new Date() } = {}) {
+  if (typeof patchedJob?.path !== 'string' || !/^[a-fA-F0-9]{64}$/.test(String(patchedJob.sha256 ?? ''))) return original;
+  const identity = jobIdentity(patchedJob.path);
+  if (identity.jobSha256?.toLowerCase() !== patchedJob.sha256.toLowerCase()) return original;
+  const basedOn = original?.path ? { job: original.path, sha256: original.sha256 } : null;
+  if (journalDir && basedOn?.sha256 && identity.jobSha256 !== basedOn.sha256) {
+    try {
+      fs.mkdirSync(journalDir, { recursive: true });
+      const journalFile = path.join(journalDir, 'job-patch.jsonl');
+      let recorded = false;
+      try { recorded = fs.readFileSync(journalFile, 'utf8').split('\n').some(line => {
+        try { const entry = JSON.parse(line); return entry.event === 'auto-patch' && entry.jobSha256 === identity.jobSha256 && entry.basedOn?.sha256 === basedOn.sha256 && entry.job === identity.job; } catch { return false; }
+      }); } catch { /* first line */ }
+      if (!recorded) fs.appendFileSync(journalFile, JSON.stringify({ at: now().toISOString(), event: 'auto-patch',
+        ...(tool ? { tool } : {}), job: identity.job, jobSha256: identity.jobSha256, basedOn }) + '\n');
+    } catch { /* provenance does not change the accepted candidate */ }
+  }
+  return { ...original, path: identity.job, sha256: identity.jobSha256, ...(basedOn ? { basedOn } : {}) };
+}
+
 // The index of the op the kernel refused, only when it says so reliably: its error starts with Verbs.Apply's
 // `op #N (<verb> <name|prop>):` (or JobPreflight's `op #N (<verb>) [CODE]:`, I2), the job file is a plain job (array or
 // {ops}, not a composite {jobs}, whose indices span its parts), op N exists there with that verb and, when named, that

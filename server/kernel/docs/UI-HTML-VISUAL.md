@@ -32,7 +32,7 @@ O que nao esta nesta tabela e erro com linha e coluna. A mesma tabela, legivel p
 | `<br>` | `IContainer` vazio | um bloco vazio quebra a linha; o Verify recusa `br` como HTML Element |
 | texto literal | `ITextWidget` | sem classe propria: a `class` fica so no elemento em volta (repetir a classe no texto aninhava o estilo, uma pilula dentro da outra); o espaco junto de um elemento inline (`<strong>Ctrl</strong> ao soltar`) e mantido |
 | `{{ expressao }}` | `IExpression` | a expressao e OutSystems, copiada tal qual; nao e JavaScript |
-| `<i icon="warning-circle" weight="regular">` | `IIcon` | `weight` obrigatorio; sem ele, erro |
+| `<i icon="warning-circle" weight="regular">` | `IIcon` | `weight` obrigatorio onde o icone tem Weight (ODC); no O11, sem `weight`, como a leitura escreve |
 | `<input bind="Var" placeholder="..." type="text\|password\|number\|time\|date\|datetime-local\|tel\|email\|search">` | `IInput` | `bind` e o nome de uma variavel/atributo existente; `placeholder` -> Prompt; o tipo da variavel ligada decide o InputType (Time -> Time, Date -> Date, Date Time -> Datetime, Integer/Long Integer/Decimal/Currency -> Number, Email -> Email, Phone Number -> Phone, Text -> Text), como o Verify exige; um `type` que o Verify recusaria (`tel` sobre Text) cede ao da variavel e sai em `inputTypes` do relatorio; `password`/`search` sobre Text ficam; Boolean ou Binary Data num `<input>`: `INPUT_TYPE_MISMATCH` (Boolean: use `type="checkbox"`); sem `<label>` automatico |
 | `<textarea bind="Var">` | `ITextArea` | |
 | `<select bind="Var" options="Lista" value="Id" label="Label">` | `IDropdown` | `options` -> List, `value` -> Values, `label` -> Labels |
@@ -44,7 +44,7 @@ O que nao esta nesta tabela e erro com linha e coluna. A mesma tabela, legivel p
 | `<img src="Imagem">` | `IImage` | `src` e nome de imagem do modulo; `src` com URL (`https://...`) ou `{{ expressao }}` vira `Type External` com `Url` |
 | `<div list="GetX.List" as="Row">` | `IList` | dentro, `{{ Row.Atributo }}`; `as` e obrigatorio; `list` vazio e erro: o Source fica no proprio elemento |
 | `<div if="expressao">` | `IIfWidget` | ramo True recebe os filhos; `else` como `<div else>` irmao imediato |
-| `<Block name="WF_X" :Input="expr" @Evento="Acao">` | `IMobileBlockInstanceWidget` | inputs por `:Nome`, handlers por `@Evento`, filhos por `<slot name>` -> placeholder; sem `id`, a instancia nasce sem nome, como o Studio a cria; com `<slot>`, nasce com os placeholders vazios (`empty`), sem o conteudo de exemplo do padrao |
+| `<Block name="WF_X" :Input="expr" @Evento="Acao">` | `IMobileBlockInstanceWidget` | inputs por `:Nome`, handlers por `@Evento="Acao"` ou, como a leitura escreve, `@Evento="Acao(Input = expr)"` (cada input recebe o valor que a chamada nomeia; posicional e recusado com a forma nomeada; `@Evento.Input="expr"` so ao lado de `@Evento`, sozinho e recusado; o mesmo input dado duas vezes, na chamada e em `@Evento.Input`, e recusado), filhos por `<slot name>` -> placeholder; sem `id`, a instancia nasce sem nome, como o Studio a cria; com `<slot>`, nasce com os placeholders vazios (`empty`), sem o conteudo de exemplo do padrao |
 | qualquer outro atributo | `IExtendedProperty` | valor literal; com `{{ }}` (tambem em `class`) vira expressao: `class="chip {{ X }}"` e `"chip " + (X)` |
 | `<style>` | CSS do tema | reescrito com prefixo da classe raiz; `@keyframes` e `@font-face` passam inteiros |
 
@@ -67,6 +67,10 @@ nome que faltou e a lista dos existentes.
 
 `onclick` (ou o `href` de um `<a>`) nomeia uma action ou uma tela do modulo:
 - `onclick="CellClick(0)"`: os argumentos vao na ordem dos inputs do callee;
+- `onclick="Abrir(Id = Row.Id)"`, como a leitura escreve: cada argumento pelo nome do input. Quando o nome antes do `=` nao e
+  input do callee e e uma variavel do escopo (`Filtrar(MostrarTodos = True)`, input `SoAtivos`), e uma comparacao passada
+  por posicao, como antes; um nome que nao e nenhum dos dois (erro de digitacao de um input) fica nomeado e e
+  `ARGUMENT_UNKNOWN` com os inputs. Sem a assinatura do callee (action criada no mesmo job), vale a forma da leitura;
 - `:Index="expr"` no proprio controle: o argumento pelo nome do input;
 - os ops saem nesta ordem: `set $hv.N/OnClick Destination`, depois um `set $hv.N/OnClick/<Input> Value` por argumento.
 
@@ -165,8 +169,9 @@ CSS que o tema renderiza, mas no lugar errado (nunca bloqueia):
 
 O compilador nao conhece plataforma: ele pergunta ao `HtmlVisualScope` se o widget do Studio alvo tem a propriedade
 (`Supports`). Sem resposta, vale o vocabulario Reactive/Mobile do proprio kernel (`ScreenVocabulary.json`). Consequencia
-visivel hoje: `IIcon` do O11 (Model API 11.55.69) **nao tem** `Weight`, o do ODC tem; o `weight` continua obrigatorio no
-fragmento nas duas faixas e chega ao modelo onde o widget o pode guardar. O mesmo mecanismo serve ao `Adapters.ODC`
+visivel hoje: `IIcon` do O11 (Model API 11.55.69) **nao tem** `Weight`, o do ODC tem. O `weight` e pedido onde o icone o
+tem (ODC: obrigatorio, sem ele o Studio mostra "Non Existing Icon") e chega ao modelo ali; no O11 a leitura nao escreve
+`weight` e o fragmento aceita o `<i>` como a leitura o escreve (ponto fixo); um `weight` escrito no O11 e ignorado. O mesmo mecanismo serve ao `Adapters.ODC`
 (WS1) sem tocar nesta tabela.
 
 ## Provas

@@ -102,8 +102,15 @@ public sealed class ScreenHtmlTests
         card.Add(W("PlaceholderContentWidget")).Set("Placeholder", holder).Add(W("TextWidget")).Set("Text", "Body");
         // A property outside the table and a Visible that is not True (read and kept: never written new).
         screen.Add(W("Container")).Set("Animate", true).Set("Visible", new Code("Page > 0"));
-        // Opaque: a table keeps its cells' widgets inside; a Traditional container hides its whole subtree.
-        screen.Add(W("TableRecords", "Grid")).Add(W("HeaderCell")).Add(W("TextWidget")).Set("Text", "Header");
+        // A native Table: its HeaderRow and Row (O11 lists each as a MobileWidget of the Table) hold one header cell and one row
+        // cell per column.
+        var grid = screen.Add(W("TableRecords", "Grid")).Set("Source", new Code("GetOrders.List"));
+        var headerRow = grid.Add(W("MobileWidget", "headerRow"));
+        var templateRow = grid.Add(W("MobileWidget", "row"));
+        grid.Set("HeaderRow", headerRow).Set("Row", templateRow);
+        headerRow.Add(W("HeaderCell")).Add(W("TextWidget")).Set("Text", "Header");
+        templateRow.Add(W("RowCell")).Add(W("Expression")).Set("Value", new Code("GetOrders.List.Current.Order.Name"));
+        // Opaque: a Traditional container hides its whole subtree.
         screen.Add(W("ContainerWidget")).Add(W("TextWidget")).Set("Text", "Legacy");
         if (reversed) Shuffle(module);
         return (module, screen, block);
@@ -146,17 +153,21 @@ public sealed class ScreenHtmlTests
         Assert.Contains("<Block k=\"w11\" name=\"Card\" :Subtitle=\"Search\" :Title='\"Total\"'>\n <slot name=\"Content\" os-Name=\"\">Body</slot>\n</Block>\n", html);
         // Outside the table: os-<Property>; a Visible that is not True is kept as it is.
         Assert.Contains("<div k=\"w12\" os-Animate=\"True\" os-Visible=\"Page > 0\"/>\n", html);
-        // Opaque: the table keeps its cells inside, the Traditional container is one untouchable node.
-        Assert.Contains("<os-opaque k=\"w13\" name=\"Grid\" kind=\"TableRecords\">\n <os-opaque k=\"w14\" kind=\"HeaderCell\">Header</os-opaque>\n</os-opaque>\n", html);
-        Assert.Contains("<os-opaque k=\"w15\" kind=\"ContainerWidget\"/>\n", html);
+        // A native Table is the <table>: its list on it, its header row and its template row, one <th> and one <td> per column.
+        Assert.Contains("<table k=\"w13\" id=\"Grid\" list=\"GetOrders.List\">\n <thead>\n  <tr>\n   <th k=\"w14\">Header</th>\n  </tr>\n </thead>\n"
+            + " <tbody>\n  <tr>\n   <td k=\"w15\">{{ GetOrders.List.Current.Order.Name }}</td>\n  </tr>\n </tbody>\n</table>\n", html);
+        // Opaque: the Traditional container is one untouchable node.
+        Assert.Contains("<os-opaque k=\"w16\" kind=\"ContainerWidget\"/>\n", html);
         Assert.EndsWith("</screen>\n", html);
         // Every k of the text maps to the key of its element; "" is the root.
         var keys = doc.Keys.ToDictionary(k => k.Key, k => k.Value);
         Assert.Equal(Module().Screen.Key, keys[""]);
         foreach (Match k in Regex.Matches(html, " k=\"(w\\d+)\"")) Assert.True(keys.ContainsKey(k.Groups[1].Value), k.Value);
-        Assert.Equal(15, Regex.Matches(html, " k=\"w\\d+\"").Count);
-        // Widgets: every widget below the root; opaque: the table, its header cell, the container and its text.
-        Assert.Equal(4, doc.OpaqueWidgets);
+        Assert.Equal(16, Regex.Matches(html, " k=\"w\\d+\"").Count);
+        // The rows of the Table are groups of the reading, keyed (k/content:HeaderRow, k/content:Row).
+        Assert.True(keys.ContainsKey("w13/content:HeaderRow") && keys.ContainsKey("w13/content:Row"));
+        // Widgets: every widget below the root; opaque: the container and its text.
+        Assert.Equal(2, doc.OpaqueWidgets);
         Assert.True(doc.Widgets >= 16, "widgets " + doc.Widgets);
     }
 
@@ -194,7 +205,11 @@ public sealed class ScreenHtmlTests
         Assert.Contains("delete w12", removed);
         // A k the reading never wrote, and a touched opaque node.
         Assert.Contains("foreign w99", Ops(html.Replace("<div k=\"w12\"", "<div k=\"w99\"")));
-        Assert.Equal("set w15 kind", Ops(html.Replace("kind=\"ContainerWidget\"", "kind=\"Container\"")));
+        Assert.Equal("set w16 kind", Ops(html.Replace("kind=\"ContainerWidget\"", "kind=\"Container\"")));
+        // A column of the native Table is its header cell and its row cell: removing one alone is refused, a class of a row is
+        // its StyleRow.
+        Assert.StartsWith("invalid", Ops(html.Replace("   <th k=\"w14\">Header</th>\n", "")));
+        Assert.Equal("set w13 p:StyleRow", Ops(html.Replace(" <tbody>\n  <tr>\n", " <tbody>\n  <tr class=\"zebra\">\n")));
         // A moved element changes the children of both parents.
         var moved = Ops(html.Replace(" <input k=\"w6\" bind=\"Search\" placeholder='\"Search\"' onchange=\"Refresh\"/>\n", "")
             .Replace("<div k=\"w12\"", "<input k=\"w6\" bind=\"Search\" placeholder='\"Search\"' onchange=\"Refresh\"/>\n<div k=\"w12\""));
@@ -223,7 +238,10 @@ public sealed class ScreenHtmlTests
         var contract = ScreenHtml.Contract();
         Assert.Equal("ssam-html/1", contract["schema"]!.ToString());
         var opaque = contract["opaque"]!.AsArray().Select(o => o!.ToString()).ToList();
-        Assert.Contains("TableRecords", opaque); Assert.Contains("MobileWidget", opaque); Assert.Contains("ContainerWidget", opaque);
+        Assert.Contains("MobileWidget", opaque); Assert.Contains("ContainerWidget", opaque);
+        // The native Table has its row (a data table, ScreenHtmlTables.NativeTable).
+        Assert.DoesNotContain("TableRecords", opaque);
+        Assert.Equal("table", contract["elements"]!["TableRecords"]!.ToString());
         Assert.DoesNotContain("Container", opaque);
         Assert.Equal("bind", contract["named"]!["Input"]!["Variable"]!.ToString());
         Assert.Contains("ObjectKey", contract["notFacts"]!.AsArray().Select(o => o!.ToString()));
@@ -402,5 +420,29 @@ public sealed class ScreenHtmlTests
         Assert.Contains("No screen or block named 'Ordres'", error.Message);
         Assert.Contains("MobileScreen:Orders", error.Message);
         Assert.Equal(reading.Read("Orders").Html, reading.Read("@" + reading.Roots.Single(r => r.Name == "Orders").Key).Html);
+    }
+
+    // A native Table the Studio holds without Source (dragged, not bound yet; the review of round 1, B2): read as <table list="">,
+    // it is the Table again at the fixed point, and an edit of another element plans that element only.
+    [Fact]
+    public void ANativeTableWithoutSourceReadsAsATableAndStaysOneAtTheFixedPoint()
+    {
+        keys = 0;
+        var module = N("ESpace", "Shop");
+        var flow = module.Add(N("MobileFlow", "MainFlow"));
+        var screen = flow.Add(N("MobileScreen", "Orders"));
+        screen.Add(W("Container", "Before")).Set("Style", new Code("\"before\""));
+        var grid = screen.Add(W("TableRecords", "Grid"));
+        var headerRow = grid.Add(W("MobileWidget", "headerRow"));
+        var templateRow = grid.Add(W("MobileWidget", "row"));
+        grid.Set("HeaderRow", headerRow).Set("Row", templateRow);
+        headerRow.Add(W("HeaderCell")).Add(W("TextWidget")).Set("Text", "Header");
+        templateRow.Add(W("RowCell")).Add(W("TextWidget")).Set("Text", "Cell");
+        var doc = ScreenHtml.Module(module, new Reader()).Read("Orders");
+        Assert.Empty(doc.Problems);
+        Assert.Contains("<table k=\"w2\" id=\"Grid\" list=\"\">", doc.Html);
+        Assert.Empty(doc.Compare(doc.Html));
+        var ops = doc.Compare(doc.Html.Replace("class=\"before\"", "class=\"before x\"")).Select(o => o["op"] + " " + o["k"] + " " + (o["fact"] ?? o["kind"])).ToList();
+        Assert.Equal(["set w1 p:Style"], ops);
     }
 }

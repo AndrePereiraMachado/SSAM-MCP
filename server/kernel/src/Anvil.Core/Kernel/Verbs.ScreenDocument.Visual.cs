@@ -76,6 +76,11 @@ public sealed partial class ModelSession
                 }
                 catch (Exception error) { Problem(ScreenDocument.Invalid, node, $"the class of the new {kind} could not be written: {Unwrap(error)}"); }
             }
+            // F2 for the rows of a new native Table: a header row or a template row without class keeps the class the Studio gives
+            // it (the Reset leaves it), as the Table keeps its own (ScreenVisual.ClassDecisions).
+            if (!read && kind == "TableRecords")
+                foreach (var property in new[] { "StyleHeader", "StyleRow" })
+                    if (!written.Contains(property) && FindProperty(widget, property) is { } rowStyle && Text(SafeGet(rowStyle, widget)) is { Length: > 0 }) written.Add(property);
             // F1: a List that is part of a table, a list or a layout container renders every row; its marker lets the block lay
             // out its rows (a List the document writes with its own disable-virtualization, as the gen-screen does, gets the marker).
             var element = AuthorElement(node);

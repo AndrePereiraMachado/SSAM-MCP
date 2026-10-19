@@ -208,7 +208,7 @@ public sealed class JobNormalizerTests
         var dir = Dir();
         var basePath = BuildBase(dir);
         var (_, error, output) = Run(dir, "ambiguous", $$$"""
-        {"base":"{{{basePath}}}","ops":[
+        {"base":"{{{basePath}}}","autoPatch":false,"ops":[
           {"op":"logic","data":{"actions":[
             {"name":"VmTexto","outputs":[{"name":"Texto","type":"Text"},{"name":"Quando","type":"Date Time"}],"steps":[
               {"assign":{"Texto":"NullDateTime()","Quando":"If(True, NullDateTime(), CurrDateTime())"}},

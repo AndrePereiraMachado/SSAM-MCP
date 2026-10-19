@@ -66,8 +66,10 @@ public class HtmlElementEditsTests
     [Fact]
     public void SetChangesOnlyTheOpenTag()
     {
+        // "id": null removes the name: written id="" in place (a text that only leaves the id out keeps the name, review of
+        // fix/html-edit-names round 2, A2).
         var r = Apply("""{"set":"w7","attributes":{"class":"login-form card","data-test":"login","id":null}}""");
-        Accepted(r, With((4, 1, ["  <form k=\"w7\" class=\"login-form card\" data-test=\"login\">"])));
+        Accepted(r, With((4, 1, ["  <form k=\"w7\" id=\"\" class=\"login-form card\" data-test=\"login\">"])));
         Assert.Equal(["w7"], r.Touched);
         // A value with a double quote is written as the reading writes it (single quotes).
         Accepted(Apply("""{"set":"/","attributes":{"title":"\"Sign in\""}}"""),

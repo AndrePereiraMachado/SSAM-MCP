@@ -14,7 +14,7 @@
     "form": { "widget": "IForm", "rule": "class -> Style; children are its content" },
     "(literal text)": { "widget": "ITextWidget", "rule": "no class of its own; a space next to an inline element stays" },
     "{{ expression }}": { "widget": "IExpression", "rule": "OutSystems, copied as written (never JavaScript)" },
-    "i": { "widget": "IIcon", "rule": "icon = the icon name; weight is mandatory" },
+    "i": { "widget": "IIcon", "rule": "icon = the icon name; weight where the icon has one (ODC: mandatory; the O11 icon has none, as its reading writes it)" },
     "input": { "widget": "IInput", "rule": "bind names an existing variable, placeholder -> Prompt, type text|password|number|time|date|datetime-local|tel|email|search; the bound data type decides the InputType" },
     "input[type=checkbox]": { "widget": "ICheckbox", "rule": "bind names an existing variable" },
     "textarea": { "widget": "ITextArea", "rule": "bind names an existing variable" },
@@ -25,7 +25,7 @@
     "img": { "widget": "IImage", "rule": "src: module image, URL or {{ }}" },
     "div[list]": { "widget": "IList", "rule": "Source = list; as is mandatory and names the row inside {{ }}" },
     "div[if]": { "widget": "IIfWidget", "rule": "children: True branch; a <div else> right after: False branch" },
-    "Block": { "widget": "IMobileBlockInstanceWidget", "rule": "name = an existing block, inputs by :Name, handlers by @Event, children by <slot name>" },
+    "Block": { "widget": "IMobileBlockInstanceWidget", "rule": "name = an existing block, inputs by :Name, handlers by @Event=\"Action\" or, as the reading writes them, @Event=\"Action(Input = expression)\", children by <slot name>" },
     "ButtonGroup": { "widget": "IButtonGroup", "rule": "bind -> Variable; each <ButtonGroupItem value> an IButtonGroupItem, its text an Expression; also written <button-group> and <button-group-item>" },
     "switch": { "widget": "ISwitch", "rule": "bind names an existing Boolean variable" },
     "upload": { "widget": "IUpload", "rule": "bind -> FileContent (a Binary Data variable), filename -> FileName" },
@@ -35,7 +35,7 @@
   "names": "id: name, alias $id; else Tag1, Tag2; Block none",
   "rejected": [
     "script",
-    "an <i> without weight",
+    "an <i> without weight where the icon has one (ODC)",
     "a name that does not exist in the module",
     "a tag outside this table",
     "color-mix()"

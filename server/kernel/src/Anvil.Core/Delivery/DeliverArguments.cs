@@ -19,6 +19,25 @@ public static class DeliverArguments
         return null;
     }
 
+    /// <summary>--auto-patch off disables correction for this request; absence leaves the job's policy in force.</summary>
+    public static bool? AutoPatch(IReadOnlyList<string> args)
+    {
+        if (!args.Contains("--auto-patch")) return null;
+        return Option(args, "--auto-patch")?.ToLowerInvariant() switch
+        {
+            "off" => false,
+            "on" => true,
+            _ => throw new ArgumentException("use --auto-patch off or --auto-patch on"),
+        };
+    }
+
+    /// <summary>A resume keeps the auto-patch policy of its recorded request.</summary>
+    public static void RequireRecordedAutoPatch(IReadOnlyList<string> args, DeliveryRequest recorded)
+    {
+        if (AutoPatch(args) is { } requested && requested != recorded.AutoPatch)
+            throw new ArgumentException("this task keeps its recorded auto-patch policy; resume without another --auto-patch");
+    }
+
     /// <summary>The bare host name of an environment, lower case; anything else (scheme, path, port) is refused.</summary>
     public static string NormalizeEnvironment(string value)
     {
@@ -80,7 +99,7 @@ public static class DeliverArguments
         var captures = CaptureBindings(args);
         return new(module, job, work, (Option(args, "--checks") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             ProducerBindings(args), BridgePort: port, ExpectedEnvironment: ExpectedEnvironment(args),
-            CaptureProducers: captures.Count > 0 ? captures : null, CloseOpenedTab: CloseOpenedTab(args));
+            CaptureProducers: captures.Count > 0 ? captures : null, CloseOpenedTab: CloseOpenedTab(args), AutoPatch: AutoPatch(args));
     }
 
     /// <summary>K1-g: --close-opened-tab, the delivery closes the tab it opened when it ends in a saved state (the facade passes

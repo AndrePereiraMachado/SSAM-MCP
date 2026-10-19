@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { createHash, randomUUID } from 'node:crypto';
-import { agentPath, AGENT_FOLDERS } from '../agent-paths.mjs';
+import { agentPath, agentJoin, AGENT_FOLDERS } from '../agent-paths.mjs';
 
 export const ARCHIVE_LIMITS = Object.freeze({ entries: 2000, fileBytes: 32 * 1024 * 1024, totalBytes: 128 * 1024 * 1024, archiveBytes: 64 * 1024 * 1024 });
 export const ARCHIVE_MARKER = '.ssam-archive.json';
@@ -294,8 +294,8 @@ export function allowedSource(source, { agentRoot = null } = {}) {
   if (!agentRoot) return { ok: true, path: source };
   let abs = source;
   const reference = /^agent:(.+)$/i.exec(String(source ?? ''));
-  if (reference) abs = path.win32.join(agentRoot, ...reference[1].split('/'));
+  if (reference) abs = agentJoin(agentRoot, ...reference[1].split('/'));
   if (agentPath(abs, { agentRoot })) return { ok: true, path: abs };
   return { ok: false, message: 'In the hosted SSAM the prototype is read only from the folders of the agent (' + AGENT_FOLDERS.map(f => f + '/').join(', ') + ' of ' + agentRoot + '); ' + source + ' is outside them.',
-    fix: 'copy the prototype folder or its .zip into ' + path.win32.join(agentRoot, 'inbox') + ' and give data.source as agent:inbox/<name>' };
+    fix: 'copy the prototype folder or its .zip into ' + agentJoin(agentRoot, 'inbox') + ' and give data.source as agent:inbox/<name>' };
 }

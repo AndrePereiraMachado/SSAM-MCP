@@ -14,6 +14,7 @@
 //   record       notes the textSha of every action an answer of this customer's reads carries (ssam_code read, ssam_map)
 import fs from 'node:fs';
 import path from 'node:path';
+import { agentJoin } from '../agent-paths.mjs';
 import { classify } from './mirror.mjs';
 import { exposedValue } from '../exposure.mjs';
 import { loadFlowReading } from '../flow-edits.mjs';
@@ -40,7 +41,8 @@ export function hostedCode(context) {
   try { agentRoot = context.agent?.info?.()?.agentRoot ?? null; } catch { agentRoot = null; }
   if (typeof agentRoot !== 'string' || !path.win32.isAbsolute(agentRoot)) agentRoot = null;
   const where = file => { const at = typeof file === 'string' ? classify(workspace, file) : { visible: false }; return at.visible ? at : null; };
-  const onMachine = rel => (agentRoot ? path.win32.join(agentRoot, ...rel.split('/')) : 'agent:' + rel);
+  // fase4-26/a8-mac: the path on the user's machine in the style of the folder the agent reported (POSIX on a Mac).
+  const onMachine = rel => (agentRoot ? agentJoin(agentRoot, ...rel.split('/')) : 'agent:' + rel);
   const place = {
     shown: file => { const at = where(file); return at ? 'ws:' + at.rel : file; },
     output: file => { const at = where(file); return at ? onMachine('inbox/' + at.rel) : file; },

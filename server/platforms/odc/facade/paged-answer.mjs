@@ -119,6 +119,6 @@ export function missingCall(file, missing) {
   const args = first.rows ? { file, pointer: first.at, table: true, ...(first.columns ? { fields: first.columns } : {}), max: Math.min(first.rows, MAX_ROWS), budgetBytes: READER_BUDGET }
     : { file, pointer: first.at, budgetBytes: READER_BUDGET };
   return { tool: 'ssam_evidence', arguments: args,
-    why: first.rows ? `the ${first.rows} rows of ${first.at}${first.columns ? ' (' + first.columns.join(', ') + ')' : ''} in one table, within the reader's budget` : `the part ${first.at}, whole`,
+    why: first.rows ? `the ${first.rows} rows of ${first.at}${first.columns ? ' (' + first.columns.join(', ') + ')' : ''} in one table, within the reader's budget` : first.at ? `the part ${first.at}, whole` : 'the whole answer',
     ...(missing.length > 1 ? { more: missing.filter(m => m !== first).map(m => ({ tool: 'ssam_evidence', arguments: m.rows ? { file, pointer: m.at, table: true, ...(m.columns ? { fields: m.columns } : {}), max: Math.min(m.rows, MAX_ROWS), budgetBytes: READER_BUDGET } : { file, pointer: m.at, budgetBytes: READER_BUDGET } })) } : {}) };
 }

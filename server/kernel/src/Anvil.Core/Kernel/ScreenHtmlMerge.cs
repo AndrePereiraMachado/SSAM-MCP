@@ -15,8 +15,12 @@ public static class ScreenHtmlMerge
 {
     public sealed class Result
     {
-        // The merged document (null when the edit could not be laid over its base: the caller plans it as it came).
+        // The merged document (null when the edit could not be laid over its base: the caller never plans a whole document
+        // written on that base in its place, Verbs.ScreenHtml.Rebase).
         public string? Document;
+        // Why Document is null: the part of a reading the merge could not match, or the edit it could not lay (said in the
+        // refusal, so a part the merge does not know yet is named).
+        public string? Why;
         public List<JsonObject> Conflicts = [];
         // The k (of the base reading) of elements the edit changed that are no longer in the screen.
         public List<string> Missing = [];
@@ -45,13 +49,14 @@ public static class ScreenHtmlMerge
             baseTree = ScreenHtml.Parse(baseHtml);
             localTree = ScreenHtml.Parse(currentHtml);
             foreignTree = Overlay(baseHtml, edits);
-        } catch (FormatException) { return result; }
-        if (foreignTree is null) return result;
+        } catch (FormatException error) { result.Why = "a text does not parse: " + error.Message; return result; }
+        if (foreignTree is null) { result.Why = "the edit could not be laid over the reading it was written on (one element per edit, each with a k of that reading)"; return result; }
         var news = 0;
-        var b = Index(baseTree, baseKeys, ref news, foreign: false);
-        var f = Index(foreignTree, baseKeys, ref news, foreign: true);
-        var l = Index(localTree, currentKeys, ref news, foreign: false);
-        if (b == null || f == null || l == null) return result;
+        string? why = null;
+        var b = Index(baseTree, baseKeys, ref news, foreign: false, ref why, "the reading the edit was written on");
+        var f = why == null ? Index(foreignTree, baseKeys, ref news, foreign: true, ref why, "the edit") : null;
+        var l = why == null ? Index(localTree, currentKeys, ref news, foreign: false, ref why, "the screen now") : null;
+        if (b == null || f == null || l == null) { result.Why = why ?? "a side could not be indexed"; return result; }
 
         // Which identities the merged screen has.
         var exists = new HashSet<string>(StringComparer.Ordinal) { Root };
@@ -167,16 +172,20 @@ public static class ScreenHtmlMerge
     // ---- identities --------------------------------------------------------------------------------------------------------
     // Null when a k of the side has no ObjectKey in its table (an edit naming an element that is not of its reading: the plan
     // refuses that with its own words).
-    private static Side? Index(ScreenHtml.Node tree, IReadOnlyDictionary<string, string> keys, ref int news, bool foreign)
+    private static Side? Index(ScreenHtml.Node tree, IReadOnlyDictionary<string, string> keys, ref int news, bool foreign, ref string? why, string what)
     {
         var side = new Side();
         var top = tree.Children.FirstOrDefault(c => !c.IsText);
-        if (top == null || top.Tag is not ("screen" or "block")) return null;
+        if (top == null || top.Tag is not ("screen" or "block")) { why = what + " is not one <screen> or <block>"; return null; }
+        string? failed = null;
         side.Nodes[Root] = top;
         var ok = true; var counter = news;
-        void Walk(ScreenHtml.Node node, string id)
+        // The children of one container: an element's own (segment self) or the false branch of an If (segment else, the
+        // <div else> right after it). The same walk for both, so an If inside an else has its own else (an else-if chain, as the
+        // reading writes it: the Audit screen of 2026-10-18 has several, and the merge could not index it, which made the edit
+        // replace the screen with the reading's actions=).
+        void Walk(ScreenHtml.Node node, string id, string segment = "self")
         {
-            var segment = "self";
             var list = Container(id, segment);
             string? lastIf = null;
             var lines = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -185,18 +194,16 @@ public static class ScreenHtmlMerge
                     foreach (var run in RunsOf(node, child)) { list.Add(Line(run, lines)); lastIf = null; }
                     continue;
                 }
-                if (child.Tag == "style" && id == Root) { side.StyleText = string.Concat(child.Children.Select(c => c.Text)); continue; }
+                if (child.Tag == "style" && id == Root && segment == "self") { side.StyleText = string.Concat(child.Children.Select(c => c.Text)); continue; }
                 if (IsElse(child) && lastIf != null) {
-                    var elseList = Container(lastIf, "else");
-                    var elseLines = new Dictionary<string, int>(StringComparer.Ordinal);
-                    WalkInto(child, lastIf, elseList, elseLines);
+                    Walk(child, lastIf, "else");
                     lastIf = null;
                     continue;
                 }
                 if (child.Tag == "text" && child.Get("k") == null) { list.Add(Line("<text>" + string.Concat(child.Children.Select(c => c.Text)), lines)); lastIf = null; continue; }
                 var cid = IdOf(child, id);
-                if (cid == null) { ok = false; return; }
-                if (side.Nodes.ContainsKey(cid)) { ok = false; return; }
+                if (cid == null) { ok = false; failed ??= "<" + child.Tag + "> at line " + child.Line.ToString(System.Globalization.CultureInfo.InvariantCulture) + (child.Get("k") is { } unkeyed ? " has k=\"" + unkeyed + "\", which its key table does not have" : " has no k and is no part the merge matches by its owner"); return; }
+                if (side.Nodes.ContainsKey(cid)) { ok = false; failed ??= "<" + child.Tag + "> at line " + child.Line.ToString(System.Globalization.CultureInfo.InvariantCulture) + " is the same element twice"; return; }
                 side.Nodes[cid] = child; side.Parent[cid] = (id, segment);
                 if (child.Get("k") is { } k) side.K[cid] = k;
                 list.Add(cid);
@@ -204,37 +211,30 @@ public static class ScreenHtmlMerge
                 lastIf = child.Get("if") != null && child.Tag == "div" ? cid : null;
             }
         }
-        void WalkInto(ScreenHtml.Node elseNode, string ifId, List<string> list, Dictionary<string, int> lines)
-        {
-            foreach (var child in elseNode.Children) {
-                if (child.IsText) {
-                    foreach (var run in RunsOf(elseNode, child)) list.Add(Line(run, lines));
-                    continue;
-                }
-                if (child.Tag == "text" && child.Get("k") == null) { list.Add(Line("<text>" + string.Concat(child.Children.Select(c => c.Text)), lines)); continue; }
-                var cid = IdOf(child, ifId);
-                if (cid == null || side.Nodes.ContainsKey(cid)) { ok = false; return; }
-                side.Nodes[cid] = child; side.Parent[cid] = (ifId, "else");
-                if (child.Get("k") is { } k) side.K[cid] = k;
-                list.Add(cid);
-                Walk(child, cid);
-            }
-        }
         List<string> Container(string id, string segment)
         {
             if (!side.Children.TryGetValue((id, segment), out var list)) side.Children[(id, segment)] = list = [];
             return list;
         }
+        // The parts of the native Tables of this side (ScreenHtmlTables.NativeTable: the thead and the tbody, and the one row of
+        // each), taken when the walk meets their table.
+        var tableParts = new HashSet<ScreenHtml.Node>(ReferenceEqualityComparer.Instance);
         string? IdOf(ScreenHtml.Node node, string parentId)
         {
+            if (node.Tag == "table" && ScreenHtmlTables.NativeTable(node) is { } table) tableParts.UnionWith([table.Head, table.HeadRow, table.Body, table.BodyRow]);
             if (node.Get("k") is { } k) return keys.TryGetValue(k, out var objectKey) ? "o:" + objectKey : null;
             if (node.Tag == "slot") return parentId + "/slot:" + (node.Get("name") ?? "");
             if (node.Tag == "content") return parentId + "/content:" + (node.Get("name") ?? "");
+            // The parts of a native Table are its structure, as a slot is a block instance's: never keyed, matched by their owner.
+            // The parts of any other table are elements, new without k (the review of round 2, B1: the two rows of a new static
+            // table had one identity, the merge gave up and the edit's whole text replaced the screen).
+            if (tableParts.Contains(node)) return parentId + "/" + node.Tag;
             // An element without k is new: only the edit writes one.
             return foreign ? "new:" + (++counter).ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
         }
         Walk(top, Root);
         news = counter;
+        if (!ok) why = failed + " in " + what;
         return ok ? side : null;
     }
 

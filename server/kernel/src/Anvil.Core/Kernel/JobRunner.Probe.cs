@@ -25,7 +25,7 @@ public static partial class JobRunner
         { "NAME_COLLISION", "FLOW_FOREACH_LIST_ACTION", "FLOW_JAVASCRIPT_NOT_ISOLATED", QueryInLoopRule.Code, "HTML_SCRIPT", "HTML_VISIBLE", "HTML_FOREACH", "HTML_JSON" };
 
     /// <summary>The job of the round and what it found, each problem with whether a patch caused it.</summary>
-    private sealed class Probe
+    internal sealed class Probe
     {
         public required string OpsPointer;
         /// <summary>The ops of the job as sent and as the round applies them.</summary>
@@ -41,6 +41,9 @@ public static partial class JobRunner
         /// <summary>Execution metadata of the disposable round, including a successful Verify that found no problems.</summary>
         public JsonObject? Execution;
         public JsonArray Normalizations = [];
+        // A final round may save only after the complete verdict accepts it. Disposable probes never save.
+        public bool Final;
+        public readonly List<JsonObject> LiteralProblems = [];
     }
 
     private static bool PatchRoundApplies(Exception refusal)
@@ -127,7 +130,10 @@ public static partial class JobRunner
             texts[i] = kept.Select(j => entries[j]).ToList();
             changed.Add(i);
         }
-        return learns ? new Probe { OpsPointer = opsPointer, Original = ops, Applied = applied, Texts = texts, Changed = changed, Dropped = dropped } : null;
+        if (!learns) return null;
+        var result = new Probe { OpsPointer = opsPointer, Original = ops, Applied = applied, Texts = texts, Changed = changed, Dropped = dropped };
+        result.LiteralProblems.AddRange(problems.Where(p => p["literalIdentifiers"] is JsonArray && p["patch"] is JsonArray).Select(p => p.DeepClone().AsObject()));
+        return result;
 
         static string Name(string text) => FlowTextForm.Header(text) is { } header
             ? (header.Owner.Length > 0 ? header.Owner + "." : "") + header.Name : "";
@@ -143,6 +149,23 @@ public static partial class JobRunner
     }
 
     private static Regex Word(string name) => new(@"(?<![\p{L}\p{N}_$])" + Regex.Escape(name) + @"(?![\p{L}\p{N}_])", RegexOptions.IgnoreCase);
+
+    private static void ClassifyUnusedLiterals(Probe probe, IEnumerable<MessageInfo> messages)
+    {
+        foreach (var warning in messages.Where(m => m.Id == "UnusedElement"))
+        {
+            var tail = warning.Path.Split(" / ").Last();
+            var name = Regex.Replace(tail, @"\s*\([^)]*\)\s*$", "").Trim();
+            foreach (var literal in probe.LiteralProblems.Where(p => p["literalIdentifiers"]!.AsArray().Any(n => string.Equals(n?.ToString(), name, StringComparison.OrdinalIgnoreCase))))
+            {
+                var problem = literal.DeepClone().AsObject();
+                problem.Remove("patch"); problem["phase"] = "verify";
+                problem["code"] = "UnusedElement"; problem["key"] = warning.Key;
+                problem["message"] = warning.ToString();
+                probe.Found.Add((problem, $"quoting the text made its named element '{name}' unused"));
+            }
+        }
+    }
 
     // Inside the round, with its model: each problem with the patch that caused it (null: a problem of the job itself).
     private static void Classify(Probe probe, ModelSession session, IEnumerable<JsonObject> problems)
@@ -331,6 +354,7 @@ public static partial class JobRunner
                 {
                     p["patch"] = null;
                     p["fix"] = p["fix"] + " (no patch: applied to the job, the corrected op was refused: " + cause + ")";
+                    Preflight.PatchCertainty.Publish(p);
                 }
             log?.Invoke($"  patch round: the patch of op #{op} is not offered ({cause})");
         }

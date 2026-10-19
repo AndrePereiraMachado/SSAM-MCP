@@ -208,6 +208,7 @@ public static partial class ScreenVisual
                 return;
             }
             if (kind.Contains("BlockInstance", StringComparison.Ordinal)) { Block(widget, parent, depth); return; }
+            if (kind == "TableRecords") { Table(widget, parent, placeholders, depth); return; }
             var row = RuntimeDomTable.Row(platform, kind);
             if (row == null || row.Element == null)
             {
@@ -321,6 +322,30 @@ public static partial class ScreenVisual
             if (value is string text) return text;
             if (reader.ExpressionText(value) is { } expression) return expression;
             return value is System.Collections.IEnumerable ? null : "";
+        }
+
+        /// <summary>A native Table (a data table): table &gt; thead &gt; tr &gt; its header cells, tbody &gt; tr &gt; its row cells (one
+        /// record), each row with its class (StyleHeader, StyleRow); inferred until a published Table is read.</summary>
+        private void Table(PrototypeRender.NativeWidget widget, DomNode parent, IReadOnlyDictionary<string, List<PrototypeRender.NativeWidget>>? placeholders, int depth)
+        {
+            var row = RuntimeDomTable.Row(platform, "ITableRecords")!;
+            if (row.Status == RuntimeStatus.Inferred && owned) prediction.Inferred++;
+            var table = parent.Add(Mark(DomNode.Element("table"), widget));
+            var classes = PublishedClasses(StyleOf(widget), "TableRecords", platform, out var quoted, out _).ToList();
+            if (quoted && owned) prediction.QuotedClasses++;
+            foreach (var (name, value) in widget.Extended)
+                if (name == "class") classes.Add(LiteralPrefix(value));
+                else table.SetAttr(name, ExpressionText(value));
+            if (classes.Count > 0) table.SetAttr("class", string.Join(" ", classes.Where(c => c.Length > 0).Distinct(StringComparer.Ordinal)));
+            if (!string.IsNullOrEmpty(widget.Name)) table.SetAttr("id", widget.Name!);
+            if (row.Status == RuntimeStatus.Inferred) table.SetAttr("data-ssam-runtime", "inferred");
+            foreach (var (section, content, style) in new[] { ("thead", "HeaderRow", "StyleHeader"), ("tbody", "Row", "StyleRow") })
+            {
+                var tr = table.Add(DomNode.Element(section)).Add(DomNode.Element("tr"));
+                var rowClasses = PublishedClasses(Raw(widget, style), "TableRecords", platform, out _, out _);
+                if (rowClasses.Count > 0) tr.SetAttr("class", string.Join(" ", rowClasses));
+                Emit(widget.Contents.GetValueOrDefault(content) ?? [], tr, placeholders, depth + 1);
+            }
         }
 
         private static void Sentinel(DomNode list)

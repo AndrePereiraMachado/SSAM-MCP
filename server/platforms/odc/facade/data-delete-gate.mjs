@@ -69,7 +69,7 @@ function recordItems(entity, ids, rows, { complete = true } = {}) {
   return { items, rows: kept, absent, unverified };
 }
 // The words name the entity of the preview (WORDS_MUST_NAME, the code of the other deletes); the count is checkExecute's.
-const entityRule = (preview, words) => (preview.mustName ?? []).filter(name => !namesWhole(words, name)).map(name => ({ code: 'WORDS_MUST_NAME', target: name,
+export const entityRule = (preview, words) => (preview.mustName ?? []).filter(name => !namesWhole(words, name)).map(name => ({ code: 'WORDS_MUST_NAME', target: name,
   message: `The owner's words do not name the entity ${name}`,
   fix: `the owner's next message after the list, naming ${name} and stating the number ${preview.items.length}. Ask the owner again; never write, complete or reuse words yourself.` }));
 const sameTarget = (preview, { tool, host, operation }) => preview && preview.tool === tool && text(preview.host).toLowerCase() === text(host).toLowerCase() && preview.operation === operation;

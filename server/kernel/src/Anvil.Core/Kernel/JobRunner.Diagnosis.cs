@@ -107,6 +107,24 @@ public static partial class JobRunner
                 var judged = footprint.Footprint with { AnonymousIntent = session.AnonymousIntentOf(footprint.Footprint) };
                 var policy = MessageExpectations.Evaluate(delta.New, expected, delta.Preexisting, judged);
                 if (expectedValid) verify = session.VerifyProblems(policy.Unexpected, ops, opsPointer, MessageExpectations.Lane, VerifyHints.TryRead());
+                var unmapped = policy.Diagnostics().Where(m => m.StartsWith("Ambiguous ", StringComparison.Ordinal)
+                    || m.StartsWith("Missing ", StringComparison.Ordinal)).ToList();
+                foreach (var message in policy.Unexpected)
+                    if (!verify.Any(p => p["severity"]?.ToString() != "warning" && p["code"]?.ToString() == message.Id
+                        && (p["key"] == null || p["key"]?.ToString() == message.Key || p["key"]?.ToString() == message.OwnerKey
+                            || p["element"]?.ToString() == message.Path))) unmapped.Add(message.ToString());
+                var isValid = ModelHost.Describe(espace, 0, after).IsValid;
+                if (isValid != expectedValid && !verify.Any(p => p["severity"]?.ToString() != "warning"))
+                    unmapped.Add($"expectValid={expectedValid}, but Verify isValid={isValid}");
+                var contract = session.DataContract();
+                if (contract["accepted"]?.GetValue<bool>() != true)
+                    unmapped.Add("dataContract: " + contract["differences"]!.ToJsonString());
+                if (unmapped.Count > 0)
+                {
+                    var problem = JobPreflight.Problem(null, opsPointer, "VERIFY_REFUSED", "error", string.Join("; ", unmapped.Distinct()),
+                        "resolve every unmapped validation and policy verdict");
+                    problem["phase"] = "verify"; verify.Add(problem);
+                }
             }
             catch (Exception ex) { verifyFailed = Errors.Text(ex); log?.Invoke("  verify of the diagnosis failed: " + verifyFailed); }
         }

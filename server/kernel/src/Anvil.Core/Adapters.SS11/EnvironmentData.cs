@@ -171,10 +171,31 @@ public static class EnvironmentData
                 es.GetAllDescendantsOfType<IEntity>().Where(e => e.GetInterface()?.Name is "IServerEntity" or "IStaticEntity")
                 .Select(e => new DataEntity(e.Name, Keys.ToDb(e.ObjectKey.ToString()!), e.GetInterface()?.Name == "IStaticEntity",
                     e.Attributes.Select(a => new DataAttribute(a.Name, Keys.ToDb(a.ObjectKey.ToString()!),
-                        a.IsAutoNumber.ToString() == "Yes", ReferenceEquals(a.DataType, es.BinaryDataType), TypeName(a))).ToArray())).ToArray());
+                        a.IsAutoNumber.ToString() == "Yes", ReferenceEquals(a.DataType, es.BinaryDataType), TypeName(a))).ToArray(),
+                    e is ServiceStudio.Model.Entity native ? native.EntityIndices.Where(index => index.Unique).Select(index =>
+                        new DataIndex(index.Name, index.Unique, index.IndexAttributes.Select(part => part.Attribute.Name).ToArray())).ToArray() : [])).ToArray());
         }
         finally { ModelHost.Release(model); }
     }
+
+    /// <summary>The offline data contract read from a published module snapshot.</summary>
+    public static JsonObject SchemaAnswer(DataSchema schema) => new()
+    {
+        ["ok"] = true, ["module"] = schema.Module, ["moduleKey"] = schema.Key,
+        ["entities"] = new JsonArray(schema.Entities.Select(entity => (JsonNode)new JsonObject
+        {
+            ["name"] = entity.Name, ["key"] = entity.Key, ["static"] = entity.IsStatic, ["identifier"] = IdentifierOf(entity),
+            ["indexes"] = new JsonArray((entity.Indexes ?? []).Select(index => (JsonNode)new JsonObject {
+                ["name"] = index.Name, ["unique"] = index.Unique,
+                ["attributes"] = new JsonArray(index.Attributes.Select(name => (JsonNode?)JsonValue.Create(name)).ToArray()),
+            }).ToArray()),
+            ["attributes"] = new JsonArray(entity.Attributes.Select(attribute => (JsonNode)new JsonObject
+            {
+                ["name"] = attribute.Name, ["type"] = attribute.Type,
+                ["autoNumber"] = attribute.AutoNumber, ["binary"] = attribute.IsBinary,
+            }).ToArray()),
+        }).ToArray()),
+    };
 
     // ---- values by type (C36) -------------------------------------------------
     //
@@ -564,7 +585,7 @@ public static class EnvironmentData
     /// <summary>Every problem of the request, found before any call: entity and operation names, write authorization and
     /// operationId, attributes, each value against its type (DATA_VALUE_INVALID) and each $ref against the inserts that come
     /// before it (DATA_REF_UNRESOLVED). Empty when the batch can run.</summary>
-    public static JsonArray ValidateBatch(DataSchema schema, JsonObject request)
+    public static JsonArray ValidateBatch(DataSchema schema, JsonObject request, bool writeFields = true)
     {
         var problems = new JsonArray();
         var operations = OperationsOf(request);
@@ -608,11 +629,14 @@ public static class EnvironmentData
             }
 
             if (entity.IsStatic) problems.Add(Problem(k, at + "/entity", "DATA_REQUEST_INVALID", $"{entity.Name} is a static entity: its records change in the model and are published, not through Edit Data"));
-            if (string.IsNullOrWhiteSpace(operation["authorization"]?.ToString() ?? request["authorization"]?.ToString()))
-                problems.Add(Problem(k, at + "/authorization", "DATA_REQUEST_INVALID", "Writing data requires the user's original authorization words in authorization (on the operation or on the batch)"));
-            var operationId = operation["operationId"]?.ToString();
-            if (!Guid.TryParse(operationId, out _)) problems.Add(Problem(k, at + "/operationId", "DATA_REQUEST_INVALID", "Writing data requires a stable UUID operationId on every write"));
-            else if (!operationIds.Add(operationId!)) problems.Add(Problem(k, at + "/operationId", "DATA_REQUEST_INVALID", $"operationId {operationId} is used by two writes of the batch; each write needs its own UUID"));
+            if (writeFields)
+            {
+                if (string.IsNullOrWhiteSpace(operation["authorization"]?.ToString() ?? request["authorization"]?.ToString()))
+                    problems.Add(Problem(k, at + "/authorization", "DATA_REQUEST_INVALID", "Writing data requires the user's original authorization words in authorization (on the operation or on the batch)"));
+                var operationId = operation["operationId"]?.ToString();
+                if (!Guid.TryParse(operationId, out _)) problems.Add(Problem(k, at + "/operationId", "DATA_REQUEST_INVALID", "Writing data requires a stable UUID operationId on every write"));
+                else if (!operationIds.Add(operationId!)) problems.Add(Problem(k, at + "/operationId", "DATA_REQUEST_INVALID", $"operationId {operationId} is used by two writes of the batch; each write needs its own UUID"));
+            }
             if (kind == "delete")
             {
                 if (operation["ids"] is not JsonArray deleteIds || deleteIds.Count == 0)
@@ -655,15 +679,28 @@ public static class EnvironmentData
     }
 
     /// <summary>The refusal of a request with problems (nothing sent), or null when it can run.</summary>
-    public static JsonObject? Refusal(DataSchema schema, JsonObject request)
+    public static JsonObject? Refusal(DataSchema schema, JsonObject request, bool writeFields = true)
     {
-        var problems = ValidateBatch(schema, request);
+        var problems = ValidateBatch(schema, request, writeFields);
         if (problems.Count == 0) return null;
         var first = problems[0]!.AsObject();
         return new JsonObject
         {
             ["ok"] = false, ["code"] = first["code"]!.DeepClone(), ["error"] = $"{problems.Count} problem(s) before any write; first: {first["message"]}",
             ["problems"] = problems, ["submitted"] = 0, ["total"] = OperationsOf(request).Count, ["results"] = new JsonArray(),
+        };
+    }
+
+    /// <summary>Validate the entire request offline, without a Studio session or data store. A dry run may omit only
+    /// the write authorization and operationId fields; every model, value and reference rule still applies.</summary>
+    public static JsonObject Check(DataSchema schema, JsonObject request, bool writeFields)
+    {
+        if (Refusal(schema, request, writeFields) is { } refusal) return refusal;
+        var operations = OperationsOf(request);
+        return new JsonObject
+        {
+            ["ok"] = true, ["operations"] = operations.Count,
+            ["records"] = operations.Sum(operation => (operation["records"] as JsonArray)?.Count ?? 0),
         };
     }
 
@@ -854,6 +891,7 @@ public static class EnvironmentData
 
 // Shared with EntityData (the private-credential path of `data`), which builds the schema the same way.
 public sealed record DataSchema(string Module, string Key, DataEntity[] Entities);
-public sealed record DataEntity(string Name, string Key, bool IsStatic, DataAttribute[] Attributes);
+public sealed record DataEntity(string Name, string Key, bool IsStatic, DataAttribute[] Attributes, DataIndex[]? Indexes = null);
+public sealed record DataIndex(string Name, bool Unique, string[] Attributes);
 public sealed record DataAttribute(string Name, string Key, bool AutoNumber, bool IsBinary, string Type = "");
 // The write receipt of both paths is DataReceipt (DataReceipt.cs).

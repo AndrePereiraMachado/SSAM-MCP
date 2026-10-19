@@ -176,6 +176,15 @@ public static class JobDocument
         return found;
     }
 
+    /// <summary>The job's optional auto-patch policy is a JSON boolean, never a textual instruction.</summary>
+    public static List<Shape> RootShape(JsonNode? job)
+    {
+        var found = new List<Shape>();
+        if (job is JsonObject root && root.TryGetPropertyValue("autoPatch", out var value))
+            Walk(value, Bool, "/autoPatch", "autoPatch", found);
+        return found;
+    }
+
     private static string? At(string? pointer, string key) => pointer == null ? null : pointer + "/" + key.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
 
     private static void Walk(JsonNode? node, Field field, string? pointer, string key, List<Shape> found)

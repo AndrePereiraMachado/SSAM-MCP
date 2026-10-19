@@ -12,7 +12,8 @@ namespace Anvil.Reading;
 //
 //   {find:"exact text", with:"text"}                  the ONLY occurrence of the text in the base (with "" removes it)
 //   {set:"w17", attributes:{"class":"a b","x":null}}  the open tag only: a value replaces (in place), null removes, a new one
-//                                                     is appended; never k; the children stay
+//                                                     is appended; never k; the children stay; "id": null removes the name
+//                                                     (written id="": an element whose text leaves its id out keeps its name)
 //   {replace:"w17", with:"<div ...>...</div>"}        the element whole (an If with its <div else>); a root without k is w17
 //   {delete:"w17"}                                    the element (and its else)
 //   {after|before:"w17", insert:"..."}                new elements (no k) as siblings
@@ -28,6 +29,8 @@ public static class HtmlElementEdits
 {
     public const string TargetUnknown = "HTML_EDIT_TARGET_UNKNOWN", TextNotUnique = "HTML_EDIT_TEXT_NOT_UNIQUE";
     public const int MaxEdits = 500;
+    // The attribute of a widget's name: null in a set removes the name (id=""), never only the attribute (which keeps it).
+    private const string NameAttribute = "id";
 
     private static readonly string[] AddressKeys = ["find", "set", "replace", "delete", "after", "before", "into", "move"];
     private static readonly string[] Destinations = ["after", "before", "into"];
@@ -433,6 +436,9 @@ public static class HtmlElementEdits
                     var next = value?.GetValue<string>();
                     if (next == null) {
                         if (written == null) continue;   // nothing to remove: no effect (R5)
+                        // "id": null removes the name, as the contract of set says: written id="" (a text that leaves an id out
+                        // keeps the name the element has; the review of round 2, A2).
+                        if (name == NameAttribute) { Emit(written.Start, written.End, ScreenHtml.Attribute(name, "")); continue; }
                         var from = written.Start;
                         while (from > e.OpenStart && char.IsWhiteSpace(b.Source[from - 1])) from--;
                         Emit(from, written.End, "");
@@ -549,7 +555,7 @@ public static class HtmlElementEdits
         foreach (var (name, value) in attributes) {
             var at = copy.Attributes.FindIndex(a => a.Key == name);
             var next = value?.GetValue<string>();
-            if (next == null) { if (at >= 0) copy.Attributes.RemoveAt(at); }
+            if (next == null) { if (at >= 0) { if (name == NameAttribute) copy.Attributes[at] = new(name, ""); else copy.Attributes.RemoveAt(at); } }
             else if (at >= 0) copy.Attributes[at] = new(name, next);
             else copy.Attributes.Add(new(name, next));
         }

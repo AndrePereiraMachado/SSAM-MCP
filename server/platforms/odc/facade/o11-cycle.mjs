@@ -58,7 +58,7 @@ import { readConnection } from './studio-session.mjs';
 import { trackTask, registerSsamTask, tasksDir } from './ssam-task.mjs';
 import { hostedContext, seamFields } from './executor.mjs';
 import { o11Studio, lastPublicationOf, readInventory } from './o11-studio.mjs';
-import { resolvePatchedJob, failedOpOf, jobShapeOf, PATCH_MAX_OPS, nextBasedOnOf, withNamedPatches } from './job-patch.mjs';
+import { resolvePatchedJob, failedOpOf, jobShapeOf, PATCH_MAX_OPS, nextBasedOnOf, withNamedPatches, appliedJobIdentity } from './job-patch.mjs';
 import { resolveOpenModule } from './studio-module.mjs';
 import * as standingGrants from './standing-grants.mjs';
 import { prepareIntegrationJob } from './integration-documents.mjs';
@@ -69,7 +69,7 @@ import { jobSummary } from './job-summary.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
 // Lane wp (atritos 3): the build phase of a phased delivery, outside the Studio lock (o11-build-phase.mjs).
 import { phaseGuards, buildBeforeApply, afterApply, validationContract, contractProblems } from './o11-build-phase.mjs';
-import { refusalFields, diagnosisOf, normalizationsOf } from './refusal-problems.mjs';
+import { refusalFields, diagnosisOf, normalizationsOf, patchesAppliedOf } from './refusal-problems.mjs';
 import { PHASES_META, noteStudioHolder, pendingOperationOf } from './studio-write-lock.mjs';
 import { watchPendingOperation } from './studio-pending-operation.mjs';
 import { stallRecovery } from './studio-recovery.mjs';
@@ -308,6 +308,7 @@ const deliverSchema = z.object({
   patch: patchSchema.optional().describe('Instead of job: JSON Patch (add, remove, replace, test; at most 50) over the job of basedOn, or "verified" (every verified patch of its refusal: verifiedPatch.call), '
     + 'paths /ops/<i>/... (/<i>/... for an array job) or by name: actions/<Action>/steps/<as>/...; the patched job is a new file'),
   basedOn: basedOnSchema.optional().describe('With patch or a partial job: {job, sha256} as an answer returned them (nextBasedOn), or {taskId} of a refused delivery'),
+  autoPatch: z.boolean().optional().describe('false: offer verified repairs without applying them automatically.'),
   checks: z.array(z.string().min(1).regex(/^[^,]+$/)).max(64).optional().describe('Element names that must exist after the merge'),
   until: z.enum(['apply', 'merge']).default('merge').describe('apply: validate on a fresh snapshot without merging, only when the person asks for it'),
   producers: z.union([z.literal('published'), z.record(z.string(), z.string().min(1))]).optional()
@@ -361,10 +362,10 @@ export function producerArgs(producers = {}, captures = [], { names } = {}) {
 export function deliverArguments(input, { work, port }) {
   const close = input.publish === true ? [] : ['--close-opened-tab'];
   if (input.resume) return ['deliver', '--resume', input.resume, '--work', work, '--port', String(port),
-    ...(input.expectedEnvironment ? ['--expected-environment', input.expectedEnvironment] : []), ...close];
+    ...(input.expectedEnvironment ? ['--expected-environment', input.expectedEnvironment] : []), ...(input.autoPatch === false ? ['--auto-patch', 'off'] : []), ...close];
   return ['deliver', '--module', input.module, '--job', input.job, ...(input.checks?.length ? ['--checks', input.checks.join(',')] : []),
     ...producerArgs(input.producers, input.captureProducers, { names: null }), ...(input.expectedEnvironment ? ['--expected-environment', input.expectedEnvironment] : []),
-    '--work', work, '--port', String(port), ...close];
+    '--work', work, '--port', String(port), ...(input.autoPatch === false ? ['--auto-patch', 'off'] : []), ...close];
 }
 // `deliver --close <taskId> --reason <text> --work W --port P` (kernel DeliveryTask.CloseKnownFailure).
 // The job a patched delivery corrects, carried on the call's input to the builds (never a field of the tool's schema).
@@ -385,6 +386,7 @@ function resolveJob(input, lane) {
     ...(input.checks?.length ? { checks: input.checks } : {}), ...(input.producers ? { producers: input.producers } : {}),
     ...(input.captureProducers?.length ? { captureProducers: input.captureProducers } : {}),
     ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}),
+    ...(input.autoPatch === false ? { autoPatch: false } : {}),
     ...(input.until === 'apply' ? { until: 'apply' } : {}), ...(input.closePrevious ? { closePrevious: input.closePrevious } : {}), authorize: WORDS_MARKER },
     why: 'The job file changed after that refusal: send it as it is now, or the whole corrected job; a patch applies only to the content the refusal named. authorize: the user\'s words in place of the marker.' } : undefined;
   throw new Refusal(resolved.code, resolved.error, next, { ...(resolved.at != null ? { at: resolved.at } : {}), ...(resolved.candidates ? { candidates: resolved.candidates } : {}) });
@@ -404,8 +406,9 @@ function withJob(value, resolved) {
 // A success names the job it delivered (or validated) the same way: nextBasedOn, and what a partial job merged. A delivery
 // ("entregue", "entregue e publicado") also says what the job created or changed (job-summary.mjs: each action with its
 // inputs and outputs, each entity and structure with its attribute count), so no map of the module follows it.
-function withJobDone(value, resolved) {
+function withJobDone(value, resolved, lane) {
   if ((value?.ok !== true && !resultIs(value?.result, 'delivered')) || !resolved?.path) return value;
+  resolved = appliedJobIdentity(value.patchedJob, resolved, { journalDir: lane && path.join(lane.local, 'journal'), tool: 'o11_deliver' });
   const delivered = resultIs(value?.result, 'delivered', 'deliveredAndPublished');
   let summary = null;
   if (delivered && value.summary == null) { try { summary = jobSummary(JSON.parse(fs.readFileSync(resolved.path, 'utf8').replace(/^﻿/, ''))); } catch { summary = null; } }
@@ -511,6 +514,7 @@ const basedOnDelivered = (input, record, hash = input.basedOn?.sha256) => refusa
     ...(input.checks?.length ? { checks: input.checks } : {}), ...(input.producers ? { producers: input.producers } : {}),
     ...(input.captureProducers?.length ? { captureProducers: input.captureProducers } : {}),
     ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}),
+    ...(input.autoPatch === false ? { autoPatch: false } : {}),
     ...(input.until === 'apply' ? { until: 'apply' } : {}), ...(input.closePrevious ? { closePrevious: input.closePrevious } : {}),
     ...(input.publish === true ? { publish: true } : {}), authorize: WORDS_MARKER },
     why: 'A delivered job is already in the module: the next change is a new job with only that change, without basedOn, over the module as it is now (ssam_map reads the @keys of what was created). authorize: the user\'s words in place of the marker.' },
@@ -700,6 +704,7 @@ export function deliveryFields(state) {
     ...referencesAddedOf(state),
     // lentidao 2026-10-12: the kernel's JobNormalizer rewrites of this job (apply receipt), never silent.
     ...normalizationsOf(state?.apply),
+    ...patchesAppliedOf(state?.apply),
     // fam-deps review (finding 1): the dialogs the bridge closed for this delivery.
     ...dialogsOf(state) };
 }
@@ -948,7 +953,8 @@ export function deliverOutcome(run, { trackId, work, job, taskId, since, input =
   const order = merged ? mergeOrderOf(state.mergeOrder) : null;
   const holds = closeState(state) === 'refused' && TASK_ID.test(String(base.taskId ?? ''));
   const repair = order?.repair && input.module ? { tool: 'o11_deliver', arguments: { module: input.module, job: order.repair,
-    ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}), ...(holds ? { closePrevious: base.taskId } : {}), authorize: WORDS_MARKER },
+    ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}),
+    ...(input.autoPatch === false ? { autoPatch: false } : {}), ...(holds ? { closePrevious: base.taskId } : {}), authorize: WORDS_MARKER },
     why: 'Delivers the repair job the kernel computed (set DefaultValue on each element by key) over the module as it is now'
       + (holds ? ', after closing this refused task' : '') + '. authorize: the user\'s words in place of the marker.' } : null;
   // The Studio runs a bridge older than the merge order this delivery needs: nothing was merged; the current bridge loads
@@ -1237,7 +1243,7 @@ async function applyOnly(input, job, ctx, task, proto = null) {
     if (captured?.key && active?.key && captured.key !== active.key) return refusal('ACTIVE_MODULE_CHANGED', 'The active module changed during the snapshot; nothing was applied.', doctor('Shows the module open in the selected Studio.'));
     const folder = path.join(lane.work, 'apply', task.id);
     const applyOnce = file => ctx.runAnvil(['apply', '--job', file, '--base', snapshot, '--out', path.join(folder, 'candidate.oml'), '--work', path.join(folder, 'model'),
-      ...producerArgs(input.producers, [], { names: null }), ...(input[BASED_ON] ? ['--based-on', input[BASED_ON]] : [])], { timeoutMs: ctx.applyTimeoutMs });
+      ...producerArgs(input.producers, [], { names: null }), ...(input.autoPatch === false ? ['--auto-patch', 'off'] : []), ...(input[BASED_ON] ? ['--based-on', input[BASED_ON]] : [])], { timeoutMs: ctx.applyTimeoutMs });
     let run;
     if (proto) {
       const begin = Date.now();
@@ -1248,7 +1254,7 @@ async function applyOnly(input, job, ctx, task, proto = null) {
       run = b.result; proto.kernelData = run?.envelope?.data ?? null;
     } else run = await applyOnce(job);
     const data = run?.envelope?.data;
-    if (run?.envelope?.ok === true && data?.isValid === true && data?.accepted === true) return { ok: true, valid: true };
+    if (run?.envelope?.ok === true && data?.isValid === true && data?.accepted === true) return { ok: true, valid: true, ...normalizationsOf(data), ...patchesAppliedOf(data) };
     if (data && typeof data === 'object' && 'isValid' in data) {
       const { messages, omitted } = validationMessages({ apply: data });
       // The part of the contract that refused and every problem (as deliverOutcome answers a delivery), never only messages;
@@ -1760,7 +1766,7 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
     if (proto && value?.ok === true) value = await prototypeAnswer(value, proto, { kernelState, module: input.module ?? null });
     // a kernel refusal of the import (PROTOTYPE_NAME_COLLISION) never offers a patch that leaves the call as it was
     if (proto && value?.ok === false) value = withoutIdentityPatches(value, readJobDocument(proto.original?.path));
-    if (until !== 'merge') return withJobDone(value, named);
+    if (until !== 'merge') return withJobDone(value, named, lane);
     const module = input.module ?? findKernelTask(lane.work, { taskId: input.resume })?.module ?? null;
     if (touch) value = { ...value, touch };
     if (input.publish === true) {
@@ -1782,8 +1788,11 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
     }
     if (proto?.receipt && value && typeof value === 'object') value = { ...value, prototype: proto.receipt };
     // G16: the job is in the module now (a failed publication too: the delivery stands); it is never a base again.
-    if (resultIs(value?.result, 'delivered', 'deliveredAndPublished')) recordDelivered(lane, named, { module, taskId: kernelState?.taskId, at: ctx.now().toISOString() });
-    return withJobDone(value, named);
+    value = withJobDone(value, named, lane);
+    if (resultIs(value?.result, 'delivered', 'deliveredAndPublished')) recordDelivered(lane,
+      { ...named, path: value.nextBasedOn?.job ?? named?.path, sha256: value.nextBasedOn?.sha256 ?? named?.sha256 },
+      { module, taskId: kernelState?.taskId, at: ctx.now().toISOString() });
+    return value;
   } catch (error) {
     if (error instanceof Refusal) return withJob(refusal(error.code, error.message, error.continuation
       ?? { tool: 'o11_deliver', arguments: input.module ? { module: input.module } : {}, why: 'Call again with the arguments fixed as the error says, and the user\'s words in authorize.' }, error.extra), resolved);

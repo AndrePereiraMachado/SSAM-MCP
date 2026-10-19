@@ -77,6 +77,19 @@ public sealed class PrototypeBuilder
             if (otherwise != null && node.Else != null) foreach (var child in node.Else) Widget(otherwise, child, specs);
             return;
         }
+        if (node.W == "ITableRecords")
+        {
+            // a native Table: its header cells in its HeaderRow, its row cells in its Row (what the Studio created there first removed)
+            var header = Prop(widget, "HeaderRow");
+            var row = Prop(widget, "Row");
+            foreach (var content in new[] { header, row })
+                if (content is IObjectSignature holder)
+                    foreach (var born in holder.Children.OfType<IObjectSignature>().Where(c => c.GetInterface()?.Name is "IHeaderCell" or "IRowCell").ToList()) born.Delete();
+            foreach (var child in node.Children)
+                if ((child.W == "IHeaderCell" ? header : row) is { } target) Widget(target, child, specs);
+                else Problems.Add(new JsonObject { ["k"] = child.K, ["code"] = "CREATE_FAILED", ["message"] = "the native Table has no " + (child.W == "IHeaderCell" ? "HeaderRow" : "Row"), ["done"] = "removed" });
+            return;
+        }
         foreach (var child in node.Children) Widget(widget, child, specs);
     }
 

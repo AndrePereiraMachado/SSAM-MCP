@@ -87,12 +87,14 @@ public static partial class FunctionCatalog
         ["Today"] = "CurrDate", ["IIf"] = "If", ["NullId"] = "NullIdentifier",
     };
 
-    /// <summary>The one built-in a call to the unknown <paramref name="name"/> certainly means, or null: a rename of
-    /// <see cref="Renames"/>, else the only built-in at most one letter (two in a name of eight or more) away.</summary>
+    /// <summary>Only the explicit compatibility table proves the intended rename. Similar spelling does not prove semantics.</summary>
     public static string? Certain(string name)
+        => Renames.TryGetValue(name, out var renamed) && Names.Contains(renamed) ? renamed : null;
+
+    /// <summary>A unique close spelling can be offered, but it always requires the author's choice.</summary>
+    public static string? Nearest(string name)
     {
-        if (Renames.TryGetValue(name, out var renamed)) return Names.Contains(renamed) ? renamed : null;
-        if (name.Length < 5) return null;
+        if (Names.Contains(name) || name.Length < 5) return null;
         var limit = name.Length >= 8 ? 2 : 1;
         var lower = name.ToLowerInvariant();
         var near = All.Select(f => f.Name).Distinct(StringComparer.Ordinal).Where(c => Math.Abs(c.Length - name.Length) <= limit && Distance(lower, c.ToLowerInvariant()) <= limit).ToList();

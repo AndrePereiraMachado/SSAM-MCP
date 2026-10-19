@@ -43,6 +43,7 @@ public static class CodedProblems
             if (problem["patch"] is JsonArray patch) problem["patch"] = basePointer == null ? null : RebasePatch(patch, basePointer, swapFrom, swapTo);
             if (phase != null && problem["phase"] == null) problem["phase"] = phase;
             problem["_kind"] = kind;
+            PatchCertainty.Publish(problem);
             result.Add(problem);
         }
         return result;

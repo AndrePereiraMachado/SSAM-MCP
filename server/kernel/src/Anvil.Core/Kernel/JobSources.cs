@@ -6,6 +6,22 @@ namespace Anvil.Core;
 public static class JobSources
 {
     public sealed record Source(string Path, bool IsJob);
+    /// <summary>The hash-bound, disclosed origin of a corrected job preserves relative source semantics when it moves.</summary>
+    internal static string DirectoryOf(string jobPath)
+    {
+        var originPath = Path.GetFullPath(jobPath) + ".source.json";
+        if (!File.Exists(originPath)) return Path.GetDirectoryName(Path.GetFullPath(jobPath))!;
+        try
+        {
+            var origin = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(originPath))!;
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(jobPath))).ToLowerInvariant();
+            var dir = origin["sourceDirectory"]!.GetValue<string>();
+            if (origin["jobSha256"]?.ToString() != hash || !Path.IsPathFullyQualified(dir) || !Directory.Exists(dir))
+                throw new InvalidOperationException("the corrected job's source provenance does not match its bytes or directory");
+            return dir;
+        }
+        catch (Exception error) { throw new KernelRefusalException("SOURCE_PROVENANCE_INVALID", $"{originPath}: {Errors.Text(error)}. If you intentionally edited this job, delete its stale sidecar '{originPath}' and resolve the job's relative sources from its current directory."); }
+    }
     public static bool IsBindingName(string spec) => Regex.IsMatch(spec, @"^[A-Za-z_][A-Za-z0-9_]*$");
 
     // fix/system-reference: the Studio lists the system producer as "(System)" (ODC Manage Dependencies and

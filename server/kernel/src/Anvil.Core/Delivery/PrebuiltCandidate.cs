@@ -54,6 +54,13 @@ public static class PrebuiltCandidate
             if (ModelSha256(buildBase) != ModelSha256(basePath)) { reason = "base-changed"; return null; }
             var result = JsonNode.Parse(File.ReadAllText(resultPath))!.AsObject();
             if (result["isValid"]?.GetValue<bool>() != true || result["accepted"]?.GetValue<bool>() != true) { reason = "build-not-accepted"; return null; }
+            if (result["patchesApplied"] is JsonArray { Count: > 0 })
+            {
+                var job = JobDocument.Parse(jobPath);
+                var jobDisabled = job is JsonObject document && document["autoPatch"] is JsonValue policy
+                    && policy.TryGetValue<bool>(out var enabled) && !enabled;
+                if (JobPreflight.AutoPatch.Value == false || jobDisabled) { reason = "auto-patch-disabled"; return null; }
+            }
             // The job and every file it reads (composite parts, html sources, producers named by job:) as the build read them.
             if (result["sources"] is not JsonArray built || !JsonNode.DeepEquals(Normalized(built), Normalized(DeliveryReceipt.Sources(jobPath)))) { reason = "job-changed"; return null; }
             if (!SameProducers(manifest["producers"] as JsonObject, producers)) { reason = "producers-changed"; return null; }

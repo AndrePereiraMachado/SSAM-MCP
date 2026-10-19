@@ -324,6 +324,7 @@ public sealed partial class ModelSession
         var patchSources = new Dictionary<int, JsonObject>();
         var patchedText = new Dictionary<string, string>(StringComparer.Ordinal);
         if (blocking.Count == 0) return problems;
+        var actionNames = BuiltinActionNames();
         // One walk of the module for every message (the owners of expressions are not in the session's key map).
         Dictionary<string, IObjectSignature>? byKey = null;
         IObjectSignature? Owner(string? key)
@@ -393,9 +394,13 @@ public sealed partial class ModelSession
             var modelPatch = ModelSourcePatch(m, owner, patchSource, sourcePointer);
             if (modelPatch is { } edit && patchSource != null && sourcePointer != null)
                 RememberSourceEdits(patchSource, sourcePointer, edit.Patch, patchedText);
-            var patch = modelPatch ?? (inner != null && pointer != null && Text(source, inner) is { } text ? CertainPatch(m, pointer, text) : null);
+            var patch = modelPatch ?? (inner != null && pointer != null && Text(source, inner) is { } text ? CertainPatch(m, pointer, text, actionNames) : null);
             var message = $"{m.Type} {m.Id}: {VerifyHints.OneLine(m.Detail, 400)} @ {m.Path}";
-            var problem = JobPreflight.Problem(op, pointer, m.Id, "error", message, patch?.Fix ?? Fix(m, owner, action, source, lane, hints), patch?.Patch, kind ?? "verify");
+            var problem = JobPreflight.Problem(op, pointer, m.Id, "error", message, patch?.Fix ?? Fix(m, owner, action, source, lane, hints), patch?.Patch, kind ?? "verify", patch?.PatchRule);
+            if (m.Id == "ArgumentRequiredExpression" && modelPatch != null && RequiredArgumentFocus(owner, source) is { } focus) {
+                problem["line"] = focus.Line;
+                problem["patchFocus"] = new JsonObject { ["argument"] = focus.Argument, ["node"] = focus.Node, ["callee"] = focus.Callee };
+            }
             problem["phase"] = "verify";
             problem["element"] = m.Path;
             if (m.OwnerKey != null) problem["key"] = m.OwnerKey;
@@ -405,9 +410,20 @@ public sealed partial class ModelSession
         }
         // Several Verify messages can repair the same HTML or flow item. Each problem carries the complete combined edit,
         // so applying every offered patch is order-independent and cannot discard another correction.
+        var rulesByPath = problems.Where(p => p["patch"] is JsonArray).SelectMany(p => p["patch"]!.AsArray().OfType<JsonObject>()
+                .Select(e => (Path: e["path"]?.ToString(), Problem: p)))
+            .Where(e => e.Path != null).GroupBy(e => e.Path!, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => Preflight.PatchCertainty.Members(g.Select(e => e.Problem)), StringComparer.Ordinal);
         foreach (var problem in problems)
+        {
+            var composedRules = new List<string>();
             foreach (var edit in (problem["patch"] as JsonArray ?? new JsonArray()).OfType<JsonObject>())
-                if (edit["path"]?.ToString() is { } path && patchedText.TryGetValue(path, out var finalText)) edit["value"] = finalText;
+                if (edit["path"]?.ToString() is { } path && patchedText.TryGetValue(path, out var finalText)) {
+                    edit["value"] = finalText;
+                    composedRules.AddRange(rulesByPath[path].Select(r => r?.ToString() ?? ""));
+                }
+            if (composedRules.Count > 0) problem["patchRules"] = new JsonArray(composedRules.Distinct(StringComparer.Ordinal).Select(r => (JsonNode)JsonValue.Create(r)!).ToArray());
+        }
         if (omitted.Count > 0)
             problems.Add(JobPreflight.Problem(null, null, "VERIFY_OF_FAILED_OPS_OMITTED", "warning",
                 $"the Verify messages on what failed op(s) #{string.Join(", #", omitted)} left half-built are not reported: they are those failures again",
@@ -586,20 +602,32 @@ public sealed partial class ModelSession
         return node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
     }
 
-    /// <summary>The fix and the patch of a message whose correction is certain from the job alone: an unknown function one
-    /// built-in certainly means (FunctionCatalog.Certain, Lower -> ToLower), renamed in the expression at the pointer (a set
-    /// value the base check does not read). Null when the correction is not certain.</summary>
-    private static (string Fix, JsonArray Patch)? CertainPatch(MessageInfo m, string pointer, string text)
+    /// <summary>Every action name can express the author's intended call, even when it is not marked Function.
+    /// Includes imported signatures and screen/data actions. Unreadable scope is not evidence of certainty.</summary>
+    internal HashSet<string>? BuiltinActionNames()
+    {
+        try {
+            return AllDescendants().Where(d => d.GetType().GetInterfaces().Any(i =>
+                i.Name.EndsWith("Action", StringComparison.Ordinal) || i.Name.EndsWith("ActionSignature", StringComparison.Ordinal)))
+                .Select(d => TypeResolver.Name(d)).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        } catch { return null; }
+    }
+
+    /// <summary>Offer the whitelist rename or a close spelling, while independently deciding whether the author has a choice.</summary>
+    private static (string Fix, JsonArray Patch, string PatchRule)? CertainPatch(MessageInfo m, string pointer, string text, IReadOnlySet<string>? actionNames)
     {
         if (m.Id != "ExpressionUnknownFunction" || Quoted.Match(m.Detail) is not { Success: true } quoted) return null;
         var name = quoted.Groups[1].Success ? quoted.Groups[1].Value : quoted.Groups[2].Value;
         // No catalog in this host (it is read from the Studio's registry): no certain fix, the message keeps its advice.
-        string? certain;
-        try { certain = FunctionCatalog.Certain(name); } catch { certain = null; }
-        if (certain == null) return null;
-        var renamed = JobRunner.RenameCall(text, name, certain);
+        string? candidate; bool whitelisted;
+        try { candidate = FunctionCatalog.Certain(name); whitelisted = candidate != null; candidate ??= FunctionCatalog.Nearest(name); }
+        catch { return null; }
+        if (candidate == null) return null;
+        var certain = whitelisted && actionNames != null && !actionNames.Contains(name) && !actionNames.Contains(candidate);
+        var rule = certain ? "BUILTIN_FUNCTION_RENAMED" : whitelisted ? "BUILTIN_FUNCTION_SHADOWED" : "BUILTIN_FUNCTION_NEAREST";
+        var renamed = JobRunner.RenameCall(text, name, candidate);
         return renamed == text ? null
-            : ($"write {certain}(...), the built-in meant here (same arguments)", new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = pointer, ["value"] = renamed }));
+            : ($"{(certain ? "write" : "choose whether the intended call is")} {candidate}(...){(certain ? ", the explicit built-in rename (same arguments)" : "; an action call or another operation may be intended")}", new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = pointer, ["value"] = renamed }), rule);
     }
 
     private static IEnumerable<(string Pointer, string Text)> Strings(JsonNode? node, string at)

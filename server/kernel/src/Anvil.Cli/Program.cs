@@ -6,7 +6,7 @@
 //   download-all  --credentials <json> --out dir [--filter substr]
 //   download-app  --credentials <json> --app <nome|key>[,<nome|key>...] --out dir
 //   referenceable --credentials <json>                                  catalogo de produtores do servidor
-//   data          --module <nome> --oml <snapshot> --request <json>      Edit Data pelo login do Studio (ver DataCommand)
+//   data          --module <nome> --oml <snapshot> (--schema | --request <json> [--check [--no-write-fields]])  schema/check offline ou Edit Data pelo login do Studio (ver DataCommand)
 //   data          --host h --module <nome> --oml <snapshot> --request <json>   Edit Data pela credencial privada do host
 //   references    --oml <arquivo> [--work dir]                          referencias consumidas (do OML)
 //   inspect       --oml <arquivo> [--work dir]                          load + verify + objetos + referencias
@@ -1009,6 +1009,7 @@ public static class Program
         JobRunner.ValidateJob(Need(args, "--job"));
         // the job a patched or partial job corrects (job-patch.mjs): the CSS loss guard of the preflight compares the two
         JobPreflight.BasedOn.Value = Opt(args, "--based-on") is { Length: > 0 } basedOn ? Path.GetFullPath(basedOn) : null;
+        using var autoPatch = JobPreflight.UseAutoPatch(Anvil.Core.Delivery.DeliverArguments.AutoPatch(args));
         // Every problem at once, with the code and the structured problems in the error envelope (PREFLIGHT_REFUSED, I2).
         // primeira-certa A2: the preflight runs inside JobRunner, which goes on to the base check, the apply and the Verify
         // when the base loads, and refuses once with every phase (verifyRan says whether the Verify ran).
@@ -1052,6 +1053,7 @@ public static class Program
             request = Anvil.Core.Delivery.DeliveryTask.ResumeRequest(work, id);
             if (request.BridgePort != null && request.BridgePort != port) throw new ArgumentException("Resume must use the task's original Studio lane");
             Anvil.Core.Delivery.DeliverArguments.RequireRecordedEnvironment(args, request);
+            Anvil.Core.Delivery.DeliverArguments.RequireRecordedAutoPatch(args, request);
             // K1-g: closing the tab is a property of this call, never of the task identity.
             request = request with { CloseOpenedTab = Anvil.Core.Delivery.DeliverArguments.CloseOpenedTab(args) };
         }
@@ -1062,7 +1064,8 @@ public static class Program
             specificationPath = Path.GetFullPath(specificationPath);
             var specification = ModuleSpecification.Read(specificationPath);
             request = new(Need(args, "--module"), specificationPath, work, Array.Empty<string>(), BridgePort: port,
-                Specification: specification, ExpectedEnvironment: Anvil.Core.Delivery.DeliverArguments.ExpectedEnvironment(args));
+                Specification: specification, ExpectedEnvironment: Anvil.Core.Delivery.DeliverArguments.ExpectedEnvironment(args),
+                AutoPatch: Anvil.Core.Delivery.DeliverArguments.AutoPatch(args));
         }
         // --expected-environment: the environment attestation; --capture-producer: read-only producer captures
         else request = Anvil.Core.Delivery.DeliverArguments.ForJob(args, work, port);

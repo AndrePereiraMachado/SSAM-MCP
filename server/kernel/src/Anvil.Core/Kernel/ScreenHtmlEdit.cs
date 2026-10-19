@@ -95,7 +95,9 @@ public static class ScreenHtmlEdit
         KeyTwice = "HTML_KEY_TWICE", OpaqueTouched = "HTML_OPAQUE_TOUCHED", Visible = "HTML_VISIBLE", Script = "HTML_SCRIPT", Json = "HTML_JSON",
         NameUnknown = "HTML_NAME_UNKNOWN", NameTaken = "HTML_NAME_TAKEN", DeleteInUse = "HTML_DELETE_IN_USE", SlotUnknown = "HTML_SLOT_UNKNOWN",
         ActionsListed = "HTML_ACTIONS_LISTED", DataNew = "HTML_DATA_NEW", KindChanged = "HTML_KIND_CHANGED", BaseChanged = "HTML_BASE_CHANGED",
-        NotApplied = "HTML_EDIT_NOT_APPLIED", ForEach = "HTML_FOREACH", DefaultsMissing = "HTML_STUDIO_DEFAULTS";
+        NotApplied = "HTML_EDIT_NOT_APPLIED", ForEach = "HTML_FOREACH", DefaultsMissing = "HTML_STUDIO_DEFAULTS", NameFixed = "HTML_NAME_FIXED",
+        // Half a column of a native Table: its header cell and its row cell are removed and added together.
+        TableColumn = "HTML_TABLE_COLUMN";
 
     // <div if k="..."> followed by its <div else>: the two halves of one If, sent together.
     internal static bool IsIfElse(ScreenHtml.Node first, ScreenHtml.Node second) =>

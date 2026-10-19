@@ -213,6 +213,13 @@ public static partial class ScreenDocument
             var kind = ScreenHtmlTables.KindOf(node, out _);
             yield return (node, ScreenHtmlTables.Reverse(kind, ScreenHtmlModuleMode.Widget), WidgetSkip(node, kind), true);
             if (kind == "TextWidget") continue;
+            // A native Table: its cells are its widgets (its thead, tbody and rows write no widget: ModelSession.Widget).
+            if (kind == "TableRecords" && ScreenHtmlTables.NativeTable(node) is { } table)
+            {
+                foreach (var fact in FactChildren(table.HeadRow)) yield return fact;
+                foreach (var fact in FactChildren(table.BodyRow)) yield return fact;
+                continue;
+            }
             if (kind == "MobileBlockInstanceWidget")
             {
                 foreach (var slot in node.Children.Where(c => !c.IsText && c.Tag == "slot"))

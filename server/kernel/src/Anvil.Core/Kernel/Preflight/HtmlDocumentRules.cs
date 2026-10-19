@@ -478,7 +478,7 @@ public static class HtmlDocumentRules
                     if (first == what && what is "screen action" or "data action") continue;
                     problems.Add(JobPreflight.Problem(i, html, "NAME_COLLISION", "error",
                         $"html: {doc.Kind} {doc.Name} declares the {what} '{name}' and the {first} '{seen.Keys.First(k => k.Equals(name, StringComparison.OrdinalIgnoreCase))}': one scope, the Studio renames the second to {NameRules.Free(name, seen.Keys)} and every expression that names it reads the first",
-                        $"give one of them another name, in the document and in every expression that names it", null, "html"));
+                        $"give one of them another name, in the document and in every expression that names it", null, "html", patchRule: "ACTION_RENAMED_FREE_NAME"));
                     continue;
                 }
                 seen[name] = what;

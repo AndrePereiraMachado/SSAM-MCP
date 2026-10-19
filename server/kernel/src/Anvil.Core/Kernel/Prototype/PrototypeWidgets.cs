@@ -147,7 +147,8 @@ public sealed class PrototypeWidgets
         var tag = node["t"]?.ToString() ?? "";
         if (NeverWidgets.Contains(tag)) return [];
         WidgetNode widget;
-        if (node["list"] is JsonObject list && list["mode"]?.ToString() == "self") widget = ListWidget(node, list, scope, self: true);
+        if (tag == "table" && DataTable(node, scope) is { } table) widget = table;
+        else if (node["list"] is JsonObject list && list["mode"]?.ToString() == "self") widget = ListWidget(node, list, scope, self: true);
         else widget = Element(node, scope, insideForm);
         if (node["if"] is JsonObject condition)
         {
@@ -670,13 +671,180 @@ public sealed class PrototypeWidgets
         return text;
     }
 
-    private WidgetNode ListWidget(JsonObject node, JsonObject list, PrototypeScope scope, bool self)
+    /// <summary>A data table of the prototype (the owner's VpBookings bug of 2026-10-18, the html op's ScreenHtmlTables.NativeTable):
+    /// a &lt;table&gt; whose only parts are a &lt;thead&gt; of one row of &lt;th&gt; and a &lt;tbody&gt; whose one row of &lt;td&gt;
+    /// repeats over a collection is the native Table: its Source the list's, one header cell and one row cell per column (aligned by
+    /// construction), the class of the header row and of the template row its StyleHeader and StyleRow. A cell of it spans one column
+    /// and one row (the owner's rule of 2026-10-19, round 5: RowCells). A table of another shape, or whose parts carry behavior of
+    /// their own (a condition, an event, a computed attribute that is not a class), stays the HTML elements and the List it was
+    /// (null), said in degraded (TABLE_NOT_NATIVE).</summary>
+    private WidgetNode? DataTable(JsonObject node, PrototypeScope scope)
+    {
+        static List<JsonObject>? Parts(JsonObject n)
+        {
+            var parts = new List<JsonObject>();
+            foreach (var c in n["c"] as JsonArray ?? [])
+            {
+                if (c is not JsonObject o) continue;
+                if (o["t"] == null) { if (o["expr"] != null || Collapse.Replace(o["x"]?.ToString() ?? "", " ").Trim().Length > 0) return null; continue; }
+                parts.Add(o);
+            }
+            return parts;
+        }
+        // A part with no behavior of its own; a row and a cell may compute their class (the Style of its widget), a row its other
+        // attributes too (left out below: a row of the Table holds none).
+        static bool Plain(JsonObject n, bool computedClass = false, bool row = false) => n["if"] == null && n["list"] == null && n["nav"] == null && n["control"] == null
+            && n["events"] is not JsonArray { Count: > 0 } && (computedClass || n["classExpr"] == null)
+            && (n["attrExpr"] is not JsonObject computed || row || computedClass && computed.All(a => string.Equals(a.Key, "class", StringComparison.OrdinalIgnoreCase)));
+        if (Parts(node) is not [var head, var body] || head["t"]?.ToString() != "thead" || body["t"]?.ToString() != "tbody") return null;
+        if (body["list"] is not JsonObject list || list["mode"]?.ToString() != "self" || list["template"] is not JsonObject template || template["t"]?.ToString() != "tr") return null;
+        if (Parts(head) is not [var headRow] || headRow["t"]?.ToString() != "tr") return null;
+        if (Parts(headRow) is not { } headers || Parts(template) is not { } cells) return null;
+        if (headers.Any(h => h["t"]?.ToString() != "th") || cells.Any(c => c["t"]?.ToString() != "td")) return null;
+        // The shape of a data table: what keeps it from the native Table is said (the review of round 1, M3), never silent.
+        string? why = null;
+        // A colspan that explains the shorter row (the html op's rule, ScreenHtmlTables.SpanExplains) makes the rows as wide: the
+        // Table's columns are the prototype's (RowCells); a different count it does not explain stays the old form, its spans named.
+        var explains = Anvil.Reading.ScreenHtmlTables.SpanExplains(headers.Select(SpanNode).ToList(), cells.Select(SpanNode).ToList());
+        if (headers.Count != cells.Count && !explains)
+        {
+            var spans = headers.Concat(cells).SelectMany(c => Anvil.Reading.ScreenHtmlTables.Spans(SpanNode(c)).Select(sp => $"{sp.Attribute}=\"{sp.Value}\" on a <{c["t"]}>")).Distinct().ToList();
+            why = $"its header row has {headers.Count} cells and its template row {cells.Count}" + (spans.Count > 0 ? $", which its spans do not explain ({string.Join(", ", spans)})" : "");
+        }
+        else if (!Plain(head) || body["if"] != null || body["events"] is JsonArray { Count: > 0 } || body["classExpr"] != null || body["attrExpr"] != null
+            || !Plain(headRow, computedClass: true, row: true) || !Plain(template, computedClass: true, row: true))
+            why = "a part of it (thead, tbody or a row) has a condition, an event or a computed attribute of its own";
+        else if (headers.Concat(cells).FirstOrDefault(c => !Plain(c, computedClass: true)) is { } cell)
+            why = $"a <{cell["t"]}> has a condition, an event or a computed attribute of its own (a sortable header, a clickable cell)";
+        if (why != null)
+        {
+            _c.Degraded.Add(new JsonObject { ["k"] = node["k"]?.ToString(), ["code"] = "TABLE_NOT_NATIVE", ["message"] = "a data table stays HTML elements and a List: " + why, ["done"] = "HTML elements and a List" });
+            return null;
+        }
+        // What a section or a row says beside its class (a data attribute of the prototype's own script, data-admin-product="1"):
+        // the native Table holds none, so it is left out and listed; the class of a section joins its row's (RowStyle).
+        foreach (var part in new[] { head, headRow, body, template })
+        {
+            var left = Attrs(part).Select(a => a.Name).Concat((part["attrExpr"] as JsonObject ?? []).Select(a => a.Key))
+                .Where(n => !string.Equals(n, "class", StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (left.Count > 0)
+                _c.Degraded.Add(new JsonObject { ["k"] = part["k"]?.ToString(), ["code"] = part["t"]?.ToString() == "tr" ? "TABLE_ROW_ATTRIBUTE" : "TABLE_SECTION_ATTRIBUTE",
+                    ["message"] = $"the <{part["t"]}> of a native Table holds no attribute: " + string.Join(", ", left), ["done"] = "left out" });
+        }
+        var spec = new PrototypeWidgetSpec { SourceKey = node["k"]?.ToString() };
+        _c.Lists++; _c.Widgets++; _c.Elements++;
+        var itemScope = ListSource(body, list, scope, spec, out _);
+        ElementMapping mapping;
+        try { mapping = _c.Element(new ElementRequest(_c.Platform, "table", Attrs(node), false, false, false, true)); }
+        catch { mapping = new ElementMapping("IAdvancedHtml", "table", null, [], [], [], null, null); }
+        var classes = new List<string>(mapping.Classes);
+        if (Attr(node, "id") is { Length: > 0 } id)
+        {
+            if (_c.Ids.TryGetValue(id, out var name)) spec.Name = name;
+            if (_c.IdClasses.TryGetValue(id, out var cls) && !classes.Contains(cls)) classes.Add(cls);
+        }
+        var style = StyleExpression(node, classes, scope);
+        spec.Properties.Add(("Style", style.Expression ?? PrototypeExpr.Quote(style.Static)));
+        spec.Properties.Add(("StyleHeader", RowStyle(head, headRow, scope)));
+        spec.Properties.Add(("StyleRow", RowStyle(body, template, itemScope)));
+        // the attributes of the table as the map keeps them (what a set op writes); its inline style an attribute (no CustomStyle)
+        foreach (var (name, value) in mapping.ExtendedProperties)
+            if (!string.Equals(name, "class", StringComparison.OrdinalIgnoreCase)) spec.Extended.Add((name, value));
+        if (mapping.Properties.FirstOrDefault(p => p.Property == "CustomStyle").Value is { Length: > 0 } inline
+            && !spec.Extended.Any(x => string.Equals(x.Name, "style", StringComparison.OrdinalIgnoreCase)))
+            spec.Extended.Add(("style", PrototypeExpr.Quote(inline)));
+        spec.Name ??= _c.Names.Free("Table");
+        _c.ExtendedProperties += spec.Extended.Count;
+        var children = RowCells(headers, "IHeaderCell", scope, explains).Concat(RowCells(cells, "IRowCell", itemScope, explains)).ToList();
+        var widget = new WidgetNode("ITableRecords", node["k"]?.ToString(), "table", style.Static, spec.Extended.Select(e => (e.Name, e.Value)).ToList(),
+            null, null, null, list.DeepClone(), children, null, null);
+        _c.Specs[widget] = spec;
+        return widget;
+    }
+
+    /// <summary>The class of a header row or of the template row (its StyleHeader, StyleRow): the static classes of its section
+    /// (&lt;thead&gt;, &lt;tbody&gt;: a Table has no class of its own for them) and its own, or the expression the capture computed for
+    /// the row in its scope, after the section's.</summary>
+    private string RowStyle(JsonObject section, JsonObject row, PrototypeScope scope)
+    {
+        var classes = (Attr(row, "class") ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        var style = StyleExpression(row, classes, scope);
+        var text = style.Expression ?? PrototypeExpr.Quote(style.Static);
+        if ((Attr(section, "class") ?? "").Trim() is not { Length: > 0 } sectionClass) return text;
+        return IsLiteral(text) ? PrototypeExpr.Quote((sectionClass + " " + Literal(text)).Trim()) : PrototypeExpr.Quote(sectionClass + " ") + " + " + text;
+    }
+
+    /// <summary>The cells of a row of a native Table, each of one column and one row (the owner's rule of 2026-10-19 in the importer,
+    /// round 5: the patch the html op offers for the same table, applied and said, ScreenHtmlTables). A colspan that explains the
+    /// shorter row (<paramref name="explains"/>) is the cell and one empty cell per column it covered after it, so the Table's
+    /// columns are the prototype's and every other cell stays in its column; any other colspan, and every rowspan (a header row is
+    /// one row; the template row repeats once per record, where rowspan pushes the next record's cells), is left out and the cells
+    /// pair one by one. A native Table never carries the span on its cell (its published columns would shift in silence). Each span
+    /// left out is listed in degraded (TABLE_CELL_SPAN, the cell's key).</summary>
+    private List<WidgetNode> RowCells(List<JsonObject> row, string type, PrototypeScope scope, bool explains)
+    {
+        var widgets = new List<WidgetNode>();
+        foreach (var source in row)
+        {
+            var node = SpanNode(source);
+            var tag = source["t"]!.ToString();
+            widgets.Add(Cell(source, type, scope));
+            var covered = explains ? Anvil.Reading.ScreenHtmlTables.Span(node) - 1 : 0;
+            foreach (var (attribute, value) in Anvil.Reading.ScreenHtmlTables.Spans(node))
+            {
+                var filled = covered > 0 && attribute.Equals("colspan", StringComparison.OrdinalIgnoreCase);
+                _c.Degraded.Add(new JsonObject
+                {
+                    ["k"] = source["k"]?.ToString(), ["code"] = "TABLE_CELL_SPAN",
+                    ["message"] = $"{attribute}=\"{value}\" on a <{tag}> of a native Table: " + Anvil.Reading.ScreenHtmlTables.SpanWhy(attribute, tag),
+                    ["done"] = filled ? $"left out, and {covered} empty <{tag}> after the cell, one per column it spanned" : "left out",
+                });
+            }
+            for (var i = 0; i < covered; i++) widgets.Add(EmptyCell(type, tag));
+        }
+        return widgets;
+    }
+
+    /// <summary>An empty header cell or row cell: a column a colspan of the prototype covered (no key: the measure reads it as the
+    /// runtime's own element).</summary>
+    private WidgetNode EmptyCell(string type, string tag)
+    {
+        var widget = new WidgetNode(type, null, tag, null, new List<(string Name, string Value)>(), null, null, null, null, new List<WidgetNode>(), null, null);
+        _c.Specs[widget] = new PrototypeWidgetSpec { Name = _c.Names.Free(PrototypeNames.TagStem(tag)) };
+        _c.Widgets++; _c.Elements++;
+        return widget;
+    }
+
+    /// <summary>A cell of the capture as a node of the language (its tag and its static attributes), for the rules of a native
+    /// Table's cells the html op and the importer share (ScreenHtmlTables.Spans, SpanExplains).</summary>
+    private static Anvil.Reading.ScreenHtml.Node SpanNode(JsonObject cell)
+        => new() { Tag = cell["t"]?.ToString() ?? "", Attributes = Attrs(cell).Select(a => new KeyValuePair<string, string>(a.Name, a.Value)).ToList() };
+
+    /// <summary>A cell of a data table: the element the map gives its &lt;th&gt; or &lt;td&gt; (its class, attributes and children),
+    /// as the header cell or the row cell of its column (no Tag; its inline style an attribute; never its span, RowCells).</summary>
+    private WidgetNode Cell(JsonObject cell, string type, PrototypeScope scope)
+    {
+        var built = Element(cell, scope, false);
+        var spec = _c.Specs[built];
+        _c.Specs.Remove(built);
+        spec.Properties.RemoveAll(p => p.Property is "Tag" or "Enabled" or "IsDefault");
+        var spans = Anvil.Reading.ScreenHtmlTables.Spans(SpanNode(cell)).Select(sp => sp.Attribute).ToList();
+        _c.ExtendedProperties -= spec.Extended.RemoveAll(x => spans.Contains(x.Name, StringComparer.OrdinalIgnoreCase));
+        if (spec.Properties.FirstOrDefault(p => p.Property == "CustomStyle").Value is { Length: > 0 } inline
+            && !spec.Extended.Any(x => string.Equals(x.Name, "style", StringComparison.OrdinalIgnoreCase)))
+            spec.Extended.Add(("style", PrototypeExpr.Quote(inline)));
+        spec.Properties.RemoveAll(p => p.Property == "CustomStyle");
+        var widget = built with { W = type, Tag = cell["t"]!.ToString(), Attributes = spec.Extended.Select(e => (e.Name, e.Value)).ToList() };
+        _c.Specs[widget] = spec;
+        return widget;
+    }
+
+    /// <summary>The source of a list and the scope of its row, written on the spec: the output of a Data Action when data.bind binds
+    /// it (its slots need bind.slots), the aggregate of its collection otherwise; <paramref name="bound"/> whether it has one.</summary>
+    private PrototypeScope ListSource(JsonObject node, JsonObject list, PrototypeScope scope, PrototypeWidgetSpec spec, out bool bound)
     {
         var binding = _c.List(list);
-        var spec = new PrototypeWidgetSpec { SourceKey = node["k"]?.ToString() };
-        _c.Lists++; _c.Widgets++;
-        var template = list["template"] as JsonObject;
-        var items = new List<WidgetNode>();
+        bound = binding != null;
         PrototypeScope itemScope = scope;
         if (binding?.Source != null)
         {
@@ -693,6 +861,16 @@ public sealed class PrototypeWidgets
                 fieldType: (field, via) => FieldType(via != null ? JoinedCollection(binding, via) : binding.Collection, field));
         }
         else _c.Unevaluable.Add(new JsonObject { ["k"] = node["k"]?.ToString(), ["what"] = "list", ["why"] = "the list has no source on this owner" });
+        return itemScope;
+    }
+
+    private WidgetNode ListWidget(JsonObject node, JsonObject list, PrototypeScope scope, bool self)
+    {
+        var spec = new PrototypeWidgetSpec { SourceKey = node["k"]?.ToString() };
+        _c.Lists++; _c.Widgets++;
+        var template = list["template"] as JsonObject;
+        var items = new List<WidgetNode>();
+        var itemScope = ListSource(node, list, scope, spec, out var bound);
         spec.Properties.Add(("Mode", "Custom"));
         spec.Extended.Add(("disable-virtualization", "True"));
         if (template != null) items.AddRange(Node(template, itemScope, false));
@@ -724,7 +902,7 @@ public sealed class PrototypeWidgets
             _c.Elements++;
         }
         else { tag = "div"; style = "ssam-list"; }
-        spec.Name ??= _c.Names.Free(binding != null ? "List" : "ListLiteral");
+        spec.Name ??= _c.Names.Free(bound ? "List" : "ListLiteral");
         spec.Properties.Add(("Tag", tag ?? "div"));
         spec.Properties.Add(("Style", PrototypeExpr.Quote(style)));
         _c.ExtendedProperties += spec.Extended.Count;

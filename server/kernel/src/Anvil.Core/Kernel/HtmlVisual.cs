@@ -113,7 +113,7 @@ public static class HtmlVisual
             ["form"] = Row("IForm", "class -> Style; children are its content"),
             ["(literal text)"] = Row("ITextWidget", "no class of its own; a space next to an inline element stays"),
             ["{{ expression }}"] = Row("IExpression", "OutSystems, copied as written (never JavaScript)"),
-            ["i"] = Row("IIcon", "icon = the icon name; weight is mandatory"),
+            ["i"] = Row("IIcon", "icon = the icon name; weight where the icon has one (ODC: mandatory; the O11 icon has none, as its reading writes it)"),
             ["input"] = Row("IInput", "bind names an existing variable, placeholder -> Prompt, type " + string.Join("|", InputTypes.Keys)
                 + "; the bound data type decides the InputType"),
             ["input[type=checkbox]"] = Row("ICheckbox", "bind names an existing variable"),
@@ -125,7 +125,7 @@ public static class HtmlVisual
             ["img"] = Row("IImage", "src: module image, URL or {{ }}"),
             ["div[list]"] = Row("IList", "Source = list; as is mandatory and names the row inside {{ }}"),
             ["div[if]"] = Row("IIfWidget", "children: True branch; a <div else> right after: False branch"),
-            ["Block"] = Row("IMobileBlockInstanceWidget", "name = an existing block, inputs by :Name, handlers by @Event, children by <slot name>"),
+            ["Block"] = Row("IMobileBlockInstanceWidget", "name = an existing block, inputs by :Name, handlers by @Event=\"Action\" or, as the reading writes them, @Event=\"Action(Input = expression)\", children by <slot name>"),
             ["ButtonGroup"] = Row("IButtonGroup", "bind -> Variable; each <ButtonGroupItem value> an IButtonGroupItem, its text an Expression; also written <button-group> and <button-group-item>"),
             ["switch"] = Row(ElementWidgetMap.LanguageElements["switch"].Widget, "bind names an existing Boolean variable"),
             ["upload"] = Row(ElementWidgetMap.LanguageElements["upload"].Widget, "bind -> FileContent (a Binary Data variable), filename -> FileName"),
@@ -133,7 +133,7 @@ public static class HtmlVisual
         },
         ["attributes"] = "any other attribute: an IExtendedProperty, {{ }} makes an expression",
         ["names"] = "id: name, alias $id; else Tag1, Tag2; Block none",
-        ["rejected"] = new JsonArray("script", "an <i> without weight", "a name that does not exist in the module", "a tag outside this table", "color-mix()"),
+        ["rejected"] = new JsonArray("script", "an <i> without weight where the icon has one (ODC)", "a name that does not exist in the module", "a tag outside this table", "color-mix()"),
     };
     private static JsonObject Row(string widget, string rule) => new() { ["widget"] = widget, ["rule"] = rule };
 
@@ -384,7 +384,7 @@ public static class HtmlVisual
                     case "block": Check(() => ValidateBlock(child)); break;
                     case "i":
                         if (child.Attribute("icon") is not { Length: > 0 }) Record(Error($"{child.Where}: <i> needs icon=\"<name>\""));
-                        if (child.Attribute("weight") is not { Length: > 0 }) Record(Error($"{child.Where}: <i icon=\"{child.Attribute("icon")}\"> needs weight=\"<weight>\"; the Studio refuses an icon without a weight"));
+                        if (IconWeighs && child.Attribute("weight") is not { Length: > 0 }) Record(Error($"{child.Where}: <i icon=\"{child.Attribute("icon")}\"> needs weight=\"<weight>\"; {WeightWhy}"));
                         break;
                     case "img":
                         Check(() =>
@@ -443,18 +443,70 @@ public static class HtmlVisual
             {
                 var name = shape.Groups[1].Value;
                 IReadOnlyList<string>? positional = null;
+                List<(string Name, string Value)>? byName = null;
                 if (shape.Groups[2].Success)
                 {
                     try { positional = Arguments(shape.Groups[2].Value); }
                     catch (InvalidOperationException) { Record(Error($"{node.Where}: the arguments of {call} are unbalanced (a parenthesis or a quote is not closed)")); }
+                    // Destination(Input = expression, ...), as the reading writes an event (onclick="Open(Id = Row.Id)"), names its
+                    // inputs: the same call in the page, the document and the fragment (ScreenDocument.ParseCall), never the
+                    // comparison "Id = Row.Id" passed to the first input.
+                    if (positional is { Count: > 0 } && ScreenDocument.ParseCall(call, out _, out var parsed) && parsed.Count == positional.Count && parsed.All(a => a.Param != null))
+                        byName = parsed.Select(a => (Name: a.Param!, Value: a.Value.Trim())).ToList();
                 }
-                if (!names) target = new Target(name, name, false, positional, named);
-                else if (resolve.Actions.TryGetValue(name, out var action)) target = new Target(name, action, false, positional, named);
-                else if (resolve.Screens?.TryGetValue(name, out var screen) == true) target = new Target(name, screen, true, positional, named);
+                string? reference = null; var isScreen = false;
+                if (!names) reference = name;
+                else if (resolve.Actions.TryGetValue(name, out var action)) reference = action;
+                else if (resolve.Screens?.TryGetValue(name, out var screen) == true) { reference = screen; isScreen = true; }
                 else Record(Error($"{node.Where}: \"{name}\" does not name an action or a screen of the module; actions: {Join(resolve.Actions.Keys)}; screens: {Join(resolve.Screens?.Keys ?? [])}"));
+                // The review of round 2, A7: Filter(ShowAll = True), where ShowAll is a variable in scope and no input of Filter, is a
+                // comparison passed by position (as before), never the input ShowAll; a name that is neither stays named, so a typo of
+                // an input is ARGUMENT_UNKNOWN with the inputs. Without the callee's signature the call is read as the reading writes it.
+                if (byName != null && !(names && reference != null && resolve.Contract(reference) is { } callee
+                        && byName.Any(a => !callee.Inputs.Any(i => i.Name.Equals(a.Name, StringComparison.OrdinalIgnoreCase)) && resolve.Variables.Contains(a.Name, StringComparer.OrdinalIgnoreCase))))
+                {
+                    named = byName.Concat(named).ToList();
+                    positional = null;
+                }
+                if (reference != null) target = new Target(name, reference, isScreen, positional, named);
             }
             targets[node] = target;
             return target;
+        }
+
+        /// <summary>A block handler as the reading writes it (ScreenHtmlModule's Events): the action alone, or the action with the
+        /// value of each of its inputs, Handler(Input = expression, ...), read with the one call of the text forms
+        /// (ScreenDocument.ParseCall), and the fallback form @Event.Input="expression" beside it. Arguments by position name no
+        /// input of a handler: refused with the named form as the fix.</summary>
+        private (string Name, List<(string Input, string Value)> Arguments) Handler(HtmlNode node, string attribute, string value)
+        {
+            var text = value.Trim();
+            if (text.Length == 0) throw Error($"{node.Where}: {attribute} needs the name of an action");
+            if (CallShape.Match(text) is not { Success: true } shape || !ScreenDocument.ParseCall(text, out _, out var parsed))
+                throw Error($"{node.Where}: {attribute}=\"{value}\" is not compiled; write the handler as the reading writes it: {attribute}=\"Action\" or {attribute}=\"Action(Input = expression)\"");
+            var name = shape.Groups[1].Value;
+            if (parsed.Any(a => a.Param == null))
+                throw Error($"{node.Where}: {attribute}=\"{value}\" passes arguments by position; the inputs of a handler are named, as the reading writes them", ArgumentUnknown,
+                    $"{attribute}=\"{name}({string.Join(", ", parsed.Select((a, k) => "<input" + (k + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) + "> = " + a.Value.Trim()))})\"");
+            var arguments = parsed.Select(a => (a.Param!, a.Value.Trim())).ToList();
+            foreach (var (key, expression) in node.Attributes.Where(a => a.Key.StartsWith(attribute + ".", StringComparison.OrdinalIgnoreCase)))
+                arguments.Add((key[(attribute.Length + 1)..], expression));
+            // One value per input (the review of round 2, A5: the call and @Event.Input both gave one, and the last one won).
+            foreach (var twice in arguments.GroupBy(a => a.Item1, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
+                throw Error($"{node.Where}: {attribute}=\"{value}\" gives the input {twice.Key} {twice.Count()} times (in the call and as {attribute}.{twice.Key}); one value per input", ArgumentUnknown,
+                    $"{attribute}=\"{name}({string.Join(", ", arguments.GroupBy(a => a.Item1, StringComparer.OrdinalIgnoreCase).Select(g => g.Key + " = " + g.First().Item2))})\" without {attribute}.{twice.Key}");
+            return (name, arguments);
+        }
+
+        /// <summary>@Event.Input="expression" is an argument of the handler of @Event: without @Event on the same &lt;Block&gt; it is
+        /// the argument of no handler, refused (it was dropped in silence: the review of round 2, A5), with the call that names it.</summary>
+        private static void HandlerArgumentsHaveTheirHandler(HtmlNode node)
+        {
+            var handlers = node.Attributes.Where(a => a.Key.StartsWith('@') && !a.Key.Contains('.')).Select(a => a.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var orphans = node.Attributes.Where(a => a.Key.StartsWith('@') && a.Key.Contains('.') && !handlers.Contains(a.Key[..a.Key.IndexOf('.')])).ToList();
+            foreach (var group in orphans.GroupBy(a => a.Key[..a.Key.IndexOf('.')], StringComparer.OrdinalIgnoreCase))
+                throw Error($"{node.Where}: {string.Join(", ", group.Select(a => a.Key))} {(group.Count() == 1 ? "is an input" : "are inputs")} of the handler of {group.Key}, and the <Block> names no handler for {group.Key}", ArgumentUnknown,
+                    $"{group.Key}=\"<Action>({string.Join(", ", group.Select(a => a.Key[(a.Key.IndexOf('.') + 1)..] + " = " + a.Value))})\"");
         }
 
         /// <summary>The top-level arguments of a call, split on the commas outside parentheses, brackets and "strings".</summary>
@@ -480,7 +532,9 @@ public static class HtmlVisual
         {
             var reference = Find(resolve.Blocks, Required(node, "name"), "block", node);
             blocks.Add(reference);
-            var members = node.Attributes.Where(a => a.Key.StartsWith(':') || a.Key.StartsWith('@')).ToArray();
+            HandlerArgumentsHaveTheirHandler(node);
+            // @Event.Input="expression" is an argument of the handler of @Event, judged with it.
+            var members = node.Attributes.Where(a => a.Key.StartsWith(':') || a.Key.StartsWith('@') && !a.Key.Contains('.')).ToArray();
             var slots = node.Elements.Where(e => e.Tag == "slot").ToArray();
             if (!names || (members.Length == 0 && slots.Length == 0)) return;
             var contract = resolve.Contract(reference)
@@ -496,8 +550,15 @@ public static class HtmlVisual
                 }
                 if (!contract.Events.Any(e => e.Name.Equals(member, StringComparison.OrdinalIgnoreCase)))
                     throw Error($"{node.Where}: {reference} has no event '{member}'; events: {Join(contract.Events.Select(e => e.Name))}");
-                if (value.Length == 0) throw Error($"{node.Where}: {attribute} needs the name of an action");
-                called.Add(Find(resolve.Actions, value, "action", node));
+                var (handler, arguments) = Handler(node, attribute, value);
+                var action = Find(resolve.Actions, handler, "action", node);
+                called.Add(action);
+                // The inputs the call names are the handler's, when its signature is known (an action the same job creates has none yet:
+                // the named argument goes where it says, and the Verify judges it).
+                if (arguments.Count > 0 && resolve.Contract(action) is { } signature)
+                    foreach (var (input, _) in arguments.Where(a => !signature.Inputs.Any(i => i.Name.Equals(a.Input, StringComparison.OrdinalIgnoreCase))))
+                        throw Error($"{node.Where}: {attribute}=\"{value}\": {handler} has no input '{input}'; inputs: {Join(signature.Inputs.Select(i => i.Name))}", ArgumentUnknown,
+                            signature.Inputs.Count == 0 ? $"{attribute}=\"{handler}\"" : $"{attribute}=\"{handler}({string.Join(", ", signature.Inputs.Select(i => i.Name + " = <expression>"))})\"");
             }
             foreach (var slot in slots)
             {
@@ -521,6 +582,12 @@ public static class HtmlVisual
             => !names ? wanted
                 : known.TryGetValue(wanted, out var reference) ? reference
                 : throw Error($"{node.Where}: \"{wanted}\" does not name a {kind} of the module; {kind}s: {Join(known.Keys)}");
+
+        /// <summary>Whether this Studio's icon has a Weight: the ODC one has (without it the Studio shows "Non Existing Icon"),
+        /// O11's has none, so the O11 reading writes no weight and the fragment asks for none (what the reading writes compiles as
+        /// written). The loaded Model API answers with a module; without one (the preflight), the platform of this kernel.</summary>
+        private bool IconWeighs => resolve.Supports != null ? resolve.Accepts("IIcon", "Weight") : Platform == ElementWidgetMap.Odc;
+        private const string WeightWhy = "the icon of this Studio has a Weight, and without one the Studio shows it as Non Existing Icon";
 
         /// <summary>A name the validation already checked; without a module (preflight) the name itself stands for it.</summary>
         private string Known(IReadOnlyDictionary<string, string> known, string wanted) => names && known.TryGetValue(wanted, out var reference) ? reference : wanted;
@@ -689,12 +756,13 @@ public static class HtmlVisual
         private string Icon(HtmlNode node, string parent)
         {
             if (node.Attribute("icon") is not { Length: > 0 } icon) throw Error($"{node.Where}: <i> needs icon=\"<name>\"");
-            if (node.Attribute("weight") is not { Length: > 0 } weight) throw Error($"{node.Where}: <i icon=\"{icon}\"> needs weight=\"<weight>\"; the Studio refuses an icon without a weight");
+            var weight = node.Attribute("weight");
+            if (IconWeighs && weight is not { Length: > 0 }) throw Error($"{node.Where}: <i icon=\"{icon}\"> needs weight=\"<weight>\"; {WeightWhy}");
             var alias = Create(parent, ElementWidgetMap.LanguageElements["i"].Widget, node);
             Set(alias, "Icon", icon);
-            // O11's IIcon has no Weight (Model API 11.55.69); the ODC one has. The weight is required of the author either
-            // way, and it reaches the model wherever the widget can hold it.
-            if (resolve.Accepts("IIcon", "Weight")) Set(alias, "Weight", weight);
+            // O11's IIcon has no Weight (Model API 11.55.69); the ODC one has. The weight is asked for where the icon has one, and it
+            // reaches the model there; the O11 reading writes no weight, and the fragment takes its <i> as written.
+            if (IconWeighs && weight is { Length: > 0 }) Set(alias, "Weight", weight);
             // An <i> takes the font size around it, as in HTML; the widget is born Twotimes, which doubles it.
             if (resolve.Accepts("IIcon", "IconSize")) Set(alias, "IconSize", "FontSize");
             Attributes(node, alias, "IIcon");
@@ -973,6 +1041,7 @@ public static class HtmlVisual
         private string Block(HtmlNode node, string parent)
         {
             var reference = Known(resolve.Blocks, Required(node, "name"));
+            HandlerArgumentsHaveTheirHandler(node);
             var alias = Create(parent, "IMobileBlockInstanceWidget", node);
             ops[^1]["source"] = reference;
             // A block whose slots the fragment fills starts with empty placeholders, as the ButtonGroup does: the example content
@@ -981,14 +1050,23 @@ public static class HtmlVisual
             var contract = resolve.Contract(reference);
             foreach (var (attribute, value) in node.Attributes.Where(a => a.Key.StartsWith(':')))
                 Set(alias + "/" + (contract == null ? attribute[1..] : Member(contract.Inputs.Select(i => i.Name), attribute[1..])), "Value", Expression(value, node));
-            foreach (var (attribute, value) in node.Attributes.Where(a => a.Key.StartsWith('@')))
+            foreach (var (attribute, value) in node.Attributes.Where(a => a.Key.StartsWith('@') && !a.Key.Contains('.')))
             {
                 var eventName = contract == null ? attribute[1..] : Member(contract.Events.Select(e => e.Name), attribute[1..]);
-                var handler = Known(resolve.Actions, value);
+                var (name, arguments) = Handler(node, attribute, value);
+                var handler = Known(resolve.Actions, name);
                 Set(alias + "/" + eventName, "Handler", handler);
-                // The event's parameters reach the handler through the input of the same name, the wiring the Studio asks
-                // for by hand; a parameter the handler does not declare is simply not passed.
                 var signature = resolve.Contract(handler);
+                // Handler(Input = expression, ...), as the reading writes the event (the paginator's OnNavigate: ShowPage(NewStartIndex =
+                // NewStartIndex)): each input the value it names, the same event in the page and in the fragment.
+                if (arguments.Count > 0)
+                {
+                    foreach (var (input, expression) in arguments)
+                        Set(alias + "/" + eventName + "/" + (signature == null ? input : Member(signature.Inputs.Select(i => i.Name), input)), "Value", Expression(expression, node));
+                    continue;
+                }
+                // The handler named alone: the event's parameters reach it through the input of the same name, the wiring the Studio
+                // asks for by hand; a parameter the handler does not declare is simply not passed.
                 foreach (var parameter in contract?.Events.FirstOrDefault(e => e.Name == eventName)?.Params ?? [])
                     if (signature?.Inputs.Any(i => i.Name.Equals(parameter.Name, StringComparison.OrdinalIgnoreCase)) == true)
                         Set(alias + "/" + eventName + "/" + parameter.Name, "Value", parameter.Name);

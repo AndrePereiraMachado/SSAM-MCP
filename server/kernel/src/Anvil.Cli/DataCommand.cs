@@ -8,7 +8,7 @@ namespace Anvil.Cli;
 ///
 /// The Studio already logged in on the lane (SSO included); no credential file. Chosen with --studio, or when neither
 /// --host nor --credentials is given (--host then only checks the Studio's environment; --credentials is refused):
-///   data [--studio] --module &lt;Name&gt; --oml &lt;published snapshot&gt; --request &lt;json&gt; [--out &lt;json&gt;] [--host h] [--read-only] [--work dir]
+///   data [--studio] --module &lt;Name&gt; --oml &lt;published snapshot&gt; (--schema | --request &lt;json&gt; [--check [--no-write-fields]]) [--out &lt;json&gt;] [--host h] [--read-only] [--work dir]
 /// The request is one operation, or {"authorization": "...", "batch": [operation, ...]} run in order in one lease,
 /// stopping at the first failure. An operation is {"operation": "read" | "read-all" | "insert" | "update" | "delete",
 /// "entity": "Name", "records": [{Attribute: value}], "ids": ["..."], "offset": n, "tenantId": n, "step": "name",
@@ -34,22 +34,33 @@ internal static class DataCommand
     {
         string? Opt(string name) { var i = Array.IndexOf(args, name); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
         string Need(string name) => Opt(name) ?? throw new ArgumentException("missing " + name);
+        JsonObject Finish(JsonObject answer)
+        {
+            if (Opt("--out") is { } path)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+                File.WriteAllText(path, answer.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            }
+            return answer;
+        }
         if (args.Contains("--credentials")) throw new ArgumentException("data through the Studio uses only the Studio's own login; --credentials is refused");
-        var request = JsonNode.Parse(File.ReadAllText(Need("--request")))!.AsObject();
         var work = Opt("--work") ?? ".local/data";
         var oml = Need("--oml");
         var schema = EnvironmentData.Schema(new ModelHost(Path.Combine(work, "model")), oml);
         if (schema.Module != Need("--module")) throw new ArgumentException("Snapshot module does not match --module.");
         if (EnvironmentData.IsRefusedModule(schema.Key)) throw new InvalidOperationException("Users and roles are out of reach of Edit Data here");
+        if (args.Contains("--schema")) return Finish(EnvironmentData.SchemaAnswer(schema));
+        var request = JsonNode.Parse(File.ReadAllText(Need("--request")))!.AsObject();
         var modelHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(oml)));
 
         // The whole request is checked first (values by type, $ref, authorization): a refusal costs no lease and writes nothing.
         JsonObject output;
-        if (EnvironmentData.Refusal(schema, request) is { } refusal)
+        if (EnvironmentData.Refusal(schema, request, !args.Contains("--check") || !args.Contains("--no-write-fields")) is { } refusal)
         {
             output = new JsonObject { ["ok"] = false, ["module"] = schema.Module };
             foreach (var (key, value) in refusal) output[key] = value?.DeepClone();
         }
+        else if (args.Contains("--check")) output = EnvironmentData.Check(schema, request, !args.Contains("--no-write-fields"));
         else
         {
             using var session = connect(args);
@@ -63,12 +74,7 @@ internal static class DataCommand
             output = new JsonObject { ["ok"] = batch["ok"]!.DeepClone(), ["host"] = session.Host, ["module"] = schema.Module, ["moduleVersion"] = live.VersionId };
             foreach (var (key, value) in batch) if (key != "ok") output[key] = value?.DeepClone();
         }
-        if (Opt("--out") is { } path)
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-            File.WriteAllText(path, output.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
-        }
-        return output;
+        return Finish(output);
     }
 
     private static JsonObject RunWithCredential(string[] args)

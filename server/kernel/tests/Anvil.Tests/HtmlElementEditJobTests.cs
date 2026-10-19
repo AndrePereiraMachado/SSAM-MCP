@@ -146,6 +146,100 @@ public class HtmlElementEditJobTests(ITestOutputHelper output)
         Assert.StartsWith("<a k=\"w28\"", element["text"]!.ToString().TrimStart());
     }
 
+    // The review of fix/html-edit-names round 2, A1: when the three-way merge gives nothing (the reading's text is not kept, or a
+    // part of the reading the merge does not match: the native Table's thead before fix/data-table), the rebase moved each k by
+    // its ObjectKey and a whole document written on the old reading (the html form, and the document the element edits make)
+    // replaced the screen: what changed since (here the banner and the link's text) was written back. Now that is one
+    // HTML_BASE_CHANGED with the current text and the next step; for element edits, with the checked patch that writes them on
+    // the current text, which then changes only what they say.
+    [Fact]
+    public void AWholeDocumentOnAReadingTheMergeCannotUseNeverReplacesTheScreen()
+    {
+        if (!StudioAvailable()) return;
+        var host = Host("whole-rebase");
+        using var own = new OwnStore();
+        var store = own.Store;
+        var basePath = Fixture("reactive-ui.oml");
+        var (read, html, sha) = Read(host, basePath, "Login", keys: true);
+        // The screen changes since that reading: a banner at its top (every k after it renumbers) and the text of the link.
+        var tree = ScreenHtml.Parse(html);
+        var screenSlot = Element(tree, "w5").Children.First(c => c.Tag == "slot");
+        screenSlot.Children.Insert(screenSlot.Children.IndexOf(Element(tree, "w6")), ScreenHtml.Parse("<div class=\"banner\">{{ \"Maintenance tonight\" }}</div>").Children[0]);
+        var link = Element(tree, "w28");
+        link.Children.Clear(); link.Children.Add(new ScreenHtml.Node { Text = "Recover password" });
+        var changed = Run(host, basePath, Job(sha, read, "Login", edit: [ScreenHtmlText.Write(Element(tree, "w5"))]), "changed");
+        Assert.True(changed["accepted"]!.GetValue<bool>(), changed.ToJsonString());
+        var changedPath = Path.Combine(Work, "whole-rebase", "changed.oml");
+        var (_, now, changedSha) = Read(host, changedPath, "Login", keys: true);
+
+        // 1. The html form, the store with the key table only (an older store): the whole document of the first reading.
+        Keep(store, sha, read, null, withText: false);
+        var older = ScreenHtml.Parse(html);
+        Attribute(Element(older, "w8"), "class", "login-logo compact");
+        var whole = new JsonObject { ["ops"] = new JsonArray(new JsonObject { ["op"] = "html", ["data"] = new JsonObject { ["screen"] = "Login",
+            ["basedOn"] = new JsonObject { ["capture"] = sha, ["html"] = read["documents"]![0]!["htmlSha256"]!.DeepClone() }, ["html"] = ScreenHtmlText.Write(older) } }) };
+        var refused = Run(host, changedPath, whole, "whole-html");
+        Assert.False(refused["accepted"]?.GetValue<bool>() ?? false, "the document of the old reading replaced the screen: " + refused.ToJsonString()[..Math.Min(600, refused.ToJsonString().Length)]);
+        var problem = Problems(refused).Select(p => p!.AsObject()).Single();
+        Assert.Equal(ScreenHtmlEdit.BaseChanged, problem["code"]!.ToString());
+        Assert.Equal(now, problem["current"]!["text"]!.ToString());
+        Assert.Contains("write the edit again on the current text", problem["fix"]!.ToString());
+        Assert.Null(problem["patch"]);
+
+        // 2. The element edits, the reading's text kept, with a part the merge does not match (an element without k: a keyless
+        // part of a reading, as the native Table's thead was): the merge gives nothing, and the document they make is refused with
+        // the checked patch.
+        var lines = html.Split('\n').ToList();
+        var slot = lines.FindIndex(l => l.TrimStart().StartsWith("<slot ", StringComparison.Ordinal) && !l.TrimEnd().EndsWith("/>", StringComparison.Ordinal));
+        Assert.True(slot >= 0, html);
+        lines.Insert(slot + 1, "<span>unmatched</span>");
+        var keptText = string.Join("\n", lines);
+        Keep(store, sha, read, keptText, withText: true);
+        var edits = new JsonArray(JsonNode.Parse("""{"set":"w8","attributes":{"class":"login-logo compact"}}"""));
+        var withEdits = Run(host, changedPath, Job(sha, read, "Login", edits: edits), "whole-edits");
+        Assert.False(withEdits["accepted"]?.GetValue<bool>() ?? false, "the document of the element edits replaced the screen: " + withEdits.ToJsonString()[..Math.Min(600, withEdits.ToJsonString().Length)]);
+        var refusal = Problems(withEdits).Select(p => p!.AsObject()).Single();
+        Assert.Equal(ScreenHtmlEdit.BaseChanged, refusal["code"]!.ToString());
+        Assert.Contains("has no k", refusal["message"]!.ToString());
+        Assert.Equal(now, refusal["current"]!["text"]!.ToString());
+        var patch = refusal["patch"]!.AsArray();
+        var basedOn = patch.Single(p => p!["path"]!.ToString().EndsWith("/basedOn", StringComparison.Ordinal))!["value"]!.AsObject();
+        Assert.Equal(changedSha, basedOn["capture"]!.ToString());
+        var patched = patch.Single(p => p!["path"]!.ToString().EndsWith("/edits", StringComparison.Ordinal))!["value"]!.AsArray();
+        var logoNow = ScreenHtmlText.Elements(ScreenHtml.Parse(now)).First(x => x.Node.Get("class")?.Contains("login-logo", StringComparison.Ordinal) == true).Node.Get("k");
+        Assert.Equal(logoNow, patched[0]!["set"]!.ToString());
+        Assert.NotEqual("w8", logoNow);
+        // The patch applied: only the class is written; the banner and the link's text stay.
+        var job = new JsonObject { ["ops"] = new JsonArray(new JsonObject { ["op"] = "html", ["data"] = new JsonObject { ["screen"] = "Login", ["basedOn"] = basedOn.DeepClone(), ["edits"] = patched.DeepClone() } }) };
+        var applied = Run(host, changedPath, job, "whole-patched");
+        Assert.True(applied["accepted"]!.GetValue<bool>(), applied.ToJsonString());
+        var (_, after, _) = Read(host, Path.Combine(Work, "whole-rebase", "whole-patched.oml"), "Login");
+        Assert.Contains("Maintenance tonight", after);
+        Assert.Contains(">Recover password</a>", after);
+        Assert.Contains("login-logo compact", after);
+        Assert.DoesNotContain("unmatched", after);
+    }
+
+    // Two html ops of one screen in one job, each written on the job's capture (the second does not see the first): the second is
+    // merged three ways with the reading of the capture before the job's first op, and never undoes the first.
+    [Fact]
+    public void TwoHtmlOpsOfOneScreenInOneJobNeverUndoTheFirst()
+    {
+        if (!StudioAvailable()) return;
+        var host = Host("two-ops");
+        using var own = new OwnStore();
+        var basePath = Fixture("reactive-ui.oml");
+        var (read, _, sha) = Read(host, basePath, "Login", keys: true);
+        var first = Job(sha, read, "Login", edits: new JsonArray(JsonNode.Parse("""{"set":"w28","attributes":{"class":"forgot"}}""")));
+        var second = Job(sha, read, "Login", edits: new JsonArray(JsonNode.Parse("""{"set":"w8","attributes":{"class":"login-logo compact"}}""")));
+        var job = new JsonObject { ["ops"] = new JsonArray(first["ops"]![0]!.DeepClone(), second["ops"]![0]!.DeepClone()) };
+        var result = Run(host, basePath, job, "two-ops");
+        Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
+        var (_, after, _) = Read(host, Path.Combine(Work, "two-ops", "two-ops.oml"), "Login");
+        Assert.Contains("class=\"forgot\"", after);
+        Assert.Contains("login-logo compact", after);
+    }
+
     [Fact]
     public void CheckJobSaysAnUnknownAddressInMillisecondsWithoutTheModel()
     {

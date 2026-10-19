@@ -451,7 +451,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
         if (rec) state.lanes = rec.lanes;
         const hello = state.hello;
         return { connected: !!state.channel, credential: !!rec?.credential, instance: state.instance, agentVersion: hello?.agent?.version ?? null,
-          agentRoot: hello?.agent?.root ?? null, agentKinds: hello?.agent?.kinds ?? null,
+          agentRoot: hello?.agent?.root ?? null, agentKinds: hello?.agent?.kinds ?? null, agentPlatform: hello?.agent?.platform ?? null,
           connectedAt: state.connectedAt, lastSeenAt: state.lastSeenAt, lanes: [...state.lanes], pack: hello?.pack ?? null,
           studios: hello?.studios ?? null, o11Connection: hello?.o11Connection ?? null, kernel: { ...serverKernel },
           compatible: compatibility(hello, serverKernel, state.lanes, { refused: kernelRefused }) };

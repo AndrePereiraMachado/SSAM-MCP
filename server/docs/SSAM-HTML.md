@@ -66,7 +66,8 @@ sintéticas do aceite).
 | `class="a b"` / `class="{{ expr }}"` | Style (ou StyleClasses): literal simples nu, qualquer outra expressão entre `{{ }}` |
 | atributo qualquer (`aria-label`, `role`, `data-*`) | extended property, na ordem da lista do widget; nome já usado vira `ext:<nome>` |
 | `os-<Propriedade>="valor"` | qualquer propriedade autorada fora da tabela, com o nome do Model API e o valor como está no modelo |
-| `<os-opaque k kind name>` | tipo sem linha na tabela: intocável. Tabela (`TableRecords`, `HeaderCell`, `RowCell`) e `MobileWidget` mantêm os widgets das células dentro; Traditional Web (D2) esconde a subárvore inteira |
+| `<table list="X"><thead><tr><th>…</th></tr></thead><tbody><tr><td>…</td></tr></tbody></table>` | Table nativo (`TableRecords`): uma coluna por par `<th>`/`<td>` (`HeaderCell`, `RowCell`); a classe de cada `<tr>` é `StyleHeader`/`StyleRow`; sem Source, `list=""`. Na entrada, a lista também vale no `<tbody>` ou no `<tr>` modelo. Documento e edição seguem a mesma regra: a classe de `<thead>`/`<tbody>` vai para a do seu `<tr>` e os atributos da List onde está a lista ficam de fora, ditos em `normalized` (`TABLE_NATIVE`); outro atributo de `<thead>`/`<tbody>`/`<tr>` é `HTML_TABLE_PART`, com o patch que o tira; `colspan` que explica meia coluna é `HTML_TABLE_COLSPAN`, com o patch que escreve uma célula vazia por coluna coberta (numa edição, a célula que a coluna tem na leitura, esvaziada, com o seu `k`: o Studio apaga a coluna inteira com qualquer uma das suas células); uma célula não ocupa mais de uma coluna nem mais de uma linha: outro `colspan` (com as duas linhas do mesmo tamanho, ou numa tabela de uma coluna) e `rowspan` (no cabeçalho ou na linha modelo, que se repete uma vez por registro), em qualquer grafia e com `ext:`, também são `HTML_TABLE_COLSPAN`, com o patch que tira o atributo (todas as células de todas as tabelas numa recusa só); o que a leitura já tem fica, como o Visible; uma célula da leitura reescrita sem o seu `k` enquanto a outra da coluna fica é `HTML_TABLE_COLUMN`, com o patch que dá à célula nova daquela coluna o `k` da antiga |
+| `<os-opaque k kind name>` | tipo sem linha na tabela: intocável. `MobileWidget` mantém os widgets de dentro; Traditional Web (D2) esconde a subárvore inteira |
 
 O que não é fato da página (chaves, contabilidade, posição no canvas, valores derivados) não é escrito; a lista está em
 `ScreenHtml.Contract()["notFacts"]`. Propriedade no padrão não é escrita e ausente lê como o padrão. Nada é descartado em
@@ -156,7 +157,7 @@ pronta em `continuations.edit`.
 Recusas, todas numa resposta, antes de escrever (`HTML_EDIT_INVALID`, `HTML_EDIT_NO_KEY`, `HTML_KEY_FOREIGN`,
 `HTML_EDIT_OVERLAP`, `HTML_KEY_TWICE`, `HTML_OPAQUE_TOUCHED`, `HTML_VISIBLE`, `HTML_SCRIPT`, `HTML_FOREACH`, `HTML_JSON`,
 `HTML_NAME_UNKNOWN`, `HTML_NAME_TAKEN`, `HTML_DELETE_IN_USE`, `HTML_SLOT_UNKNOWN`, `HTML_ACTIONS_LISTED`, `HTML_DATA_NEW`,
-`HTML_KIND_CHANGED`, `HTML_BASE_CHANGED`):
+`HTML_KIND_CHANGED`, `HTML_BASE_CHANGED`, `HTML_NAME_FIXED`):
 
 - **Uma recusa só, com todos os problemas** (bloqueio B3 da conferência de 12/10/2026; a rodada do patch da revisão de
   12/10/2026, docs/TEXTO-LOGICA.md: quando a recusa é por uma regra do dono, a edição com o patch aplicado roda numa cópia
@@ -189,12 +190,25 @@ Recusas, todas numa resposta, antes de escrever (`HTML_EDIT_INVALID`, `HTML_EDIT
 - Input (Input, TextArea, Dropdown, Checkbox, Switch, RadioGroup, ButtonGroup, Upload) novo ou movido para dentro de um link
   ou botão: recusado no plano (a plataforma recusaria no `create`).
 - Screen actions, aggregates e data actions não são criados pela página (`HTML_DATA_NEW`, `HTML_ACTIONS_LISTED`): são do
-  texto da lógica, no mesmo job.
+  texto da lógica, no mesmo job. O `actions=` como a leitura o escreveu é aceito: uma action que o módulo tem agora e o texto
+  não lista (criada depois da leitura, por uma op `logic` anterior do mesmo job ou no Studio, ou deixada de fora pelo texto)
+  fica, dita em `normalized` sem dizer qual dos dois foi (o plano não sabe); a página nunca remove uma action. Só um nome que o módulo não tem é recusado, e a correção é a op `logic` antes da op `html`.
+- Nome que o Studio dá e não deixa mudar (`HTML_NAME_FIXED`, "Widget does not support name changing"): o de um slot é o do seu
+  placeholder, o de um ramo de If e o de um Content. Um `os-Name` num `<slot>` que diz outro nome é recusado antes de escrever,
+  uma vez por slot, com o patch que escreve o slot como foi lido; um `<content name>` que o elemento não tem também. Os slots
+  de uma instância nova nascem com o nome do placeholder e nada os renomeia. `os-Name` igual ao nome do slot, ou `os-Name=""`
+  (como a leitura escreve um slot sem Name), é aceito e nada escreve. O nome de um slot, de um ramo ou de um Content não é
+  nome de widget da tela: não ocupa nome (`HTML_NAME_TAKEN`).
+- Nomes de widget: um elemento com `k` cujo texto não escreve `id` guarda o nome que tem (listado em `normalized`); `id=""`
+  tira o nome (`set Name` vazio); `id="Outro"` renomeia. Um nome único na tela: `id` de outro elemento é `HTML_NAME_TAKEN`.
+  Mover um nome (o elemento A sem `id`, o elemento B com o nome de A) é recusado uma vez, com o motivo (A guarda o nome
+  porque o texto não escreve `id` nele: tirar o `id` não diz que A larga o nome; a sessão de 18/10/2026 tirou os `id` de todos
+  os elementos que editou) e o patch conferido que escreve `id=""` em A; a outra saída, outro `id` em B, vem no `fix`.
 
 **Conferência:** depois de escrever, a tela é lida de novo e comparada com o texto editado, elemento por elemento: tipo,
 fatos, filhos e a ObjectKey de tudo o que a edição manteve (inclusive as linhas de texto). Se não for o texto editado, nada
 fica (`HTML_EDIT_NOT_APPLIED`). As únicas normalizações aceitas são listadas em `normalized`: o CSS só reformatado e o nome
-que a plataforma dá a um input novo quando a edição não escreveu `id`. A resposta traz o `next` (o `htmlSha256` da tela
+que a plataforma dá a um input novo quando a edição não escreveu `id`, o nome que um elemento com `k` já tinha quando a edição não escreveu `id` (ele guarda o nome que tem; nada é renomeado sem o texto pedir) e o nome que o Studio dá a um slot escrito com `os-Name=""`. A resposta traz o `next` (o `htmlSha256` da tela
 depois da edição) para a próxima edição.
 
 **Base e merge de 3 vias (plano 3.4):** se a tela mudou desde a leitura do `basedOn` (outra captura), a edição é juntada em
@@ -202,9 +216,19 @@ depois da edição) para a próxima edição.
 com a edição. Elementos casam pela ObjectKey (nunca pelo `k`, que renumera), slots pelo nome, o `else` pelo seu If, linhas
 de texto pelo valor. O que só um lado mudou vem desse lado; o que os dois mudaram fica com a versão da entrega (regra do
 dono) e é listado em `rebased[].conflicts`; widget que o Studio acrescentou fica. Elemento que a edição mudou e o Studio
-removeu não volta com a chave: `HTML_KEY_FOREIGN` com o texto atual. Sem o texto da base guardado (armazenamento antigo),
-cada `k` passa pela ObjectKey e o elemento enviado substitui o atual. Sem a tabela de chaves: `HTML_BASE_CHANGED` com o texto
-atual, uma recusa. Depois disso, o merge nativo da entrega leva o candidato ao módulo vivo, como em toda entrega.
+removeu não volta com a chave: `HTML_KEY_FOREIGN` com o texto atual. Sem o texto da base guardado (armazenamento antigo), ou
+quando o merge não consegue casar as duas leituras (o motivo vai na resposta: a parte que ele não casa e a linha), só a forma
+`edit` (elementos) segue: cada `k` passa pela ObjectKey, cada elemento enviado substitui o atual inteiro (o que mudou dentro
+dele desde a leitura fica com a edição) e o resto da tela fica (`rebased[].merge: "by-key"`, com o motivo em `because`). O
+documento inteiro escrito sobre aquela leitura (a forma `html` e o documento que as `edits` fazem) nunca substitui a tela:
+escreveria a leitura antiga por cima do que mudou (revisão da rodada 2, A1: com a Table nativa o merge não casava e a edição
+desfazia uma op anterior do job). É `HTML_BASE_CHANGED`, uma recusa, com `current.text`, `next.basedOn` e o próximo passo:
+reescrever sobre o texto atual ou mandar só os elementos em `edit`; quando uma op anterior do mesmo job mudou a tela, fazer a
+mudança na op `html` dela. Para `edits`, `current.elements` traz cada elemento endereçado como está agora e, quando todo
+endereço acha o seu elemento pela ObjectKey e nenhuma edição é `find`, o patch troca `basedOn` pela leitura atual e os
+endereços (e os `k` de um `replace`) pelos atuais, conferido no plano; se essas edições têm problemas próprios no texto atual,
+eles vêm na mesma recusa. Sem a tabela de chaves: `HTML_BASE_CHANGED` com o texto atual, uma recusa. Depois disso, o merge
+nativo da entrega leva o candidato ao módulo vivo, como em toda entrega.
 
 CLI frio: `anvil html-edit --oml <captura> --data <op.json> [--out r.oml]` (uma op) e
 `anvil html-edit-battery --oml <captura> [--seed N] [--per-kind N] [--root Tela] [--out rel.json]` (a bateria). O mesmo em
@@ -227,7 +251,7 @@ escrita, conferência). No `ssam_code`: `{action:"write", part:"html", element:"
 | Forma | Base | Efeito |
 |---|---|---|
 | `{find:"<texto exato>", with:"<texto>"}` | leitura e texto de job | troca a única ocorrência; `with:""` apaga o trecho; sobre a leitura, os `k` do `with` são os do trecho (na mesma ordem; em outra, só com cada elemento que muda de lugar levando o seu próprio texto) |
-| `{set:"w17", attributes:{"class":"a b","os-Width":null}}` | leitura | só a tag de abertura; `null` remove; nunca `k`; filhos intactos |
+| `{set:"w17", attributes:{"class":"a b","os-Width":null}}` | leitura | só a tag de abertura; `null` remove; `"id": null` tira o nome (escreve `id=""`, dito em `normalizations[].names`; o elemento cujo texto só deixa o `id` de fora guarda o nome); nunca `k`; filhos intactos |
 | `{replace:"w17", with:"<div …>…</div>"}` | leitura | o elemento inteiro (um If com o seu `<div else>`); raiz sem `k` herda `w17` |
 | `{delete:"w17"}` | leitura | o elemento (e o seu else) |
 | `{after:"w17", insert:"…"}` / `{before:"w17", insert:"…"}` | leitura | elementos novos (sem `k`) como irmãos |
@@ -255,7 +279,8 @@ muda de pai sem mudar a ordem dos `k` (sai do pai, por exemplo) continua sendo o
 loja, o preflight (`check-job`) já diz tudo isso em ms, sem o modelo. Um problema do plano num `k` que uma edição tocou
 leva `edit: <j>`; a resposta lista `normalizations [{rule:"html-element-edits", from, edits, touched}]`. Sem a leitura
 guardada e com a tela mudada: `HTML_BASE_CHANGED` com o texto atual e, quando a tabela de chaves está guardada,
-`current.elements [{address, k, text}]` com o texto atual de cada elemento endereçado. A forma `edit` (elementos inteiros)
+`current.elements [{address, k, text}]` com o texto atual de cada elemento endereçado. Com a leitura guardada e o merge de 3
+vias sem resultado, a mesma recusa, com o patch descrito em "Base e merge de 3 vias". A forma `edit` (elementos inteiros)
 e a forma documento continuam valendo como antes.
 
 **Correção de um job recusado ou checado:** `basedOn {job, sha256}` (o `nextBasedOn` da recusa, também na recusa do
@@ -704,7 +729,7 @@ então compilam em qualquer ordem.
 
 | Tela | O que tem |
 |---|---|
-| lista `<E>List` | `<table class="table">` com `<thead>` e `<tbody list>` (List nativa, nunca For Each nem cards); busca nos atributos de texto (`like`), um dropdown por referência a static; cabeçalhos ordenáveis (sort dinâmico, a referência ordena pelo rótulo do alvo); paginação; estados de erro (`HasFetchError`), carregando e vazio; link para o detalhe, editar e excluir com confirmação |
+| lista `<E>List` | `<table class="table">` com `<thead>` e `<tbody list>` (Table nativo, uma coluna por campo; nunca For Each nem cards); busca nos atributos de texto (`like`), um dropdown por referência a static; cabeçalhos ordenáveis (sort dinâmico, a referência ordena pelo rótulo do alvo); paginação; estados de erro (`HasFetchError`), carregando e vazio; link para o detalhe, editar e excluir com confirmação |
 | detalhe `<E>Detail` | uma tabela de duas colunas (rótulo, valor; a referência mostra o rótulo do alvo pelo join); voltar, editar, excluir |
 | formulário `<E>Edit` | um input por atributo, tipado (texto, textarea acima de 500, email, telefone, número, data, data e hora, checkbox), Max. Length do atributo, `required` do atributo, dropdown por referência; validações nativas (`BuiltInValidations`) e `if not Form.Valid` no Save |
 

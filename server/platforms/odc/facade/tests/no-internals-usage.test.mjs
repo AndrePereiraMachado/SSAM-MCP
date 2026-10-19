@@ -56,7 +56,8 @@ test('the customer\'s names and data keep every name, value and key', () => {
 });
 test('ssam_code problems keep their origin; an evidence keeps its guidance and limits, only its level becomes the seal', () => {
   const check = { ok: false, code: 'CODE_CHECK_FAILED', problems: [{ code: 'UNKNOWN_ACTION', message: 'Missing() is not an action of Neutral', origin: { at: 'files/1', file: 'C:\\work\\caller.flow', action: 'Caller' } }] };
-  assert.deepEqual(licensee('ssam_code', check).problems, check.problems);
+  // (marco-a6) the file the call named comes back as the caller sent it; a path it did not send is the server's
+  assert.deepEqual(licensee('ssam_code', check, { action: 'check', files: ['C:\\work\\other.flow', 'C:\\work\\caller.flow'] }).problems, check.problems);
   const expand = { ok: true, expansions: { 'integration.rest-expose': { evidence: { level: 'C-executed-historical', proofs: [{ job: 'rest-expose', path: 'tests/jobs/rest-expose.json' }],
     negative: [], guidance: 'Addressing outside the creating job: IRestService:<Service> and IRestService:<Service>/<Method>.',
     limits: [{ text: 'The URLPath rewrite on rename is measured on ODC only.', origin: 'tests/jobs/rename-logic-propagation.json' }] } } } };

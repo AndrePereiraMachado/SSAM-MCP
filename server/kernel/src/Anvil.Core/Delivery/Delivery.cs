@@ -27,12 +27,14 @@ public interface IMergePlanner
 /// saved state; a property of the call, never of the task identity (not serialized), so a resume passes it again.
 /// SkipOpenReferencesCheck (speed lane vel-entrega): the build phase of this call captured the module's tab by key (`deliver
 /// --prebuilt`), so the open of an already open tab skips the Studio's references check (OpeningOwnTab); a call property,
-/// not serialized.</summary>
+/// not serialized. AutoPatch is a nullable call override recorded with the task and retained on resume;
+/// false disables automatic correction and null leaves the job policy in force.</summary>
 public sealed record DeliveryRequest(string Module, string JobPath, string WorkDirectory, IReadOnlyList<string> Checks,
     IReadOnlyDictionary<string, string>? Producers = null, string? TaskId = null, int? BridgePort = null, JsonObject? Specification = null, string? ExpectedEnvironment = null, string? ReservationOwner = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? CaptureProducers = null,
     [property: System.Text.Json.Serialization.JsonIgnore] bool CloseOpenedTab = false,
-    [property: System.Text.Json.Serialization.JsonIgnore] bool SkipOpenReferencesCheck = false);
+    [property: System.Text.Json.Serialization.JsonIgnore] bool SkipOpenReferencesCheck = false,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] bool? AutoPatch = null);
 
 public sealed record DeliveryDependencyContext(DeliveryRequest Request, string Environment, string ModuleKey,
     string TaskDirectory, Anvil.CSharp.CompilationResult? Compilation);
@@ -67,6 +69,7 @@ public static partial class Delivery
         Func<string, string, string, JsonObject>? previewSignatures = null,
         Func<string, JsonArray>? referenceInventory = null)
     {
+        using var autoPatch = JobPreflight.UseAutoPatch(request.AutoPatch);
         var clock = Stopwatch.StartNew();
         // Proof-only jobs (K1 proofs, NEVER DELIVER marker) are refused before a task exists or the bridge is called.
         NonDeliverableJobs.Require(request.JobPath);

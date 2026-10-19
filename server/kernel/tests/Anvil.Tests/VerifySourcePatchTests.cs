@@ -72,7 +72,7 @@ public sealed class VerifySourcePatchTests
         var one = VerifySourceEdits.AddFlowArgument(flow, "Probe", "ReadValue", "Reset", "False");
         Assert.Equal(flow.Replace("))  #", "), Reset=False)  #"), one);
         var two = VerifySourceEdits.AddFlowArgument(one!, "Probe", "ReadValue", "Count", "0");
-        Assert.Contains("Reset=False, Count=0)  # Keep", two);
+        Assert.Contains("ReadValue(Count=0, Name=Trim(\"x)y\"), Reset=False)  # Keep", two);
         Assert.Null(VerifySourceEdits.AddFlowArgument(two!, "Probe", "ReadValue", "Reset", "False"));
     }
 
@@ -122,7 +122,7 @@ public sealed class VerifySourcePatchTests
         var work = Path.Combine(root, ".local", "verify-source-patch-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(work);
         var job = JsonNode.Parse("""
-            {"base":"blank-service.oml","expectValid":true,"ops":[
+            {"base":"blank-service.oml","expectValid":true,"autoPatch":false,"ops":[
               {"op":"logic","data":{"actions":[{"name":"ReadValue","inputs":[{"name":"Reset","type":"Boolean","default":"False"},{"name":"Count","type":"Integer","default":"0"}],"outputs":[{"name":"Result","type":"Boolean"}],"steps":[{"assign":{"Result":"Reset and Count > 0"}}]}]}},
               {"op":"logic","data":{"flow":"server action CheckValue public\n  Probe = ReadValue()\n  end\n"}}
             ]}
@@ -164,7 +164,7 @@ public sealed class VerifySourcePatchTests
         var work = Path.Combine(root, ".local", "verify-source-patch-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(work);
         var job = JsonNode.Parse("""
-            {"base":"reactive-ui.oml","expectValid":true,"ops":[
+            {"base":"reactive-ui.oml","expectValid":true,"autoPatch":false,"ops":[
               {"op":"logic","data":{"actions":[{"name":"ReadFlag","kind":"client","inputs":[{"name":"Reset","type":"Boolean","default":"False"}],"outputs":[{"name":"Result","type":"Boolean"}],"steps":[{"assign":{"Result":"Reset"}}]}]}},
               {"op":"html","data":{"html":"<screen name=\"PatchProbe\" roles=\"Registered\"><var name=\"TextValue\" type=\"Text\"/><input bind=\"TextValue\" placeholder=\"Search for a value\"/></screen>"}},
               {"op":"logic","data":{"flow":"action PatchProbe.LoadFlag\n  Read = ReadFlag()\n  end\n"}}
@@ -194,7 +194,7 @@ public sealed class VerifySourcePatchTests
         var work = Path.Combine(root, ".local", "verify-source-patch-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(work);
         var job = JsonNode.Parse("""
-            {"base":"reactive-ui.oml","expectValid":true,"ops":[
+            {"base":"reactive-ui.oml","expectValid":true,"autoPatch":false,"ops":[
               {"op":"spec","data":{"ddl":"type RowValue = { Id: Long Integer; }"}},
               {"op":"html","data":{"html":"<screen name=\"ListProbe\" roles=\"Registered\"><var name=\"Rows\" type=\"RowValue List\"/><var name=\"Query\" type=\"Text\"/><div list=\"Rows\"><button onclick=\"SelectRow(Id=Rows.Current.Id)\">Pick</button></div><input bind=\"Query\" placeholder=\"Search for a row\"/></screen>"}},
               {"op":"logic","data":{"flow":"action ListProbe.SelectRow\n  in Id: Long Integer\n  end\n"}}

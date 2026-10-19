@@ -3,6 +3,7 @@
  "reviewedAt": "2026-10-04",
  "note": "Routing of every MCP tool and verb of the ssam server for ssam_discover (tool-routing.mjs). Capability matching never reads this file; its vocabulary is separate from the capability synonyms and keywords. Integrator-owned; tests/tool-routes.test.mjs keeps it complete against the live registry.",
  "synonyms": {
+  "@carga_arquivo": ["carregar", "carregue", "load", "importar", "importe", "import"],
   "@query_test_target": [
    "sql",
    "query",
@@ -3546,7 +3547,7 @@
      "field": "request.operation",
      "value": "insert",
      "selector": "enum",
-     "when": "Insert records into an entity (published database).",
+     "when": "Insert records into a published entity. Alternative: replace records with files:[\"<absolute-path.csv>\"]; file loads require operationId:\"<uuid>\" and declared natural keys (unique and non-null in the file); they support columns, references and dryRun (per row: insert, update current -> new, unchanged). Equal rows skip, missing rows insert; a key that exists with other values stops the load before any write (updatePreview) until confirmUpdates {previewSha256, authorize} carries the owner's next message stating that row count. Missing keys refuse with DATA_LOAD_KEYS_REQUIRED before writing (only a model unique index is offered, as a dryRun); duplicate keys report all source rows. Resume reconciles keys; close {preview:true}, then close {previewSha256, authorize}.",
      "preconditions": [
       "Service Studio open and connected on the O11 lane (ssam_connect {lane:\"o11\"}), signed in to the environment",
       "the user's own authorization words, verbatim (never a paraphrase)"
@@ -3595,7 +3596,14 @@
        "@adicionar",
        "@testar",
        "@entidade"
-      ]
+      ],
+      ["@carga_arquivo","@registro","@entidade","@arquivo"],
+      ["@carga_arquivo","@registro","@entidade","csv"],
+      ["@carga_arquivo","@registro","@entidade","json"],
+      ["@carga_arquivo","@registro","@entidade","jsonl"],
+      ["@carga_arquivo","@registro","@entidade","ndjson"],
+      ["@carga_arquivo","@registro","@entidade","fonte"],
+      ["@carga_arquivo","@registro","@entidade","source"]
      ],
      "without": [
       "@estatica",
@@ -3615,12 +3623,14 @@
       "pt": [
        "inserir registros na entidade Cliente",
        "popular a entidade Produto com dados de teste",
-       "cadastrar um registro na tabela Pedido"
+       "cadastrar um registro na tabela Pedido",
+       "carregar os registros do arquivo clientes.csv na entidade Cliente"
       ],
       "en": [
        "insert records into entity Customer",
        "seed entity Product with test data",
-       "add a row to table Order"
+       "add a row to table Order",
+       "load records from customers.csv into entity Customer"
       ]
      },
      "equivalent": {
@@ -3633,7 +3643,7 @@
      "field": "request.operation",
      "value": "update",
      "selector": "enum",
-     "when": "Update records (identifier plus the attributes to change).",
+     "when": "Update records with Id plus changed attributes. Alternative: replace records with files:[\"<absolute-path.csv>\"]; file loads require operationId:\"<uuid>\" and declared natural keys (unique and non-null in the file). Every changed existing row is an overwrite: the load stops before any write (updatePreview) until confirmUpdates {previewSha256, authorize} carries the owner's next message stating that row count. Absent keys insert (upsert); insertMissing:false refuses them with DATA_KEY_NOT_FOUND. Missing keys refuse with DATA_LOAD_KEYS_REQUIRED before writing; duplicate keys report all source rows. Resume reconciles keys; close {preview:true}, then close {previewSha256, authorize}.",
      "preconditions": [
       "Service Studio open and connected on the O11 lane (ssam_connect {lane:\"o11\"}), signed in to the environment",
       "the user's own authorization words, verbatim (never a paraphrase)"
@@ -3748,12 +3758,14 @@
       "pt": [
        "atualizar registros da entidade Pedido",
        "alterar o status do registro 42",
-       "corrigir um valor na tabela Cliente"
+       "corrigir um valor na tabela Cliente",
+       "atualizar os registros da entidade Cliente por chave a partir do arquivo clientes.csv"
       ],
       "en": [
        "update records of entity Order",
        "change the status of record 42",
-       "fix a value in table Customer"
+       "fix a value in table Customer",
+       "update Customer records by key from customers.csv"
       ]
      },
      "equivalent": {
@@ -16853,7 +16865,7 @@
    "group": "data",
    "kind": "data",
    "title": "Insert records into an entity (development database)",
-   "when": "Insert records into an entity of the ODC development database.",
+   "when": "Insert ODC entity records, or replace records with files:[\"<absolute-path.csv>\"] (operationId, natural keys): equal rows skip, missing rows insert, changed rows wait for confirmUpdates with the owner's counted words; close {preview:true}.",
    "preconditions": [
     "ODC Studio open with the bridge attached (ssam_connect {lane:\"odc\"})",
     "the module is open in ODC Studio (studio_open)",
@@ -16898,7 +16910,14 @@
      "@adicionar",
      "@testar",
      "@entidade"
-    ]
+    ],
+    ["@carga_arquivo","@registro","@entidade","@arquivo"],
+    ["@carga_arquivo","@registro","@entidade","csv"],
+    ["@carga_arquivo","@registro","@entidade","json"],
+    ["@carga_arquivo","@registro","@entidade","jsonl"],
+    ["@carga_arquivo","@registro","@entidade","ndjson"],
+    ["@carga_arquivo","@registro","@entidade","fonte"],
+    ["@carga_arquivo","@registro","@entidade","source"]
    ],
    "without": [
     "@estatica",
@@ -16917,12 +16936,14 @@
    "intents": {
     "pt": [
      "popular a entidade com dados de teste no ODC",
-     "cadastrar registros no banco de dev"
+     "cadastrar registros no banco de dev",
+     "carregar os registros do arquivo clientes.csv na entidade Cliente"
     ],
     "en": [
      "insert a record into entity Product",
      "seed the entity with test data in ODC",
-     "add rows to the dev database"
+     "add rows to the dev database",
+     "load records from customers.csv into entity Customer"
     ]
    },
    "equivalent": {
@@ -16938,7 +16959,7 @@
    "group": "data",
    "kind": "data",
    "title": "Update records of an entity (development database)",
-   "when": "Update records (identifier plus attributes) in the ODC development database.",
+   "when": "Update ODC records by Id, or replace records with files:[\"<absolute-path.csv>\"] (operationId, natural keys): changed rows wait for confirmUpdates with the owner's counted words; insertMissing:false refuses absent keys; close {preview:true}.",
    "preconditions": [
     "ODC Studio open with the bridge attached (ssam_connect {lane:\"odc\"})",
     "the module is open in ODC Studio (studio_open)",
@@ -17038,12 +17059,14 @@
     "pt": [
      "atualizar registros da entidade Produto",
      "alterar dados no banco de dev do ODC",
-     "corrigir um registro da entidade"
+     "corrigir um registro da entidade",
+     "atualizar os registros da entidade Cliente por chave a partir do arquivo clientes.csv"
     ],
     "en": [
      "update records of entity Product",
      "change data in the ODC dev database",
-     "fix a record of the entity"
+     "fix a record of the entity",
+     "update Customer records by key from customers.csv"
     ]
    },
    "equivalent": {

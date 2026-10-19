@@ -25,8 +25,12 @@ import { DESTRUCTIVE_SUFFIX, callWordsProblems, resultWithoutWordEchoes, taskSte
 import fs from 'node:fs';
 import {workspaceRoot, anvilRoot} from './workspace.mjs';
 import path from 'node:path';
+import { agentJoin } from './agent-paths.mjs';
 import { pathToFileURL } from 'node:url';
 import { randomUUID, createHash } from 'node:crypto';
+import { runDataLoad, o11DataChannel } from './data-load.mjs';
+import { withInlineDataReservation } from './data-load-lock.mjs';
+import { waitForDataLoadEnd } from './data-load-lock.mjs';
 import { parseAppArguments } from './app-urls.mjs';
 import { anvilLaneFacts, catalog, command, lane, laneNames, laneOfModule, LANES, run, studioProcesses, studioProcessScript, parseStudioProcesses, verbs } from './lanes.mjs';
 import { registerO11Operations } from './o11-operations.mjs';
@@ -54,7 +58,7 @@ import { prototypeDeliveryDefaults, readJobDocument, PROTOTYPE_DELIVER_TEXT } fr
 import { textFormRefusal, partReader } from './text-routes.mjs';
 import { CODE_JOB_TEXT, normalizeCodeOps } from './ssam-code.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
-import { resolvePatchedJob, jobIdentity, failedOpOf, patchJsonSchema, basedOnJsonSchema, withNamedPatches } from './job-patch.mjs';
+import { resolvePatchedJob, jobIdentity, failedOpOf, patchJsonSchema, basedOnJsonSchema, withNamedPatches, appliedJobIdentity } from './job-patch.mjs';
 import { createWorkerFirstRunner, createWorkerClient, workerDisabled } from './anvil-worker.mjs';
 import { shapeToolResult } from './responses.mjs';
 import { keepAnswer, fitResult } from './answer-size.mjs';
@@ -375,7 +379,7 @@ export async function hostedDoctor(laneName, { context, session }, { network = f
     kernel: info.kernel ?? null, compatible: info.compatible ?? null,
     // C26: the agent's folder and its inbox, where the user's own files go (an OML, an image), passed as agent:inbox/<name>;
     // jobs go inline (HOSTED_RULES, fase4-24).
-    ...(typeof info.agentRoot === 'string' && info.agentRoot ? { root: info.agentRoot, inbox: path.win32.join(info.agentRoot, 'inbox') } : {}) };
+    ...(typeof info.agentRoot === 'string' && info.agentRoot ? { root: info.agentRoot, inbox: agentJoin(info.agentRoot, 'inbox') } : {}) };
   const lanes = {};
   for (const name of laneName ? [lane(laneName).name] : laneNames) {
     const enabled = (context.lanes ?? []).includes(name);
@@ -489,7 +493,7 @@ export const HOSTED_RULES_CODE_OFF = hostedRules('agent:inbox/<file> is only for
 export function hostedInstructions(hosted) {
   let root = null;
   try { root = (hosted?.session?.agent ?? hosted?.context?.agent)?.info?.()?.agentRoot ?? null; } catch { root = null; }
-  const inbox = typeof root === 'string' && root ? ' The agent inbox folder of this account is ' + path.win32.join(root, 'inbox') + '.' : ' ssam_doctor shows the agent inbox folder (agent.inbox).';
+  const inbox = typeof root === 'string' && root ? ' The agent inbox folder of this account is ' + agentJoin(root, 'inbox') + '.' : ' ssam_doctor shows the agent inbox folder (agent.inbox).';
   return codeServedHosted(hosted?.tools ?? null)
     ? HOSTED_INSTRUCTIONS + ' ' + HOSTED_RULES + inbox
     : HOSTED_INSTRUCTIONS_CODE_OFF + ' ' + HOSTED_RULES_CODE_OFF + inbox;
@@ -580,12 +584,23 @@ const dataOp = (batch) => ({ type: 'object', required: ['operation', 'entity'], 
   limit: { type: 'integer', minimum: 1, maximum: DATA_ROW_CAP, description: `read-all: at most this many rows in one call (default ${DATA_DEFAULT_ROWS}); continue from the answer's continuation.offset.` },
   deadlineMs: { type: 'integer', minimum: 1000, maximum: 120000, description: 'read/read-all: the call stops reading at this many ms (default 60000) and says where to continue.' },
   ...(batch ? { step: { type: 'string', minLength: 1, description: 'The name later ops of the batch use in {"$ref": "<step>"}.' } } : {}),
+  ...(batch ? {} : {
+    // CX13 review 6 (listing budget): the load validates its options itself (one refusal with everything, before any write; delimiter,
+    // files, columns and references only after the schema and the files are read),
+    // so they are listed with their cheapest schema.
+    close: {}, // {preview:true}, then {previewSha256, authorize}: stated in the tool text
+    confirmUpdates: {type:'object',properties:{previewSha256:{type:'string'},authorize:{type:'string'}},
+      description:"Overwrites of existing rows: the updatePreview sha256 and the owner's next message after that preview, verbatim, stating its number of rows."},
+    files: { type: 'array', items: { type: 'string' } }, columns: {}, references: {}, // objects; the load refuses any other value
+    keys: { anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] },
+    insertMissing: { type: 'boolean' }, batchSize: { type: 'integer' }, delimiter: { type: 'string' }, dryRun: { type: 'boolean' },
+  }),
 }, additionalProperties: false });
 export const o11DataRequestSchema = { anyOf: [dataOp(false), { type: 'object', required: ['batch'], properties: {
   authorization: { type: 'string', description: "The user's own words for every write of the batch." },
   batch: { type: 'array', minItems: 1, items: dataOp(true) },
 }, additionalProperties: false }] };
-const dataWrites = request => (Array.isArray(request?.batch) ? request.batch : [request]).some(op => ['insert', 'update', 'delete'].includes(op?.operation));
+const dataWrites = request => (Array.isArray(request?.batch) ? request.batch : [request]).some(op => !op?.dryRun && ['insert', 'update', 'delete'].includes(op?.operation));
 // The answer of one o11_data call, from the runner's result (worker or cold): the CLI envelope as `result`, with its
 // code and problems lifted to the top for the refusal. A request written to the worker with no reply is an unknown
 // outcome: never repeated here; the same request with the same operationId reconciles it from its receipt.
@@ -1317,12 +1332,32 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
   const o11Runner = deps.runAnvil ?? createWorkerFirstRunner();
   if (o11) server.registerTool('o11_data', {
     title: 'O11 headless entity data',
-    description: 'Read or write published O11 business records through the Edit Data of the Service Studio connected on the O11 lane, with that Studio\'s own login (SSO included); no credential and no vault. host only checks that the Studio is on that environment. Pass a published OML snapshot and entity/attribute names. read/read-all/insert/update/delete; (System) and Users modules are refused. read-all answers at most limit rows (default 2000) within deadlineMs (default 60 s), every page with its own timeout; complete:false comes with the continuation (same read, next offset). Writes require the user authorization words and a stable operationId UUID inside request. Reuse the same operationId after a lost response; pending receipts block automatic retry. Long IDs must be strings. Several entities in one call: request {authorization, batch:[op, ...]}, each op with its own step name; an attribute value or id {"$ref": "<step>"} (or "<step>#<i>") is the record id an earlier insert of the batch created. See docs/O11-DADOS-HEADLESS.md.',
+    description: 'Read or write published O11 business records through the Edit Data of the Service Studio connected on the O11 lane, with that Studio\'s own login (SSO included); no credential and no vault. host only checks that the Studio is on that environment. Pass a published OML snapshot and entity/attribute names. read/read-all/insert/update/delete; (System) and Users modules are refused. read-all answers at most limit rows (default 2000) within deadlineMs (default 60 s), every page with its own timeout; complete:false comes with the continuation (same read, next offset). Writes require the user authorization words and a stable operationId UUID inside request. Reuse the same operationId after a lost response; pending receipts block automatic retry. Long IDs must be strings. Several entities in one call: request {authorization, batch:[op, ...]}, each op with its own step name; an attribute value or id {"$ref": "<step>"} (or "<step>#<i>") is the record id an earlier insert of the batch created. See docs/O11-DADOS-HEADLESS.md. files:[abs paths] (JSON/JSONL/CSV) need natural keys: equal rows skip, missing rows insert; changed rows stop before writing (updatePreview) until confirmUpdates. Same operationId resumes by reading keys. close:{preview:true}, then close:{previewSha256,authorize} with the owner reply.',
     inputSchema: fromJsonSchema({ type: 'object', additionalProperties: false, required: ['host', 'module', 'oml', 'request'], properties: {
       host: { type: 'string' }, module: { type: 'string' }, oml: { type: 'string' },
       request: o11DataRequestSchema,
     } }),
   }, async ({ host, module, oml, request }, ctx) => {
+    // merge: file loads (files/close) before the CX15 words gate
+    // Hosted: the lane's local folder of the context (<ws>/o11), never the server's own lane folder (nor deps.dataRoot).
+    const work = hosted ? path.join(o11LaneOf(LANES.o11.lane).local, 'data')
+      : path.join(deps.dataRoot ?? LANES.o11.root, LANES.o11.lane === 'ss5' ? '.local/lane-ss5/data' : '.local/data');
+    if (Object.hasOwn(request, 'files') || Object.hasOwn(request,'close')) {
+      const call = { host, module, oml };
+      const token = ctx?.mcpReq?._meta?.progressToken;
+      const progress = token == null || typeof ctx?.mcpReq?.notify !== 'function' ? undefined : stage => {
+        Promise.resolve().then(() => ctx.mcpReq.notify({ method: 'notifications/progress', params: { progressToken: token,
+          progress: stage.done, total: stage.total, message: `o11_data: ${stage.done}/${stage.total} batches completed` } })).catch(() => {});
+      };
+      return reply(await runDataLoad({ lane: 'o11', ...call, ...request },
+        o11DataChannel({ runAnvil: o11Runner, call:{...call,entity:request.entity}, work, authorization: request.authorization }),
+        { journalRoot: path.join(work, 'loads'), now: deps.dataNow ?? Date.now, progress, signal: ctx?.mcpReq?.signal, destructive: deps.destructive,
+          continuation: { tool: 'o11_data', arguments: { ...call, request }, why: 'Resume the same load with the same operationId.' } }));
+    }
+    const fileFields = ['columns', 'references', 'keys', 'insertMissing', 'batchSize', 'delimiter', 'dryRun', 'confirmUpdates'].filter(field => Object.hasOwn(request, field));
+    if (fileFields.length) return reply({ ok: false, code: 'INPUT_INVALID', written: 0,
+      error: 'File-load options require files; no records were sent.', problemCount: fileFields.length,
+      problems: fileFields.map(field => ({ code: 'INPUT_INVALID', at: field, reason: `${field} requires files` })) });
     const gate = await import('./data-delete-gate.mjs');
     const noWords = gate.dataWordsRefusal(request); if (noWords) return reply(noWords); // CX15 r6 (M-1)
     if (gate.hasDataDelete(request)) {
@@ -1331,15 +1366,22 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
       if (hosted) return reply((await import('./hosted/destructive.mjs')).destructiveUnavailable('o11_data'));
       return reply(await gate.o11DataDelete({ host, module, oml, request }, { o11Runner, o11DataArguments, o11DataAnswer, dataRoot: deps.dataRoot ?? LANES.o11.root, lane: LANES.o11.lane, ...deps.destructive, signal: ctx?.mcpReq?.signal ?? null })); // CX15: a delete previews first; r2: the client's cancellation reaches it
     }
-    // Hosted: the lane's local folder of the context (<ws>/o11), never the server's own lane folder (nor deps.dataRoot).
-    const work = hosted ? path.join(o11LaneOf(LANES.o11.lane).local, 'data')
-      : path.join(deps.dataRoot ?? LANES.o11.root, LANES.o11.lane === 'ss5' ? '.local/lane-ss5/data' : '.local/data');
-    const requests = path.join(work, 'requests'); fs.mkdirSync(requests, { recursive: true });
-    // CX15 r4 (W-4): the request file and the kernel (which copies it into its receipt) get sha256:<hex> of the owner's
-    // words, never the words; the answer's continuation is built from the same hashed request.
-    const kernelRequest = gate.hashedDataRequest(request);
-    const file = path.join(requests, randomUUID() + '.json'); fs.writeFileSync(file, JSON.stringify(kernelRequest));
-    return reply(o11DataAnswer(await o11Runner(['data', ...o11DataArguments({ host, module, oml }, file, work)], { read: !isWrite('o11_data', { request }) }), kernelRequest, { host, module, oml }));
+    const send=async()=>{
+      const requests = path.join(work, 'requests'); fs.mkdirSync(requests, { recursive: true });
+      // CX15 r4 (W-4): the request file and the kernel (which copies it into its receipt) get sha256:<hex> of the owner's
+      // words, never the words; the answer's continuation is built from the same hashed request.
+      const kernelRequest = gate.hashedDataRequest(request);
+      const file = path.join(requests, randomUUID() + '.json'); fs.writeFileSync(file, JSON.stringify(kernelRequest));
+      return o11DataAnswer(await o11Runner(['data', ...o11DataArguments({ host, module, oml }, file, work)], { read: !isWrite('o11_data', { request }) }), kernelRequest, { host, module, oml });
+    };
+    const entities=[...new Set((request.batch??[request]).filter(op=>['insert','update'].includes(op.operation)).map(op=>op.entity))].sort();
+    // Review 6: no --schema before an inline write unless a file load of the lane is open (withInlineDataReservation).
+    // Review 7 (R7-1): only a failed identity read (nothing sent yet) is not-sent; an error of the write itself (a dead worker,
+    // a cancelled call) may have run: it goes up to the hub, which answers it uncertain (TASK_FAILED_UNCERTAIN).
+    const identities=async()=>{try{const out=[];for(const entity of entities)out.push(await o11DataChannel({runAnvil:o11Runner,call:{host,module,oml,entity},work}).identity());return out;}
+      catch(error){throw Object.assign(error,{code:error.code??'DATA_TARGET_IDENTITY_REQUIRED',identityFailure:true});}};
+    try{return reply(entities.length?await withInlineDataReservation({lane:'o11'},identities,{journalRoot:path.join(work,'loads')},send):await send());}
+    catch(error){if(!error?.identityFailure)throw error;return reply({ok:false,code:error.code,error:error.message,written:0,outcome:'not-sent'});}
   });
   // The headless debugger of both lanes, in this process and independent of Studio proxies: the server debugger
   // (ssam_debug), the action runner (ssam_debug_run: execution=native-entry through the nearest public entry the code
@@ -1468,7 +1510,7 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
       const exposed = inlineJob ? { ...schema, required: (schema.required ?? []).filter(r => r !== 'feature'), properties: { ...schema.properties, job: { anyOf: [{ type: 'string' }, { type: 'object' }, { type: 'array' }],
         description: 'Path of the job JSON (absolute or relative to the SSAM-Hybrid-ODC root), or the job itself ({ops:[...]} or an array of ops). '
           + 'With basedOn: a partial job, only the changed or new actions/entities/ops (same name replaces, new name is added).' },
-        patch: patchJsonSchema, basedOn: basedOnJsonSchema } } : schema;
+        patch: patchJsonSchema, basedOn: basedOnJsonSchema, autoPatch: { type: 'boolean', description: 'false: offer verified repairs without automatically applying them.' } } } : schema;
       const description = (needsLane ? '[o11 | odc] ' : ownLane ? '' : '[' + laneName + '] ') + (tool.description ?? '')
         + (inlineJob ? ' Every answer with a job names nextBasedOn {job, sha256}; a refusal also job, jobSha256, failedOp and each patch by name (patchByName). '
           + 'Correct it with patch + basedOn (paths by index or by name: actions/<Action>/steps/<as>/...), or with only the changed actions as a partial job + basedOn; never rewrite the whole job. '
@@ -1541,6 +1583,8 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
         let result;
         try { result = await relayWork(client, { name: tool.name, arguments: forwarded }, ctx, relayOptions(ctx, { timeoutMs: relayTimeoutMs }), { write: isMutation(tool.name, forwarded) }); }
         catch (error) {
+          if (['studio_data_insert', 'studio_data_update'].includes(tool.name) && (forwarded.files !== undefined || forwarded.close !== undefined))
+            await waitForDataLoadEnd(deps.odcDataRoot ?? path.join(odcLaneRoot, 'journal', 'data', 'loads'), forwarded.operationId);
           return reply(relayFailure(error, { tool: tool.name, args: forwarded, signal: ctx?.mcpReq?.signal, timeoutMs: relayTimeoutMs,
             statusTool: listedNames.has('studio_status') ? 'studio_status' : 'ssam_doctor' }));
         }
@@ -1565,7 +1609,8 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
             const failedOp = failedOpOf(value.error ?? value.refusal?.error, file);
             named = withNamedPatches({ ...value, ...jobIdentity(file), ...(failedOp != null ? { failedOp } : {}), ...(partial ? { partial } : {}), ...notes }, file);
           } else if (value.ok === true) {
-            const { nextBasedOn } = jobIdentity(file);
+            const corrected = appliedJobIdentity(value.patchedJob, { path: file, sha256: jobIdentity(file).jobSha256 }, { journalDir: path.join(odcLaneRoot, '.local', 'journal'), tool: 'studio_deliver' });
+            const { nextBasedOn } = jobIdentity(corrected.path);
             if (nextBasedOn || partial || jobNotes.length) named = { ...value, ...(nextBasedOn ? { nextBasedOn } : {}), ...(partial ? { partial } : {}), ...notes };
           }
           if (named) return { ...result, structuredContent: named, content: [{ type: 'text', text: JSON.stringify(named) }] };
@@ -1627,9 +1672,9 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
     + 'producers binds {Name: absolute .oml/.avsig path}; captureProducers ["Name" | "Name=Producer", e.g. "System=(System)"] '
     + 'first reads each producer\'s current signature read-only through the logged-in Studio and binds the .avsig.',
     inputSchema: fromJsonSchema({ type: 'object',
-      properties: { job: inlineJobSchema, patch: patchJsonSchema, basedOn: basedOnJsonSchema, base: { type: 'string' }, out: { type: 'string' }, ...producerSchema }, additionalProperties: false }),
+      properties: { job: inlineJobSchema, patch: patchJsonSchema, basedOn: basedOnJsonSchema, autoPatch: { type: 'boolean', description: 'false: offer verified repairs without automatically applying them.' }, base: { type: 'string' }, out: { type: 'string' }, ...producerSchema }, additionalProperties: false }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true } },
-    async ({ job, patch, basedOn, base, out, producers, captureProducers }) => reply(await runJobTool({ lane: 'o11', job, patch, basedOn, base, out, producers, captureProducers })));
+    async ({ job, patch, basedOn, base, out, producers, captureProducers, autoPatch }) => reply(await runJobTool({ lane: 'o11', job, patch, basedOn, base, out, producers, captureProducers, autoPatch })));
 
   // The same job runner for either lane: O11 over an Anvil fixture, ODC over an ODC fixture through the anvil-odc
   // CLI (the same kernel compiled against the ODC Studio). It proves a job; it delivers nothing to any Studio.
@@ -1642,10 +1687,10 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
     + 'which validate inside the call and refuse before any change; studio_manifest prepares an existing candidate. '
     + 'A refused run answers ONCE with every problem of every phase over the base (problems[]: phase, op, pointer, code, fix, patch when certain, identical ones grouped; verifyRan). '
     + 'A failed run also returns `discovery` (contract of the failing op, catalog capability of its element, proven refusal, next step); ssam_discover gives the contracts before writing the job. ' + CODE_JOB_TEXT, inputSchema: fromJsonSchema({ type: 'object',
-      properties: { job: inlineJobSchema, patch: patchJsonSchema, basedOn: basedOnJsonSchema, lane: { type: 'string', enum: laneNames, description: 'o11 (default) or odc.' },
+      properties: { job: inlineJobSchema, patch: patchJsonSchema, basedOn: basedOnJsonSchema, autoPatch: { type: 'boolean', description: 'false: offer verified repairs without automatically applying them.' }, lane: { type: 'string', enum: laneNames, description: 'o11 (default) or odc.' },
         base: { type: 'string' }, out: { type: 'string' }, ...producerSchema }, additionalProperties: false }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true } },
-    async ({ job, patch, basedOn, lane: which = 'o11', base, out, producers, captureProducers }) => reply(await runJobTool({ lane: which, job, patch, basedOn, base, out, producers, captureProducers })));
+    async ({ job, patch, basedOn, lane: which = 'o11', base, out, producers, captureProducers, autoPatch }) => reply(await runJobTool({ lane: which, job, patch, basedOn, base, out, producers, captureProducers, autoPatch })));
 
   // O11 end-user roles by versioned manifest (o11-access.mjs): plan offline; apply EXECUTES with the user's words (one delivery
   // per owner module, bound to the manifest environment), never publishes and never creates accounts.
@@ -1663,13 +1708,15 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
       return (listed?.roots ?? []).map(r => r?.uri).filter(u => typeof u === 'string');
     } catch { return []; }
   };
+  // a9 (review marco-a6 M1): the hosted network texts are this line's own bytes in the fixed core of the listing budget (B2,
+  // context-budget-listing.test.mjs): kept short, so CX13 and X3 fit under 167747 B (total) and 34178 B (core) here too.
   server.registerTool('ssam_doctor', { title: 'Both lanes side by side', description:
     'O11 and ODC side by side: root, CLI, catalog, open Studio per lane; ok: the lane asked (or some lane) is usable; warnings: '
     + 'optional gaps; server: root and release of this server. release frees a foreign or orphan reservation it lists. '
     + 'task.stop requests stop of a live write; cancelling the wait does not stop work. task reads facade evidence; task.close explicitly closes an uncertain facade operation after reconciliation. '
-    + 'Hosted: network:true also tests the uploads of the user\'s internet through the agent (about 5 s) and says per exit, in plain words, whether they pass.',
+    + 'Hosted: network:true tests the agent\'s uploads per internet exit (about 5 s).',
     inputSchema: fromJsonSchema({ type: 'object', properties: { lane: { type: 'string', enum: laneNames },
-      network: { type: 'boolean', description: 'Hosted only: also run the network check (small and 1 MB uploads of the agent on new connections, per public exit of the user\'s internet; about 5 s).' },
+      network: { type: 'boolean', description: 'Hosted only: small and 1 MB agent uploads on new connections; a verdict per exit, in plain words.' },
       release: { type: 'object', required: ['reservation'], additionalProperties: false,
         description: 'Alone: frees one foreign or orphan module reservation (its next names this call); lane o11.',
         properties: { reservation: { type: 'string', description: 'reservations.active[].file' },

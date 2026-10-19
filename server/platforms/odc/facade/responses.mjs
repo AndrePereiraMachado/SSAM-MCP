@@ -324,7 +324,7 @@ const CORRECTION = ['job', 'jobSha256', 'jobShape', 'failedOp', 'basedOn', 'next
 // job merged.
 // summary (job-summary.mjs, 2026-10-12): what the delivered job created or changed, so no map of the module follows it;
 // normalizations (kernel JobNormalizer, 2026-10-12): what the kernel rewrote in the job instead of refusing it, never silent.
-const NEXT = ['nextBasedOn', 'partial', 'summary', 'normalizations'];
+const NEXT = ['nextBasedOn', 'partial', 'summary', 'normalizations', 'patchesApplied', 'patchedJob', 'autoPatch', 'sourceBuilds', 'sourceJob'];
 // The shared fields of a deliver/publish answer (contract of the 2026-10-05 package, section 3.2): kept exactly on a
 // success. `result` "entregue e publicado" says the publish ran in the same call; `publish` carries its outcome;
 // `lastPublication`, `leftovers` (what the job declared to pass the gate) and `screenRoles` (who can open each screen the
@@ -389,7 +389,7 @@ export function compactDelivery(tool, args, value) {
       // pointer, code, fix and patch, the whole list in one answer (grouped only to fit it), whether the Verify ran and
       // the phases; the patches go back with patch + basedOn.
       ...(Array.isArray(problems) && problems.length ? { problems } : {}),
-      ...Object.fromEntries(['problemsTotal', 'grouped', 'verifyRan', 'verifyReason', 'phases', 'normalizations'].filter(key => value[key] != null).map(key => [key, value[key]])),
+      ...Object.fromEntries(['problemsTotal', 'grouped', 'verifyRan', 'verifyReason', 'phases', 'normalizations', 'patchesApplied', 'patchedJob', 'autoPatch', 'sourceBuilds', 'sourceJob'].filter(key => value[key] != null).map(key => [key, value[key]])),
       ...correction, ...prototypeFields(value),
       // A module name that reached no open module (or several): the open modules are the fix.
       ...(Array.isArray(value.openModules) ? { openModules: value.openModules } : {}), ...(Array.isArray(value.candidates) ? { candidates: value.candidates } : {}),

@@ -150,6 +150,7 @@ usage: anvil-odc <command> [--flags]
         JobRunner.ValidateJob(job);
         // the job a patched or partial job corrects (job-patch.mjs): the CSS loss guard of the preflight compares the two
         JobPreflight.BasedOn.Value = Opt(args, "--based-on") is { Length: > 0 } basedOn ? Path.GetFullPath(basedOn) : null;
+        using var autoPatch = JobPreflight.UseAutoPatch(Anvil.Core.Delivery.DeliverArguments.AutoPatch(args));
         // Every problem at once, with the code and the structured problems in the error envelope (PREFLIGHT_REFUSED, I2).
         // primeira-certa A2: the preflight runs inside JobRunner, which goes on to the base check, the apply and the Verify
         // when the base loads, and refuses once with every phase (verifyRan says whether the Verify ran).

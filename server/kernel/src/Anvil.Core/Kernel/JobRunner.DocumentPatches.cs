@@ -33,6 +33,8 @@ public static partial class JobRunner
         }
         foreach (var (op, members) in groups)
         {
+            var rules = Preflight.PatchCertainty.Members(members);
+            foreach (var member in members) member["patchRules"] = rules.DeepClone();
             var steps = new List<JsonObject>();
             foreach (var p in members)
                 foreach (var step in p["patch"]!.AsArray().OfType<JsonObject>())

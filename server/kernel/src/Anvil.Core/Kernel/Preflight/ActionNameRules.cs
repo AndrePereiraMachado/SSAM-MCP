@@ -69,7 +69,7 @@ public static class ActionNameRules
         return renames.Select(rename => {
             var p = JobPreflight.Problem(rename.Action.Op, prefix == null ? null : $"{prefix}/{rename.Action.Op}/data{rename.Action.Pointer}",
                 "NAME_COLLISION", "error", $"new action '{rename.Action.Name}' collides with {rename.Taken.Kind} '{rename.Taken.Name}' of {rename.Taken.Owner}; the Studio would rename it to '{rename.Name}'",
-                Fix, patch?.DeepClone().AsArray(), "logic");
+                Fix, patch?.DeepClone().AsArray(), "logic", patchRule: "ACTION_RENAMED_FREE_NAME");
             p["taken"] = new JsonObject { ["kind"] = rename.Taken.Kind, ["name"] = rename.Taken.Name, ["owner"] = rename.Taken.Owner };
             return p;
         }).ToList();
@@ -83,7 +83,8 @@ public static class ActionNameRules
         var original = problems.OfType<JsonObject>().FirstOrDefault(p => p["code"]?.ToString() == "NAME_COLLISION" && p["pointer"]?.ToString() == sentPointer);
         if (original == null) return false;
         var before = JobPreflight.Text(original);
-        foreach (var field in new[] { "patch", "fix", "message", "taken" }) original[field] = withBase[field]?.DeepClone();
+        foreach (var field in new[] { "patch", "fix", "message", "taken", "patchRule", "patchRules" }) original[field] = withBase[field]?.DeepClone();
+        PatchCertainty.Publish(original);
         var after = JobPreflight.Text(original);
         if (preflight["errors"] is JsonArray errors)
             for (var i = 0; i < errors.Count; i++) if (errors[i]?.ToString() == before) errors[i] = after;

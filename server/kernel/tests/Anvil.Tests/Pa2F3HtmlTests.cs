@@ -105,7 +105,9 @@ public sealed class Pa2F3HtmlTests
         var ex = Assert.Throws<KernelRefusalException>(() => HtmlVisual.PreflightOp(op));
         Assert.Equal("HTML_INVALID", ex.Code);
         var problems = ex.Problems!.Select(p => p!.AsObject()).ToList();
-        Assert.True(problems.Count >= 7, string.Join("\n", problems.Select(p => p.ToJsonString())));
+        // The <i> without weight is no problem in O11, whose icon has no Weight (the reading writes none): six problems.
+        Assert.True(problems.Count >= 6, string.Join("\n", problems.Select(p => p.ToJsonString())));
+        Assert.DoesNotContain(problems, p => p["message"]!.ToString().Contains("needs weight=", StringComparison.Ordinal));
         Assert.All(problems, p => Assert.Equal("/html", p["pointer"]!.ToString()));
         var codes = problems.Select(p => p["code"]!.ToString()).ToHashSet();
         Assert.Contains("HTML_TAG_NOT_ALLOWED", codes);
@@ -113,7 +115,7 @@ public sealed class Pa2F3HtmlTests
         Assert.Contains("CSS_FUNCTION_UNSUPPORTED", codes);
         var cssFix = problems.Single(p => p["code"]!.ToString() == "CSS_FUNCTION_UNSUPPORTED")["fix"]!.ToString();
         Assert.Contains("#800080", cssFix);
-        foreach (var expected in new[] { "needs weight=", "needs as=", "does not name a widget of this fragment", "must immediately follow" })
+        foreach (var expected in new[] { "needs as=", "does not name a widget of this fragment", "must immediately follow" })
             Assert.Contains(problems, p => p["message"]!.ToString().Contains(expected, StringComparison.Ordinal));
     }
 

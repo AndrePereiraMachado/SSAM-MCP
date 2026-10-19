@@ -125,6 +125,49 @@ public class Pa3WpPrebuiltTests
         Assert.Equal(reused ? "prebuilt-candidate" : "fresh-candidate", File.ReadAllText(bridge.Foreign!));
     }
 
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(null, false)]
+    [InlineData(true, false)]
+    public void AutoPatchOptOutRejectsPatchedPrebuiltCandidate(bool? callPolicy, bool jobPolicy)
+    {
+        var work = Work();
+        var jobPath = Path.Combine(work, "job.json");
+        File.WriteAllText(jobPath, new JsonObject { ["ops"] = new JsonArray(), ["autoPatch"] = jobPolicy }.ToJsonString());
+        var (manifest, job, candidate) = Build(work, "MODEL-1");
+        var resultPath = Path.Combine(Path.GetDirectoryName(candidate)!, "candidate.result.json");
+        var result = JsonNode.Parse(File.ReadAllText(resultPath))!.AsObject();
+        result["patchesApplied"] = new JsonArray(new JsonObject { ["patchRule"] = "TEXT_LITERAL_QUOTED" });
+        File.WriteAllText(resultPath, result.ToJsonString());
+        var snapshot = Path.Combine(work, "snapshot.oml"); File.WriteAllBytes(snapshot, Oml("live-header", "MODEL-1"));
+        var output = Path.Combine(work, "foreign.oml");
+        using var policy = Anvil.Core.JobPreflight.UseAutoPatch(callPolicy);
+        Assert.Null(PrebuiltCandidate.TryReuse(manifest, snapshot, job, output, null, null, out var reason));
+        Assert.Equal("auto-patch-disabled", reason);
+        Assert.False(File.Exists(output));
+        var applies = 0;
+        var fresh = PrebuiltCandidate.Apply(manifest, snapshot, job, output, null, null, () =>
+        {
+            applies++;
+            return new JsonObject { ["accepted"] = false, ["isValid"] = false };
+        });
+        Assert.Equal(1, applies);
+        Assert.False(fresh["accepted"]!.GetValue<bool>());
+        Assert.Equal("auto-patch-disabled", fresh["prebuilt"]!["reason"]!.GetValue<string>());
+        Assert.False(File.Exists(output));
+    }
+
+    [Fact]
+    public void AutoPatchOptOutKeepsUnpatchedPrebuiltCandidateReusable()
+    {
+        var work = Work();
+        var (manifest, job, _) = Build(work, "MODEL-1");
+        var snapshot = Path.Combine(work, "snapshot.oml"); File.WriteAllBytes(snapshot, Oml("live-header", "MODEL-1"));
+        using var policy = Anvil.Core.JobPreflight.UseAutoPatch(false);
+        Assert.NotNull(PrebuiltCandidate.TryReuse(manifest, snapshot, job, Path.Combine(work, "foreign.oml"), null, null, out var reason));
+        Assert.Equal("", reason);
+    }
+
     private sealed class Bridge : IBridgeClient
     {
         public string Model = "MODEL-1"; public int Merges; public string? Foreign;

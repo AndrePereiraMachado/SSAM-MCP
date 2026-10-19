@@ -74,7 +74,7 @@ test('the three tools are exposed with the distribution schema', async t => {
   assert.equal(inspect.additionalProperties, false);
   assert.equal(tools.o11_inspect.annotations.readOnlyHint, true);
   const deliver = tools.o11_deliver.inputSchema;
-  assert.deepEqual(Object.keys(deliver.properties).sort(), ['authorize', 'basedOn', 'captureProducers', 'checks', 'close', 'closePrevious', 'expectedEnvironment', 'job',
+  assert.deepEqual(Object.keys(deliver.properties).sort(), ['authorize', 'autoPatch', 'basedOn', 'captureProducers', 'checks', 'close', 'closePrevious', 'expectedEnvironment', 'job',
     'module', 'patch', 'producers', 'publish', 'resume', 'until']);
   // A written patch (at most 50), or "verified" (every verified patch of the refusal of that job).
   const patch = deliver.properties.patch.anyOf.find(x => x.type === 'array');
@@ -239,6 +239,26 @@ test('a delivered task answers "delivered" and the job it used, ready for the ne
   const value = { ok: true, result: 'delivered', nextBasedOn: { job: box.job, sha256: sha256(fs.readFileSync(box.job)) } };
   assert.deepEqual(result.structuredContent, value);
   assert.deepEqual(result.content, [{ type: 'text', text: JSON.stringify(value) }]);
+});
+
+test('automatic repairs name the corrected delivered job and guard both ancestor hashes', async t => {
+  const box = setup(t);
+  const corrected = path.join(box.base, 'corrected.json');
+  fs.writeFileSync(corrected, JSON.stringify({ ops: [{ op: 'get', target: 'ServerAction:SaveOrder', name: 'Corrected' }] }));
+  const patchedJob = { path: corrected, sha256: sha256(fs.readFileSync(corrected)) };
+  const delivered = structuredClone(envelopes.delivered);
+  delivered.data.apply.patchedJob = patchedJob;
+  delivered.data.apply.patchesApplied = [{ code: 'HTML_INVALID', pointer: '/ops/0', phase: 'apply', patchRule: 'TEXT_LITERAL_QUOTED', reason: 'Literal', from: 'Hi there', to: '"Hi there"', patchSha256: 'a'.repeat(64) }];
+  box.deps.runAnvil = fakeAnvil({ deliver: () => delivered });
+  const { call, close } = await serve(box.deps); t.after(close);
+  const result = (await call('o11_deliver', { module: 'Orders', job: box.job, autoPatch: false, authorize: WORDS })).structuredContent;
+  assert.deepEqual(result.nextBasedOn, { job: corrected, sha256: patchedJob.sha256 });
+  assert.equal(result.patchesApplied.length, 1);
+  assert.equal(box.deps.runAnvil.calls[0].args.includes('--auto-patch'), true);
+  for (const basedOn of [result.nextBasedOn, { job: box.job, sha256: sha256(fs.readFileSync(box.job)) }]) {
+    const again = (await call('o11_deliver', { module: 'Orders', basedOn, patch: [{ op: 'replace', path: '/ops/0/target', value: '@espace' }], authorize: WORDS })).structuredContent;
+    assert.equal(again.code, 'BASED_ON_DELIVERED'); assert.equal(again.delivered.sha256, patchedJob.sha256);
+  }
 });
 
 test('validation errors come back with stage and taskId, and nothing is delivered', async t => {

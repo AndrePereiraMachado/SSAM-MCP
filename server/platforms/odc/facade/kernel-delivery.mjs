@@ -9,9 +9,10 @@ import { hostedContext, hostedSpawnEnv } from './executor.mjs';
 import { catalogKind } from './studio-module.mjs';
 import { hashedWords, wordsGiven, wordsRequired } from './destructive-operations.mjs';
 import { warningsFromVerdicts, highWarningsOf, HIGH } from './delivery-warnings.mjs';
-import { diagnosisOf, refusalFields, normalizationsOf } from './refusal-problems.mjs';
+import { diagnosisOf, refusalFields, normalizationsOf, patchesAppliedOf } from './refusal-problems.mjs';
 import * as writeLock from './studio-write-lock.mjs';
 import { jobSummary } from './job-summary.mjs';
+import { appliedJobIdentity, jobIdentity, nextBasedOnOf } from './job-patch.mjs';
 // The prototype importer (docs/PROTOTIPO-NATIVO.md, lane surface): the capture before the Studio, the rebuild of 1.4.1,
 // the receipt after the build and the seed after a clean publication.
 import { hasPrototypeOps, expandJobFile, capturePrototype, buildWithDegradation, buildProblems, journalTo, kernelPrototypeReport, findNativeDom,
@@ -121,7 +122,7 @@ export function interpretKernelResult(result, { output, exitCode = 0 }) {
     references: (Array.isArray(result.data?.results) ? result.data.results : []).map(r => r?.result).filter(r => r && typeof r === 'object' && !Array.isArray(r) && typeof r.producerKey === 'string')
       .map(r => ({ producer: r.producer ?? null, producerKey: r.producerKey, signatureHash: r.signatureHash ?? null, referenceExisted: r.referenceExisted === true, referenceHashBefore: r.referenceHashBefore ?? null })),
     // lentidao 2026-10-12: what the kernel rewrote in the job instead of refusing it (JobNormalizer), on an accepted candidate.
-    ...(ok ? normalizationsOf(result.data) : {}),
+    ...(ok ? { ...normalizationsOf(result.data), ...patchesAppliedOf(result.data) } : {}),
     // ssam_code: what an action text or a screen edit removed, never silent.
     removed: removedOf(result.data?.results),
     // The HIGH warnings of the data-access rules (kernel highWarnings) first, then the Verify ones.
@@ -150,7 +151,7 @@ const runOnWorker = async (argv, options) => (await import('./anvil-worker.mjs')
 // author (--developer-id, capability apply:developer-id) with the capture's content identity (--base-content-sha256, its
 // BaseModelCache); else cold, in a private process with ANVIL_DEVELOPER_ID of THIS snapshot, as before. The worker never
 // takes another identity: the author travels in each request. deps (tests): worker (null = cold), contentSha, exec, cli.
-export async function applyKernel({ job, snapshot, output, producers = {} }, deps = {}) {
+export async function applyKernel({ job, snapshot, output, producers = {}, autoPatch }, deps = {}) {
   const cli = deps.cli ?? kernelCli();
   if (!fs.existsSync(cli)) throw new Error('ODC kernel CLI is not built (' + cli + '): the integrator or the user builds it; ssam_doctor {lane:"odc"} reports the state.');
   if (!snapshot.developerId || !snapshot.host || !snapshot.moduleKey) throw new Error('Snapshot lacks developerId, host or moduleKey; capture a new snapshot.');
@@ -174,7 +175,7 @@ export async function applyKernel({ job, snapshot, output, producers = {} }, dep
   const hosted = hostedContext() ? hostedSpawnEnv('odc') : null;
   const content = snapshot.contentSha256 ?? await baseContentSha256(snapshot, deps);
   const argv = ['apply', '--job', job, '--base', snapshot.path, '--out', candidate, '--work', path.join(output, 'work'), ...producerArgs,
-    '--developer-id', snapshot.developerId, ...(content ? ['--base-content-sha256', content] : [])];
+    ...(autoPatch === false ? ['--auto-patch', 'off'] : []), '--developer-id', snapshot.developerId, ...(content ? ['--base-content-sha256', content] : [])];
   const onWorker = await (deps.runOnWorker ?? runOnWorker)(argv, { ...(deps.worker !== undefined ? { worker: deps.worker } : {}), needs: ['apply:developer-id'] });
   if (onWorker.used && onWorker.unknown) {
     try { fs.writeFileSync(path.join(output, 'kernel-output.txt'), 'worker: ' + (onWorker.error ?? 'no answer')); } catch { /* evidence only */ }
@@ -351,15 +352,29 @@ export function jobDigest(jobFile, { roots = [], anvil = anvilRoot } = {}) {
   };
   try { return visit(jobFile) ? hash.digest('hex') : null; } catch { return null; }
 }
+// Corrected documents retain their original relative bindings. Their separately
+// disclosed origin must travel with a cached job, with both hashes checked before
+// any restored file is materialized.
+function checkedPatchedJobSource(bytes, patchedJob) {
+  if (sha256(bytes).toLowerCase() !== String(patchedJob.source?.sha256).toLowerCase()) throw new Error('Patched job source changed');
+  const source = JSON.parse(bytes.toString('utf8').replace(/^\uFEFF/, ''));
+  if (!isObject(source) || String(source.jobSha256).toLowerCase() !== String(patchedJob.sha256).toLowerCase()
+      || typeof source.sourceDirectory !== 'string' || !path.isAbsolute(source.sourceDirectory))
+    throw new Error('Patched job source is not bound to this job and origin');
+  return bytes;
+}
 export function deliveryCache({ root, cli = kernelCli(), builder = path.join(root, 'studio', 'builder', 'bin', 'Release', 'net10.0', 'ODC3.Builder.dll'), dir = path.join(root, '.local', 'deliver-cache'), keep = 20, identity = null } = {}) {
   const kernel = () => identity ?? kernelIdentity({ cli, builder });
   return {
     dir,
-    key({ job, snapshot, producers = [] }) {
+    key({ job, snapshot, producers = [], autoPatch }) {
       const digest = jobDigest(job, { roots: [path.dirname(cli), repoRootOf(path.dirname(job)), anvilRoot].filter(Boolean) });
       if (!digest) return null;
       // The base by its content identity (I1) when the caller has it: two captures of an unchanged module are one entry.
-      return sha256(JSON.stringify({ v: 2, job: digest, base: String(snapshot.contentSha256 ?? snapshot.sha256 ?? '').toUpperCase(), developer: snapshot.developerId ?? null, host: String(snapshot.host ?? '').toLowerCase(),
+      // Equal job bytes in different input folders can resolve the same relative
+      // spelling from different origins. A cached sidecar must never substitute
+      // the first input folder's origin for a later request's origin.
+      return sha256(JSON.stringify({ v: 4, sourceDirectory: path.dirname(path.resolve(job)), autoPatch: autoPatch !== false, job: digest, base: String(snapshot.contentSha256 ?? snapshot.sha256 ?? '').toUpperCase(), developer: snapshot.developerId ?? null, host: String(snapshot.host ?? '').toLowerCase(),
         producers: producers.map(p => [p.name, String(p.sha256 ?? '').toLowerCase()]).sort(), kernel: kernel() }));
     },
     restore(key, output) {
@@ -369,6 +384,20 @@ export function deliveryCache({ root, cli = kernelCli(), builder = path.join(roo
         const bytes = fs.readFileSync(path.join(entryDir, 'kernel-candidate.oml'));
         if (entry.key !== key || sha256(bytes).toLowerCase() !== String(entry.candidateSha256).toLowerCase()) return null;
         const result = JSON.parse(fs.readFileSync(path.join(entryDir, 'kernel-result.json'), 'utf8'));
+        if (result.data?.patchedJob) {
+          const corrected = fs.readFileSync(path.join(entryDir, 'patched-job.json'));
+          if (sha256(corrected).toLowerCase() !== String(result.data.patchedJob.sha256).toLowerCase()) return null;
+          const source = result.data.patchedJob.source
+            ? checkedPatchedJobSource(fs.readFileSync(path.join(entryDir, 'patched-job.json.source.json')), result.data.patchedJob) : null;
+          const correctedPath = path.join(output, 'kernel-candidate.oml.patched-job.json');
+          fs.writeFileSync(correctedPath, corrected);
+          result.data.patchedJob.path = correctedPath;
+          if (source) {
+            const sourcePath = correctedPath + '.source.json';
+            fs.writeFileSync(sourcePath, source);
+            result.data.patchedJob.source.path = sourcePath;
+          }
+        }
         fs.writeFileSync(path.join(output, 'kernel-candidate.oml'), bytes);
         fs.writeFileSync(path.join(output, 'kernel-result.json'), JSON.stringify(result, null, 2));
         fs.writeFileSync(path.join(output, 'kernel-cache.json'), JSON.stringify({ hit: true, key, from: entryDir, storedAt: entry.storedAt }, null, 2));
@@ -383,6 +412,15 @@ export function deliveryCache({ root, cli = kernelCli(), builder = path.join(roo
         const bytes = fs.readFileSync(path.join(output, 'kernel-candidate.oml'));
         fs.writeFileSync(path.join(tmp, 'kernel-candidate.oml'), bytes);
         fs.copyFileSync(path.join(output, 'kernel-result.json'), path.join(tmp, 'kernel-result.json'));
+        const result = JSON.parse(fs.readFileSync(path.join(output, 'kernel-result.json'), 'utf8'));
+        if (result.data?.patchedJob) {
+          const corrected = fs.readFileSync(result.data.patchedJob.path);
+          if (sha256(corrected).toLowerCase() !== String(result.data.patchedJob.sha256).toLowerCase()) throw new Error('Patched job changed');
+          const source = result.data.patchedJob.source
+            ? checkedPatchedJobSource(fs.readFileSync(result.data.patchedJob.source.path), result.data.patchedJob) : null;
+          fs.writeFileSync(path.join(tmp, 'patched-job.json'), corrected);
+          if (source) fs.writeFileSync(path.join(tmp, 'patched-job.json.source.json'), source);
+        }
         fs.writeFileSync(path.join(tmp, 'entry.json'), JSON.stringify({ key, candidateSha256: sha256(bytes), storedAt: new Date().toISOString(), evidence: output }, null, 2));
         fs.renameSync(tmp, path.join(dir, key));
       } catch { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ } return; }
@@ -1432,15 +1470,15 @@ export async function deliverKernel(input, deps) {
     const built = await call('build', async () => {
       // I1: the capture's content identity keys the delivery cache and the worker's base cache; the base stays this capture.
       const based = { ...snapshot, contentSha256: await baseContentSha256(snapshot, deps) };
-      const keyOf = () => (cache ? (() => { try { return cache.key({ job, snapshot: based, producers: report.producers ?? [] }); } catch { return null; } })() : null);
+      const keyOf = () => (cache ? (() => { try { return cache.key({ job, snapshot: based, producers: report.producers ?? [], autoPatch: input.autoPatch }); } catch { return null; } })() : null);
       let key = keyOf();
       let applied = key ? cache.restore(key, output) : null;
       // The build of this delivery: a prototype job's (1.4.1: a build problem on a generated item rebuilds ONCE without it; a
       // second failure is an SSAM defect) or the job's own apply.
       const build = async () => {
-        if (!proto) return apply({ job, snapshot: based, output, producers });
+        if (!proto) return apply({ job, snapshot: based, output, producers, autoPatch: input.autoPatch });
         const begin = Date.now();
-        const b = await buildWithDegradation({ jobFile: job, attempt: file => apply({ job: file, snapshot: based, output, producers }), ok: a => a?.ok === true,
+        const b = await buildWithDegradation({ jobFile: job, attempt: file => apply({ job: file, snapshot: based, output, producers, autoPatch: input.autoPatch }), ok: a => a?.ok === true,
           problemsOf: buildProblems, inlineDir: path.join(root, '.local', 'jobs', 'inline'), journal: journalTo(path.join(root, '.local', 'journal'), { lane: 'odc' }) });
         proto.degraded = b.degraded; proto.buildMs = Date.now() - begin;
         if (b.refusal) { protoRefusal = b.refusal; return { ...b.result, ok: false, code: 'VALIDATION_REFUSED', error: b.refusal.error, problems: b.refusal.problems }; }
@@ -1488,6 +1526,13 @@ export async function deliverKernel(input, deps) {
       report.kernelReceipt = applied.receipt; candidate = applied.candidate;
       capped(report, 'leftovers', applied.leftovers ?? []);
       if (applied.normalizations) report.normalizations = applied.normalizations;
+      Object.assign(report, patchesAppliedOf(applied));
+      if (report.patchedJob) {
+        const corrected = appliedJobIdentity(report.patchedJob, { path: job, sha256: jobIdentity(job).jobSha256 },
+          { journalDir: path.join(root, '.local', 'journal'), tool: 'studio_deliver' });
+        Object.assign(report, nextBasedOnOf(corrected.path, corrected.sha256));
+        if (corrected.path !== job) jobDocument = readJob(corrected.path);
+      }
       capped(report, 'screenRoles', applied.screenRoles ?? []);
       capped(report, 'removed', applied.removed ?? []);
       capped(report, 'integration', Array.isArray(applied.integration) ? applied.integration : [], 10);

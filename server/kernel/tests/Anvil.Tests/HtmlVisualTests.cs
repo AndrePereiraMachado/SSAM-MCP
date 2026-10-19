@@ -327,11 +327,16 @@ public sealed class HtmlVisualTests
         Assert.Contains("Chosen, RetrySearch", ex.Message);
     }
 
-    [Fact] public void AnIconWithoutAWeightIsRefusedWithLineAndColumn()
+    [Fact] public void AnIconWithoutAWeightIsRefusedWithLineAndColumnWhereTheIconHasOne()
     {
-        var ex = Assert.Throws<InvalidOperationException>(() => Ops("<div>\n<i icon=\"warning-circle\"></i>\n</div>"));
+        // ODC: the icon has a Weight, and without one the Studio shows "Non Existing Icon".
+        var ex = Assert.Throws<InvalidOperationException>(() => HtmlVisual.Expand("<div>\n<i icon=\"warning-circle\"></i>\n</div>", "$screen",
+            Scope() with { Supports = (type, property) => type != "IIcon" || property is "Icon" or "Weight" or "Style" }));
         Assert.Contains("line 2 col 1 <i>", ex.Message);
         Assert.Contains("needs weight=", ex.Message);
+        // O11: the icon has no Weight, its reading writes none, and the fragment takes the <i> as the reading writes it (round 2 of
+        // the html edit names, 2026-10-18).
+        Assert.Contains(Ops("<div>\n<i icon=\"warning-circle\"></i>\n</div>"), o => Is(o, "IIcon"));
     }
 
     [Fact] public void AScriptIsRefusedBecauseLogicIsNative()

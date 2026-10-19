@@ -33,13 +33,19 @@ export const PROBLEMS_BUDGET = 30000;
 const bytes = value => Buffer.byteLength(JSON.stringify(value), 'utf8');
 const clip = (text, max) => { const s = String(text ?? ''); return s.length > max ? s.slice(0, max - 3) + '...' : s; };
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+const SOURCE_PATCH_OMITTED = 'The patch belongs to the source job, whose own hash-bound basedOn is not offered here; correct that source job before retrying the consumer.';
 
 // One problem as the answers keep it: the fields of the kernel's single refusal, texts cut, the patch whole (it is the fix).
 export function problemOf(p, limit = 600) {
   if (!isObject(p)) return { op: null, pointer: null, code: 'PROBLEM', severity: 'error', message: clip(typeof p === 'string' ? p : JSON.stringify(p), limit), fix: null };
   return { ...(typeof p.phase === 'string' ? { phase: p.phase } : {}), op: Number.isInteger(p.op) ? p.op : null, pointer: typeof p.pointer === 'string' ? p.pointer : null,
     code: String(p.code ?? 'PROBLEM'), severity: p.severity === 'warning' ? 'warning' : 'error', message: clip(p.message, limit), fix: p.fix == null ? null : clip(p.fix, limit),
-    ...(Array.isArray(p.patch) && p.patch.length ? { patch: p.patch } : {}),
+    ...(Array.isArray(p.patch) && p.patch.length ? (isObject(p.sourceJob)
+      ? { patchOmitted: true, patchOmittedWhy: SOURCE_PATCH_OMITTED } : { patch: p.patch }) : {}),
+    ...(typeof p.patchRule === 'string' ? { patchRule: p.patchRule } : {}),
+    ...(typeof p.patchCertain === 'boolean' ? { patchCertain: p.patchCertain } : {}),
+    ...(typeof p.patchChoice === 'string' ? { patchChoice: clip(p.patchChoice, 600) } : {}),
+    ...(isObject(p.sourceJob) ? { sourceJob: p.sourceJob } : {}),
     // One patch of a document for several problems (kernel JobRunner.DocumentPatches), or none and why (verified-patch.mjs).
     ...(Number.isInteger(p.patchJoins) ? { patchJoins: p.patchJoins } : {}),
     ...(p.patchOmitted === true ? { patchOmitted: true, ...(typeof p.patchOmittedWhy === 'string' ? { patchOmittedWhy: clip(p.patchOmittedWhy, 300) } : {}) } : {}),
@@ -222,7 +228,9 @@ export function fitProblems(list, { budget = PROBLEMS_BUDGET, limit = 600, job =
   // eleven different input problems of one write became one group with no code and no message, their lines left out).
   const groups = new Map();
   for (const p of all) {
-    const key = [p.code, p.phase ?? '', p.severity, moldOf(p.fix), p.code == null ? String(p.error ?? p.message ?? '') : ''].join('\u0001');
+    const source = isObject(p.sourceJob) ? JSON.stringify([p.sourceJob.role, p.sourceJob.spec, p.sourceJob.job]) : '';
+    const key = [p.code, p.phase ?? '', p.severity, moldOf(p.fix), p.code == null ? String(p.error ?? p.message ?? '') : '',
+      p.patchRule ?? '', p.patchCertain ?? '', p.patchChoice ?? '', source].join('\u0001');
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(p);
   }
@@ -234,6 +242,9 @@ export function fitProblems(list, { budget = PROBLEMS_BUDGET, limit = 600, job =
     const places = [...new Set(members.map(m => placeOf(m.message)).filter(Boolean).map(m => m[2] ? `${m[1]}:${m[2]}` : m[1]))];
     const blocks = members.reduce((n, m) => n + (Number.isInteger(m.blocks) ? m.blocks : 0), 0);
     const group = { ...(first.phase ? { phase: first.phase } : {}), code: first.code, severity: first.severity, count: members.reduce((n, m) => n + (m.count ?? 1), 0),
+      ...(first.patchRule ? { patchRule: first.patchRule } : {}), ...(typeof first.patchCertain === 'boolean' ? { patchCertain: first.patchCertain } : {}),
+      ...(first.patchChoice ? { patchChoice: first.patchChoice } : {}),
+      ...(first.sourceJob ? { sourceJob: first.sourceJob } : {}),
       message: first.message, ...(first.code == null && first.error != null ? { error: first.error } : {}), fix: first.fix, ops: [...new Set(members.map(m => m.op).filter(Number.isInteger))],
       pointers: [...new Set(members.flatMap(m => m.pointers ?? ([m.pointer ?? m.at ?? m.part ?? m.key ?? m.element].filter(v => v != null))))], ...(places.length > 1 ? { lines: places } : {}), ...(blocks ? { blocks } : {}), ...(patch.length ? { patch } : {}),
       items: members.map(m => ({ pointer: m.pointer ?? m.at, ...(m.message !== first.message ? { message: m.message } : {}), ...(m.fix !== first.fix ? { fix: m.fix } : {}),
@@ -273,14 +284,57 @@ export function fitProblems(list, { budget = PROBLEMS_BUDGET, limit = 600, job =
 // rewrite reaches the module unseen: the count per rule and the first entries {rule, path, from, to}. The whole list
 // stays in the kernel's result (data.normalizations, or the refusal envelope). Empty when there are none.
 export const NORMALIZATIONS_SHOWN = 8;
+// Current producers already supply a focused pair, including their cut markers.
+// Leave that pair intact. Older receipts can contain a whole changed line: a
+// second prefix clip would hide a difference beyond column 160, so focus both
+// windows at the same first difference and disclose any removed context.
+function appliedTextPair(from, to) {
+  const before = String(from ?? ''); const after = String(to ?? '');
+  if (before.length <= 160 && after.length <= 160) return { from: before, to: after };
+  let difference = 0;
+  while (difference < Math.min(before.length, after.length) && before[difference] === after[difference]) difference++;
+  const start = Math.max(0, difference - 60);
+  const window = text => {
+    const prefix = start > 0 ? '...' : '';
+    const remaining = 160 - prefix.length;
+    const suffix = text.length - start > remaining ? '...' : '';
+    return prefix + text.slice(start, start + remaining - suffix.length) + suffix;
+  };
+  return { from: window(before), to: window(after) };
+}
 export function normalizationsOf(source, max = NORMALIZATIONS_SHOWN) {
   const list = (Array.isArray(source?.normalizations) ? source.normalizations : []).filter(isObject);
   if (!list.length) return {};
   const byRule = {};
   for (const n of list) { const rule = String(n.rule ?? 'UNKNOWN'); byRule[rule] = (byRule[rule] ?? 0) + 1; }
   const items = list.slice(0, max).map(n => ({ rule: String(n.rule ?? 'UNKNOWN'), ...(n.path ? { path: clip(n.path, 160) } : {}),
-    ...(n.from != null ? { from: clip(n.from, 160) } : {}), ...(n.to != null ? { to: clip(n.to, 160) } : {}) }));
+    ...(n.patchApplied === true ? { patchApplied: true } : {}),
+    ...(n.patchApplied === true && n.from != null && n.to != null ? appliedTextPair(n.from, n.to) : {
+      ...(n.from != null ? { from: clip(n.from, 160) } : {}), ...(n.to != null ? { to: clip(n.to, 160) } : {}) }) }));
   return { normalizations: { total: list.length, byRule, items, ...(list.length > max ? { itemsLeft: list.length - max } : {}) } };
+}
+
+// Applied repairs are never hidden by the normalizations or success-answer budgets.
+// A resolved dependency can be corrected even when the root needed no repair.
+// Its receipt and a refused source's identity must survive the same public paths
+// as root repairs, without fitting away changes made by a source build.
+function sourceFieldsOf(source) {
+  return { ...(Array.isArray(source?.sourceBuilds) && source.sourceBuilds.length
+    ? { sourceBuilds: source.sourceBuilds.filter(isObject).map(receipt => ({
+      ...Object.fromEntries(['role', 'spec', 'job', 'accepted', 'isValid'].filter(key => receipt[key] != null).map(key => [key, receipt[key]])),
+      ...(Array.isArray(receipt.normalizations) ? normalizationsOf(receipt)
+        : isObject(receipt.normalizations) ? { normalizations: receipt.normalizations } : {}),
+      ...patchesAppliedOf(receipt) })) } : {}),
+    ...(isObject(source?.sourceJob) ? { sourceJob: source.sourceJob } : {}) };
+}
+export function patchesAppliedOf(source) {
+  if (!isObject(source)) return {};
+  const list = (Array.isArray(source.patchesApplied) ? source.patchesApplied : []).filter(isObject);
+  return { ...sourceFieldsOf(source), ...(list.length ? { patchesApplied: list.map(p => ({ code: p.code, pointer: p.pointer, phase: p.phase,
+    patchRule: p.patchRule, reason: p.reason, ...appliedTextPair(p.from, p.to), patchSha256: p.patchSha256 })) } : {}),
+    ...(isObject(source.patchedJob) ? { patchedJob: { path: source.patchedJob.path, sha256: source.patchedJob.sha256,
+      ...(isObject(source.patchedJob.source) ? { source: { path: source.patchedJob.source.path, sha256: source.patchedJob.source.sha256 } } : {}) } } : {}),
+    ...(isObject(source.autoPatch) ? { autoPatch: { rounds: source.autoPatch.rounds, elapsedMs: source.autoPatch.elapsedMs } } : {}) };
 }
 
 // Whether the kernel's Verify ran before the refusal, why not, the phases its problems come from, and what the kernel
@@ -290,7 +344,7 @@ export function diagnosisOf(source) {
   return { ...(typeof source.verifyRan === 'boolean' ? { verifyRan: source.verifyRan } : {}),
     ...(typeof source.verifyReason === 'string' && source.verifyReason ? { verifyReason: clip(source.verifyReason, 600) } : {}),
     ...(Array.isArray(source.phases) && source.phases.length ? { phases: source.phases.filter(p => typeof p === 'string') } : {}),
-    ...normalizationsOf(source) };
+    ...normalizationsOf(source), ...sourceFieldsOf(source) };
 }
 
 // The fields of a refusal with problems: {problems, problemsTotal?, grouped?, verifyRan?, verifyReason?, phases?}; empty
@@ -298,14 +352,25 @@ export function diagnosisOf(source) {
 export function refusalFields(problems, source, options) {
   // Integration 24-1 familias (review): patches that write different values at one path are no patch (the last would win):
   // each problem whose patch touches such a path loses it and says why (patchOmitted, patchOmittedWhy), and no verified call.
-  const conflicts = Array.isArray(problems) ? patchConflicts(patchUnion(problems)) : [];
-  if (conflicts.length) {
-    const paths = new Set(conflicts.map(c => c.path));
-    problems = problems.map(p => (isObject(p) && Array.isArray(p.patch) && p.patch.some(op => isObject(op) && paths.has(op.path))
+  const originOf = p => isObject(p?.sourceJob) ? JSON.stringify([p.sourceJob.role, p.sourceJob.spec, p.sourceJob.job]) : '';
+  const byOrigin = new Map();
+  for (const p of Array.isArray(problems) ? problems : []) {
+    const origin = originOf(p);
+    if (!byOrigin.has(origin)) byOrigin.set(origin, []);
+    byOrigin.get(origin).push(p);
+  }
+  const conflicts = new Map([...byOrigin].map(([origin, members]) => [origin, new Set(patchConflicts(patchUnion(members)).map(c => c.path))]));
+  if ([...conflicts.values()].some(paths => paths.size)) {
+    problems = problems.map(p => (isObject(p) && Array.isArray(p.patch)
+      && p.patch.some(op => isObject(op) && conflicts.get(originOf(p))?.has(op.path))
       ? (({ patch, ...rest }) => ({ ...rest, patchOmitted: true, patchOmittedWhy: CONFLICT_NOTE }))(p) : p));
   }
   const fitted = Array.isArray(problems) && problems.length ? fitProblems(problems, options) : null;
-  const verified = fitted && options?.jobFile ? writeVerifiedPatch(options.jobFile, patchUnion(problems)) : {};
+  // Source patches are relative to their own sent document, not to this consumer.
+  // Omit them publicly with their origin and reason, never seal a union against the root
+  // when any offered repair belongs to another source job.
+  const sourcePatches = Array.isArray(problems) && problems.some(p => isObject(p?.sourceJob) && Array.isArray(p.patch) && p.patch.length);
+  const verified = fitted && options?.jobFile && !sourcePatches ? writeVerifiedPatch(options.jobFile, patchUnion(problems)) : {};
   return { ...(fitted ? { problems: fitted.problems, ...(fitted.grouped ? { grouped: true } : {}), ...(fitted.problemsTotal ? { problemsTotal: fitted.problemsTotal } : {}) } : {}),
     ...diagnosisOf(source), ...verified };
 }

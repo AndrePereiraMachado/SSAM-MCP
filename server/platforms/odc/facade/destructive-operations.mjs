@@ -530,12 +530,15 @@ const previewNames = p => [...(p.mustName ?? []), ...(p.items ?? []).flatMap(i =
 // words of THIS call and the owner's request, frozen (sha256) with every line seen on the host in the window before.
 // notes (CX15 r3, CT-7): the sentences that end next and confirmWith; by default what goes WITHOUT a backup
 // (noBackupNote of the items); a lane with sharper reasons passes its own ([] for none).
-export function createPreview({ tool, lane = null, host, operation, selection = {}, items = [], ownerRequest, words, mustName = [], now, root, uuid = crypto.randomUUID, extra = {}, serverTexts = [], notes } = {}) {
+// alsoBefore (CX13 review 6): sha256 of words the caller KNOWS were said before this preview although they may be older
+// than the window of the host (a file load's own words and its earlier confirmations, kept in its plan): frozen too.
+export function createPreview({ tool, lane = null, host, operation, selection = {}, items = [], ownerRequest, words, mustName = [], now, root, uuid = crypto.randomUUID, extra = {}, serverTexts = [], notes, alsoBefore = [] } = {}) {
   const at = ms(now);
   const previewId = text(uuid()).toLowerCase();
   const clientId = currentClientId();
   const before = new Set(seenWords({ host, now: at, root }));
   for (const value of [words, ownerRequest]) if (normalizeWords(value)) before.add(wordsSha256(value));
+  for (const hash of alsoBefore) if (/^[0-9a-f]{64}$/.test(text(hash))) before.add(text(hash));
   const said = (notes ?? [noBackupNote(items)]).filter(Boolean).map(text);
   const p = { schema: PREVIEW_SCHEMA, previewId, tool, lane, host, operation, selection, items: items.map(i => ({ ...i })), listSha256: listSha256(items),
     createdAt: iso(at), expiresAt: iso(at + PREVIEW_TTL_MS), operationId: derivedOperationId(previewId, 'execute'), wordsBefore: [...before].sort(), mustName, ...extra, ...(clientId ? { clientId } : {}),

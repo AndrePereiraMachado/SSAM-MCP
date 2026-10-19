@@ -359,7 +359,7 @@ test('studio_deliver through ssam: a partial job + basedOn reaches the ODC serve
   const odcFacade = async () => {
     const fake = new McpServer({ name: 'fake-odc', version: '0.0.1' });
     fake.registerTool('studio_deliver', { title: 'Deliver', description: 'Fake ODC delivery.', inputSchema: z.object({ feature: z.string().min(1), module: z.string().optional(),
-      job: z.string().optional(), owners: z.array(z.string()).optional(), changes: z.array(z.string()).optional() }).strict() }, async args => {
+      job: z.string().optional(), autoPatch: z.boolean().optional(), owners: z.array(z.string()).optional(), changes: z.array(z.string()).optional() }).strict() }, async args => {
       seen.push({ args, job: args.job ? readJson(args.job) : null });
       const value = replies.shift();
       return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value.ok === false ? { isError: true } : {}) };
@@ -379,6 +379,17 @@ test('studio_deliver through ssam: a partial job + basedOn reaches the ODC serve
   assert.equal(seen[0].job.ops[4].value, 'odc'); assert.equal(seen[0].job.ops.length, JOB.ops.length);
   assert.deepEqual(done.nextBasedOn, { job: seen[0].args.job, sha256: sha256(fs.readFileSync(seen[0].args.job)) });
   assert.equal(done.partial.replaced, 1);
+  assert.equal(tool.inputSchema.properties.autoPatch.type, 'boolean');
+  const corrected = path.join(odcRoot, 'corrected.json'); fs.writeFileSync(corrected, JSON.stringify(JOB));
+  const patchedJob = { path: corrected, sha256: sha256(fs.readFileSync(corrected)) };
+  const patchesApplied = [{ code: 'HTML_INVALID', pointer: '/ops/1', patchRule: 'TEXT_LITERAL_QUOTED', from: 'Hello world', to: '"Hello world"' }];
+  replies.push({ ok: true, merged: true, strictlyEqual: true, patchedJob, patchesApplied, autoPatch: { rounds: 1, elapsedMs: 10 } });
+  const repaired = await call({ job: s.file, autoPatch: false });
+  assert.equal(seen[1].args.autoPatch, false);
+  assert.deepEqual(repaired.nextBasedOn, { job: corrected, sha256: patchedJob.sha256 });
+  assert.deepEqual(repaired.patchesApplied, patchesApplied);
+  assert.deepEqual(repaired.patchedJob, patchedJob);
+  assert.equal(repaired.autoPatch.rounds, 1);
   replies.push({ ok: false, code: 'PREFLIGHT_REFUSED', error: 'every phase', problems: [PROBLEM], verifyRan: true });
   const refused = await call({ job: s.file });
   assert.deepEqual(refused.nextBasedOn, { job: s.file, sha256: s.sha });

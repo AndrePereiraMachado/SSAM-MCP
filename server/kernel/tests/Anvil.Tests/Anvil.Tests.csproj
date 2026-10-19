@@ -58,6 +58,17 @@
     <Compile Include="../../src/Anvil.Bridge/ScPrivateCookieExchange.cs" Link="Bridge/ScPrivateCookieExchange.cs" />
     <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../Shared/ModelReadingTests.cs" Link="ModelReadingTests.cs" />
+    <Compile Include="../Shared/PatchCertaintyTableTests.cs" Link="PatchCertaintyTableTests.cs" />
+    <Compile Include="../Shared/PatchCertaintyCorpusTests.cs" Link="PatchCertaintyCorpusTests.cs" />
+    <Compile Include="../Shared/PatchCertaintyLiteralRevisionTests.cs" Link="PatchCertaintyLiteralRevisionTests.cs" />
+    <Compile Include="../Shared/PatchCertaintyDeclaredNameTests.cs" Link="PatchCertaintyDeclaredNameTests.cs" />
+    <Compile Include="../Shared/PatchCertaintyUnreadableJobScopeTests.cs" Link="PatchCertaintyUnreadableJobScopeTests.cs" />
+    <Compile Include="../Shared/PatchCertaintyReviewFourTests.cs" Link="PatchCertaintyReviewFourTests.cs" />
+    <Compile Include="../Shared/PatchCertaintyArgumentReceiptRevisionTests.cs" Link="PatchCertaintyArgumentReceiptRevisionTests.cs" />
+    <Compile Include="../Shared/PatchCertaintyArgumentOrderTests.cs" Link="PatchCertaintyArgumentOrderTests.cs" />
+    <Compile Include="../Shared/AutoPatchOptOutTests.cs" Link="AutoPatchOptOutTests.cs" />
+    <Compile Include="../Shared/AutoPatchSourceRevisionTests.cs" Link="AutoPatchSourceRevisionTests.cs" />
+    <Compile Include="../Shared/DataTableNativeCases.cs" Link="DataTableNativeCases.cs" />
     <Compile Include="../Shared/ModuleIndexTests.cs" Link="ModuleIndexTests.cs" />
     <Compile Include="../Shared/ModuleDigestTests.cs" Link="ModuleDigestTests.cs" />
     <Compile Include="../Shared/TextRoundTripTests.cs" Link="TextRoundTripTests.cs" />
@@ -73,6 +84,8 @@
     <Compile Include="../Shared/ScreenHtmlTests.cs" Link="ScreenHtmlTests.cs" />
     <Compile Include="../Shared/ScreenHtmlCoverage.cs" Link="ScreenHtmlCoverage.cs" />
     <Compile Include="../Shared/ScreenHtmlEditTests.cs" Link="ScreenHtmlEditTests.cs" />
+    <Compile Include="../Shared/ScreenHtmlEditNamesTests.cs" Link="ScreenHtmlEditNamesTests.cs" />
+    <Compile Include="../Shared/ScreenHtmlRebaseTests.cs" Link="ScreenHtmlRebaseTests.cs" />
     <Compile Include="../Shared/ScreenHtmlEditCorpus.cs" Link="ScreenHtmlEditCorpus.cs" />
     <Compile Include="../Shared/ScreenHtmlFamilyCorpus.cs" Link="ScreenHtmlFamilyCorpus.cs" />
     <Compile Include="../Shared/ScreenRecreationCorpus.cs" Link="ScreenRecreationCorpus.cs" />

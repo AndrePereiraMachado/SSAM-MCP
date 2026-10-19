@@ -1526,6 +1526,7 @@ internal static class FlowTextForm
     internal static JsonObject Problem(FlowProblem p, string? pointer, JsonArray? patch)
     {
         var problem = JobPreflight.Problem(null, pointer, p.Code, "error", p.Message, p.Fix, p.Corrected != null && patch != null ? patch.DeepClone().AsArray() : null);
+        if (p.Code is "FLOW_FOREACH_LIST_ACTION" or "FLOW_JAVASCRIPT_NOT_ISOLATED" or "QUERY_IN_LOOP") problem["patchRule"] = "OWNER_RULE_REWRITE";
         if (p.Id != null) problem["id"] = p.Id;
         if (p.Patch != null) problem["text"] = p.Patch;
         if (p.Fields != null) foreach (var (key, value) in p.Fields) problem[key] ??= value?.DeepClone();

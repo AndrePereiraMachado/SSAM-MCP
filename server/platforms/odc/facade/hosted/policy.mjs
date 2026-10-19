@@ -35,7 +35,7 @@ import { fileURLToPath } from 'node:url';
 import { anvilRoot, workspaceRoot } from '../workspace.mjs';
 import { scrubDiscover, scrubEvidence, thirdPartyJobs } from './evidence.mjs';
 import { agentReadable, agentSegments, insideVisible } from './mirror.mjs';
-import { agentPath, outsideWorkspaceRefusal } from '../agent-paths.mjs';
+import { agentPath, outsideWorkspaceRefusal, isAgentMachinePath } from '../agent-paths.mjs';
 import { CODE_TOOL, JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesGenerator, namesPrototype, namesVerifiedPatch, outside, parseJobTexts } from './job-paths.mjs';
 import { generatorApproval, offered } from '../generators.mjs';
 import { holdPointers, pointersOf, scrubText } from '../exposure.mjs';
@@ -100,20 +100,26 @@ export const RECONNECT_WAIT_MS = 45000;
 export const RETRY_AFTER_SECONDS = 15;
 const sinceSeen = (info, now) => { const at = Date.parse(info?.lastSeenAt ?? ''); return info?.instance && Number.isFinite(at) ? Math.max(0, now - at) : Infinity; };
 export const reconnecting = (info, now = Date.now()) => info?.credential !== false && sinceSeen(info, now) < RECONNECT_WINDOW_MS;
+// The launcher the user runs, by the system the agent reported (fase4-26/a8-mac: agent.platform 'darwin' is a Mac;
+// anything else, or an agent never seen, keeps the Windows words).
+const launcherOf = info => (info?.agentPlatform === 'darwin'
+  ? { status: 'agent/ssam-agent.sh status', start: '~/SSAM-Agent/agent/ssam-agent.sh start, see docs/AGENTE-MAC.md' }
+  : { status: 'agent\\ssam-agent.ps1 status', start: 'agent\\ssam-agent.ps1 start, see docs/AGENTE-CLIENTE.md' });
 export function agentNotConnected(info, { now = Date.now(), tool = null, args = null } = {}) {
+  const launcher = launcherOf(info);
   if (reconnecting(info, now)) {
     const age = sinceSeen(info, now);
     const seconds = Math.round(age / 1000);
     const why = age < RESTART_AFTER_MS
       ? 'the SSAM agent reconnects by itself (it lost the connection ' + seconds + ' s ago): repeat the same call in ' + RETRY_AFTER_SECONDS + ' s; do not ask the user to restart anything'
-      : 'the agent has been out of contact for ' + seconds + ' s: repeat in ' + RETRY_AFTER_SECONDS + ' s and, if it goes on, ask the user to check the agent window (agent\\ssam-agent.ps1 status) and to start it only if it has stopped';
+      : 'the agent has been out of contact for ' + seconds + ' s: repeat in ' + RETRY_AFTER_SECONDS + ' s and, if it goes on, ask the user to check the agent window (' + launcher.status + ') and to start it only if it has stopped';
     return { ok: false, code: 'AGENT_RECONNECTING', retryAfterSeconds: RETRY_AFTER_SECONDS, lastSeenSecondsAgo: seconds,
       error: 'The SSAM agent of this account lost its connection ' + seconds + ' s ago and is reconnecting by itself; nothing ran on the user\'s machine.',
       continuation: tool ? { tool, arguments: args ?? {}, why } : doctor(why) };
   }
   const why = info?.credential === false
     ? 'The server owner must issue an agent credential for this token (ssam server-token agent-rotate); then the user starts the SSAM agent and calls this tool again.'
-    : 'Ask the user to start the SSAM agent on their machine (agent\\ssam-agent.ps1 start, see docs/AGENTE-CLIENTE.md), then call this tool again. ssam_doctor shows when the agent is connected.';
+    : 'Ask the user to start the SSAM agent on their machine (' + launcher.start + '), then call this tool again. ssam_doctor shows when the agent is connected.';
   return { ok: false, code: 'AGENT_NOT_CONNECTED', error: 'The SSAM agent of this account is not connected, so nothing ran on the user\'s machine.', continuation: doctor(why) };
 }
 export const o11NotConnected = () => ({ ok: false, code: 'O11_NOT_CONNECTED',
@@ -187,9 +193,10 @@ const pathRefused = (code, error) => ({ ok: false, code, error,
 function jobPathRefused(error, agentRoot) {
   const pointer = error.pointer ?? null;
   if (error.code !== 'PATH_OUTSIDE_WORKSPACE') return { ...pathRefused(error.code, error.message), ...(pointer ? { pointer } : {}), ...(error.fields ?? {}), ...(error.fix ? { fix: error.fix } : {}) };
+  // a9: generic, as outsideWorkspaceRefusal: the path is never said back (the gate answers before any presenter).
   return { ok: false, ...outsideWorkspaceRefusal(error.value, { agentRoot }), pointer,
-    error: 'The job names, at ' + pointer + ', a path outside the workspace of this account: ' + JSON.stringify(String(error.value ?? '').slice(0, 300))
-      + '. Files a job names (base, composite parts, a reference producer, an html file, a WSDL/OpenAPI document, a prototype folder) must be ws:<rel> or agent:inbox/<file>; nothing was read there and nothing ran.' };
+    error: 'The job names, at ' + pointer + ', a path outside your own workspace. Files a job names (base, composite parts, a reference producer, an html file, '
+      + 'a WSDL/OpenAPI document, a prototype folder) must be ws:<rel> or agent:inbox/<file>; nothing was read there and nothing ran.' };
 }
 const jobTextInvalid = error => ({ ok: false, code: 'JOB_INVALID', pointer: error.pointer, error: error.message + '; nothing ran.',
   fix: 'send the job itself (an object, or its compact JSON text), or the path of a job file (ws:<rel>, agent:inbox/<file>)' });
@@ -310,8 +317,9 @@ const pathOnlyWhen = (name, entry, pointer, args, value) => {
 async function resolveValue(value, role, lane, context, agentRoot = null) {
   const workspace = path.resolve(context.workspace);
   // C26: an absolute path of the user's machine under the agent's own folders (the root the agent reports in its Hello) is
-  // that agent: path, e.g. C:\SSAM-Agent\inbox\job.json -> agent:inbox/job.json.
-  const mapped = /^[A-Za-z]:[\\/]/.test(value) ? agentPath(value, { agentRoot }) : null;
+  // that agent: path, e.g. C:\SSAM-Agent\inbox\job.json -> agent:inbox/job.json; on a Mac (a POSIX agent folder,
+  // fase4-26/a8-mac) /Users/ana/SSAM-Agent/inbox/job.json -> agent:inbox/job.json.
+  const mapped = isAgentMachinePath(value, agentRoot) ? agentPath(value, { agentRoot }) : null;
   if (mapped) value = mapped;
   if (value.startsWith('ws:') || value.startsWith('agent:')) {
     const agent = value.startsWith('agent:');
@@ -383,7 +391,7 @@ async function agentContent(context, agentPathValue) {
 }
 async function inputValue(value, role, lane, context, agentRoot) {
   const workspace = path.resolve(context.workspace);
-  const mapped = /^[A-Za-z]:[\\/]/.test(value) ? agentPath(value, { agentRoot }) : null;
+  const mapped = isAgentMachinePath(value, agentRoot) ? agentPath(value, { agentRoot }) : null;
   if (mapped) value = mapped;
   if (value.startsWith('ws:') || value.startsWith('agent:')) {
     const agent = value.startsWith('agent:');
@@ -411,7 +419,7 @@ async function jobInputs(value, lane, context, agentRoot, budget, depth = 0) {
   if (depth > 64 || budget.left <= 0) return value;
   if (typeof value === 'string') {
     budget.left--;
-    if (value.length > 1024 || !(/^(?:ws|agent):/.test(value) || /^[A-Za-z]:[\\/]/.test(value) && agentPath(value, { agentRoot }))) return value;
+    if (value.length > 1024 || !(/^(?:ws|agent):/.test(value) || isAgentMachinePath(value, agentRoot) && agentPath(value, { agentRoot }))) return value;
     return (await inputValue(value, 'in', lane, context, agentRoot)) ?? value;
   }
   if (Array.isArray(value)) { const out = []; for (const item of value) out.push(await jobInputs(item, lane, context, agentRoot, budget, depth + 1)); return out; }

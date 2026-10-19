@@ -14,30 +14,53 @@ public sealed partial class ModelSession
 
     private static string? ExpressionValue(object? value) => value is IExpression expression ? expression.Text : value as string;
 
+    private static (IObjectSignature Call, IObjectSignature Callee, IObjectSignature Input, string InputName)? RequiredArgument(IObjectSignature owner)
+    {
+        for (var call = owner; call != null; call = call.Parent as IObjectSignature) {
+            if (OptionalProperty(call, "Action") is not IObjectSignature callee) continue;
+            string? inputName = null;
+            for (var part = owner; part != null && !ReferenceEquals(part, call); part = part.Parent as IObjectSignature)
+                if (OptionalProperty(part, "Parameter") is IObjectSignature parameter) { inputName = TypeResolver.Name(parameter); break; }
+            inputName ??= TypeResolver.Name(owner);
+            var input = callee.Children.OfType<IObjectSignature>().FirstOrDefault(p => (Implements(p, "IInputParameter") || Implements(p, "IInputParameterSignature"))
+                && TypeResolver.Name(p) == inputName);
+            if (input != null && inputName != null) return (call, callee, input, inputName);
+        }
+        return null;
+    }
+
+    private static (int Line, string Argument, string Node, string Callee)? RequiredArgumentFocus(IObjectSignature? owner, JsonObject? source)
+    {
+        try {
+            if (owner == null || source == null || source["op"]?.ToString() != "logic" || RequiredArgument(owner) is not { } required) return null;
+            var relative = TextOf(owner, source);
+            if (relative == null) return null;
+            var inner = "/data" + relative;
+            var text = Text(source, inner) ?? Text(source, inner + "/text");
+            var node = new KernelModelReader().DisplayOf(required.Call);
+            var callee = TypeResolver.Name(required.Callee) ?? "";
+            if (text == null || VerifySourceEdits.FlowCallLocation(text, node, callee) is not { } located) return null;
+            return (located.Line, required.InputName, node, callee);
+        } catch { return null; }
+    }
+
     /// <summary>Corrections determined by the constructed model, still returned as edits of the original source.</summary>
-    private static (string Fix, JsonArray Patch)? ModelSourcePatch(MessageInfo message, IObjectSignature? owner, JsonObject? source, string? opPointer)
+    private static (string Fix, JsonArray Patch, string PatchRule)? ModelSourcePatch(MessageInfo message, IObjectSignature? owner, JsonObject? source, string? opPointer)
     {
         try { return ModelSourcePatchCore(message, owner, source, opPointer); }
         catch { return null; } // A best-effort correction never hides the platform's original diagnostic.
     }
 
-    private static (string Fix, JsonArray Patch)? ModelSourcePatchCore(MessageInfo message, IObjectSignature? owner, JsonObject? source, string? opPointer)
+    private static (string Fix, JsonArray Patch, string PatchRule)? ModelSourcePatchCore(MessageInfo message, IObjectSignature? owner, JsonObject? source, string? opPointer)
     {
         if (owner == null || source == null || opPointer == null) return null;
         if (message.Id == "ArgumentRequiredExpression" && source["op"]?.ToString() == "logic")
         {
-            for (var call = owner; call != null; call = call.Parent as IObjectSignature)
+            if (RequiredArgument(owner) is { } required)
             {
-                if (OptionalProperty(call, "Action") is not IObjectSignature callee) continue;
-                // Argument names in the Model API are derived from Parameter; they need not expose a Name property.
-                string? inputName = null;
-                for (var part = owner; part != null && !ReferenceEquals(part, call); part = part.Parent as IObjectSignature)
-                    if (OptionalProperty(part, "Parameter") is IObjectSignature parameter) { inputName = TypeResolver.Name(parameter); break; }
-                inputName ??= TypeResolver.Name(owner);
-                var inputs = callee.Children.OfType<IObjectSignature>().Where(p => Implements(p, "IInputParameter") || Implements(p, "IInputParameterSignature")).ToList();
-                var input = inputs.FirstOrDefault(p => TypeResolver.Name(p) == inputName);
-                if (input == null) continue;
+                var (call, callee, input, inputName) = required;
                 var value = ExpressionValue(OptionalProperty(input, "DefaultValue"));
+                var declaredDefault = !string.IsNullOrWhiteSpace(value);
                 if (string.IsNullOrWhiteSpace(value))
                     value = VerifySourceEdits.TypeDefault(UiCatalog.TypeName(OptionalProperty(input, "DataType")) ?? "");
                 if (value == null) return null;
@@ -49,7 +72,8 @@ public sealed partial class ModelSession
                 if (text == null) return null;
                 var written = VerifySourceEdits.AddFlowArgument(text, new KernelModelReader().DisplayOf(call), TypeResolver.Name(callee) ?? "", inputName!, value);
                 if (written == null) return null;
-                return ($"pass {inputName}={value}, the input's declared default or the default of its type", ReplaceSource(opPointer + inner, written));
+                return ($"pass {inputName}={value}, " + (declaredDefault ? "the input's declared default" : "a type default to review; this input declares no default"),
+                    ReplaceSource(opPointer + inner, written), declaredDefault ? "REQUIRED_ARGUMENT_DEFAULT" : "REQUIRED_ARGUMENT_TYPE_DEFAULT");
             }
         }
         if (message.Id == "ExpressionUnknownObject" && source["op"]?.ToString() == "html" && Unknown(message) is { } unknown)
@@ -78,7 +102,7 @@ public sealed partial class ModelSession
                 if (inner == null || Text(source, inner) is not { } html) return null;
                 var written = VerifySourceEdits.QualifyListValue(html, listSource, unknown, field);
                 if (written == null) return null;
-                return ($"use {listSource}.Current.{field}, the attribute of the current list item", ReplaceSource(opPointer + inner, written));
+                return ($"use {listSource}.Current.{field}, the attribute of the current list item", ReplaceSource(opPointer + inner, written), "LIST_ITEM_QUALIFIED");
             }
         }
         return null;

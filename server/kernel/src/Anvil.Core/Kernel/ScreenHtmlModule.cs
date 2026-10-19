@@ -686,14 +686,58 @@ public sealed partial class ScreenHtmlModule<T> where T : class
                 default: node.Tag = ScreenHtml.WidgetTags[kd]; break;
             }
             if (kd == "TextWidget") { node.Content = textFact.Text ?? ""; facts.RemoveAll(f => f.Name == "Text"); element.Facts["text"] = node.Content; }
+            // A native Table: the class of its header row and of its template row are those rows' (WriteTable).
+            var rowStyles = kd == "TableRecords" ? facts.Where(f => f.Name is "StyleHeader" or "StyleRow").ToList() : null;
+            if (rowStyles != null) facts.RemoveAll(f => f.Name is "StyleHeader" or "StyleRow");
             Encode(kd, facts, node, element, ScreenHtmlModuleMode.Widget);
+            // A Table without Source (dragged in the Studio, not bound yet) is still the <table> of the language: list="" says so,
+            // and it reads back as the Table (the review of round 1, B2).
+            if (rowStyles != null && !element.Facts.ContainsKey("p:Source")) { element.Facts["p:Source"] = "e:"; node.Attrs.Add(("list", Const(""))); }
             Events(pointers, children, node, element, shape, m.InPopup(i));
             Arguments(children, node, element);
             Extended(children, node, element, kd);
             parentNode.Children.Add(node);
             if (kd == "TextWidget") { foreach (var c in children) if (m.role[c] == "widget") Problems.Add("text with widgets inside @" + m.id[c]); return; }
             if (kd == "IfWidget") { WriteIf(i, k, pointers, children, node, element, parentNode); return; }
+            if (rowStyles != null) { WriteTable(i, k, children, node, element, rowStyles); return; }
             WriteChildren(k, children, node, element.Children);
+        }
+
+        // A native Table is the <table> of the language (ScreenHtmlTables.NativeTable): its HeaderRow the one <tr> of its <thead>,
+        // its Row the one template <tr> of its <tbody>, StyleHeader and StyleRow the class of those rows. Each row is a group of the
+        // canonical form (k/content:HeaderRow, k/content:Row) in that order, as any element with several contents. The rows are the
+        // Table's HeaderRow and Row properties, whatever the platform calls them (O11: a MobileWidget headerRow and row; ODC: a
+        // Content).
+        private void WriteTable(int table, string k, List<int> children, PNode node, ScreenHtmlCanon.Element element, List<Fact> rowStyles)
+        {
+            var contents = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var name in new[] { "HeaderRow", "Row" })
+                if (m.r.PropertyOf(m.nodes[table], name)?.Invoke() is T held && m.at.TryGetValue(held, out var index)) contents[name] = index;
+            foreach (var c in children) {
+                if (Carried(m, c) || contents.ContainsValue(c)) continue;
+                Problems.Add("table child @" + m.id[c] + " " + m.kind[c]);
+            }
+            foreach (var (name, section, style) in new[] { ("HeaderRow", "thead", "StyleHeader"), ("Row", "tbody", "StyleRow") }) {
+                var row = new PNode { Tag = "tr" };
+                var group = new PNode { Tag = section };
+                group.Children.Add(row);
+                node.Children.Add(group);
+                var f = rowStyles.FirstOrDefault(s => s.Name == style);
+                if (f.Name != null && !IsDefault("TableRecords", f)) {
+                    element.Facts["p:" + style] = f.Type + ":" + f.Text;
+                    row.Attrs.Add(("class", Value("TableRecords", f, "class")));
+                }
+                if (!contents.TryGetValue(name, out var c)) { Problems.Add("table " + k + " without its " + name); continue; }
+                // O11 lists a row as a widget of the Table (a MobileWidget): one of the page's widgets, represented by its <tr>; an
+                // ODC row is a Content, as every content of an element, no widget of its own.
+                if (m.role[c] == "widget" && m.kind[c] != "Content") WidgetCount++;
+                CheckStructural(c, m.kind[c]);
+                var cid = k + "/content:" + name;
+                Keys.Add(new(cid, m.key[c]));
+                element.Children.Add("c:" + name);
+                var groupElement = Element(cid, "Content", new Shape { Kind = "Content", Node = c });
+                foreach (var g in m.ChildIndexes(c)) if (!Carried(m, g)) WriteWidget(g, cid, row, groupElement.Children);
+            }
         }
 
         internal static bool Redundant(List<Fact> facts, Fact style)
@@ -1049,8 +1093,39 @@ public sealed partial class ScreenHtmlModule<T> where T : class
             if (kd is "List" && tagText != "div") element.Facts["p:Tag"] = "t:" + tagText;
             DecodeAttributes(node, element, shape, ScreenHtmlModuleMode.Widget, kd);
             if (kd == "TextWidget") { element.Facts["text"] = string.Concat(node.Children.Select(c => c.Text)); return; }
+            if (kd == "TableRecords" && ScreenHtmlTables.NativeTable(node) is { } table) { DecodeTable(table, k, element, shape); return; }
             DecodeChildren(node, k, element.Children);
             if (kd == "IfWidget") element.Children.Add("else");
+        }
+
+        // A native Table (ScreenHtmlTables.NativeTable): its list wherever the text writes it, the class of its header row and of its
+        // template row its StyleHeader and StyleRow, each row the Content group of the reading (k/content:HeaderRow, k/content:Row).
+        // The List's own attributes beside the list are left out (a Table renders every row); any other attribute of a part is a
+        // problem: the Table has no property for it.
+        private void DecodeTable(ScreenHtmlTables.NativeTableShape table, string k, ScreenHtmlCanon.Element element, Shape shape)
+        {
+            if (!ReferenceEquals(table.SourceAt, table.Table)) {
+                var type = TypeOf(shape, "Source");
+                element.Facts["p:Source"] = type + ":" + Decode(shape, "Source", type, table.Source, "list");
+                if (type is 'r' or 'l') element.Raw["p:Source"] = table.Source;
+            }
+            // A column is one header cell and one row cell: the platform removes and adds them together (deleting a header cell
+            // deletes its column), so a text with more of one is no Table the module can hold.
+            if (table.HeaderCells.Count != table.RowCells.Count) canon.Problems.Add(ScreenHtmlTables.HalfColumn(table));
+            foreach (var (name, header, row, style) in new[] { ("HeaderRow", true, table.HeadRow, "StyleHeader"), ("Row", false, table.BodyRow, "StyleRow") }) {
+                // The class of the row: its section's and its <tr>'s (ScreenHtmlTables.RowClass).
+                if (ScreenHtmlTables.RowClass(table, header) is { } rowClass) {
+                    var type = TypeOf(shape, style);
+                    element.Facts["p:" + style] = type + ":" + Decode(shape, style, type, rowClass, "class");
+                }
+                foreach (var (part, attribute) in ScreenHtmlTables.PartAttributes(table, header))
+                    canon.Problems.Add("<" + part.Tag + "> of a native Table at line " + part.Line.ToString(CultureInfo.InvariantCulture) + " has " + attribute + ": "
+                        + ScreenHtmlTables.PartAttributeWhy);
+                element.Children.Add("c:" + name);
+                var id = k + "/content:" + name;
+                var group = Element(id, "Content");
+                DecodeChildren(row, id, group.Children);
+            }
         }
 
         // <div else> right after a <div if>: its children continue the If's list after the "else" marker.
@@ -1210,7 +1285,20 @@ public sealed partial class ScreenHtmlModule<T> where T : class
             // property starting with "on" bare (it is ext:on...), so this is also the form of a new one (C2).
             else if (name.StartsWith("on", StringComparison.Ordinal) && name.Length > 2) prefix = "hev:" + name;
             else return false;
-            if (!ScreenHtml.TryCall(value, out var target, out var arguments)) { canon.Problems.Add("event " + name + " is not Destination(Param = expression, ...): " + value); return true; }
+            // The reading writes Destination(Param = expression, ...) (TryCall); the one call of the text forms (ScreenHtml.ParseCall:
+            // the spaces around '=' and after ',' optional, as the fragment and the document read it) is the same call here (the
+            // review of round 2, A6: @OnNavigate="ShowChainPage(NewStartIndex=NewStartIndex)" compiled in the fragment and was
+            // HTML_EDIT_INVALID in the edit). Arguments by position name no input: refused with the named form.
+            if (!ScreenHtml.TryCall(value, out var target, out var arguments)) {
+                // A script URL (javascript:go()) is never a call: it stays the problem the edit says once, as a script.
+                List<(string? Param, string Value)> parsed = [];
+                if (ScreenHtml.ScriptUrl(value) || !ScreenHtml.ParseCall(value, out target, out parsed) || parsed.Any(a => a.Param == null)) {
+                    canon.Problems.Add("event " + name + " is not Destination(Param = expression, ...): " + value
+                        + (parsed is { Count: > 0 } && parsed.Any(a => a.Param == null) ? " (its arguments go by position; the page names each input: " + target + "(" + string.Join(", ", parsed.Select((a, n) => (a.Param ?? "<input" + (n + 1).ToString(CultureInfo.InvariantCulture) + ">") + " = " + a.Value.Trim())) + "))" : ""));
+                    return true;
+                }
+                arguments = parsed.Select(a => (a.Param!, a.Value.Trim())).ToList();
+            }
             element.Facts[prefix] = target.Length == 0 ? "" : m.TryResolveDestination(target, scope, out var resolved) ? resolved : "?" + target;
             foreach (var (param, expression) in arguments) element.Facts[prefix + ":a:" + param] = expression;
             return true;
@@ -1238,6 +1326,7 @@ internal static class ScreenHtmlTables
         ["Image"] = Map("Image", "src", "Url", "url"),
         ["Icon"] = Map("Icon", "icon", "IconSize", "size", "Weight", "weight"),
         ["List"] = Map("Source", "list"),
+        ["TableRecords"] = Map("Source", "list"),
         ["IfWidget"] = Map("Condition", "if"),
         ["Popup"] = Map("ShowPopup", "show"),
         ["MobileBlockInstanceWidget"] = Map("SourceBlock", "name"),
@@ -1248,6 +1337,11 @@ internal static class ScreenHtmlTables
     public static readonly Dictionary<string, string> CommonNamed = Map("Name", "id", "Style", "class", "CustomStyle", "style");
     public static readonly Dictionary<string, string> DataNamed = Map("Name", "name", "DataType", "type", "DefaultValue", "default",
         "IsMandatory", "mandatory", "Description", "description", "MaxRecords", "max", "Title", "title", "Roles", "roles");
+
+    // The kinds whose name the Studio gives and never lets change: a slot is named after its placeholder, an If branch and a
+    // Content by the platform ("Widget does not support name changing" in both lanes, the coverage matrix of fase2). The one rule
+    // of the edit: their name is never written, and a text that changes it is HTML_NAME_FIXED.
+    public static bool FixedName(string kind) => kind is "PlaceholderContentWidget" or "IfBranchWidget" or "Content";
 
     private static Dictionary<string, string> Map(params string[] pairs)
     {
@@ -1291,6 +1385,8 @@ internal static class ScreenHtmlTables
     internal static string KindOf(ScreenHtml.Node node, out string tagText)
     {
         tagText = node.Tag;
+        if (node.NativeKind is { } cell) return cell;
+        if (node.Tag == "table" && NativeTable(node) is { } table) { Mark(table); return "TableRecords"; }
         if (node.Get("list") != null) { if (node.Tag == "list") tagText = node.Get("tag") ?? ""; return "List"; }
         if (node.Tag == "div" && node.Get("if") != null) return "IfWidget";
         if (node.Get("html") != null) return "AdvancedHtml";
@@ -1299,8 +1395,175 @@ internal static class ScreenHtmlTables
         // The rows of the language with no HTML tag of their own (switch, upload, button-group, button-group-item, i) are the
         // rows of ElementWidgetMap.LanguageElements too (this file is also compiled by the ODC builder, without that table: a
         // test holds the two equal).
-        foreach (var (kd, tag) in ScreenHtml.WidgetTags) if (tag == node.Tag && kd is not ("Checkbox" or "IfWidget" or "Input")) return kd;
+        foreach (var (kd, tag) in ScreenHtml.WidgetTags) if (tag == node.Tag && kd is not ("Checkbox" or "IfWidget" or "Input") && !ScreenHtml.ShapeKinds.Contains(kd)) return kd;
         return "AdvancedHtml";
+    }
+
+    // ---- the data table (the owner's VpBookings bug of 2026-10-18) --------------------------------------------------------
+    // A data table is the native Table (TableRecords): a <table> whose only parts are one <thead> with one <tr> of <th> (the header
+    // row) and one <tbody> with one template <tr> of <td> (the row), its rows repeated over a list written once, on the <table>
+    // (the reading's form), on the <tbody> or on the template <tr> (the forms documents write). One column per <th>/<td> pair: a
+    // header cell and a row cell in the same column of the widget, aligned by construction. Its parts carry no k (an HTML table of
+    // a reading has one on each: it stays what it is). Anything else (no header row, no list, a caption, a footer, two rows) is
+    // what it was: HTML Elements, a List where the list is.
+    internal sealed record NativeTableShape(ScreenHtml.Node Table, ScreenHtml.Node Head, ScreenHtml.Node HeadRow, ScreenHtml.Node Body, ScreenHtml.Node BodyRow,
+        IReadOnlyList<ScreenHtml.Node> HeaderCells, IReadOnlyList<ScreenHtml.Node> RowCells, string Source, ScreenHtml.Node SourceAt);
+
+    // The attributes of a List a data table's rows may carry where its list is (the List's own means to render every row; a native
+    // Table renders them all): never written, said in normalized.
+    internal static readonly HashSet<string> ListOnlyAttributes = new(StringComparer.Ordinal) { "os-Mode", "disable-virtualization", "ext:disable-virtualization" };
+
+    internal static NativeTableShape? NativeTable(ScreenHtml.Node table)
+    {
+        // <table html> is the HTML Element the author asked for, whatever its parts.
+        if (table.IsText || table.Tag != "table" || table.Get("html") != null) return null;
+        if (Parts(table) is not [{ Tag: "thead" } head, { Tag: "tbody" } body]) return null;
+        if (Parts(head) is not [{ Tag: "tr" } headRow] || Parts(body) is not [{ Tag: "tr" } bodyRow]) return null;
+        if (Parts(headRow) is not { } header || Parts(bodyRow) is not { } row) return null;
+        if (header.Any(c => c.Tag != "th") || row.Any(c => c.Tag != "td")) return null;
+        if (head.Get("k") != null || headRow.Get("k") != null || body.Get("k") != null || bodyRow.Get("k") != null) return null;
+        var holders = new[] { table, body, bodyRow }.Where(n => n.Get("list") != null).ToList();
+        if (holders.Count != 1) return null;
+        return new NativeTableShape(table, head, headRow, body, bodyRow, header, row, holders[0].Get("list")!, holders[0]);
+    }
+
+    // The message of half a column (the decoder's; the edit says it with the Table's k and its patch, HTML_TABLE_COLUMN).
+    internal static string HalfColumn(NativeTableShape table) =>
+        "the native Table at line " + table.Table.Line.ToString(System.Globalization.CultureInfo.InvariantCulture) + " has " + table.HeaderCells.Count + " header cells and "
+        + table.RowCells.Count + " row cells: a column is one <th> and one <td> (remove or add both)";
+    internal static bool IsHalfColumn(string problem) =>
+        problem.StartsWith("the native Table at line ", StringComparison.Ordinal) && problem.EndsWith(" row cells: a column is one <th> and one <td> (remove or add both)", StringComparison.Ordinal);
+
+    // The classes the Studio gives a List (list, list-group: an older reading writes them on the <tbody> or <tr> that was the List).
+    private static readonly HashSet<string> ListClasses = new(StringComparer.Ordinal) { "list", "list-group" };
+
+    // The class of the header row (header) or of the template row: the class of its section (<thead>, <tbody>: a Table has no
+    // class of its own for them) and of its <tr>, in that order; where the list is, the classes of the List an older reading wrote
+    // (list, list-group) are left out (dropped receives them). Null: no class.
+    internal static string? RowClass(NativeTableShape table, bool header, List<string>? dropped = null)
+    {
+        var parts = new List<string>();
+        var written = false;   // a class written, empty included (class="" is the empty class the reading writes)
+        foreach (var part in header ? new[] { table.Head, table.HeadRow } : [table.Body, table.BodyRow]) {
+            if (part.Get("class") is not { } value) continue;
+            var listClass = false;
+            if (ReferenceEquals(part, table.SourceAt) && !value.Contains("{{", StringComparison.Ordinal)) {
+                var tokens = value.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+                var left = tokens.Where(ListClasses.Contains).ToList();
+                if (left.Count > 0) { dropped?.AddRange(left.Select(c => "class " + c)); value = string.Join(" ", tokens.Where(x => !ListClasses.Contains(x))); listClass = true; }
+            }
+            // The row's own class, empty included; a class that held only the List's is no class of the row.
+            written |= part.Tag == "tr" && !(listClass && value.Length == 0);
+            if (value.Trim().Length > 0) parts.Add(value.Trim());
+        }
+        return parts.Count > 0 ? string.Join(" ", parts) : written ? "" : null;
+    }
+
+    // What a part of a native Table may say: the list where it is, beside it the List's own attributes (os-Mode,
+    // disable-virtualization: a Table renders every row), and its class (the row's); a marker of the engine has its own rule
+    // (ReservedMarker). Anything else has no property in the Table.
+    internal static IEnumerable<(ScreenHtml.Node Part, string Attribute)> PartAttributes(NativeTableShape table, bool header)
+    {
+        foreach (var part in header ? new[] { table.Head, table.HeadRow } : [table.Body, table.BodyRow])
+            foreach (var (attribute, _) in part.Attributes) {
+                if (attribute == "class" || IsEngineMarker(attribute)) continue;
+                if (ReferenceEquals(part, table.SourceAt) && (attribute == "list" || ListOnlyAttributes.Contains(attribute))) continue;
+                yield return (part, attribute);
+            }
+    }
+    internal const string PartAttributeWhy = "a native Table has no property for an attribute of its <thead>, <tbody> or <tr> but the class (the row's); put it on the <table> or on a cell";
+    // A problem of the decoder that the table rules of the document and of the edit say with their own code and patch (half a column,
+    // an attribute of a part).
+    internal static bool IsTableProblem(string problem) => IsHalfColumn(problem) || problem.EndsWith(": " + PartAttributeWhy, StringComparison.Ordinal);
+
+    // The markers of the engine's native layout block (Anvil.Core.ScreenVisual.MarkerOf: data-ssam-gap, data-ssam-page, data-ssam-rows,
+    // in any case, ext: or not), left to their own rule (HTML_RESERVED_MARKER). This file is also compiled by the ODC builder, without
+    // ScreenVisual (Builder.csproj): a test holds the two equal.
+    private static readonly string[] EngineMarkers = ["data-ssam-gap", "data-ssam-page", "data-ssam-rows"];
+    internal static bool IsEngineMarker(string attribute)
+    {
+        var bare = attribute.StartsWith("ext:", StringComparison.OrdinalIgnoreCase) ? attribute[4..] : attribute;
+        return EngineMarkers.Any(m => m.Equals(bare, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // The columns a cell spans (colspan), 1 when it says none.
+    internal static int Span(ScreenHtml.Node cell) =>
+        int.TryParse(cell.Get("colspan"), NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n > 1 ? n : 1;
+
+    // Half a column that colspan explains: the row with fewer cells spans, cell by cell, the cells of the other, which span none.
+    // True only then (the rows hold a different number of cells); which cell is missing otherwise is the author's.
+    internal static bool SpanExplains(NativeTableShape table) => SpanExplains(table.HeaderCells, table.RowCells);
+    // The same rule over the cells of the two rows (the prototype importer's data table, PrototypeWidgets.DataTable).
+    internal static bool SpanExplains(IReadOnlyList<ScreenHtml.Node> headerCells, IReadOnlyList<ScreenHtml.Node> rowCells)
+    {
+        if (headerCells.Count == rowCells.Count) return false;
+        var (fewer, more) = headerCells.Count < rowCells.Count ? (headerCells, rowCells) : (rowCells, headerCells);
+        return fewer.Sum(Span) == more.Count && more.All(c => Span(c) == 1);
+    }
+
+    // A cell of a native Table spans one column and one row (the owner's decision of 2026-10-19): with the rows as many cells, colspan
+    // made the header wider than the rows, and rowspan on the template row (it repeats once per record) pushed the cells of the next
+    // record's row, both in silence. Its colspan and rowspan (any case, ext: or not) with a value other than 1, refused where the
+    // document (ScreenDocument.TableProblems) and the edit (EditPlan.TableRules) write them new, each with its certain patch: the
+    // columns a colspan explains written as empty cells (SpanExplains), else the attribute removed. What the reading has stays.
+    internal static IEnumerable<(string Attribute, string Value)> Spans(ScreenHtml.Node cell)
+    {
+        foreach (var (attribute, value) in cell.Attributes)
+            if (SpanOf(attribute) != null && value.Trim() != "1") yield return (attribute, value);
+    }
+    // colspan or rowspan, for the attribute that is one (any case, ext: or not); else null.
+    private static string? SpanOf(string attribute)
+    {
+        var bare = attribute.StartsWith("ext:", StringComparison.OrdinalIgnoreCase) ? attribute[4..] : attribute;
+        return bare.Equals("colspan", StringComparison.OrdinalIgnoreCase) ? "colspan" : bare.Equals("rowspan", StringComparison.OrdinalIgnoreCase) ? "rowspan" : null;
+    }
+    // The colspan whose columns the patch of half a column writes as empty cells (SpanExplains), not removed.
+    internal static bool SpanExplained(NativeTableShape table, ScreenHtml.Node cell, string attribute) => attribute == "colspan" && Span(cell) > 1 && SpanExplains(table);
+    internal const string ColumnSpanWhy = "a native Table has one <th> and one <td> per column, and a cell spans none";
+    internal static string SpanWhy(string attribute, string tag) => SpanOf(attribute) != "rowspan" ? ColumnSpanWhy
+        : tag == "td" ? "a cell of a native Table spans one row: its template row repeats once per record, and rowspan pushes the cells of the next record's row"
+        : "a cell of a native Table spans one row: its header row is one row";
+
+    // What a native Table makes of what its parts write beyond its properties, said in normalized by the document and by the edit
+    // (TABLE_NATIVE): the class of a section joins the class of its row; the List's own classes and attributes where the list is are
+    // left out (a Table renders every row).
+    internal static List<string> Folded(NativeTableShape table)
+    {
+        var notes = new List<string>();
+        var dropped = new List<string>();
+        foreach (var (header, section, row, style) in new[] { (true, table.Head, table.HeadRow, "StyleHeader"), (false, table.Body, table.BodyRow, "StyleRow") })
+            if (RowClass(table, header, dropped) != row.Get("class") && section.Get("class") != null) notes.Add($"<{section.Tag} class> joins the class of its <tr> ({style})");
+        foreach (var part in new[] { table.Body, table.BodyRow }.Where(p => ReferenceEquals(p, table.SourceAt)))
+            foreach (var (attribute, _) in part.Attributes) if (ListOnlyAttributes.Contains(attribute)) dropped.Add(attribute);
+        if (dropped.Count > 0) notes.Add($"{string.Join(", ", dropped.Distinct())} of the List left out (a Table renders every row)");
+        return notes;
+    }
+
+    // The element children of a part, or null when it holds text (whitespace between elements is the layout of the text).
+    private static List<ScreenHtml.Node>? Parts(ScreenHtml.Node node)
+    {
+        var parts = new List<ScreenHtml.Node>();
+        foreach (var child in node.Children)
+            if (child.IsText) { if (child.Text!.Trim().Length > 0) return null; }
+            else parts.Add(child);
+        return parts;
+    }
+
+    private static void Mark(NativeTableShape table)
+    {
+        foreach (var th in table.HeaderCells) th.NativeKind = "HeaderCell";
+        foreach (var td in table.RowCells) td.NativeKind = "RowCell";
+    }
+
+    // Every data table of a parsed text, its cells marked (a visitor of the cells alone reads their kind right).
+    internal static void MarkNativeTables(ScreenHtml.Node node)
+    {
+        foreach (var child in node.Children)
+        {
+            if (child.IsText) continue;
+            if (child.Tag == "table" && NativeTable(child) is { } table) Mark(table);
+            MarkNativeTables(child);
+        }
     }
 
     // Names an extended property cannot take bare on this kind (the element spends them on itself).

@@ -176,6 +176,14 @@ public static class PrototypeRender
         var element = host.Add(DomNode.Element(row.Element.StartsWith('{') ? node.Tag ?? "div" : row.Element));
         element.K = node.K; element.Widget = row.Widget;
         Fill(element, node, row);
+        if (node.W == "ITableRecords")
+        {
+            // the native Table renders its header row in a thead and its template row (one record) in a tbody
+            var header = element.Add(DomNode.Element("thead")).Add(DomNode.Element("tr"));
+            var record = element.Add(DomNode.Element("tbody")).Add(DomNode.Element("tr"));
+            foreach (var child in Kids()) Emit(child, child.W == "IHeaderCell" ? header : record, platform);
+            return;
+        }
         if (node.Text != null) element.Add(DomNode.TextNode(node.Text));
         foreach (var child in Kids()) Emit(child, element, platform);
     }
@@ -229,7 +237,7 @@ public static class PrototypeRender
         public object? SourceBlock;
     }
 
-    private static readonly string[] ReadProps = ["Style", "StyleClasses", "Tag", "Text", "Value", "Condition", "Source", "ShowPopup", "InputType", "Variable",
+    private static readonly string[] ReadProps = ["Style", "StyleClasses", "StyleHeader", "StyleRow", "Tag", "Text", "Value", "Condition", "Source", "ShowPopup", "InputType", "Variable",
         "Enabled", "CustomStyle", "Label", "Image", "Url", "Prompt", "Mode", "Width", "List", "Values", "Labels", "MaxLength",
         // CX17: the left margin the runtime turns into ThemeGrid_MarginGutter (read for ScreenVisual's prediction; the importer's
         // render does not use it)
@@ -249,8 +257,15 @@ public static class PrototypeRender
             if (Raw(reader, node, "FalseBranch") is T no) widget.Else = Widgets(reader, no).ToList();
             return widget;
         }
+        // A native Table: its header cells and row cells are its HeaderRow and Row (O11 lists them as widgets of the Table, ODC as
+        // contents), read in Contents, never as children.
+        var rows = new List<T>();
+        if (kind == "TableRecords")
+            foreach (var name in new[] { "HeaderRow", "Row" })
+                if (Raw(reader, node, name) is T content) { rows.Add(content); widget.Contents[name] = Widgets(reader, content).ToList(); }
         foreach (var child in reader.ChildrenOf(node))
         {
+            if (rows.Any(r => ReferenceEquals(r, child))) continue;
             var childKind = reader.KindOf(child);
             if (childKind == "ExtendedProperty")
             {
@@ -678,6 +693,30 @@ public static class PrototypeRender
                     }
                     return;
                 }
+                case "TableRecords":
+                {
+                    // the native Table: its header row in a thead, its template row once per record in a tbody
+                    Count(row, widget);
+                    var source = widget.Props.GetValueOrDefault("Source") ?? "";
+                    var table = parent.Add(Mark(DomNode.Element("table"), widget));
+                    Attributes(table, widget, row, scope);
+                    var header = table.Add(DomNode.Element("thead")).Add(DomNode.Element("tr"));
+                    if (RowClass(widget, "StyleHeader", scope) is { Length: > 0 } headerClass) header.SetAttr("class", headerClass);
+                    Children(widget.Contents.GetValueOrDefault("HeaderRow") ?? [], header, scope);
+                    var body = table.Add(DomNode.Element("tbody"));
+                    List<object?> items;
+                    try { items = Expressions.Evaluate(source, scope) is ListValue list ? list.Items : throw new UnevaluableException("the table source is not a list"); }
+                    catch (UnevaluableException ex) { Unevaluable(widget, source, ex.Message); body.Add(Mark(new DomNode { Unevaluable = source }, widget)); return; }
+                    var owner = Expressions.ListOwner(source);
+                    foreach (var item in items)
+                    {
+                        var inner = scope.With(owner, item);
+                        var record = body.Add(DomNode.Element("tr"));
+                        if (RowClass(widget, "StyleRow", inner) is { Length: > 0 } rowClass) record.SetAttr("class", rowClass);
+                        Children(widget.Contents.GetValueOrDefault("Row") ?? [], record, inner);
+                    }
+                    return;
+                }
                 case "Popup":
                 {
                     Count(row, widget);
@@ -789,6 +828,11 @@ public static class PrototypeRender
             }
             Children(widget.Children, node, scope);
         }
+
+        /// <summary>The class of a native Table's header row or template row (StyleHeader, StyleRow) evaluated in its scope.</summary>
+        private string? RowClass(NativeWidget widget, string property, Scope scope) =>
+            widget.Props.GetValueOrDefault(property) is { Length: > 0 } style && Eval(widget, style, scope, out var failed) is { } value && !failed
+                ? string.Join(" ", value.Split(' ', StringSplitOptions.RemoveEmptyEntries)) : null;
 
         private void Attributes(DomNode element, NativeWidget widget, RuntimeDomRow? row, Scope scope)
         {

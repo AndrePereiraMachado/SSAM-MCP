@@ -242,6 +242,7 @@ public sealed partial class ModelSession
                 {
                     p["pointer"] = rebased[n]["pointer"]?.DeepClone();
                     if (p["patch"] is JsonArray) p["patch"] = rebased[n]["patch"]?.DeepClone();
+                    Preflight.PatchCertainty.Publish(p);
                 }
             }
             return failures[0].Error;

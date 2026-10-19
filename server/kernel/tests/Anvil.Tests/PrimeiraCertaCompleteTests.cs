@@ -177,6 +177,9 @@ public sealed class PrimeiraCertaCompleteTests
         Assert.Equal("/ops/0/data/actions/0/steps/0/assign/Code", problem["pointer"]!.GetValue<string>());
         Assert.Contains("TextToInteger", problem["fix"]!.GetValue<string>());
         Assert.False(string.IsNullOrEmpty(problem["key"]?.GetValue<string>()));
+        Assert.False(Anvil.Core.Preflight.PatchCertainty.IsCertain(problem.AsObject()));
+        Assert.Null(result["patchesApplied"]);
+        Assert.Null(result["patchedJob"]);
     }
 
     // ---- A4 ---------------------------------------------------------------------------------------------------------------
@@ -221,7 +224,7 @@ public sealed class PrimeiraCertaCompleteTests
         if (!PacoteBPolicyTests.StudioAvailable()) return;
         var dir = Dir();
         var (_, error, _) = Run(dir, "nulldatetime", """
-        {"base":"blank-service.oml","ops":[
+        {"base":"blank-service.oml","autoPatch":false,"ops":[
           {"op":"logic","data":{"actions":[{"name":"PcWhen","outputs":[{"name":"At","type":"Date Time"},{"name":"S","type":"Text"}],"steps":[
             {"assign":{"At":"If(True, NullDateTime(), CurrDateTime())"}},
             {"assign":{"S":"\"NullDateTime()\" + DateTimeToText(NullDateTime())"}}]}]}}]}

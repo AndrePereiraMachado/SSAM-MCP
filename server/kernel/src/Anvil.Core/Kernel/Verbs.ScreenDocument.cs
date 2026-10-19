@@ -20,6 +20,24 @@ namespace Anvil.Core;
 /// </summary>
 public sealed partial class ModelSession
 {
+    /// <summary>The literal-certainty scope, shared by production and corpus checks. Every named native node counts,
+    /// including reference signatures and record/attribute members; no role or action-body filter narrows it.</summary>
+    internal IReadOnlySet<string> LiteralScopeNames(IEnumerable<string>? jobNames = null)
+    {
+        var names = new HashSet<string>(FunctionCatalog.Names, StringComparer.OrdinalIgnoreCase);
+        if (jobNames != null) names.UnionWith(jobNames.Where(n => !string.IsNullOrEmpty(n)));
+        var pending = new Stack<IObjectSignature>(); pending.Push((IObjectSignature)_espace);
+        var seen = new HashSet<IObjectSignature>(ReferenceEqualityComparer.Instance);
+        var reader = new KernelModelReader();
+        while (pending.TryPop(out var node)) {
+            if (!seen.Add(node)) continue;
+            try { if (node.WasDeleted) continue; } catch (NotImplementedException) { /* Signatures without this getter still contribute their names and children. */ }
+            try { if (TypeResolver.Name(node) is { Length: > 0 } name) names.Add(name); } catch (TargetInvocationException) { }
+            try { if (reader.DisplayOf(node) is { Length: > 0 } display) names.Add(display); } catch (TargetInvocationException) { }
+            foreach (var child in node.Children.OfType<IObjectSignature>()) pending.Push(child);
+        }
+        return names;
+    }
     /// <summary>What a caller inside the kernel adds to a document compile (the recreation proof, the job's shells).</summary>
     internal sealed class DocumentOptions
     {
@@ -81,6 +99,84 @@ public sealed partial class ModelSession
             }
         }
         return names;
+    }
+
+    // Additional names used only to decide literal certainty, never to suppress an unknown-name diagnostic. Null when an op
+    // cannot be read: a data.flow that is no text (FlowTextForm.Texts refuses it with FLOW_SYNTAX), a flow, html or ddl text
+    // that does not parse, a data that is no object. The scope is then unreadable and every literal of the document is a
+    // choice: the unreadable op says what is wrong with it in the same refusal, never instead of the document's problems.
+    private static HashSet<string>? LiteralJobNames(IEnumerable<JsonNode?> ops)
+    {
+        try {
+            var list = ops.ToList();
+            var names = JobDeclaredNames(list);
+            void JsonNames(JsonNode? node) {
+                if (node is JsonObject obj) foreach (var (key, value) in obj) {
+                    if (key is "name" or "id" or "as" && value is JsonValue scalar && scalar.TryGetValue<string>(out var name) && name.Length > 0) names.Add(name);
+                    JsonNames(value);
+                }
+                else if (node is JsonArray array) foreach (var item in array) JsonNames(item);
+            }
+            void FlowNames(FlowItem item) { if (item.Name.Length > 0) names.Add(item.Name); foreach (var child in item.Items) FlowNames(child); }
+            foreach (var op in list.OfType<JsonObject>()) {
+                JsonNames(op);
+                if (op["op"]?.ToString() == "reference")
+                    foreach (var element in (op["elements"] as JsonArray ?? []).OfType<JsonValue>())
+                        if (element.TryGetValue<string>(out var typed) && typed.Split(':', 2) is [_, var name] && name.Length > 0) names.Add(name);
+                if (op["data"] is JsonObject data && data["flow"] != null)
+                    foreach (var flow in FlowTextForm.Texts(data)) FlowNames(ModuleFlow.Read(flow.Text));
+                // ssam-html (a whole document, or the elements of an edit) is read by its own parser. The expander's page and
+                // fragment forms are HTML, not ssam-html (review x3-4, R1b: a valid page made the scope unreadable): their names
+                // are the ones the expander creates (data-av keys, ids, the screen and its variables), as Collect reads them. A
+                // page the HTML parser cannot read leaves the scope unreadable, like any other op.
+                if (op["data"]?["html"] is JsonValue html && html.TryGetValue<string>(out var text)) {
+                    if (ScreenDocument.IsDocument(text) || ScreenHtmlEdit.IsEdit(op)) {
+                        foreach (var (element, _) in ScreenHtmlText.Elements(ScreenHtml.Parse(text)))
+                            foreach (var key in new[] { "name", "id" }) if (element.Get(key) is { Length: > 0 } name) names.Add(name);
+                    }
+                    else {
+                        HtmlSource.Parse(text);
+                        foreach (var created in HtmlExpander.CreatedNames(op["data"]!.AsObject())) names.Add(created);
+                    }
+                }
+                if (op["data"]?["ddl"] is JsonValue ddl && ddl.TryGetValue<string>(out var source))
+                    foreach (var element in DdlParser.Parse(source, MessageExpectations.Lane).All()) if (element.Name.Length > 0) names.Add(element.Name);
+            }
+            return names;
+        }
+        catch (Exception) { return null; }
+    }
+
+    private static readonly string[] PageKinds = ["IMobileScreen", "IMobileBlock", "IWebScreen", "IWebBlock"];
+
+    /// <summary>The names a page declares, for the one-slip rule of literal certainty (option B of the owner, 2026-10-17): the
+    /// page and every named node under it (its variables, inputs, aggregates, widgets, actions and theirs). The compile of a
+    /// document adds the job's names; the corpus checks read each page of a capture with this same function.</summary>
+    internal static HashSet<string> LiteralPageNames(IObjectSignature page)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var pending = new Stack<IObjectSignature>(); pending.Push(page);
+        var seen = new HashSet<IObjectSignature>(ReferenceEqualityComparer.Instance);
+        while (pending.TryPop(out var node)) {
+            if (!seen.Add(node)) continue;
+            try { if (node.WasDeleted) continue; } catch (NotImplementedException) { }
+            try { if (TypeResolver.Name(node) is { Length: > 0 } name) names.Add(name); } catch (TargetInvocationException) { }
+            foreach (var child in node.Children.OfType<IObjectSignature>()) pending.Push(child);
+        }
+        return names;
+    }
+
+    /// <summary>Every screen and block of the module (references excluded) with the names it declares (LiteralPageNames).</summary>
+    internal IReadOnlyList<(string Page, IReadOnlySet<string> Names)> LiteralDeclaredNamesByPage()
+    {
+        var pages = new List<(string, IReadOnlySet<string>)>();
+        var pending = new Stack<IObjectSignature>(); pending.Push((IObjectSignature)_espace);
+        while (pending.TryPop(out var node)) {
+            if (Implements(node, "IReference")) continue;
+            if (PageKinds.Any(kind => Implements(node, kind))) { pages.Add((TypeResolver.Name(node) ?? "", LiteralPageNames(node))); continue; }
+            foreach (var child in node.Children.OfType<IObjectSignature>()) pending.Push(child);
+        }
+        return pages;
     }
 
     private static bool OwnedBy(HtmlJobAction action, string rootType, string rootName) =>
@@ -703,18 +799,20 @@ public sealed partial class ModelSession
                     // An expression that does not parse, written without a binding, in an attribute: as text it is the string literal
                     // of what it says (placeholder="Buscar por nome…" is "Buscar por nome…"); the patch, checked by compiling it.
                     var value = where.Length > 0 ? node.Get(where) : null;
-                    // Integration 24-1 familias (review): the literal is the patch only when the value is prose by the conservative
-                    // rule (ScreenHtml.NotAnExpression: two operands with no operator, a character no expression has, a ':' outside
-                    // a literal, a number mask). An expression typed wrong (a '(' or a quote not closed, an operator at the end, a
-                    // name and its '(' left open) is two readings: refused with the Verify's message and what its syntax lacks, no patch.
+                    // The parser proves a literal compiles, not that prose was intended. Preserve its offered correction,
+                    // but a name in scope or foreign-language syntax makes quoting an author's choice.
                     var literal = id.StartsWith("Parser", StringComparison.Ordinal) && value is { Length: > 0 } && !ScreenHtml.HoldsBraces(value) && !value.TrimStart().StartsWith('"')
                         && ScreenHtml.NotAnExpression(value);
                     var syntax = !literal && value is { Length: > 0 } && !ScreenHtml.HoldsBraces(value) ? Anvil.Core.Preflight.ExpressionSyntax.Check(value) : null;
                     Problem(ScreenDocument.Invalid, node, $"{where}: {detail.Trim()}" + (literal ? $" (\"{Clip(value!)}\" is no expression)" : syntax is { } s1 ? $" ({s1.Problem})" : ""),
-                        literal ? $"{where} holds an expression: as text, write its string literal ({where}='{ScreenHtml.Literal(value!)}'); the patch does it"
+                        literal ? $"{where} holds an expression: as text, write its string literal ({where}='{ScreenHtml.Literal(value!)}')"
                             : syntax is { } s2 ? $"{s2.Fix} (no patch: the expression meant and its text are two readings; a text goes in quotes)"
                             : "write the expression in the OutSystems expression language (the Verify's message names the fault)");
-                    if (literal) problems[^1] = problems[^1] with { Correct = new ScreenDocument.SetAttribute(where, ScreenHtml.Literal(value!)) };
+                    if (literal) {
+                        var certain = LiteralNames() is { } names && ScreenHtml.CertainLiteral(value!, names.Scope, names.Declared);
+                        problems[^1] = problems[^1] with { Correct = new ScreenDocument.SetAttribute(where, ScreenHtml.Literal(value!)),
+                            PatchRule = certain ? "TEXT_LITERAL_QUOTED" : "TEXT_LITERAL_CHOICE", LiteralIdentifiers = ScreenHtml.LiteralIdentifiers(value!) };
+                    }
                     continue;
                 }
                 var bare = unknown.Split('.')[0];
@@ -726,6 +824,7 @@ public sealed partial class ModelSession
                 var attribute = ExpressionWhere(node, bare);
                 Problem(ScreenDocument.NameUnknown, node, $"{(attribute.Length > 0 ? attribute : "{{ }}")}: no variable, input, aggregate or element of the page or the module is named '{bare}'" + (near.Count > 0 ? "; nearest: " + string.Join(", ", near) : ""),
                     near.Count == 1 ? $"{bare} -> {near[0]}" : "declare it (<var>, <input>, <aggregate>) or name one that exists", near, near.Count == 1 ? (attribute, bare, near[0]) : null);
+                if (near.Count == 1) problems[^1] = problems[^1] with { PatchRule = "NEAREST_NAME" };
             }
         }
 
@@ -782,6 +881,32 @@ public sealed partial class ModelSession
             foreach (var (node, _, name, role) in index.NamedNodes(options.Exclude)) if (role is not "widget" && Value(node, role)) names.Add(name);
             return names;
         }
+
+        /// <summary>What decides a literal's certainty: every name of the module, its references and the job (Scope), and the
+        /// names this job and this page declare (Declared: the one-slip rule, option B of the owner). Null when any of it cannot
+        /// be read (an op of the job that is no text where a text goes, a model node that throws): the literal is then a
+        /// choice, and nothing of the reading ever leaves this compile as its refusal.</summary>
+        private (IReadOnlySet<string> Scope, IReadOnlySet<string> Declared)? LiteralNames()
+        {
+            if (literalNamesVersion != version) {
+                literalNamesVersion = version;
+                literalNames = null;
+                try {
+                    var jobs = s._applyOps == null ? options.JobNames : LiteralJobNames(s._applyOps);
+                    if (s._applyOps == null || jobs != null) {
+                        var declared = new HashSet<string>(jobs ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+                        foreach (var (element, _) in ScreenHtmlText.Elements(document))
+                            foreach (var key in new[] { "name", "id" }) if (element.Get(key) is { Length: > 0 } name) declared.Add(name);
+                        if (root != null) declared.UnionWith(LiteralPageNames(root));
+                        literalNames = (s.LiteralScopeNames(jobs), declared);
+                    }
+                }
+                catch (Exception) { literalNames = null; }
+            }
+            return literalNames;
+        }
+        private int literalNamesVersion = -1;
+        private (IReadOnlySet<string> Scope, IReadOnlySet<string> Declared)? literalNames;
 
         // ---- the flow -----------------------------------------------------------------------------------------------------
         private IObjectSignature? Flow(ScreenHtml.Node top)
@@ -1058,7 +1183,9 @@ public sealed partial class ModelSession
             }
             if (name != null && !string.Equals(TypeResolver.Name(widget), name, StringComparison.Ordinal))
                 Problem(ScreenDocument.Invalid, node, $"{nameAttribute}=\"{name}\" is taken in this {rootKind}: the Studio named it '{TypeResolver.Name(widget)}'", "give it a name no other element of the page has");
-            ClearBorn(widget);
+            // A native Table keeps its HeaderRow and Row (the Model API lists them as its widgets in O11): what is born in them is
+            // cleared there (TableRows).
+            if (kind != "TableRecords") ClearBorn(widget);
             Track(widget);
             var written = new HashSet<string>(StringComparer.Ordinal);
             if (name != null) written.Add("Name");
@@ -1067,6 +1194,8 @@ public sealed partial class ModelSession
             // then the facts in the order of the text.
             // What the element spends on itself (its key, its name, the tag of an HTML element...): the preflight skips the same.
             written.UnionWith(Facts(widget, kind, node, ScreenHtmlModuleMode.Widget, ScreenDocument.WidgetSkip(node, kind)));
+            var table = kind == "TableRecords" ? ScreenHtmlTables.NativeTable(node) : null;
+            if (table != null) TableFacts(widget, table, written);
             // A block that did not resolve has no inputs, events or placeholders: its name is the one problem, and what its
             // slots hold is still compiled (every name of the document is checked in the same refusal).
             var lost = kind == "MobileBlockInstanceWidget" && PrototypeBuilder.Prop(widget, "SourceBlock") == null;
@@ -1094,11 +1223,47 @@ public sealed partial class ModelSession
                 foreach (var slot in node.Children.Where(c => !c.IsText && c.Tag == "slot")) Children(host, slot.Children.ToList(), k + "/" + slot.Get("name"), owner);
             }
             else if (kind == "MobileBlockInstanceWidget") Slots(widget, node, k, owner);
+            else if (table != null) TableRows(widget, table, k, owner);
             else Children(widget, node.Children.ToList(), k, owner);
             if (lost) return;
             NativeVisual(widget, kind, node, tagText, written);   // CX17: F2 class and F1 rows of a new widget, before its Reset
             events.Add(() => Events(widget, kind, node));
             events.Add(() => Reset(widget, kind, written));
+        }
+
+        // ---- the native Table (a data table: ScreenHtmlTables.NativeTable) ----------------------------------------------------
+        // Its list wherever the text writes it (the table, its tbody or its template row) is the Source; the class of the header row
+        // and of the template row are StyleHeader and StyleRow; the List's own attributes beside the list are left out (a Table
+        // renders every row), said once in normalized; any other attribute of a part is refused (the Table has no property for it).
+        private void TableFacts(IObjectSignature widget, ScreenHtmlTables.NativeTableShape table, HashSet<string> written)
+        {
+            if (!ReferenceEquals(table.SourceAt, table.Table)) { Assign(widget, "TableRecords", "Source", table.Source, table.SourceAt, "list", false); written.Add("Source"); }
+            // The class of each row: its section's and its <tr>'s (ScreenHtmlTables.RowClass); the List's classes and attributes an
+            // older reading wrote where the list is are left out and said. Any other attribute of a part is refused, with the patch
+            // that removes it (ScreenDocument.TableProblems, among the rules of every element), and so is half a column.
+            foreach (var (header, style) in new[] { (true, "StyleHeader"), (false, "StyleRow") })
+                if (ScreenHtmlTables.RowClass(table, header) is { } rowClass) { Assign(widget, "TableRecords", style, rowClass, header ? table.HeadRow : table.BodyRow, "class", true); written.Add(style); }
+            // What it made of its parts' classes and of the List's attributes (ScreenHtmlTables.Folded, the edit's note too).
+            normalized.Add(new JsonObject
+            {
+                ["code"] = "TABLE_NATIVE", ["line"] = table.Table.Line, ["column"] = table.Table.Column, ["element"] = "TableRecords", ["columns"] = table.HeaderCells.Count,
+                ["note"] = $"a <table> with one header row and one template row over {(table.Source.Length > 0 ? table.Source : "no list yet")} is the native Table: one column per <th>/<td> pair (header cell and row cell in the same column); the reading writes it as <table list=\"{table.Source}\">"
+                    + string.Concat(ScreenHtmlTables.Folded(table).Select(note => "; " + note)),
+            });
+        }
+
+        // The header row and the template row of a native Table are its HeaderRow and Row contents: one header cell per <th>, one row
+        // cell per <td>, in order (what the Studio created in them first is cleared).
+        private void TableRows(IObjectSignature widget, ScreenHtmlTables.NativeTableShape table, string k, IObjectSignature owner)
+        {
+            foreach (var (name, row) in new[] { ("HeaderRow", table.HeadRow), ("Row", table.BodyRow) })
+            {
+                var content = PrototypeBuilder.Prop(widget, name) as IObjectSignature;
+                if (content == null) { Problem(ScreenDocument.Invalid, row, $"the native Table was created without its {name}"); continue; }
+                byK[k + "/content:" + name] = content;
+                ClearBorn(content);
+                Children(content, row.Children.ToList(), k + "/content:" + name, owner, row);
+            }
         }
 
         private void Slots(IObjectSignature instance, ScreenHtml.Node node, string k, IObjectSignature owner)

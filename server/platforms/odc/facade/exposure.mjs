@@ -42,6 +42,8 @@ export const LICENSEE_CHANGES = Object.freeze([
   'in SSAM\'s documentation, evidence and proof levels become one seal (proven, refused, not proven, undetermined); proof lists, stamps, mismatches, limit origins and the index identity are left out; guidance and limits stay',
   'stack frames, source file names, kernel class names, suite commands, run dates and sessions, round and review names, owner decisions, blind tests and project document names are left out of SSAM\'s prose',
   'ssam_reference answers usage references by part: a whole document becomes its list of parts with the call for each one, within a byte limit per call and per day',
+  // (review marco-a6 B1, the Integradora 19/10: see scrub, the patchedJob line)
+  'a job SSAM corrected comes back as nextBasedOn (its path and sha256); the server\'s own record of it (patchedJob, with its provenance file) is left out',
 ]);
 export const LICENSEE_INSTRUCTION = 'Answers carry what you need to use SSAM: grammars, op contracts, examples by id with the seal "proven", '
   + 'refusals with fix, patch and continuation. Paths of the server that you never pass back read <server>.';
@@ -496,7 +498,27 @@ function scrubString(value, key, ctx) {
   }
   // (a runtime prose that held only a CLI form is left out; one that held a server path keeps <server>, as before)
   if (proseKey(RUNTIME_PROSE, key)) { const after = scrubRuntimeText(value, ctx); return after.trim() || !value.trim() ? after : DROP; }
+  // (marco-a6, the family "no server path reaches a licensee") a whole value that is a path of the server is served only as
+  // a handle the next call takes back (under a handle root, in any key: review marco-a6 B1, SSAM answers its handles as
+  // path, snapshot, manifest, receipt, evidence, checks, xif... too) or as the very path the caller sent in this call; any
+  // other (a root itself, a folder outside the roots, a temp or customers folder) is <server>
+  if (ctx.mode === 'runtime') {
+    const whole = value.trim();
+    if (isServerPath(whole) && !ctx.isHandle(whole) && !ctx.sentPaths?.has(whole)) return MARK;
+  }
   return value;
+}
+// The whole paths the caller sent in the arguments of the call (its own text, which tells it nothing new).
+function sentPathsOf(args) {
+  const out = new Set();
+  const walk = (value, depth) => {
+    if (out.size >= MAX_ECHOES || depth > 8) return;
+    if (typeof value === 'string') { const text = value.trim(); if (isServerPath(text)) out.add(text); return; }
+    if (Array.isArray(value)) { for (const v of value) walk(v, depth + 1); return; }
+    if (value && typeof value === 'object') for (const v of Object.values(value)) walk(v, depth + 1);
+  };
+  walk(args, 0);
+  return out;
 }
 function scrub(value, ctx, key = null, depth = 0) {
   if (typeof value === 'string') return key === null && ctx.mode !== 'doc' ? value : scrubString(value, key, ctx);
@@ -504,7 +526,10 @@ function scrub(value, ctx, key = null, depth = 0) {
     if (ctx.mode === 'doc' && key === 'why' && value.every(v => typeof v === 'string')) return DROP; // the matched words
     // Round 6 (re-review round 5, LOW 3; D17): a string in a list is read like a string under the list's key, in every mode
     // (a list of prose is prose, a report's list of paths is paths); before, only the prose lists of the documentation were.
-    return value.map(v => (typeof v === 'string' ? scrubString(v, key, ctx) : scrub(v, ctx, key, depth + 1))).filter(v => v !== DROP);
+    const out = value.map(v => (typeof v === 'string' ? scrubString(v, key, ctx) : scrub(v, ctx, key, depth + 1))).filter(v => v !== DROP);
+    // (marco-a6) a runtime list of paths of the server only (the roots of a refusal) is left out
+    if (ctx.mode === 'runtime' && value.length && value.every(v => typeof v === 'string' && isServerPath(v.trim())) && out.every(v => v === MARK)) return DROP;
+    return out;
   }
   if (!isObject(value)) return value;
   const mode = typeof value.schemaVersion === 'string' && DOC_SCHEMA.test(value.schemaVersion) ? 'doc' : ctx.mode;
@@ -533,6 +558,11 @@ function scrub(value, ctx, key = null, depth = 0) {
     }
     // (a verb of an operations map, such as set, is no code key)
     if (k === 'arguments' && isCall(value)) { out[k] = v; continue; }
+    // (review marco-a6 B1, the Integradora 19/10: X3's patchedJob leaves a licensee's answer whole. Its path and hash are
+    // nextBasedOn's, the same corrected job (appliedJobIdentity + nextBasedOnOf), and its source is the server's provenance
+    // sidecar, which no tool takes back; when the server could not verify the corrected file, nextBasedOn names the job that
+    // ran, never the unverified one. The owner reads it whole.)
+    if (here.mode !== 'doc' && k === 'patchedJob') continue;
     // (round 6, LOW 5: the definition of a tool is documentation, its schema code; exposedToolDefinition reads both)
     if (k === 'definition' && value.schemaVersion === 'ssam-tool-definition/1' && isObject(v)) { out[k] = exposedToolDefinition(v, here); continue; }
     if (CODE_KEYS.has(k) && key !== 'operations') { out[k] = here.mode === 'doc' ? docCode(k === 'native' ? withoutRuntimeProvenance(v) : v, here, k) : v; continue; }
@@ -552,7 +582,10 @@ function scrub(value, ctx, key = null, depth = 0) {
     if (here.mode === 'doc' && k === 'text' && (key === 'example' || key === 'card') && typeof v === 'string') { out[k] = v; continue; }
     // (round 5, LOW 3: the data of a check is SSAM's answer about the customer's job or delivery, never the customer's
     // records: it follows the runtime rule, so its prose loses kernel classes, source files and server paths)
-    if (here.mode !== 'doc' && DATA_KEYS.has(k) && !(k === 'data' && here.checkData && depth === 0)) { out[k] = v; continue; }
+    // (review marco-a6 M2: the messages of a problem are SSAM's prose wherever they sit. A problem of a refusal, an element of
+    // a problems list, keeps under items the members fitProblems grouped, each with its own message and fix: SSAM's own
+    // problems, read by the rule like the group's first message, never the customer's records)
+    if (here.mode !== 'doc' && DATA_KEYS.has(k) && !(k === 'data' && here.checkData && depth === 0) && !(k === 'items' && key === 'problems')) { out[k] = v; continue; }
     const next = scrub(v, here, k, depth + 1);
     if (next !== DROP) out[k] = next;
   }
@@ -717,7 +750,9 @@ export function exposedValue(value, { exposure = 'owner', handleRoots = [], tool
   const ctx = { mode: modeOf(tool, args, origin), isHandle: handleTest(handleRoots), suiteNames, contractData: served.tool === 'ssam_reference' && CONTRACT_KINDS.has(served.args?.kind),
     checkData: served.tool === 'ssam_reference' && CHECK_KINDS.has(served.args?.kind), evidenceRoot: tool === 'ssam_evidence',
     // (round 7b, B6: the caller's own texts, held where SSAM's prose quotes them)
-    echoes: echoesOf(args) };
+    echoes: echoesOf(args),
+    // (marco-a6: the caller's own paths, served back as it sent them)
+    sentPaths: sentPathsOf(args) };
   const out = scrub(value, ctx);
   return out === DROP ? null : out;
 }

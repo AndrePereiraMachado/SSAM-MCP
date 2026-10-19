@@ -1,0 +1,396 @@
+{
+  "encode": [
+    {
+      "type": "Date",
+      "json": "2026-09-28",
+      "written": "2026-09-28"
+    },
+    {
+      "type": "Date",
+      "json": "2026-09-28T00:00:00",
+      "written": "2026-09-28"
+    },
+    {
+      "type": "Date",
+      "json": "28/09/2026",
+      "written": null
+    },
+    {
+      "type": "Date",
+      "json": "2026-09-28T10:00:00",
+      "written": null
+    },
+    {
+      "type": "Time",
+      "json": "13:45",
+      "written": "13:45:00"
+    },
+    {
+      "type": "Time",
+      "json": "13:45:10",
+      "written": "13:45:10"
+    },
+    {
+      "type": "Time",
+      "json": "1:45 PM",
+      "written": null
+    },
+    {
+      "type": "Boolean",
+      "json": true,
+      "written": "True"
+    },
+    {
+      "type": "Boolean",
+      "json": "false",
+      "written": "False"
+    },
+    {
+      "type": "Boolean",
+      "json": "True",
+      "written": "True"
+    },
+    {
+      "type": "Boolean",
+      "json": "yes",
+      "written": null
+    },
+    {
+      "type": "Integer",
+      "json": 720,
+      "written": "720"
+    },
+    {
+      "type": "Integer",
+      "json": "720",
+      "written": "720"
+    },
+    {
+      "type": "Integer",
+      "json": 7.5,
+      "written": null
+    },
+    {
+      "type": "Integer",
+      "json": 3000000000,
+      "written": null
+    },
+    {
+      "type": "Long Integer",
+      "json": "9007199254740993",
+      "written": "9007199254740993"
+    },
+    {
+      "type": "Long Integer",
+      "json": 9007199254740993,
+      "written": null
+    },
+    {
+      "type": "Long Integer",
+      "json": 42,
+      "written": "42"
+    },
+    {
+      "type": "Decimal",
+      "json": 12.5,
+      "written": "12.5"
+    },
+    {
+      "type": "Decimal",
+      "json": "12.50",
+      "written": "12.50"
+    },
+    {
+      "type": "Decimal",
+      "json": "12,5",
+      "written": null
+    },
+    {
+      "type": "Text",
+      "json": "Olá, mundo",
+      "written": "Olá, mundo"
+    },
+    {
+      "type": "Publisher Identifier",
+      "json": "1",
+      "written": "1"
+    },
+    {
+      "type": "Publisher Identifier",
+      "json": 3,
+      "written": "3"
+    },
+    {
+      "type": "Publisher Identifier",
+      "json": true,
+      "written": null
+    },
+    {
+      "type": "DateTime",
+      "json": null,
+      "written": null
+    },
+    {
+      "type": "Currency",
+      "json": "12.50",
+      "written": "12.50"
+    },
+    {
+      "type": "Email",
+      "json": " USER@example.test ",
+      "written": " USER@example.test "
+    },
+    {
+      "type": "Phone Number",
+      "json": "+55 (11) 1234-5678",
+      "written": "+55 (11) 1234-5678"
+    },
+    {
+      "type": "Date Time",
+      "json": "2026-10-03T23:55:00.123",
+      "written": "2026-10-03 23:55:00"
+    },
+    {
+      "type": "DateTime",
+      "json": "2026-10-03T23:55:00Z",
+      "written": null
+    },
+    {
+      "type": "Decimal",
+      "json": "1.25e2",
+      "written": "125"
+    },
+    {
+      "type": "Decimal",
+      "json": "12345678901234567890123456789",
+      "written": "12345678901234567890123456789"
+    },
+    {
+      "type": "Decimal",
+      "json": "123456789012345678901234567890",
+      "written": null
+    },
+    {
+      "type": "Decimal",
+      "json": "0.12345678901234567890123456789",
+      "written": "0.1234567890123456789012345679"
+    },
+    {
+      "type": "Publisher Identifier",
+      "json": " opaque-id ",
+      "written": "opaque-id"
+    },
+    {
+      "type": "Publisher Identifier",
+      "json": " ",
+      "written": null
+    },
+    {
+      "type": "Time",
+      "json": "1900-01-01T13:45:00",
+      "written": "13:45:00"
+    },
+    {
+      "type": "Boolean",
+      "json": "1",
+      "written": null
+    },
+    {
+      "type": "Integer",
+      "json": "1e2",
+      "written": "100"
+    },
+    {
+      "type": "Integer",
+      "json": "2147483647",
+      "written": "2147483647"
+    },
+    {
+      "type": "Integer",
+      "json": "-2147483648",
+      "written": "-2147483648"
+    },
+    {
+      "type": "Integer",
+      "json": "2147483648",
+      "written": null
+    },
+    {
+      "type": "Long Integer",
+      "json": "9223372036854775807",
+      "written": "9223372036854775807"
+    },
+    {
+      "type": "Future Type",
+      "json": " as-is ",
+      "written": " as-is "
+    },
+    {
+      "type": "Binary Data",
+      "json": "YWJj",
+      "written": "YWJj"
+    },
+    {
+      "type": "Text",
+      "json": null,
+      "written": null
+    },
+    {
+      "type": "Boolean",
+      "json": null,
+      "written": null
+    },
+    {
+      "type": "Integer",
+      "json": null,
+      "written": null
+    },
+    {
+      "type": "Long Integer",
+      "json": null,
+      "written": null
+    },
+    {
+      "type": "Decimal",
+      "json": null,
+      "written": null
+    },
+    {
+      "type": "Currency",
+      "json": null,
+      "written": null
+    },
+    {
+      "type": "Date",
+      "json": null,
+      "written": null
+    },
+    {
+      "type": "Date Time",
+      "json": null,
+      "written": null
+    },
+    {
+      "type": "Time",
+      "json": null,
+      "written": null
+    },
+    {
+      "type": "Publisher Identifier",
+      "json": null,
+      "written": null
+    },
+    {
+      "type": "Unknown",
+      "json": null,
+      "written": null
+    }
+  ],
+  "canonical": [
+    {
+      "type": "Decimal",
+      "text": "12.50",
+      "canonical": "12.5"
+    },
+    {
+      "type": "Currency",
+      "text": "1.250e2",
+      "canonical": "125"
+    },
+    {
+      "type": "Decimal",
+      "text": "0.12345678901234567890123456789",
+      "canonical": "0.1234567890123456789012345679"
+    },
+    {
+      "type": "Decimal",
+      "text": "12345678901234567890123456789",
+      "canonical": "12345678901234567890123456789"
+    },
+    {
+      "type": "Boolean",
+      "text": "1",
+      "canonical": "True"
+    },
+    {
+      "type": "Boolean",
+      "text": "0",
+      "canonical": "False"
+    },
+    {
+      "type": "Boolean",
+      "text": "FALSE",
+      "canonical": "False"
+    },
+    {
+      "type": "Integer",
+      "text": "0012",
+      "canonical": "12"
+    },
+    {
+      "type": "Long Integer",
+      "text": "0012",
+      "canonical": "12"
+    },
+    {
+      "type": "Publisher Identifier",
+      "text": " 0012 ",
+      "canonical": "0012"
+    },
+    {
+      "type": "Date Time",
+      "text": "2026-10-03T23:55:00",
+      "canonical": "2026-10-03 23:55:00"
+    },
+    {
+      "type": "Date",
+      "text": "2026-09-28T10:00:00",
+      "canonical": "2026-09-28"
+    },
+    {
+      "type": "Time",
+      "text": "1900-01-01T13:45:00",
+      "canonical": "13:45:00"
+    },
+    {
+      "type": "Text",
+      "text": " Case ",
+      "canonical": " Case "
+    },
+    {
+      "type": "Email",
+      "text": "a@b.test",
+      "canonical": "a@b.test"
+    },
+    {
+      "type": "Phone Number",
+      "text": "+55 11",
+      "canonical": "+55 11"
+    },
+    {
+      "type": "Unknown",
+      "text": " as-is ",
+      "canonical": " as-is "
+    },
+    {
+      "type": "Integer",
+      "text": "invalid",
+      "canonical": "invalid"
+    },
+    {
+      "type": "DateTime",
+      "text": "bad",
+      "canonical": "bad"
+    },
+    {
+      "type": "Decimal",
+      "text": "12,5",
+      "canonical": "12,5"
+    },
+    {
+      "type": "Decimal",
+      "text": null,
+      "canonical": null
+    }
+  ]
+}

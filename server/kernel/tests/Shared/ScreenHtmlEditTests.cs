@@ -63,6 +63,8 @@ public sealed class ScreenHtmlEditTests
                 case "IfWidget": node.Set("TrueBranch", node.Add(W("IfBranchWidget"))).Set("FalseBranch", node.Add(W("IfBranchWidget"))); break;
                 case "Link" or "Button": Event(node, "OnClick"); break;
                 case "Input": Event(node, "OnChange"); break;
+                // A native Table is born with its HeaderRow and Row (O11: a MobileWidget each, widgets of the Table).
+                case "TableRecords": node.Set("HeaderRow", node.Add(W("MobileWidget", "headerRow"))).Set("Row", node.Add(W("MobileWidget", "row"))); break;
                 case "ExtendedProperty":
                     node.Set("Property", "").Set("Value", new Code(""));
                     if (parent.Props.GetValueOrDefault("ExtendedProperties") is not List<Node> list) parent.Set("ExtendedProperties", list = []);
@@ -149,8 +151,442 @@ public sealed class ScreenHtmlEditTests
         card.Add(N("Argument")).Set("Parameter", title).Set("Value", new Code("\"Total\""));
         card.Add(W("PlaceholderContentWidget")).Set("Placeholder", block.Children.Last()).Add(W("TextWidget")).Set("Text", "Body");
         screen.Add(W("Container", "Hidden")).Set("Visible", new Code("Page > 0"));
-        screen.Add(W("TableRecords", "Grid")).Add(W("HeaderCell")).Add(W("TextWidget")).Set("Text", "Header");
+        // An opaque node with children (a generic MobileWidget: the language has no row for it).
+        screen.Add(W("MobileWidget", "Grid")).Add(W("Container")).Add(W("TextWidget")).Set("Text", "Header");
+        // A native Table of two columns over the page's list (its HeaderRow and Row as O11 has them).
+        var lines = screen.Add(W("TableRecords", "Lines")).Set("Source", new Code("GetOrders.List"));
+        var head = lines.Add(W("MobileWidget", "headerRow"));
+        var row = lines.Add(W("MobileWidget", "row"));
+        lines.Set("HeaderRow", head).Set("Row", row);
+        foreach (var (label, value) in new[] { ("Name", "GetOrders.List.Current.Order.Name"), ("Total", "GetOrders.List.Current.Order.Total") })
+        {
+            head.Add(W("HeaderCell")).Add(W("TextWidget")).Set("Text", label);
+            row.Add(W("RowCell")).Add(W("Expression")).Set("Value", new Code(value));
+        }
+        // A container with a List of cards (where the battery writes a new data table, beside it).
+        screen.Add(W("Container", "Panel")).Add(W("List", "Cards")).Set("Source", new Code("GetOrders.List")).Add(W("TextWidget")).Set("Text", "Card");
         return module;
+    }
+
+    private static ScreenHtml.Node TableOf(ScreenHtml.Node tree, string id) =>
+        ScreenHtmlText.Elements(tree).Select(x => x.Node).Single(n => n.Tag == "table" && n.Get("id") == id);
+
+    // B1 of the review of round 1: a new native Table in an edit keeps its rows (the Order of a new element took O11's
+    // MobileWidget rows for widgets the edit did not write, and deleted them); the page reads back with it.
+    [Fact]
+    public void AnEditAddsANativeTableToAPageAndItKeepsItsRows()
+    {
+        var module = Module();
+        var (_, document) = Read(module);
+        var table = "<table list=\"GetOrders.List\" class=\"added\"><thead><tr><th>Item</th><th>Page</th></tr></thead>"
+            + "<tbody><tr><td>{{ GetOrders.List.Current.Order.Name }}</td><td>{{ Page }}</td></tr></tbody></table>\n";
+        var tree = ScreenHtml.Parse(document.Html);
+        var section = ScreenHtmlText.Elements(tree).Select(x => x.Node).First(n => n.Tag == "section");
+        section.Children.Add(ScreenHtml.Parse(table).Children[0]);
+        var (result, after, _) = Apply(module, [ScreenHtmlText.Write(section)]);
+        Assert.False(result.Refused, Codes(result) + " " + string.Join(" | ", result.Problems.Select(p => p["message"])));
+        var read = ScreenHtml.Parse(after);
+        var added = ScreenHtmlText.Elements(read).Select(x => x.Node).Single(n => n.Tag == "table" && n.Get("class") == "added");
+        Assert.Equal("GetOrders.List", added.Get("list"));
+        Assert.Equal(["Item", "Page"], ScreenHtmlText.Elements(added).Select(x => x.Node).Where(n => n.Tag == "th").Select(n => string.Concat(n.Children.Where(c => c.IsText).Select(c => c.Text)).Trim()));
+        Assert.Equal(2, ScreenHtmlText.Elements(added).Count(x => x.Node.Tag == "td"));
+        var again = ScreenHtml.Module(module, new Reader()).Read("Orders");
+        Assert.Empty(again.Compare(again.Html));
+    }
+
+    // M1 of the review of round 1: half a column of a native Table is refused once, with the Table's k, the pointer of the edit and
+    // the patch that removes the other half (the whole column); the patch plans and applies.
+    [Fact]
+    public void HalfAColumnOfANativeTableIsRefusedOnceWithThePatchThatRemovesTheWholeColumn()
+    {
+        foreach (var cell in new[] { "th", "td" })
+        {
+            var module = Module();
+            var (reading, document) = Read(module);
+            var tree = ScreenHtml.Parse(document.Html);
+            var table = TableOf(tree, "Lines");
+            var half = ScreenHtmlText.Elements(table).Select(x => x.Node).Where(n => n.Tag == cell).Last();
+            ScreenHtmlText.Parents(tree)[half].Children.Remove(half);
+            var plan = reading.Edit(document, [ScreenHtmlText.Write(table)]);
+            Assert.True(plan.Refused);
+            var problem = Assert.Single(plan.Result.Problems);
+            Assert.Equal("HTML_TABLE_COLUMN", problem["code"]!.ToString());
+            Assert.Equal(table.Get("k"), problem["k"]!.ToString());
+            Assert.False(string.IsNullOrEmpty(problem["pointer"]?.ToString()));
+            Assert.Contains("remove the whole column", problem["fix"]!.ToString());
+            var patched = problem["patch"]![0]!["value"]!.AsArray().Select(e => e!.ToString()).ToList();
+            var (result, after, _) = Apply(module, patched);
+            Assert.False(result.Refused, Codes(result));
+            var lines = TableOf(ScreenHtml.Parse(after), "Lines");
+            Assert.Single(ScreenHtmlText.Elements(lines), x => x.Node.Tag == "th");
+            Assert.Single(ScreenHtmlText.Elements(lines), x => x.Node.Tag == "td");
+            Assert.DoesNotContain(">Total<", after);
+        }
+    }
+
+    // M-A of the review of round 2: colspan in an edit follows the document's rule (HTML_TABLE_COLSPAN), refused once with the
+    // Table's k, the pointer and the patch that writes the cell without colspan and one empty cell per column it spanned. A column of
+    // the reading keeps its own cell, emptied, with its k (the platform deletes the whole column with either of its cells): the patch never
+    // removes a column of data (it removed the other cell and left the colspan: a header one column wider than the rows).
+    [Fact]
+    public void ColspanOfANativeTableInAnEditIsRefusedOnceWithThePatchThatWritesTheColumnsItSpannedAsEmptyCells()
+    {
+        foreach (var tag in new[] { "th", "td" })
+        {
+            var module = Module();
+            var (reading, document) = Read(module);
+            var tree = ScreenHtml.Parse(document.Html);
+            var table = TableOf(tree, "Lines");
+            var cells = ScreenHtmlText.Elements(table).Select(x => x.Node).Where(n => n.Tag == tag).ToList();
+            var spanned = cells[1].Get("k");
+            Assert.NotNull(spanned);
+            cells[0].Attributes.Add(new("colspan", "2"));
+            ScreenHtmlText.Parents(tree)[cells[1]].Children.Remove(cells[1]);
+            var plan = reading.Edit(document, [ScreenHtmlText.Write(table)]);
+            Assert.True(plan.Refused);
+            var problem = Assert.Single(plan.Result.Problems);
+            Assert.Equal("HTML_TABLE_COLSPAN", problem["code"]!.ToString());
+            Assert.Equal(table.Get("k"), problem["k"]!.ToString());
+            Assert.False(string.IsNullOrEmpty(problem["pointer"]?.ToString()));
+            var patched = problem["patch"]![0]!["value"]!.AsArray().Select(e => e!.ToString()).ToList();
+            var written = ScreenHtmlText.Elements(ScreenHtml.Parse(Assert.Single(patched))).Select(x => x.Node).Where(n => n.Tag == tag).ToList();
+            Assert.Equal(2, written.Count);
+            Assert.All(written, c => Assert.Null(c.Get("colspan")));
+            Assert.Equal(spanned, written[1].Get("k"));
+            Assert.DoesNotContain(written[1].Children, c => !c.IsText || c.Text!.Trim().Length > 0);
+            var (result, after, _) = Apply(module, patched);
+            Assert.False(result.Refused, Codes(result));
+            var lines = TableOf(ScreenHtml.Parse(after), "Lines");
+            Assert.Equal(2, ScreenHtmlText.Elements(lines).Count(x => x.Node.Tag == "th"));
+            Assert.Equal(2, ScreenHtmlText.Elements(lines).Count(x => x.Node.Tag == "td"));
+            Assert.DoesNotContain("colspan", after);
+        }
+        // A new data table in an edit: the columns it spanned are new empty cells, the document's patch.
+        {
+            var module = Module();
+            var (reading, document) = Read(module);
+            var tree = ScreenHtml.Parse(document.Html);
+            var section = ScreenHtmlText.Elements(tree).Select(x => x.Node).First(n => n.Tag == "section");
+            section.Children.Add(ScreenHtml.Parse("<table list=\"GetOrders.List\" class=\"added\"><thead><tr><th colspan=\"2\">Item</th></tr></thead>"
+                + "<tbody><tr><td>{{ GetOrders.List.Current.Order.Name }}</td><td>{{ Page }}</td></tr></tbody></table>").Children[0]);
+            var plan = reading.Edit(document, [ScreenHtmlText.Write(section)]);
+            var problem = Assert.Single(plan.Result.Problems);
+            Assert.Equal("HTML_TABLE_COLSPAN", problem["code"]!.ToString());
+            var patched = problem["patch"]![0]!["value"]!.AsArray().Select(e => e!.ToString()).ToList();
+            Assert.Contains("<th>Item</th>", Assert.Single(patched).Replace("\n", "").Replace(" ", ""));
+            var (result, after, _) = Apply(module, patched);
+            Assert.False(result.Refused, Codes(result));
+            var added = ScreenHtmlText.Elements(ScreenHtml.Parse(after)).Select(x => x.Node).Single(n => n.Tag == "table" && n.Get("class") == "added");
+            Assert.Equal(2, ScreenHtmlText.Elements(added).Count(x => x.Node.Tag == "th"));
+            Assert.Equal(2, ScreenHtmlText.Elements(added).Count(x => x.Node.Tag == "td"));
+        }
+    }
+
+    // The family of M1 the colspan patch of round 3 relies on (its probes C1, C3 and C4): a cell of the reading written again without
+    // its k while the other cell of its column stays, the rows as many. The platform deletes the whole column with either of its cells,
+    // so the Verify found a cell short and kept nothing; the plan refuses it once (HTML_TABLE_COLUMN) with the patch that gives the new
+    // cell of that column the k of the column's own, its content the edit's (it plans and applies).
+    [Fact]
+    public void ACellWrittenAgainWithoutItsKWhileTheOtherCellOfItsColumnStaysIsRefusedWithThePatchThatKeepsTheColumnsOwn()
+    {
+        foreach (var (tag, text) in new[] { ("th", "<th>Amount</th>"), ("td", "<td>{{ Page }}</td>") })
+        {
+            var module = Module();
+            var (reading, document) = Read(module);
+            var tree = ScreenHtml.Parse(document.Html);
+            var table = TableOf(tree, "Lines");
+            var cells = ScreenHtmlText.Elements(table).Select(x => x.Node).Where(n => n.Tag == tag).ToList();
+            var own = cells[1].Get("k")!;
+            var row = ScreenHtmlText.Parents(tree)[cells[1]];
+            row.Children[row.Children.IndexOf(cells[1])] = ScreenHtml.Parse(text).Children[0];
+            var plan = reading.Edit(document, [ScreenHtmlText.Write(table)]);
+            var problem = Assert.Single(plan.Result.Problems);
+            Assert.Equal("HTML_TABLE_COLUMN", problem["code"]!.ToString());
+            Assert.Equal(table.Get("k"), problem["k"]!.ToString());
+            Assert.Contains("<" + tag + " k=\"" + own + "\">", problem["message"]!.ToString());
+            var patched = problem["patch"]![0]!["value"]!.AsArray().Select(e => e!.ToString()).ToList();
+            var written = ScreenHtmlText.Elements(ScreenHtml.Parse(Assert.Single(patched))).Select(x => x.Node).Where(n => n.Tag == tag).ToList();
+            Assert.Equal(own, written[1].Get("k"));
+            Assert.Equal(ScreenHtmlText.Write(ScreenHtml.Parse(text).Children[0]).Replace("<" + tag, "<" + tag + " k=\"" + own + "\""), ScreenHtmlText.Write(written[1]));
+            var (result, after, _) = Apply(module, patched);
+            Assert.False(result.Refused, Codes(result));
+            var lines = TableOf(ScreenHtml.Parse(after), "Lines");
+            Assert.Equal(2, ScreenHtmlText.Elements(lines).Count(x => x.Node.Tag == "th"));
+            Assert.Equal(2, ScreenHtmlText.Elements(lines).Count(x => x.Node.Tag == "td"));
+            Assert.Contains(tag == "th" ? "Amount" : "{{ Page }}", ScreenHtmlText.Write(lines));
+        }
+    }
+
+    // The owner's decision of 2026-10-19 (round 4): a cell of a native Table spans one column and one row. colspan with the rows as
+    // many cells (the header one column wider than the rows) and rowspan (on the template row it pushes the next record's row; on
+    // the header row too), in any case and with ext:, written new are refused (HTML_TABLE_COLSPAN, the Table's k, the pointer), every
+    // cell of every table of the edit in one refusal with the other rules of the table, and one patch that removes them all, which
+    // plans and applies: the table reads back as it was.
+    [Fact]
+    public void ACellOfANativeTableThatSpansAColumnOrARowWrittenNewIsOneRefusalWhosePatchRemovesTheSpan()
+    {
+        foreach (var (tag, at, attribute, value) in new[] { ("th", 0, "colspan", "2"), ("td", 1, "colspan", "3"), ("td", 0, "rowspan", "2"), ("th", 1, "rowspan", "2"),
+                     ("th", 1, "COLSPAN", "2"), ("td", 1, "ext:rowspan", "2") })
+        {
+            var module = Module();
+            var (reading, document) = Read(module);
+            var tree = ScreenHtml.Parse(document.Html);
+            var table = TableOf(tree, "Lines");
+            ScreenHtmlText.Elements(table).Select(x => x.Node).Where(n => n.Tag == tag).ElementAt(at).Attributes.Add(new(attribute, value));
+            var plan = reading.Edit(document, [ScreenHtmlText.Write(table)]);
+            Assert.True(plan.Refused, attribute + " on a " + tag);
+            var problem = Assert.Single(plan.Result.Problems);
+            Assert.Equal("HTML_TABLE_COLSPAN", problem["code"]!.ToString());
+            Assert.Equal(table.Get("k"), problem["k"]!.ToString());
+            Assert.Contains(attribute + "=\"" + value + "\"", problem["message"]!.ToString());
+            Assert.False(string.IsNullOrEmpty(problem["pointer"]?.ToString()));
+            var patched = problem["patch"]![0]!["value"]!.AsArray().Select(e => e!.ToString()).ToList();
+            Assert.DoesNotContain("span=", Assert.Single(patched), StringComparison.OrdinalIgnoreCase);
+            var (result, after, _) = Apply(module, patched);
+            Assert.False(result.Refused, Codes(result));
+            Assert.Equal(document.Html, after);
+        }
+        // Every cell of every table in one refusal, beside the other rules of a table: colspan on a header cell and rowspan on a row
+        // cell of the reading's Table with an attribute of its <tbody>, and a new data table with rowspan on its header and colspan
+        // on its template row, in one edit list.
+        {
+            var module = Module();
+            var (reading, document) = Read(module);
+            var tree = ScreenHtml.Parse(document.Html);
+            var table = TableOf(tree, "Lines");
+            var parts = ScreenHtmlText.Elements(table).Select(x => x.Node).ToList();
+            parts.First(n => n.Tag == "th").Attributes.Add(new("colspan", "2"));
+            parts.Last(n => n.Tag == "td").Attributes.Add(new("rowspan", "2"));
+            parts.First(n => n.Tag == "tbody").Attributes.Add(new("data-x", "1"));
+            var section = ScreenHtmlText.Elements(tree).Select(x => x.Node).First(n => n.Tag == "section");
+            section.Children.Add(ScreenHtml.Parse("<table list=\"GetOrders.List\" class=\"added\"><thead><tr><th rowspan=\"2\">Item</th><th>Page</th></tr></thead>"
+                + "<tbody><tr><td colspan=\"2\">{{ GetOrders.List.Current.Order.Name }}</td><td>{{ Page }}</td></tr></tbody></table>").Children[0]);
+            var plan = reading.Edit(document, [ScreenHtmlText.Write(section), ScreenHtmlText.Write(table)]);
+            Assert.True(plan.Refused);
+            Assert.Equal(["HTML_TABLE_COLSPAN", "HTML_TABLE_COLSPAN", "HTML_TABLE_COLSPAN", "HTML_TABLE_COLSPAN", "HTML_TABLE_PART"],
+                plan.Result.Problems.Select(p => p["code"]!.ToString()).Order(StringComparer.Ordinal));
+            Assert.Equal(2, plan.Result.Problems.Count(p => p["k"]?.ToString() == table.Get("k") && p["code"]!.ToString() == "HTML_TABLE_COLSPAN"));
+            var patches = plan.Result.Problems.Select(p => p["patch"]![0]!["value"]!.ToJsonString()).Distinct().ToList();
+            var patched = JsonNode.Parse(Assert.Single(patches))!.AsArray().Select(e => e!.ToString()).ToList();
+            Assert.All(patched, p => Assert.DoesNotContain("span=", p, StringComparison.Ordinal));
+            Assert.All(patched, p => Assert.DoesNotContain("data-x", p, StringComparison.Ordinal));
+            var (result, after, _) = Apply(module, patched);
+            Assert.False(result.Refused, Codes(result));
+            var read = ScreenHtml.Parse(after);
+            Assert.Equal(ScreenHtmlText.WithoutKeys(ScreenHtmlText.Write(TableOf(ScreenHtml.Parse(document.Html), "Lines"))), ScreenHtmlText.WithoutKeys(ScreenHtmlText.Write(TableOf(read, "Lines"))));
+            var added = ScreenHtmlText.Elements(read).Select(x => x.Node).Single(n => n.Tag == "table" && n.Get("class") == "added");
+            Assert.Equal(2, ScreenHtmlText.Elements(added).Count(x => x.Node.Tag == "th"));
+            Assert.Equal(2, ScreenHtmlText.Elements(added).Count(x => x.Node.Tag == "td"));
+            Assert.DoesNotContain("span=", after, StringComparison.Ordinal);
+        }
+    }
+
+    // What the reading has stays (as the Visible): a cell of a native Table the Studio gave colspan or rowspan (an extended property)
+    // reads with it at the fixed point, and an edit that keeps it (the table written again with a text changed, the whole page sent
+    // back) is no refusal and reads back as written. A new value of it is written new: refused, the patch removes it.
+    [Fact]
+    public void ASpanACellOfANativeTableHasInTheReadingStaysAndANewValueOfItIsRefused()
+    {
+        static Node Spanned()
+        {
+            var module = Module();
+            var lines = Find(module, n => n.Kind == "TableRecords" && n.Name == "Lines");
+            var head = lines.Children.Single(c => c.Name == "headerRow").Children.First(c => c.Kind == "HeaderCell");
+            var row = lines.Children.Single(c => c.Name == "row").Children.Last(c => c.Kind == "RowCell");
+            foreach (var (cell, property) in new[] { (head, "colspan"), (row, "rowspan") })
+                cell.Set("ExtendedProperties", new List<Node> { cell.Add(N("ExtendedProperty")).Set("Property", property).Set("Value", new Code("\"2\"")) });
+            return module;
+        }
+        {
+            var (_, document) = Read(Spanned());
+            var lines = ScreenHtmlText.Write(TableOf(ScreenHtml.Parse(document.Html), "Lines"));
+            Assert.Contains("colspan=\"2\"", lines);
+            Assert.Contains("rowspan=\"2\"", lines);
+            Assert.Empty(document.Compare(document.Html));
+        }
+        // The table written again, a header text changed beside the spans.
+        {
+            var module = Spanned();
+            var (_, document) = Read(module);
+            var tree = ScreenHtml.Parse(document.Html);
+            var table = TableOf(tree, "Lines");
+            var name = Texts(table).First(t => t.Text!.Trim() == "Name");
+            name.Text = name.Text!.Replace("Name", "Order", StringComparison.Ordinal);
+            var (result, after, _) = Apply(module, [ScreenHtmlText.Write(table)]);
+            Assert.False(result.Refused, Codes(result) + " " + string.Join(" | ", result.Problems.Select(p => p["message"])));
+            var lines = ScreenHtmlText.Write(TableOf(ScreenHtml.Parse(after), "Lines"));
+            Assert.Contains("colspan=\"2\"", lines);
+            Assert.Contains("rowspan=\"2\"", lines);
+            Assert.Contains("Order", lines);
+            var again = ScreenHtml.Module(module, new Reader()).Read("Orders");
+            Assert.Empty(again.Compare(again.Html));
+        }
+        // The whole page sent back as the edit (the html form).
+        {
+            var module = Spanned();
+            var (_, document) = Read(module);
+            var (result, after, _) = Apply(module, [document.Html]);
+            Assert.False(result.Refused, Codes(result) + " " + string.Join(" | ", result.Problems.Select(p => p["message"])));
+            Assert.Equal(document.Html, after);
+        }
+        // A new value of the reading's colspan: refused, the patch removes it; the reading's rowspan stays.
+        {
+            var module = Spanned();
+            var (reading, document) = Read(module);
+            var tree = ScreenHtml.Parse(document.Html);
+            var table = TableOf(tree, "Lines");
+            var th = ScreenHtmlText.Elements(table).Select(x => x.Node).First(n => n.Tag == "th");
+            th.Attributes[th.Attributes.FindIndex(a => a.Key == "colspan")] = new("colspan", "3");
+            var plan = reading.Edit(document, [ScreenHtmlText.Write(table)]);
+            var problem = Assert.Single(plan.Result.Problems);
+            Assert.Equal("HTML_TABLE_COLSPAN", problem["code"]!.ToString());
+            Assert.Contains("colspan=\"3\"", problem["message"]!.ToString());
+            var (result, after, _) = Apply(module, problem["patch"]![0]!["value"]!.AsArray().Select(e => e!.ToString()).ToList());
+            Assert.False(result.Refused, Codes(result));
+            var lines = ScreenHtmlText.Write(TableOf(ScreenHtml.Parse(after), "Lines"));
+            Assert.DoesNotContain("colspan", lines);
+            Assert.Contains("rowspan=\"2\"", lines);
+        }
+    }
+
+    // M-B and L1 of the review of round 2: what an edit writes on the parts of a native Table follows the document's rule. An
+    // attribute of a <thead>, <tbody> or <tr> the Table has no property for is refused once each (HTML_TABLE_PART), with the Table's
+    // k, the pointer and the patch that removes them all (it plans and applies); the class of a section joins its row's, said in
+    // normalized (TABLE_NATIVE), never in silence.
+    [Fact]
+    public void AnAttributeOfAPartOfANativeTableInAnEditIsRefusedOnceWithItsPatchAndASectionClassJoinsItsRowAndIsSaid()
+    {
+        {
+            var module = Module();
+            var (reading, document) = Read(module);
+            var tree = ScreenHtml.Parse(document.Html);
+            var table = TableOf(tree, "Lines");
+            var parts = ScreenHtmlText.Elements(table).Select(x => x.Node).ToList();
+            parts.First(n => n.Tag == "tbody").Attributes.Add(new("data-x", "1"));
+            parts.First(n => n.Tag == "tr").Attributes.Add(new("aria-label", "head"));
+            var plan = reading.Edit(document, [ScreenHtmlText.Write(table)]);
+            Assert.Equal(["HTML_TABLE_PART", "HTML_TABLE_PART"], plan.Result.Problems.Select(p => p["code"]!.ToString()));
+            Assert.All(plan.Result.Problems, p => { Assert.Equal(table.Get("k"), p["k"]!.ToString()); Assert.False(string.IsNullOrEmpty(p["pointer"]?.ToString())); });
+            var patched = plan.Result.Problems[0]["patch"]![0]!["value"]!.AsArray().Select(e => e!.ToString()).ToList();
+            Assert.Equal(patched, plan.Result.Problems[1]["patch"]![0]!["value"]!.AsArray().Select(e => e!.ToString()));
+            Assert.DoesNotContain("data-x", patched[0]);
+            Assert.DoesNotContain("aria-label", patched[0]);
+            var (result, after, _) = Apply(module, patched);
+            Assert.False(result.Refused, Codes(result));
+            Assert.Equal(document.Html, after);
+        }
+        // The List's attribute on a <tbody> while the list is on the <table> (no List there): refused with its patch; the class of
+        // that <tbody> joins the row's, said.
+        {
+            var module = Module();
+            var (reading, document) = Read(module);
+            var tree = ScreenHtml.Parse(document.Html);
+            var table = TableOf(tree, "Lines");
+            var body = ScreenHtmlText.Elements(table).Select(x => x.Node).First(n => n.Tag == "tbody");
+            body.Attributes.Add(new("class", "zebra")); body.Attributes.Add(new("os-Mode", "Custom"));
+            var plan = reading.Edit(document, [ScreenHtmlText.Write(table)]);
+            var problem = Assert.Single(plan.Result.Problems);
+            Assert.Equal("HTML_TABLE_PART", problem["code"]!.ToString());
+            Assert.Contains("os-Mode", problem["message"]!.ToString());
+            var (result, after, _) = Apply(module, problem["patch"]![0]!["value"]!.AsArray().Select(e => e!.ToString()).ToList());
+            Assert.False(result.Refused, Codes(result));
+            Assert.Contains(result.Normalized, n => n["code"]?.ToString() == "TABLE_NATIVE" && n["note"]!.ToString().Contains("<tbody class> joins the class of its <tr> (StyleRow)", StringComparison.Ordinal));
+            Assert.Contains("zebra", TableOf(ScreenHtml.Parse(after), "Lines").Children.Where(c => !c.IsText).Select(ScreenHtmlText.Write).Last());
+        }
+        // The class of a <thead>: accepted, the header row's class (StyleHeader), said.
+        {
+            var module = Module();
+            var tree = ScreenHtml.Parse(Read(module).Document.Html);
+            var table = TableOf(tree, "Lines");
+            ScreenHtmlText.Elements(table).Select(x => x.Node).First(n => n.Tag == "thead").Attributes.Add(new("class", "dark"));
+            var (result, after, _) = Apply(module, [ScreenHtmlText.Write(table)]);
+            Assert.False(result.Refused, Codes(result) + " " + string.Join(" | ", result.Problems.Select(p => p["message"])));
+            var note = Assert.Single(result.Normalized, n => n["code"]?.ToString() == "TABLE_NATIVE");
+            Assert.Equal(table.Get("k"), note["k"]!.ToString());
+            Assert.Contains("<thead class> joins the class of its <tr> (StyleHeader)", note["note"]!.ToString());
+            var head = ScreenHtmlText.Elements(TableOf(ScreenHtml.Parse(after), "Lines")).Select(x => x.Node).First(n => n.Tag == "tr");
+            Assert.Contains("dark", head.Get("class") ?? "");
+        }
+    }
+
+    // B1 of the review of round 2: the three-way merge matches the parts of a native Table (its thead, tbody and their one row, which
+    // carry no k) by their owner, and the parts of any other table as elements. A new static table of two rows, of two header rows or
+    // of two bodies, written on an older reading, merges, and what the Studio changed since stays (the two new rows had one identity:
+    // no merge, and the edit's whole text replaced the screen).
+    [Fact]
+    public void ANewStaticTableOfTwoRowsWrittenOnAnOlderReadingMergesThreeWaysBesideANativeTable()
+    {
+        foreach (var table in new[] {
+            "<table class=\"detail\"><tbody><tr><th>Name</th><td>{{ Search }}</td></tr><tr><th>Page</th><td>{{ Page }}</td></tr></tbody></table>",
+            "<table class=\"detail\"><thead><tr><th>A</th></tr><tr><th>B</th></tr></thead><tbody><tr><td>x</td></tr></tbody></table>",
+            "<table class=\"detail\"><tbody><tr><td>a</td></tr></tbody><tbody><tr><td>b</td></tr></tbody></table>" })
+        {
+            var module = Module();
+            var (_, older) = Read(module);
+            Find(module, n => n.Name == "Toolbar").Set("Style", new Code("\"toolbar dark\""));
+            var (reading, current) = Read(module);
+            var tree = ScreenHtml.Parse(older.Html);
+            var section = ScreenHtmlText.Elements(tree).Select(x => x.Node).First(n => n.Tag == "section");
+            section.Children.Add(ScreenHtml.Parse(table).Children[0]);
+            // The native Table's first header text, in the same edit: its parts are still matched by their owner.
+            var lines = TableOf(tree, "Lines");
+            var name = Texts(lines).First(t => t.Text!.Trim() == "Name");
+            name.Text = name.Text!.Replace("Name", "Order", StringComparison.Ordinal);
+            var merged = ScreenHtmlMerge.ThreeWay(older.Html, Keys(older), current.Html, Keys(current), [ScreenHtmlText.Write(section), ScreenHtmlText.Write(lines)]);
+            Assert.NotNull(merged.Document);
+            Assert.Empty(merged.Conflicts);
+            Assert.Empty(merged.Missing);
+            Assert.Contains("class=\"toolbar dark\"", merged.Document);
+            var plan = reading.Edit(current, [merged.Document!]);
+            Assert.False(plan.Refused, Codes(plan.Result) + " " + string.Join(" | ", plan.Result.Problems.Select(p => p["message"])));
+            plan.Apply(new Writer());
+            plan.Verify(reading.Refresh(current.RootKey).Read("Orders"));
+            Assert.False(plan.Refused, string.Join(" | ", plan.Result.Problems.Select(p => p["message"])));
+            var after = ScreenHtml.Module(module, new Reader()).Read("Orders").Html;
+            Assert.Contains("class=\"toolbar dark\"", after);
+            Assert.Contains("class=\"detail\"", after);
+            Assert.Contains("Order", Texts(TableOf(ScreenHtml.Parse(after), "Lines")).Select(t => t.Text!.Trim()));
+        }
+    }
+
+    private static IEnumerable<ScreenHtml.Node> Texts(ScreenHtml.Node node)
+    {
+        foreach (var child in node.Children)
+            if (child.IsText) yield return child;
+            else foreach (var inner in Texts(child)) yield return inner;
+    }
+
+    // The ODC builder compiles ScreenHtmlModule.cs without ScreenVisual (Builder.csproj, BuilderLinkClosureTests): the markers of
+    // the engine a part of a native Table leaves to their own rule are ScreenVisual's, in every spelling.
+    [Fact]
+    public void TheMarkersAPartOfANativeTableLeavesToTheirOwnRuleAreTheEngines()
+    {
+        foreach (var marker in Anvil.Core.ScreenVisual.EngineMarkers)
+            foreach (var spelling in new[] { marker, marker.ToUpperInvariant(), "ext:" + marker, "EXT:" + marker.ToUpperInvariant() })
+                Assert.True(ScreenHtmlTables.IsEngineMarker(spelling), spelling);
+        foreach (var other in new[] { "data-ssam", "data-ssam-pages", "data-x", "class", "list", "ext:data-x" })
+            Assert.Equal(Anvil.Core.ScreenVisual.MarkerOf(other) != null, ScreenHtmlTables.IsEngineMarker(other));
+    }
+
+    // M4 of the review of round 1: the synthetic battery edits whole columns of a native Table and writes new data tables, and
+    // each of those edits reads back as written.
+    [Fact]
+    public void TheBatteryEditsWholeColumnsAndAddsDataTablesAndEachReadsBack()
+    {
+        var kinds = new HashSet<string>();
+        for (var seed = 1; seed <= 12; seed++)
+        {
+            var (reading, document) = Read(Module());
+            foreach (var edit in ScreenHtmlEditBattery.Generate(document, seed, 1, k => !reading.UsedOutside(document, k), reading.ActionNames(document)).Where(e => e.Kind is "column" or "table"))
+            {
+                kinds.Add(edit.Kind + ":" + edit.Note.Split(' ')[0]);
+                var (result, after, _) = Apply(Module(), edit.Edits);
+                Assert.False(result.Refused, edit.Note + ": " + Codes(result) + " " + string.Join(" | ", result.Problems.Select(p => p["message"])));
+                Assert.Equal(edit.Expected, ScreenHtmlText.WithoutKeys(after));
+            }
+        }
+        Assert.Contains("table:new", kinds);
+        Assert.True(kinds.Count(k => k.StartsWith("column:", StringComparison.Ordinal)) >= 2, string.Join(", ", kinds));
     }
 
     private static (ScreenHtmlModule<Node> Reading, ScreenHtmlDocument Document) Read(Node module, string target = "Orders")
@@ -261,7 +697,7 @@ public sealed class ScreenHtmlEditTests
         var plan = reading.Edit(document, [
             "<div class=\"no-key\"/>",                                                           // no k
             "<div k=\"w99\"/>",                                                                   // a k the reading never wrote
-            Line(html, "w13").Replace("kind=\"TableRecords\"", "kind=\"Container\"") + "</os-opaque>\n",  // an opaque node changed
+            Line(html, "w13").Replace("kind=\"MobileWidget\"", "kind=\"Container\"") + "</os-opaque>\n",  // an opaque node changed
             Line(html, "w7").Replace("onclick=\"Open(Id = Page)\"", "onclick=\"Refrsh\"") + "\n",  // a name that names nothing
             Line(html, "w9").Replace("/>", " os-Visible=\"Page = 1\"/>", StringComparison.Ordinal) + "\n",
         ]);
@@ -270,7 +706,7 @@ public sealed class ScreenHtmlEditTests
         foreach (var code in new[] { ScreenHtmlEdit.NoKey, ScreenHtmlEdit.KeyForeign }) Assert.Contains(code, codes);
         // The merge stops at its own problems; the rest come once the edits merge.
         var second = reading.Edit(document, [
-            Line(html, "w13").Replace("kind=\"TableRecords\"", "kind=\"Container\"").Replace("\">", "\"/>") + "\n",
+            Line(html, "w13").Replace("kind=\"MobileWidget\"", "kind=\"Container\"").Replace("\">", "\"/>") + "\n",
             Line(html, "w7").Replace("onclick=\"Open(Id = Page)\"", "onclick=\"Refrsh\"") + "\n",
             Line(html, "w9").Replace("/>", " os-Visible=\"Page = 1\"/>") + "\n",
             Line(html, "w10").Replace("/>", " data-x='{{ JSONSerialize(Page) }}'/>") + "\n",

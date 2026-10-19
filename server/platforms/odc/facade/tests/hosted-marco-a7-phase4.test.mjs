@@ -121,8 +121,10 @@ for (const [layout, presentation] of Object.entries(LAYOUTS)) {
       assert.equal(body.fix, value.fix, 'a pointer the answer names in violations[].path stays, even a root of the image: ' + said);
       assert.deepEqual(body.violations.map(v => v.path), ['/app', '/tmp'], said);
       assert.equal(body.details.note, '/app expected string (the pointer of this answer); <server> is a server file', 'the pointers reach every text below the answer; a real path beside them goes: ' + said);
-      // a whole value in a field that is no prose: withheld by the presenter where it is a folder of the server (the image)
-      assert.equal(body.day, presentation() ? withheld['/data/server/state/day.json'] : value.day, said);
+      // a whole value in a field that is no prose: withheld by the presenter where it is a folder of the server (the image), and
+      // since a9 (the marco-a6 path family of the rule: a whole server path that is no handle and not the caller's) on this
+      // machine too
+      assert.equal(body.day, withheld['/data/server/state/day.json'], said);
       assert.deepEqual(body.pointers, kept, said);
       assert.equal(text, JSON.stringify(body), 'the text answer is the structured one');
     } finally { await s.close(); }

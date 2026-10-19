@@ -249,7 +249,9 @@ test('the origin of a fact in SSAM\'s documentation names neither the kernel\'s 
   assert.match(out.differences.o11[0].origin, /ITimer \(writable: Action, Description, Priority, Schedule, TimeoutInMinutes\); timer-action description$/, 'the fact stays');
   // a runtime origin is the customer's (ssam_code problems): as it is
   const code = { ok: false, problems: [{ code: 'X', origin: { at: 'files/1', file: 'C:\\work\\caller.flow' } }] };
-  assert.deepEqual(licensee('ssam_code', code).problems, code.problems);
+  // (marco-a6) the file the call named comes back as the caller sent it; a path it did not send is the server's
+  // (no-internals-paths.test.mjs)
+  assert.deepEqual(licensee('ssam_code', code, { action: 'check', files: ['C:\\work\\other.flow', 'C:\\work\\caller.flow'] }).problems, code.problems);
 });
 
 test('the steps of round 7 keep the text whole: a folder of examples, a parenthetical left open, a period after a path', () => {

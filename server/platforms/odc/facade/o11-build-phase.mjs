@@ -216,6 +216,7 @@ export async function buildBeforeApply({ input, job, ctx, lane, task, signal }) 
   const pool = ctx.buildPool ?? sharedBuildPool({ root: ctx.root, env: ctx.env });
   const producers = Object.entries(input.producers ?? {});
   const argv = ['apply', '--job', job, '--base', shot.path, '--out', candidate, '--work', path.join(folder, 'model'),
+    ...(input.autoPatch === false ? ['--auto-patch', 'off'] : []),
     ...producers.flatMap(([name, file]) => ['--producer', name + '=' + file]),
     // the job a patched delivery corrects (o11-cycle.mjs BASED_ON): the preflight refuses CSS the correction dropped
     ...Object.getOwnPropertySymbols(input).filter(s => s.description === 'basedOnJob').map(s => input[s]).filter(f => typeof f === 'string').flatMap(f => ['--based-on', f])];

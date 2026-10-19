@@ -26,11 +26,11 @@ import { o11LaneOf } from './o11-lane.mjs';
 import { readConnection } from './studio-session.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
 import { createWorkerClient, hostedWorkerClient, workerDisabled } from './anvil-worker.mjs';
-import { resolvePatchedJob, jobIdentity, failedOpOf, withNamedPatches } from './job-patch.mjs';
+import { resolvePatchedJob, jobIdentity, failedOpOf, withNamedPatches, appliedJobIdentity } from './job-patch.mjs';
 import { hostedContext, seamFields, usesWorkspace, workspacePath } from './executor.mjs';
 import { highWarningsOf } from './delivery-warnings.mjs';
 import { jobSummary } from './job-summary.mjs';
-import { refusalFields, diagnosisOf, normalizationsOf } from './refusal-problems.mjs';
+import { refusalFields, diagnosisOf, normalizationsOf, patchesAppliedOf } from './refusal-problems.mjs';
 import { withNormalizationsOf } from './normalizations.mjs';
 import { textFormRefusal, partReader } from './text-routes.mjs';
 import { normalizeCodeOps } from './ssam-code.mjs';
@@ -192,7 +192,7 @@ export function summarize({ lane, job, out, resultFile, saved, note, quiet = fal
     const success = successOf(value, results, SUCCESS_BYTES - 120, x.results?.length ?? 0);
     // lentidao 2026-10-12: what the kernel rewrote in the job instead of refusing it (JobNormalizer), outside the 1 KB budget
     // like the HIGH warnings and the summary: a rewrite is never hidden.
-    return { ...success, ...normalizationsOf(x) };
+    return { ...success, ...normalizationsOf(x), ...patchesAppliedOf(x) };
   }
   // A refusal of the job (I2): every problem of every phase, from the CLI's error envelope or from the apply's own
   // preflight, with verifyRan and the phases (primeira-certa A3).
@@ -347,7 +347,7 @@ async function runJobOnce(request, deps, carried) {
     const out = outFor(file);
     fs.mkdirSync(path.dirname(out), { recursive: true });
     if (lane === 'odc') {
-      const argv = ['apply', '--job', file, '--out', out, ...(base ? ['--base', base] : []), ...producers.flatMap(p => ['--producer', p]), ...(basedOnFile ? ['--based-on', basedOnFile] : []),
+      const argv = ['apply', '--job', file, '--out', out, ...(base ? ['--base', base] : []), ...producers.flatMap(p => ['--producer', p]), ...(request.autoPatch === false ? ['--auto-patch', 'off'] : []), ...(basedOnFile ? ['--based-on', basedOnFile] : []),
         '--work', request.work ?? path.join(odcLocal, 'jobs', 'work')];
       let envelope = null; let via = 'worker odc';
       if (worker) {
@@ -371,7 +371,7 @@ async function runJobOnce(request, deps, carried) {
       return { saved: { ok: Boolean(envelope.ok), data: envelope.data, via, wallMs }, out, note };
     }
     const argv = ['apply', '--job', file, '--out', out, '--work', request.work ?? o11.work, ...(base ? ['--base', base] : []), ...producers.flatMap(p => ['--producer', p]),
-      ...(basedOnFile ? ['--based-on', basedOnFile] : [])];
+      ...(request.autoPatch === false ? ['--auto-patch', 'off'] : []), ...(basedOnFile ? ['--based-on', basedOnFile] : [])];
     let envelope = null;
     if (worker) {
       const w = await worker.run(argv);
@@ -414,6 +414,7 @@ async function runJobOnce(request, deps, carried) {
   const resultFile = withSuffix(out, '.result.json');
   fs.writeFileSync(resultFile, JSON.stringify(saved, null, 2), 'utf8');
   let value = withFound(noted(summarize({ lane, job, out, resultFile, saved, note, quiet: request.quiet === true })));
+  if (value.ok && value.patchedJob) { const corrected = appliedJobIdentity(value.patchedJob, { path: job, sha256: jobIdentity(job).jobSha256 }, { journalDir: path.join(laneLocal, 'journal'), tool: lane === 'odc' ? 'ssam_job' : 'o11_job' }); job = corrected.path; value.job = job; }
   // What the proven job creates or changes (job-summary.mjs), outside the 1 KB budget of a success, as highWarnings: the
   // same summary a delivery of it answers with.
   if (value.ok && !proto) { try { const summary = jobSummary(JSON.parse(fs.readFileSync(job, 'utf8').replace(/^﻿/, ''))); if (summary) value.summary = summary; } catch { /* a summary never changes the run */ } }
@@ -443,9 +444,10 @@ async function runJobOnce(request, deps, carried) {
 // The MCP inputs of o11_job / ssam_job, checked as ssam.mjs producerArgs checks them: binding names, absolute
 // producer paths, no name both bound and captured; captures exist only in lane o11.
 export function jobToolRequest(input = {}) {
-  const allowed = ['job', 'patch', 'basedOn', 'lane', 'base', 'out', 'producers', 'captureProducers', 'quiet'];
+  const allowed = ['job', 'patch', 'basedOn', 'lane', 'base', 'out', 'producers', 'captureProducers', 'quiet', 'autoPatch'];
   const unknown = Object.keys(input).filter(k => !allowed.includes(k));
   if (unknown.length) return refusal('unknown-argument', 'Unknown argument(s) ' + unknown.join(', '));
+  if (input.autoPatch != null && typeof input.autoPatch !== 'boolean') return refusal('invalid-auto-patch', 'autoPatch must be boolean');
   const lane = input.lane ?? 'o11';
   if (!JOB_LANES.includes(lane)) return refusal('unknown-lane', `Unknown lane ${lane}; lanes: ${JOB_LANES.join(', ')}`);
   // patch + basedOn stand for job; job + basedOn is a partial job (only the changed or new elements), with a patch applied
@@ -469,7 +471,7 @@ export function jobToolRequest(input = {}) {
     if ((producer === undefined ? listedKeyOf(name) : bindingKeyOf(name)) == null || producer === '') return refusal('invalid-capture', 'Invalid captureProducers entry: ' + entry);
     if (Object.hasOwn(producers, name)) return refusal('invalid-capture', 'Producer ' + name + ' is both bound and captured');
   }
-  return { ok: true, request: { lane, job: input.job, base: input.base, out: input.out, producers, captureProducers: captures, ...(input.quiet ? { quiet: true } : {}),
+  return { ok: true, request: { lane, job: input.job, ...(typeof input.autoPatch === 'boolean' ? { autoPatch: input.autoPatch } : {}), base: input.base, out: input.out, producers, captureProducers: captures, ...(input.quiet ? { quiet: true } : {}),
     ...(patching ? { patch: input.patch, basedOn: input.basedOn } : {}) } };
 }
 

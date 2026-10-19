@@ -12,6 +12,15 @@ namespace Anvil.Tests;
 public sealed class ActionNameCollisionCorpusTests(ITestOutputHelper output)
 {
     [Fact]
+    public void TheNativeNameOracleDoesNotDependOnAnExternalAcceptanceCapture()
+    {
+        var root = TextRoundTripCorpus.Root()!;
+        var source = File.ReadAllText(Path.Combine(root, "kernel", "tests", "Anvil.Tests", "ActionNameCollisionCorpusTests.cs"));
+        var obsolete = string.Concat("C:", "\\t\\codex\\", "cx1\\replay\\");
+        Assert.DoesNotContain(obsolete, source);
+    }
+
+    [Fact]
     public void PredictionsAndPatchNamesAgreeWithTheNativeNamingScope()
     {
         // An isolated test output folder may be outside the checkout (parallel offline validation).
@@ -19,7 +28,6 @@ public sealed class ActionNameCollisionCorpusTests(ITestOutputHelper output)
         var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "kernel", "tests", "fixtures", "text-roundtrip", "corpus.json")))!.AsArray();
         var modules = manifest.OfType<JsonObject>().Where(m => m["lane"]!.ToString() == "o11")
             .Select(m => (Name: m["label"]!.ToString(), File: m["oml"]!.ToString())).ToList();
-        modules.Add(("acceptance-base", @"C:\t\codex\cx1\replay\base-DemoFabio_CS.oml"));
         if (Environment.GetEnvironmentVariable("ACTION_NAME_ORACLE_MODULES") is { Length: > 0 } only)
         {
             var selected = only.Split(',', StringSplitOptions.TrimEntries).ToHashSet(StringComparer.OrdinalIgnoreCase);
