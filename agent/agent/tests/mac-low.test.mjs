@@ -112,3 +112,33 @@ test('B7: a runtimeconfig.json the agent cannot read stops the attach before any
   } finally { fs.rmSync(realOf(top), { recursive: true, force: true }); }
   english();
 });
+
+// B4 in install.sh too: the folder check comes before any tool runs (no Node download for nothing).
+const BASH = ['C:\\Program Files\\Git\\usr\\bin\\bash.exe', '/bin/bash'].find(f => fs.existsSync(f));
+test('B4: install.sh refuses a credential file in a folder macOS guards or syncs, before any tool runs', { skip: !BASH }, async () => {
+  const { execFile } = await import('node:child_process');
+  const { fileURLToPath } = await import('node:url');
+  const msys = file => (process.platform === 'win32' ? file.replace(/^([A-Za-z]):/, (m, d) => '/' + d.toLowerCase()).split(path.sep).join('/') : file);
+  const agentDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const top = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-cred-sh-'));
+  try {
+    const root = path.join(top, 'SSAM-Agent'); const home = path.join(top, 'home'); const stubs = path.join(top, 'stubs'); const log = path.join(top, 'tools.log');
+    fs.mkdirSync(path.join(root, 'agent'), { recursive: true }); fs.mkdirSync(stubs);
+    fs.copyFileSync(path.join(agentDir, 'install.sh'), path.join(root, 'install.sh'));
+    fs.copyFileSync(path.join(agentDir, 'ssam-agent.mjs'), path.join(root, 'agent', 'ssam-agent.mjs'));
+    fs.writeFileSync(path.join(root, 'pack.json'), '{"id":"pack-mac","files":[]}');
+    const stub = (name, body) => fs.writeFileSync(path.join(stubs, name), '#!/bin/bash\n' + body + '\n', { mode: 0o755 });
+    stub('uname', 'case "$1" in -s) echo Darwin ;; -m) echo arm64 ;; *) echo Darwin ;; esac'); stub('sw_vers', 'echo 14.6'); stub('sysctl', 'echo 1');
+    for (const tool of ['xattr', 'curl', 'plutil', 'osascript']) stub(tool, `echo "${tool} $*" >> "${msys(log)}"; exit 1`);
+    const file = path.join(home, 'Downloads', 'cred.txt'); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, CREDENTIAL + '\n');
+    const result = await new Promise(resolve => execFile(BASH, [msys(path.join(root, 'install.sh')), '--credential-file', msys(file)], { encoding: 'utf8', timeout: 60000, windowsHide: true,
+      env: { ...process.env, PATH: [stubs, ...(process.platform === 'win32' ? ['C:\\Program Files\\Git\\usr\\bin', 'C:\\Windows\\System32', 'C:\\Windows'] : ['/usr/bin', '/bin'])].join(path.delimiter), HOME: msys(home), SSAM_NODE: process.execPath } },
+    (error, stdout, stderr) => resolve({ code: error ? error.code : 0, out: stdout + stderr })));
+    texts.push(['install.sh credential in Downloads', result.out]);
+    assert.equal(result.code, 1, result.out);
+    assert.match(result.out, /the credential file .*cred\.txt is inside .*Downloads, which macOS guards or syncs/);
+    assert.equal(fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '', '', 'no tool ran');
+    assert.equal(fs.existsSync(path.join(root, 'private')), false);
+  } finally { fs.rmSync(top, { recursive: true, force: true }); }
+  english();
+});

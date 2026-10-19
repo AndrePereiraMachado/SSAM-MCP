@@ -98,6 +98,8 @@ test('install.sh: a Node 24 found, setup with a credential file (never shown), t
     assert.equal(fs.readFileSync(path.join(c.root, 'private', 'credential'), 'utf8'), CREDENTIAL);
     assert.match(fs.readFileSync(c.log, 'utf8'), /xattr -dr com\.apple\.quarantine /);
     assert.equal(fs.existsSync(path.join(c.root, 'agent', 'node')), false, 'nothing downloaded');
+    // The Node it chose is recorded for agent/ssam-agent.sh (review B6, mac-node.test.mjs).
+    assert.equal(fs.readFileSync(path.join(c.root, 'private', 'node'), 'utf8').trim(), process.execPath);
     const again = await install(c, []);
     texts.push(['install again', again.out]);
     assert.equal(again.code, 0, again.out);
