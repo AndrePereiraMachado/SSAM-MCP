@@ -845,8 +845,13 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
   // in the customer's context), never in <anvilRoot>/.local/tasks; and the gate is the one resolver: the served handler gets the
   // gate's arguments, and the deadline's inputs are read by the gate's own rules (hosted/policy.mjs replayInputs, below), never
   // relative to this server's ODC lane root (a file of the server would decide a customer's call).
+  // a8 phase 7 (review vps-a8, M1): hosted, the prints read only the customer's own files (the visible area of the workspace,
+  // the gate's own rule): never a file of the server or of another customer, and asynchronously, with ceilings
+  // (replay-store.mjs replayPrintInside). A file the call names outside it gives no print: no join and no replay by content.
+  const hostedMirror = hosted ? await import('./hosted/mirror.mjs') : null;
   const replays = createReplay({ folder: deps.tasksDir ?? tasksDir(answersRoot), windowMs: deps.replayWindowMs ?? REPLAY_WINDOW_MS,
     schemaOf: name => inputSchemas.get(name),
+    ...(hosted ? { inside: file => hostedMirror.insideVisible(hosted.context.workspace, file), limits: deps.replayLimits ?? {} } : {}),
     resolve: hosted ? null : (name, args) => (relativeToOdcRoot[name] ? resolveRelativePaths(args, deps.odcRoot ?? LANES.odc.root, relativeToOdcRoot[name]) : args) });
   // servidor/fase4-26 a8 (rounds 3c, 3d): hosted, the deadline wraps the gate and sees the arguments as sent (ws:, agent:,
   // relative, a path of the agent's machine). For a run-to-end call it reads them as the gate does, without bringing or writing
@@ -1182,7 +1187,8 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
       // Owner decision (2026-10-18): a delivery or a creation (tool-classification.mjs runsToEnd) answers when its work ends.
       // This handler serves every client call and the delivery ssam_code writes through, so the mark reaches the call this one
       // runs inside under every deadline (this server's, the warm start's boot proxy).
-      if (runsToEnd(name, args)) { markRunsToEnd(); replays.outerPrints(name, args); } // an outer call (ssam_code write) takes its print now
+      // (hosted, a8 phase 7: the prints are read asynchronously; locally these answer plain values)
+      if (runsToEnd(name, args)) { markRunsToEnd(); await replays.outerPrints(name, args); } // an outer call (ssam_code write) takes its print now
       const lane = args.lane ?? (/^(studio_|odc_|hybrid_)/.test(name) ? 'odc' : 'o11');
       // fix/no-internals round 4: an answer this call keeps for a later read names whose answer it is (licensee only).
       const kept = keptOrigin(name, args);
@@ -1218,7 +1224,7 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
       // the arguments this tool runs: the call this deadline entry serves (never a delivery nested in it) gets the kept answer
       // of the same call (normalized arguments and the sha256 of every file it reads); on a miss, any write ends the replays of
       // its subject. The print is taken as the call starts (the deadline's, when it took one), for the answer it may keep.
-      const replay = replays.start(name, args);
+      const replay = await replays.start(name, args);
       if (replay?.hit) return replay.hit;
       const signal = ctx && typeof ctx === 'object' ? ctx.mcpReq?.signal : undefined;
       // Lane wp: a delivery runs its build phase without the Studio lock and takes it at its first Studio write (phased).
@@ -1272,7 +1278,7 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
       const final = pageAnswer(fitResult(name, args, shaped, { root: answersRoot, directory: answersDirectory(), budgets: deps.answerBudgets, origin: kept }),
         { root: answersRoot, directory: answersDirectory(), maxBytes, origin: kept });
       // a8: hosted, the kept answer of a replay is the customer's, in ws:o11/answers with its origin record, as every kept answer.
-      replays.keep(replay, final, value => keepAnswer(sanitizeAnswer(value), answersRoot, kept, { directory: answersDirectory() }));
+      await replays.keep(replay, final, value => keepAnswer(sanitizeAnswer(value), answersRoot, kept, { directory: answersDirectory() }));
       return final;
     };
     // R1: the gate reads argsOf, so what it confines is what the tool runs. servidor/fase4-25: the handler map (ssam_code

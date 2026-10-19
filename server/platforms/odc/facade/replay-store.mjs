@@ -47,17 +47,22 @@ const SCHEME = /^(?:agent|ws|file):/i;
 const RELATIVE = /^(?:\.{1,2}[\\/]|[^\s:*?"<>|\\/][^\s:*?"<>|]*[\\/][^\s:*?"<>|]*\.[A-Za-z0-9]{1,8}$)/;
 const BARE_FILE = /^[^\s:*?"<>|\\/]+\.(?:json|jsonl|oml|osp|oap|xif|avsig|zip|nupkg|dll|xml|ya?ml|csv|txt|sql|html?|css|m?js|cs)$/i;
 const MAX_FILE_BYTES = 256 * 1024 * 1024;
+// The absolute paths of the platform and the strings no print can read for sure.
+function pathRules(platform) {
+  const posix = platform !== 'win32';
+  const ABSOLUTE = posix ? /^\// : WINDOWS_ABSOLUTE;
+  // a bare file name only as an argument (or an item of a list argument): inside a job it names an element (a resource "app.js")
+  const unsure = (value, depth, nested) => SCHEME.test(value) || posix && WINDOWS_ABSOLUTE.test(value)
+    || !ABSOLUTE.test(value) && (RELATIVE.test(value) || nested === 0 && depth <= 2 && BARE_FILE.test(value));
+  return { ABSOLUTE, unsure };
+}
 // The print of a slot: null when a file the call reads cannot be read for sure. platform: the system this server reads on.
 export function replayPrint(slot, options) { return replayPrintOf(slot, options).print; }
 // The print and, when it is null, why (round 3d, the cause of re-review B1): "path" (a path this server cannot read for
 // sure: relative, agent:, ws:, file:, another machine's, or a file it cannot open) or "size" (too large to look at whole).
 export function replayPrintOf(slot, { platform = process.platform } = {}) {
   if (!slot) return { print: null, unreadable: 'path' };
-  const posix = platform !== 'win32';
-  const ABSOLUTE = posix ? /^\// : WINDOWS_ABSOLUTE;
-  // a bare file name only as an argument (or an item of a list argument): inside a job it names an element (a resource "app.js")
-  const unsure = (value, depth, nested) => SCHEME.test(value) || posix && WINDOWS_ABSOLUTE.test(value)
-    || !ABSOLUTE.test(value) && (RELATIVE.test(value) || nested === 0 && depth <= 2 && BARE_FILE.test(value));
+  const { ABSOLUTE, unsure } = pathRules(platform);
   const files = {};
   let unreadable = false, strings = 0, reason = 'path';
   // Whatever cannot be looked at whole (too deep, too many strings) is no proof either.
@@ -85,6 +90,91 @@ export function replayPrintOf(slot, { platform = process.platform } = {}) {
   };
   visit(slot.args, 0, 0);
   return unreadable ? { print: null, unreadable: reason } : { print: sha(slot.key + '\0' + canonicalArguments(files)), unreadable: null };
+}
+
+// ---- the hosted print (servidor/fase4-26 a8 phase 7; review of the a8 line, M1)
+// A hosted server answers many customers in one process, and its call deadline wraps the gate: the print above read and
+// hashed ANY absolute path a call named (a field the gate does not confine, a string of an inline job, a path a JSON names),
+// so the outcome of one customer's call followed a file of the server or of another customer (a 1-bit signal), and a call
+// naming large files stopped the process of every customer while it read them. Hosted, the print is replayPrintInside:
+//  - inside(file): the customer's own files (ssam.mjs: the visible area of the workspace, hosted/mirror.mjs insideVisible).
+//    Only those are ever stat'ed, opened or hashed;
+//  - an absolute path outside it is never touched. One that names a file (its last segment has an extension: the shape this
+//    store already reads as a file name, RELATIVE and BARE_FILE) gives no print, "outside": no join and no replay by
+//    content; the gate answers the call itself (a pointer outside the workspace is refused there). Any other absolute-looking
+//    text (a JSON pointer of a patch, a route, "/") is text, as it was when it named no file;
+//  - a file is hashed from a stream (the event loop never waits for it); a JSON whose paths are read is read whole only up
+//    to HOSTED_MAX_JSON_BYTES, the gate's own ceiling for a job file (hosted/job-paths.mjs MAX_JOB_BYTES). Over a ceiling
+//    (per file, per call, a JSON): no print, "size".
+export const HOSTED_MAX_FILE_BYTES = 256 * 1024 * 1024;
+export const HOSTED_MAX_CALL_BYTES = 512 * 1024 * 1024;
+export const HOSTED_MAX_JSON_BYTES = 16 * 1024 * 1024;
+const NAMES_A_FILE = /[^\\/.]\.[A-Za-z0-9]{1,8}$/;
+class TooLarge extends Error {}
+const hashFile = (file, limit) => new Promise((resolve, reject) => {
+  const hash = createHash('sha256');
+  let bytes = 0;
+  const stream = fs.createReadStream(file);
+  stream.on('data', chunk => {
+    bytes += chunk.length;
+    if (bytes > limit) { stream.destroy(); reject(new TooLarge()); return; }
+    hash.update(chunk);
+  });
+  stream.on('error', reject);
+  stream.on('end', () => resolve({ sha256: hash.digest('hex'), bytes }));
+});
+export async function replayPrintInside(slot, { inside, platform = process.platform, maxFileBytes = HOSTED_MAX_FILE_BYTES,
+  maxCallBytes = HOSTED_MAX_CALL_BYTES, maxJsonBytes = HOSTED_MAX_JSON_BYTES } = {}) {
+  if (!slot || typeof inside !== 'function') return { print: null, unreadable: 'path' };
+  const { ABSOLUTE, unsure } = pathRules(platform);
+  const files = {};
+  const pending = [];
+  let strings = 0, total = 0;
+  // The strings of a value: no file system here; the files inside the workspace wait in pending. -> null | why
+  const walk = (value, depth, nested) => {
+    if (value == null) return null;
+    if (depth > 64 || strings > 20000) return 'size';
+    if (typeof value === 'string') {
+      strings++;
+      if (value.length > 1024) return null;
+      if (unsure(value, depth, nested)) return 'path';
+      if (!ABSOLUTE.test(value)) return null;
+      const file = path.resolve(value);
+      let mine = false;
+      try { mine = inside(file) === true; } catch { mine = false; }
+      if (!mine) return NAMES_A_FILE.test(file) ? 'outside' : null;
+      if (!Object.hasOwn(files, file) && !pending.some(p => p.file === file)) pending.push({ file, nested });
+      return null;
+    }
+    if (typeof value === 'object') for (const child of Object.values(value)) { const why = walk(child, depth + 1, nested); if (why) return why; }
+    return null;
+  };
+  let why = walk(slot.args, 0, 0);
+  while (!why && pending.length) {
+    const { file, nested } = pending.shift();
+    if (Object.hasOwn(files, file)) continue;
+    let stat;
+    try { stat = await fs.promises.stat(file); } catch { continue; } // an output, or a missing input the call refuses
+    if (!stat.isFile()) continue;
+    const json = nested < 2 && /\.json$/i.test(file);
+    if (stat.size > maxFileBytes || total + stat.size > maxCallBytes || json && stat.size > maxJsonBytes) { why = 'size'; break; }
+    try {
+      if (json) {
+        const body = await fs.promises.readFile(file);
+        if (body.length > maxJsonBytes) { why = 'size'; break; }
+        total += body.length;
+        files[file] = sha(body);
+        let parsed;
+        try { parsed = JSON.parse(body.toString('utf8')); } catch { parsed = undefined; } // not JSON: its bytes are hashed
+        if (parsed !== undefined) why = walk(parsed, 0, nested + 1);
+      } else {
+        const read = await hashFile(file, Math.min(maxFileBytes, maxCallBytes - total));
+        total += read.bytes;
+        files[file] = read.sha256;
+      }
+    } catch (error) { why = error instanceof TooLarge ? 'size' : 'path'; }
+  }
+  return why ? { print: null, unreadable: why } : { print: sha(slot.key + '\0' + canonicalArguments(files)), unreadable: null };
 }
 
 // A final answer that applied work: an explicit ok, or a delivery whose later step failed (result delivered, publish
@@ -177,17 +267,29 @@ export function resolveRelativePaths(args, root, fields) {
 //    in the task record (A4); save(final) keeps the answer and gives {file, sha256}. Also of a call cancelled before the
 //    deadline whose work still applied (round 3c, M1): the CX12 rule "a cancelled definitive answer is delivered once", on
 //    the content after the gate when the deadline could not read it.
-export function createReplay({ folder, windowMs = REPLAY_WINDOW_MS, schemaOf = () => undefined, platform = process.platform, resolve = null } = {}) {
+// inside (a8 phase 7, hosted): the predicate of the customer's own files; every print is then replayPrintInside (above), read
+// asynchronously, so inputsOf, outerPrints, start and keep answer promises (the served handler awaits them; awaiting the
+// plain value of a local server is that value). limits (tests): maxFileBytes, maxCallBytes, maxJsonBytes of that print.
+export function createReplay({ folder, windowMs = REPLAY_WINDOW_MS, schemaOf = () => undefined, platform = process.platform, resolve = null, inside = null, limits = {} } = {}) {
   const resolved = (name, args) => { try { return resolve?.(name, args) ?? args; } catch { return args; } };
   const slotOf = (name, args) => replaySlot(name, resolved(name, args), schemaOf(name));
+  // {print, unreadable} of a slot: a value on a local server, a promise hosted
+  const printOf = slot => (inside ? replayPrintInside(slot, { ...limits, platform, inside }) : replayPrintOf(slot, { platform }));
+  const after = (value, then) => (value && typeof value.then === 'function' ? value.then(then) : then(value));
   const inputsOf = (name, args) => {
     if (!runsToEnd(name, args) && !nestsDelivery(name, args)) return undefined;
-    const slot = slotOf(name, args), { print, unreadable } = replayPrintOf(slot, { platform });
-    return { key: slot.key, print, replay: keepsReplay(name, args), ...(unreadable ? { unreadable } : {}) };
+    const slot = slotOf(name, args);
+    return after(printOf(slot), ({ print, unreadable }) => ({ key: slot.key, print, replay: keepsReplay(name, args), ...(unreadable ? { unreadable } : {}) }));
   };
   const outerPrints = (name, args) => {
     const none = name !== undefined && !keepsReplay(name, args);
-    for (let scope = callScope.getStore(), depth = 0; scope && depth < 64; scope = scope.parent, depth++) { if (none) scope.noReplay = true; scope.replay?.printOf(); }
+    const taking = [];
+    for (let scope = callScope.getStore(), depth = 0; scope && depth < 64; scope = scope.parent, depth++) {
+      if (none) scope.noReplay = true;
+      const taken = scope.replay?.printOf();
+      if (taken && typeof taken.then === 'function') taking.push(taken);
+    }
+    return taking.length ? Promise.all(taking).then(() => undefined) : undefined;
   };
   const start = (name, args) => {
     const scope = callScope.getStore();
@@ -198,25 +300,29 @@ export function createReplay({ folder, windowMs = REPLAY_WINDOW_MS, schemaOf = (
     const slot = slotOf(name, args);
     // the deadline's print, taken as the call came in, only for these same arguments; after a gate it is taken here
     let print = scope.inputs && scope.inputs.key === slot.key ? scope.inputs.print : undefined;
-    const state = { scope, dir, slot, name, args, printOf: () => (print === undefined ? (print = replayPrint(slot, { platform })) : print) };
-    if (keepsReplay(name, args) && hasReplay(dir, slot)) {
-      const found = findReplay(dir, slot, state.printOf());
-      if (found) return { ...state, hit: annotateAnswer(found.answer, { resumedFrom: found.id }) };
-    }
-    for (const id of endReplays(dir, { subjects: subjectsOf(name, args) })) { try { mergeTask(dir, { id, replayUntil: null }); } catch { /* the index entry is gone */ } }
-    scope.replay = state;
-    if (runsToEnd(name, args)) state.printOf(); // the inputs as the call starts
-    return state;
+    const state = { scope, dir, slot, name, args, printOf: () => (print === undefined ? (print = after(printOf(slot), taken => (print = taken.print))) : print) };
+    const begin = () => {
+      for (const id of endReplays(dir, { subjects: subjectsOf(name, args) })) { try { mergeTask(dir, { id, replayUntil: null }); } catch { /* the index entry is gone */ } }
+      scope.replay = state;
+      return runsToEnd(name, args) ? after(state.printOf(), () => state) : state; // the inputs as the call starts
+    };
+    if (keepsReplay(name, args) && hasReplay(dir, slot))
+      return after(state.printOf(), printed => {
+        const found = findReplay(dir, slot, printed);
+        return found ? { ...state, hit: annotateAnswer(found.answer, { resumedFrom: found.id }) } : begin();
+      });
+    return begin();
   };
   const keep = (state, final, save) => {
     if (!state?.scope?.runsToEnd || !(state.scope.kept || state.scope.cancelled) || state.scope.noReplay || !keepsReplay(state.name, state.args) || !appliedAnswer(final)) return;
-    const print = state.printOf();
-    if (!print) return;
-    try {
-      const until = keepReplay(state.dir, state.slot, print, { id: state.scope.id, answer: save(final), subjects: subjectsOf(state.name, state.args),
-        dependsOnOthers: dependsOnOthers(state.name, state.args), windowMs });
-      mergeTask(state.dir, { id: state.scope.id, replayUntil: new Date(until).toISOString() });
-    } catch { /* no replay: the call ran and answered */ }
+    return after(state.printOf(), print => {
+      if (!print) return;
+      try {
+        const until = keepReplay(state.dir, state.slot, print, { id: state.scope.id, answer: save(final), subjects: subjectsOf(state.name, state.args),
+          dependsOnOthers: dependsOnOthers(state.name, state.args), windowMs });
+        mergeTask(state.dir, { id: state.scope.id, replayUntil: new Date(until).toISOString() });
+      } catch { /* no replay: the call ran and answered */ }
+    });
   };
   return { inputsOf, outerPrints, start, keep };
 }

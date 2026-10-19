@@ -201,7 +201,10 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
   // model back with the same job: after the end it reads the task's answer, which is this call's when the job is the same.
   const readTaskText = () => (hasTool('ssam_task') ? 'ssam_task {id}' : 'ssam_doctor {task:{id}}');
   // The cause named is the call's own (inputs.unreadable): a path it cannot read, or a job too large to look at whole.
-  const unreadableCause = reason => (reason === 'size' ? 'cannot compare the content this call names (a job too large to look at whole)' : 'cannot read the content this call names (a relative path, agent:, ws: or a path of another machine)');
+  // 'outside' (a8 phase 7, hosted): a file this call names outside the caller's own workspace, which the server never reads.
+  const unreadableCause = reason => (reason === 'size' ? 'cannot compare the content this call names (a job or a file too large to look at whole)'
+    : reason === 'outside' ? 'does not read a file this call names outside your own workspace (its content cannot be compared)'
+      : 'cannot read the content this call names (a relative path, agent:, ws: or a path of another machine)');
   const stillRunning = (entry, { unreadable = false } = {}) => refusal('DELIVERY_STILL_RUNNING', unreadable
     ? 'A delivery of this job is still running. This server ' + unreadableCause(unreadable) + ', so it neither joins the running one nor starts this one; nothing was started. Its continuation waits for its final answer; after its end read it with ' + readTaskText() + ': when the job is the same, that is this call\'s answer. Never send the same job again; a changed job goes after it ends or after stopping it.'
     : 'This call is still running with the content it read when it started; a file it reads changed since, so the new content was not started. Wait for the running one or stop it, then send the call again.', {
