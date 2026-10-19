@@ -58,8 +58,10 @@ function odcPositions(words) {
   return roles;
 }
 
+// platform: 'darwin' attaches the ODC bridge without the pack's .NET client (deps.attachOdc speaks the diagnostic IPC,
+// attach-unix.mjs) and names the Studios without an image name; deps.pipeCall replaces the Windows pipe (odc-pipe-unix.mjs).
 export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {}, blobs = null, limits = () => ({}), o11Port = 4516,
-  onConnection = () => {}, probe = null }) {
+  onConnection = () => {}, probe = null, platform = process.platform }) {
   const lanes = Array.isArray(pack.lanes) ? pack.lanes : [];
   const pids = new Map(); // pid -> {image, version}, from the last listing
   const maxFileBytes = () => limits().maxFileBytes ?? 512 * 1024 * 1024;
@@ -86,7 +88,7 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
     const image = LANE_IMAGE[lane];
     let known = pids.get(pid);
     if (known?.image !== image) { await listing(image); known = pids.get(pid); }
-    if (known?.image !== image) throw refuse('STUDIO_NOT_SELECTED', `No ${image} process ${pid} is running on this machine`);
+    if (known?.image !== image) throw refuse('STUDIO_NOT_SELECTED', `No ${platform === 'darwin' ? STUDIO_NAME[lane] : image} process ${pid} is running on this machine`);
     const expected = kernel()?.[lane] ?? null;
     if (!expected) throw refuse('STUDIO_VERSION_MISMATCH', `The server reports no kernel for the ${lane} lane`);
     if (!sameVersion(known.version, expected))
@@ -169,7 +171,7 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
     const target = await checkPid('odc', pid);
     const connect = Number.isFinite(Number(connectMs)) ? Math.min(Math.max(Number(connectMs), 1), 120000) : undefined;
     try {
-      const line = await pipeCall(target.pid, version, mapped, connect === undefined ? {} : { connectMs: connect });
+      const line = await (deps.pipeCall ?? pipeCall)(target.pid, version, mapped, connect === undefined ? {} : { connectMs: connect });
       return relativizeLine(line);
     } catch (error) {
       if (error instanceof PipeError) throw new AgentError(error.code, error.message, { executed: error.sent ? null : false, sent: error.sent });
@@ -184,8 +186,9 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
     if (!/^v\d+$/.test(version ?? '')) throw refuse('BRIDGE_VERSION_MISMATCH', 'The agent pack carries no ODC bridge');
     const client = path.join(root, 'odc', 'studio', 'bridge', 'client', 'bin', 'Release', 'net10.0', 'ODC3.Bridge.Client.dll');
     const bridge = path.join(root, 'odc', 'studio', 'bridge', 'bin', 'Release', 'net8.0', 'ODC3.Bridge.' + version + '.dll');
-    for (const file of [client, bridge]) if (!fs.existsSync(file)) throw refuse('ATTACH_FAILED', 'The agent pack is missing ' + path.relative(root, file));
-    const result = await deps.attachOdc({ pid: target.pid, client, bridge });
+    // macOS: no .NET client, the agent itself speaks the diagnostic IPC (the client is not in the macOS pack).
+    for (const file of platform === 'darwin' ? [bridge] : [client, bridge]) if (!fs.existsSync(file)) throw refuse('ATTACH_FAILED', 'The agent pack is missing ' + path.relative(root, file));
+    const result = await deps.attachOdc(platform === 'darwin' ? { pid: target.pid, bridge, version } : { pid: target.pid, client, bridge });
     return { ok: result?.ok === true, attached: result?.attached === true, pid: target.pid, version, note: result?.note ?? result?.error ?? null };
   }
 

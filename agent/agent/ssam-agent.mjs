@@ -5,9 +5,11 @@
 //   node agent\ssam-agent.mjs setup --server <url> [--root <dir>] [--credential-file <file>] [--o11-port <port>]
 //   node agent\ssam-agent.mjs run [--root <dir>] [--log-file <file>]
 //   node agent\ssam-agent.mjs status [--root <dir>]
-//   node agent\ssam-agent.mjs doctor [--root <dir>]
+//   node agent\ssam-agent.mjs doctor [--root <dir>] [--json]
 // The credential (ssam_agent_...) is read from the standard input or a file, written to private\credential and never
 // printed. Nothing here imports from platforms/.
+// macOS (docs/AGENTE-MAC.md): the same commands, behind agent/ssam-agent.sh and install.sh; the root is POSIX
+// (~/SSAM-Agent by default), private/ is closed with chmod 700 and the doctor adds the checks of lib/mac-doctor.mjs.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,6 +21,7 @@ import { createAgent, readPack, credentialFile, CREDENTIAL_PATTERN, AGENT_VERSIO
 import { LAYOUT } from './lib/workspace.mjs';
 import { installedStudios } from './lib/studios.mjs';
 import { readConnection } from './lib/o11-connect.mjs';
+import { macDoctor } from './lib/mac-doctor.mjs';
 
 export { createAgent } from './lib/agent.mjs';
 
@@ -28,7 +31,12 @@ const configFile = root => path.join(root, 'private', 'config.json');
 const stateFile = root => path.join(root, 'private', 'agent.json');
 const stopFile = root => path.join(root, 'private', 'agent.stop');
 const readJson = file => { try { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); } catch { return null; } };
-const writeAtomic = (file, text) => { const temporary = file + '.' + process.pid + '.tmp'; fs.writeFileSync(temporary, text); fs.renameSync(temporary, file); };
+// mode (macOS): the file is created with it (the credential: 0600), before it gets its name.
+const writeAtomic = (file, text, mode) => { const temporary = file + '.' + process.pid + '.tmp'; fs.writeFileSync(temporary, text, mode === undefined ? undefined : { mode }); fs.renameSync(temporary, file); };
+// The words of a path for the person, by system: private\credential on Windows, private/credential on macOS.
+const shown = (platform, ...parts) => parts.join(platform === 'darwin' ? '/' : '\\');
+const launcherOf = platform => (platform === 'darwin' ? 'agent/ssam-agent.sh' : 'agent\\ssam-agent.ps1');
+const guideOf = platform => (platform === 'darwin' ? 'docs/AGENTE-MAC.md' : 'docs\\AGENTE-CLIENTE.md');
 const EXIT_TEXT = {
   2: 'credential refused, revoked, expired or replaced by the server owner: ask for a new credential and run setup again',
   3: 'another agent with the same credential took over this account; this one stopped so as not to compete with it',
@@ -45,12 +53,33 @@ export function defaultRoot({ env = process.env, scriptDir = here } = {}) {
 
 // Why a root is not usable, or null. The ODC bridge splits its command line by spaces (so no whitespace); MSIX
 // processes see a private %LOCALAPPDATA% (so the Studio would not find the DLLs there).
-export function rootProblem(root, env = process.env) {
+export function rootProblem(root, env = process.env, platform = process.platform) {
+  if (platform === 'darwin') return posixRootProblem(root, env);
   if (/\s/.test(root)) return `the folder ${root} has a space; the agent needs a folder without spaces. Use --root, for example --root C:\\SSAM-Agent`;
   if (!/^[A-Za-z]:\\/.test(path.win32.resolve(root)) || /^\\\\/.test(root)) return `the folder ${root} must be a local path with a drive letter, such as C:\\SSAM-Agent`;
   const local = env.LOCALAPPDATA ? path.win32.resolve(env.LOCALAPPDATA).toLowerCase() : null;
   const resolved = path.win32.resolve(root).toLowerCase();
   if (local && (resolved === local || resolved.startsWith(local + '\\'))) return `the folder ${root} is inside %LOCALAPPDATA%, which some processes see differently; use another one, such as C:\\SSAM-Agent`;
+  return null;
+}
+
+// macOS: an absolute folder without spaces (the bridge splits its line by spaces), outside the folders macOS guards for
+// privacy (TCC: the Studio would be asked for access or refused there), outside the temporary folders macOS cleans and
+// off /Volumes (another disk, maybe a network or removable one: the Windows rule of a local drive). Names are compared
+// without case, as APFS does by default.
+const fold = text => String(text).normalize('NFC').toLowerCase().replace(/\/+$/, '');
+export function posixRootProblem(root, env = process.env) {
+  const home = env.HOME && env.HOME.startsWith('/') ? env.HOME.replace(/\/+$/, '') : os.homedir();
+  const example = path.posix.join(home, 'SSAM-Agent');
+  if (/\s/.test(root)) return `the folder ${root} has a space; the agent needs a folder without spaces. Use --root, for example --root ${example}`;
+  if (!String(root).startsWith('/')) return `the folder ${root} must be an absolute path, such as ${example}`;
+  const target = fold(path.posix.resolve(root));
+  const inside = parent => target === fold(parent) || target.startsWith(fold(parent) + '/');
+  for (const guarded of ['Desktop', 'Documents', 'Downloads', 'Library/Mobile Documents', 'Library/CloudStorage'].map(name => path.posix.join(home, name)))
+    if (inside(guarded)) return `the folder ${root} is inside ${guarded}, which macOS guards for privacy: the Studio would be asked for access or refused there. Use ${example}`;
+  for (const temporary of ['/tmp', '/private/tmp', '/var/folders', '/private/var/folders', ...(env.TMPDIR ? [env.TMPDIR] : [])])
+    if (inside(temporary)) return `the folder ${root} is a temporary folder that macOS cleans; use ${example}`;
+  if (inside('/Volumes')) return `the folder ${root} is on another volume (/Volumes); use a folder of this Mac's disk, such as ${example}`;
   return null;
 }
 
@@ -87,8 +116,16 @@ async function readCredential({ file, stdin, stderr }) {
   });
 }
 
+// private/ on macOS: owner only (0700), checked after the change; the credential file is then created 0600.
+async function restrictPosix(dir) {
+  fs.chmodSync(dir, 0o700);
+  const mode = fs.statSync(dir).mode & 0o777;
+  if (mode !== 0o700) throw new Error(`the folder kept the mode ${mode.toString(8)}`);
+}
+
 export async function setup({ root, server, credentialFile: file, o11Port, stdin = process.stdin, stdout = process.stdout, stderr = process.stderr,
-  env = process.env, icacls = runIcacls }) {
+  env = process.env, icacls = runIcacls, platform = process.platform, restrict = restrictPosix }) {
+  if (platform === 'darwin') return setupPosix({ root, server, file, o11Port, stdin, stdout, stderr, env, restrict });
   const say = text => stdout.write(text + '\n'); const fail = text => { stderr.write('Error: ' + text + '\n'); return 1; };
   if (!server) return fail('missing --server <url> (the address the server owner gave you)');
   const badServer = serverProblem(server);
@@ -116,6 +153,34 @@ export async function setup({ root, server, credentialFile: file, o11Port, stdin
   return 0;
 }
 
+// setup on macOS: the same checks and files as on Windows; private/ is closed with chmod 700 before the credential is
+// written, and the credential is created 0600.
+async function setupPosix({ root, server, file, o11Port, stdin, stdout, stderr, env, restrict }) {
+  const say = text => stdout.write(text + '\n'); const fail = text => { stderr.write('Error: ' + text + '\n'); return 1; };
+  if (!server) return fail('missing --server <url> (the address the server owner gave you)');
+  const badServer = serverProblem(server);
+  if (badServer) return fail(badServer);
+  const port = o11Port === undefined || o11Port === null ? null : /^\d{4,5}$/.test(String(o11Port)) ? Number(o11Port) : NaN;
+  if (port !== null && !(port >= 1024 && port <= 65535)) return fail(`--o11-port must be a port between 1024 and 65535: ${o11Port}`);
+  if (typeof root !== 'string' || !root.startsWith('/')) return fail(posixRootProblem(String(root ?? ''), env) ?? `the folder ${root} must be an absolute path`);
+  const target = path.posix.resolve(root);
+  const badRoot = posixRootProblem(target, env);
+  if (badRoot) return fail(badRoot);
+  let credential;
+  try { credential = await readCredential({ file, stdin, stderr }); } catch (error) { return fail('could not read the credential: ' + error.message); }
+  if (!CREDENTIAL_PATTERN.test(credential)) return fail('the credential does not have the 54-character ssam_agent_... format (it was neither shown nor saved)');
+  for (const folder of LAYOUT) fs.mkdirSync(path.join(target, ...folder.split('/')), { recursive: true });
+  const privateDir = path.join(target, 'private');
+  try { await restrict(privateDir); }
+  catch (error) { return fail('could not restrict private/ to the current user (chmod 700): ' + error.message); }
+  const previous = readJson(configFile(target)) ?? {};
+  writeAtomic(configFile(target), JSON.stringify({ server: server.replace(/\/+$/, ''), o11Port: port ?? (Number.isInteger(previous.o11Port) ? previous.o11Port : 4516) }, null, 2), 0o600);
+  writeAtomic(credentialFile(target), credential, 0o600);
+  say(`Agent set up in ${target} for ${server}. The credential was saved in private/credential (only this user can read it).`);
+  say(`Next step: ${path.posix.join(target, 'agent', 'ssam-agent.sh')} start`);
+  return 0;
+}
+
 const alive = pid => { try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; } };
 // A state file whose pid lives and was refreshed in the last 90 s means an agent runs for this root.
 function runningAgent(root, now = Date.now()) {
@@ -124,12 +189,12 @@ function runningAgent(root, now = Date.now()) {
   return alive(state.pid) && now - Date.parse(state.at) < 90000 ? state : null;
 }
 
-export async function runAgent({ root, logFile = null, stderr = process.stderr }) {
+export async function runAgent({ root, logFile = null, stderr = process.stderr, platform = process.platform }) {
   const target = path.resolve(root);
   const config = readJson(configFile(target));
-  if (!config?.server || !fs.existsSync(credentialFile(target))) { stderr.write('Error: the agent is not set up; run setup first (docs\\AGENTE-CLIENTE.md).\n'); return 1; }
+  if (!config?.server || !fs.existsSync(credentialFile(target))) { stderr.write(`Error: the agent is not set up; run setup first (${guideOf(platform)}).\n`); return 1; }
   const other = runningAgent(target);
-  if (other) { stderr.write(`Error: another agent already runs in this folder (pid ${other.pid}). Stop it first (agent\\ssam-agent.ps1 stop).\n`); return 1; }
+  if (other) { stderr.write(`Error: another agent already runs in this folder (pid ${other.pid}). Stop it first (${launcherOf(platform)} stop).\n`); return 1; }
   const write = line => { if (logFile) fs.appendFileSync(logFile, line + '\n'); else stderr.write(line + '\n'); };
   const log = (event, fields = {}) => write(JSON.stringify({ time: new Date().toISOString(), event, ...fields }));
   let current = { pid: process.pid, server: config.server, state: 'starting', at: new Date().toISOString() };
@@ -183,35 +248,46 @@ async function packIntegrity(root) {
 }
 const runtimesOf = async () => (await exec('dotnet', ['--list-runtimes'], { windowsHide: true, timeout: 60000 })).stdout;
 
-// doctor: what this machine needs, without printing any secret. deps (tests): flags, runtimes, studios, fetch, env.
-export async function doctor({ root, stdout = process.stdout, deps = {} }) {
-  const target = path.resolve(root);
+// doctor: what this machine needs, without printing any secret. deps (tests): flags, runtimes, studios, fetch, env,
+// platform, mac (the deps of lib/mac-doctor.mjs). json: one JSON object instead of the lines (macOS: with the facts).
+export async function doctor({ root, stdout = process.stdout, deps = {}, json = false }) {
+  const platform = deps.platform ?? process.platform;
+  const target = platform === 'darwin' ? path.posix.resolve(root) : path.resolve(root);
   const env = deps.env ?? process.env;
   const flags = deps.flags ?? process.allowedNodeEnvironmentFlags;
   const checks = [];
   const add = (ok, name, detail, required = true) => checks.push({ ok, name, detail, required });
   for (const flag of ['--use-env-proxy', '--use-system-ca'])
     add(flags.has(flag), 'Node ' + flag, flags.has(flag) ? `${process.version} has ${flag}` : `${process.version} does not have ${flag}: install the current Node 24`);
-  const badRoot = rootProblem(target, env);
+  const badRoot = rootProblem(target, env, platform);
   add(!badRoot, 'agent folder', badRoot ?? target);
   const integrity = await packIntegrity(target);
   add(integrity.ok, 'pack', integrity.detail);
   const pack = readPack(target);
   const config = readJson(configFile(target));
-  const badServer = config?.server ? serverProblem(config.server) : 'no private\\config.json: run setup';
+  const badServer = config?.server ? serverProblem(config.server) : `no ${shown(platform, 'private', 'config.json')}: run setup`;
   add(!badServer, 'server', badServer ?? config.server);
   let credentialOk = false;
   try { credentialOk = CREDENTIAL_PATTERN.test(fs.readFileSync(credentialFile(target), 'utf8').trim()); } catch { /* missing */ }
-  add(credentialOk, 'credential', credentialOk ? 'private\\credential present (not shown)' : 'no valid credential: run setup');
-  let runtimes = '';
-  try { runtimes = await (deps.runtimes ?? runtimesOf)(); } catch { /* no dotnet */ }
-  const hasRuntime = major => new RegExp('^Microsoft\\.NETCore\\.App ' + major + '\\.', 'm').test(runtimes);
-  if (pack.lanes.includes('odc')) add(hasRuntime(10), '.NET 10 (attach ODC)', hasRuntime(10) ? 'installed' : 'the .NET 10 runtime is missing (Microsoft.NETCore.App 10.x)');
-  if (pack.lanes.includes('o11')) { const ok = [8, 9, 10, 11].some(hasRuntime); add(ok, '.NET 8+ (Anvil.Connect)', ok ? 'installed' : 'the .NET 8 or newer runtime is missing'); }
-  const studios = await (deps.studios ?? (() => installedStudios()))().catch(() => ({}));
-  for (const lane of pack.lanes) {
-    const installed = studios?.[lane]?.installed;
-    add(Boolean(installed), lane === 'odc' ? 'ODC Studio' : 'Service Studio', installed ? `${installed.version ?? 'unknown version'} in ${installed.dir}` : 'not found on this machine', false);
+  add(credentialOk, 'credential', credentialOk ? `${shown(platform, 'private', 'credential')} present (not shown)` : 'no valid credential: run setup');
+  let facts = null;
+  if (platform === 'darwin') {
+    // No .NET on a Mac: the agent attaches the Studios itself (the .NET diagnostic IPC); the macOS facts instead.
+    add(true, 'attach', 'the agent speaks the .NET diagnostic IPC itself: no .NET runtime is needed on this Mac', false);
+    const mac = await macDoctor({ pack, deps: deps.mac ?? {} }).catch(error => ({ checks: [{ ok: false, name: 'macOS checks', detail: String(error?.message ?? error), required: false }], facts: null }));
+    checks.push(...mac.checks);
+    facts = mac.facts;
+  } else {
+    let runtimes = '';
+    try { runtimes = await (deps.runtimes ?? runtimesOf)(); } catch { /* no dotnet */ }
+    const hasRuntime = major => new RegExp('^Microsoft\\.NETCore\\.App ' + major + '\\.', 'm').test(runtimes);
+    if (pack.lanes.includes('odc')) add(hasRuntime(10), '.NET 10 (attach ODC)', hasRuntime(10) ? 'installed' : 'the .NET 10 runtime is missing (Microsoft.NETCore.App 10.x)');
+    if (pack.lanes.includes('o11')) { const ok = [8, 9, 10, 11].some(hasRuntime); add(ok, '.NET 8+ (Anvil.Connect)', ok ? 'installed' : 'the .NET 8 or newer runtime is missing'); }
+    const studios = await (deps.studios ?? (() => installedStudios()))().catch(() => ({}));
+    for (const lane of pack.lanes) {
+      const installed = studios?.[lane]?.installed;
+      add(Boolean(installed), lane === 'odc' ? 'ODC Studio' : 'Service Studio', installed ? `${installed.version ?? 'unknown version'} in ${installed.dir}` : 'not found on this machine', false);
+    }
   }
   if (config?.server && !badServer) {
     let reached = false; let detail = '';
@@ -219,8 +295,11 @@ export async function doctor({ root, stdout = process.stdout, deps = {} }) {
     catch (error) { detail = error.message; }
     add(reached, 'server responds', reached ? detail : `${detail}; check the network, the proxy (HTTPS_PROXY) and the certificate (--use-system-ca)`);
   }
-  for (const check of checks) stdout.write(`[${check.ok ? 'ok' : check.required ? 'fail' : 'warn'}] ${check.name}: ${check.detail}\n`);
-  return checks.every(check => check.ok || !check.required) ? 0 : 1;
+  const ok = checks.every(check => check.ok || !check.required);
+  if (json) stdout.write(JSON.stringify({ ok, platform, agentVersion: AGENT_VERSION, node: process.version, root: target, pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: pack.o11BuiltFor },
+    checks: checks.map(check => ({ status: check.ok ? 'ok' : check.required ? 'fail' : 'warn', name: check.name, detail: check.detail })), ...(facts ? { mac: facts } : {}) }, null, 2) + '\n');
+  else for (const check of checks) stdout.write(`[${check.ok ? 'ok' : check.required ? 'fail' : 'warn'}] ${check.name}: ${check.detail}\n`);
+  return ok ? 0 : 1;
 }
 
 function parse(argv) {
@@ -230,6 +309,7 @@ function parse(argv) {
     const name = rest[i];
     if (!name.startsWith('--')) throw new Error('unexpected argument: ' + name);
     const key = name.slice(2);
+    if (key === 'json' && command === 'doctor') { options.json = true; continue; }
     if (!['server', 'root', 'credential-file', 'log-file', 'o11-port'].includes(key)) throw new Error('unknown option: ' + name);
     if (i + 1 >= rest.length) throw new Error('missing value for ' + name);
     options[key] = rest[++i];
@@ -245,8 +325,8 @@ export async function main(argv = process.argv.slice(2)) {
   if (command === 'setup') return setup({ root, server: options.server, credentialFile: options['credential-file'], o11Port: options['o11-port'] });
   if (command === 'run') return runAgent({ root, logFile: options['log-file'] ?? null });
   if (command === 'status') return status({ root });
-  if (command === 'doctor') return doctor({ root });
-  process.stderr.write('Usage: ssam-agent.mjs setup --server <url> [--root <folder>] [--credential-file <file>] [--o11-port <port>] | run | status | doctor\n');
+  if (command === 'doctor') return doctor({ root, json: options.json === true });
+  process.stderr.write('Usage: ssam-agent.mjs setup --server <url> [--root <folder>] [--credential-file <file>] [--o11-port <port>] | run | status | doctor [--json]\n');
   return 1;
 }
 

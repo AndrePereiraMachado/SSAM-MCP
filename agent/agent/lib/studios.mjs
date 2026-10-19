@@ -1,10 +1,13 @@
 // The Studios of this machine: running processes with each executable's ProductVersion (studio.processes and the
 // per-pid version check, docs/FASE2-AGENTE.md 4.4/4.8), and the installed Studio of each lane for the Hello (3.1).
 // Only reads: tasklist, a CIM process query, file versions and the uninstall registry keys. Never touches a Studio process.
+// On macOS (platform 'darwin') the same three answers come from macos.mjs (application bundles, ps, the version resource
+// of the managed entry assembly); the image names stay the protocol's names of the two lanes.
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { studioProcesses, installedBundles, inspectBundle, bundleOfExe } from './macos.mjs';
 
 const exec = promisify(execFile);
 
@@ -38,8 +41,9 @@ async function describePids(image, pids) {
   return (Array.isArray(parsed) ? parsed : [parsed]).map(p => ({ pid: Number(p.pid), path: p.path ?? null, version: p.version ?? null }));
 }
 export async function listProcesses(image, { tasklist = () => exec('tasklist', ['/FI', 'IMAGENAME eq ' + image, '/FO', 'CSV', '/NH'], { windowsHide: true, timeout: 15000 }),
-  describe = describePids } = {}) {
+  describe = describePids, platform = process.platform, mac = {} } = {}) {
   if (!IMAGES.includes(image)) return [];
+  if (platform === 'darwin') return macProcesses(image, mac);
   let pids;
   try { pids = parseTasklist((await tasklist()).stdout, image); } catch { return []; }
   for (const key of [...described.keys()]) if (key.startsWith(image + ':') && !pids.includes(Number(key.slice(image.length + 1)))) described.delete(key);
@@ -83,12 +87,40 @@ export async function locateInstalled(kind, { env = process.env, exists = fs.exi
   return valid(path.join(env.ProgramFiles || 'C:\\Program Files', ...entry.programFiles));
 }
 
-// Hello.studios: { odc: { installed: {dir, version} | null }, o11: { installed: ... } }.
-export async function installedStudios({ locate = locateInstalled, version = fileVersion } = {}) {
+// Hello.studios: { odc: { installed: {dir, version} | null }, o11: { installed: ... } }. On macOS dir is the bundle.
+export async function installedStudios({ locate = locateInstalled, version = fileVersion, platform = process.platform } = {}) {
   const studios = {};
   for (const [kind, entry] of Object.entries(STUDIOS)) {
     const dir = await locate(kind).catch(() => null);
-    studios[kind] = { installed: dir ? { dir, version: await version(path.join(dir, entry.image)).catch(() => null) } : null };
+    studios[kind] = { installed: dir ? { dir, version: await version(platform === 'darwin' ? dir : path.join(dir, entry.image)).catch(() => null) } : null };
   }
   return studios;
+}
+
+// ---- macOS (macos.mjs). One inspection per bundle while its Info.plist keeps its time (a Studio that updates itself in
+// place is read again).
+const LANE_OF = { 'ODCStudio.exe': 'odc', 'ServiceStudio.exe': 'o11' };
+const bundles = new Map(); // bundle -> {stamp, info}
+async function macBundle(bundle, mac) {
+  const f = mac.fs ?? fs;
+  let stamp = null;
+  try { stamp = f.statSync(path.posix.join(bundle, 'Contents', 'Info.plist')).mtimeMs; } catch { /* no Info.plist */ }
+  const known = bundles.get(bundle);
+  if (known && known.stamp === stamp) return known.info;
+  const info = await inspectBundle(bundle, mac).catch(() => null);
+  bundles.set(bundle, { stamp, info });
+  return info;
+}
+async function macProcesses(image, mac) {
+  const listed = await studioProcesses(LANE_OF[image], { ...mac, inspect: bundle => macBundle(bundle, mac) }).catch(() => []);
+  return listed.map(p => ({ pid: p.pid, path: p.path, version: p.version ?? null }));
+}
+// The version of a bundle, or of the bundle an executable lives in, or null.
+export async function macFileVersion(target, mac = {}) {
+  const bundle = /\.app$/i.test(String(target ?? '')) ? target : bundleOfExe(target);
+  return bundle ? (await macBundle(bundle, mac))?.version ?? null : null;
+}
+// The installed bundle of a lane (the newest version, /Applications first), or null.
+export async function macLocate(kind, mac = {}) {
+  return (await installedBundles(mac)).find(info => info.kind === kind)?.bundle ?? null;
 }
