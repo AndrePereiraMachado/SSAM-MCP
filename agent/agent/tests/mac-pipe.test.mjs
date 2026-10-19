@@ -112,3 +112,29 @@ test('a reply that does not come is an unknown outcome (sent); a socket path mac
   const long = createUnixPipe({ folders: async () => ['/' + 'x'.repeat(UNIX_PATH_MAX) + '/'] });
   await assert.rejects(long(501, 'v97', ['status'], { stat: () => ({ ino: 1 }) }), e => e.code === 'PIPE_TRANSPORT' && e.sent === false && /cannot open it/.test(e.message));
 });
+
+// Review B1: on the last attempt the time left can be 1 ms, and a refusal that comes a little later lost the race against
+// the connect timer (PIPE_CONNECT_TIMEOUT instead of BRIDGE_NOT_ATTACHED, 2 runs in 20). An attempt always gets a short
+// floor of time, so the socket's own answer decides; a connect timeout (nothing written) is one more attempt, and at the
+// end it is said as such, never as "not attached".
+test('a refusal that comes after the last moment of connectMs is still a refusal: BRIDGE_NOT_ATTACHED, nothing written', async () => {
+  resetUnixPipes();
+  const call = createUnixPipe({ folders: async () => [DIR] });
+  const c = clock();
+  let connects = 0;
+  const slowRefusal = () => { connects++; const socket = new EventEmitter(); socket.destroy = () => {}; socket.write = () => assert.fail('nothing is written');
+    setTimeout(() => socket.emit('error', Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })), 20); return socket; };
+  await assert.rejects(call(501, 'v97', ['status'], { connectMs: 5, stat: () => ({ ino: 5 }), connect: slowRefusal, now: c.now, sleep: c.sleep }),
+    e => { assert.equal(e.code, 'BRIDGE_NOT_ATTACHED', e.message); assert.equal(e.sent, false); return true; });
+  assert.ok(connects >= 1);
+});
+
+test('a socket that never accepts: PIPE_CONNECT_TIMEOUT with nothing written once connectMs is over, never "not attached"', async () => {
+  resetUnixPipes();
+  const call = createUnixPipe({ folders: async () => [DIR] });
+  const silent = () => { const socket = new EventEmitter(); socket.destroy = () => {}; socket.write = () => assert.fail('nothing is written'); return socket; };
+  const started = Date.now();
+  await assert.rejects(call(501, 'v97', ['status'], { connectMs: 300, stat: () => ({ ino: 6 }), connect: silent }),
+    e => { assert.equal(e.code, 'PIPE_CONNECT_TIMEOUT', e.message); assert.equal(e.sent, false); assert.doesNotMatch(e.message, /call studio_attach/); return true; });
+  assert.ok(Date.now() - started >= 280);
+});
