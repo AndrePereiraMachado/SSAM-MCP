@@ -67,21 +67,87 @@ export function rootProblem(root, env = process.env, platform = process.platform
 // macOS: an absolute folder without spaces (the bridge splits its line by spaces), outside the folders macOS guards for
 // privacy (TCC: the Studio would be asked for access or refused there), outside the temporary folders macOS cleans and
 // off /Volumes (another disk, maybe a network or removable one: the Windows rule of a local drive). Names are compared
-// without case, as APFS does by default.
+// without case, as APFS does by default. A folder of its own (review M2): never the disk root, the home folder itself or a
+// folder above it, ~/Library (macOS and the applications keep their data there) nor a folder of macOS or of the
+// applications: uninstall removes what the installation put in the root, so the root must be the pack's own folder.
+export const SYSTEM_FOLDERS = Object.freeze(['/System', '/Library', '/Applications', '/usr', '/bin', '/sbin', '/etc', '/opt', '/private', '/var', '/tmp', '/cores',
+  '/dev', '/Volumes', '/Network']);
+export const GUARDED_FOLDERS = Object.freeze(['Desktop', 'Documents', 'Downloads', 'Library/Mobile Documents', 'Library/CloudStorage']);
 const fold = text => String(text).normalize('NFC').toLowerCase().replace(/\/+$/, '');
+const homeOf = env => (env.HOME && env.HOME.startsWith('/') ? env.HOME.replace(/\/+$/, '') : os.homedir());
+// The folder of GUARDED_FOLDERS (absolute) that holds target, or null.
+const guardedFolderOf = (target, home) => GUARDED_FOLDERS.map(name => path.posix.join(home, name)).find(guarded => fold(target) === fold(guarded) || fold(target).startsWith(fold(guarded) + '/')) ?? null;
 export function posixRootProblem(root, env = process.env) {
-  const home = env.HOME && env.HOME.startsWith('/') ? env.HOME.replace(/\/+$/, '') : os.homedir();
+  const home = homeOf(env);
   const example = path.posix.join(home, 'SSAM-Agent');
   if (/\s/.test(root)) return `the folder ${root} has a space; the agent needs a folder without spaces. Use --root, for example --root ${example}`;
   if (!String(root).startsWith('/')) return `the folder ${root} must be an absolute path, such as ${example}`;
   const target = fold(path.posix.resolve(root));
   const inside = parent => target === fold(parent) || target.startsWith(fold(parent) + '/');
-  for (const guarded of ['Desktop', 'Documents', 'Downloads', 'Library/Mobile Documents', 'Library/CloudStorage'].map(name => path.posix.join(home, name)))
-    if (inside(guarded)) return `the folder ${root} is inside ${guarded}, which macOS guards for privacy: the Studio would be asked for access or refused there. Use ${example}`;
+  if (target === '') return `the folder / is the root of the disk: extract the pack to a folder of its own, such as ${example}`;
+  if (target === fold(home)) return `the folder ${root} is your home folder itself: extract the pack to a folder of its own, such as ${example}`;
+  if (fold(home).startsWith(target + '/')) return `the folder ${root} holds your home folder: extract the pack to a folder of its own, such as ${example}`;
+  const guarded = guardedFolderOf(target, home);
+  if (guarded) return `the folder ${root} is inside ${guarded}, which macOS guards for privacy: the Studio would be asked for access or refused there. Use ${example}`;
+  if (inside(path.posix.join(home, 'Library'))) return `the folder ${root} is inside ${path.posix.join(home, 'Library')}, where macOS and the applications keep their own data: use ${example}`;
   for (const temporary of ['/tmp', '/private/tmp', '/var/folders', '/private/var/folders', ...(env.TMPDIR ? [env.TMPDIR] : [])])
     if (inside(temporary)) return `the folder ${root} is a temporary folder that macOS cleans; use ${example}`;
   if (inside('/Volumes')) return `the folder ${root} is on another volume (/Volumes); use a folder of this Mac's disk, such as ${example}`;
+  for (const system of SYSTEM_FOLDERS) if (inside(system)) return `the folder ${root} is inside ${system}, a folder of macOS or of the applications: use a folder of your own, such as ${example}`;
   return null;
+}
+
+// The real path of a POSIX folder (from its nearest existing parent), or null when the system does not spell it as POSIX.
+function realPosix(target) {
+  let existing = target; const tail = [];
+  for (;;) {
+    try { const real = fs.realpathSync.native(existing); return real.startsWith('/') ? path.posix.join(real, ...tail) : null; }
+    catch { const up = path.posix.dirname(existing); if (up === existing) return null; tail.unshift(path.posix.basename(existing)); existing = up; }
+  }
+}
+
+// What an extracted SSAM agent pack folder may hold (review M2), from the layout of the pack (pack.json, the tar) and of
+// the agent: at the top, the pack's files and folders (install.sh, pack.json, agent, bin, docs, odc, and any other top
+// name pack.json lists), the agent's data folders (private, inbox, o11), the download folder of install.sh
+// (.install-node) and the .DS_Store Finder writes; agent/, bin/ and odc/studio/ hold the code and binaries of this pack or
+// of an older one; odc/ holds README.md, studio/ and the data folders snapshots/, journal/, lab/; docs/ holds the guides
+// (*.md). The data folders are the agent's own and are not looked into; anything else, and a link anywhere outside them,
+// is not of an SSAM agent pack. -> the relative paths of what is not (at most limit), [] for a missing or empty folder.
+export function foreignContent(root, { files = fs, limit = 5 } = {}) {
+  const join = rel => (rel ? path.join(root, ...rel.split('/')) : root);
+  let top;
+  try { top = files.lstatSync(root); } catch { return []; }
+  if (top.isSymbolicLink() || !top.isDirectory()) return ['(the folder itself is a link or a file)'];
+  let pack = null;
+  try { if (files.lstatSync(join('pack.json')).isFile()) pack = JSON.parse(files.readFileSync(join('pack.json'), 'utf8').replace(/^﻿/, '')); } catch { pack = null; }
+  const listed = Array.isArray(pack?.files) ? pack.files.map(entry => String(entry?.path ?? '')).filter(rel => /^[^/\\]/.test(rel) && !rel.split('/').includes('..')) : [];
+  const topFiles = new Set(['install.sh', 'pack.json', ...listed.filter(rel => !rel.includes('/'))]);
+  const topFolders = new Set(['agent', 'bin', 'docs', 'odc', ...listed.filter(rel => rel.includes('/')).map(rel => rel.split('/')[0])]);
+  const DATA = new Set(['private', 'inbox', 'o11', 'odc/snapshots', 'odc/journal', 'odc/lab', '.install-node']);
+  const foreign = [];
+  let seen = 0;
+  // rule: 'top' (the root), 'code' (agent/, bin/, odc/studio/: anything but a link), 'docs' (*.md) or 'odc'.
+  const walk = (rel, rule) => {
+    let items;
+    try { items = files.readdirSync(join(rel), { withFileTypes: true }); } catch (error) { foreign.push(`${rel || '.'}/ (cannot be read: ${error.code ?? error.message})`); return; }
+    for (const item of items.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+      if (foreign.length >= limit || ++seen > 20000) return;
+      const name = item.name; const sub = rel ? rel + '/' + name : name;
+      if (name === '.DS_Store' && item.isFile()) continue;
+      if (item.isSymbolicLink()) { foreign.push(sub + ' (a link)'); continue; }
+      if (DATA.has(sub)) { if (!item.isDirectory()) foreign.push(sub); continue; }
+      const dir = item.isDirectory();
+      let next = null; let ok = false;
+      if (rule === 'code') { next = 'code'; ok = true; }
+      else if (rule === 'top') { if (dir) next = sub === 'docs' ? 'docs' : sub === 'odc' ? 'odc' : topFolders.has(sub) ? 'code' : null; else ok = topFiles.has(name); }
+      else if (rule === 'docs') ok = !dir && /\.md$/i.test(name);
+      else if (rule === 'odc') { if (dir) next = sub === 'odc/studio' ? 'code' : null; else ok = name === 'README.md'; }
+      if (dir) { if (next) walk(sub, next); else foreign.push(sub + '/'); }
+      else if (!ok || !item.isFile()) foreign.push(sub);
+    }
+  };
+  walk('', 'top');
+  return foreign.slice(0, limit);
 }
 
 // Server URL check: https, or plain http only on loopback (tests, or a tunnel endpoint on this machine).
@@ -167,6 +233,12 @@ async function setupPosix({ root, server, file, o11Port, stdin, stdout, stderr, 
   const target = path.posix.resolve(root);
   const badRoot = posixRootProblem(target, env);
   if (badRoot) return fail(badRoot);
+  // The real folder as well (a link to a system folder: /etc is /private/etc), when the system spells it as POSIX.
+  const real = realPosix(target);
+  const badReal = real && real !== target ? posixRootProblem(real, env) : null;
+  if (badReal) return fail(badReal);
+  const foreign = foreignContent(target);
+  if (foreign.length) return fail(`the folder ${target} already holds files that are not of an SSAM agent pack: ${foreign.join(', ')}. Extract the pack to a new folder of its own, such as ${path.posix.join(homeOf(env), 'SSAM-Agent')}`);
   let credential;
   try { credential = await readCredential({ file, stdin, stderr }); } catch (error) { return fail('could not read the credential: ' + error.message); }
   if (!CREDENTIAL_PATTERN.test(credential)) return fail('the credential does not have the 54-character ssam_agent_... format (it was neither shown nor saved)');
@@ -270,6 +342,11 @@ export async function doctor({ root, stdout = process.stdout, deps = {}, json = 
     add(flags.has(flag), 'Node ' + flag, flags.has(flag) ? `${process.version} has ${flag}` : `${process.version} does not have ${flag}: install the current Node 24`);
   const badRoot = rootProblem(target, env, platform);
   add(!badRoot, 'agent folder', badRoot ?? target);
+  if (platform === 'darwin') {
+    const foreign = foreignContent(target);
+    add(foreign.length === 0, 'agent folder content', foreign.length ? `it holds files that are not of an SSAM agent pack (${foreign.join(', ')}); uninstall keeps them, and a new pack goes to a folder of its own`
+      : 'only the pack, the agent data and the Node of the installer', false);
+  }
   const integrity = await packIntegrity(target);
   add(integrity.ok, 'pack', integrity.detail);
   const pack = readPack(target);

@@ -66,6 +66,30 @@ for guarded in Desktop Documents Downloads "Library/Mobile Documents" Library/Cl
   case "$LOWER_ROOT/" in "$lower"/*) fail "the folder $ROOT is inside $HOME/$guarded, which macOS guards for privacy: extract the pack to $HOME/SSAM-Agent" ;; esac
 done
 case "$LOWER_ROOT/" in /volumes/*|/tmp/*|/private/tmp/*|/var/folders/*|/private/var/folders/*) fail "the folder $ROOT is on another volume or in a temporary folder: extract the pack to $HOME/SSAM-Agent" ;; esac
+# A folder of its own (uninstall removes what the installation put in it): never the disk root, the home folder or a
+# folder above it, ~/Library, a folder of macOS or of the applications, nor a folder that holds anything else.
+LOWER_HOME="${LOWER_HOME%/}"
+[ "$ROOT" != "/" ] || fail "the folder / is the root of the disk: extract the pack to a folder of its own, such as $HOME/SSAM-Agent"
+[ "$LOWER_ROOT" != "$LOWER_HOME" ] || fail "the folder $ROOT is your home folder itself: extract the pack to a folder of its own, such as $HOME/SSAM-Agent"
+case "$LOWER_HOME/" in "$LOWER_ROOT"/*) fail "the folder $ROOT holds your home folder: extract the pack to a folder of its own, such as $HOME/SSAM-Agent" ;; esac
+case "$LOWER_ROOT/" in "$LOWER_HOME/library"/*) fail "the folder $ROOT is inside $HOME/Library, where macOS and the applications keep their own data: extract the pack to $HOME/SSAM-Agent" ;; esac
+for system in /System /Library /Applications /usr /bin /sbin /etc /opt /private /var /tmp /cores /dev /Volumes /Network; do
+  lower="$(printf '%s' "$system" | tr '[:upper:]' '[:lower:]')"
+  case "$LOWER_ROOT/" in "$lower"/*) fail "the folder $ROOT is inside $system, a folder of macOS or of the applications: extract the pack to $HOME/SSAM-Agent" ;; esac
+done
+# An extracted pack (and a folder set up before) has only these names at its top; setup checks the whole folder.
+FOREIGN=""
+for entry in "$ROOT"/* "$ROOT"/.[!.]* "$ROOT"/..?*; do
+  [ -e "$entry" ] || [ -L "$entry" ] || continue
+  name="${entry##*/}"
+  if [ -L "$entry" ]; then FOREIGN="$FOREIGN, $name (a link)"; continue; fi
+  case "$name" in
+    install.sh|pack.json|.DS_Store) [ -f "$entry" ] || FOREIGN="$FOREIGN, $name" ;;
+    agent|bin|docs|odc|private|inbox|o11|.install-node) [ -d "$entry" ] || FOREIGN="$FOREIGN, $name" ;;
+    *) if [ -d "$entry" ]; then FOREIGN="$FOREIGN, $name/"; else FOREIGN="$FOREIGN, $name"; fi ;;
+  esac
+done
+[ -z "$FOREIGN" ] || fail "the folder $ROOT already holds files that are not of an SSAM agent pack: ${FOREIGN#, }. Extract the pack to a new folder of its own, such as $HOME/SSAM-Agent"
 [ -f "$ROOT/pack.json" ] && [ -f "$ROOT/agent/ssam-agent.mjs" ] || fail "this folder is not an extracted SSAM agent pack (pack.json or agent/ssam-agent.mjs is missing)"
 
 # ---- 2. the quarantine of this folder only (files that came by a browser or a chat carry it)

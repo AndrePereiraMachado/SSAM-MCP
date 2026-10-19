@@ -27,7 +27,8 @@ test('the macOS root: absolute, no space, outside Desktop, Documents, Downloads,
   const env = { HOME: '/Users/ana', TMPDIR: '/var/folders/x1/abc/T/' };
   assert.equal(posixRootProblem('/Users/ana/SSAM-Agent', env), null);
   assert.equal(rootProblem('/Users/ana/SSAM-Agent', env, 'darwin'), null);
-  assert.equal(posixRootProblem('/opt/ssam', env), null);
+  // A folder of macOS or of the applications is refused too (review M2, mac-root.test.mjs).
+  assert.match(posixRootProblem('/opt/ssam', env), /inside \/opt, a folder of macOS or of the applications/);
   const cases = [['/Users/ana/My Agent', /has a space.*--root \/Users\/ana\/SSAM-Agent/], ['SSAM-Agent', /absolute path, such as \/Users\/ana\/SSAM-Agent/],
     ['/Users/ana/Desktop/SSAM', /inside \/Users\/ana\/Desktop, which macOS guards/], ['/Users/ana/documents/SSAM', /inside \/Users\/ana\/Documents/],
     ['/Users/ana/Downloads', /Downloads/], ['/Users/ana/Library/CloudStorage/OneDrive-X/a', /CloudStorage/], ['/tmp/agent', /temporary folder/],
