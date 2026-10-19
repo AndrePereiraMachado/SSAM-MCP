@@ -68,8 +68,9 @@ test('agent-pack.ps1 -Platform mac: the exact tar.gz, its modes, pack.json (no n
     assert.ok(entries.every(e => e.type === 'file' || e.type === 'dir'));
     for (const e of entries) assert.equal(e.mode, e.type === 'dir' || /\.sh$/.test(e.name) ? 0o755 : 0o644, e.name);
     for (const e of files) assert.equal(/\.(exe|ps1|cs|csproj|pdb|key)$/i.test(e.name) || /^odc\/studio\/bridge\/client\/|^bin\/o11\/connect\/|^agent\/node\//i.test(e.name), false, e.name);
-    // The shipped bytes are the box's own (agent code, scripts, guides).
-    for (const rel of ['agent/ssam-agent.sh', 'agent/ssam-agent.mjs', 'docs/AGENTE-MAC.md']) assert.equal(sha(files.find(e => e.name === rel).data), sha(fs.readFileSync(path.join(box, ...rel.split('/')))), rel);
+    // The shipped bytes are the box's own (agent code, scripts, guides), with LF line ends (review B2).
+    const lf = bytes => Buffer.from(bytes.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
+    for (const rel of ['agent/ssam-agent.sh', 'agent/ssam-agent.mjs', 'docs/AGENTE-MAC.md', 'docs/AGENTE-CLIENTE.md']) assert.equal(sha(files.find(e => e.name === rel).data), sha(lf(fs.readFileSync(path.join(box, ...rel.split('/'))))), rel);
     assert.equal(sha(files.find(e => e.name === 'install.sh').data), sha(fs.readFileSync(path.join(box, 'agent', 'install.sh'))));
     const packText = files.find(e => e.name === 'pack.json').data.toString('utf8').replace(/^﻿/, '');
     assert.equal(/\bnull\b/.test(packText), false, 'no null in pack.json');
@@ -114,5 +115,35 @@ test('agent-pack.ps1 -Platform mac: an IP finding in the tree read back deletes 
     }
     const zip = pack(['-Out', path.join(work, 'out', 'x.zip'), '-Lanes', 'odc', '-NoBuild', '-Prebuilt', path.join(work, 'ok'), '-Platform', 'mac']);
     assert.notEqual(zip.code, 0); assert.match(zip.out, /escreve um \.tar\.gz/);
+  } finally { fs.rmSync(work, { recursive: true, force: true }); }
+});
+
+// Review B2: the guides of docs/ have no eol attribute, so a checkout with core.autocrlf gives them CRLF and the tar came
+// out different from one checkout to another. The macOS pack writes every text file with LF: a CRLF copy of the box gives
+// the same bytes as an LF one.
+test('agent-pack.ps1 -Platform mac: text files go with LF whatever the checkout, so a CRLF checkout gives the same files', { skip: process.platform !== 'win32' }, () => {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-mac-pack-eol-'));
+  try {
+    fakePrebuilt(path.join(work, 'prebuilt'));
+    // A copy of the box as a CRLF checkout would write it: the guides and the scripts' JSON with CRLF.
+    const copy = path.join(work, 'box');
+    fs.cpSync(path.join(box, 'agent'), path.join(copy, 'agent'), { recursive: true, filter: source => !/[\\/]tests([\\/]|$)/.test(path.relative(box, source)) });
+    fs.cpSync(path.join(box, 'scripts'), path.join(copy, 'scripts'), { recursive: true });
+    for (const name of ['AGENTE-CLIENTE.md', 'AGENTE-MAC.md']) write(path.join(copy, 'docs', name), fs.readFileSync(path.join(box, 'docs', name), 'utf8').replace(/\r?\n/g, '\r\n'));
+    const tars = {};
+    for (const [label, script] of [['lf', path.join(box, 'scripts', 'agent-pack.ps1')], ['crlf', path.join(copy, 'scripts', 'agent-pack.ps1')]]) {
+      const out = path.join(work, label, 'ssam-agent-mac.tar.gz');
+      const run = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, '-Out', out, '-Lanes', 'odc,o11', '-NoBuild', '-Prebuilt', path.join(work, 'prebuilt'), '-Platform', 'mac'],
+        { encoding: 'utf8', windowsHide: true, timeout: 180000, env: { ...process.env, SSAM_NODE: process.execPath } });
+      assert.equal(run.status, 0, label + ': ' + run.stdout + run.stderr);
+      tars[label] = readTarGz(out).filter(e => e.type === 'file');
+    }
+    for (const e of tars.crlf) {
+      if (/\.(md|mjs|sh|json|txt)$/.test(e.name)) assert.equal(e.data.includes(0x0d), false, e.name + ' has a CR');
+      if (e.name === 'pack.json') continue;
+      const twin = tars.lf.find(x => x.name === e.name);
+      assert.ok(twin, e.name);
+      assert.equal(sha(e.data), sha(twin.data), e.name + ': the same bytes from both checkouts');
+    }
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
 });
