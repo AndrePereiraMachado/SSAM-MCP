@@ -66,6 +66,11 @@ test('agent-pack.ps1 -Platform mac: the exact tar.gz, its modes, pack.json (no n
       'bin/o11/hook/Anvil.RuntimeHook.Agent.deps.json', 'bin/o11/hook/Anvil.RuntimeHook.Agent.dll', 'docs/AGENTE-CLIENTE.md', 'docs/AGENTE-MAC.md', 'install.sh', 'odc/README.md',
       'odc/studio/bridge/bin/Release/net8.0/ODC3.Bridge.v97.deps.json', 'odc/studio/bridge/bin/Release/net8.0/ODC3.Bridge.v97.dll', 'pack.json'].sort());
     assert.ok(entries.every(e => e.type === 'file' || e.type === 'dir'));
+    // install.sh refuses a folder with other names at its top (review M2): every top name of the pack is one it accepts.
+    const accepted = (fs.readFileSync(path.join(box, 'agent', 'install.sh'), 'utf8').match(/^\s+((?:[\w.-]+\|)+[\w.-]+)\) \[ -[fd] "\$entry" \]/gm) ?? [])
+      .flatMap(line => line.trim().split(')')[0].split('|'));
+    assert.ok(accepted.includes('private') && accepted.includes('pack.json'), accepted.join(' '));
+    for (const top of new Set(entries.map(e => e.name.split('/')[0]))) assert.ok(accepted.includes(top), `install.sh does not accept ${top} at the top of the folder`);
     for (const e of entries) assert.equal(e.mode, e.type === 'dir' || /\.sh$/.test(e.name) ? 0o755 : 0o644, e.name);
     for (const e of files) assert.equal(/\.(exe|ps1|cs|csproj|pdb|key)$/i.test(e.name) || /^odc\/studio\/bridge\/client\/|^bin\/o11\/connect\/|^agent\/node\//i.test(e.name), false, e.name);
     // The shipped bytes are the box's own (agent code, scripts, guides), with LF line ends (review B2).
