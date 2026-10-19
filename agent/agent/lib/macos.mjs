@@ -149,7 +149,7 @@ export function officialBundle(bundle, home) {
 // The installed Studios: [{...inspectBundle}] of the application folders, newest version first, /Applications first.
 export async function installedBundles(deps = {}) {
   const home = deps.home ?? homeOf(deps.env);
-  const roots = applicationFolders(home);
+  const roots = deps.roots ?? applicationFolders(home);
   const found = [];
   for (const bundle of findBundles(roots, { fs: deps.fs ?? fs })) {
     const info = await inspectBundle(bundle, deps).catch(() => null);

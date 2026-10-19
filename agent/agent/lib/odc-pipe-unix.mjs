@@ -35,8 +35,9 @@ export function createUnixPipe({ folders }) {
     for (const file of candidates) if (Buffer.byteLength(file) > UNIX_PATH_MAX)
       throw new PipeError(`The ODC bridge socket path has more than ${UNIX_PATH_MAX} bytes (${file}); macOS cannot open it`, { code: 'PIPE_TRANSPORT', sent: false });
     for (let wait = 25; ; wait = Math.min(wait * 2, 250)) {
-      const file = candidates.find(candidate => stat(candidate));
-      const current = file ? identityOf(stat(file)) : null;
+      // The first folder that has the socket, and the identity of the instance it names now (read once).
+      let file = null; let current = null;
+      for (const candidate of candidates) { const found = stat(candidate); if (found) { file = candidate; current = identityOf(found); break; } }
       if (file && busy.get(file)) {
         if (now() >= deadline) throw new PipeError(`The ODC bridge ${version} of ODC Studio ${pid} stayed busy for ${Math.round(connectMs / 1000)} s; a command is still running there: read its evidence or wait, never repeat a write`, { code: 'BRIDGE_BUSY', sent: false });
       } else if (file && current !== served.get(file)) {

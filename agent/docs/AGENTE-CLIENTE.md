@@ -61,7 +61,7 @@ once: keep both in a password vault, never in a repository or a chat.
 
 ## Prerequisites
 
-- Windows 10 or 11.
+- Windows 10 or 11. On a Mac, use the macOS pack and [AGENTE-MAC.md](AGENTE-MAC.md).
 - Node: no need to install it. The pack carries `agent\node\node.exe` (Node 24, with the options `--use-env-proxy` and
   `--use-system-ca`) and, next to it, `agent\node\LICENSE`, the Node license, which goes with the binary.
   `ssam-agent.ps1` uses this Node. Only a pack built without Node (the owner tells you) needs Node 24 installed (the

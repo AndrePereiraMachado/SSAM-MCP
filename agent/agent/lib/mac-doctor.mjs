@@ -12,7 +12,7 @@ import { unixPipeName, UNIX_PATH_MAX } from './odc-pipe-unix.mjs';
 
 const posix = path.posix;
 const firstLine = error => String(error?.message ?? error).split('\n')[0].slice(0, 200);
-const numbers = value => (/^\s*(\d+)\.(\d+)(?:\.(\d+))?/.exec(String(value ?? '')) ?? []).slice(1).map(v => Number(v ?? 0));
+const numbers = value => (/^\s*(\d+)(?:\.(\d+))?(?:\.(\d+))?/.exec(String(value ?? '')) ?? []).slice(1).map(v => Number(v ?? 0));
 const atLeast = (version, wanted) => { const a = numbers(version); const b = numbers(wanted); for (let i = 0; i < 3; i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0); return a.length > 0; };
 
 export async function macDoctor({ pack = {}, deps = {} } = {}) {

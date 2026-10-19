@@ -170,12 +170,13 @@ function createPosixWorkspace(root, files) {
     if (!insidePosix(P.join(real, ...tail), P.join(realRoot(), ...head))) throw forbidden(`${original} leaves ${prefix} through a link`);
     return target;
   }
-  // The part of an absolute path under the root (as given, or its real path), or null.
+  // The part of an absolute path under the root (as given, or its real path), or null; compared segment by segment, so
+  // an NFD spelling of the root (longer than its NFC one) still cuts at the right place.
   const under = text => {
-    const normalized = P.normalize(text);
+    const segments = P.normalize(text).split('/');
     for (const top of [base, realRoot()]) {
-      const head = top.replace(/\/$/, '');
-      if (fold(normalized).startsWith(fold(head) + '/')) return normalized.slice(head.length + 1);
+      const head = top.replace(/\/$/, '').split('/');
+      if (segments.length > head.length && head.every((part, i) => fold(part) === fold(segments[i]))) return segments.slice(head.length).join('/');
     }
     return null;
   };
