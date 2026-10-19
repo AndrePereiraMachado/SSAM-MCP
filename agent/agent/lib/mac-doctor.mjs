@@ -66,11 +66,12 @@ export async function macDoctor({ pack = {}, deps = {} } = {}) {
     const official = officialBundle(info.bundle, home);
     const fact = { lane: info.kind, bundle: info.bundle, official, executable: info.executable, archs, managedDir: info.managedDir, entry: info.entry,
       productVersion: info.productVersion, shortVersion: info.shortVersion, bundleVersion: info.bundleVersion, version: info.version, versionSource: info.versionSource,
-      startupHooks: hooks === false || hooks === 'false' ? 'off' : 'on', diagnosticsEnvironment: diagnostics, sandboxed, entitlementsRead: entitlements !== null };
+      startupHooks: info.runtimeConfig?.unreadable === true ? 'unknown' : hooks === false || hooks === 'false' ? 'off' : 'on', diagnosticsEnvironment: diagnostics, sandboxed, entitlementsRead: entitlements !== null };
     facts.studios.push(fact);
     const problems = [];
     if (!official) problems.push('it is not in /Applications or ~/Applications: move it there (the agent attaches only an installed Studio)');
     if (fact.startupHooks === 'off') problems.push('this build turns startup hooks off (System.StartupHookProvider.IsSupported=false): no bridge can be attached; tell the server owner');
+    if (fact.startupHooks === 'unknown') problems.push(`its ${info.entry}.runtimeconfig.json cannot be read, so the attach stops before sending anything: reinstall the Studio from its official installer`);
     if (diagnostics === '0') problems.push('its Info.plist sets DOTNET_EnableDiagnostics=0: the attach is off; tell the server owner');
     if (sandboxed) problems.push('it runs in the App Sandbox: its sockets live in its container; tell the server owner');
     if (!info.exePath || archs.length === 0) problems.push('its executable (CFBundleExecutable) was not found or is not a Mach-O file');
@@ -130,6 +131,12 @@ export async function macDoctor({ pack = {}, deps = {} } = {}) {
       facts.running.push(fact);
       add(ok, `${name} ${p.pid} running`, notes.join('; '));
     }
+  }
+  // An installed Studio of a lane of the pack that does not run (review B5): the attach needs it open.
+  for (const lane of lanes) {
+    const installed = bundles.find(b => b.kind === lane);
+    if (installed && !facts.running.some(r => r.lane === lane))
+      add(false, `${MAC_STUDIOS[lane].name} running`, `installed but not running: open it (${installed.bundle}) from the Dock or Finder, sign in, then run this doctor again (the attach needs it open)`);
   }
   // Processes that look like a Studio but were not recognized (diagnosis for the owner).
   const others = parsePs(psOut).filter(p => !matched.has(p.pid) && /outsystems|odc ?studio|service ?studio/i.test(p.exe) && !/helper/i.test(p.exe)).slice(0, 10);

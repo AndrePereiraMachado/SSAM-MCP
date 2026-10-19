@@ -239,6 +239,11 @@ async function setupPosix({ root, server, file, o11Port, stdin, stdout, stderr, 
   if (badReal) return fail(badReal);
   const foreign = foreignContent(target);
   if (foreign.length) return fail(`the folder ${target} already holds files that are not of an SSAM agent pack: ${foreign.join(', ')}. Extract the pack to a new folder of its own, such as ${path.posix.join(homeOf(env), 'SSAM-Agent')}`);
+  // --credential-file (review B4): never from a folder macOS guards or syncs to the cloud (the credential would travel
+  // with it); the agent does not delete a file it did not create, so the person is told to delete it.
+  const credentialPath = file ? (String(file).startsWith('/') ? path.posix.normalize(String(file)) : process.cwd().startsWith('/') ? path.posix.resolve(process.cwd(), String(file)) : null) : null;
+  const synced = credentialPath ? guardedFolderOf(credentialPath, homeOf(env)) : null;
+  if (synced) return fail(`the credential file ${file} is inside ${synced}, which macOS guards or syncs to the cloud: move it to your home folder, or run install.sh without --credential-file and paste the credential when install.sh asks`);
   let credential;
   try { credential = await readCredential({ file, stdin, stderr }); } catch (error) { return fail('could not read the credential: ' + error.message); }
   if (!CREDENTIAL_PATTERN.test(credential)) return fail('the credential does not have the 54-character ssam_agent_... format (it was neither shown nor saved)');
@@ -258,6 +263,7 @@ async function setupPosix({ root, server, file, o11Port, stdin, stdout, stderr, 
   try { writeInstallRecord(target, created); }
   catch (error) { return fail(`could not write the setup record ${INSTALL_RECORD} (uninstall needs it): ` + error.message); }
   say(`Agent set up in ${target} for ${server}. The credential was saved in private/credential (only this user can read it).`);
+  if (file) say(`Delete ${file} now: the credential is saved in private/credential and this file is no longer needed (rm "${file}").`);
   say(`Next step: ${path.posix.join(target, 'agent', 'ssam-agent.sh')} start`);
   return 0;
 }

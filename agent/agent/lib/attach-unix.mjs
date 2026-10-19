@@ -60,6 +60,9 @@ export function createMacAttach(deps = {}) {
     const p = await processOf(lane, pid);
     const name = MAC_STUDIOS[lane].name;
     if (!p.official) throw fail(`${name} ${p.pid} runs from ${p.bundle}, which is not in /Applications or ~/Applications; the agent attaches only an installed Studio.`);
+    // A runtimeconfig.json that cannot be read cannot tell whether startup hooks are on (review B7): stop before sending.
+    if (p.info.runtimeConfig?.unreadable === true)
+      throw fail(`The ${p.info.entry}.runtimeconfig.json of ${name} ${p.pid} (${p.info.managedDir}) cannot be read, so the agent cannot tell whether the Studio allows startup hooks. Nothing was sent; reinstall the Studio from its official installer, then run agent/ssam-agent.sh doctor.`);
     const hooks = p.info.runtimeConfig?.runtimeOptions?.configProperties?.['System.StartupHookProvider.IsSupported'];
     if (hooks === false || hooks === 'false')
       throw fail(`${name} turns startup hooks off (System.StartupHookProvider.IsSupported=false in ${p.info.entry}.runtimeconfig.json): no bridge can be attached to it. Nothing was sent.`);
