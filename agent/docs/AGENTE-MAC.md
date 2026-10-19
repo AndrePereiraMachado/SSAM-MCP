@@ -22,8 +22,11 @@ Keep the token and the credential in a password vault, never in a repository or 
   server kernel (`ssam_doctor` of your MCP client shows both versions).
 - No .NET and no administrator rights. Node 24: if the Mac has none, `install.sh` downloads the official one from
   `nodejs.org` (about 50 MB) and checks its sha256 against the value fixed in `pack.json`.
-- A folder without spaces, outside `~/Desktop`, `~/Documents`, `~/Downloads` and iCloud Drive (macOS guards those for
-  privacy and the Studio would be asked for access there). The default is `~/SSAM-Agent`.
+- A new folder of its own, without spaces, outside `~/Desktop`, `~/Documents`, `~/Downloads` and iCloud Drive (macOS
+  guards those for privacy and the Studio would be asked for access there). The default is `~/SSAM-Agent`. `install.sh`
+  refuses `/`, your home folder itself, `~/Library`, the folders of macOS and of the applications (`/Applications`,
+  `/Library`, `/usr`, `/opt`, ...) and a folder that already holds anything but this pack (a folder set up before by
+  the pack is fine).
 
 ## Install (one command)
 
@@ -42,11 +45,13 @@ mkdir -p ~/SSAM-Agent && tar -xzf ~/Downloads/ssam-agent-mac.tar.gz -C ~/SSAM-Ag
    `agent/node/`;
 4. asks for the agent credential: paste it and press Enter (it does not appear on screen). It never goes as an
    argument, is never shown and stays in `private/credential`, in a folder only your user can open (`chmod 700`);
-5. starts the agent, runs the doctor and shows how to connect your MCP client.
+5. records the Node it chose in `private/node` (the agent keeps using it even when a new Terminal finds another `node`
+   first), starts the agent, runs the doctor and shows how to connect your MCP client.
 
-Options: `--server <https://...>`, `--credential-file <file>` (delete the file afterwards), `--o11-port <port>` (the
-local port of the Service Studio bridge, default 4516), `--node <path of a Node 24>`. Running `install.sh` again on a
-folder that is already set up keeps the credential and the server.
+Options: `--server <https://...>`, `--credential-file <file>` (never a file in `~/Desktop`, `~/Documents`,
+`~/Downloads`, iCloud Drive or a cloud folder, which macOS guards or syncs; delete the file afterwards: the installer
+reminds you), `--o11-port <port>` (the local port of the Service Studio bridge, default 4516), `--node <path of a Node
+24>`. Running `install.sh` again on a folder that is already set up keeps the credential and the server.
 
 As on Windows, nothing starts by itself when you log in: start the agent with `~/SSAM-Agent/agent/ssam-agent.sh start`.
 
@@ -77,7 +82,9 @@ reads, without changing anything:
   runtime it reports (a read-only ProcessInfo2 request), whether the ODC bridge is attached;
 - the temporary folders (`$TMPDIR` and the one macOS gives the apps);
 - the readers of a process start time with microseconds (`perl`, `osascript`, `sysctl`), which the Service Studio
-  connection needs.
+  connection needs, each checked on two short processes the agent starts itself;
+- a Studio that is installed and not running (open it, then run the doctor again);
+- anything in the agent folder that is not of the pack.
 
 Each problem comes with the next step. When the owner asks for it, send the output of
 `~/SSAM-Agent/agent/ssam-agent.sh doctor --json`: it has no token and no credential.
@@ -105,11 +112,14 @@ Then, in the MCP client: `ssam_doctor`, `studio_attach` (ODC Studio) and `ssam_c
 - **The ODC bridge pipe** is a Unix socket in the Studio's temporary folder (`CoreFxPipe_ODC3-Bridge-<version>-<pid>`).
   On a Mac a second connection waits in a queue instead of getting "busy", so the agent sends one command at a time to
   each Studio; a command that arrives while another one runs answers `BRIDGE_BUSY` after the wait, as on Windows.
-- **Service Studio** checks the start time of its own process, to the microsecond, before it loads the bridge. The
-  agent reads it with `perl`, `osascript` or `sysctl` (parts of macOS) and checks each value against the kernel.
+- **Service Studio** checks the start time of its own process, to the microsecond, before it loads the bridge, and a
+  wrong value can only be tried again after a restart of Service Studio. The agent reads it with `perl`, `osascript` or
+  `sysctl` (parts of macOS), and trusts a reader only after it read, to the microsecond, the start of two short
+  processes the agent started itself; each value is also checked against the kernel. With no trusted reader the
+  connection is refused before the Studio is touched, and `doctor --json` shows why.
 - **Paths.** The agent folder rules are the Windows ones written for POSIX paths: only `agent:<relative path>` from the
-  server, no `..`, no absolute path outside the agent folder, links that leave a folder refused, names compared without
-  case (as APFS does by default).
+  server, no `..`, no absolute path outside the agent folder, links that leave a folder refused. An absolute path must
+  spell the agent folder exactly, case included (on a case-sensitive volume another case is another folder).
 - **The machine identifier** is a hash of the Mac's `IOPlatformUUID` with the computer name and your user, the same
   rule as the Windows `MachineGuid`.
 
@@ -124,7 +134,7 @@ Then, in the MCP client: `ssam_doctor`, `studio_attach` (ODC Studio) and `ssam_c
   odc/studio/   ODC bridge                    odc/README.md  marker of the root of the ODC bridge
   odc/snapshots/  odc/journal/  odc/lab/  o11/   data (mirror of your space on the server)
   inbox/        files YOU deliver to the server (agent:inbox/<file>)
-  private/      config.json, credential, authority/, agent.log (only your user)
+  private/      config.json, credential, node, installed.json, authority/, agent.log (only your user)
 ```
 
 ## Update the agent (new pack)
@@ -138,9 +148,11 @@ Then, in the MCP client: `ssam_doctor`, `studio_attach` (ODC Studio) and `ssam_c
 
 `~/SSAM-Agent/agent/ssam-agent.sh uninstall` stops the agent and removes exactly what the pack and `install.sh` put
 there: the files listed in `pack.json`, `pack.json`, the Node of the installer (`agent/node/node` and its `LICENSE`),
-`private/` (configuration, credential, key, state and log) and the folders left empty. Folders that still hold your
-work (`inbox/`, `odc/`, `o11/`) are kept and named; delete them yourself when you no longer need them. A bridge already
-loaded stays in an open Studio until it quits.
+the files of `private/` that the setup recorded in `private/installed.json` (configuration, credential, Node path,
+key, state and log) and, when they are left empty, the folders the pack and the setup created. It never deletes through
+a link: a link anywhere in a path keeps that item, and the result names it. Anything else, such as folders that still
+hold your work (`inbox/`, `odc/`, `o11/`), is kept and named; delete it yourself when you no longer need it. A bridge
+already loaded stays in an open Studio until it quits.
 
 ## Corporate proxy and certificates
 
@@ -153,7 +165,7 @@ loaded stays in an open Studio until it quits.
 
 - The attach needs the Studio's .NET diagnostic socket and its startup hooks. A Studio build that turns either off
   cannot be attached (the doctor says so).
-- The Service Studio connection needs one working start time reader (`perl`, `osascript` or `sysctl`); the doctor
-  shows which ones work on your Mac.
+- The Service Studio connection needs one trusted start time reader (`perl`, `osascript` or `sysctl`); the doctor
+  shows which ones work on your Mac and why the others do not.
 - The bridges are the ones of the Windows pack; dialogs and windows of the Studio on macOS have not been proven in
   every operation yet. Report anything odd with `ssam_friction` and send `doctor --json` to the owner.
