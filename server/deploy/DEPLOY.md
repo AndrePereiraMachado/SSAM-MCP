@@ -934,6 +934,9 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
 | `DELIVERY_STILL_RUNNING` numa entrega repetida | Esperado (marco-a8): entregas e criações rodam até o fim numa chamada (sem `running` aos 25 s). A repetição idêntica junta-se à que roda (`joined`) ou, até 10 min depois, recebe a resposta guardada (`resumedFrom`); com outro conteúdo (job, `ws:` ou arquivo `agent:` mudado), `DELIVERY_STILL_RUNNING` "changed" e nada começa. Parar: `ssam_task {id, stop:true}`. Timeout de ferramenta do cliente: 10 min ou mais |
 | `HOSTED_UNAVAILABLE` / `SSAM_CODE_HOSTED_PENDING` no `ssam_code` | O interruptor está em `off` (8.1). Sem ele o `ssam_code` é servido desde o marco-a8 |
 | `AGENT_FOLDER_UNKNOWN` no `ssam_code plan` | O plano leva prompts e `plan.json` à pasta do agente do cliente, e o agente não disse a pasta: o cliente reconecta o agente |
+| `PATH_OUTSIDE_WORKSPACE` com o texto genérico ("outside the folders the agent reads … nothing was read there") | Esperado (marco-a9): o caminho não volta na recusa. O cliente põe o arquivo na `inbox` do agente e manda `agent:inbox/<arquivo>` (o `fix` e a continuação dizem como) |
+| `DATA_LOAD_UPDATE_CONFIRMATION_REQUIRED` numa carga por arquivos (`o11_data` `request.files`, `studio_data_insert/update` `files`) | Esperado (marco-a9, CX13): linhas que mudariam param antes de escrever (`updatePreview`, arquivos como `ws:`) até `confirmUpdates` com as palavras do dono. Plano e diário ficam em `ws:o11/data/loads` e `ws:odc/journal/data/loads` do cliente |
+| `patchesApplied` e `nextBasedOn` numa entrega ou num job | Esperado (marco-a9, X3): as correções certas entram na mesma chamada; o job corrigido volta como `ws:o11/jobs/...`. `autoPatch:false` desliga. O licenciado não recebe `patchedJob` |
 | `<server>` no lugar de um caminho numa resposta | Esperado (marco-a7): caminho do servidor (volumes de `/data`, `/studio`, `/tmp`, `/app`) nunca sai numa resposta; os do workspace do cliente saem como `ws:...`. |
 
 ## 14. Limitações conhecidas
@@ -996,6 +999,11 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
   ganhou as fontes da fina O11 da linha (Manage Dependencies por código; o pacote novo é montado à parte, o de 13/10 continua
   servido). O `compose.prod.yml` passa `SSAM_HOSTED_SSAM_CODE` (8.1). As mudanças de comportamento estão em
   `C:\t\vps-a8\LINHA.md` §8 e §12.8.
+- **marco-a9** (`server/r29-marco-a9`, imagem `prod-20261019-b882605`): a cópia saiu de `fase4-26/marco-a9` (`2aede778`), sobre a caixa da
+  `r28` (linha `87e12565`). Conferido blob a blob: as 6959 entradas da caixa server que vêm da linha são iguais às de
+  `2aede778`; a caixa agent não mudou (o pacote do agente é o mesmo, bridge ODC v97; o `BridgeDataIndexes.cs` novo vai só para a
+  caixa server, a bridge não o compila). `compose.prod.yml`, `Caddyfile`, scripts e `kernel.json` não mudam. As mudanças de
+  comportamento estão em `C:\t\vps-a9\LINHA.md` §8.
 - O índice do `ssam_discover` e os outros caches de `/app` se perdem a cada container novo: 1 a 2 min de aquecimento
   (7.3). O índice de módulos e a cópia dos leitores ficam no volume `cache` e passam pela recriação.
 - O container não roda com o sistema de arquivos raiz só de leitura.
