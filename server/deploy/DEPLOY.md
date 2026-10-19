@@ -989,9 +989,10 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
   caminhos do dono) fica fora da imagem. A guarda de nomes do `build.sh` roda com um `/tmp` em memória, porque os testes
   da fachada agora isolam o perfil em `os.tmpdir()`. As mudanças de comportamento estão em `C:\t\vps-a7\LINHA.md` §8,
   `LINHA-2.md` §6, `LINHA-3.md` §7 e `LINHA-4.md` §3.
-- **marco-a8** (`server/r28-marco-a8`, imagem `prod-20261018-dab1c86`): a cópia saiu de `fase4-26/marco-a8` (`52562a86`), sobre
-  a caixa da `r27` (linha `b606ee7b`). Conferido blob a blob: as 6880 entradas da caixa server que vêm da linha são iguais às de
-  `52562a86`; os compartilhados `docs/FASE2-AGENTE.md` e `docs/O11-BRIDGE-FINA.md` foram para as duas caixas; a caixa agent
+- **marco-a8** (`server/r28-marco-a8`, imagem `prod-20261018-130b493`; a `prod-20261018-dab1c86` da linha `52562a86` foi superada): a
+  cópia saiu de `fase4-26/marco-a8` (`87e12565`; a fase 7 é o M1 da revisão `vps-a8`: o prazo hospedado só lê arquivos do workspace
+  do próprio cliente), sobre a caixa da `r27` (linha `b606ee7b`). Conferido blob a blob: as 6881 entradas da caixa server que vêm
+  da linha são iguais às de `87e12565`; os compartilhados `docs/FASE2-AGENTE.md` e `docs/O11-BRIDGE-FINA.md` foram para as duas caixas; a caixa agent
   ganhou as fontes da fina O11 da linha (Manage Dependencies por código; o pacote novo é montado à parte, o de 13/10 continua
   servido). O `compose.prod.yml` passa `SSAM_HOSTED_SSAM_CODE` (8.1). As mudanças de comportamento estão em
   `C:\t\vps-a8\LINHA.md` §8 e §12.8.
