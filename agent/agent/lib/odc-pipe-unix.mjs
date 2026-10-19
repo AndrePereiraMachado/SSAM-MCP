@@ -9,8 +9,10 @@
 // running there, answers BRIDGE_BUSY after connectMs with nothing written (the Windows answer); and (2) connects only to a
 // socket file that is not the one of the previous command (another inode), checked again once connected, so a command
 // is never written to an instance about to close. ENOENT and ECONNREFUSED (the gap between two instances) are tried again
-// until connectMs, as ENOENT is on Windows. Limit: a process outside this agent that talks to the same pipe is not
-// queued here (only this agent talks to its bridge).
+// until connectMs, as ENOENT is on Windows, and so is a connection that was not accepted in its attempt (nothing written;
+// at the end PIPE_CONNECT_TIMEOUT, never "not attached"). Each attempt gets at least ATTEMPT_FLOOR_MS, so the socket's own
+// answer decides near the end of connectMs (review B1). Limit: a process outside this agent that talks to the same pipe is
+// not queued here (only this agent talks to its bridge).
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
@@ -19,6 +21,9 @@ import { PipeError, replyTimeoutMs } from './odc-pipe.mjs';
 export const unixPipeName = (version, pid) => `CoreFxPipe_ODC3-Bridge-${version}-${pid}`;
 // sun_path of macOS: 104 bytes with its NUL.
 export const UNIX_PATH_MAX = 103;
+// The least time one connection attempt gets (review B1): a Unix socket accepts or refuses at once, so near the end of
+// connectMs the socket's own answer decides, not a timer of 1 ms racing it. A call may end up to this much after connectMs.
+export const ATTEMPT_FLOOR_MS = 250;
 const busy = new Map(); // socket path -> true while a command of this agent runs there
 const served = new Map(); // socket path -> identity (ino:birthtime) of the instance that served the last command
 const identityOf = stat => (stat ? stat.ino + ':' + (stat.birthtimeMs ?? stat.ctimeMs) : null);
@@ -34,6 +39,8 @@ export function createUnixPipe({ folders }) {
     const candidates = (await folders(pid)).map(dir => path.posix.join(dir, name));
     for (const file of candidates) if (Buffer.byteLength(file) > UNIX_PATH_MAX)
       throw new PipeError(`The ODC bridge socket path has more than ${UNIX_PATH_MAX} bytes (${file}); macOS cannot open it`, { code: 'PIPE_TRANSPORT', sent: false });
+    // A socket that is there but did not accept in its attempt (nothing written): said as such at the end, not as absent.
+    let stalled = null;
     for (let wait = 25; ; wait = Math.min(wait * 2, 250)) {
       // The first folder that has the socket, and the identity of the instance it names now (read once).
       let file = null; let current = null;
@@ -43,12 +50,16 @@ export function createUnixPipe({ folders }) {
       } else if (file && current !== served.get(file)) {
         busy.set(file, true);
         try {
-          return await attempt(file, current, args, { ...options, connectMs: Math.max(1, deadline - now()), stat });
+          return await attempt(file, current, args, { ...options, connectMs: Math.max(ATTEMPT_FLOOR_MS, deadline - now()), stat });
         } catch (error) {
-          if (!(error instanceof PipeError) || error.sent !== false || !['PIPE_ABSENT', 'PIPE_CHANGED'].includes(error.code)) throw error;
+          if (!(error instanceof PipeError) || error.sent !== false || !['PIPE_ABSENT', 'PIPE_CHANGED', 'PIPE_CONNECT_TIMEOUT'].includes(error.code)) throw error;
+          stalled = error.code === 'PIPE_CONNECT_TIMEOUT' ? error : null;
         } finally { busy.delete(file); }
       }
-      if (now() >= deadline) throw absent();
+      if (now() >= deadline) {
+        if (stalled) throw new PipeError(`The ODC bridge pipe of ODC Studio ${pid} is there but did not accept a connection for ${Math.round(connectMs / 1000)} s; nothing was written. Run status before any write and never repeat a write`, { code: 'PIPE_CONNECT_TIMEOUT', sent: false });
+        throw absent();
+      }
       await sleep(Math.max(1, Math.min(wait, deadline - now())));
     }
   };
