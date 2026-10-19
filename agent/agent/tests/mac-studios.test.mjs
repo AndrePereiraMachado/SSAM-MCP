@@ -214,6 +214,14 @@ test('the .NET start time text: DateTime.UnixEpoch + TimeSpan.FromSeconds(sec + 
   // microseconds.
   const seconds = 1760872353 + 123456 / 1000000;
   assert.equal(dotnetStartTimeText(1760872353, 123456).slice(20, 27), String(BigInt(Math.trunc(seconds * 10000000)) % 10000000n).padStart(7, '0'));
+  // The texts .NET 10.0.12 wrote for (DateTime.UnixEpoch + TimeSpan.FromSeconds(sec + usec / 1e6)).ToString("O") on
+  // 2026-10-19 (C:\t\agent-mac\prova-ipc, the formula of Process.OSX.cs; the same code in .NET 8): 2000000000.000007 s is
+  // .0000068, the double's own rounding, which the agent reproduces.
+  for (const [sec, usec, text] of [[0, 0, '1970-01-01T00:00:00.0000000Z'], [1, 500000, '1970-01-01T00:00:01.5000000Z'], [1760872353, 123456, '2025-10-19T11:12:33.1234560Z'],
+    [1760872353, 999999, '2025-10-19T11:12:33.9999990Z'], [1760872353, 1, '2025-10-19T11:12:33.0000010Z'], [1700000000, 654321, '2023-11-14T22:13:20.6543210Z'],
+    [1767225599, 999999, '2025-12-31T23:59:59.9999990Z'], [2000000000, 7, '2033-05-18T03:33:20.0000068Z'], [1760872353, 500001, '2025-10-19T11:12:33.5000010Z'],
+    [1234567890, 123457, '2009-02-13T23:31:30.1234570Z']])
+    assert.equal(dotnetStartTimeText(sec, usec), text, `${sec} ${usec}`);
 });
 
 test('Mach-O architectures: thin arm64 and x86_64, universal, and not a Mach-O', () => {
