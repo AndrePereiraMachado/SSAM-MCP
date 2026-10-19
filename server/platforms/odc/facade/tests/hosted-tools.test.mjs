@@ -8,6 +8,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
 import { createSsamServer } from '../ssam.mjs';
 import { hostedTools } from '../hosted/policy.mjs';
+import { scrubText } from '../exposure.mjs';
 import { frictionTool } from '../../../../facade/friction-boundary.mjs';
 import { APP_SESSION_TOOLS } from '../o11-app-session.mjs';
 
@@ -36,13 +37,16 @@ async function liveTools() {
 // check-job {basedOn: {job}} (servidor/fase4-23).
 const alternatives = node => !node || typeof node !== 'object' ? [] : [node, ...[...(node.anyOf ?? []), ...(node.oneOf ?? [])].flatMap(alternatives)];
 const anyValue = node => Object.keys(node).every(key => ['description', 'title', '$schema'].includes(key));
+// servidor/fase4-26 a8: an object schema that names no property and does not close itself ({type:"object"}, as ssam_code's
+// basedOn and producers are) takes any key, as JSON Schema reads it: a record of values of any shape.
+const openObject = node => node.type === 'object' && !node.properties && node.additionalProperties === undefined;
 function pointerExists(schema, pointer) {
   let nodes = [schema];
   for (const segment of pointer.split('/').slice(1)) {
     const next = [];
     for (const node of nodes.flatMap(alternatives)) {
       if (node !== schema && anyValue(node)) { next.push(node); continue; }
-      const record = node.additionalProperties && typeof node.additionalProperties === 'object' ? node.additionalProperties : node.additionalProperties === true ? {} : null;
+      const record = node.additionalProperties && typeof node.additionalProperties === 'object' ? node.additionalProperties : node.additionalProperties === true || openObject(node) ? {} : null;
       if (segment === '*') { if (node.items) next.push(node.items); if (record) next.push(record); }
       else if (node.properties?.[segment]) next.push(node.properties[segment]);
       else if (record) next.push(record);
@@ -76,17 +80,29 @@ test('classes, lanes and agent rules are valid; unavailable tools take no path a
     assert.ok(entry.reason.length > 5, name + ': reason');
     assert.ok(Array.isArray(entry.paths?.in) && Array.isArray(entry.paths?.out), name + ': paths {in, out}');
     const rule = entry.agent;
-    if (typeof rule === 'string') assert.ok(['always', 'never', 'report'].includes(rule), name + ': agent ' + rule);
-    else {
-      assert.ok(['module-target', 'present', 'non-empty', 'in', 'not-in', 'absent-all'].includes(rule.when), name + ': when ' + rule.when);
-      const args = rule.when === 'absent-all' ? rule.args : [rule.arg];
-      for (const arg of args) assert.ok(schema.properties?.[arg], `${name}: rule argument ${arg} exists`);
+    // a8: {when:"by", arg, values:{<value>: rule}, else} chooses a rule by the argument's value (each one checked the same
+    // way); module-target takes {args:[...]}, the first of them the call gives.
+    const checkRule = (rule, at) => {
+      if (typeof rule === 'string') { assert.ok(['always', 'never', 'report'].includes(rule), at + ': agent ' + rule); return; }
+      assert.ok(['module-target', 'present', 'non-empty', 'in', 'not-in', 'absent-all', 'by'].includes(rule.when), at + ': when ' + rule.when);
+      const args = rule.when === 'absent-all' || (rule.when === 'module-target' && Array.isArray(rule.args)) ? rule.args : [rule.arg];
+      for (const arg of args) assert.ok(schema.properties?.[arg], `${at}: rule argument ${arg} exists`);
       if (['in', 'not-in'].includes(rule.when)) {
-        assert.ok(Array.isArray(rule.values) && rule.values.length, name + ': values');
+        assert.ok(Array.isArray(rule.values) && rule.values.length, at + ': values');
         const values = enumOf(schema, rule.arg);
-        if (values.length) for (const v of rule.values) assert.ok(values.includes(v), `${name}: ${rule.arg}=${v} is in the schema enum`);
+        if (values.length) for (const v of rule.values) assert.ok(values.includes(v), `${at}: ${rule.arg}=${v} is in the schema enum`);
       }
-    }
+      if (rule.when === 'by') {
+        assert.ok(rule.values && typeof rule.values === 'object' && Object.keys(rule.values).length, at + ': values');
+        const values = enumOf(schema, rule.arg);
+        for (const [value, inner] of Object.entries(rule.values)) {
+          if (values.length) assert.ok(values.includes(value), `${at}: ${rule.arg}=${value} is in the schema enum`);
+          checkRule(inner, `${at} ${rule.arg}=${value}`);
+        }
+        checkRule(rule.else ?? 'never', at + ' else');
+      }
+    };
+    checkRule(rule, name);
     if (entry.class === 'server') assert.notEqual(rule, 'always', name + ': a server tool never always needs the agent');
     if (entry.class === 'agent' || entry.class === 'tenant-agent') assert.ok(rule !== 'never', name + ': an agent tool needs the agent somehow');
     if (entry.class === 'unavailable') assert.deepEqual([entry.lane, entry.agent, entry.paths], ['none', 'never', { in: [], out: [] }], name);
@@ -111,11 +127,12 @@ test('every in/out pointer exists in the tool schema under the 6.4 grammar', asy
   assert.equal(pointerExists(names.get('studio_open').inputSchema, '/nope'), false);
 });
 
-test('the totals of section 5: 23 server (10 with a mode that uses the agent), 33 agent, 22 tenant-agent, 18 unavailable (ssam_code, fase4-25)', () => {
+// servidor/fase4-26 a8: ssam_code moves from unavailable (fase4-25) to server, with a mode that uses the agent.
+test('the totals of section 5: 24 server (11 with a mode that uses the agent), 33 agent, 22 tenant-agent, 17 unavailable (a8: ssam_code served)', () => {
   const count = klass => Object.values(tools).filter(t => t.class === klass).length;
   assert.deepEqual({ server: count('server'), agent: count('agent'), tenant: count('tenant-agent'), unavailable: count('unavailable') },
-    { server: 23, agent: 33, tenant: 22, unavailable: 18 });
-  assert.equal(Object.values(tools).filter(t => t.class === 'server' && typeof t.agent === 'object').length, 10);
+    { server: 24, agent: 33, tenant: 22, unavailable: 17 });
+  assert.equal(Object.values(tools).filter(t => t.class === 'server' && typeof t.agent === 'object').length, 11);
   assert.deepEqual(Object.entries(tools).filter(([, t]) => t.agent === 'report').map(([n]) => n).sort(), ['hybrid_tenants', 'odc_auth_status', 'ssam_doctor', 'studio_doctor']);
 });
 
@@ -253,7 +270,8 @@ test('the four API Client tools answer HOSTED_UNAVAILABLE with cause API_CLIENT_
     const value = (await gated({ tenant: 'acme.outsystems.dev', assetKey: '00000000-0000-0000-0000-000000000000', op: 'check' }, {})).structuredContent;
     assert.equal(ran, false, name + ': the handler never runs');
     assert.equal(value.code, 'HOSTED_UNAVAILABLE', name);
-    assert.ok(value.error.includes(tools[name].reason), name + ': the reason is in the answer');
+    // (a8 review M1: as the no-internals rule shows it: a folder of the server is <server>)
+    assert.ok(value.error.includes(scrubText(tools[name].reason)), name + ': the reason is in the answer');
     if (API_CLIENT_ONLY.includes(name)) {
       assert.equal(value.cause, 'API_CLIENT_ONLY', name);
       assert.deepEqual(value.continuation, tools[name].continuation, name);

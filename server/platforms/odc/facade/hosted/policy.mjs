@@ -36,16 +36,17 @@ import { anvilRoot, workspaceRoot } from '../workspace.mjs';
 import { scrubDiscover, scrubEvidence, thirdPartyJobs } from './evidence.mjs';
 import { agentReadable, agentSegments, insideVisible } from './mirror.mjs';
 import { agentPath, outsideWorkspaceRefusal } from '../agent-paths.mjs';
-import { JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesGenerator, namesPrototype, namesVerifiedPatch, outside, parseJobTexts } from './job-paths.mjs';
+import { CODE_TOOL, JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesGenerator, namesPrototype, namesVerifiedPatch, outside, parseJobTexts } from './job-paths.mjs';
 import { generatorApproval, offered } from '../generators.mjs';
-import { holdPointers, pointersOf } from '../exposure.mjs';
+import { holdPointers, pointersOf, scrubText } from '../exposure.mjs';
+import { hostedCatalog } from './served.mjs';
 import { causeOf, studioIdentity, studioRefusal, studioWarningOf } from '../studio-identity.mjs';
 import { destructiveUnavailable, hostedDestructive, hostedDestructiveFiles } from './destructive.mjs';
 import { withStudioScope } from './studio-scope.mjs';
 
-export const TOOLS_FILE = fileURLToPath(new URL('./tools.json', import.meta.url));
-let loaded = null;
-export const hostedTools = () => (loaded ??= JSON.parse(fs.readFileSync(TOOLS_FILE, 'utf8')).tools);
+// The catalog is hosted/served.mjs's, the one switch the session texts read too (a8 review, M1).
+export { TOOLS_FILE } from './served.mjs';
+export const hostedTools = () => hostedCatalog();
 
 const STUDIO = { odc: 'ODC Studio', o11: 'Service Studio' };
 const LANED = new Set(['odc', 'o11']);
@@ -60,10 +61,17 @@ export const looksLikePath = value => typeof value === 'string'
   && (/^(ws|agent):/.test(value) || path.isAbsolute(value) || /^[A-Za-z]:[\\/]/.test(value) || /\.(oml|json|jsonl|avsig)$/i.test(value));
 
 // When a tool needs the agent for these arguments: 'always', 'never' or 'report' (answers without the agent).
+// servidor/fase4-26 a8 (ssam_code): {when:"by", arg, values:{<value>: rule}, else: rule} takes the rule of the argument's
+// value (an action); module-target takes {args:[...]}, the first of them the call gives (read: target, else module).
 export function agentNeed(rule, args = {}) {
   if (rule === 'always' || rule === 'report') return rule;
   if (rule === 'never' || rule == null) return 'never';
-  const value = args?.[rule.arg];
+  if (rule.when === 'by') {
+    const chosen = args?.[rule.arg];
+    const values = rule.values && typeof rule.values === 'object' ? rule.values : {};
+    return agentNeed(typeof chosen === 'string' && Object.hasOwn(values, chosen) ? values[chosen] : rule.else ?? 'never', args);
+  }
+  const value = rule.when === 'module-target' && Array.isArray(rule.args) ? rule.args.map(name => args?.[name]).find(v => v !== undefined && v !== null) : args?.[rule.arg];
   const empty = v => v === undefined || v === null || v === '';
   let needs;
   switch (rule.when) {
@@ -143,11 +151,19 @@ export function incompatible(lane, compat, info) {
     continuation: doctor('Shows the state of each lane: the agent, the installed Studios and the server kernel.') };
 }
 // An entry may name the cause (a stable code, e.g. XIF_ENGINE_WINDOWS_ONLY) and its own continuation; otherwise the
-// discover of the same request.
-const unavailable = (name, entry, config) => ({ ok: false, code: 'HOSTED_UNAVAILABLE', ...(entry?.cause ? { cause: entry.cause } : {}),
-  error: `${name} is not available on a hosted SSAM server: ${entry?.reason ?? 'it is not classified for hosted use.'}`,
-  continuation: entry?.continuation
-    ?? { tool: 'ssam_discover', arguments: { intent: config?.title ?? name }, why: 'Lists the tools this server offers for the same request.' } });
+// discover of the same request. a8 review (M1): a served entry switched off (its class set to unavailable) refuses with its
+// off state ({cause, reason, continuation}: ssam_code's is the refusal it had before it was served); and the reason and the
+// why pass the no-internals rule (exposure.mjs scrubText, the rule of SSAM's documentation prose): the gate answers before
+// the rule of the answers, so a release, a line or a project document named in the catalog never reaches the licensee.
+const unavailable = (name, entry, config) => {
+  const shown = entry?.class === 'unavailable' && entry.off && typeof entry.off === 'object' ? { ...entry, ...entry.off } : entry;
+  const continuation = shown?.continuation
+    ?? { tool: 'ssam_discover', arguments: { intent: config?.title ?? name }, why: 'Lists the tools this server offers for the same request.' };
+  const why = typeof continuation.why === 'string' ? scrubText(continuation.why) : continuation.why;
+  return { ok: false, code: 'HOSTED_UNAVAILABLE', ...(shown?.cause ? { cause: shown.cause } : {}),
+    error: `${name} is not available on a hosted SSAM server: ${scrubText(shown?.reason ?? 'it is not classified for hosted use.')}`,
+    continuation: { ...continuation, ...(why !== undefined ? { why } : {}) } };
+};
 const laneDisabled = lane => ({ ok: false, code: 'HOSTED_LANE_DISABLED', lane,
   error: `This account has no ${lane} lane on this SSAM server; nothing ran.`, continuation: doctor('Shows the lanes of this account. Ask the server owner when the lane is needed.') });
 // Multi-version design O.6.1 (kernel-image.mjs kernelPair): a lane this server image refused at start, because its
@@ -278,6 +294,8 @@ const pathOnlyWhen = (name, entry, pointer, args, value) => {
   // in every pointer, so e.g. ssam_evidence {file:"[x]/../../<server file>"} reached the handler unresolved).
   if (isJsonText(value) && jobTextPointers(name, args).includes(pointer)) return false;
   if (entry.agent?.when === 'module-target' && (pointer === '/' + entry.agent.arg || pointer === '/' + entry.agent.arg + '/*')) return looksLikePath(value);
+  // servidor/fase4-26 a8: an argument that takes a module OR a path, declared by the entry (ssam_code target and module).
+  if (Array.isArray(entry.moduleOrPath) && entry.moduleOrPath.includes(pointer)) return looksLikePath(value);
   if (name === 'studio_command' && pointer === '/args/*') return looksLikePath(value);
   // servidor/fase4-26 a7: a producer binding is the path of a capture or OML, or the word "published" (the producer's published
   // signature, captured from the user's session), which is no path (o11_deliver, ssam_job/o11_job and, since the a7 merge,
@@ -343,6 +361,132 @@ export async function resolvePaths(name, entry, args, lane, context, { agentRoot
     }
   }
   return resolved;
+}
+
+// ---- the call deadline's inputs (servidor/fase4-26 a8: fix/delivery-no-deadline rounds 3c and 3d on the hosted line)
+// The call deadline wraps this gate (ssam.mjs): it joins a live run-to-end call (a delivery, a creation) only on the same
+// content and refuses the same arguments with other content (DELIVERY_STILL_RUNNING), on the print of what the call names
+// (replay-store.mjs). It sees the arguments as sent (ws:, agent:, relative, a path of the agent's machine), which no print
+// can read. replayInputs reads them as this gate reads them (the pointers of tools.json, the rules of resolveValue), but
+// brings and writes nothing: ws: and a relative path are the workspace path the gate hands the tool; an agent: input (also a
+// path of the agent's machine under its root, C26) that the gate brings is named by the sha256 the agent lists for that one
+// file (executor.agentFileSha256: file.list of the file, hashed on the user's machine), so a call the deadline then joins or
+// refuses never replaces the workspace copy a running delivery reads and never waits for a transfer. The strings of an
+// inline job are read the same way. A value the gate would refuse, or an agent file the agent does not list, stays as it
+// came: that call has no print (no join, no replay), and the gate answers it. A tool unavailable hosted is never read.
+const AGENT_CONTENT = 'agent-content:sha256:';
+const isPlainObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const fileExists = file => { try { return fs.statSync(file).isFile(); } catch { return false; } };
+async function agentContent(context, agentPathValue) {
+  try { const sha = await context.executor?.agentFileSha256?.(agentPathValue); return typeof sha === 'string' && /^[0-9a-f]{64}$/.test(sha) ? AGENT_CONTENT + sha : null; }
+  catch { return null; }
+}
+async function inputValue(value, role, lane, context, agentRoot) {
+  const workspace = path.resolve(context.workspace);
+  const mapped = /^[A-Za-z]:[\\/]/.test(value) ? agentPath(value, { agentRoot }) : null;
+  if (mapped) value = mapped;
+  if (value.startsWith('ws:') || value.startsWith('agent:')) {
+    const agent = value.startsWith('agent:');
+    const parsed = agentSegments('agent:' + value.slice(agent ? 6 : 3));
+    if (parsed.error || (agent && !agentReadable(parsed.segments))) return null;
+    const abs = path.join(workspace, ...parsed.segments);
+    if (!insideVisible(workspace, abs)) return null;
+    if (role !== 'in') return abs;
+    // What the tool will read: the agent's file when the gate brings it (agent:inbox always; agent:odc|o11 and a ws: input
+    // of the mirror's folders when the workspace lacks it, C14), else the workspace copy.
+    const brought = agent ? parsed.segments[0] === 'inbox' || !fileExists(abs)
+      : parsed.segments[0] !== 'inbox' && agentReadable(parsed.segments) && !fileExists(abs) && context.agent?.connected?.() === true;
+    return brought ? agentContent(context, 'agent:' + parsed.rel) : abs;
+  }
+  if (path.isAbsolute(value) || /^[A-Za-z]:/.test(value) || /^[\\/]/.test(value)) {
+    const abs = path.resolve(value);
+    return insideVisible(workspace, abs) ? abs : null;
+  }
+  const base = role === 'out' ? (lane === 'o11' ? ['o11'] : ['odc', 'lab']) : LANED.has(lane) ? [lane] : [];
+  const abs = path.resolve(workspace, ...base, value);
+  return insideVisible(workspace, abs) ? abs : null;
+}
+// The ws: and agent: strings inside an inline job (or the path of the agent's machine), read as inputs; a fresh copy.
+async function jobInputs(value, lane, context, agentRoot, budget, depth = 0) {
+  if (depth > 64 || budget.left <= 0) return value;
+  if (typeof value === 'string') {
+    budget.left--;
+    if (value.length > 1024 || !(/^(?:ws|agent):/.test(value) || /^[A-Za-z]:[\\/]/.test(value) && agentPath(value, { agentRoot }))) return value;
+    return (await inputValue(value, 'in', lane, context, agentRoot)) ?? value;
+  }
+  if (Array.isArray(value)) { const out = []; for (const item of value) out.push(await jobInputs(item, lane, context, agentRoot, budget, depth + 1)); return out; }
+  if (isPlainObject(value)) { const out = {}; for (const [key, item] of Object.entries(value)) out[key] = await jobInputs(item, lane, context, agentRoot, budget, depth + 1); return out; }
+  return value;
+}
+// The checks of the gate that come before the agent and any path, in their order: an unavailable tool, T2 deleting (on the
+// arguments it runs and on the ones sent), an invalid job text, the prototype op, a pending generator, patch "verified" (the
+// job tools' and ssam_code write's), a lane outside the token, a lane the image refused. -> {refusal} | {args, lane, need}
+// (args: the job texts parsed). a8 phase 6: ONE function, which wrapHostedTool answers with and the call deadline's inputs
+// read (refusedBeforePaths): a check the gate gains is never missing from the deadline. The ssam_code merge proved the copy
+// of these checks fell behind (its prototype, generator and patch "verified" checks: the deadline listed the agent's files of
+// a call the gate then refused).
+export function refusalBeforeAgent(name, args, { entry, config = null, raw = args, hasArgs = true, lanes = [], kernelRefused = null,
+  prototypeOp = HOSTED_PROTOTYPE_OP, generatorOps = HOSTED_GENERATOR_OPS, destructive = HOSTED_DESTRUCTIVE } = {}) {
+  if (!entry || entry.class === 'unavailable') return { refusal: unavailable(name, entry, config) };
+  // T2: a call that deletes, read on the arguments it runs and on the ones sent, before anything else of the call.
+  if (destructive !== 'allow' && (deletes(name, args) || (hasArgs && deletes(name, raw)))) return { refusal: destructiveUnavailable(name) };
+  // Item 1: the JSON text of a job is the job itself only on a job pointer; parsed here, every rule below (and the
+  // handler) reads the object. A text there that looks like JSON and does not parse is refused: it is no path either.
+  if (hasArgs) {
+    try { args = parseJobTexts(name, args); }
+    catch (error) { if (!(error instanceof JobTextError)) throw error; return { refusal: jobTextInvalid(error) }; }
+  }
+  const lane = laneOf(entry, args);
+  // D2: an inline job, partial job or patch with the prototype op, before the agent, the lane checks and any capture.
+  // servidor/fase4-26 a8: ssam_code makes the job a check runs and a write delivers (job-paths.mjs confineJobs): the same
+  // two switches as the job tools.
+  if (prototypeOp !== 'allow' && (PROTOTYPE_TOOLS.includes(name) || name === CODE_TOOL) && hasArgs && namesPrototype(args)) return { refusal: prototypeUnavailable(name, lane) };
+  // servidor/fase4-25: a pending generator op in the inline job, partial job or patch, at the same place.
+  if (generatorOps !== 'allow' && (GENERATOR_TOOLS.includes(name) || name === CODE_TOOL) && hasArgs) {
+    const generator = namesGenerator(args, pendingGenerator);
+    if (generator) return { refusal: generatorUnavailable(name, lane, generator) };
+  }
+  // servidor/fase4-25 (finding A1): patch "verified" reads its operations from a file the gate never reads; refused here,
+  // before the agent, any file brought from it and any capture (the explicit patch is checked: confineJobs).
+  if (hasArgs) { const at = namesVerifiedPatch(name, args); if (at) return { refusal: verifiedPatchUnavailable(name, lane, args, at) }; }
+  // a8: ssam_code write {patch:"verified", basedOn} hands that patch to the delivery; refused here, with its own continuation.
+  if (hasArgs && name === CODE_TOOL && typeof args.patch === 'string' && args.patch.trim().toLowerCase() === 'verified') return { refusal: verifiedPatchUnavailable(name, lane, args, '/patch') };
+  if (LANED.has(lane) && !lanes.includes(lane)) return { refusal: laneDisabled(lane) };
+  const need = agentNeed(entry.agent, args);
+  // O.6.1: a lane the image refused at start is off for every tool but the state reports, before the agent and any path.
+  if (LANED.has(lane) && need !== 'report' && kernelRefused?.[lane]) return { refusal: kernelLaneOff(lane, kernelRefused[lane]) };
+  return { args, lane, need };
+}
+// Whether the gate refuses this call before the agent and any path (refusalBeforeAgent). The deadline's inputs never ask the
+// agent anything for such a call: the gate answers it, nothing pulled and no kind (hosted-destructive NEW-1). A call whose
+// checks throw is read as refused too (no print: the gate answers it).
+export function refusedBeforePaths(name, args, { tools = hostedTools(), lanes = [], kernelRefused = null, raw = args, prototypeOp = HOSTED_PROTOTYPE_OP,
+  generatorOps = HOSTED_GENERATOR_OPS, destructive = HOSTED_DESTRUCTIVE } = {}) {
+  try { return Boolean(refusalBeforeAgent(name, args, { entry: tools?.[name], raw, lanes, kernelRefused, prototypeOp, generatorOps, destructive }).refusal); }
+  catch { return true; }
+}
+export async function replayInputs(name, args, context, { agentRoot = null, tools = hostedTools(), lanes = context?.lanes ?? [], kernelRefused = null, raw = args } = {}) {
+  const entry = tools?.[name];
+  if (!entry || !isPlainObject(args) || !context?.workspace || refusedBeforePaths(name, args, { tools, lanes, kernelRefused, raw })) return args;
+  let value;
+  try { value = structuredClone(parseJobTexts(name, args)); } catch { return args; }
+  const lane = laneOf(entry, value);
+  for (const role of ['in', 'out']) {
+    for (const pointer of entry.paths?.[role] ?? []) {
+      for (const { parent, key, value: given } of locations(value, segmentsOf(pointer))) {
+        if (typeof given !== 'string' || given === '' || !pathOnlyWhen(name, entry, pointer, args, given)) continue;
+        const read = await inputValue(given, role, lane, context, agentRoot);
+        if (read !== null) parent[key] = read;
+      }
+    }
+  }
+  const budget = { left: 20000 };
+  for (const pointer of jobTextPointers(name, value)) {
+    for (const { parent, key, value: job } of locations(value, segmentsOf(pointer))) {
+      if (job !== null && typeof job === 'object') parent[key] = await jobInputs(job, lane, context, agentRoot, budget);
+    }
+  }
+  return value;
 }
 
 // ---- presentation (6.3 rule 4)
@@ -559,34 +703,21 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
   // presentation (a7 phase 4, tests): {workspace, serverRoots, pathApi} of the presenter only (the Linux image's layout with
   // path.posix on another machine); the call itself keeps the context's workspace.
   const present = presenter({ workspace: context.workspace, ...(serverRoots ? { serverRoots } : {}), ...(presentation ?? {}) });
-  const refusesPrototype = prototypeOp !== 'allow' && PROTOTYPE_TOOLS.includes(name);
-  const refusesGenerators = generatorOps !== 'allow' && GENERATOR_TOOLS.includes(name);
+  // The switches the walk of the job files reads after the paths (confineJobs, the files T2 reads); the checks before the
+  // agent read the same switches in refusalBeforeAgent.
+  const refusesPrototype = prototypeOp !== 'allow' && (PROTOTYPE_TOOLS.includes(name) || name === CODE_TOOL);
+  const refusesGenerators = generatorOps !== 'allow' && (GENERATOR_TOOLS.includes(name) || name === CODE_TOOL);
   const refusesDestructive = destructive !== 'allow';
   return async (...params) => {
     const hasArgs = config?.inputSchema != null && params.length > 1;
     // R1: the arguments the tool runs (a field the input layer renames is confined under its own name).
     let args = hasArgs ? effectiveArgs(argsOf, params[0] ?? {}) : {};
-    if (!entry || entry.class === 'unavailable') return refusal(unavailable(name, entry, config));
-    // T2: a call that deletes, read on the arguments it runs and on the ones sent, before anything else of the call.
-    if (refusesDestructive && (deletes(name, args) || (hasArgs && deletes(name, params[0])))) return refusal(destructiveUnavailable(name));
-    // Item 1: the JSON text of a job is the job itself only on a job pointer; parsed here, every rule below (and the
-    // handler) reads the object. A text there that looks like JSON and does not parse is refused: it is no path either.
-    if (hasArgs) {
-      try { args = parseJobTexts(name, args); }
-      catch (error) { if (!(error instanceof JobTextError)) throw error; return refusal(jobTextInvalid(error)); }
-    }
-    const lane = laneOf(entry, args);
-    // D2: an inline job, partial job or patch with the prototype op, before the agent, the lane checks and any capture.
-    if (refusesPrototype && hasArgs && namesPrototype(args)) return refusal(prototypeUnavailable(name, lane));
-    // servidor/fase4-25: a pending generator op in the inline job, partial job or patch, at the same place.
-    if (refusesGenerators && hasArgs) { const generator = namesGenerator(args, pendingGenerator); if (generator) return refusal(generatorUnavailable(name, lane, generator)); }
-    // servidor/fase4-25 (finding A1): patch "verified" reads its operations from a file the gate never reads; refused here,
-    // before the agent, any file brought from it and any capture (the explicit patch is checked: confineJobs).
-    if (hasArgs) { const at = namesVerifiedPatch(name, args); if (at) return refusal(verifiedPatchUnavailable(name, lane, args, at)); }
-    if (LANED.has(lane) && !lanes.includes(lane)) return refusal(laneDisabled(lane));
-    const need = agentNeed(entry.agent, args);
-    // O.6.1: a lane the image refused at start is off for every tool but the state reports, before the agent and any path.
-    if (LANED.has(lane) && need !== 'report' && kernelRefused?.[lane]) return refusal(kernelLaneOff(lane, kernelRefused[lane]));
+    // a8 phase 6: the checks before the agent and any path are ONE function (refusalBeforeAgent), the one the call deadline's
+    // inputs read too (refusedBeforePaths).
+    const early = refusalBeforeAgent(name, args, { entry, config, raw: params[0], hasArgs, lanes, kernelRefused, prototypeOp, generatorOps, destructive });
+    if (early.refusal) return refusal(early.refusal);
+    args = early.args;
+    const { lane, need } = early;
     let info = null, skipped = [];
     try { info = link?.info?.() ?? null; } catch { info = null; }
     if (need === 'always') {
@@ -606,7 +737,8 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
       if (studio.refusal) return refusal(studio.refusal);
       if (studio.args) ({ args, skipped } = studio);
     }
-    if ((need === 'always' || (entry.paths?.out ?? []).length) && context.executor?.quota?.full?.()) return refusal(workspaceFull());
+    // (a8: an entry that writes in the workspace by itself, writesWorkspace: ssam_code's check jobs and plans)
+    if ((need === 'always' || (entry.paths?.out ?? []).length || entry.writesWorkspace === true) && context.executor?.quota?.full?.()) return refusal(workspaceFull());
     let resolved = args;
     if (hasArgs) {
       try { resolved = await resolvePaths(name, entry, args, lane, context, { agentRoot: info?.agentRoot ?? null }); }

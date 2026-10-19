@@ -1,7 +1,8 @@
 // servidor/fase4-25 (C:\t\vps-a5\PLANO.md, sections 3.2 and 5): what the product's marco-a5 adds that the hosted server
 // must keep inside its seam.
-// - ssam_code (D1 a): unavailable hosted (HOSTED_UNAVAILABLE, cause SSAM_CODE_HOSTED_PENDING) with the continuation to the
-//   text views of ssam_map and the delivery tools; its check and plan read and write the server's own roots.
+// - ssam_code (D1 a): unavailable hosted (HOSTED_UNAVAILABLE, cause SSAM_CODE_HOSTED_PENDING) while its check and plan read
+//   and wrote the server's own roots. servidor/fase4-26 a8 (owner request 18/10): served hosted, every read and write of it
+//   the customer's (hosted-ssam-code.test.mjs); here, that it is a server tool whose grammar answers with nothing sent.
 // - 3.2-A: ssam_code writes through the registered handler of the lane's delivery tool (the handler map of ssam.mjs). That
 //   map keeps the GATED handler, the one a client reaches: a job ssam_code hands to o11_deliver is confined like any other.
 // - 3.2-C (D4): the environment components of ssam_discover (environment-components.mjs) read the server's own connection
@@ -79,20 +80,17 @@ async function hostedServer(context, { tools } = {}) {
     call: async (name, args) => { const r = await client.callTool({ name, arguments: args }); return r.structuredContent ?? JSON.parse(r.content[0].text); } };
 }
 
-test('ssam_code is classified unavailable hosted, with its cause and the continuation to the text views and the delivery tools', async () => {
+test('a8: ssam_code is a server tool of the hosted catalog; its grammar answers on the server with nothing sent', async () => {
   const entry = hostedTools().ssam_code;
-  assert.equal(entry?.class, 'unavailable');
-  assert.equal(entry.cause, 'SSAM_CODE_HOSTED_PENDING');
-  assert.equal(entry.continuation?.tool, 'ssam_map');
+  assert.equal(entry?.class, 'server');
+  assert.equal(entry.cause, undefined);
   const context = hosted();
   const sb = await hostedServer(context);
   try {
-    for (const args of [{ lane: 'o11', action: 'grammar' }, { lane: 'o11', action: 'check', files: ['ws:inbox/a.txt'] }, { lane: 'odc', action: 'plan', items: ['A'] },
-      { lane: 'o11', action: 'write', module: 'M', text: 'action A() {}' }]) {
-      const value = await sb.call('ssam_code', args);
-      assert.equal(value.code, 'HOSTED_UNAVAILABLE', JSON.stringify(value).slice(0, 300));
-      assert.equal(value.cause, 'SSAM_CODE_HOSTED_PENDING');
-      assert.equal(value.continuation.tool, 'ssam_map');
+    for (const lane of ['o11', 'odc']) {
+      const value = await sb.call('ssam_code', { lane, action: 'grammar' });
+      assert.equal(value.ok, true, JSON.stringify(value).slice(0, 300));
+      assert.equal(value.action, 'grammar');
     }
   } finally { await sb.close(); }
   assert.deepEqual(context.executor.calls, [], 'nothing reached the customer\'s machine');
@@ -116,18 +114,23 @@ test('the handler map ssam_code writes through keeps the gated handler: a job it
   assert.deepEqual(spawned, [], 'no kernel process ran for a refused job');
 });
 
-test('hosted, the environment components of ssam_discover are off: HOSTED_UNAVAILABLE, nothing read or written in any root', async () => {
+// servidor/fase4-26 a8 (declared change of this test): the components are no longer off hosted. They read the customer's own
+// connection and list through the customer's lane (hosted-a8-agent.test.mjs proves the listing and the per-customer cache);
+// what this test kept stays: nothing is read or written in the server's root. Here the customer's lane refuses (the fake
+// executor runs no o11.selected), so the answer is NO_LISTING and nothing is kept.
+test('hosted, the environment components of ssam_discover never read or write a root of the server (a8: listed through the customer\'s lane)', async () => {
   const context = hosted();
   const root = temp('ssam-a5-root-');
   const value = await within(context, () => laneComponents({ lane: 'o11', intent: 'gerar um PDF do relatorio', needs: ['pdf'] }, { root }));
   assert.equal(value.ok, false);
-  assert.equal(value.code, 'HOSTED_UNAVAILABLE');
-  assert.equal(value.cause, 'COMPONENTS_HOSTED_PENDING');
+  assert.equal(value.code, 'NO_LISTING', JSON.stringify(value).slice(0, 300));
+  assert.notEqual(value.cause, 'COMPONENTS_HOSTED_PENDING');
   assert.deepEqual(fs.readdirSync(root), [], 'no .local/components cache was written');
-  assert.deepEqual(context.executor.calls, []);
+  assert.ok(!fs.existsSync(path.join(context.workspace, 'state', 'components')) || fs.readdirSync(path.join(context.workspace, 'state', 'components')).length === 0);
+  assert.deepEqual(context.executor.calls.map(c => c.kind).filter(k => k !== 'o11.selected'), [], 'only the customer\'s own lane was asked');
 });
 
-test('the hosted instructions never send a session to ssam_code; they say what replaces it, the generators and the prompt', async () => {
+test('a8: the hosted instructions send a session to ssam_code as the local ones do, where its subagent files go, the generators and the prompt', async () => {
   const context = hosted();
   const server = await within(context, () => createSsamServer({ o11: true, odc: false, hosted: { context, session: { agent, lanes: context.lanes } } }));
   const local = await createSsamServer({ o11: true, odc: false });
@@ -136,9 +139,10 @@ test('the hosted instructions never send a session to ssam_code; they say what r
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
   try {
     const text = client.getInstructions();
-    assert.equal(text.includes('mcp__ssam__ssam_code'), false, 'not in the core tools to load');
-    assert.equal(/ssam_code (plan|check|write|\{lane)/.test(text), false, 'no ssam_code step');
-    assert.match(text, /ssam_code is unavailable here too/);
+    assert.equal(text.includes('mcp__ssam__ssam_code'), true, 'in the core tools to load');
+    assert.match(text, /ssam_code (plan|check|write|\{lane)/, 'the ssam_code steps of the session rules');
+    assert.doesNotMatch(text, /ssam_code is unavailable/);
+    assert.match(text, /files subagents write for it go in the agent inbox folder/);
     assert.match(text, /GENERATOR_PENDING/);
     assert.match(text, /HOSTED_PROMPT_UNAVAILABLE/);
     const [s2, c2] = InMemoryTransport.createLinkedPair();

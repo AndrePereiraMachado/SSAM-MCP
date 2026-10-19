@@ -408,6 +408,7 @@ class JobWalk {
 // generator(id): servidor/fase4-25, whether the gate refuses that generator op (null: not asked); the answer then names the
 // first refused generator the call reaches, or 'unreadable' for a part the gate could not read whole.
 export async function confineJobs(name, resolved, { workspace, resolve, prototype = false, generator = null } = {}) {
+  if (name === CODE_TOOL) return confineCodeJobs(resolved, { workspace, resolve, prototype, generator });
   if (!jobSlot(name, resolved)) return { resolved, prototype: false, generator: null, refusal: null };
   const copy = structuredClone(resolved);
   const { holder, at, key } = jobSlot(name, copy);
@@ -454,6 +455,38 @@ export async function confineJobs(name, resolved, { workspace, resolve, prototyp
       }
       if (effective !== undefined) await walk.document(effective, { mode: 'moved', dir: path.dirname(base), at: at + '/basedOn/job (patched) > ', depth: 1 });
     }
+  }
+  return { resolved: copy, prototype: prototype && (walk.prototype || walk.unknown),
+    generator: generator ? walk.generator ?? (walk.unknown ? 'unreadable' : null) : null, refusal: walk.refusal };
+}
+
+// servidor/fase4-26 a8: ssam_code makes the job a check runs (and a write hands to its lane's delivery tool) of its texts,
+// which name no file, its raw ops and the ops of the .json files of `files`; and its corrections read the job of basedOn
+// {job} (or of an also item). A check runs that job on the server with no other gate after this one, so every path in it is
+// confined here like a delivery's: the raw ops are normalized as the handler's job runner normalizes them and rewritten to
+// the workspace files the kernel reads (inline), a .json op file and the job of basedOn are checked where they are (their
+// bytes are what the facade reads; tools.json already confined their own paths). The prototype op and the pending
+// generators are noted on the way, as in confineJobs.
+export const CODE_TOOL = 'ssam_code';
+async function confineCodeJobs(resolved, { workspace, resolve, prototype = false, generator = null } = {}) {
+  const copy = structuredClone(resolved ?? {});
+  const walk = new JobWalk({ workspace, resolve, prototype, generator });
+  if (Array.isArray(copy.ops)) {
+    const shaped = shapedJob({ ops: copy.ops });
+    if (shaped === null || !Array.isArray(shaped.ops)) walk.refuse(unchecked('/ops', 'ops the gate cannot normalize as the handler does'), '/ops');
+    else { copy.ops = shaped.ops; await walk.document({ ops: copy.ops }, { mode: 'inline', dir: null, at: '', depth: 0 }); }
+  }
+  for (const [i, file] of (Array.isArray(copy.files) ? copy.files : []).entries()) {
+    if (typeof file !== 'string' || !/\.json$/i.test(file) || !path.isAbsolute(file) || !isFile(file)) continue;
+    const doc = walk.top(file, `/files/${i}`);
+    if (doc !== undefined) await walk.document(Array.isArray(doc) ? { ops: doc } : doc, { mode: 'file', dir: path.dirname(file), at: `/files/${i} > `, depth: 1 });
+  }
+  const bases = [['/basedOn/job', copy.basedOn], ...(Array.isArray(copy.also) ? copy.also.map((item, i) => [`/also/${i}/basedOn/job`, item?.basedOn]) : [])];
+  for (const [at, basedOn] of bases) {
+    const file = isObject(basedOn) && typeof basedOn.job === 'string' && path.isAbsolute(basedOn.job) && isFile(basedOn.job) ? basedOn.job : null;
+    if (!file || walk.seen.has(fileKey(file))) continue;
+    const doc = walk.top(file, at);
+    if (doc !== undefined) await walk.document(Array.isArray(doc) ? { ops: doc } : doc, { mode: 'file', dir: path.dirname(file), at: at + ' > ', depth: 1 });
   }
   return { resolved: copy, prototype: prototype && (walk.prototype || walk.unknown),
     generator: generator ? walk.generator ?? (walk.unknown ? 'unreadable' : null) : null, refusal: walk.refusal };

@@ -17,12 +17,21 @@
 //     the Portal through the headless Studio session (odc_mcp_connection readiness), the tools unavailable hosted, the
 //     prototype op and a renamed path argument refused at the gate, and a third customer still on the v48 pack: accepted
 //     by kernel.json odcBridgeAccepted, typed refusals for what the 23rd pack lacks.
-//   - the product's marco-a5 (servidor/fase4-25, step 9j): ssam_code unavailable, the generators pending their blind test
-//     refused at the gate, odc_portal_login prompt and focus refused (no credential window).
+//   - the product's marco-a5 (servidor/fase4-25, step 9j): the generators pending their blind test refused at the gate,
+//     odc_portal_login prompt and focus refused (no credential window).
+//   - deliveries without the 25 s deadline (servidor/fase4-26 a8, step 9k): ssam_code write naming an agent: file twice at
+//     once (case f: one delivery, the second joins) and a delivery of 3 min (E2E_LONG_DELIVERY_MS) through a proxy that cuts a
+//     response idle for 60 s.
+//   - servidor/fase4-26 a8 (step 9l, owner request 18/10): ssam_code served hosted, both lanes: read (O11 by the open
+//     module's name through the relay, ODC over the ws: capture), check over the newest capture of the customer's workspace,
+//     plan (prompts brought to the customer's machine, batch files named in its agent inbox, a batch check that brings its
+//     file), write (O11 delivered through o11_deliver's gate and the thin bridge, an edit of a read action included; ODC
+//     through studio_deliver until the build); customer B (step 10) never reaches any of A's.
 // Tokens and agent credentials only ever go to files under the temporary folder; nothing here prints them.
 // Ports: the server and the fake O11 bridges take free ports in 7400-7499. Never a real Studio: the fake ODC pipes use
 // unlikely pids, and the agents list only the fake Studio processes.
 import fs from 'node:fs';
+import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -218,6 +227,39 @@ function relayLine(relayPort, request, limitMs = 30000) {
   });
 }
 
+// A proxy in front of the server that cuts any response idle for idleMs (a tunnel or a load balancer before Caddy: 60 s is
+// common), at the HTTP level so that idle pooled connections between requests are not counted. It counts the ": keepalive"
+// comments of the SSE responses (http-server.mjs writes one after 25 s without a write) and every cut.
+async function idleCutProxy(targetPort, idleMs) {
+  const stats = { responses: 0, sse: 0, keepalives: 0, idleCuts: 0, longestGapMs: 0, streams: [] };
+  const NEEDLE = ': keepalive\n\n';
+  const server = http.createServer((req, res) => {
+    // The server accepts only its own Host (DNS rebinding guard): the proxy names it, as Caddy does with --public-host.
+    const upstream = http.request({ host: '127.0.0.1', port: targetPort, method: req.method, path: req.url, headers: { ...req.headers, host: '127.0.0.1:' + targetPort } }, up => {
+      stats.responses++;
+      const sse = /^text\/event-stream/i.test(String(up.headers['content-type'] ?? ''));
+      if (sse) stats.sse++;
+      res.writeHead(up.statusCode, up.headers);
+      res.flushHeaders?.();
+      let timer = null, last = Date.now(), carry = '';
+      const stream = { sse, keepalives: 0, ms: 0, started: Date.now() };
+      stats.streams.push(stream);
+      const arm = () => { clearTimeout(timer); timer = setTimeout(() => { stats.idleCuts++; up.destroy(); res.destroy(); }, idleMs); };
+      arm();
+      up.on('data', chunk => {
+        const now = Date.now(); stats.longestGapMs = Math.max(stats.longestGapMs, now - last); last = now; arm();
+        if (sse) { const text = carry + chunk.toString('latin1'); for (let i = text.indexOf(NEEDLE); i >= 0; i = text.indexOf(NEEDLE, i + NEEDLE.length)) { stats.keepalives++; stream.keepalives++; } carry = text.slice(-(NEEDLE.length - 1)); }
+        res.write(chunk);
+      });
+      up.on('end', () => { clearTimeout(timer); stream.ms = Date.now() - stream.started; res.end(); });
+      up.on('error', () => { clearTimeout(timer); res.destroy(); });
+    });
+    upstream.on('error', () => res.destroy());
+    req.pipe(upstream);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  return { stats, port: server.address().port, close: () => new Promise(resolve => { server.closeAllConnections?.(); server.close(resolve); }) };
+}
 // ---------------------------------------------------------------- the run
 let failure = null;
 const A = customerMachine('cliente-a'), B = customerMachine('cliente-b'), C = customerMachine('cliente-c');
@@ -451,6 +493,53 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
   check('thin: o11_studio refresh-references is refresh_references on the thin bridge, on the open module, with the agent\'s key',
     studioRefresh?.ok === true && studioRefreshSeen.some(e => e.method === 'refresh_references' && e.authOk && JSON.stringify(e.producers) === '["ThinProducer"]'),
     { reply: studioRefresh, seen: studioRefreshSeen.map(e => e.method + (e.success ? '' : ':' + e.error)) });
+  // a8 (the next agent pack, C:\t\agent-pack-next\PLANO.md 2.1): the Studio's own Manage Dependencies by code through the thin
+  // bridge of the current pack (capability refresh_references:add): add and published reach the bridge unchanged, with the
+  // agent's key, and the answer is the Studio's commit.
+  seen = o11Count();
+  const managedAdd = [{ producer: 'ThinProducer', elements: ['IServerActionSignature:ThinAction'] }];
+  const managed = sc(await call(clientA, 'o11_studio', { command: 'refresh-references', args: { add: managedAdd, published: true } }));
+  const managedSeen = o11Since(seen);
+  check('a8 (a): o11_studio refresh-references with add and published is the Studio\'s Manage Dependencies on the current pack\'s thin bridge (refresh_references:add), the parameters unchanged, the agent\'s key',
+    managed?.ok === true && managed.committed === true && managed.command === 'Manage Dependencies'
+      && managedSeen.some(e => e.method === 'refresh_references' && e.authOk && e.published === true && JSON.stringify(e.add) === JSON.stringify(managedAdd)),
+    { reply: managed, seen: managedSeen.map(e => e.method + (e.success ? '' : ':' + e.error)) });
+  // a8 round 2 (review M1 and IP option D): a dialog the Studio opened during the command. The thin bridge closed it: one typed
+  // refusal, the dialog first, every text written by the server. A dialog it could not close: never ok, STUDIO_DIALOG_PENDING.
+  const dialogReply = sc(await call(clientA, 'o11_studio', { command: 'refresh-references', args: { add: [{ producer: 'ThinDialogProducer', elements: ['IServerActionSignature:ThinAction'] }], published: true } }));
+  check('a8 round 2 (M1): the thin bridge closed the dialog of its Manage Dependencies: one typed refusal, the dialog first, the server\'s texts, never ok',
+    dialogReply?.ok === false && dialogReply.code === 'REFERENCES_NOT_ADDED' && dialogReply.problems?.[0]?.cause === 'studio-dialog'
+      && /^A Studio dialog opened during the Manage Dependencies of [^:]+: "Sign in"/.test(dialogReply.problems[0].message ?? '') && !/fix the cause, then repeat/.test(JSON.stringify(dialogReply)),
+    dialogReply);
+  const blockedReply = sc(await call(clientA, 'o11_studio', { command: 'refresh-references', args: { add: [{ producer: 'ThinBlockedProducer', elements: ['IServerActionSignature:ThinAction'] }], published: true } }));
+  check('a8 round 2 (M1): a dialog the thin bridge could not close is never ok: STUDIO_DIALOG_PENDING, outcome running, the dialog',
+    blockedReply?.ok === false && blockedReply.code === 'STUDIO_DIALOG_PENDING' && blockedReply.outcome === 'running' && blockedReply.blockedBy?.kind === 'MergeEditor', blockedReply);
+  // a8 (b): the installed extensions and Forge components of the customer's environment: the kernel's listing over the
+  // customer's Studio session (environment_session referenceable and signature through the agent), the cache in the
+  // customer's own folder, nothing in the server's roots.
+  const serverCaches = [path.join(repo, 'kernel', '.local', 'components'), path.join(repo, '.local', 'components')];
+  const cacheFiles = () => serverCaches.flatMap(dir => (fs.existsSync(dir) ? fs.readdirSync(dir).map(f => path.join(dir, f) + ':' + fs.statSync(path.join(dir, f)).mtimeMs) : []));
+  const serverCachesBefore = cacheFiles();
+  seen = o11Count();
+  // A call above the hosted deadline (25 s) answers running with its continuation; the client follows it, as an MCP client does.
+  const componentsStarted = Date.now();
+  let componentsAnswer = sc(await call(clientA, 'ssam_discover', { lane: 'o11', intent: 'which installed extensions of the environment can I use to generate a PDF' }, 600000));
+  const componentsRounds = [componentsAnswer?.state ?? 'answer'];
+  for (let i = 0; i < 40 && componentsAnswer?.state === 'running' && componentsAnswer?.continuation?.arguments?.continueTask; i++) {
+    componentsAnswer = sc(await call(clientA, componentsAnswer.continuation.tool ?? 'ssam_discover', componentsAnswer.continuation.arguments, 600000));
+    componentsRounds.push(componentsAnswer?.state ?? 'answer');
+  }
+  const componentsMs = Date.now() - componentsStarted;
+  const componentsSeen = o11Since(seen).filter(e => !probe(e));
+  const customerCache = path.join(issued.a.workspace, 'state', 'components');
+  const customerCacheFiles = fs.existsSync(customerCache) ? fs.readdirSync(customerCache) : [];
+  check('a8 (b): a hosted ssam_discover lists the PDF producer of the customer\'s environment through the agent, keeps the cache in the customer\'s folder and nothing in the server\'s',
+    componentsAnswer?.environment?.ok === true && (componentsAnswer.environment.components ?? []).some(c => c.name === 'NeutralPdfEngine' && c.kind === 'Extension')
+      && componentsSeen.length > 0 && componentsSeen.every(e => e.method === 'environment_session' && e.authOk) && componentsSeen.some(e => e.operation === 'referenceable')
+      && customerCacheFiles.some(f => f.endsWith('.json') && f !== 'last.json') && JSON.stringify(cacheFiles()) === JSON.stringify(serverCachesBefore)
+      && ![repo, T, serverDir].some(p => JSON.stringify(componentsAnswer.environment ?? null).toLowerCase().includes(JSON.stringify(p).slice(1, -1).toLowerCase())),
+    { rounds: componentsRounds, ms: componentsMs, customerCache: customerCacheFiles, serverCaches: cacheFiles(),
+      seen: componentsSeen.map(e => e.method + ':' + e.operation + (e.success ? '' : ':' + e.error)), environment: componentsAnswer?.environment ?? componentsAnswer });
 
   // 9c. The merge order (Delivery.cs, bridge capability merge_from_oml:first_pass) over the thin wire: an entity attribute
   //     of an identifier type with a default, created by the job, is a default one native merge drops (MergeOrderTests,
@@ -672,14 +761,15 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
       // module.file is the capture that answers the read: this one, or the first intact one of the same content (C15).
       // servidor/fase4-26 a7 (CX11 R5): the packet's default budget is 8 KB; a module section that does not fit is a cut whose
       // recover call names the same ws: capture. The read is the server's either way: the delivery step names the module, and
-      // it is the lane's delivery tool, never ssam_code (unavailable hosted).
+      // it is the lane's delivery tool, or (a8: ssam_code served hosted, the local packet) the code form of ssam_code.
       packet.isError !== true && value?.ok === true && value.schemaVersion === 'ssam-packet/1' && value.app === captured
         && (value.module ? value.module.name === moduleName && inWs(value.module.file, 'ws:' + lane + '/')
           : (value.cuts ?? []).some(c => c.section === 'module' && c.recover?.tool === 'ssam_discover' && c.recover.arguments?.app === captured))
-        && value.next?.deliver?.tool === (lane === 'o11' ? 'o11_deliver' : 'studio_deliver') && value.next.deliver.arguments?.module === moduleName
-        && !JSON.stringify(value).includes('ssam_code') && !serverPathIn(value) && clientHits(value).length === 0,
-      value ? { ok: value.ok, schema: value.schemaVersion, app: value.app, module: value.module ? { name: value.module.name, file: value.module.file } : null, next: value.next?.deliver ?? null,
-        size: value.size, error: value.error ?? null, client: clientHits(value) } : packet);
+        && ['ssam_code', lane === 'o11' ? 'o11_deliver' : 'studio_deliver'].includes(value.next?.deliver?.tool) && value.next.deliver.arguments?.module === moduleName
+        && !serverPathIn(value) && clientHits(value).length === 0,
+      value ? { ok: value.ok, schema: value.schemaVersion, app: value.app, module: value.module ? { name: value.module.name, file: value.module.file } : null,
+        moduleCut: (value.cuts ?? []).find(c => c.section === 'module') ?? null, deliver: value.next?.deliver ? { tool: value.next.deliver.tool, module: value.next.deliver.arguments?.module ?? null } : null,
+        serverPath: serverPathIn(value), size: value.size, error: value.error ?? null, client: clientHits(value) } : packet);
   }
 
   const search = sc(await call(clientA, 'ssam_map', { lane: 'odc', target: odcCapture?.path, view: 'search', text: ODC_MODULE.name }, 600000));
@@ -803,14 +893,10 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
     renamedInside?.ok === true && renamedInside.count >= 1 && inWs(renamedInside.captures?.[0]?.file, 'ws:odc/') && !serverPathIn(renamedInside),
     renamedInside ? { ok: renamedInside.ok, count: renamedInside.count, code: renamedInside.code ?? null, error: renamedInside.error ?? null } : renamedInside);
 
-  // 9j. The product's marco-a5 over the hosted path (servidor/fase4-25, C:\t\vps-a5\PLANO.md section 5): ssam_code is
-  // unavailable, the generators still pending their blind test are refused at the gate (rest-consume naming an internal
-  // address included: nothing is fetched), and the private credential window of odc_portal_login never opens.
+  // 9j. The product's marco-a5 over the hosted path (servidor/fase4-25, C:\t\vps-a5\PLANO.md section 5): the generators still
+  // pending their blind test are refused at the gate (rest-consume naming an internal address included: nothing is fetched),
+  // and the private credential window of odc_portal_login never opens. (ssam_code: served since a8, step 9k.)
   odcSeen = odcLines(A).length; seen = o11Count();
-  const codeAnswer = sc(await call(clientA, 'ssam_code', { lane: 'o11', action: 'write', module: O11_MODULE.name, text: 'action A() {}' }));
-  check('marco-a5: ssam_code answers HOSTED_UNAVAILABLE (cause SSAM_CODE_HOSTED_PENDING, continuation ssam_map); nothing reached a Studio',
-    codeAnswer?.code === 'HOSTED_UNAVAILABLE' && codeAnswer.cause === 'SSAM_CODE_HOSTED_PENDING' && codeAnswer.continuation?.tool === 'ssam_map'
-      && odcLines(A).length === odcSeen && o11Count() === seen, codeAnswer);
   const GENERATOR_OPS = { 'entity-actions': { op: 'entity-actions', data: { entities: 'all' } },
     'rest-consume': { op: 'rest-consume', data: { name: 'Internal', methods: [{ name: 'Probe', url: 'http://127.0.0.1:9/internal' }] } },
     'gen-screen': { op: 'screen', data: { generate: { entities: ['Order'] } } } };
@@ -829,6 +915,158 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
   check('marco-a5: odc_portal_login prompt and focus answer HOSTED_PROMPT_UNAVAILABLE before the Studio is read; no credential window',
     Object.values(windows).every(value => value?.code === 'HOSTED_PROMPT_UNAVAILABLE') && odcLines(A).length === odcSeen,
     Object.fromEntries(Object.entries(windows).map(([action, value]) => [action, { ok: value?.ok ?? null, code: value?.code ?? null }])));
+
+  // 9k. Deliveries without the 25 s deadline (servidor/fase4-26 a8, fix/delivery-no-deadline; C:\t\no-deadline\RESULTADO.md):
+  //   - case f: ssam_code write {files} naming an agent: file, twice at once. ssam_code is served since a8 phase 6 and its
+  //     write runs a delivery inside, so the deadline reads its files as the gate does (hosted/policy.mjs replayInputs: the
+  //     sha256 the agent lists, never a transfer): ONE delivery, both answers "delivered", the second joined the first, never
+  //     DELIVERY_STILL_RUNNING; the deadline only listed the file (file.list, one per call) and one gate reached the agent;
+  //   - a delivery of E2E_LONG_DELIVERY_MS (3 min) through a proxy that cuts a response idle for 60 s: ONE call answers
+  //     "delivered" at its end (never state "running" nor a continueTask), its SSE response carried a ": keepalive" about
+  //     every 25 s, so the proxy cut nothing, and the fake thin bridge merged once (its answer held for the 3 min).
+  {
+    write(path.join(A.root, 'inbox', 'case-f.logic'), 'server action ThinCaseF\n  out Result: Integer\n  assign Result = 6\n  end\n');
+    const callsBefore = agentCalls(A).length, studioBefore = o11Count();
+    const codeArgs = { lane: 'o11', action: 'write', module: O11_MODULE.name, files: ['agent:inbox/case-f.logic'], authorize: 'pode entregar a ThinCaseF no Headless_CS' };
+    const codeCalls = await Promise.all([0, 1].map(() => call(clientA, 'ssam_code', codeArgs, 900000).then(sc)));
+    const fMerges = o11Since(studioBefore).filter(e => e.method === 'merge_from_oml');
+    const fKinds = agentCalls(A).slice(callsBefore).map(e => e.kind);
+    check('a8 (f): ssam_code write naming an agent: file, twice at once (served since a8 phase 6): ONE delivery, both "delivered", the second joined the first; the deadline only listed the file (one file.list per call, before any transfer) and only one gate reached the agent; never DELIVERY_STILL_RUNNING',
+      codeCalls.every(value => value?.ok === true && value.result === 'delivered') && codeCalls.filter(value => value.joined === true).length === 1 && fMerges.length === 1
+        && fKinds.filter(kind => kind === 'file.list').length === 2 && fKinds.indexOf('file.get') > fKinds.lastIndexOf('file.list') && fKinds.filter(kind => kind === 'o11.selected').length === 1
+        && !codeCalls.some(value => value?.code === 'DELIVERY_STILL_RUNNING'),
+      { replies: codeCalls.map(value => ({ ok: value?.ok ?? null, result: value?.result ?? null, joined: value?.joined ?? null, code: value?.code ?? null, error: value?.error ? String(value.error).slice(0, 200) : null })),
+        merges: fMerges.length, kinds: fKinds });
+    const LONG_MS = Number(process.env.E2E_LONG_DELIVERY_MS ?? 180000);
+    const proxy = await idleCutProxy(port, 60000);
+    const longClient = new Client({ name: 'e2e-long-delivery', version: '1' });
+    await longClient.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${proxy.port}/mcp`), { requestInit: { headers: { Authorization: 'Bearer ' + issued.a.token } } }));
+    const delayFile = A.studiosFile + '.merge-delay-ms';
+    fs.writeFileSync(delayFile, String(LONG_MS));
+    const before9k = o11Count();
+    const started = Date.now();
+    const longJob = { expectValid: true, ops: [{ op: 'logic', data: { actions: [{ name: 'ThinLongDelivery', public: true,
+      outputs: [{ name: 'Result', type: 'Integer' }], steps: [{ assign: { Result: '3' } }] }] } }] };
+    let long;
+    try { long = await call(longClient, 'o11_deliver', { module: O11_MODULE.name, job: longJob, checks: ['ThinLongDelivery'], authorize: 'deliver ThinLongDelivery to Headless_CS' }, LONG_MS + 600000); }
+    finally { fs.rmSync(delayFile, { force: true }); }
+    const elapsedMs = Date.now() - started;
+    const longSeen = studioLog(A).filter(e => e.studio === 'o11').slice(before9k);
+    const longMerges = longSeen.filter(e => e.method === 'merge_from_oml');
+    const value = sc(long);
+    check('a8: a delivery of 3 min through a proxy that cuts idle responses at 60 s: ONE call answers "delivered" at its end, never state "running" nor continueTask; one merge',
+      value?.ok === true && value.result === 'delivered' && value.state !== 'running' && !JSON.stringify(value).includes('continueTask') && elapsedMs >= LONG_MS
+        && longMerges.length === 1 && longMerges[0].merged === true && longMerges[0].heldMs === LONG_MS,
+      { elapsedMs, reply: value ? { ok: value.ok, result: value.result, state: value.state ?? null, code: value.code ?? null, error: value.error ?? null } : long, merges: longMerges.map(e => ({ merged: e.merged, heldMs: e.heldMs })) });
+    check('a8: the SSE answer of that call carried a ": keepalive" about every 25 s and the proxy cut nothing (longest silence under 60 s)',
+      proxy.stats.streams.some(s => s.sse && s.ms >= LONG_MS && s.keepalives >= Math.floor(LONG_MS / 25000) - 1) && proxy.stats.idleCuts === 0 && proxy.stats.longestGapMs < 60000,
+      { ...proxy.stats, streams: proxy.stats.streams.map(({ sse, keepalives, ms }) => ({ sse, keepalives, ms })) });
+    await longClient.close().catch(() => {});
+    await proxy.close();
+  }
+
+  // 9l. servidor/fase4-26 a8 (owner request 18/10): ssam_code over the hosted path, both lanes, every file of it A's own.
+  //   - read: O11 by the open module's name (captured through the relay and the thin bridge), ODC over its ws: capture; the
+  //     action read is kept as a read of A (an edit of it expands only for A);
+  //   - check: over the newest capture of A's workspace, its job in A's workspace, the kernel on the server, no Studio call;
+  //   - plan: the plan folder in A's workspace, its prompts and plan.json brought to A's machine by the agent, every batch
+  //     file named in A's agent inbox; a subagent's batch check (the call of its prompt) brings its file through the agent;
+  //   - write: O11 delivered through o11_deliver's gate, the relay and the thin bridge (a text, then an edit of the read
+  //     action); ODC through studio_deliver's gate until the build (the fake ODC bridge has no merge).
+  // The paths of A's own machine (its agent folder) are the user's, taken out before looking for server paths.
+  const userForms = machine => { const once = JSON.stringify(machine.root).slice(1, -1); return [JSON.stringify(once).slice(1, -1), once]; };
+  const onMachineOf = (value, machine) => { let text = textOf(value); for (const form of userForms(machine)) text = text.split(form).join('<user folder>'); return text; };
+  const serverPathInA = value => { const text = onMachineOf(value, A).toLowerCase(); return [repo, T, serverDir].some(p => text.includes(JSON.stringify(p).slice(1, -1).toLowerCase())); };
+  const CODE_DDL = 'create entity HostedCodeE2E (\n  Id Long Integer identifier auto required,\n  Name Text(50)\n);\n';
+  seen = o11Count();
+  const o11Ddl = sc(await call(clientA, 'ssam_code', { lane: 'o11', action: 'read', part: 'ddl', target: O11_MODULE.name }, 600000));
+  const o11ReadSeen = o11Since(seen);
+  check('a8: hosted ssam_code read {lane:"o11", part:"ddl", target: the open module}: captured through the relay and the thin bridge (read-only, the agent\'s key) into ws:o11/, read on the server, no server path',
+    o11Ddl?.ok === true && inWs(o11Ddl.file, 'ws:o11/') && o11ReadSeen.some(e => ['snapshot_module', 'environment_session'].includes(e.method) && e.authOk)
+      && o11ReadSeen.every(e => probe(e) || e.authOk) && !o11ReadSeen.some(e => ['merge_from_oml', 'publish', 'refresh_references', 'open_module'].includes(e.method)) && !serverPathInA(o11Ddl),
+    o11Ddl ? { ok: o11Ddl.ok, file: o11Ddl.file ?? null, code: o11Ddl.code ?? null, error: o11Ddl.error ?? null, seen: o11ReadSeen.map(e => e.method) } : o11Ddl);
+  const flowRead = sc(await call(clientA, 'ssam_code', { lane: 'o11', action: 'read', part: 'logic', target: o11Ddl?.file, element: 'ThinE2EPing' }, 600000));
+  const flowText = String(flowRead?.text ?? flowRead?.action?.text ?? '');
+  const assignId = flowText.split('\n').find(l => /\bassign\b/.test(l))?.trim().split(/\s+/).at(-1) ?? null;
+  const readSha = flowRead?.action?.textSha ?? null;
+  check('a8: hosted ssam_code read {part:"logic", element}: the action as text with its textSha, kept as a read of this customer (ws:state, never served back)',
+    flowRead?.ok === true && /^[0-9a-f]{16}$/.test(readSha ?? '') && /^@n\d+$/.test(assignId ?? '') && fs.existsSync(path.join(issued.a.workspace, 'state', 'code-readings', 'o11', readSha ?? 'none'))
+      && !serverPathInA(flowRead), flowRead ? { ok: flowRead.ok, textSha: readSha, assignId, code: flowRead.code ?? null, error: flowRead.error ?? null } : flowRead);
+  const odcRead = sc(await call(clientA, 'ssam_code', { lane: 'odc', action: 'read', part: 'ddl', target: odcCapture?.path }, 600000));
+  check('a8: hosted ssam_code read {lane:"odc", part:"ddl"} over the ws: capture: answered by A\'s own capture, no server path',
+    odcRead?.ok === true && odcRead.file === odcCapture?.path && !serverPathInA(odcRead), odcRead ? { ok: odcRead.ok, file: odcRead.file ?? null, code: odcRead.code ?? null, error: odcRead.error ?? null } : odcRead);
+  const codeChecks = {};
+  // a8 review (M2): a check leaves its job (the base of a correction) and never its candidate or work folder
+  const checkFolderOf = job => (typeof job === 'string' && job.startsWith('ws:') ? path.dirname(path.join(issued.a.workspace, ...job.slice(3).split('/'))) : null);
+  const leftOf = job => { const dir = checkFolderOf(job); return dir ? { job: fs.existsSync(path.join(dir, 'job.json')), candidate: fs.existsSync(path.join(dir, 'candidate.oml')), result: fs.existsSync(path.join(dir, 'candidate.oml.result.json')), work: fs.existsSync(path.join(dir, 'work')) } : null; };
+  for (const [lane, module] of [['o11', O11_MODULE.name], ['odc', ODC_MODULE.name]]) {
+    seen = o11Count(); odcSeen = odcLines(A).length;
+    codeChecks[lane] = sc(await call(clientA, 'ssam_code', { lane, action: 'check', module, part: 'ddl', text: CODE_DDL }, 600000));
+    const value = codeChecks[lane];
+    const left = leftOf(value?.job);
+    check(`a8: hosted ssam_code check {lane:"${lane}"}: over the newest capture of A's workspace (ws:${lane}/snapshots), its job in A's workspace, the kernel on the server, no Studio call, no server path; its candidate and work folder removed when it ended`,
+      value?.ok === true && new RegExp('^ws:' + lane + '/snapshots/').test(value.capture?.path ?? '') && new RegExp(lane === 'o11' ? '^ws:o11/jobs/check/' : '^ws:odc/lab/jobs/check/').test(value.job ?? '')
+        && o11Count() === seen && odcLines(A).length === odcSeen && !serverPathInA(value) && left?.job === true && left.candidate === false && left.result === false && left.work === false,
+      value ? { ok: value.ok, code: value.code ?? null, capture: value.capture?.path ?? null, job: value.job ?? null, left, problems: (value.problems ?? []).slice(0, 3), error: value.error ?? null } : value);
+  }
+  const PLAN_ITEMS = [{ kind: 'data', name: 'HostedShape', intent: 'type HostedShape = { Name: Text; }' },
+    ...Array.from({ length: 6 }, (_, i) => ({ kind: 'action', name: `HostedPlan${i}`, intent: `returns ${i}`, signature: `server action HostedPlan${i}\n  out Result: Integer`, calls: i < 5 ? [`HostedPlan${i + 1}`] : [] }))];
+  for (const [lane, module] of [['o11', O11_MODULE.name], ['odc', ODC_MODULE.name]]) {
+    const plan = sc(await call(clientA, 'ssam_code', { lane, action: 'plan', module, items: PLAN_ITEMS, workers: 2 }, 600000));
+    const folder = typeof plan?.dir === 'string' && plan.dir.startsWith('ws:') ? plan.dir.slice(3) : null;
+    const onMachine = folder ? path.join(A.root, ...folder.split('/'), 'plan.json') : null;
+    const full = onMachine && fs.existsSync(onMachine) ? JSON.parse(fs.readFileSync(onMachine, 'utf8')) : null;
+    const all = full ? [full.data, ...full.batches].filter(Boolean) : [];
+    const promptsHere = all.length > 0 && all.every(b => typeof b.promptFile === 'string' && b.promptFile.toLowerCase().startsWith(A.root.toLowerCase() + '\\') && fs.existsSync(b.promptFile));
+    const filesInInbox = all.length > 0 && all.every(b => b.files.every(f => f.toLowerCase().startsWith(path.join(A.root, 'inbox').toLowerCase() + '\\')));
+    const prompts = promptsHere ? all.map(b => fs.readFileSync(b.promptFile, 'utf8')) : [];
+    check(`a8: hosted ssam_code plan {lane:"${lane}"}: the plan folder in A's workspace, its prompts and plan.json brought to A's machine by the agent, every batch file named in A's agent inbox, no server path, no client text`,
+      plan?.ok === true && new RegExp(lane === 'o11' ? '^ws:o11/plans/[0-9a-f]{16}$' : '^ws:odc/lab/plans/[0-9a-f]{16}$').test(plan.dir) && promptsHere && filesInInbox
+        && plan.batches.every(b => b.launchPrompt.toLowerCase().includes(A.root.toLowerCase() + '\\')) && !serverPathInA(plan) && !serverPathInA(full) && prompts.every(p => !serverPathInA(p)) && clientHits(prompts).length === 0,
+      plan ? { ok: plan.ok, code: plan.code ?? null, dir: plan.dir ?? null, error: plan.error ?? null, batches: plan.batches?.length ?? null, onMachine: Boolean(full), promptsHere, filesInInbox } : plan);
+    if (full) {
+      const batch = full.batches[0];
+      for (const file of batch.files) write(file, batch.items.map(name => `server action ${name}\n  out Result: Integer\n  assign Result = 1\n  end\n`).join('\n'));
+      write(full.data.files[0], 'type HostedShape = {\n  Name: Text;\n}\n');
+      const batchCheck = sc(await call(clientA, batch.check.tool, batch.check.arguments, 600000));
+      const brought = batch.files.map(f => path.join(issued.a.workspace, 'inbox', ...path.relative(path.join(A.root, 'inbox'), f).split(path.sep)));
+      check(`a8: hosted ssam_code plan {lane:"${lane}"}: a subagent's batch check (the call of its prompt) brings its file from A's agent inbox and checks it over A's capture`,
+        (batchCheck?.ok === true || batchCheck?.code === 'CHECK_REFUSED') && brought.every(f => fs.existsSync(f)) && !serverPathInA(batchCheck),
+        batchCheck ? { ok: batchCheck.ok, code: batchCheck.code ?? null, problems: (batchCheck.problems ?? []).slice(0, 3), error: batchCheck.error ?? null } : batchCheck);
+      // Every subagent wrote its batch: the session sends the plan's final write, ONE ssam_code write with every file (O11
+      // delivered through the thin bridge; ODC until the build, the fake ODC bridge has no merge).
+      for (const other of full.batches.slice(1)) for (const file of other.files) write(file, other.items.map(name => `server action ${name}\n  out Result: Integer\n  assign Result = 1\n  end\n`).join('\n'));
+      seen = o11Count(); odcSeen = odcLines(A).length;
+      const finalArgs = { ...full.final.arguments, ...(lane === 'o11' ? { authorize: 'pode entregar o plano HostedPlan no Headless_CS' } : { until: 'build' }) };
+      const delivered = sc(await call(clientA, full.final.tool, finalArgs, 900000));
+      const finalSeen = lane === 'o11' ? o11Since(seen).map(e => e.method) : odcLines(A).slice(odcSeen).map(e => e.line.split(' ')[0]);
+      check(`a8: hosted ssam_code plan {lane:"${lane}"}: the plan's final write (every file from A's agent inbox) ${lane === 'o11' ? 'is delivered through the thin bridge' : 'is built on the server, the Studio saw the capture only'}, no server path`,
+        delivered?.ok === true && (lane === 'o11' ? delivered.result === 'delivered' && finalSeen.includes('merge_from_oml') : finalSeen.every(c => c === 'snapshot' || c === 'status'))
+          && full.final.tool === 'ssam_code' && full.final.arguments.files.length === 1 + full.batches.reduce((n, b) => n + b.files.length, 0) && !serverPathInA(delivered),
+        delivered ? { ok: delivered.ok, result: delivered.result ?? null, code: delivered.code ?? null, error: delivered.error ?? null, problems: (delivered.problems ?? []).slice(0, 3), seen: finalSeen } : delivered);
+    }
+  }
+  seen = o11Count();
+  const o11Write = sc(await call(clientA, 'ssam_code', { lane: 'o11', action: 'write', module: O11_MODULE.name, part: 'ddl', text: CODE_DDL, authorize: 'pode entregar a HostedCodeE2E no Headless_CS' }, 900000));
+  const o11WriteSeen = o11Since(seen);
+  check('a8: hosted ssam_code write {lane:"o11"}: delivered ("delivered") through o11_deliver\'s gate, the relay and the thin bridge (one merge_from_oml, the agent\'s key), no server path',
+    o11Write?.ok === true && o11Write.result === 'delivered' && o11WriteSeen.filter(e => e.method === 'merge_from_oml').length === 1 && o11WriteSeen.every(e => probe(e) || e.authOk) && !serverPathInA(o11Write),
+    o11Write ? { ok: o11Write.ok, result: o11Write.result ?? null, code: o11Write.code ?? null, error: o11Write.error ?? null, seen: o11WriteSeen.map(e => e.method) } : o11Write);
+  if (readSha && assignId) {
+    seen = o11Count();
+    const edited = sc(await call(clientA, 'ssam_code', { lane: 'o11', action: 'write', module: O11_MODULE.name, part: 'logic', element: 'ThinE2EPing', basedOn: readSha,
+      edits: [{ replace: assignId, with: 'assign Result = 2' }], authorize: 'pode entregar a mudança do ThinE2EPing no Headless_CS' }, 900000));
+    const editSeen = o11Since(seen);
+    check('a8: hosted ssam_code write {edits} over the read A was served: expanded on the server and delivered through the thin bridge',
+      edited?.ok === true && edited.result === 'delivered' && editSeen.some(e => e.method === 'merge_from_oml') && !serverPathInA(edited),
+      edited ? { ok: edited.ok, result: edited.result ?? null, code: edited.code ?? null, error: edited.error ?? null, seen: editSeen.map(e => e.method) } : edited);
+  } else check('a8: hosted ssam_code write {edits} over the read A was served (no read to edit)', false, { readSha, assignId });
+  odcSeen = odcLines(A).length;
+  const odcWrite = sc(await call(clientA, 'ssam_code', { lane: 'odc', action: 'write', module: ODC_MODULE.name, part: 'ddl', text: CODE_DDL, until: 'build' }, 900000));
+  const odcWriteLines = odcLines(A).slice(odcSeen).map(e => e.line.split(' ')[0]);
+  check('a8: hosted ssam_code write {lane:"odc", until:"build"}: through studio_deliver\'s gate, the capture from A\'s ODC Studio through the agent, built on the server; the Studio saw the capture only, no server path',
+    odcWrite?.ok === true && odcWriteLines.includes('snapshot') && odcWriteLines.every(c => c === 'snapshot' || c === 'status') && !serverPathInA(odcWrite),
+    odcWrite ? { ok: odcWrite.ok, result: odcWrite.result ?? null, code: odcWrite.code ?? null, error: odcWrite.error ?? null, lines: odcWriteLines, keys: Object.keys(odcWrite) } : odcWrite);
 
   // Customer C: the same pack, turned into the v48 pack of the 23rd. pack.json and the ODC bridge files name v48, and the
   // agent carries the lists of the 23rd (no sc_http, no reference-producers; AGENT_VERSION 0.2.0). Each edit is checked,
@@ -884,6 +1122,15 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
     connectedC.isError !== true && scC?.code === 'STUDIO_BRIDGE_OUTDATED' && scC.continuation?.tool === 'ssam_connect'
       && !scSeenC.some(e => ['sc_http', 'sc_web', 'studio_login'].includes(e.method)),
     { connect: sc(connectedC)?.ok ?? connectedC, reply: scC, seen: scSeenC.map(e => e.method) });
+  // a8: customer C's pack is older than the next agent pack: its thin bridge has no refresh_references:add, so the Studio's
+  // Manage Dependencies by code is refused typed (nothing sent to C's bridge), with the exact step for the user.
+  const seenManageC = o11C().length;
+  const manageC = sc(await call(clientC, 'o11_studio', { command: 'refresh-references', args: { add: [{ producer: 'ThinProducer', elements: ['IServerActionSignature:ThinAction'] }], published: true } }));
+  const manageSeenC = o11C().slice(seenManageC);
+  check('a8 (a): an older pack (customer C) answers MANAGE_DEPENDENCIES_HOSTED_PENDING with the exact step; nothing refreshed or added on C\'s Studio',
+    manageC?.code === 'HOSTED_UNAVAILABLE' && manageC.cause === 'MANAGE_DEPENDENCIES_HOSTED_PENDING' && manageC.outcome === 'not-sent'
+      && /install the current agent package/.test(manageC.error ?? '') && manageSeenC.some(e => e.method === 'bridge_manifest') && !manageSeenC.some(e => e.method === 'refresh_references'),
+    { reply: manageC, seen: manageSeenC.map(e => e.method) });
   fs.writeFileSync(path.join(C.root, 'private', 'agent.stop'), '');
   check('v48 pack: customer C agent stops cleanly (exit 0)', (await Promise.race([C.agent.exit, delay(10000).then(() => 'timeout')])) === 0);
 
@@ -910,6 +1157,16 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
     check('customer B\'s relay key is refused by customer A\'s relay; nothing reaches A\'s agent',
       crossRelay.reply?.success === false && crossRelay.reply?.executed === false && studioLog(A).filter(e => e.studio === 'o11').length === seen2, crossRelay);
   }
+  // a8: B never reaches anything of A's ssam_code: A's capture as base, a check of a module B never captured, and B's
+  // workspace holds no plan or check job.
+  const aCapture = serverFile(codeChecks.o11?.capture?.path);
+  const bBase = sc(await call(clientB, 'ssam_code', { lane: 'o11', action: 'check', module: O11_MODULE.name, part: 'ddl', text: CODE_DDL, base: aCapture }));
+  const bNone = sc(await call(clientB, 'ssam_code', { lane: 'odc', action: 'check', module: ODC_MODULE.name, part: 'ddl', text: CODE_DDL }));
+  const bFolders = ['o11/plans', 'odc/lab/plans', 'o11/jobs/check', 'odc/lab/jobs/check', 'state/code-readings'].map(rel => path.join(issued.b.workspace, ...rel.split('/')))
+    .filter(dir => fs.existsSync(dir) && fs.readdirSync(dir).length);
+  check('a8: customer B never reaches A\'s ssam_code files: A\'s capture as base is PATH_OUTSIDE_WORKSPACE, a check of a module B never captured is CAPTURE_MISSING, B\'s workspace holds no plan, check job or read of A',
+    typeof aCapture === 'string' && bBase?.code === 'PATH_OUTSIDE_WORKSPACE' && bNone?.code === 'CAPTURE_MISSING' && bFolders.length === 0,
+    { base: bBase?.code ?? bBase, none: bNone?.code ?? bNone, folders: bFolders.map(f => path.relative(issued.b.workspace, f)) });
   // With its agent connected (the gate checks the agent first), B still cannot name a file of A's workspace.
   const crossPath = sc(await call(clientB, 'studio_open', { module: 'Orders', localOml: candidate }));
   check('customer B cannot name a file of customer A\'s workspace (PATH_OUTSIDE_WORKSPACE), nothing reached either Studio',

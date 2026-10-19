@@ -1176,7 +1176,9 @@ function writtenElements(input) {
   }, 0), 0);
 }
 
-export function registerSsamCode(server, { fromJsonSchema, map, deliver, check, plan, lanes = ['o11', 'odc'] } = {}) {
+// write (feat/ssam-code-hosted): the deps of writeCall a server gives each write ({readReading, readJob}, or a function of
+// the call that returns them): the read of an action an edit expands and the job file a correction reads.
+export function registerSsamCode(server, { fromJsonSchema, map, deliver, check, plan, lanes = ['o11', 'odc'], write = null } = {}) {
   const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value && value.ok === false ? { isError: true } : {}) });
   // The lists of a write carry the person's code: no limit of this tool cuts them (the delivery takes any number of texts
   // and ops in one job); the bounds below only keep a runaway call out.
@@ -1243,7 +1245,8 @@ export function registerSsamCode(server, { fromJsonSchema, map, deliver, check, 
         if (!(input.target ?? input.module)) return reply({ ok: false, code: 'INPUT_INVALID', tool: CODE_TOOL, error: 'read needs target (the open module or a capture .oml)' });
         return reply(await codeRead({ ...input, lane }, { map }));
       }
-      const call = writeCall({ ...input, lane });
+      const writeDeps = (typeof write === 'function' ? write() : write) ?? {};
+      const call = writeCall({ ...input, lane }, Object.fromEntries(Object.entries(writeDeps).filter(([k, v]) => ['readReading', 'readJob'].includes(k) && typeof v === 'function')));
       const { PLAN_MIN_ITEMS } = await import('./code-plan.mjs');
       const jobParts = (call.arguments?.job?.ops ?? []).flatMap(op => op?.op === 'logic' && op.data?.flow
         ? [{ part: 'logic', text: op.data.flow, basedOn: op.data.basedOn }]

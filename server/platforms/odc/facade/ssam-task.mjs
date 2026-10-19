@@ -61,9 +61,13 @@ export function sanitizeAnswer(answer) {
 // confirmation saved for the original call of a reconciled kernel delivery (confirmation, R4-7).
 export const awaitsReplay = task => !task?.closedAt && !task.deliveries && ['ok', 'failed'].includes(task.state)
   && (task.confirmation === 'delivered' || task.cancelled === true && (task.callResult ?? task.result)?.outcome !== 'not-sent');
+// The replay window of an unconfirmed final answer (replay-store.mjs; Integradora, 2026-10-18, A4): the record keeps it, so
+// after a restart the call stays reserved for it; the served handler decides the replay on the call's inputs.
+export const replayWindowOpen = task => !!task && !task.closedAt && ['ok', 'failed'].includes(task.state)
+  && typeof task.replayUntil === 'string' && Date.parse(task.replayUntil) > Date.now();
 // One predicate decides whether a record holds its call key: the index and the guard read the same rule (R4-5).
 export const reservesCall = task => !!task && !task.closedAt && task.isWrite !== false
-  && (task.state === 'running' || task.state === 'uncertain' || awaitsReplay(task));
+  && (task.state === 'running' || task.state === 'uncertain' || awaitsReplay(task) || replayWindowOpen(task));
 function updateIndexes(dir, task) {
   if (task.tool && task.call?.argsSha256) {
     const file = indexFile(dir, 'calls', callKey(task.tool, task.call.argsSha256));

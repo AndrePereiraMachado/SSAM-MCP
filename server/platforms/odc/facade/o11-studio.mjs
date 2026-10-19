@@ -36,6 +36,7 @@ import { stallRecovery } from './studio-recovery.mjs';
 export { classifyWindow } from './bridge-stall.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { hostedContext } from './executor.mjs';
+import { renderManageProblems } from './manage-dependencies-text.mjs';
 import { assertSelectedO11 } from './studio-connect.mjs';
 import { resolveOpenModule, systemModuleName } from './studio-module.mjs';
 import { studioWriteHolder, withStudioWriteLock } from './studio-write-lock.mjs';
@@ -358,14 +359,15 @@ export function allDialogs(active, listed) {
 export const DEPENDENCIES_CAPABILITY = 'dialogs:dependencies_auto';
 // fix-ext-refs: refresh_references with add/published runs the Studio's own Manage Dependencies (RefreshReferencesHandler.Manage).
 export const MANAGE_DEPENDENCIES_CAPABILITY = 'refresh_references:add';
-// servidor/fase4-26 (a7, E1): hosted, the customer's Service Studio runs the O11 bridge of the SSAM agent package, which does
-// not run the Studio's Manage Dependencies yet; reopening the Studio loads the same bridge, so the hosted refusal names the
-// agent package (nothing is sent), never the local shortcut.
+// servidor/fase4-26 (a7, E1): hosted, the customer's Service Studio runs the O11 bridge of the SSAM agent package; reopening
+// the Studio loads the same bridge, so the hosted refusal names the agent package (nothing is sent), never the local shortcut.
+// a8 (the next agent pack): the thin bridge of the current package runs the Studio's Manage Dependencies (capability
+// refresh_references:add) and the call is sent; a bridge without it is an older package's, and the refusal says the exact step.
 export const MANAGE_DEPENDENCIES_HOSTED_PENDING = 'MANAGE_DEPENDENCIES_HOSTED_PENDING';
 export function manageDependenciesHostedPending(module) {
   return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: MANAGE_DEPENDENCIES_HOSTED_PENDING, module, executed: false, outcome: 'not-sent',
-    error: 'Hosted: the O11 bridge of the SSAM agent package does not run the Studio\'s own Manage Dependencies yet (capability '
-      + MANAGE_DEPENDENCIES_CAPABILITY + '); nothing was sent, added or refreshed. Reopening the Service Studio loads the same bridge; a new agent package brings it.',
+    error: 'Hosted: install the current agent package and restart Service Studio, then repeat this call. The O11 bridge this Studio loaded is an older package\'s,'
+      + ' without the Studio\'s own Manage Dependencies (capability ' + MANAGE_DEPENDENCIES_CAPABILITY + '); nothing was sent, added or refreshed.',
     continuation: { tool: 'ssam_doctor', arguments: { lane: 'o11' },
       why: 'Shows the agent package and the O11 bridge of this account. Without add and published, refresh-references runs the Studio\'s own Refresh References (it adds no element).' } };
 }
@@ -960,20 +962,39 @@ async function refreshReferences(bridge, args, ctx) {
         continuation: STATUS('see the Studio; nothing was published') };
     throw error;
   }
+  // a8 round 2 (review M1): a refresh or a Manage Dependencies the Studio holds with a dialog (blocked: a bridge that could not
+  // close it) is still running in the Studio: never ok, never the shape of a command that ended.
+  if (data?.blocked === true) {
+    const command = data?.command ?? (manage ? 'Manage Dependencies' : 'Refresh References');
+    const title = data?.blockedBy?.title ?? data?.blockedBy?.kind ?? 'a dialog';
+    return { ok: false, code: 'STUDIO_DIALOG_PENDING', module: data?.module ?? active.name, outcome: 'running', command, blockedBy: data?.blockedBy ?? null,
+      ...(Array.isArray(data?.dialogs) && data.dialogs.length ? { dialogs: data.dialogs } : {}),
+      error: 'A Studio dialog is open: "' + title + '". It opened during the ' + command + ' of ' + (data?.module ?? active.name)
+        + ' and the command waits for it in the Studio: it may still change the module when the person answers it (Ctrl+Z undoes it). Nothing else was sent.',
+      ...(data?.next ? { next: data.next } : {}),
+      continuation: { tool: 'o11_studio', arguments: { command: 'windows' }, why: 'shows the dialog; the person answers it in the Studio, then check the module (o11_studio status) before repeating this call' } };
+  }
   // fix-ext-refs: a Manage Dependencies the Studio refused committed nothing: one refusal with every problem and its fix.
-  if (manage && data?.committed === false)
+  // a8 round 2 (IP option D): the thin bridge answers each problem with its cause and facts; the texts are written here.
+  if (manage && data?.committed === false) {
+    const problems = Array.isArray(data?.problems) ? renderManageProblems(data.problems, data?.module ?? active.name) : null;
     return { ok: false, code: data?.code ?? 'REFERENCES_NOT_ADDED', module: data?.module ?? active.name, outcome: 'not-applied', command: data?.command ?? 'Manage Dependencies',
-      error: 'The Studio\'s Manage Dependencies added nothing; the module is unchanged' + (Array.isArray(data?.problems) && data.problems.length
-        ? ': ' + data.problems.map(p => p?.message + (p?.fix ? ' Fix: ' + p.fix : '')).join(' ') : data?.error ? ': ' + data.error : '.'),
-      ...(Array.isArray(data?.problems) ? { problems: data.problems } : {}), ...(data?.stage ? { stage: data.stage } : {}),
+      error: 'The Studio\'s Manage Dependencies added nothing; the module is unchanged' + (problems?.length
+        ? ': ' + problems.map(p => p?.message + (p?.fix ? ' Fix: ' + p.fix : '')).join(' ') : data?.error ? ': ' + data.error : '.'),
+      ...(problems ? { problems } : {}), ...(data?.stage ? { stage: data.stage } : {}),
+      ...(Array.isArray(data?.dialogs) && data.dialogs.length ? { dialogs: data.dialogs } : {}),
       continuation: STATUS('the Studio is unchanged; follow the fix of each problem, then repeat this call') };
+  }
+  // a8 round 3 (re-review N2): a command that ended keeps the windows the bridge closed (closed true) or left to the person
+  // (closed false) during it, as the delivery does (refreshDialogs).
+  const windows = Array.isArray(data?.dialogs) && data.dialogs.length ? { dialogs: data.dialogs } : {};
   if (manage) return { ok: true, module: data?.module ?? active.name, command: data?.command ?? 'Manage Dependencies', committed: data?.committed === true, changed: data?.changed === true,
     added: data?.added ?? [], ...(data?.alreadyReferenced?.length ? { alreadyReferenced: data.alreadyReferenced } : {}), references: data?.references ?? [],
     refreshed: data?.refreshed ?? [], ...(Number.isInteger(data?.newErrors) ? { newErrors: data.newErrors } : {}), ...(data?.undo ? { undo: data.undo } : {}),
-    ...(closed ? { dependenciesDialog: { answered: closed.answered } } : {}) };
+    ...windows, ...(closed ? { dependenciesDialog: { answered: closed.answered } } : {}) };
   return { ok: true, module: data?.module ?? active.name, changed: data?.changed === true, refreshed: data?.refreshed ?? [], ...(data?.upToDate?.length ? { upToDate: data.upToDate } : {}),
     ...(data?.missing?.length ? { missing: data.missing } : {}), ...(Number.isInteger(data?.newErrors) ? { newErrors: data.newErrors } : {}),
-    ...(data?.undo ? { undo: data.undo } : {}), ...(closed ? { dependenciesDialog: { answered: closed.answered } } : {}) };
+    ...(data?.undo ? { undo: data.undo } : {}), ...windows, ...(closed ? { dependenciesDialog: { answered: closed.answered } } : {}) };
 }
 
 // ---- close-module (C22, a client session of 2026-10-07): closes the module's tab in whatever window holds it (bridge close_module,

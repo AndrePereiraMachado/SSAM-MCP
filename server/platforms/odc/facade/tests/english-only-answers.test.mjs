@@ -37,6 +37,7 @@ const NOT_EMITTED = Object.freeze({
   'platforms/odc/studio/builder/features/RotaSegura.cs': 'a demonstration C# feature of the builder (the owner\'s sample route, its own Portuguese module texts), never run by a tool',
   'kernel/src/Anvil.Core/Kernel/UiCatalogDocs.cs': 'generator of the developer documents under kernel/docs/ui (400 files no tool serves; ui-block answers come from the catalog JSON), regenerated only from the Studio libraries',
   'kernel/src/Anvil.Core/Kernel/Prototype/PrototypeLogic.cs': 'the Portuguese labels it writes only for a prototype written in Portuguese (_p.Pt: the language of the user\'s own prototype; English otherwise), and the Portuguese labels of the prototype it recognizes',
+  'platforms/odc/facade/cli-flags.mjs': 'the closed list of the flag names SSAM\'s own command lines accept, generated from their sources (some owner scripts name theirs in Portuguese): identifiers the licensee rule matches, never emitted',
 });
 
 // Input vocabulary: in these files the word lists (letters, spaces, commas, bars, parentheses) are the Portuguese words
@@ -69,6 +70,8 @@ const VOCABULARY = Object.freeze({
   'kernel/src/Anvil.Core/Kernel/Prototype/PrototypeWidgets.cs': 'Portuguese labels of the user\'s prototype it recognizes',
   // servidor/fase4-26 (a7): the server line's own modules.
   'kernel/src/Anvil.Core/Kernel/EnvironmentCut.cs': 'the Portuguese .NET network errors (a Windows in Portuguese) it recognizes in a Studio call the environment cut (prazos B); never emitted',
+  // fase4-26/a8-agent round 3: the thin bridge's copy of the product's family-D rule (OperationDialogs.cs).
+  'kernel/src/Anvil.Bridge.Thin/ManageDependencies.cs': 'captions of the Portuguese Studio dialogs it recognizes ("Erro inesperado", "Fechar"), the same as OperationDialogs.cs',
 });
 const vocabularyShaped = text => /^[\p{L}\s,|()'-]+$/u.test(text);
 

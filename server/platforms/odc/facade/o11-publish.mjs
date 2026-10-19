@@ -539,7 +539,7 @@ export function registerO11Publish(server, deps = {}) {
       + 'message the Studio showed (type, stage, text, detail, element) and a continuation to the element to fix. '
       + 'consumers:true then refreshes and publishes every consumer of the module, one outcome per consumer. '
       + 'outcome "uncertain" (timeout, lost reply, cancellation, unconfirmed end) is never repeated: check o11_studio status before '
-      + 'retry. refreshReferences:true refreshes; continueTask waits.',
+      + 'retry. refreshReferences:true refreshes; answers when it ends.',
     inputSchema: publishSchema, annotations,
   }, async (input, extra) => {
     try { const value = await run(input ?? {}, { signal: extra?.signal }); return value === PUBLISHED ? reply(value, value.result) : reply(value); }

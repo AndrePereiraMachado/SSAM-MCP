@@ -1301,3 +1301,47 @@ pela sessão do próprio Studio (`ScHttpHandler`). A fina segue a completa (pass
   parâmetros. O `EnvironmentSessionHandler` da fina descreve a falha como a completa (`Describe`: as exceções
   internas com o código do socket e o tipo do erro HTTP), para o kernel decidir a nova tentativa de leitura igual nas
   duas bridges (`DescribeParityTests`). O agente passa a `0.3.1` (0.3.0 com o transporte do 0.2.1 e o `net.probe`).
+
+## 17. O próximo pacote do agente na linha do servidor (`fase4-26/a8-agent`)
+
+Pedido do dono de 18/10/2026: o cliente hospedado tem o Manage Dependencies por código e os componentes do ambiente no
+`ssam_discover`, como o dono tem no SSAM local. Plano e resultado: `C:\t\agent-pack-next\PLANO.md` e `RESULTADO.md`.
+
+- **Verbos.** Continuam 23. `refresh_references` com `add` ou `published:true` vai para `ManageDependenciesHandler`
+  (`ManageDependencies.cs`, só da fina); sem eles, para o `RefreshReferencesHandler` ligado, como antes.
+- **Capacidades.** Entra `refresh_references:add`, logo depois de `refresh_references`, a ordem da completa do produto
+  (`fix-ext-refs`, `990a8e01`). A completa da linha não a tem (regra D: overlays de release). `DispatchTests` declara a
+  capacidade em `ThinAhead`.
+- **`ManageDependencies.cs`.** É a cópia fina de `Requests` e `Apply` do `Anvil.Core.ManageDependencies`, só com tipos do
+  Studio, num comando "Manage Dependencies", tudo ou nada. A tabela de famílias é cópia do `NativeReferenceKinds.ForType`.
+  `ManageDependenciesThinTests` prova, nas assinaturas congeladas v112→v113, os mesmos pedidos, famílias, respostas e
+  modelos salvos do kernel. O `ApplyOffline` fica no kernel.
+- **Diálogos.** Durante o comando a fina só detecta (`Dialogs.BlockedBy`), nunca fecha. Um diálogo novo responde
+  `blocked:true` e `outcome:"running"`, a forma do produto. O laço do produto, que fecha relatórios de erro, é do kernel.
+- **Merge.** A seleção de assinaturas roda dentro de `QuietCommand.Execute` (`QuietCommand.cs`, cópia do kernel). Cada
+  árvore usa `tree.Merge()` + `ClearCurrentMergeState()` na thread do comando (o `98785efd` do produto). Nunca
+  `CompareAndMergeCommands.Merge`, o caminho do "No command is open". `BridgeCommandScopeTests` lê a fina também.
+- **Servidor.** Nada novo para rotear (a): o kernel e a fachada decidem pela capacidade. A recusa de um pacote antigo diz o
+  passo: instalar o pacote atual e reiniciar o Service Studio. Para (b), `environment-components.mjs` lista pelo agente e
+  guarda o cache em `<ws>/state/components`, sem leitura do XIF nem digest de OML publicado.
+- **Pacote.** O `kernel.json` não muda e o pacote antigo continua aceito. A bridge ODC v97, o conector e o gancho dev
+  são os do pacote de 13/10.
+- **Rodada 2 (revisão `C:\t\revisoes\agent-pack-next\REVISAO.md`).**
+  - M1: um diálogo que o Studio abre durante o Manage Dependencies é do comando. A fina fecha a janela, como o X faz
+    (Cancel), e o comando termina no Studio. A resposta é uma recusa tipada com o diálogo primeiro (`studio-dialog`).
+    Só um diálogo que ela não fecha (presenter modal, ou uma janela que fica depois de 3 fechadas) responde `blocked`. A
+    fachada nunca responde `ok` para `blocked`: dá `STUDIO_DIALOG_PENDING`.
+  - IP, opção D: a fina responde cada problema só com a causa e os fatos. O texto e o fix são escritos no servidor:
+    `ManageDependenciesText.cs` no kernel, aplicado no `ThinBridge.Call`, e `manage-dependencies-text.mjs` na fachada,
+    com a mesma tabela.
+  - M3: o merge de assinaturas da fina é `MergeHandler.MergeSignatures`, provado headless por `ThinSignatureMergeTests`.
+- **Rodada 3 (re-revisão `C:\t\revisoes\agent-pack-next-2\REVISAO.md`, N1 e N2).**
+  - N1: a fina fecha só o que a regra da família D do produto (`OperationDialogPolicy.Decide`) fecha com certeza: o
+    relatório de erro do Studio (`Unexpected Error`), o diálogo de dependências (pelo texto da página, `DependenciesDialog`)
+    e a caixa nativa só com OK ou Close. Cada uma é fechada uma vez, no máximo 3 por comando.
+  - Qualquer outra janela nova (login, recuperação Open | Discard, pergunta, editor com texto, o Manage Dependencies de
+    outra aba, presenter modal) fica como está. O comando tem 3 s (`GraceMs`) para terminar sozinho; se terminar, a
+    resposta cita a janela em `dialogs` com `closed:false`, sem problema. Se não, a resposta é `blocked` com essa janela,
+    e o servidor responde `STUDIO_DIALOG_PENDING` com o título. Nada é fechado.
+  - N2: o `o11_studio refresh-references` devolve `dialogs` também quando o comando termina com commit (e no Refresh
+    References), para a IA saber da janela que a fina fechou ou deixou.

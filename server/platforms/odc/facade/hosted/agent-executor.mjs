@@ -311,4 +311,18 @@ export class AgentExecutor {
     catch (error) { throw coded(error?.code ?? 'AGENT_ERROR', error?.message ?? String(error), undelivered(error) ? false : null); }
     return dest;
   }
+
+  // servidor/fase4-26 a8: the sha256 of one agent file as the agent lists it (file.list of that one file: the agent hashes it
+  // on the user's machine), without bringing it; null when the agent does not list exactly that file. The call deadline's
+  // inputs of a run-to-end call (policy.mjs replayInputs): never a write to the workspace.
+  async agentFileSha256(agentPath) {
+    try {
+      const wanted = this.mirror.fromAgent(agentPath);
+      const listing = await this.link.call('file.list', { path: agentPath, max: 1 }, { timeoutMs: 30000 });
+      const entries = Array.isArray(listing?.entries) ? listing.entries : [];
+      if (entries.length !== 1 || this.mirror.fromAgent(entries[0]?.path) !== wanted) return null;
+      const sha = String(entries[0].sha256 ?? '').toLowerCase();
+      return /^[0-9a-f]{64}$/.test(sha) ? sha : null;
+    } catch { return null; }
+  }
 }

@@ -376,6 +376,11 @@ public sealed class ThinBridgeTests : IDisposable
         Assert.Contains("MANAGE_DEPENDENCIES_HOSTED_PENDING", hosted);
         Assert.DoesNotContain("Service Studio (SSAM)", hosted);
         Assert.DoesNotContain("next Service Studio opened", hosted);
+        // a8 (the next agent pack): the thin bridge of the current pack runs it; only an older pack's does not, and the answer
+        // says the exact step (install the current pack, restart Service Studio so the agent loads its bridge).
+        Assert.Contains("install the current agent package", hosted);
+        Assert.Contains("restart Service Studio", hosted);
+        Assert.DoesNotContain("does not run it yet", hosted);
         Environment.SetEnvironmentVariable("ANVIL_BRIDGE_FLAVOR", null);
         var local = Delivery.AlignmentText(alignment, "ZZExt", null);
         Assert.Contains("Service Studio (SSAM)", local);

@@ -9,7 +9,7 @@
       "data": {
         "structures": [
           {
-            "name": "AnvilPerfPayload",
+            "name": "PerfPayload",
             "public": true,
             "attributes": [
               {
@@ -26,12 +26,12 @@
       "data": {
         "actions": [
           {
-            "name": "AnvilPerf_Forward",
+            "name": "Perf_Forward",
             "public": true,
             "inputs": [
               {
                 "name": "Payload",
-                "type": "AnvilPerfPayload"
+                "type": "PerfPayload"
               }
             ],
             "outputs": [
@@ -42,7 +42,7 @@
             ],
             "steps": [
               {
-                "call": "AnvilPerf_Echo",
+                "call": "Perf_Echo",
                 "as": "Echo",
                 "args": {
                   "Payload": "Payload"
@@ -56,12 +56,12 @@
             ]
           },
           {
-            "name": "AnvilPerf_Echo",
+            "name": "Perf_Echo",
             "public": true,
             "inputs": [
               {
                 "name": "Payload",
-                "type": "AnvilPerfPayload"
+                "type": "PerfPayload"
               }
             ],
             "outputs": [

@@ -90,18 +90,22 @@ test('the relay asks the lane with a 30 min wait that progress restarts, and for
 
 test('a write remains running past relay timeout until explicit stop; a pure read still answers TIMEOUT', async t => {
   const { client, seen } = await harness(t, { callDeadlineMs: 700, detachedNotifications: true });
-  const reply = await client.callTool({ name: 'studio_deliver', arguments: { feature: 'F', pid: 77 } });
-  const value = valueOf(reply);
-  seen.liveTask = value.task?.id;
-  assert.notEqual(reply.isError, true);
-  assert.equal(value.state, 'running');
-  assert.equal(value.continuation.tool, 'studio_deliver');
-  assert.equal(value.continuation.arguments.continueTask, value.task.id);
+  // Owner decision (2026-10-18): a delivery answers when its work ends. Past the deadline its call is kept (its task detaches,
+  // the original call waits for the final answer); the relay timeout still cannot stop it, only the explicit stop does.
+  const original = client.callTool({ name: 'studio_deliver', arguments: { feature: 'F', pid: 77 } });
+  await sleep(1000);
+  const listed = valueOf(await client.callTool({ name: 'ssam_task', arguments: {} }));
+  const task = listed.tasks?.find(entry => entry.tool === 'studio_deliver' && entry.state === 'running');
+  assert.ok(task, JSON.stringify(listed).slice(0, 400));
+  seen.liveTask = task.id;
   assert.equal(seen.detached.at(-1), 1, 'launcher still counts the actual live facade write');
   assert.deepEqual(seen.aborted, [], 'relay timeout cannot stop the real write or finish its record');
-  const stopped = valueOf(await client.callTool({ name: 'ssam_doctor', arguments: { lane: 'odc', task: { id: value.task.id, stop: true } } }));
+  const stopped = valueOf(await client.callTool({ name: 'ssam_doctor', arguments: { lane: 'odc', task: { id: task.id, stop: true } } }));
   assert.equal(stopped.ok, true);
-  assert.equal(valueOf(await client.callTool({ name: 'studio_deliver', arguments: value.continuation.arguments })).ok, true);
+  const reply = await original;
+  assert.notEqual(reply.isError, true);
+  assert.equal(valueOf(reply).ok, true, 'the original call answers the final result once the work ends');
+  assert.equal(valueOf(await client.callTool({ name: 'studio_deliver', arguments: { continueTask: task.id } })).ok, true);
   assert.equal(seen.detached.at(-1), 0, 'the counter ends only after actual facade completion');
   const helper = relayFailure(Object.assign(new Error('Request timed out'), { code: 'REQUEST_TIMEOUT' }), { tool: 'studio_deliver', args: { feature: 'F' }, timeoutMs: RELAY_TIMEOUT_MS });
   assert.deepEqual([helper.code, helper.stage, helper.outcome, helper.tool], ['TIMEOUT', 'relay', 'uncertain', 'studio_deliver']);

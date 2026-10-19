@@ -19,23 +19,56 @@ const readJson = file => { try { return JSON.parse(fs.readFileSync(file, 'utf8')
 const stat = file => { try { const s = fs.statSync(file); return s.isFile() ? s : null; } catch { return null; } };
 const filesIn = dir => { try { return fs.readdirSync(dir); } catch { return []; } };
 const nowMs = deps => Number(typeof deps.now === 'function' ? deps.now() : deps.now ?? Date.now());
-function locations(deps) {
+// feat/ssam-code-hosted: deps.roots, the folders of a session that a server keeps apart from every other one (a hosted
+// server: the customer's workspace), all absolute:
+//   o11      the O11 lane folder: captures (snapshots/), producer cache (producer-cache/), check jobs (jobs/check/), plans/
+//   odc      the ODC data folder: captures (snapshots/) and the producer captures
+//   odcWork  the ODC work folder: check jobs (jobs/check/), plans/
+// Given, the check and the plan read and write only there, never the folders of this checkout, and a base is only a capture
+// of the lane's capture folder (<o11|odc>/snapshots), never any .oml. Without them, the folders of this checkout, as before.
+export function codeRoots(deps = {}) {
+  if (deps.roots != null) {
+    const given = deps.roots;
+    for (const key of ['o11', 'odc', 'odcWork'])
+      if (typeof given?.[key] !== 'string' || !path.isAbsolute(given[key])) throw new Error(`roots.${key} must be an absolute folder`);
+    return { o11: path.resolve(given.o11), odc: path.resolve(given.odc), odcWork: path.resolve(given.odcWork), confined: true };
+  }
   const root = deps.root ?? anvilRoot;
-  const local = deps.local ?? o11LaneOf(deps.o11Lane ?? o11Lane.lane, { root, env: deps.env ?? process.env, ...(deps.workspace ? { workspace: deps.workspace } : {}) }).local;
-  return { root, local, odc: deps.odcRoot ?? odcRoot };
+  const o11 = deps.local ?? o11LaneOf(deps.o11Lane ?? o11Lane.lane, { root, env: deps.env ?? process.env, ...(deps.workspace ? { workspace: deps.workspace } : {}) }).local;
+  return { o11, odc: deps.odcRoot ?? odcRoot, odcWork: path.join(root, '.local', 'lane-odc'), confined: false };
+}
+function locations(deps) {
+  const roots = codeRoots(deps);
+  return { root: deps.root ?? anvilRoot, local: roots.o11, odc: roots.odc, odcWork: roots.odcWork, confined: roots.confined };
 }
 const escape = text => String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// The capture folder of a lane: the folder the newest capture is taken from.
+const captureFolder = (lane, { local, odc }) => path.join(lane === 'o11' ? local : odc, 'snapshots');
+const real = file => { try { return fs.realpathSync.native(file); } catch { return path.resolve(file); } };
+const inside = (dir, file) => { const rel = path.relative(real(dir), real(file)); return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel); };
+/** Why a base is refused, or null: an existing absolute .oml; with deps.roots, a capture of the lane's capture folder only. */
+export function baseProblem({ lane = 'o11', base } = {}, deps = {}) {
+  if (base == null) return null;
+  if (typeof base !== 'string' || !path.isAbsolute(base) || !/\.oml$/i.test(base) || !stat(base)) return 'base must be an existing absolute .oml file';
+  const where = locations(deps);
+  if (where.confined && !inside(captureFolder(lane, where), base))
+    return 'base must be a capture of this ' + lane + ' lane, a file of ' + captureFolder(lane, where) + ' (the capture a read of the module made), never another .oml';
+  return null;
+}
 
 export function newestCapture({ lane = 'o11', module, base } = {}, deps = {}) {
-  const { local, odc } = locations(deps);
+  const where = locations(deps);
+  const { local, odc } = where;
   const candidates = [];
   const add = (file, source, at) => {
     const s = stat(file); if (!s) return;
+    // With roots, a capture is a file of the lane's capture folder: an index row that names any other file is no capture.
+    if (where.confined && !inside(captureFolder(lane, where), file)) return;
     const parsed = Date.parse(at);
     candidates.push({ path: path.resolve(file), source, time: Number.isFinite(parsed) ? parsed : s.mtimeMs });
   };
   if (base != null) {
-    if (typeof base !== 'string' || !path.isAbsolute(base) || !/\.oml$/i.test(base) || !stat(base)) return null;
+    if (baseProblem({ lane, base }, deps)) return null;
     add(base, 'given');
   } else if (lane === 'o11') {
     const dir = path.join(local, 'snapshots');
@@ -178,7 +211,8 @@ export async function codeCheck(input = {}, deps = {}) {
     return i < stubs.length ? `${slash}stubs/${i}` : `${slash}files/${i - stubs.length}`;
   }) : at;
   const originalSource = origin => origin && ({ ...origin, at: originalAt(origin.at), ...(origin.flows ? { flows: origin.flows.map(originalSource) } : {}) });
-  const call = (deps.writeCall ?? writeCall)(clean, { origins: true });
+  // The read of an action an edit expands (readReading) and the job file of a correction (readJob) are the server's to give.
+  const call = (deps.writeCall ?? writeCall)(clean, { origins: true, ...(deps.readReading ? { readReading: deps.readReading } : {}), ...(deps.readJob ? { readJob: deps.readJob } : {}) });
   if (call.origins) call.origins = call.origins.map(originalSource);
   if (call.refusal) problems.push(...(call.refusal.problems?.length ? call.refusal.problems : [{ code: 'INPUT_INVALID', message: call.refusal.error }]).map(p => {
     const index = String(p.at ?? '').match(/^\/?files\/(\d+)/);
@@ -187,17 +221,17 @@ export async function codeCheck(input = {}, deps = {}) {
     return { code: 'INPUT_INVALID', ...p, ...(at != null ? { at } : {}), ...(typeof file === 'string' ? { origin: { at: String(at).replace(/^\//, ''), file } } : {}) };
   }));
   const capture = newestCapture({ lane, module, base: input.base }, deps);
-  if (!capture) problems.push({ code: input.base != null ? 'INPUT_INVALID' : 'CAPTURE_MISSING', at: 'base', message: input.base != null ? 'base must be an existing absolute .oml file' : `No capture of ${module ?? 'the module'} is available`, fix: 'the main agent reads the module once; that capture serves every check' });
+  if (!capture) problems.push({ code: input.base != null ? 'INPUT_INVALID' : 'CAPTURE_MISSING', at: 'base', message: input.base != null ? baseProblem({ lane, base: input.base }, deps) ?? 'base must be an existing absolute .oml file' : `No capture of ${module ?? 'the module'} is available`, fix: 'the main agent reads the module once; that capture serves every check' });
   // CX16: a write refusal's own problem codes (HTML_EDIT_INVALID, EDIT_*, BASE_CHANGED) are input problems of the check: the
   // code stays as reason. Edits of the texts of the job of basedOn {job, sha256} came back as writeCall's generated patch
   // (its patch route has no job; the model's own patch stays forbidden above): the corrected job is resolved here, before the
   // reference ops are read from it (referenceOps) and before it is written as the job of this check.
   if (call.refusal) for (const p of problems) if (p.code !== 'INPUT_INVALID' && p.code !== 'CAPTURE_MISSING') { p.reason = p.code; p.code = 'INPUT_INVALID'; }
   if (!call.refusal && call.arguments?.patch != null && call.arguments.job == null) {
-    const { root: home, local: laneLocal } = locations(deps);
+    const { root: home, local: laneLocal, odcWork } = locations(deps);
     const { resolvePatchedJob } = await import('./job-patch.mjs');
     const patched = resolvePatchedJob({ patch: call.arguments.patch, basedOn: call.arguments.basedOn }, { root: home,
-      inlineDir: path.join(lane === 'o11' ? laneLocal : path.join(home, '.local', 'lane-odc'), 'jobs', 'check'), ...(deps.uuid ? { uuid: deps.uuid } : {}) });
+      inlineDir: path.join(lane === 'o11' ? laneLocal : odcWork, 'jobs', 'check'), ...(deps.uuid ? { uuid: deps.uuid } : {}) });
     if (!patched.ok) problems.push({ code: 'INPUT_INVALID', at: 'basedOn', reason: patched.code, message: patched.error, ...(patched.candidates ? { candidates: patched.candidates } : {}) });
     else { call.arguments.job = readJson(patched.path); fs.rmSync(patched.path, { force: true }); }
   }
@@ -216,8 +250,8 @@ export async function codeCheck(input = {}, deps = {}) {
     : capturing.length && capturing.length === problems.length ? capturing[0].continuation
     : { tool: 'ssam_code', arguments: { ...input, lane, action: 'check' } };
   if (problems.length) return { ok: false, code: problems.some(p => p.code === 'INPUT_INVALID') ? 'INPUT_INVALID' : !capture ? 'CAPTURE_MISSING' : 'PRODUCER_NOT_CAPTURED', lane, module, action: 'check', problems, ...(capture ? { capture } : {}), continuation };
-  const { root, local } = locations(deps);
-  const dir = path.join(lane === 'o11' ? local : path.join(root, '.local', 'lane-odc'), 'jobs', 'check', (deps.uuid ?? randomUUID)());
+  const { root, local, odcWork, odc: odcData, confined } = locations(deps);
+  const dir = path.join(lane === 'o11' ? local : odcWork, 'jobs', 'check', (deps.uuid ?? randomUUID)());
   fs.mkdirSync(dir, { recursive: true });
   const job = path.join(dir, 'job.json');
   fs.writeFileSync(job, JSON.stringify(call.arguments.job, null, 2));
@@ -228,8 +262,9 @@ export async function codeCheck(input = {}, deps = {}) {
     environment: ({ lane, root, env }) => o11LaneOf(lane, { root, env }).env(env),
     ...(deps.execFileFn ? { execFileFn: deps.execFileFn } : {}) });
   try {
+    // With roots, the producers a job runner binds by itself (an ODC job's captures) are the session's too.
     result = await (deps.runJob ?? runJob)({ lane, job, base: capture.path, out: path.join(dir, 'candidate.oml'), work: path.join(dir, 'work'), producers: bindings, quiet: true },
-      { ...deps, env, runAnvil });
+      { ...deps, env, runAnvil, ...(confined ? { odcRoot: odcData } : {}) });
     if (!result.ok && result.stage !== 'static') { // CX16 (c): a static refusal carries its own correction; guidance measured ~0.2 s, ~2.9 KB
       if (deps.guidance) result = await deps.guidance(lane, result.job ?? job, result);
       else {

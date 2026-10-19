@@ -90,12 +90,17 @@ for (const wrapped of [true, false]) test(`R3-8: explicit doctor stop reaches th
     return wrapped ? outcome : { content: [{ type: 'text', text: JSON.stringify(outcome) }], structuredContent: outcome };
   }, { deadline: 60, wrapped });
   try {
-    const running = value(await f.call({ module: 'SyntheticStop' })); assert.equal(running.state, 'running');
+    // Owner decision (2026-10-18): a publication answers when its work ends; past the deadline its call is kept (its task
+    // detaches, the original call waits) and the explicit stop still reaches the facade before the next item.
+    const original = f.call({ module: 'SyntheticStop' });
+    await sleep(100);
+    const running = listTasks({ dir: f.dir, tool: 'studio_publish' })[0]; assert.equal(running?.state, 'running');
     const before = sent;
-    const stop = value(await f.client.callTool({ name: 'ssam_doctor', arguments: { lane: 'odc', task: { id: running.task.id, stop: true } } }));
+    const stop = value(await f.client.callTool({ name: 'ssam_doctor', arguments: { lane: 'odc', task: { id: running.id, stop: true } } }));
     assert.equal(stop.ok, true);
     await sleep(70); assert.equal(stopped, true); assert.equal(sent, before);
-    assert.equal(value(await f.call(running.continuation.arguments)).stopped, true);
+    assert.equal(value(await original).stopped, true);
+    assert.equal(value(await f.call({ continueTask: running.id })).stopped, true);
   } finally { await f.close(); }
 });
 

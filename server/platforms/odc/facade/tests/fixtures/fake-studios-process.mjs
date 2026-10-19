@@ -24,6 +24,9 @@
 // environment_session answers the primitives one call each (connect, modules, referenceable, download, signature,
 // close). It never computes a plan or a find: those are the server's. refresh_references (the Studio's own Refresh
 // References, ninth release) answers the module up to date; get_errors with settle answers settled and a generation.
+// a8 (the next agent pack): the current profile's thin bridge offers refresh_references:add and answers refresh_references
+// with add/published as the Studio's Manage Dependencies committed; the pack of the 23rd ("pack-v48") has no such capability.
+// referenceable also lists an installed extension for a PDF (NeutralPdfEngine), which the environment components list.
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
@@ -125,10 +128,12 @@ function odcReply(line) {
     const hash = sha(bytes).toUpperCase();
     const file = path.join(agentRoot, 'odc', 'snapshots', args[0] + '-' + hash + '.oml');
     const identity = real ? { moduleKey: odcModule.moduleKey, host: odcModule.host, developerId: odcModule.developerId } : {};
+    // a8: capturedAt, as the real bridge records a snapshot (StartupHook.cs snapshot record): the builder of a delivery reads it.
+    const capturedAt = new Date().toISOString();
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, bytes);
-    fs.writeFileSync(file + '.json', JSON.stringify({ ok: true, module: args[0], sha256: hash, path: file, ...identity }));
-    return { ok: true, module: args[0], sha256: hash, size: bytes.length, path: file, ...identity };
+    fs.writeFileSync(file + '.json', JSON.stringify({ ok: true, module: args[0], sha256: hash, path: file, capturedAt, ...identity }));
+    return { ok: true, module: args[0], sha256: hash, size: bytes.length, path: file, capturedAt, ...identity };
   }
   if (command === 'open') {
     if (!args[1]) return { ok: true, module: args[0], opened: true };
@@ -167,7 +172,7 @@ const CAPABILITIES_23 = ['environment_session', 'sc_api:soap', 'sc_api:server-ap
   'get_errors:generation', 'publish:wait_running', 'publish:dialogs_seen', 'list_open_modules:server_operation', 'refresh_references', 'thin', 'merge:reference-plan'];
 const CAPABILITIES = pack23 ? CAPABILITIES_23 : ['environment_session', 'sc_api:soap', 'sc_api:server-api', 'sc_api:sc-rest', 'sc_web', 'sc_web:secretRefs',
   'sc_session', 'publish_log', 'merge_from_oml:first_pass', 'merge_from_oml:rollback_proof', 'merge_from_oml:module_key', 'get_errors:generation',
-  'publish:wait_running', 'publish:dialogs_seen', 'list_open_modules:server_operation', 'refresh_references', 'sc_api:integration-studio',
+  'publish:wait_running', 'publish:dialogs_seen', 'list_open_modules:server_operation', 'refresh_references', 'refresh_references:add', 'sc_api:integration-studio',
   'sc_http:studioSession', 'thin', 'merge:reference-plan'];
 // The Service Center pages the fake Studio's own HTTP session answers (sc_http fetch): the page fixtures of the facade
 // tests stand for the Service Center of the open module's environment.
@@ -298,7 +303,9 @@ function environment(params, extra) {
   const args = params.arguments ?? {};
   if (operation === 'modules') return { value: [moduleSummary()] };
   // The server catalog has a newer (System) signature than the module's reference: the server finds it stale.
-  if (operation === 'referenceable') return { value: [{ Key: spec.systemKey, Name: '(System)', Kind: 'eSpace', SignatureHash: '9b2d5f7e-3c41-4a8e-b6d0-1f2e3a4b5c6d', IsSystem: true, ApplicationKey: null }] };
+  // a8: and an installed extension for a PDF (the environment components of ssam_discover list it through the agent).
+  if (operation === 'referenceable') return { value: [{ Key: spec.systemKey, Name: '(System)', Kind: 'eSpace', SignatureHash: '9b2d5f7e-3c41-4a8e-b6d0-1f2e3a4b5c6d', IsSystem: true, ApplicationKey: null },
+    { Key: 'nE2ePdfEngineKeyAAAAAAA', Name: 'NeutralPdfEngine', Kind: 'Extension', SignatureHash: '3f1c2a4b-5d6e-4f70-8a9b-0c1d2e3f4a5b', IsSystem: false, ApplicationKey: null }] };
   if (operation === 'signature') return { value: null };
   if (operation === 'download') {
     if (args.module?.Key !== spec.key) refuse('download: unknown module');
@@ -367,6 +374,28 @@ function o11Reply(method, params, extra) {
   if (spec && method === 'refresh_references') {
     target(params);
     extra.producers = params.producers ?? null; extra.producerKeys = params.producer_keys ?? null;
+    // a8: the current pack's thin bridge runs the Studio's Manage Dependencies for add/published (refresh_references:add);
+    // the thin bridge of the 23rd has no such capability and runs the plain Refresh References whatever it is given.
+    if (!pack23 && (Array.isArray(params.add) || params.published === true)) {
+      extra.add = params.add ?? null; extra.published = params.published === true;
+      // a8 round 2 (review M1): the thin bridge of the pack closes a dialog its command opened and answers the refusal with the
+      // dialog first (causes and facts only, the server writes the texts); a dialog it cannot close answers blocked.
+      const asked = (params.add ?? []).map(a => a.producer);
+      if (asked.includes('ThinDialogProducer')) return { module: spec.name, moduleKey: spec.key, command: 'Manage Dependencies', committed: false, code: 'REFERENCES_NOT_ADDED',
+        problems: [{ code: 'REFERENCES_NOT_ADDED', severity: 'error', cause: 'studio-dialog', producer: null, key: null, element: 'Sign in', message: 'studio-dialog: Sign in',
+          fix: 'fix the cause, then repeat', patch: null, facts: { kind: 'Modal' } }],
+        reason: 'nothing was applied: the Studio rolled the Manage Dependencies command back',
+        dialogs: [{ kind: 'Modal', title: 'Sign in', type: 'LoginWindow', source: 'window', answer: 'close', closed: true }],
+        refreshed: [], upToDate: [], newErrors: 0, elapsedMs: 1, dependenciesDialog: null, dialogsBefore: null };
+      if (asked.includes('ThinBlockedProducer')) return { module: spec.name, moduleKey: spec.key, command: 'Manage Dependencies', changed: null, blocked: true, outcome: 'running',
+        blockedBy: { kind: 'MergeEditor', type: 'MergeEditorPresenter', source: 'presenter' }, dialogs: [], elapsedMs: 1, dialogsBefore: null, dependenciesDialog: null,
+        next: 'the person answers the dialog in the Studio; the Manage Dependencies then ends by itself (Ctrl+Z undoes it)' };
+      const added = (params.add ?? []).flatMap(a => (a.elements ?? []).map(e => ({ producer: a.producer, key: 'k-' + a.producer, element: String(e).replace(/^[^:]*:/, ''), type: 'ReferenceAction', spec: e })));
+      return { module: spec.name, moduleKey: spec.key, command: 'Manage Dependencies', committed: true, changed: added.length > 0, added, alreadyReferenced: [],
+        references: (params.add ?? []).map(a => ({ producer: a.producer, key: 'k-' + a.producer, kind: 'Extension', hashBefore: null, hashAfter: '3f1c2a4b-5d6e-4f70-8a9b-0c1d2e3f4a5b',
+          published: '3f1c2a4b-5d6e-4f70-8a9b-0c1d2e3f4a5b', atPublished: true })), undo: 'Ctrl+Z in the Studio undoes the Manage Dependencies; nothing was published',
+        refreshed: [], upToDate: [], newErrors: 0, elapsedMs: 1, dependenciesDialog: null, dialogs: null, dialogsBefore: null };
+    }
     return { module: spec.name, moduleKey: spec.key, changed: false, refreshed: [], upToDate: Array.isArray(params.producers) ? params.producers : [],
       missing: [], newErrors: 0, undo: null, elapsedMs: 1 };
   }
@@ -381,6 +410,11 @@ function o11Reply(method, params, extra) {
   if (spec && method === 'sc_http') return serviceCenterHttp(params, extra);
   return { method, modules: [], active: null, errors: [], windows: [] };
 }
+
+// servidor/fase4-26 a8 (deliveries without the 25 s deadline): while <studiosFile>.merge-delay-ms names a number, the answer of
+// a merge_from_oml (the merge itself is done at once) waits that many ms, like a Service Studio that takes minutes to merge a
+// large module. The process e2e's long delivery writes it and removes it.
+const mergeDelayMs = () => { try { return Math.max(0, Math.floor(Number(fs.readFileSync(studiosFile + '.merge-delay-ms', 'utf8')) || 0)); } catch { return 0; } };
 
 const o11 = net.createServer(socket => {
   let buffer = '';
@@ -403,9 +437,13 @@ const o11 = net.createServer(socket => {
         try { reply = { success: true, data: o11Reply(method, params ?? {}, extra) }; }
         catch (error) { reply = error instanceof NotExecuted ? { success: false, executed: false, error: error.message } : { success: false, error: error.message }; }
       }
+      const heldMs = method === 'merge_from_oml' && reply.success ? mergeDelayMs() : 0;
+      if (heldMs) extra.heldMs = heldMs;
       record({ studio: 'o11', method, paramKeys: Object.keys(params ?? {}), authOk, hasPort: Object.hasOwn(params ?? {}, 'port'), success: reply.success,
         ...(reply.executed === false ? { executed: false } : {}), ...(reply.success ? {} : { error: reply.error }), ...extra });
-      socket.write(JSON.stringify(reply) + '\n');
+      const answer = JSON.stringify(reply) + '\n';
+      if (heldMs) setTimeout(() => { if (!socket.destroyed) socket.write(answer); }, heldMs);
+      else socket.write(answer);
     }
   });
   socket.on('error', () => {});

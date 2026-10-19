@@ -158,14 +158,17 @@ public static partial class Delivery
         if (alignment["bridgeOffers"]?.GetValue<bool>() == true)
             return " The same job would roll back the same way" + (reason != null ? " (" + reason + ")" : "") + ". " + studio
                 + " It ran and did not align them: run it again with o11_studio refresh-references {module, producers, add, published:true} to see what the Studio refuses and follow each fix; then deliver this job as a new delivery.";
-        // servidor/fase4-26 (a7, E1): the hosted kernel (the thin flavor) talks to the bridge of the SSAM agent package, which does
-        // not run the Studio's Manage Dependencies (refresh_references:add) yet: reopening the Service Studio loads the same bridge,
-        // so the answer never sends the person to the local shortcut; it names the agent package instead. The flavor is read as
-        // ThinBridge.Enabled reads it (this file is also compiled into the ODC kernel, which has no ThinBridge).
+        // servidor/fase4-26 (a7, E1): the hosted kernel (the thin flavor) talks to the bridge of the SSAM agent package; reopening
+        // the Service Studio loads the same bridge, so the answer never sends the person to the local shortcut; it names the agent
+        // package instead. a8 (the next agent pack): the thin bridge of the current package runs it (capability
+        // refresh_references:add); a bridge without it is an older package's, and the answer says the exact step. The flavor is
+        // read as ThinBridge.Enabled reads it (this file is also compiled into the ODC kernel, which has no ThinBridge).
         if (Environment.GetEnvironmentVariable("ANVIL_BRIDGE_FLAVOR") == "thin")
             return " The same job would roll back the same way" + (reason != null ? " (" + reason + ")" : "") + ". " + studio
-                + " The O11 bridge of the SSAM agent package does not run it yet (capability " + ManageDependenciesCapability + "; hosted, MANAGE_DEPENDENCIES_HOSTED_PENDING):"
-                + " reopening the Service Studio loads the same bridge, so a delivery adds the elements of a new producer version through the Studio only with a new agent package. Nothing was applied.";
+                + " The O11 bridge this Service Studio loaded from the SSAM agent package does not run it (capability " + ManageDependenciesCapability
+                + "; hosted, MANAGE_DEPENDENCIES_HOSTED_PENDING): it is an older agent package's bridge. Ask the user to install the current agent package"
+                + " and restart Service Studio so the agent loads its bridge (reopening the Studio alone loads the same bridge); then deliver this job as a new delivery:"
+                + " with that bridge the delivery adds the elements through the Studio itself before its merge. Nothing was applied.";
         return " The same job would roll back the same way" + (reason != null ? " (" + reason + ")" : "") + ". " + studio
             + " The Service Studio runs a bridge without it (capability " + ManageDependenciesCapability + "): the current bridge loads with the next Service Studio opened"
             + " (the \"Service Studio (SSAM)\" shortcut); then deliver this job as a new delivery: with that bridge the delivery adds the elements through the Studio itself before its merge. Nothing was applied.";

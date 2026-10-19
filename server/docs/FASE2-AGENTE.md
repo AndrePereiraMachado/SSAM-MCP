@@ -748,6 +748,9 @@ marco-a5 (`fase4-25/marco-a5`, 15/10/2026): entra a `ssam_code` (linha 94), indi
 `createSsamServer` registra 91, mais as 4 do hook e a `ssam_friction`. Totais: servidor 23 (10 delas com um modo que usa o
 agente), agente 33, tenant-agente 22 e indisponível 18. No ar, o `tools/list` sem o hook deve mostrar 92 (não conferido no ar).
 
+a8 (`fase4-26/a8-ssam-code`, 18/10/2026, pedido do dono): a `ssam_code` passa a servidor (linha 94). Totais: servidor 24 (11
+com um modo que usa o agente), agente 33, tenant-agente 22, indisponível 17. Os mesmos 96 nomes e 92 no `tools/list`.
+
 Regras novas do marco-a5 no portão e na costura:
 
 - Os ops de gerador que ainda esperam o teste cego (`entity-actions`, `rest-consume` e o op `screen` com `data.generate`) são
@@ -904,7 +907,7 @@ seção 8), exceto `ssam_connect` e as de relatório.
 | 91 | `ssam_debug_server` | indisponível | — | — | o mesmo motivo do `ssam_debug` |
 | 92 | `ssam_debug_client` | indisponível | — | — | idem, mais perfis de navegador (CDP) da máquina do servidor |
 | 93 | `ssam_debug_matrix` | indisponível | — | — | lê e grava a evidência de `.local/debugger` da máquina do servidor (do dono) |
-| 94 | `ssam_code` | indisponível | — | — | marco-a5: `check` e `plan` leem a captura mais nova e o cache de produtores das raízes do servidor e gravam planos lá; `cause:"SSAM_CODE_HOSTED_PENDING"`, continuação para o `ssam_map` (views `ddl`, `flow`, `html`) e a entrega por `o11_deliver`/`studio_deliver` |
+| 94 | `ssam_code` | servidor | `arg:odc` | por ação: `read` de um nome de módulo, `plan` e `write` | a8: tudo do workspace do usuário. `read` é o `ssam_map` sobre uma captura do workspace (nome de módulo captura pelo agente); `check` e `plan` leem a captura mais nova de `ws:o11/snapshots` ou `ws:odc/snapshots` (base só dali) e os produtores do workspace, e gravam jobs e planos em `ws:o11/` e `ws:odc/lab/`; `files`, `stubs`, `shared`, `base`, `basedOn.job`, `also[].basedOn.job` e `producers` são entradas do workspace, e os caminhos dentro das ops confinados como os de um job. O plano nomeia os arquivos dos subagentes na caixa de entrada do agente e leva os prompts à máquina do usuário. `write` entrega por `o11_deliver`/`studio_deliver` (o mesmo portão). Uma edição de lógica só expande leitura que este usuário recebeu. Cada `check` toma uma vaga do cliente e uma do servidor, numa fila só, por ordem de chegada (`hosted/checks.mjs`: `SSAM_CODE_CHECKS` e `SSAM_CODE_CHECKS_PER_CUSTOMER`; sem elas, as CPUs do contêiner menos 1, de 1 a 4, e 2 por cliente); o `candidate.oml` e o `work/` do check saem quando ele termina (o `job.json` fica), e os que um check interrompido deixou saem depois de 1 h. Interruptor: a classe; `unavailable` recusa com o bloco `off` (`SSAM_CODE_HOSTED_PENDING`, continuação `ssam_map`) e as instruções da sessão voltam às de antes. (marco-a5: era indisponível, `SSAM_CODE_HOSTED_PENDING`.) |
 
 Notas da tabela:
 

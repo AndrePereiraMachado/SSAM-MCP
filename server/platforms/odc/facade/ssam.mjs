@@ -36,9 +36,10 @@ import { authorityDir, userEnvironmentValue, o11LaneOf } from './o11-lane.mjs';
 import { registerO11AppSession, runHook } from './o11-app-session.mjs';
 import { registerO11Cycle, findKernelTask, closeState } from './o11-cycle.mjs';
 import { configureRelayFacade, relayWork } from './relay-lifecycle.mjs';
-import { createCallDeadline, continuationSchema, isLiveTask, folderKey, CONTINUATION_REFUSED } from './call-deadline.mjs';
-import { kernelWorkFolders, registerSsamTask, closeFacadeTask, readTask, findKernelFacadeTasks, tasksDir } from './ssam-task.mjs';
-import { isMutation } from './tool-classification.mjs';
+import { createCallDeadline, continuationSchema, isLiveTask, folderKey, CONTINUATION_REFUSED, markRunsToEnd } from './call-deadline.mjs';
+import { REPLAY_WINDOW_MS, createReplay, resolveRelativePaths } from './replay-store.mjs';
+import { kernelWorkFolders, registerSsamTask, closeFacadeTask, readTask, findKernelFacadeTasks, sanitizeAnswer, tasksDir } from './ssam-task.mjs';
+import { isMutation, nestsDelivery, runsToEnd } from './tool-classification.mjs';
 import { serverIdentity, releaseChanged, releaseWatch, sessionRoot, sameFolder } from './server-identity.mjs';
 import { registerO11Studio } from './o11-studio.mjs';
 import { registerO11Environment } from './o11-environment.mjs';
@@ -67,6 +68,7 @@ import { registerO11Extension } from './o11-extension.mjs';
 import { readLocalSettings } from './local-settings.mjs';
 import { withCall, noteAnswer } from './quality-meter.mjs';
 import { registerQueryTestTools } from './query-test.mjs';
+import { codeServedHosted } from './hosted/served.mjs';
 
 const print = value => process.stdout.write(JSON.stringify(value, null, 2) + '\n');
 const fail = message => { process.stderr.write(JSON.stringify({ ok: false, error: message }) + '\n'); process.exitCode = 1; };
@@ -441,18 +443,24 @@ export function hostedRelease(freeing, { context }) {
   return byFileName(releaseReservation({ ...freeing, reservation }, { env: hostedAuthorityEnv(context), readUserEnvironment: () => null }));
 }
 
-// The paragraph a hosted session adds to the instructions (docs/FASE2-AGENTE.md 10.7).
-export const HOSTED_INSTRUCTIONS = 'This SSAM server is hosted: it runs on the SSAM owner\'s machine and drives the user\'s own '
+// The paragraph a hosted session adds to the instructions (docs/FASE2-AGENTE.md 10.7). a8 review (M1): its ssam_code
+// sentence follows the one switch (hosted/served.mjs, the class of ssam_code in hosted/tools.json); off, the paragraph and
+// the rules are the ones of the line before ssam_code was served hosted, word for word (HOSTED_*_CODE_OFF).
+const hostedParagraph = code => 'This SSAM server is hosted: it runs on the SSAM owner\'s machine and drives the user\'s own '
   + 'Studios through the SSAM agent on the user\'s machine. ssam_debug, ssam_debug_run, ssam_debug_invoke, context, propose, '
   + 'continue and status are unavailable here (HOSTED_UNAVAILABLE). Files are named ws:<path> (the workspace of this account on '
   + 'the server: ODC files under ws:odc/, O11 files under ws:o11/, files the user delivered under ws:inbox/); pass them back '
   + 'exactly as returned. A file from the user\'s machine reaches SSAM when the user puts it in the agent inbox folder and you '
   + 'pass agent:inbox/<file>. Before any O11 tool, connect the Service Studio with ssam_connect {lane:"o11"}. When the agent is '
   + 'not connected, tools that need the user\'s Studio answer AGENT_NOT_CONNECTED; ssam_doctor shows the agent and the Studio '
-  + 'versions of both sides. ssam_code is unavailable here too: read a module as text with ssam_map (views ddl, flow, html) and deliver '
-  + 'the change as ONE job of o11_deliver or studio_deliver. The generator ops not offered here yet (entity-actions, '
+  + 'versions of both sides. ' + code + ' The generator ops not offered here yet (entity-actions, '
   + 'rest-consume, screen with data.generate) are refused (GENERATOR_PENDING). No credential window opens here: odc_portal_login '
   + 'prompt and focus answer HOSTED_PROMPT_UNAVAILABLE.';
+export const HOSTED_INSTRUCTIONS = hostedParagraph('ssam_code reads and writes the module as code here too, its texts inline (text, also); the files '
+  + 'subagents write for it go in the agent inbox folder (an ssam_code plan names each one there and brings its prompts to the '
+  + 'agent folder).');
+export const HOSTED_INSTRUCTIONS_CODE_OFF = hostedParagraph('ssam_code is unavailable here too: read a module as text with ssam_map (views ddl, flow, html) and deliver '
+  + 'the change as ONE job of o11_deliver or studio_deliver.');
 // The working rules a hosted session adds (servidor/fase4: C26, C03 and the model behaviour of the first client session).
 // fase4-24 (production test of 2026-10-11): a job goes INLINE, the job itself as compact JSON in the job argument. The MCP
 // request goes straight to this server (up to 16 MiB), while a job file in the agent inbox costs one more upload from the
@@ -460,25 +468,31 @@ export const HOSTED_INSTRUCTIONS = 'This SSAM server is hosted: it runs on the S
 // spaces. agent:inbox stays for the user's real files (OML, images, assets).
 // servidor/fase4-24 (product speed package, integracao/velocidade): ONE job per module with every change of the request,
 // and the kernel's normalizations (JobNormalizer: what it rewrote instead of refusing) come listed in the answer, never silent.
-export const HOSTED_RULES = 'Jobs: ONE job per module, with every change of the request for that module (separate jobs only for different modules, '
+const hostedRules = inbox => 'Jobs: ONE job per module, with every change of the request for that module (separate jobs only for different modules, '
   + 'never one action or one step per call), sent inline in the job argument as compact JSON (no indentation), whatever its size: '
   + 'the call goes straight to this server (up to 16 MiB), so a large job is still one call, with no upload through the agent. '
   + 'Never write a job to a file for this server, never with a shell heredoc or a script; a correction is patch + basedOn (nextBasedOn of the answer). '
   + 'An answer lists normalizations {total, byRule, items} when the kernel rewrote a shape of the job instead of refusing it (a sort, a null, an '
   + 'entity segment): they are applied already; read them, never resend the job to undo or repeat them. '
-  + 'agent:inbox/<file> is only for the user\'s own files in the agent inbox folder (an OML, an image, an asset); an absolute path under '
+  + inbox + '; an absolute path under '
   + 'the agent folder is taken as the same agent: path, any other path is refused with the exact folder. '
   + 'AGENT_RECONNECTING means the agent is reconnecting by itself: repeat the same call after retryAfterSeconds; ask the user to '
   + 'start the agent only when an answer says AGENT_NOT_CONNECTED. '
   + 'An approved prototype is ported 1:1 (html op plus its <style> in the theme), never replaced by OutSystems UI patterns; '
   + 'nothing is done until the app link (appLinks of the answer, or ssam_app_url) is given to the user. '
   + 'A subagent prompt loads the SSAM tools with ToolSearch before its first SSAM call.';
+export const HOSTED_RULES = hostedRules('agent:inbox/<file> is only for the user\'s own files in the agent inbox folder (an OML, an image, an asset) and the code files of '
+  + 'ssam_code subagents');
+export const HOSTED_RULES_CODE_OFF = hostedRules('agent:inbox/<file> is only for the user\'s own files in the agent inbox folder (an OML, an image, an asset)');
 // The instructions of one hosted session: the paragraph, the rules and, when the agent reported its folder (Hello), the inbox.
+// a8 review (M1): served or not by the catalog the session's gate reads (hosted.tools in a test, else hosted/tools.json).
 export function hostedInstructions(hosted) {
   let root = null;
   try { root = (hosted?.session?.agent ?? hosted?.context?.agent)?.info?.()?.agentRoot ?? null; } catch { root = null; }
   const inbox = typeof root === 'string' && root ? ' The agent inbox folder of this account is ' + path.win32.join(root, 'inbox') + '.' : ' ssam_doctor shows the agent inbox folder (agent.inbox).';
-  return HOSTED_INSTRUCTIONS + ' ' + HOSTED_RULES + inbox;
+  return codeServedHosted(hosted?.tools ?? null)
+    ? HOSTED_INSTRUCTIONS + ' ' + HOSTED_RULES + inbox
+    : HOSTED_INSTRUCTIONS_CODE_OFF + ' ' + HOSTED_RULES_CODE_OFF + inbox;
 }
 
 // The gate of each tool of a hosted session (hosted/policy.mjs), set by createSsamServer and used by registerServedTool.
@@ -781,9 +795,10 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
   // deps.exposure {profile?, handleRoots?}; else SSAM_EXPOSURE, owner when unset (a hosted server passes licensee).
   // servidor/fase4-26 a7 (no-internals list item 6): a hosted session is a licensee's, whatever the environment says.
   const exposure = hosted ? 'licensee' : deps.exposure?.profile ?? exposureOf(process.env);
-  // servidor/fase4-25: ssam_code is unavailable hosted (D1 a), so a hosted session is never told to use it (the rules of
-  // server-instructions.mjs without it); the hosted paragraph and rules (hostedInstructions) follow.
-  const serverOptions = { instructions: serverInstructions({ profile, hosted: Boolean(hosted) }) + (exposure === 'licensee' ? ' ' + LICENSEE_INSTRUCTION : '')
+  // servidor/fase4-25: while ssam_code is unavailable hosted (D1 a), a hosted session is never told to use it (the rules of
+  // server-instructions.mjs without it); a8: served hosted, the same rules as a local session (hosted/served.mjs). The hosted
+  // paragraph and rules (hostedInstructions) follow.
+  const serverOptions = { instructions: serverInstructions({ profile, hosted: hosted ? { tools: hosted.tools ?? null } : false }) + (exposure === 'licensee' ? ' ' + LICENSEE_INSTRUCTION : '')
     + (hosted ? ' ' + hostedInstructions(hosted) : '') };
   const server = deps.server ?? new McpServer({ name: selectedProfile.name, version: '0.2.0' }, serverOptions);
   server.ssamInstructions = serverOptions.instructions;
@@ -818,10 +833,46 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
   // fix/no-internals round 4: the argsOf of each tool (the input layer), so whatever keeps an answer names whose answer it is
   // on the arguments the tool ran (keptOrigin below); a licensee's server only.
   const argsOfTool = new Map();
+  // The replay of an unconfirmed final answer (replay-store.mjs createReplay; Integradora, 2026-10-18, review round 3), one
+  // helper for the served handler here and on the hosted server: the deadlines join live calls by the inputs of a run-to-end
+  // call (its print on the arguments the tool runs: argsOf, the defaults of its listed schema filled, and the files it reads;
+  // null when one cannot be read for sure); the served handler replays on the arguments it runs.
+  const inputSchemas = new Map();
+  // Round 3c (M1): the paths a tool reads relative to a root it declares are read as the tool reads them: studio_deliver's
+  // job (and a patch's basedOn.job) relative to the ODC lane root (the proxy below and kernel-delivery.mjs resolve it so).
+  const relativeToOdcRoot = Object.freeze({ studio_deliver: ['job', 'basedOn.job'] });
+  // servidor/fase4-26 a8: hosted, the replays live in the customer's task folder (tasksDir: ws:o11/tasks, this server is created
+  // in the customer's context), never in <anvilRoot>/.local/tasks; and the gate is the one resolver: the served handler gets the
+  // gate's arguments, and the deadline's inputs are read by the gate's own rules (hosted/policy.mjs replayInputs, below), never
+  // relative to this server's ODC lane root (a file of the server would decide a customer's call).
+  const replays = createReplay({ folder: deps.tasksDir ?? tasksDir(answersRoot), windowMs: deps.replayWindowMs ?? REPLAY_WINDOW_MS,
+    schemaOf: name => inputSchemas.get(name),
+    resolve: hosted ? null : (name, args) => (relativeToOdcRoot[name] ? resolveRelativePaths(args, deps.odcRoot ?? LANES.odc.root, relativeToOdcRoot[name]) : args) });
+  // servidor/fase4-26 a8 (rounds 3c, 3d): hosted, the deadline wraps the gate and sees the arguments as sent (ws:, agent:,
+  // relative, a path of the agent's machine). For a run-to-end call it reads them as the gate does, without bringing or writing
+  // anything (agent: by the sha256 the agent lists), so the same content joins the live call and other content is one
+  // DELIVERY_STILL_RUNNING "changed". A call the gate refuses before the agent (a tool unavailable hosted; deleting,
+  // o11_access apply; the prototype op, also in ssam_code...) is outside the family here: an identical call joins that refusal
+  // (CX12). The gate and this read judge it by one function (hosted/policy.mjs refusalBeforeAgent, a8 phase 6).
+  const hostedPolicy = hosted ? await import('./hosted/policy.mjs') : null;
+  const agentRootOf = () => { try { return (hosted.session?.agent ?? hosted.context.agent)?.info?.()?.agentRoot ?? null; } catch { return null; } };
+  const inputsOf = hosted
+    ? async (name, raw) => {
+      const args = runArgs(argsOfTool.get(name), raw ?? {});
+      if (!runsToEnd(name, args) && !nestsDelivery(name, args)) return undefined;
+      const tools = hosted.tools ?? hostedPolicy.hostedTools();
+      const gate = { tools, raw: raw ?? {}, lanes: hosted.session?.lanes ?? hosted.context.lanes ?? [], kernelRefused: hosted.kernelRefused ?? null };
+      // A call the gate refuses before the agent and any path (unavailable, deleting, the prototype op...) is outside the
+      // family here: an identical call joins that refusal, never "a delivery is still running"; nothing is asked of the agent.
+      if (hostedPolicy.refusedBeforePaths(name, args, gate)) return undefined;
+      return replays.inputsOf(name, await hostedPolicy.replayInputs(name, args, hosted.context, { ...gate, agentRoot: agentRootOf() }));
+    }
+    : (name, raw) => replays.inputsOf(name, runArgs(argsOfTool.get(name), raw ?? {}));
+  server.ssamInputsOf = inputsOf;
   const deadline = createCallDeadline({ root: answersRoot, ...(deps.tasksDir ? { dir: deps.tasksDir } : {}), timeoutMs: deps.callDeadlineMs, hasTool: name => served.has(name), defaultLane: o11 ? 'o11' : 'odc',
     // a7: hosted, the final answer of a detached call is kept in ws:o11/answers with the origin the exposure rule names.
     ...(hosted ? { saveAnswer: (full, root, origin) => keepAnswer(full, answersRoot, origin, { directory: answersDirectory() }) } : {}),
-    notify: notification => server.server.notification(notification),
+    notify: notification => server.server.notification(notification), inputsOf,
     ...(exposure === 'owner' ? {} : { answerOrigin: (name, args) => keptOrigin(name, runArgs(argsOfTool.get(name), args ?? {})) }) });
   // A cached surface waits through the bootstrap deadline; cold calls use this server's deadline.
   const activeTasks = () => [...new Map([...deadline.runningTasks(), ...(deps.activeDeadline?.()?.runningTasks() ?? [])].map(task => [task.id, task])).values()];
@@ -1077,10 +1128,27 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
   const passedGate = new WeakSet();
   // (a7 phase 4: the same view of the server layout as the gate's presenter, hosted.presentation in a test)
   const deadlinePresenter = hosted ? (await import('./hosted/policy.mjs')).presenter({ workspace: hosted.context.workspace, ...(hosted.presentation ?? {}) }) : null;
+  // servidor/fase4-26 a8: the ssam_code deps of a hosted customer (hosted/code.mjs), used by ssam_code and by ssam_map below.
+  const hostedCodeOf = hosted ? (await import('./hosted/code.mjs')).hostedCode : null;
   const deadlineAnswer = answer => (!answer || typeof answer !== 'object' || passedGate.has(answer) || answer.resultType === 'input_required' ? answer
     : deadlinePresenter.result(exposedResult(answer, { exposure, handleRoots, tool: 'ssam_task', args: {}, suiteNames })));
   server.registerTool = (name, config, handler) => {
     if (!profileServes(profile, name)) return null;
+    // a8: hosted, a ssam_map answer (view flow, a list of actions) notes the actions this customer read, as ssam_code read
+    // does: an edit of logic by ssam_code expands only a read its customer was served (hosted/code.mjs record). Only while
+    // ssam_code is served (the switch off, ssam_map answers as before and keeps nothing).
+    if (hosted && name === 'ssam_map' && typeof handler === 'function' && codeServedHosted(hosted.tools ?? null)) {
+      const read = handler;
+      handler = async (...params) => {
+        const result = await read(...params);
+        try {
+          const args = params.length > 1 && params[0] && typeof params[0] === 'object' ? params[0] : {};
+          const value = result?.structuredContent ?? (typeof result?.content?.[0]?.text === 'string' ? JSON.parse(result.content[0].text) : null);
+          hostedCodeOf(hosted.context).record(args.lane === 'o11' ? 'o11' : 'odc', value);
+        } catch { /* an unrecorded read only refuses a later edit */ }
+        return result;
+      };
+    }
     // Lane wp: only a handler that declares its build and apply phases (config._meta, studio-write-lock.mjs PHASES_META)
     // builds without the Studio lock; any other write holds the Studio for its whole call.
     const phases = declaresPhases(config);
@@ -1111,6 +1179,10 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
       // coerced, under the name the tool knows), so a `next` reads the listing the call read and a continuation goes to its
       // Studio ({kinds} ran kind, {PID} ran pid). Arguments the layer refuses are read as sent.
       const args = hasArgs ? argsOf?.(params[0]) ?? params[0] ?? {} : {};
+      // Owner decision (2026-10-18): a delivery or a creation (tool-classification.mjs runsToEnd) answers when its work ends.
+      // This handler serves every client call and the delivery ssam_code writes through, so the mark reaches the call this one
+      // runs inside under every deadline (this server's, the warm start's boot proxy).
+      if (runsToEnd(name, args)) { markRunsToEnd(); replays.outerPrints(name, args); } // an outer call (ssam_code write) takes its print now
       const lane = args.lane ?? (/^(studio_|odc_|hybrid_)/.test(name) ? 'odc' : 'o11');
       // fix/no-internals round 4: an answer this call keeps for a later read names whose answer it is (licensee only).
       const kept = keptOrigin(name, args);
@@ -1142,6 +1214,12 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
         return pageAnswer(fitResult(name, args, shaped, { root: answersRoot, directory: answersDirectory(), budgets: deps.answerBudgets, origin: kept }),
           { root: answersRoot, directory: answersDirectory(), maxBytes, origin: kept });
       }
+      // The replay of an unconfirmed final answer (replay-store.mjs; Integradora, 2026-10-18, review round 3), decided here, on
+      // the arguments this tool runs: the call this deadline entry serves (never a delivery nested in it) gets the kept answer
+      // of the same call (normalized arguments and the sha256 of every file it reads); on a miss, any write ends the replays of
+      // its subject. The print is taken as the call starts (the deadline's, when it took one), for the answer it may keep.
+      const replay = replays.start(name, args);
+      if (replay?.hit) return replay.hit;
       const signal = ctx && typeof ctx === 'object' ? ctx.mcpReq?.signal : undefined;
       // Lane wp: a delivery runs its build phase without the Studio lock and takes it at its first Studio write (phased).
       const bounded = ['o11_service_center_read', 'o11_service_center_session', 'odc_read', 'odc_portal_read', 'odc_portal_login'].includes(name);
@@ -1191,8 +1269,11 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
         }
       }
       if (qualityKey) { try { noteAnswer(qualityKey, name, args, shaped); } catch { /* the record never changes an answer */ } }
-      return pageAnswer(fitResult(name, args, shaped, { root: answersRoot, directory: answersDirectory(), budgets: deps.answerBudgets, origin: kept }),
+      const final = pageAnswer(fitResult(name, args, shaped, { root: answersRoot, directory: answersDirectory(), budgets: deps.answerBudgets, origin: kept }),
         { root: answersRoot, directory: answersDirectory(), maxBytes, origin: kept });
+      // a8: hosted, the kept answer of a replay is the customer's, in ws:o11/answers with its origin record, as every kept answer.
+      replays.keep(replay, final, value => keepAnswer(sanitizeAnswer(value), answersRoot, kept, { directory: answersDirectory() }));
+      return final;
     };
     // R1: the gate reads argsOf, so what it confines is what the tool runs. servidor/fase4-25: the handler map (ssam_code
     // writes through the delivery tool of its lane by it) keeps the GATED handler, the same one the client reaches: hosted,
@@ -1207,6 +1288,7 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
     // CX11 x CX12 (INT-4): the warm-start snapshot is the list a session is served, the projected listing of
     // tool-listing.mjs, so a cached start never lists the originals; the originals stay for ssam_reference (toolDetails).
     const original = snapshotTool(name, sdkConfig);
+    inputSchemas.set(name, original.inputSchema); // the defaults a replay fills (replay-store.mjs normalizedArguments)
     server.ssamOriginalTools.push(original);
     server.ssamTools.push(deps.listing === 'full' ? original : listedTool(original));
     // CX12: the call deadline wraps the gated handler (a continueTask reads only this server's task folder and never passes
@@ -1494,9 +1576,26 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
     const { registerSsamCode } = await import('./ssam-code.mjs');
     // An omitted budget is the answer ceiling (less the shaper's room), as the ssam_map relay does.
     const codeMap = deps.codeMap ?? (async input => (await import('./module-map.mjs')).moduleMap({ ...input, budgetBytes: input.budgetBytes ?? budgetCeiling(maxBytes) }));
-    registerSsamCode(server, { fromJsonSchema, map: codeMap, lanes: laneNames,
-      check: deps.codeCheck ?? (async input => (await import('./code-check.mjs')).codeCheck(input, {})),
-      plan: deps.codePlan ?? (async input => (await import('./code-plan.mjs')).codePlan(input, {})),
+    // feat/ssam-code-hosted: deps.code() gives the deps of each check, plan and write, read at the call (a server that keeps
+    // each session apart: code-check.mjs roots, code-plan.mjs place, the read an edit expands); none, this checkout's.
+    // servidor/fase4-26 a8: hosted, those deps are this customer's, read at the call (hosted/code.mjs: the roots of its
+    // workspace, the places of a plan on the server and on the user's machine, the reads it was served), whatever deps say;
+    // and every read of ssam_code notes the actions it answered (an edit of logic expands only those).
+    const codeDeps = () => (hosted ? hostedCodeOf(hosted.context) : typeof deps.code === 'function' ? deps.code() ?? {} : {});
+    const readMap = !hosted ? codeMap : async input => {
+      const answer = await codeMap(input);
+      try { hostedCodeOf(hosted.context).record(input?.lane === 'o11' ? 'o11' : 'odc', answer); } catch { /* an unrecorded read only refuses a later edit */ }
+      return answer;
+    };
+    // a8 review (M2): hosted, every check takes a slot of its customer and of the server (one queue; hosted/checks.mjs) and
+    // leaves no candidate behind; a plan, and each check, first sweeps the candidates an interrupted check left.
+    const check = deps.codeCheck ?? (async input => (await import('./code-check.mjs')).codeCheck(input, codeDeps()));
+    const plan = deps.codePlan ?? (async input => (await import('./code-plan.mjs')).codePlan(input, codeDeps()));
+    const checks = hosted ? await import('./hosted/checks.mjs') : null;
+    registerSsamCode(server, { fromJsonSchema, map: readMap, lanes: laneNames,
+      check: hosted ? checks.hostedCheck(hosted.context, check, { slots: hosted.checkSlots ?? null }) : check,
+      plan: hosted ? async input => { checks.sweepCandidates(hosted.context.workspace); return plan(input); } : plan,
+      write: () => codeDeps(),
       deliver: async (tool, args, ctx) => {
         const handler = handlers.get(tool);
         if (!handler) {
@@ -1748,7 +1847,8 @@ export async function runStdio({ env = process.env, profile, warm = warmBackgrou
     const warmEnv = exposure === 'owner' ? env : { ...env, SSAM_TOOLS_SNAPSHOT_DISABLE: '1' };
     let active;
     const bootTools = new Set();
-    const bootDeadline = createCallDeadline({ root: anvilRoot, env, hasTool: name => bootTools.has(name), defaultLane: served.o11 === false ? 'odc' : 'o11', notify: notification => active?.server.notification(notification) });
+    const bootDeadline = createCallDeadline({ root: anvilRoot, env, hasTool: name => bootTools.has(name), defaultLane: served.o11 === false ? 'odc' : 'o11', notify: notification => active?.server.notification(notification),
+      inputsOf: (name, args) => active?.server?.ssamInputsOf?.(name, args) });
     const result = await createWarmServer({ root: workspaceRoot, identity: serverIdentity(), env: warmEnv, serverInfo: { name: serverProfile(selectedProfile).name, version: '0.2.0' }, args: [...args, 'profile:' + selectedProfile], startAfterConnect: true, build: (server, registerTool) => createSsamServer({ ...served, profile: selectedProfile, deps: { server, registerTool, activeDeadline: () => bootDeadline, exposure: { profile: exposure } } }),
       wrap: (name, handler, config) => { bootTools.add(name); return bootDeadline.wrap(name, handler, { ...config, exempt: config?._meta?.canRequestInput === true }); },
       onStale: async () => { const store = await import(pathToFileURL(path.join(workspaceRoot, 'facade', 'friction-store.mjs')).href); await store.recordEvent({ operation: 'mcp-start', code: 'TOOL_LIST_SNAPSHOT_STALE', outcome: 'reconciled' }); } });
@@ -1914,6 +2014,9 @@ export async function runServed(args) {
   const executor = await import('./executor.mjs');
   executor.setDefaultExecutor(new executor.DenyExecutor());
   const { kernel, refused: kernelRefused } = await startupKernel({ dir, fileVersion: executor.fileVersion, log });
+  // a8 phase 6 (owner request): the hosted catalog is read here, at the start, with SSAM_HOSTED_SSAM_CODE (off | on); the
+  // log names what this server serves of ssam_code and whether the variable switched it ({served, switch, ignored?}).
+  log({ event: 'hosted-ssam-code', ...(await import('./hosted/served.mjs')).codeSwitchState() });
   // One hosted context per token (workspace, AgentExecutor, relay), shared by the sessions of that token and closed when
   // the agent link closes (revoked, expired, server-stop).
   const contexts = new Map();

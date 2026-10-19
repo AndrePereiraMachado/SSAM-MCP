@@ -15,6 +15,7 @@
 import { normalize } from './catalog.mjs';
 import { codeCall } from './ssam-code.mjs';
 import { hostedContext } from './executor.mjs';
+import { codeServedHosted } from './hosted/served.mjs';
 const codeGrammar = (lane, part) => ({ tool: 'ssam_code', arguments: { lane, action: 'grammar', part } });
 
 export const TEXT_ROUTE_SCHEMA = 'ssam-text-route/1';
@@ -432,9 +433,10 @@ export function sectionOf(route, lane, { slice = () => undefined, cardBytes = 40
     read: r.read(lane), readWhy: r.readWhy,
     call: wired ? deliverCall(lane, r.op(), r.names) : null,
     // The same read and delivery as ONE tool with one word for both (ssam_code, ssam-code.mjs): what a model calls.
-    // a7 (review B1, the family of K1): ssam_code is unavailable on the hosted server (SSAM_CODE_HOSTED_PENDING), so a hosted
-    // route names only the read and the delivery call of its lane (read, call), never the code form.
-    ...(wired && !hostedContext() ? { code: { read: route.id === 'ui.screen-html' ? codeGrammar(lane, 'html') : codeCall(r.read(lane)), write: codeCall(deliverCall(lane, r.op(), r.names)) } } : {}),
+    // a7 (review B1, the family of K1): while ssam_code is unavailable on the hosted server (hosted/tools.json), a hosted
+    // route names only the read and the delivery call of its lane (read, call), never the code form. a8: served hosted, the
+    // code form is there too (hosted/served.mjs).
+    ...(wired && (!hostedContext() || codeServedHosted()) ? { code: { read: route.id === 'ui.screen-html' ? codeGrammar(lane, 'html') : codeCall(r.read(lane)), write: codeCall(deliverCall(lane, r.op(), r.names)) } } : {}),
     ...(wired ? {} : { note: 'only reading: the way back of this text is not wired in the MCP (the cut rule of the plan: its fixed point did not close at 100%); write with the JSON op of the matches' }),
     slots: r.slots, rules: [...r.rules, ...COMMON_RULES],
     contract: card ? { pointer: r.pointer, card } : { pointer: r.pointer, expand: `ssam_discover {lane:"${lane}", expand:"contract:${r.pointer}"}` },

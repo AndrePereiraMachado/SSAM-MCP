@@ -33,6 +33,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { workspaceRoot, anvilRoot, o11Lane } from './workspace.mjs';
 import { readSnapshot } from './reader-client.mjs';
 import { root as odcRoot, paths, odcStudioDir, ensureBuilder, builderNeedsBuild, studio } from './lib.mjs';
+import { hostedContext } from './executor.mjs';
 import { LANES } from './lanes.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { resolveOpenModule, systemModuleName } from './studio-module.mjs';
@@ -108,7 +109,14 @@ function keepReadings(lane, sha256, served, actions) {
 }
 export const richFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), 'v1', lane, sha256.toLowerCase() + '.' + RICH_ADAPTER + '.rich.json');
 // C15: the registry of canonical captures by content (oml-content-sha.mjs canonicalCapture), beside the index store.
-export const contentRegistry = (lane, env = process.env) => path.join(indexRoot(env), 'v1', lane, 'content');
+// servidor/fase4-26 a8: hosted, the registry is the customer's (<ws>/state/content-registry/<lane>): the module index is
+// shared by every customer and addressed by hashes, but this registry names FILES, so a shared one answered a customer's
+// read with another customer's capture of the same content (its path in the answer, and whether someone else holds that
+// module). Each customer's first capture of a content is its own canonical one.
+export const contentRegistry = (lane, env = process.env) => {
+  const context = hostedContext();
+  return context ? path.join(context.workspace, 'state', 'content-registry', lane) : path.join(indexRoot(env), 'v1', lane, 'content');
+};
 // The capture that answers a read of `file`: the first intact capture of the same content (its index and its sha), or the
 // file itself. A registry that cannot be read or written only loses the reuse.
 export function readCapture(file, lane, { module = null, env = process.env } = {}) {

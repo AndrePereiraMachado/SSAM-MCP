@@ -160,10 +160,12 @@ test('hostedSpawnEnv is a closed list: the workspace, the relay, and nothing els
       assert.equal(env.TMPDIR, path.join(context.workspace, 'o11', 'tmp'));
       const allowed = new Set([...SPAWN_ALLOWED, 'TEMP', 'TMP', 'TMPDIR', 'ANVIL_AUTHORITY_DIR', 'ANVIL_BRIDGE_PORT', 'ANVIL_STUDIO_DIR', 'ANVIL_LANE',
         'ANVIL_BRIDGE_FLAVOR', 'ANVIL_BRIDGE_TIMEOUT_SECONDS', 'ANVIL_BRIDGE_PROBE_MS', 'ANVIL_KEPT_READINGS',
-    'SSAM_STUDIO_DEFAULTS_ROOT']); // a7 (SD): the customer's own folder of the Studio defaults
+    'SSAM_STUDIO_DEFAULTS_ROOT', // a7 (SD): the customer's own folder of the Studio defaults
+    'SSAM_MODULE_INDEX_ROOT']); // a8: the server's module index (absolute), where its readers keep it
       assert.deepEqual(Object.keys(env).filter(k => !allowed.has(k)), []);
       // servidor/fase4-26: the CX14 probes off (A1) and kept readings of the job's own capture only (M2), set here.
       assert.equal(env.ANVIL_BRIDGE_PROBE_MS, '0'); assert.equal(env.ANVIL_KEPT_READINGS, 'own');
+      assert.equal(env.SSAM_MODULE_INDEX_ROOT, path.isAbsolute(process.env.SSAM_MODULE_INDEX_ROOT ?? '') ? process.env.SSAM_MODULE_INDEX_ROOT : undefined, 'a8: the server\'s index root');
       for (const leaked of ['ANVIL_CSHARP_RUNTIME_REGISTRATION', 'SSAM_HYBRID_ODC_TENANT', 'ODC_CLIENT_SECRET', 'SSAM_HYBRID_ODC_ROOT']) assert.equal(env[leaked], undefined, leaked);
     });
   } finally { for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key]; Object.assign(process.env, saved); }

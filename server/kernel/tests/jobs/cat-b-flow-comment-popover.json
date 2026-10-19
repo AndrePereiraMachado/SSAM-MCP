@@ -47,7 +47,7 @@
 
   {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetNotices", "as": "$agg"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$CatBNotice"}},
-  {"op": "create", "parent": "$agg", "type": "ITextMetadata", "name": "CatBNote", "args": {"managedBy": "anvil"}, "as": "$md",
+  {"op": "create", "parent": "$agg", "type": "ITextMetadata", "name": "CatBNote", "args": {"managedBy": "ssam"}, "as": "$md",
    "_why": "CreateMetadata<T>(name, managedBy) of IAggregate in O11: managedBy has no default, so the args is mandatory; Name and ManagedBy are readOnly in IMetadata"},
   {"op": "set", "target": "$md", "prop": "Value", "value": "aggregate escrito pelo job cat-b-flow-comment-popover"},
   {"op": "set", "target": "$md", "prop": "Hidden", "value": true},

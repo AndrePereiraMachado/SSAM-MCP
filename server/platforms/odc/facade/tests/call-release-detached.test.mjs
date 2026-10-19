@@ -10,7 +10,12 @@ import { createCallDeadline } from '../call-deadline.mjs';
 import { workspaceRoot } from '../workspace.mjs';
 const reply = structuredContent => ({content:[{type:'text',text:JSON.stringify(structuredContent)}],structuredContent});
 const base = {name:'ssam',root:workspaceRoot,startedAt:'2026-10-14T00:00:00Z',release:{head:'a'.repeat(40),facadeSha256:'1'.repeat(64),catalogSha256:'2'.repeat(64),launcherSha256:null}};
-async function setup(t, bootstrap) {
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+// The detached write of these tests is a write outside the delivery family (o11_access: it answers running at the deadline).
+// Owner decision (2026-10-18): a delivery (o11_publish) answers when it ends; past the deadline it is kept, and the release
+// check and the doctor protect it while its original call waits (the last test).
+const WRITE = 'o11_access';
+async function setup(t, bootstrap, tool = WRITE) {
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'cx12-release-'));
   const registered=new Map(); let current=base;
   const bootDeadline=bootstrap ? createCallDeadline({root,timeoutMs:35}) : null;
@@ -21,19 +26,19 @@ async function setup(t, bootstrap) {
     identity:{started:base,read:()=>current,cacheMs:0,launchCwd:workspaceRoot}}});
   t.after(async()=>{await server.close();fs.rmSync(root,{recursive:true,force:true});});
   let finish;const work=new Promise(resolve=>{finish=resolve;});let calls=0;
-  server.registerTool('o11_publish',{inputSchema:fromJsonSchema({type:'object',properties:{module:{type:'string'}}})},async()=>{calls++;await work;return reply({ok:true});});
+  server.registerTool(tool,{inputSchema:fromJsonSchema({type:'object',properties:{module:{type:'string'}}})},async()=>{calls++;await work;return reply({ok:true});});
   const invoke=(name,args={})=>registered.get(name)(args,{mcpReq:{signal:new AbortController().signal}});
   return {invoke,finish,calls:()=>calls,change:kind=>{current={...base,release:{...base.release,[kind+'Sha256']:'3'.repeat(64)}};},
-    resume:args=>bootstrap ? bootDeadline.wrap('o11_publish',server.ssamHandlers.get('o11_publish'))(args) : invoke('o11_publish',args),
-    start:()=>bootstrap ? bootDeadline.wrap('o11_publish',server.ssamHandlers.get('o11_publish'))({module:'M'}) : invoke('o11_publish',{module:'M'})};
+    resume:args=>bootstrap ? bootDeadline.wrap(tool,server.ssamHandlers.get(tool))(args) : invoke(tool,args),
+    start:()=>bootstrap ? bootDeadline.wrap(tool,server.ssamHandlers.get(tool))({module:'M'}) : invoke(tool,{module:'M'})};
 }
 for(const kind of ['facade','catalog']) for(const bootstrap of [false,true]) test(`R3 ${kind}: ${bootstrap?'cached':'core'} deadline protects detached write and doctor`,async t=>{
   const h=await setup(t,bootstrap),running=(await h.start()).structuredContent;
   assert.equal(running.state,'running');h.change(kind);
-  const refusal=(await h.invoke('o11_publish',{module:'N'})).structuredContent;
+  const refusal=(await h.invoke(WRITE,{module:'N'})).structuredContent;
   const doctor=(await h.invoke('ssam_doctor')).structuredContent;
   for(const value of [refusal,doctor]) {
-    assert.ok(value.tasks?.some(task=>task.id===running.task.id && task.tool==='o11_publish' && task.isWrite===true),JSON.stringify(value));
+    assert.ok(value.tasks?.some(task=>task.id===running.task.id && task.tool===WRITE && task.isWrite===true),JSON.stringify(value));
     assert.equal(value.continuation.tool,running.continuation.tool);
     assert.deepEqual(value.continuation.arguments,running.continuation.arguments);
     assert.match(value.next,/launcher.*automatically.*all.*finish/i);
@@ -45,20 +50,39 @@ for(const kind of ['facade','catalog']) for(const bootstrap of [false,true]) tes
 });
 test('R3 idle release response keeps its restart and doctor continuation',async t=>{
  const h=await setup(t,false);h.change('facade');
- for(const name of ['o11_publish','ssam_doctor']) {
-   const v=(await h.invoke(name,name==='o11_publish'?{module:'N'}:{})).structuredContent;
+ for(const name of [WRITE,'ssam_doctor']) {
+   const v=(await h.invoke(name,name===WRITE?{module:'N'}:{})).structuredContent;
    assert.equal(v.next,RESTART_NEXT);assert.equal(v.continuation.tool,'ssam_doctor');assert.equal(v.tasks,undefined);
  }
  h.finish();
 });
 test('R3 doctor lists every detached write even before the identity changes',async t=>{
   const h=await setup(t,false),first=(await h.start()).structuredContent;
-  const second=(await h.invoke('o11_publish',{module:'Second'})).structuredContent;
+  const second=(await h.invoke(WRITE,{module:'Second'})).structuredContent;
   const value=(await h.invoke('ssam_doctor')).structuredContent;
   assert.deepEqual(value.tasks.map(task=>task.id).sort(),[first.task.id,second.task.id].sort());
-  assert.ok(value.tasks.every(task=>task.tool==='o11_publish' && task.isWrite===true && task.continuation.arguments.continueTask===task.id));
+  assert.ok(value.tasks.every(task=>task.tool===WRITE && task.isWrite===true && task.continuation.arguments.continueTask===task.id));
   assert.equal(value.continuation.arguments.continueTask,first.task.id);
   assert.match(value.next,/if.*release.*changed/i);assert.ok(!JSON.stringify(value).includes(RESTART_NEXT));
   h.finish();await h.resume(first.continuation.arguments);await h.resume(second.continuation.arguments);
   assert.equal(h.calls(),2);
+});
+for(const bootstrap of [false,true]) test(`R3 ${bootstrap?'cached':'core'} deadline: a delivery kept past the deadline is protected like a detached write while its original call waits`,async t=>{
+  const h=await setup(t,bootstrap,'o11_publish');
+  const original=h.start();
+  await sleep(120); // past the deadline (35 ms): the delivery is kept, not answered
+  h.change('facade');
+  const refusal=(await h.invoke('o11_publish',{module:'N'})).structuredContent;
+  const doctor=(await h.invoke('ssam_doctor')).structuredContent;
+  for(const value of [refusal,doctor]) {
+    const kept=value.tasks?.find(task=>task.tool==='o11_publish' && task.isWrite===true);
+    assert.ok(kept,JSON.stringify(value));
+    assert.deepEqual(value.continuation.arguments,{continueTask:kept.id});
+    assert.match(value.next,/launcher.*automatically.*all.*finish/i);
+    assert.ok(!JSON.stringify(value).includes(RESTART_NEXT));
+  }
+  h.finish();
+  assert.deepEqual((await original).structuredContent,{ok:true},'the original call answers the final result');
+  const idle=(await h.invoke('ssam_doctor')).structuredContent;
+  assert.equal(idle.next,RESTART_NEXT);assert.equal(h.calls(),1);
 });

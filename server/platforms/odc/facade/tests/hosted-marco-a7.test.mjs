@@ -2,7 +2,8 @@
 // customer and coherent on a hosted server. One test per adjustment:
 // - CX11 P: a hosted session serves the profile all (every tool of hosted/tools.json), whatever profile is asked.
 // - CX11 L: the hosted tools/list is the local projection; a tool whose part is off gets its note in front of it.
-// - CX11 I: the hosted instructions never name ssam_code (unavailable hosted), the local ones do.
+// - CX11 I: the hosted instructions never name ssam_code while it is unavailable hosted, the local ones do (a8: served hosted,
+//   the hosted rules are the local ones; K1 and B1 follow the same switch, hosted/served.mjs).
 // - M6: a hosted ssam_discover never marks a tool of another profile and never answers a path of the server.
 // - SD: the Studio's defaults of the screen reading are kept in the customer's own folder by every customer process, and
 //   the processes the server shares between customers keep none on disk.
@@ -137,22 +138,32 @@ test('CX11 L: the hosted tools/list is the local projection; a tool whose part i
   } finally { await remote.close(); await local.close(); }
 });
 
-test('CX11 I: the hosted instructions never name ssam_code (unavailable hosted); the local ones do, and both keep the session rules', async () => {
+// a8 (owner request 18/10): ssam_code is served hosted, so the hosted session rules are the local ones; while its class in
+// hosted/tools.json is unavailable (the switch, hosted/served.mjs), they leave it out as before.
+test('CX11 I: the hosted session rules name ssam_code while it is served hosted (a8), never while it is not; both keep the session rules', async () => {
   const context = hosted();
   const remote = await hostedServer(context);
   const local = await createSsamServer({ profile: 'all' });
+  const { serverInstructions, HOSTED_OFF_RULES } = await import('../server-instructions.mjs');
+  const { codeServedHosted, overrideCodeServed } = await import('../hosted/served.mjs');
   try {
+    assert.equal(codeServedHosted(), true, 'served by hosted/tools.json');
     const said = remote.server.ssamInstructions;
-    // The session rules name no ssam_code; the hosted paragraph names it only as unavailable.
     const rules = said.slice(0, said.indexOf('This SSAM server is hosted'));
     assert.ok(rules.length > 0, 'the session rules come first');
-    assert.doesNotMatch(rules, /ssam_code/);
-    assert.deepEqual([...said.matchAll(/ssam_code[^.:;]*/g)].map(m => m[0]), ['ssam_code is unavailable here too'], 'ssam_code only as unavailable');
+    assert.match(rules, /mcp__ssam__ssam_code/);
+    assert.ok(local.ssamInstructions.startsWith(serverInstructions({ profile: 'all' })), 'the local rules');
+    assert.equal(serverInstructions({ profile: 'all', hosted: true }), serverInstructions({ profile: 'all' }), 'served: the hosted rules are the local ones');
+    assert.doesNotMatch(said, /ssam_code is unavailable/);
     assert.match(said, /This SSAM server is hosted/);
     assert.match(said, /ssam_discover \{intent,lane\}/);
-    assert.match(local.ssamInstructions, /mcp__ssam__ssam_code/);
-    const { serverInstructions, HOSTED_OFF_RULES } = await import('../server-instructions.mjs');
     assert.deepEqual([...HOSTED_OFF_RULES], ['code', 'code-parts', 'plan']);
+    const restore = overrideCodeServed(false);
+    try {
+      const off = serverInstructions({ profile: 'all', hosted: true });
+      assert.doesNotMatch(off, /ssam_code/, 'not served: the rules leave ssam_code out (a7)');
+      assert.ok(off.length <= 2000);
+    } finally { restore(); }
     assert.ok(serverInstructions({ profile: 'all', hosted: true }).length <= 2000);
   } finally { await remote.close(); await local.close(); }
 });
@@ -274,8 +285,11 @@ test('R1: hosted, a job binds the producers it names only to captures of the cus
   assert.deepEqual(within(b, () => odcCapturesForJob(job, [], { odcRoot: jobOdcRoot() })), [], 'B finds no capture of A');
 });
 
-test('K1: a hosted work packet never sends its work to ssam_code (unavailable hosted): the lane\'s delivery tool, no plan, no code card', async () => {
+// a8: served hosted, a hosted packet is the local one (the code form, the plan for six or more elements); with the switch off
+// (hosted/served.mjs) it goes back to the lane's delivery tool, no plan, no code card (a7 K1).
+test('K1: a hosted work packet sends its work to ssam_code while it is served hosted (a8), to the lane\'s delivery tool while it is not', async () => {
   const { nextSection } = await import('../work-packet.mjs');
+  const { overrideCodeServed } = await import('../hosted/served.mjs');
   const route = { id: 'logic.flow', form: 'ssam-flow/1', code: { read: { tool: 'ssam_map', arguments: { view: 'flow', target: '<Module>' } },
     write: { tool: 'ssam_code', arguments: { lane: 'o11', action: 'write', part: 'logic', module: '<Module>' } } } };
   const input = lane => ({ lane, intent: 'change the action ZZTotal and add six actions ZZA ZZB ZZC ZZD ZZE ZZF', module: { digest: { module: { name: 'ZZModule' } } }, textRoute: route });
@@ -284,15 +298,21 @@ test('K1: a hosted work packet never sends its work to ssam_code (unavailable ho
     const local = nextSection(input(lane));
     assert.equal(local.deliver.tool, 'ssam_code', lane + ': locally the code form, as in the product');
     const remote = within(context, () => nextSection(input(lane)));
-    assert.equal(remote.deliver.tool, lane === 'o11' ? 'o11_deliver' : 'studio_deliver', lane);
+    assert.deepEqual(remote, local, lane + ': served hosted, the same packet section');
     assert.equal(remote.deliver.arguments.module, 'ZZModule');
-    assert.equal(remote.plan, undefined); assert.equal(remote.code, undefined);
-    assert.doesNotMatch(JSON.stringify(remote), /ssam_code/, lane);
+    const restore = overrideCodeServed(false);
+    try {
+      const off = within(context, () => nextSection(input(lane)));
+      assert.equal(off.deliver.tool, lane === 'o11' ? 'o11_deliver' : 'studio_deliver', lane);
+      assert.equal(off.plan, undefined); assert.equal(off.code, undefined);
+      assert.doesNotMatch(JSON.stringify(off), /ssam_code/, lane);
+    } finally { restore(); }
   }
 });
 
-test('B1 (review a7): a hosted text route names its read and its delivery call, never the code form of ssam_code; locally it does', async () => {
+test('B1 (review a7): a hosted text route names the code form of ssam_code while it is served hosted (a8), never while it is not', async () => {
   const { sectionOf, TEXT_ROUTE_IDS } = await import('../text-routes.mjs');
+  const { overrideCodeServed } = await import('../hosted/served.mjs');
   const context = hosted();
   let wired = 0;
   for (const id of TEXT_ROUTE_IDS) for (const lane of ['o11', 'odc']) {
@@ -300,9 +320,14 @@ test('B1 (review a7): a hosted text route names its read and its delivery call, 
     const local = sectionOf(route, lane);
     const remote = within(context, () => sectionOf(route, lane));
     if (local.wired) { wired++; assert.ok(local.code, id + ' ' + lane + ': locally the code form, as in the product'); }
-    assert.equal(remote.code, undefined, id + ' ' + lane);
-    assert.doesNotMatch(JSON.stringify(remote), /ssam_code/, id + ' ' + lane);
-    assert.deepEqual(remote.call, local.call, id + ' ' + lane + ': the same delivery call');
+    assert.deepEqual(remote, local, id + ' ' + lane + ': served hosted, the same route');
+    const restore = overrideCodeServed(false);
+    try {
+      const off = within(context, () => sectionOf(route, lane));
+      assert.equal(off.code, undefined, id + ' ' + lane);
+      assert.doesNotMatch(JSON.stringify(off), /ssam_code/, id + ' ' + lane);
+      assert.deepEqual(off.call, local.call, id + ' ' + lane + ': the same delivery call');
+    } finally { restore(); }
   }
   assert.ok(wired > 0, 'wired routes: ' + wired);
 });

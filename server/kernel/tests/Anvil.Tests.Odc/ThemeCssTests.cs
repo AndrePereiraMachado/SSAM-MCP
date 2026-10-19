@@ -20,8 +20,8 @@ public class ThemeCssTests
 {
     private static readonly string Root = FindRoot();
     private static readonly string Work = Path.Combine(Root, ".local", "lane-odc", "test-work");
-    private const string Marker = "/* anvil:theme-css-halves */";
-    private const string Written = Marker + "\n.anvil-halves { color: #0066db; }";
+    private const string Marker = "/* theme-css-halves */";
+    private const string Written = Marker + "\n.theme-halves { color: #0066db; }";
 
     /// <summary>A invariante da plataforma: a efetiva e gerada + CRLF + autor. E o que o Studio recalcula em
     /// CalculateFinalCssSource e o que o kernel repoe depois de escrever.</summary>

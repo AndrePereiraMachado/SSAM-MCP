@@ -13,7 +13,9 @@ combinada mudou de novo 2: `docs/FASE2-AGENTE.md` (Service Studio 11.55.92, a se
 recusa também as ferramentas só do servidor e esvazia os caches dela). A branch `feat/studio-build-identity` (A-M1) mudou
 `docs/FASE2-AGENTE.md` de novo (seção 7: identidade do Studio pelo build de 4 números, uma recusa por direção, avisos
 `studioBuildDiffers` e `studioNotServed`). A `server/r27-marco-a7` levou às duas caixas o `docs/FASE2-AGENTE.md` da linha
-`fase4-26/marco-a7` (`7b14280a`): a classificação das ferramentas do marco-a5 e os textos dos marcos a6 e a7.
+`fase4-26/marco-a7` (`7b14280a`): a classificação das ferramentas do marco-a5 e os textos dos marcos a6 e a7. A
+`server/r28-marco-a8` levou às duas caixas o `docs/FASE2-AGENTE.md` e o `docs/O11-BRIDGE-FINA.md` da `fase4-26/marco-a8`
+(`52562a86`): o `ssam_code` hospedado e o Manage Dependencies da fina por código.
 
 ## A regra
 
@@ -69,8 +71,8 @@ Sem saída, está tudo igual.
 | Arquivo (relativo à caixa) | sha256 (conteúdo com fim de linha LF) |
 | --- | --- |
 | `docs/DISTRIBUICAO.md` | `bc87ebe53ef2230f89d4ceb1162e5e84b9eecc0e2563e93905eccb78fbc9d5b1` |
-| `docs/FASE2-AGENTE.md` | `6691fb0ef1e281de844fc1c4a5fba684cd8e6ede20063199dfac731e59c85d46` |
-| `docs/O11-BRIDGE-FINA.md` | `c7f24e4ad0e2b537394a537d103ad5b0654745c4c692965cdec5cc8fcc80a25d` |
+| `docs/FASE2-AGENTE.md` | `17f99b6a0f27392c5bd94874e7143307f82ae72ce2935f1a1a8a673ba66ff992` |
+| `docs/O11-BRIDGE-FINA.md` | `5300a92480c3f0393d2adb217321ed06cfb888f5da5f19f71225a86515362a3b` |
 | `docs/PROVAS-AO-VIVO.md` | `b66c259ac7cb293fbc7c7165794885ac6462598a2e65e2753c85f3646d99979a` |
 | `docs/exemplos/mcp-cliente-hospedado.json` | `cabbe38805716878f03def98527dd5234b2dcfd9187df8c773305f80d8d6fa28` |
 

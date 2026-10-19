@@ -30,40 +30,66 @@ public sealed class BridgeCommandScopeTests
 {
     private static readonly string Root = JobRunner.RepoRoot(Path.GetDirectoryName(typeof(BridgeCommandScopeTests).Assembly.Location)!)!;
 
-    /// <summary>The code that runs inside the Studio: the bridge, and the Manage Dependencies it runs (Adapters.SS11).</summary>
+    /// <summary>The code that runs inside the Studio: the bridge, and the Manage Dependencies it runs (Adapters.SS11).
+    /// servidor/fase4-26 a8 (the next agent pack): the thin bridge the agent pack loads into the customer's Studio
+    /// (kernel/src/Anvil.Bridge.Thin) is scanned by the same rule, but for its two kernel-side copies: QuietCommand.cs is the
+    /// opener itself (the copy of Anvil.Core's, the one Command.Execute a scope may hold, ThinQuietCommandTests) and
+    /// ReferenceSelections.cs is the helper whose MergeInCurrentCommand runs only inside the caller's command, the copy of the
+    /// kernel's ReferenceSignatureMerge.cs, which the product does not scan either; its call sites are scanned here.</summary>
     private static IEnumerable<string> StudioSideSources()
     {
-        var bridge = Path.Combine(Root, "src", "Anvil.Bridge");
-        foreach (var file in Directory.EnumerateFiles(bridge, "*.cs", SearchOption.AllDirectories))
+        string[] KernelSideCopies = ["QuietCommand.cs", "ReferenceSelections.cs"];
+        foreach (var project in new[] { "Anvil.Bridge", "Anvil.Bridge.Thin" })
         {
-            var relative = Path.GetRelativePath(bridge, file).Replace('\\', '/');
-            if (relative.StartsWith("bin/", StringComparison.Ordinal) || relative.StartsWith("obj/", StringComparison.Ordinal)) continue;
-            yield return file;
+            var bridge = Path.Combine(Root, "src", project);
+            foreach (var file in Directory.EnumerateFiles(bridge, "*.cs", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(bridge, file).Replace('\\', '/');
+                if (relative.StartsWith("bin/", StringComparison.Ordinal) || relative.StartsWith("obj/", StringComparison.Ordinal)) continue;
+                if (project == "Anvil.Bridge.Thin" && KernelSideCopies.Contains(relative, StringComparer.Ordinal)) continue;
+                yield return file;
+            }
         }
         var manage = Path.Combine(Root, "src", "Anvil.Core", "Adapters.SS11", "ManageDependencies.cs");
         if (File.Exists(manage)) yield return manage;
     }
 
-    /// <summary>servidor/fase4-26 a7, rule D of the merge: the server line keeps kernel/src/Anvil.Bridge with the bytes of the
-    /// agent pack's bridge (the thin bridge links six of its files and refuses Anvil.Core), so fix-ext-refs (the signature merge
-    /// inside QuietCommand, tree.Merge on the command's thread) is not in it: these three violations of its MergeHandler.cs are
-    /// the known gap, the same in the thin bridge of the pack (C:\t\vps-a7\LINHA.md). Each must still be there (the line drops
-    /// it when it takes the fix with a new agent pack); any other violation fails as in the product.</summary>
+    /// <summary>servidor/fase4-26 a7, rule D of the merge: the server line keeps kernel/src/Anvil.Bridge with the bytes it had
+    /// (its files have release overlays and the thin bridge links six of them), so fix-ext-refs (the signature merge inside
+    /// QuietCommand, tree.Merge on the command's thread) is not in that full bridge: these three violations of its MergeHandler.cs
+    /// are the known gap of a bridge no customer loads (the full bridge stays the owner's local mode). Each must still be there;
+    /// any other violation fails as in the product. a8: the thin bridge of the agent pack has the fix (no kept violation).</summary>
     private static readonly string[] KeptByTheServerLine = [
-        "MergeHandler.cs: line 231: a raw Command.Execute",
-        "MergeHandler.cs: line 233: ReferenceSignatureMerge.MergeInCurrentCommand outside a command",
-        "MergeHandler.cs: line 236: CompareAndMergeCommands.Merge",
+        "Anvil.Bridge/MergeHandler.cs: line 231: a raw Command.Execute",
+        "Anvil.Bridge/MergeHandler.cs: line 233: ReferenceSignatureMerge.MergeInCurrentCommand outside a command",
+        "Anvil.Bridge/MergeHandler.cs: line 236: CompareAndMergeCommands.Merge",
     ];
+
+    /// <summary>The source's folder and name under src (Anvil.Bridge/MergeHandler.cs, Anvil.Bridge.Thin/MergeHandler.cs).</summary>
+    private static string Named(string file) => Path.GetRelativePath(Path.Combine(Root, "src"), file).Replace('\\', '/');
 
     [Fact]
     public void EveryModelMutationOfTheBridgeRunsInsideAStudioCommandItOpened()
     {
         var violations = new List<string>();
         foreach (var file in StudioSideSources())
-            violations.AddRange(CommandScope.Violations(File.ReadAllText(file)).Select(v => Path.GetFileName(file) + ": " + v));
+            violations.AddRange(CommandScope.Violations(File.ReadAllText(file)).Select(v => Named(file) + ": " + v));
         foreach (var kept in KeptByTheServerLine) Assert.Contains(violations, v => v.StartsWith(kept, StringComparison.Ordinal));
         violations.RemoveAll(v => KeptByTheServerLine.Any(kept => v.StartsWith(kept, StringComparison.Ordinal)));
         Assert.True(violations.Count == 0, "Model mutations outside a Studio command the bridge opened:\n" + string.Join("\n", violations));
+    }
+
+    /// <summary>a8: the rule reads the thin bridge the agent pack loads, its merge and its Manage Dependencies included; only
+    /// the two kernel-side copies stay out (StudioSideSources).</summary>
+    [Fact]
+    public void TheThinBridgeOfTheAgentPackIsScanned()
+    {
+        var scanned = StudioSideSources().Select(Named).ToList();
+        Assert.Contains("Anvil.Bridge.Thin/MergeHandler.cs", scanned);
+        Assert.Contains("Anvil.Bridge.Thin/ManageDependencies.cs", scanned);
+        Assert.Contains("Anvil.Bridge.Thin/Dispatch.cs", scanned);
+        Assert.DoesNotContain("Anvil.Bridge.Thin/QuietCommand.cs", scanned);
+        Assert.DoesNotContain("Anvil.Bridge.Thin/ReferenceSelections.cs", scanned);
     }
 
     [Fact]

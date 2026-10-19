@@ -45,6 +45,7 @@ import { coveredBy } from './text-packet.mjs';
 import { fitComponents } from './environment-components.mjs';
 import { planSize, PLAN_MIN_ITEMS } from './code-plan.mjs';
 import { hostedContext } from './executor.mjs';
+import { codeServedHosted } from './hosted/served.mjs';
 
 export const PACKET_SCHEMA = 'ssam-packet/1';
 export const PACKET_ORDER = ['module', 'text', 'environment', 'capabilities', 'example', 'rules', 'next'];
@@ -462,10 +463,11 @@ export function nextSection({ lane, intent = '', module = null, operations = nul
     ? { tool: 'o11_deliver', arguments: { module: name, job: { ops }, authorize: '<the user\'s own words, or none with a standing grant>' } }
     : { tool: 'studio_deliver', arguments: { feature: '<Feature>', module: name, job: { ops }, owners: ['<Owner>'], changes: ['<Change>'] } };
   // A data, action or screen intent is written as code (ssam_code, the same delivery underneath); the JSON ops stay the way
-  // for what the code forms do not write. servidor/fase4-26 a7 (K1): ssam_code is unavailable on the hosted server
-  // (hosted/tools.json, SSAM_CODE_HOSTED_PENDING), so a hosted packet never sends its work there: its delivery is the JSON
-  // job of the lane's delivery tool, with no plan and no code card (the text forms are read with ssam_map views).
-  const hosted = hostedContext() !== null;
+  // for what the code forms do not write. servidor/fase4-26 a7 (K1): while ssam_code is unavailable on the hosted server
+  // (hosted/tools.json), a hosted packet never sends its work there: its delivery is the JSON job of the lane's delivery
+  // tool, with no plan and no code card (the text forms are read with ssam_map views). a8: ssam_code is served hosted, so a
+  // hosted packet is the local one; the switch is its class in hosted/tools.json (hosted/served.mjs).
+  const hosted = hostedContext() !== null && !codeServedHosted();
   const code = hosted ? null : codeOfRoute(textRoute, lane, name);
   // A generator writes the whole family the intent asks for (a REST API from its URLs, the standard actions of the entities;
   // 2026-10-13): its one op is the job and its card next.generator, the same way for each (generators.mjs generatorFor).

@@ -5,7 +5,7 @@
  "ops": [
   {"op": "get", "target": "IMobileTheme:InsuranceApp", "_why": "before: StyleSheet = GeneratedStyleSheet + CRLF + UserStyleSheet"},
   {"op": "set", "target": "IMobileTheme:InsuranceApp", "prop": "StyleSheet",
-   "value": "/* anvil:theme-css-halves */\n.anvil-halves { color: #0066db; }",
+   "value": "/* theme-css-halves */\n.theme-halves { color: #0066db; }",
    "_why": "replaces the AUTHOR's CSS; to append, read the text first and write the whole (or use the html op, which already does the cycle)"},
   {"op": "get", "target": "IMobileTheme:InsuranceApp", "_why": "after: UserStyleSheet is the new text and StyleSheet is generated + CRLF + that text"}
  ]

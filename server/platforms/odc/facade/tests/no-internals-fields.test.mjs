@@ -154,6 +154,128 @@ test('the documentation a licensee is served names neither the kernel nor its CL
   assert.match(def.description, /\(SSAM signature\), with <server> as set\./);
 });
 
+// ---- round 7, the port from servidor/fase4-26 (a7 phase 3, review vps-a7-2 B4): the layout of the Linux image too
+test('a path of the Linux image (its temp folder, its /data volumes) is the server\'s; a JSON pointer stays (port of a7 B4)', () => {
+  const runtime = { ok: false, code: 'X', error: 'cannot read /tmp/ssam-x/answers/a.json nor /data/server/state/day.json; see /data/results and /data/html of the answer' };
+  const out = licensee('ssam_job', runtime);
+  assert.deepEqual(shown(findings(out)), []);
+  assert.match(out.error, /^cannot read <server> nor <server>; see \/data\/results and \/data\/html of the answer$/);
+  const report = { ok: true, cache: '/data/cache/discovery/o11.json', friction: '/data/friction/queue' };
+  assert.deepEqual(licensee('ssam_doctor', report), { ok: true, cache: '<server>', friction: '<server>' });
+});
+
+// ---- round 7 (review C:\t\revisoes\vps-a7-3\REVISAO.md, B1 and B2, and the same family the sweep found): no kernel layout,
+// CLI flag or internal proof level reaches a licensee in any field
+const CLI_FLAG = /(?<![\w-]|var\()--[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?![\w-]*\s*:)/;
+const CODE_KEYS_R7 = new Set(['ops', 'patch', 'arguments', 'code', 'html', 'flow', 'ddl', 'content']);
+const flagsIn = (node, at = '', out = []) => {
+  if (Array.isArray(node)) node.forEach((v, i) => flagsIn(v, at + '/' + i, out));
+  else if (node && typeof node === 'object') for (const [k, v] of Object.entries(node)) {
+    if (CODE_KEYS_R7.has(k)) continue;
+    if (typeof v === 'string' && (CLI_FLAG.test(v) || /<kernel>/.test(v))) out.push(at + '/' + k + ' ' + v.slice(Math.max(0, v.search(CLI_FLAG) - 50), v.search(CLI_FLAG) + 50));
+    else flagsIn(v, at + '/' + k, out);
+  }
+  return out;
+};
+const BASE_REASON = "the base or a producer of the job could not be loaded (ArgumentException: base 'C:\\Users\\cust\\mybase.oml' points to an OML outside tests/fixtures and outside the SSAM capture folders (<kernel>/.local/**/snapshots|downloads|download|download-app|work, platforms/odc/snapshots): a loose file another run may rewrite. Use job:<name>, a fixture, a capture of those folders (o11_studio snapshot, o11_environment download), or bind a snapshot on the command: --base <oml> / --producer <Name>=<oml>): only the job was read, so the base check, the apply and the Verify did not run";
+test('SSAM\'s prose in any *Reason/*Message field names no kernel layout, suite folder or CLI flag (B1)', () => {
+  const job = { ok: false, code: 'PREFLIGHT_REFUSED', verifyRan: false, verifyReason: BASE_REASON, closeReason: 'see C:\\srv\\ssam\\kernel\\.local\\work\\x.json', skipMessage: 'skipped by Anvil.Core.JobRunner' };
+  const out = licensee('ssam_job', job);
+  assert.deepEqual([...shown(findings(out)), ...flagsIn(out)], []);
+  assert.match(out.verifyReason, /o11_studio snapshot, o11_environment download/, 'what to do stays');
+  assert.match(out.verifyReason, /only the job was read, so the base check, the apply and the Verify did not run$/);
+  const check = { ok: true, verifyRan: false, data: { verifyReason: 'only the job was read (no base loaded): the base check, the apply and the Verify did not run; `apply --job <job> --base <oml> --out <oml>` runs every phase and refuses once with all of them' } };
+  const shownCheck = licensee('ssam_reference', check, { kind: 'check-job' });
+  assert.deepEqual(flagsIn(shownCheck), []);
+  assert.equal(shownCheck.data.verifyReason, 'only the job was read (no base loaded): the base check, the apply and the Verify did not run');
+});
+test('a CLI flag leaves SSAM\'s documentation; a tool form, a CSS custom property and code stay (B1, the family)', () => {
+  const doc = { ok: true, kind: 'example', lane: 'odc',
+    description: 'On the blank Mobile app (create-blank --kind Mobile), a public service action. The output is the fixture p.oml (apply with --base blank.oml --out p.oml). Bind the producer with ssam_job captureProducers:["<Module>"] or --producer <Module>=<snapshot.oml>.',
+    rules: ['Style the runtime box, not the bare tag (api --op html: document.runtime); a visual warning names its check.', 'Set `--color-primary` in the theme; var(--color-primary) reads it.'],
+    text: 'Every detection reads O11 jobs. In a run with `--platform odc`, the job stages do not run. The rest applies.',
+    error: "ArgumentException: block 'Button' not in OutSystemsUI 2.28.1; try --find",
+    limits: [{ text: 'The contract is the signature in the capture (context.signatures with --app, or studio_inspect {target:"<capture>"}).' }],
+    data: { ops: [{ op: 'theme', value: '.x { --crv-navy: #142446; color: var(--crv-navy); }' }] } };
+  const out = licensee('ssam_reference', doc, { kind: 'example' });
+  assert.deepEqual(flagsIn(out), []);
+  // (round 7b, review no-internals-7 B4: a pointer to SSAM's own reference and a producer binding read as the MCP form)
+  assert.equal(out.description, 'On the blank Mobile app, a public service action. The output is the fixture p.oml. Bind the producer with ssam_job captureProducers:["<Module>"] or producers:{"<Module>":"<snapshot.oml>"}.');
+  assert.equal(out.rules[0], 'Style the runtime box, not the bare tag (ssam_reference {kind:"api", query:{op:"html"}}: document.runtime); a visual warning names its check.');
+  assert.equal(out.rules[1], doc.rules[1], 'a CSS custom property is no flag');
+  // (round 7b, review no-internals-7 MEDIUM 2: the run of a lane reads as the lane, so what holds on ODC stays)
+  assert.equal(out.text, 'Every detection reads O11 jobs. In a run on ODC, the job stages do not run. The rest applies.');
+  assert.equal(out.error, "ArgumentException: block 'Button' not in OutSystemsUI 2.28.1; try query:{find:\"<words>\"}");
+  assert.equal(out.limits[0].text, 'The contract is the signature in the capture (context.signatures with app, or studio_inspect {target:"<capture>"}).');
+  assert.deepEqual(out.data.ops, doc.data.ops, 'code stays');
+});
+test('an internal proof level reads the seal in any field, under a code key and in a packet\'s patch; a packet\'s prose too (B2)', () => {
+  const discover = { ok: true, schemaVersion: 'ssam-discovery/1', bindings: [{ rule: 'set Action', job: 'smoke-data-logic', op: 41, level: 'C-executed-historical' }, { rule: 'r', level: 'C-suite' }],
+    native: [{ type: 'IServerAction', evidence: 'proven-historical' }] };
+  const out = licensee('ssam_discover', discover);
+  assert.deepEqual(shown(findings(out)), []);
+  assert.deepEqual(out.bindings.map(b => b.level), ['proven', 'proven']);
+  assert.equal(out.bindings[0].job, 'smoke-data-logic', 'an example id stays');
+  const part = { ok: true, schemaVersion: 'ssam-packet-part/1', section: 'rules', missing: [
+    { op: 'add', path: '/items/1/level', value: 'C-executed-historical' },
+    { op: 'add', path: '/items/1/rule', value: "The owner's decision (2026-10-09), a kernel rule on both lanes. Fetch the related data at once, before the loop." },
+    { op: 'add', path: '/items/2/proofs', value: [{ job: 'x', provenance: { kernelSha256: 'ab' } }] },
+    { op: 'add', path: '/chosen', value: 'by the words of the intent' }] };
+  const shownPart = licensee('ssam_discover', part);
+  assert.deepEqual(shown(findings(shownPart)), []);
+  assert.equal(shownPart.missing.find(m => m.path === '/items/1/level').value, 'proven');
+  assert.match(shownPart.missing.find(m => m.path === '/items/1/rule').value, /Fetch the related data at once, before the loop\.$/);
+  assert.equal(shownPart.missing.some(m => m.path === '/items/2/proofs'), false, 'an internal field of the documentation is left out of the patch too');
+  assert.equal(shownPart.missing.find(m => m.path === '/chosen').value, 'by the words of the intent');
+});
+test('a text cut at its end, an html example\'s file and a job\'s _why note name nothing internal (the sweep of round 7)', () => {
+  const doc = { ok: true, kind: 'example', lane: 'o11', matches: [
+    { id: 'a', description: 'UsdRate returns Rate = Rates.USD (written by an LLM with no context in the cold session E of 2026-09-04, passed the first...' },
+    { id: 'b', description: 'the order that makes it pass was only measured in O11 (tests/jobs/block-events-delete-reactive.j…' }],
+    files: [{ path: 'tests/html/dcips-approval.css' }],
+    data: { ops: [{ op: 'delete', _why: 'The refusal with the consumer linked is in tests/jobs-odc-negative/delete-static-record-in-use.json; the two tie at Rank 2 (Verbs.cs:877-880).' }] } };
+  const out = licensee('ssam_reference', doc, { kind: 'example' });
+  assert.deepEqual(shown(findings(out)), []);
+  assert.match(out.matches[0].description, /^UsdRate returns Rate = Rates\.USD…$/);
+  // (round 7b, review no-internals-7 B5: tests/jobs-odc-negative is no folder ssam_reference serves: no id that answers
+  // EXAMPLE_NOT_FOUND)
+  assert.match(out.data.ops[0]._why, /^The refusal with the consumer linked is in an example of SSAM; the two tie at Rank 2\.?$/);
+});
+
+test('the origin of a fact in SSAM\'s documentation names neither the kernel\'s layout nor a suite job (the sweep of round 7)', () => {
+  const doc = { ok: true, schemaVersion: 'ssam-discovery/1', differences: { o11: [{ property: 'Schedule', origin: 'kernel/catalog/model-api-11.55.69.json ITimer (writable: Action, Description, Priority, Schedule, TimeoutInMinutes); tests/jobs-odc/timer-action.json description' }] } };
+  const out = licensee('ssam_discover', doc);
+  assert.deepEqual(shown(findings(out)), []);
+  assert.match(out.differences.o11[0].origin, /ITimer \(writable: Action, Description, Priority, Schedule, TimeoutInMinutes\); timer-action description$/, 'the fact stays');
+  // a runtime origin is the customer's (ssam_code problems): as it is
+  const code = { ok: false, problems: [{ code: 'X', origin: { at: 'files/1', file: 'C:\\work\\caller.flow' } }] };
+  assert.deepEqual(licensee('ssam_code', code).problems, code.problems);
+});
+
+test('the steps of round 7 keep the text whole: a folder of examples, a parenthetical left open, a period after a path', () => {
+  const doc = { ok: true, kind: 'example', lane: 'o11',
+    error: "no example 'timer-action' in tests/jobs, tests/jobs/examples or tests/html",
+    negative: [{ description: 'it must give ok=False with the expectError message (runs in tests/jobs-odc-negative/delete-logic-in-use.json. The clean path, with replace, is in delete-logic-consumers.' }],
+    matches: [{ id: 'x', description: 'Over the fixture, with stand-ins for the producer actions; generated by C:\\srv\\x\\gen.mjs --target fixture.' },
+      { id: 'y', description: 'Over the fixture; generated by scripts/gen-fixture.mjs --target fixture.' },
+      // a find cuts a description to its room without a mark
+      { id: 'z', description: 'Fx_GetUsdRate that returns Rate = Rates.USD (written by an LLM with no context in the cold session E of 2026-09-04, passed the first ti' }] };
+  const out = licensee('ssam_reference', doc, { kind: 'example' });
+  assert.equal(out.error, "no example 'timer-action' in the proven examples");
+  assert.match(out.negative[0].description, /The clean path, with replace, is in delete-logic-consumers\.$/, 'a parenthetical left open in a whole text keeps what follows');
+  assert.equal(out.matches[0].description, 'Over the fixture, with stand-ins for the producer actions; generated by <server>.');
+  assert.equal(out.matches[1].description, 'Over the fixture; generated by <server>.', 'a repository path leaves its period too');
+  assert.equal(out.matches[2].description, 'Fx_GetUsdRate that returns Rate = Rates.USD\u2026', 'a text cut without a mark inside an internal parenthetical');
+  assert.deepEqual(shown(findings(out)), []);
+  // a suite job in any folder of the suite is its name (tests/jobs-odc/examples-live/x.json)
+  const guidance = licensee('ssam_discover', { ok: true, schemaVersion: 'ssam-discovery/1', matches: [{ id: 'a', guidance: 'Proven in tests/jobs-odc/examples-live/odc-agents-example.json. Native model tests: kernel/tests/Anvil.Tests/X.cs.' }] });
+  // (round 7b, B5: a job of a folder ssam_reference does not serve reads as an example of SSAM, not as an id)
+  assert.equal(guidance.matches[0].guidance, 'Proven in a live example of SSAM. Native model tests: <server>.');
+  // and in any suite folder of jobs (jobs-live, as served in a discover guidance)
+  const live = licensee('ssam_discover', { ok: true, schemaVersion: 'ssam-discovery/1', matches: [{ id: 'a', guidance: 'Example: kernel/tests/jobs-live/odc-agents-example.json. See tests/jobs-live for the rest.' }] });
+  assert.equal(live.matches[0].guidance, 'Example: a live example of SSAM. See the proven examples for the rest.');
+});
+
 // ---- live
 async function session() {
   const { createSsamServer } = await import('../ssam.mjs');
@@ -221,6 +343,40 @@ test('live: the documentation the sweep found names neither the kernel nor its C
     }
     assert.deepEqual(problems, []);
   } finally { await s.close(); }
+});
+test('live: no kernel layout, CLI flag or internal proof level in the answers the sweep of round 7 found (B1, B2)', { skip, timeout: 900000 }, async () => {
+  const s = await session();
+  const dir = fs.mkdtempSync(path.join((await import('node:os')).tmpdir(), 'r7-loose-'));
+  const loose = path.join(dir, 'mybase.oml'); fs.writeFileSync(loose, 'not an oml');
+  const badOps = [{ op: 'create', type: 'NoSuchType', parent: '$x' }, { op: 'logic', data: { action: 'A', flow: 'Start -> End' } }];
+  try {
+    const problems = [];
+    const calls = [
+      ['ssam_job', { lane: 'o11', job: { description: 'x', base: loose, ops: badOps } }],
+      ['ssam_reference', { lane: 'o11', kind: 'check-job', query: { description: 'x', ops: [] } }],
+      ['ssam_discover', { lane: 'o11', intent: 'add an entity Customer with name and email', budgetBytes: 40960 }],
+      ['ssam_discover', { lane: 'odc', intent: 'create a mobile app', budgetBytes: 40960 }],
+      ['ssam_reference', { lane: 'o11', kind: 'rules', query: 'standards' }],
+      ['ssam_reference', { lane: 'o11', kind: 'ui-block', query: 'Button' }],
+      ['ssam_reference', { lane: 'o11', kind: 'recipe', query: { find: 'entity' } }],
+      ['ssam_reference', { lane: 'odc', kind: 'example', query: { find: 'process' } }],
+      ['ssam_reference', { lane: 'odc', kind: 'example', query: { id: 'jobs-odc/agent-definition-tools' } }],
+      ['ssam_reference', { lane: 'o11', kind: 'example', query: { id: 'jobs/examples/pat-consumer-reference-action' } }],
+      ['ssam_doctor', { lane: 'o11' }],
+    ];
+    for (const [name, args] of calls) {
+      const answer = await s.call(name, args);
+      for (const at of [...shown(findings(answer)), ...flagsIn(answer)]) problems.push(name + ' ' + JSON.stringify(args).slice(0, 80) + ' ' + at);
+    }
+    // a packet's parts (the patch that rebuilds its sections)
+    const base = { lane: 'o11', intent: 'create an entity Customer with name and email and its CRUD actions', limit: 8, packet: true };
+    const packet = await s.call('ssam_discover', base);
+    for (const expand of [...new Set(JSON.stringify(packet).match(/packet:(?:rules|capabilities|text):[^"]+/g) ?? [])]) {
+      const piece = await s.call('ssam_discover', { ...base, expand });
+      for (const at of [...shown(findings(piece)), ...flagsIn(piece)]) problems.push('packet ' + expand.slice(0, 20) + ' ' + at);
+    }
+    assert.deepEqual(problems, []);
+  } finally { await s.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 test('live: no internal name of the kernel or the project in the listing or any tool definition (LOW 1 of round 6)', { skip, timeout: 900000 }, async () => {
   const s = await session();

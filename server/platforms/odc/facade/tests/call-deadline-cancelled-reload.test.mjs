@@ -78,13 +78,19 @@ async function serverWith(root,tool,handler,lockMode) {
   return {server,run:handlers.get(tool)};
 }
 for(const tool of tools)for(const [outcome,final] of Object.entries(finals))for(const lockMode of ['real','passthrough']) {
-  test(`R3-2 server ${tool} ${outcome}: ${lockMode} lock preserves cancelled answer through reload`,async t=>{
+  // Re-review B2: each name says what it checks (a publication keeps no replay since round 3b).
+  const checks=tool==='studio_publish'?'after a reload a cancelled publication publishes again on the identical call (no replay)':'preserves cancelled answer through reload';
+  test(`R3-2 server ${tool} ${outcome}: ${lockMode} lock ${checks}`,async t=>{
     const root=rootFor(t),args=argsOf(tool);let runs=0,start,release;
     const started=new Promise(r=>start=r),gate=new Promise(r=>release=r);
     const first=await serverWith(root,tool,async()=>{runs++;start();await gate;return reply(final);},lockMode);
     t.after(()=>first.server.close());await seedCancelled(first.run,args,release,started,tasksDir(root));
     const second=await serverWith(root,tool,async()=>{runs++;return reply(fresh);},lockMode);t.after(()=>second.server.close());
     const answer=await second.run(args,{mcpReq:{signal:new AbortController().signal}});
+    // Round 3b (Integradora, 2026-10-18): a publication keeps no replay, as its content is the module open in the Studio,
+    // which no print covers: through the served handler, the identical call after its end publishes again, also when the
+    // earlier one was cancelled (its record keeps its answer for ssam_task). The deadline alone (above) keeps the CX12 rule.
+    if(tool==='studio_publish'){assert.equal(runs,2,'a publication runs again after its end');assert.deepEqual(value(answer),fresh);return;}
     assert.equal(runs,1,'server reload must deliver the saved answer without invoking the lock or handler again');
     assert.deepEqual(value(answer),final);
     assert.deepEqual(value(await second.run(args,{mcpReq:{signal:new AbortController().signal}})),fresh);assert.equal(runs,2);

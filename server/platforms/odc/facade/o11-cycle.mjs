@@ -140,15 +140,17 @@ export function signatureChangesOf(state) {
 
 // fix-ext-refs: the kernel's alignment of a rollback (Delivery.Alignment): what the Studio's own Manage Dependencies must
 // do, by producer, the capability it needs and whether the loaded bridge offers it.
-// servidor/fase4-26 (a7, E1): hosted, the customer's Service Studio runs the O11 bridge of the SSAM agent package, which does
-// not run the Studio's Manage Dependencies (refresh_references:add) yet: reopening the Studio loads the same bridge, so the
-// hosted answer names the agent package, and the producers as OML when every one is an eSpace module (never for an Extension).
+// servidor/fase4-26 (a7, E1): hosted, the customer's Service Studio runs the O11 bridge of the SSAM agent package: reopening the
+// Studio loads the same bridge, so the hosted answer names the agent package, and the producers as OML when every one is an
+// eSpace module (never for an Extension). a8 (the next agent pack): the current package's bridge runs the Studio's Manage
+// Dependencies (refresh_references:add); a bridge without it is an older package's, and the answer says the exact step.
 export function manageDependenciesHostedWhy(alignment) {
   const modules = alignment.add.length > 0 && alignment.add.every(a => (a.kind ?? 'eSpace').toLowerCase() === 'espace');
-  return 'The O11 bridge of the SSAM agent package does not run the Studio\'s own Manage Dependencies yet (capability ' + alignment.requires
-    + '; hosted, MANAGE_DEPENDENCIES_HOSTED_PENDING): reopening the Service Studio loads the same bridge. '
-    + (modules ? 'Deliver the job again with ' + alignment.add.map(a => a.producer).join(', ') + ' as OML (producers), so the candidate carries the signature the module has. '
-      : 'A delivery adds the elements of a new Extension or system producer version only with a new agent package. ')
+  return 'The O11 bridge this Service Studio loaded from the SSAM agent package does not run the Studio\'s own Manage Dependencies (capability ' + alignment.requires
+    + '; hosted, MANAGE_DEPENDENCIES_HOSTED_PENDING): it is an older agent package\'s bridge. Ask the user to install the current agent package and restart Service Studio'
+    + ' so the agent loads its bridge (reopening the Studio alone loads the same bridge); then deliver this job as a new delivery, which adds the elements through the Studio itself. '
+    + (modules ? 'Until then, deliver the job again with ' + alignment.add.map(a => a.producer).join(', ') + ' as OML (producers), so the candidate carries the signature the module has. '
+      : 'Until then, a delivery adds the elements of a new Extension or system producer version only that way. ')
     + 'Nothing was merged';
 }
 export function alignmentOf(alignment) {

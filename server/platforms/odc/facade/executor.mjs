@@ -267,6 +267,11 @@ export function hostedSpawnEnv(lane) {
   // reads a kept reading (html keys and text, a data text, an action's flow read) only of the capture it runs on
   // (ModuleIndexStore.OwnReadingsOnly).
   env.ANVIL_KEPT_READINGS = 'own';
+  // a8 (the e2e guard, with ssam_code's checks and data texts): that index is the server's, where its own readers keep it
+  // (SSAM_MODULE_INDEX_ROOT, absolute). Without it the kernel's store took the folder above the CLI, the code folder (/app in
+  // the image), and every customer's kernel wrote its readings there.
+  const indexRoot = process.env.SSAM_MODULE_INDEX_ROOT;
+  if (typeof indexRoot === 'string' && path.isAbsolute(indexRoot)) env.SSAM_MODULE_INDEX_ROOT = indexRoot;
   // servidor/fase4-26 (a7, SD): the Studio's defaults of the screen reading (kernel StudioDefaults, marco-a5 e8f4073f) are
   // measured on a disposable copy of the customer's module and kept per user profile (<profile>/.ssam-hybrid/studio-defaults,
   // whose file names the module and flow measured). Hosted, the customer's own folder (state/: internal, never read back by

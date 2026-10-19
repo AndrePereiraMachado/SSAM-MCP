@@ -38,6 +38,9 @@ internal sealed class ThinBridge(Func<string, JsonObject?, JsonObject> send)
         if (Refused.Contains(method)) throw NotSent(method, "not available with the thin bridge (hosted)");
         if (method == "merge_from_oml" && parameters?["base_path"] != null)
             return send(method, BeforeSend(method, () => WithReferencePlan(parameters)));
+        // a8 round 2 (IP option D): the thin bridge answers the problems of the Studio's Manage Dependencies with their causes
+        // and facts; the explanation and the fix are written here, on the server (ManageDependenciesText).
+        if (method == "refresh_references") return ManageDependenciesText.Render(send(method, parameters));
         return send(method, parameters);
     }
 

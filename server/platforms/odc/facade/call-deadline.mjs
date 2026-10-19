@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { canonicalArguments } from './read-budget.mjs';
 import { keepAnswer } from './answer-size.mjs';
-import { mergeTask, readTask, findCallTask, ensureTaskIndexes, releaseKernelFacadeTasks, sanitizeAnswer, tasksDir, stateOf, kernelTaskAnswer, awaitsReplay, kernelWorkFolders } from './ssam-task.mjs';
+import { mergeTask, readTask, findCallTask, ensureTaskIndexes, releaseKernelFacadeTasks, sanitizeAnswer, tasksDir, stateOf, kernelTaskAnswer, awaitsReplay, replayWindowOpen, kernelWorkFolders } from './ssam-task.mjs';
 import { isMutation, declareToolClassification, classifyTool, phaseOfCall } from './tool-classification.mjs';
 import { taskStepOfCall, tokensOfCall } from './destructive-operations.mjs';
 import { WORDS_MARKER } from './next-steps.mjs';
@@ -30,6 +30,20 @@ const scopedMap = (map, scope) => ({ get: key => map.get(scope + '|' + key), set
 const runsInside = entry => { for (let scope = callScope.getStore(), depth = 0; scope && depth < 64; scope = scope.parent, depth++) if (scope === entry) return true; return false; };
 // CT-1: a task whose handler a deadline of this process runs now, on that folder.
 export const runsHere = (id, dir) => isLiveTask(String(id), dir);
+// Owner decision (2026-10-18): deliveries and creations have no time limit. A handler that runs one marks every live call it
+// runs inside (ssam.mjs, by tool-classification.mjs runsToEnd: the served call itself, and the call a nested delivery runs
+// inside, as ssam_code write through the lane's delivery tool). At the deadline a marked call is KEPT instead of answered
+// running (wait below): it detaches as before (its task on disk for ssam_task {id}, a cancellation of the client no longer
+// stops the work, continueTask and stop work on it) while the original call, and an identical call that joined it, wait for
+// the final answer. A call never marked keeps the deadline and its continueTask.
+export function markRunsToEnd() {
+  for (let scope = callScope.getStore(), depth = 0; scope && depth < 64; scope = scope.parent, depth++) scope.runsToEnd = true;
+}
+// The replay of an unconfirmed final answer is decided by the served handler on the call's resolved inputs (replay-store.mjs,
+// ssam.mjs). Here, a run-to-end call carries its inputs (inputsOf: its print, or null when a file it reads cannot be read for
+// sure): a live call is joined by the same inputs, also under other arguments (a default written or not); the same arguments
+// while the first still runs with other content is one refusal (DELIVERY_STILL_RUNNING) that names the running task, how to
+// wait for it and how to stop it; an undelivered final (CX12) is replayed only for the same inputs, never without them.
 export function stopTask(id, { dir = tasksDir() } = {}) {
   const entry = liveTasks.get(liveKey(dir, id));
   if (!entry) return refusal(readTask(id, { dir }) ? 'TASK_NOT_RUNNING' : 'TASK_NOT_FOUND', 'No live task ' + id);
@@ -116,9 +130,14 @@ function annotate(answer, fields) {
   if (!changed) content.unshift({ type: 'text', text: JSON.stringify(updated) });
   return { ...answer, structuredContent: updated, content };
 }
+// The fields of a replayed or joined answer next to its own (ssam.mjs: resumedFrom of a replay).
+export const annotateAnswer = (answer, fields) => annotate(answer, fields);
 // answerOrigin(tool, args) -> {tool, kind?} | null (fix/no-internals round 4, a licensee's server): whose answer the final
 // answer of a call is, kept with it (answer-size.mjs keepAnswer), so ssam_evidence reads it back as that tool's answer.
-export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = callDeadlineMs(), env = process.env, notify, hasTool = () => true, defaultLane = 'o11', persistTask = mergeTask, saveAnswer = keepAnswer, answerOrigin = null } = {}) {
+// inputsOf(tool, args) -> undefined (a call outside the run-to-end family: CX12 as before) | {key, print, replay} (print: the
+// sha256 of its normalized arguments and of the files it reads, null when one cannot be read for sure; replay false: its
+// final answer is never given to a later identical call); replay-store.mjs createReplay.
+export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = callDeadlineMs(), env = process.env, notify, hasTool = () => true, defaultLane = 'o11', persistTask = mergeTask, saveAnswer = keepAnswer, answerOrigin = null, inputsOf = null } = {}) {
   const originOf = (tool, args) => { try { return answerOrigin?.(tool, args) ?? null; } catch { return null; } };
   const scope = folderKey(dir);
   const entries = scopedMap(callsByKey, scope), byId = scopedMap(callsById, scope);
@@ -169,15 +188,40 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
     }
     return entry.result;
   };
+  // A call marked to run to its end (markRunsToEnd) is kept at the deadline: it detaches without an answer, and the
+  // original request (holding: its progress still reaches it) and an identical call that joined it wait for the final
+  // answer. A continuation (continueTask) of any task still answers running at the deadline.
+  const keep = (entry, original) => { entry.kept = true; if (original && !entry.cancelled) entry.holding = true; detach(entry); };
+  // A repeat that joins a run-to-end call names its task (Integradora, A5): ssam_task {id, stop:true} stops it.
+  const joinedFields = entry => ({ joined: true, ...(entry.runsToEnd ? { joinedTask: entry.id } : {}) });
+  // B4: the same arguments while the first still runs, but the files it reads changed: one refusal, nothing started. Round 3b
+  // (Integradora, 2026-10-18: no blind join): the same when this server cannot read what the call names (a relative path,
+  // agent:, ws:, a path of another machine: its print is null), so it cannot compare it with what the running one read.
+  // Round 3c (re-review M2): when the content cannot be read there is no replay after the end, so the refusal never sends the
+  // model back with the same job: after the end it reads the task's answer, which is this call's when the job is the same.
+  const readTaskText = () => (hasTool('ssam_task') ? 'ssam_task {id}' : 'ssam_doctor {task:{id}}');
+  // The cause named is the call's own (inputs.unreadable): a path it cannot read, or a job too large to look at whole.
+  const unreadableCause = reason => (reason === 'size' ? 'cannot compare the content this call names (a job too large to look at whole)' : 'cannot read the content this call names (a relative path, agent:, ws: or a path of another machine)');
+  const stillRunning = (entry, { unreadable = false } = {}) => refusal('DELIVERY_STILL_RUNNING', unreadable
+    ? 'A delivery of this job is still running. This server ' + unreadableCause(unreadable) + ', so it neither joins the running one nor starts this one; nothing was started. Its continuation waits for its final answer; after its end read it with ' + readTaskText() + ': when the job is the same, that is this call\'s answer. Never send the same job again; a changed job goes after it ends or after stopping it.'
+    : 'This call is still running with the content it read when it started; a file it reads changed since, so the new content was not started. Wait for the running one or stop it, then send the call again.', {
+    outcome: 'not-sent', task: { id: entry.id, tool: entry.tool }, continuation: next(entry),
+    wait: { ...evidenceNext(entry), why: 'the state of the running call; continuation waits for its final answer' },
+    stop: hasTool('ssam_task') ? { tool: 'ssam_task', arguments: { id: entry.id, stop: true }, why: 'stops the running call before its next step; then send the call again' }
+      : { tool: 'ssam_doctor', arguments: { lane: entry.call?.lane ?? defaultLane, task: { id: entry.id, stop: true } }, why: 'stops the running call before its next step; then send the call again' } });
+  const sameInputs = (entry, inputs) => inputs === undefined || inputs?.print != null && entry?.inputs?.print === inputs.print;
   async function wait(entry, signal, joined = false, original = false) {
     let timer, abort;
     try {
-      const elapsed = new Promise(resolve => { if (!entry.exempt || !original) timer = setTimeout(() => resolve(false), timeoutMs); });
+      const elapsed = new Promise(resolve => {
+        if (entry.exempt && original) return;
+        timer = setTimeout(() => { if ((original || joined) && entry.runsToEnd) keep(entry, original); else resolve(false); }, timeoutMs);
+      });
       const cancelled = new Promise((_, reject) => { abort = () => { if (original) cancelOriginal(entry); reject(Object.assign(new Error('Continuation cancelled'), { code: 'CANCELLED' })); }; if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true }); });
       const finished = await Promise.race([entry.promise.then(() => true), elapsed, cancelled]);
-      if (finished) return joined ? annotate(deliver(entry), { joined: true }) : deliver(entry);
+      if (finished) return joined ? annotate(deliver(entry), joinedFields(entry)) : deliver(entry);
       detach(entry); return running(entry, joined);
-    } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); }
+    } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); if (original) entry.holding = false; }
   }
   async function fromDisk(tool, args, signal) {
     let task = readTask(args.continueTask, { dir });
@@ -237,11 +281,19 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
       // TASK_UNCERTAIN_PENDING: an uncertain finished one is forgotten here and the gate answers the repeat by its record; a
       // running one is joined (the same call, never a second send); a definitive one (ok/failed) is delivered as CX12 does.
       const phase = phaseOfCall(tool, args);
+      // inputsOf may answer a promise (a hosted gate that pulls the file it names to read it); the lookup below stays atomic.
+      let inputs;
+      try { inputs = inputsOf?.(tool, args); if (typeof inputs?.then === 'function') inputs = await inputs; } catch { inputs = { print: null }; }
       let entry = entries.get(key);
       // CT-2: a call never joins a live call it runs inside (a nested identical call through another deadline of the folder
       // would wait for itself); it goes on as a call of its own and leaves the index to the outer call, as before.
       const nested = !!entry && !entry.finished && runsInside(entry);
       if (nested) entry = null;
+      // B1: the same inputs under other arguments (a default written or not) are the same live call.
+      if (!entry && inputs?.print) entry = entries.values().find(e => !e.finished && e.tool === tool && e.inputs?.print === inputs.print && !runsInside(e)) ?? null;
+      // A1: an undelivered final (CX12) is the answer of a run-to-end call only for the same inputs; none when they cannot be read.
+      // Round 3b: none for a publication, refresh, deployment or package (inputs.replay false), which runs again after its end.
+      if (entry?.finished && completionState(entry.result) !== 'uncertain' && (!sameInputs(entry, inputs) || inputs?.replay === false)) { if (entries.get(key) === entry) entries.delete(key); entry = null; }
       if (entry?.finished && entry.phase === 'execute' && completionState(entry.result) === 'uncertain') { entries.delete(key); if (entry.deliveries) byId.delete(entry.id); entry = null; }
       if (entry?.finished && (!entry.isWrite || completionState(entry.result) !== 'uncertain') && (entry.deliveries || entry.cancelled && (!entry.isWrite || valueOf(entry.result)?.outcome === 'not-sent') || Date.now() - entry.finished > 600000 && !(entry.cancelled && entry.isWrite))) { entries.delete(key); entry = null; }
       if (entry) {
@@ -252,23 +304,30 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
           else if (entry.isWrite && entry.deliveries && completionState(entry.result) === 'uncertain') return uncertainAnswer(entry);
           else return entry.detached && !entry.cancelled ? annotate(deliver(entry), { resumedFrom: entry.id }) : deliver(entry);
         }
+        // B4: the same arguments while the first still runs, but what it reads changed: one refusal, nothing started; round 3b:
+        // also when what it reads cannot be read here (never a blind join).
+        if (entry && (inputs?.print === null || entry.inputs?.print === null)) return stillRunning(entry, { unreadable: inputs?.unreadable ?? entry.inputs?.unreadable ?? 'path' });
+        if (entry && inputs?.print && entry.inputs?.print && entry.inputs.print !== inputs.print) return stillRunning(entry);
         if (entry) return wait(entry, signal, true);
       }
       const mutation = isMutation(tool, args);
       if (mutation) {
         const previous = findCallTask(dir, tool, hash);
-        if (previous && awaitsReplay(previous)) return fromDisk(tool, { continueTask: previous.id }, signal);
-        if (previous && !previous.closedAt && phase !== 'execute') return uncertainAnswer(previous);
+        // A1: an undelivered final on disk is the answer of a run-to-end call only for the same inputs (its record keeps them).
+        const same = previous && (inputs === undefined || inputs.replay !== false && inputs.print != null && previous.call?.inputsSha256 === inputs.print);
+        if (previous && awaitsReplay(previous) && same) return fromDisk(tool, { continueTask: previous.id }, signal);
+        // A4: a record that only keeps its replay window reserves the call for the served handler, which decides on the inputs.
+        if (previous && !previous.closedAt && phase !== 'execute' && !replayWindowOpen(previous) && !(awaitsReplay(previous) && !same)) return uncertainAnswer(previous);
       }
       const controller = new AbortController();
       const abort = () => controller.abort(signal.reason);
       if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
       const previewIds = phase === 'execute' ? tokensOfCall(args) : [];
-      entry = { id: randomUUID(), dir, tool, key, exempt, started: Date.now(), continuationLane: args.lane, call: { argsSha256: hash, lane: args.lane ?? (/^o11_/.test(tool) ? 'o11' : /^(studio_|odc_|hybrid_)/.test(tool) ? 'odc' : defaultLane), ...(previewIds.length ? { previewIds } : {}) }, isWrite: mutation, deliveries: 0, controller,
+      entry = { id: randomUUID(), dir, tool, key, exempt, started: Date.now(), continuationLane: args.lane, call: { argsSha256: hash, lane: args.lane ?? (/^o11_/.test(tool) ? 'o11' : /^(studio_|odc_|hybrid_)/.test(tool) ? 'odc' : defaultLane), ...(previewIds.length ? { previewIds } : {}), ...(inputs?.print ? { inputsSha256: inputs.print } : {}) }, isWrite: mutation, deliveries: 0, controller, inputs,
         phase, previewIds, step: phase === 'execute' ? taskStepOfCall(args) : null, owner, persistTask, parent: callScope.getStore() ?? null,
         removeAbort: () => signal?.removeEventListener('abort', abort) };
       const notifyOriginal = ctx?.mcpReq?.notify;
-      const context = ctx?.mcpReq ? { ...ctx, mcpReq: { ...ctx.mcpReq, signal: controller.signal, notify: (...params) => entry.detached ? Promise.resolve() : notifyOriginal?.(...params) } } : ctx;
+      const context = ctx?.mcpReq ? { ...ctx, mcpReq: { ...ctx.mcpReq, signal: controller.signal, notify: (...params) => entry.detached && !entry.holding ? Promise.resolve() : notifyOriginal?.(...params) } } : ctx;
       if (!nested) entries.set(key, entry);
       byId.set(entry.id, entry); liveTasks.set(liveKey(dir, entry.id), entry);
       entry.promise = Promise.resolve().then(() => callScope.run(entry, () => handler(args, context))).catch(error => reply({ ok: false, error: error.message, ...(entry.isWrite ? { outcome: 'uncertain', code: entry.cancelled ? 'TASK_CANCELLED_UNCERTAIN' : 'TASK_FAILED_UNCERTAIN', continuation: entry.step ?? evidenceNext(entry), ...(entry.step ? recordOf(entry) : {}) } : {}) })).then(async result => {

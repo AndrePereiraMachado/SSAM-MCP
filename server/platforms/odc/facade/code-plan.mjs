@@ -2,13 +2,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { newestCapture } from './code-check.mjs';
+import { newestCapture, codeRoots, baseProblem } from './code-check.mjs';
 import { moduleDigest } from './module-map.mjs';
 import { moduleItems, rulesSection } from './work-packet.mjs';
 import { indexLine } from './module-digest.mjs';
 import { grammarCard, headerOf } from './ssam-code.mjs';
-import { anvilRoot, o11Lane } from './workspace.mjs';
-import { o11LaneOf } from './o11-lane.mjs';
 
 export const PLAN_VERSION = 1;
 export const PLAN_MIN_ITEMS = 6;
@@ -126,6 +124,18 @@ export function planSize(intent, digest) {
 
 const call = args => ({ tool: 'ssam_code', arguments: args });
 const launchPrompt = file => `Read ${file} and do exactly what it says; answer only the path(s)`;
+// feat/ssam-code-hosted: deps.place, where the session that runs a plan meets its files, for a server whose subagents run on
+// another machine (a hosted one). Every hook is optional; without them every path is this machine's, as it is.
+//   shown(file)    -> how a file of this server (the capture, a stub, a shared file, the plan folder) is named in the calls
+//                     and in the answer, as the session passes it back
+//   output(file)   -> the path a subagent writes a data or batch file at (and the calls name it by)
+//   input(file)    -> the path a subagent reads a plan file at (its prompt, plan.json)
+//   document(section, value) -> SSAM's documentation inside a prompt (section 'grammar': the cards; 'rules': the rules
+//                     section) as that session may read it, before it is written as JSON
+//   publish(files) -> async, once the plan file and the prompts are written: makes each one readable at input(file); what it
+//                     throws is the plan's refusal ({code, error}: nothing to launch)
+const SAME = Object.freeze({ shown: file => file, output: file => file, input: file => file, document: (section, value) => value, publish: async () => {} });
+const placeOf = deps => ({ ...SAME, ...Object.fromEntries(Object.entries(deps.place ?? {}).filter(([k, v]) => k in SAME && typeof v === 'function')) });
 const finish = '\nDo not call ssam_discover/ssam_map/ssam_code read; run the check until ok; answer only the path(s).\n';
 function promptOf(sections, recovery) {
   const markers = sections.map(([name]) => `## ${name} (cut)\nRead ${recovery} for the complete ${name} section.\n\n`);
@@ -173,8 +183,13 @@ export async function codePlan(input = {}, deps = {}) {
   if (input.shared != null && !Array.isArray(input.shared)) problem('shared', 'shared is an array of absolute .ddl/.json file paths');
   for (const [i, file] of shared.entries()) if (typeof file !== 'string' || !path.isAbsolute(file) || !/\.(ddl|json)$/i.test(file) || !fs.existsSync(file)) problem(`shared/${i}`, 'shared needs an existing absolute .ddl/.json file');
   if (input.ops != null && !Array.isArray(input.ops)) problem('ops', 'ops is an array');
-  const capture = (deps.newestCapture ?? newestCapture)({ lane, module, base: input.base }, deps);
-  if (!capture) problems.push({ code: 'CAPTURE_MISSING', at: 'base', message: `No capture of ${module ?? 'the module'} is available`, fix: 'the main agent reads the module once; that capture serves every check' });
+  const place = placeOf(deps);
+  const based = baseProblem({ lane, base: input.base }, deps);
+  const capture = based ? null : (deps.newestCapture ?? newestCapture)({ lane, module, base: input.base }, deps);
+  if (based) problem('base', based);
+  else if (!capture) problems.push({ code: 'CAPTURE_MISSING', at: 'base', message: `No capture of ${module ?? 'the module'} is available`, fix: 'the main agent reads the module once; that capture serves every check' });
+  // The capture as the session names it (deps.place shown).
+  const shownCapture = capture ? { ...capture, path: place.shown(capture.path) } : null;
   const batches = batchItems(valid, { workers: Number.isInteger(input.workers) ? input.workers : undefined });
   const byBatch = new Map(batches.flatMap(batch => batch.items.map(item => [item.name, batch.id])));
   const needed = new Set();
@@ -182,37 +197,45 @@ export async function codePlan(input = {}, deps = {}) {
   for (const name of [...needed]) if (name.includes('.')) needed.add(name.slice(0, name.lastIndexOf('.')));
   for (const item of valid) if (needed.has(item.name) && !signatureOf(item.signature)) problems.push({ code: 'SIGNATURE_NEEDED', at: `items/${items.indexOf(item)}/signature`, item: item.name,
     message: item.kind === 'action' ? 'Provide the ssam-flow header and in/out lines for this cross-batch call' : 'Provide the opening screen/block tag and input/event/var elements for this cross-batch use' });
-  const continuation = !capture ? { tool: 'ssam_map', arguments: { lane, target: module }, why: 'the main agent reads the module once; that capture serves every check' } : call({ ...input, lane, action: 'plan' });
-  if (problems.length) return { ok: false, code: problems.some(p => p.code === 'INPUT_INVALID') ? 'INPUT_INVALID' : !capture ? 'CAPTURE_MISSING' : 'SIGNATURE_NEEDED', lane, module, action: 'plan', problems, ...(capture ? { capture } : {}), continuation };
+  const continuation = !capture ? (based ? call({ ...input, lane, action: 'plan', base: '<a capture of the module, or no base>' })
+    : { tool: 'ssam_map', arguments: { lane, target: module }, why: 'the main agent reads the module once; that capture serves every check' }) : call({ ...input, lane, action: 'plan' });
+  if (problems.length) return { ok: false, code: problems.some(p => p.code === 'INPUT_INVALID') ? 'INPUT_INVALID' : !capture ? 'CAPTURE_MISSING' : 'SIGNATURE_NEEDED', lane, module, action: 'plan', problems, ...(shownCapture ? { capture: shownCapture } : {}), continuation };
   const found = await (deps.moduleDigest ?? moduleDigest)({ lane, target: capture.path }, deps);
-  if (found.ok === false || !found.digest) return { ok: false, lane, module, action: 'plan', code: 'DIGEST_UNAVAILABLE', problems: [{ code: 'DIGEST_UNAVAILABLE', message: found.error ?? 'Capture digest is unavailable' }], continuation: { tool: 'ssam_map', arguments: { lane, target: capture.path, view: 'digest' } } };
+  if (found.ok === false || !found.digest) return { ok: false, lane, module, action: 'plan', code: 'DIGEST_UNAVAILABLE', problems: [{ code: 'DIGEST_UNAVAILABLE', message: found.error ?? 'Capture digest is unavailable' }], continuation: { tool: 'ssam_map', arguments: { lane, target: shownCapture.path, view: 'digest' } } };
   const planId = createHash('sha256').update(JSON.stringify(canonical({ PLAN_VERSION, lane, module, items, shared, ops: input.ops ?? [], workers: input.workers ?? null, capture: { sha256: capture.sha256 } }))).digest('hex').slice(0, 16);
-  const root = deps.root ?? anvilRoot;
-  const local = deps.local ?? o11LaneOf(deps.o11Lane ?? o11Lane.lane, { root, env: deps.env ?? process.env, ...(deps.workspace ? { workspace: deps.workspace } : {}) }).local;
-  const dir = path.join(lane === 'o11' ? local : path.join(root, '.local', 'lane-odc'), 'plans', planId);
+  // The plans folder of the lane (deps.roots, or this checkout's).
+  const roots = codeRoots(deps);
+  const dir = path.join(lane === 'o11' ? roots.o11 : roots.odcWork, 'plans', planId);
   fs.mkdirSync(dir, { recursive: true });
   const planFile = path.join(dir, 'plan.json'), dataItems = valid.filter(item => item.kind === 'data'), dataFile = dataItems.length ? path.join(dir, 'data.ddl') : null;
   const baseFiles = [...(dataFile ? [dataFile] : []), ...shared];
-  const artifacts = [], fullSections = {};
+  // A file a subagent writes (the data and every batch file) is named where it writes it; any other file as the session
+  // passes it back (deps.place).
+  const outputs = new Set(dataFile ? [dataFile] : []);
+  const nameOf = file => (outputs.has(file) ? place.output(file) : place.shown(file));
+  const artifacts = [], fullSections = {}, prompts = [];
   const makePrompt = (id, own, files, stubs = []) => {
     const intent = own.map(item => `${item.name} ${item.intent} ${item.signature ?? ''} ${(item.calls ?? []).join(' ')}`).join('\n');
-    const check = call({ lane, action: 'check', module, base: capture.path, files: [...(id === 'data' ? shared : baseFiles), ...files], ...(stubs.length ? { stubs } : {}), ...(input.ops ? { ops: input.ops } : {}) });
+    const check = call({ lane, action: 'check', module, base: shownCapture.path, files: [...(id === 'data' ? shared : baseFiles), ...files].map(nameOf), ...(stubs.length ? { stubs: stubs.map(place.shown) } : {}), ...(input.ops ? { ops: input.ops } : {}) });
     const parts = [...new Set(own.map(item => item.kind === 'action' ? 'logic' : item.kind === 'data' ? 'ddl' : 'html'))];
     const actionIndex = new Map(found.digest.actions.map(action => [action.key, action]));
     const context = moduleItems(found.digest, intent).items.filter(item => item.score >= 10 && !['bodies', 'screens'].includes(item.group))
       .map(item => item.group === 'actions' && actionIndex.has(item.key) ? indexLine(actionIndex.get(item.key)) : item.text).join('\n');
-    const sections = [['work', `Write UTF-8 files: ${files.join(', ')}. Keep EXACTLY these signatures.\n${own.map(item => `${item.kind} ${item.name}: ${item.intent}${item.calls?.length ? `\nCalls: ${item.calls.join(', ')}` : ''}\n${item.signature ? signatureOf(item.signature) : ''}`).join('\n\n')}`],
+    const cards = parts.map(part => { const { rules, slots, forms } = grammarCard(part, lane).card; return { part, rules, slots, forms }; });
+    const sections = [['work', `Write UTF-8 files: ${files.map(nameOf).join(', ')}. Keep EXACTLY these signatures.\n${own.map(item => `${item.kind} ${item.name}: ${item.intent}${item.calls?.length ? `\nCalls: ${item.calls.join(', ')}` : ''}\n${item.signature ? signatureOf(item.signature) : ''}`).join('\n\n')}`],
       ['check', JSON.stringify(check)], ['stubs', stubs.map(file => fs.readFileSync(file, 'utf8')).join('\n') || 'None.'],
-      ['grammar', parts.map(part => { const { rules, slots, forms } = grammarCard(part, lane).card; return JSON.stringify({ part, rules, slots, forms }); }).join('\n')],
-      ['module', context || 'No named existing elements.'], ['rules', JSON.stringify(rulesSection({ intent, matches: [], categories: new Map(), textForms: parts }, 2000, { lane }).value)]];
+      ['grammar', place.document('grammar', cards).map(card => JSON.stringify(card)).join('\n')],
+      ['module', context || 'No named existing elements.'], ['rules', JSON.stringify(place.document('rules', rulesSection({ intent, matches: [], categories: new Map(), textForms: parts }, 2000, { lane }).value))]];
     fullSections[id] = Object.fromEntries(sections);
-    const prompt = promptOf(sections, `${planFile} (sections.${id})`), promptFile = path.join(dir, `${id === 'data' ? 'data' : `batch-${id}`}.prompt.md`);
+    const prompt = promptOf(sections, `${place.input(planFile)} (sections.${id})`), promptFile = path.join(dir, `${id === 'data' ? 'data' : `batch-${id}`}.prompt.md`);
     fs.writeFileSync(promptFile, prompt.text);
+    prompts.push(promptFile);
     artifacts.push({ id, sectionBytes: prompt.sectionBytes, cuts: prompt.cuts });
-    return { files, promptFile, promptBytes: bytes(prompt.text), launchPrompt: launchPrompt(promptFile), check };
+    return { files: files.map(nameOf), promptFile: place.input(promptFile), promptBytes: bytes(prompt.text), launchPrompt: launchPrompt(place.input(promptFile)), check };
   };
   const outputBatches = batches.map(batch => {
     const files = [...new Set(batch.items.map(item => item.kind === 'action' ? 'flow' : 'html'))].map(ext => path.join(dir, `batch-${batch.id}.${ext}`));
+    for (const file of files) outputs.add(file);
     const names = new Set(batch.items.flatMap(item => itemCalls(item, valid)));
     for (const name of [...names]) if (name.includes('.')) names.add(name.slice(0, name.lastIndexOf('.')));
     const others = valid.filter(item => names.has(item.name) && byBatch.get(item.name) !== batch.id && item.kind !== 'data');
@@ -221,11 +244,17 @@ export async function codePlan(input = {}, deps = {}) {
       const file = path.join(dir, `stubs-${batch.id}.${ext}`); fs.writeFileSync(file, own.map(stubOf).join('\n')); stubs.push(file); }
     return { id: batch.id, items: batch.items.map(item => item.name), estimateBytes: batch.estimateBytes, ...makePrompt(batch.id, batch.items, files, stubs) };
   });
-  const data = dataFile ? { file: dataFile, ...makePrompt('data', dataItems, [dataFile]) } : undefined;
-  const result = { ok: true, lane, module, action: 'plan', planId, dir, capture, ...(data ? { data } : {}), batches: outputBatches,
-    final: call({ lane, action: 'write', module, files: [...baseFiles, ...outputBatches.flatMap(batch => batch.files)], ...(input.ops ? { ops: input.ops } : {}) }),
+  const data = dataFile ? { file: nameOf(dataFile), ...makePrompt('data', dataItems, [dataFile]) } : undefined;
+  const result = { ok: true, lane, module, action: 'plan', planId, dir: place.shown(dir), capture: shownCapture, ...(data ? { data } : {}), batches: outputBatches,
+    final: call({ lane, action: 'write', module, files: [...baseFiles.map(nameOf), ...outputBatches.flatMap(batch => batch.files)], ...(input.ops ? { ops: input.ops } : {}) }),
     launch: `${data ? 'Write data first; then l' : 'L'}aunch these ${batches.length} subagents now, in parallel (Claude Code: Agent tool; Codex: spawn_agent), each with its launchPrompt; when all answer, send final.` };
-  const { ageSeconds, ...stableCapture } = capture;
+  const { ageSeconds, ...stableCapture } = shownCapture;
   fs.writeFileSync(planFile, JSON.stringify({ ...result, capture: stableCapture, sections: fullSections, measurements: artifacts }, null, 2) + '\n');
+  // The plan file and the prompts reach the session where its subagents read them; a failure there is the plan's refusal.
+  try { await place.publish([planFile, ...prompts]); }
+  catch (error) {
+    return { ok: false, lane, module, action: 'plan', planId, code: typeof error?.code === 'string' ? error.code : 'PLAN_NOT_DELIVERED', dir: place.shown(dir),
+      error: 'The plan was written but its prompts could not reach the session: ' + String(error?.message ?? error), continuation: call({ ...input, lane, action: 'plan' }) };
+  }
   return result;
 }

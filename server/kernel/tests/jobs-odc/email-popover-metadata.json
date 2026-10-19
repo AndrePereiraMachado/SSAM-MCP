@@ -51,7 +51,7 @@
 
   {"op": "create", "parent": "$scr", "type": "IScreenAggregate", "name": "GetNotices", "as": "$agg"},
   {"op": "create", "parent": "$agg", "type": "IAliasedSource", "args": {"dataSource": "$WfCovNotice"}},
-  {"op": "create", "parent": "$agg", "type": "ITextMetadata", "name": "WfCovNote", "args": {"managedBy": "anvil"}, "as": "$md", "_why": "4. the metadata: CreateMetadata<T>(name, managedBy) has no default for managedBy, so args is MANDATORY; Name and ManagedBy are readOnly after this and there is no second chance"},
+  {"op": "create", "parent": "$agg", "type": "ITextMetadata", "name": "WfCovNote", "args": {"managedBy": "ssam"}, "as": "$md", "_why": "4. the metadata: CreateMetadata<T>(name, managedBy) has no default for managedBy, so args is MANDATORY; Name and ManagedBy are readOnly after this and there is no second chance"},
   {"op": "set", "target": "$md", "prop": "Value", "value": "aggregate escrito pelo job email-popover-metadata"},
   {"op": "set", "target": "$md", "prop": "Hidden", "value": true, "_why": "Hidden True in the 363 samples of the corpus: tool metadata is not shown to the author"},
 

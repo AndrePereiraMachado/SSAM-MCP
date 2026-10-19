@@ -23,6 +23,8 @@ import { hostedContext } from './executor.mjs';
 export const COMPONENTS_SCHEMA = 'ssam-components/1';
 export const COMPONENTS_CACHE_SCHEMA = 'ssam-components-cache/1';
 // servidor/fase4-25 (D4 of C:\t\vps-a5\PLANO.md, 3.2-C): the answer of the environment components on a hosted server.
+// servidor/fase4-26 a8: no longer the hosted answer (laneComponents lists through the customer's lane and keeps the cache in
+// the customer's own folder); kept because its code stays in the ssam-quality/1 registry while servers before a8 answer it.
 export const hostedComponentsUnavailable = (needs = []) => ({ ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'COMPONENTS_HOSTED_PENDING', schema: COMPONENTS_SCHEMA,
   needs: Array.isArray(needs) ? needs : [], error: 'The installed extensions and Forge components of the environment are not listed on a hosted SSAM server yet; nothing was read.',
   continuation: { tool: 'o11_dependencies', arguments: { action: 'producers' }, why: 'Lists the producers the module can reference, through the user\'s own Service Studio.' } });
@@ -76,7 +78,11 @@ export const actionsOfDigest = digest => (digest?.actions ?? []).filter(a => a?.
 export const actionsOfElements = elements => (elements ?? []).filter(e => /ActionSignature|ServerAction/.test(e?.type ?? e?.kind ?? '')).map(e => ({ name: e.name, signature: null }));
 
 // ---- the cache
-export const cacheFile = (root, host) => path.join(root, '.local', 'components', String(host || 'environment').replace(/[^\w.-]/g, '_') + '.json');
+// The folder of the cache: <root>/.local/components locally; hosted (a8) the customer's own <ws>/state/components (laneComponents
+// passes it as deps.cacheDir; state/ is internal: ssam_evidence never reads it).
+export const componentsDir = root => path.join(root, '.local', 'components');
+const cacheIn = (dir, host) => path.join(dir, String(host || 'environment').replace(/[^\w.-]/g, '_') + '.json');
+export const cacheFile = (root, host) => cacheIn(componentsDir(root), host);
 export function readCache(file) {
   try { const c = JSON.parse(fs.readFileSync(file, 'utf8')); return c?.schema === COMPONENTS_CACHE_SCHEMA ? c : null; } catch { return null; }
 }
@@ -87,7 +93,7 @@ function writeCache(file, cache) {
   // The environment of the last listing: an entry with no Studio attached answers from its cache, naming it.
   try { fs.writeFileSync(path.join(path.dirname(file), 'last.json'), JSON.stringify({ host: cache.host }), 'utf8'); } catch { /* the cache stands */ }
 }
-const lastHost = root => { try { return JSON.parse(fs.readFileSync(path.join(root, '.local', 'components', 'last.json'), 'utf8')).host ?? null; } catch { return null; } };
+const lastHost = dir => { try { return JSON.parse(fs.readFileSync(path.join(dir, 'last.json'), 'utf8')).host ?? null; } catch { return null; } };
 
 // The producers of the listing that a need names by their name, then by the name of one of their cached actions; the
 // system ones the platform note names first. At most `max`, in a fixed order (need, name match before action match, name).
@@ -107,8 +113,9 @@ export function candidates(cache, needs, { max = 6 } = {}) {
 
 /**
  * The components of the environment for the needs of an intent.
- * input: {lane, intent | needs, host?, refresh?, maxLive?}; deps: {root, listProducers, listElements, readExtension,
- * producerDigest, now}. Without listProducers (no Studio attached) and no cache: the answer says which call lists them.
+ * input: {lane, intent | needs, host?, refresh?, maxLive?}; deps: {root, cacheDir?, listProducers, listElements, readExtension,
+ * producerDigest, now}. cacheDir: the folder of the cache (default <root>/.local/components). Without listProducers (no Studio
+ * attached) and no cache: the answer says which call lists them.
  */
 export async function environmentComponents(input = {}, deps = {}) {
   const lane = input.lane ?? 'o11';
@@ -117,15 +124,16 @@ export async function environmentComponents(input = {}, deps = {}) {
   if (!needs.length) return { ok: false, schema: COMPONENTS_SCHEMA, lane, code: 'NO_NEED', error: 'the intent names no capability the platform lacks (pdf, excel, email, file, zip, image, barcode, crypto, word, sms)', call };
   if (lane !== 'o11') return { ok: false, schema: COMPONENTS_SCHEMA, lane, needs, code: 'LANE', error: 'the listing of installed components is O11 only (ODC: odc_external_library and the Forge of the tenant)', call };
   const root = deps.root;
-  let host = input.host ?? (deps.listProducers || !root ? null : lastHost(root));
-  let cache = host && root ? readCache(cacheFile(root, host)) : null;
+  const dir = deps.cacheDir ?? (root ? componentsDir(root) : null);
+  let host = input.host ?? (deps.listProducers || !dir ? null : lastHost(dir));
+  let cache = host && dir ? readCache(cacheIn(dir, host)) : null;
   const live = [];
   if ((!cache || input.refresh) && deps.listProducers) {
     let listed;
     try { listed = await deps.listProducers(); } catch (error) { listed = { ok: false, error: String(error?.message ?? error) }; }
     if (listed?.ok !== false && Array.isArray(listed?.rows)) {
       host = host ?? listed.host ?? 'environment';
-      const previous = root ? readCache(cacheFile(root, host)) : null;
+      const previous = dir ? readCache(cacheIn(dir, host)) : null;
       cache = { schema: COMPONENTS_CACHE_SCHEMA, host, producers: listed.rows.map(producerOf).filter(p => p.name).sort((a, b) => a.name.localeCompare(b.name)),
         elements: previous?.elements ?? {} };
       live.push('producers');
@@ -162,7 +170,7 @@ export async function environmentComponents(input = {}, deps = {}) {
     budget--;
     if (actions) { cache.elements[key] = { kind: c.producer.kind, source, actions: actions.sort((a, b) => a.name.localeCompare(b.name)) }; changed = true; live.push(c.producer.name); }
   }
-  if (changed && root) { try { writeCache(cacheFile(root, cache.host), cache); } catch { /* the answer stands without the cache */ } }
+  if (changed && dir) { try { writeCache(cacheIn(dir, cache.host), cache); } catch { /* the answer stands without the cache */ } }
   // Producers an action match only now finds (their actions were read in this call) join the answer on the next call.
   const components = found.map(c => {
     const entry = cache.elements[entryKey(c.producer)] ?? null;
@@ -181,7 +189,7 @@ export async function environmentComponents(input = {}, deps = {}) {
     ...(platform.length ? { platform } : {}),
     ...(components.length ? {} : { none: 'no installed extension or Forge component of ' + cache.host + ' names ' + needs.join(', ') + ' (producers: ' + cache.producers.length + '); install one from the Forge, or write an extension (o11_extension publish)' }),
     use: 'bind the actions in the same job: {"op":"reference","producer":"<Name>","elements":["IServerActionSignature:<Action>",...]} before the logic op, deliver with producers:"published"; a flow text calls one as <Node> = <Producer>.<Action>(<Param>=<value>, ...)',
-    ...(input.withSource ? { source: { cache: root ? cacheFile(root, cache.host) : null, live } } : {}),
+    ...(input.withSource ? { source: { cache: dir ? cacheIn(dir, cache.host) : null, live } } : {}),
   };
 }
 
@@ -231,13 +239,24 @@ export function liveComponentSources({ root, lane = 'o11', run, readExtension, p
 // The components answer of an entry (ssam_discover: the packet and the direct intent): live when a Studio is attached on
 // the O11 lane (its connection record), else from the cache of the last listing. `digest`: the lane's module digest
 // reader (the published OML of an eSpace producer).
-export async function laneComponents({ lane = 'o11', intent, needs, refresh = false }, { root, digest = null } = {}) {
-  // servidor/fase4-25: hosted, the components stay off until they have a root per account: the cache and its last.json are
-  // one per server root, the connection record read here is the server's own, and the extension read would call
-  // o11_extension around the gate. Nothing is read or written.
-  if (hostedContext()) return hostedComponentsUnavailable(needs);
+// `run` (tests): the lane runner of the live sources (default lanes.mjs run).
+export async function laneComponents({ lane = 'o11', intent, needs, refresh = false }, { root, digest = null, run = null } = {}) {
   let attached = null;
   try { const { LANES } = await import('./lanes.mjs'); const { readConnection } = await import('./studio-session.mjs'); attached = readConnection(LANES.o11.root, LANES.o11.lane); } catch { attached = null; }
-  const sources = attached ? liveComponentSources({ root, lane, ...(digest ? { producerDigest: digest } : {}) }) : { root };
+  // servidor/fase4-26 a8 (the next agent pack; before it, servidor/fase4-25 kept this off hosted): every piece is the
+  // customer's. The connection record is the customer's own (readConnection answers the executor's record hosted, null
+  // without a Studio of this account on the O11 lane); the listing is the kernel's dependencies producers/list run as this
+  // customer's process (lanes.run: hostedSpawnEnv, the relay to the customer's agent and Studio session); the cache and its
+  // last.json are in the customer's own <ws>/state/components, never the server's root, never another customer's. The XIF
+  // read of an extension (o11_extension: its work and receipts are not confined per account) and the digest of a published
+  // eSpace module (it captures modules the call never named) stay off: hosted, a component's actions are the names of its
+  // published signature (dependencies list), with the call that reads the rest.
+  const context = hostedContext();
+  if (context) {
+    const cacheDir = path.join(context.workspace, 'state', 'components');
+    const sources = attached ? liveComponentSources({ root, lane, ...(run ? { run } : {}), readExtension: async () => ({ ok: false }) }) : {};
+    return environmentComponents({ lane, intent, needs, refresh }, { ...sources, root: null, cacheDir });
+  }
+  const sources = attached ? liveComponentSources({ root, lane, ...(run ? { run } : {}), ...(digest ? { producerDigest: digest } : {}) }) : { root };
   return environmentComponents({ lane, intent, needs, refresh }, sources);
 }

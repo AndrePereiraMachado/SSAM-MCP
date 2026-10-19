@@ -37,11 +37,15 @@ internal static class Dispatch
     /// servidor/fase4-24 (speed lane vel-entrega): list_open_modules:model_sha256 and open_module:references_check_optional are
     /// served as in the full bridge (Reads.cs, OpenHandler.cs and MergeRollbackProof.cs are linked), so a hosted delivery
     /// reuses a capture the server holds instead of uploading the same model again, and skips the references check of a
-    /// tab already open.</summary>
+    /// tab already open.
+    /// servidor/fase4-26 a8 (the next agent pack): refresh_references:add, right after refresh_references as in the product's full
+    /// bridge (fix-ext-refs): refresh_references with add or published:true runs the Studio's own Manage Dependencies
+    /// (ManageDependencies.cs, the thin copy of the kernel's), so a hosted delivery adds new elements of any producer kind through
+    /// the customer's Studio; without them the linked Refresh References runs as before.</summary>
     internal static readonly string[] Capabilities = [.. UiGate.Capabilities, "environment_session", "sc_api:soap", "sc_api:server-api", "sc_api:sc-rest", "sc_web",
         "sc_web:secretRefs", "sc_session", "publish_log", "merge_from_oml:first_pass",
         MergeRollbackProof.Capability, "merge_from_oml:module_key", "get_errors:generation", "publish:wait_running", "publish:dialogs_seen",
-        "list_open_modules:server_operation", "refresh_references", "sc_api:integration-studio", ScHttpHandler.Capability,
+        "list_open_modules:server_operation", "refresh_references", ManageDependencies.Capability, "sc_api:integration-studio", ScHttpHandler.Capability,
         DialogScope.BlockedCapability, DialogScope.DialogsCapability, DialogScope.WindowCapability, DialogScope.DependenciesCapability,
         "list_open_modules:model_sha256", "open_module:references_check_optional",
         "thin", "merge:reference-plan"];
@@ -79,7 +83,7 @@ internal static class Dispatch
         "studio_login" => ScReply.Fail(new ScFailure(ScCodes.StudioNotSignedIn, "Headless Service Center tools require an existing authenticated Studio session; no login dialog was opened.")),
         "sc_session" => await ScApiHandler.Session(p),
         "publish_log" => await PublishLogHandler.Handle(p),
-        "refresh_references" => await RefreshReferencesHandler.Handle(p),
+        "refresh_references" => ManageDependencies.Asks(p) ? await ManageDependenciesHandler.Handle(p) : await RefreshReferencesHandler.Handle(p),
         DialogScope.DependenciesVerb => await DependenciesDialog.Handle(p),
         _ => Server.NotExecuted("Unknown method: " + method),
     };

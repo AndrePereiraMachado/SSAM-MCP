@@ -19,9 +19,11 @@ const ok = data => ({ success: true, data, error: null });
 
 // Real publication and consumer cascade, through the same registration boundary used by ssam.mjs.
 // Only the bridge, release identity, write lock and environment inventory are fake.
+// Owner decision (2026-10-18): a publication answers when it ends; past the deadline it is kept (its task detaches, its
+// original call waits) and its final answer is the first answer.
 for (const { label, deadlineMs, publishMs } of [
   { label: 'fast', deadlineMs: 200, publishMs: 0 },
-  { label: 'detached', deadlineMs: 50, publishMs: 100 },
+  { label: 'kept past the deadline', deadlineMs: 50, publishMs: 100 },
 ]) test(`R2 ${label}: producer and consumer retain their own tracked summaries`, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cx12-publish-summary-'));
   const journal = [], publications = [];
@@ -60,8 +62,7 @@ for (const { label, deadlineMs, publishMs } of [
   const args = { module: 'Producer', authorize: 'publish Producer and Consumer in the fake test', consumers: true };
   const run = arguments_ => client.callTool({ name: 'o11_publish', arguments: arguments_ });
   const first = await run(args);
-  if (label === 'fast') assert.notEqual(first.structuredContent.state, 'running');
-  else assert.equal(first.structuredContent.state, 'running');
+  assert.notEqual(first.structuredContent.state, 'running');
   let final = first;
   while (final.structuredContent.state === 'running') final = await run(final.structuredContent.continuation.arguments);
   assert.equal(final.structuredContent.ok, true, JSON.stringify(final));
@@ -87,6 +88,8 @@ for (const { label, deadlineMs, publishMs } of [
   }
   assert.equal(producer.callTask, undefined);
   assert.equal(consumer.callTask, producer.id);
-  if (label === 'detached') assert.equal(producer.id, first.structuredContent.task.id);
+  // kept: the producer's record is the task of the call (its tracker inherits the call's id), detached past the deadline and
+  // delivered once, to the original call
+  if (label !== 'fast') { assert.equal(producer.deliveries, 1); assert.ok(producer.answer?.file); }
   assert.doesNotMatch(JSON.stringify(records), /publish Producer and Consumer/);
 });

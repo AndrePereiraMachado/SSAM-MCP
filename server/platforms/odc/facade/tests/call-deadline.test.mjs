@@ -121,19 +121,29 @@ test('local O11, shared lane, ssam_job and nested ssam_code write all leave thro
   server.registerTool('shared_probe',{inputSchema:z.object({lane:z.string()})},()=>record('shared_probe'));
   const [a,b]=InMemoryTransport.createLinkedPair();const client=new Client({name:'test',version:'1'});await Promise.all([server.connect(a),client.connect(b)]);
   t.after(async()=>{await client.close();await server.close();});
-  const cases=[['o11_deliver',{module:'M'},'o11_deliver'],['shared_probe',{lane:'odc'},'shared_probe'],['ssam_job',{lane:'odc',job:{ops:[]}},'ssam_job'],['ssam_code',{lane:'odc',action:'write',part:'ddl',module:'M',text:'create entity A (Id Long Integer identifier auto required);'},'studio_deliver']];
-  for(const [name,args,counter] of cases){
-    delay=100;const expected=await client.callTool({name,arguments:args}); assert.ok(counts.get(counter),JSON.stringify(expected));
-    for(const factor of [1.5,3.4,10]){
+  // Owner decision (2026-10-18): a delivery (o11_deliver, and the nested ssam_code write through studio_deliver) answers its
+  // final result in the same call, however long; the shared lane probe and the fixture job still answer running within the
+  // deadline and continue with continueTask. A delivery kept past the deadline replays its final answer to an identical call
+  // for 10 minutes (Integradora, 2026-10-18: never a second run), so each factor of a delivery works on its own module.
+  const cases=[['o11_deliver',{module:'M'},'o11_deliver',true],['shared_probe',{lane:'odc'},'shared_probe',false],['ssam_job',{lane:'odc',job:{ops:[]}},'ssam_job',false],['ssam_code',{lane:'odc',action:'write',part:'ddl',module:'M',text:'create entity A (Id Long Integer identifier auto required);'},'studio_deliver',true]];
+  for(const [name,base,counter,toEnd] of cases){
+    let args=base;
+    delay=100;let expected=await client.callTool({name,arguments:args}); assert.ok(counts.get(counter),JSON.stringify(expected));
+    for(const [index,factor] of [1.5,3.4,10].entries()){
+      if(toEnd){args={...base,module:base.module+index};delay=100;expected=await client.callTool({name,arguments:args});}
       delay=200*factor;const before=counts.get(counter)??0,waits=[];
-      const run=async input=>{const began=performance.now();const result=await client.callTool({name,arguments:input});assert.ok(performance.now()-began<=250,`${name} window`);return result;};
+      const run=async input=>{const began=performance.now();const result=await client.callTool({name,arguments:input});const ms=performance.now()-began;
+        if(toEnd&&!Object.hasOwn(input,'continueTask'))assert.ok(ms>=delay-5,`${name} answered before its work ended`);else assert.ok(ms<=250,`${name} window`);return result;};
       const actual=await finish(run,await run(args),waits);
       // Each distinct ssam_code invocation writes a new UUID job file; compare its hash and all content,
       // then verify the saved envelope of THIS invocation without normalizing its path.
       const comparable=structuredClone(expected);
-      if(name==='ssam_code'){assert.equal(value(actual).nextBasedOn.sha256,value(expected).nextBasedOn.sha256);comparable.structuredContent.nextBasedOn.job=value(actual).nextBasedOn.job;comparable.content[0].text=JSON.stringify(comparable.structuredContent);assert.deepEqual(await run(value(waits[0]).continuation.arguments),actual);}
-      assert.deepEqual(actual,comparable,`${name} result`);assert.equal((counts.get(counter)??0)-before,1,`${name} invocation`);assert.equal(waits.length,Math.ceil(factor)-1,`${name} continuations`);
+      if(name==='ssam_code'){assert.equal(value(actual).nextBasedOn.sha256,value(expected).nextBasedOn.sha256);comparable.structuredContent.nextBasedOn.job=value(actual).nextBasedOn.job;comparable.content[0].text=JSON.stringify(comparable.structuredContent);}
+      if(name==='ssam_code'&&waits.length)assert.deepEqual(await run(value(waits[0]).continuation.arguments),actual);
+      assert.deepEqual(actual,comparable,`${name} result`);assert.equal((counts.get(counter)??0)-before,1,`${name} invocation`);assert.equal(waits.length,toEnd?0:Math.ceil(factor)-1,`${name} continuations`);
     }
+    if(toEnd){const before=counts.get(counter);const replay=value(await client.callTool({name,arguments:args}));
+      assert.equal(replay.ok,true);assert.ok(replay.resumedFrom,`${name} replays the kept final answer`);assert.equal(counts.get(counter),before,`${name} never runs twice`);}
   }
 });
 test('a continuation waits on a live task from another pid and never starts a handler', async t => {
