@@ -25,6 +25,10 @@ export function createMacAttach(deps = {}) {
   const run = deps.run ?? runTool;
   const ipc = { processInfo2, applyStartupHook, ...(deps.ipc ?? {}) };
   const startCache = new Map(); // `${pid}:${seconds}` -> {sec, usec, readers}
+  // The temporary folders change only with the session: read again after a minute (odc.pipe asks on every command).
+  let temp = null; let tempAt = 0;
+  const now = deps.now ?? Date.now;
+  const folders = async () => { if (!temp || now() - tempAt > 60000) { temp = await tempFolders({ env: deps.env ?? process.env, run }); tempAt = now(); } return temp; };
 
   async function processOf(lane, pid) {
     const number = Number(pid);
@@ -36,8 +40,7 @@ export function createMacAttach(deps = {}) {
 
   // The diagnostic socket of a pid, newest first: {path, dir, key} or null.
   async function endpointOf(pid) {
-    const dirs = await tempFolders({ env: deps.env ?? process.env, run });
-    return unixEndpoints(pid, dirs, { readdir: f.readdirSync, stat: f.statSync })[0] ?? null;
+    return unixEndpoints(pid, await folders(), { readdir: f.readdirSync, stat: f.statSync })[0] ?? null;
   }
 
   // What both lanes check before anything is sent.
@@ -124,7 +127,7 @@ export function createMacAttach(deps = {}) {
   // Path.GetTempPath()), then the other temporary folders.
   async function pipeFolders(pid) {
     const endpoint = await endpointOf(pid);
-    const all = await tempFolders({ env: deps.env ?? process.env, run });
+    const all = await folders();
     return endpoint ? [endpoint.dir, ...all.filter(dir => dir !== endpoint.dir)] : all;
   }
 
