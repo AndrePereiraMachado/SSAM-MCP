@@ -22,6 +22,7 @@ import { LAYOUT } from './lib/workspace.mjs';
 import { installedStudios } from './lib/studios.mjs';
 import { readConnection } from './lib/o11-connect.mjs';
 import { macDoctor } from './lib/mac-doctor.mjs';
+import { writeInstallRecord, INSTALL_RECORD } from './lib/launcher.mjs';
 
 export { createAgent } from './lib/agent.mjs';
 
@@ -169,6 +170,12 @@ async function setupPosix({ root, server, file, o11Port, stdin, stdout, stderr, 
   let credential;
   try { credential = await readCredential({ file, stdin, stderr }); } catch (error) { return fail('could not read the credential: ' + error.message); }
   if (!CREDENTIAL_PATTERN.test(credential)) return fail('the credential does not have the 54-character ssam_agent_... format (it was neither shown nor saved)');
+  // The folders this setup creates (those not there yet), for the record that uninstall reads (review M2).
+  const created = [];
+  for (const folder of LAYOUT) {
+    const parts = folder.split('/');
+    for (let i = 1; i <= parts.length; i++) { const rel = parts.slice(0, i).join('/'); if (!created.includes(rel) && !fs.existsSync(path.join(target, ...parts.slice(0, i)))) created.push(rel); }
+  }
   for (const folder of LAYOUT) fs.mkdirSync(path.join(target, ...folder.split('/')), { recursive: true });
   const privateDir = path.join(target, 'private');
   try { await restrict(privateDir); }
@@ -176,6 +183,8 @@ async function setupPosix({ root, server, file, o11Port, stdin, stdout, stderr, 
   const previous = readJson(configFile(target)) ?? {};
   writeAtomic(configFile(target), JSON.stringify({ server: server.replace(/\/+$/, ''), o11Port: port ?? (Number.isInteger(previous.o11Port) ? previous.o11Port : 4516) }, null, 2), 0o600);
   writeAtomic(credentialFile(target), credential, 0o600);
+  try { writeInstallRecord(target, created); }
+  catch (error) { return fail(`could not write the setup record ${INSTALL_RECORD} (uninstall needs it): ` + error.message); }
   say(`Agent set up in ${target} for ${server}. The credential was saved in private/credential (only this user can read it).`);
   say(`Next step: ${path.posix.join(target, 'agent', 'ssam-agent.sh')} start`);
   return 0;
