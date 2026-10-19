@@ -65,6 +65,9 @@ services:
       SSAM_O11_WORKER_RSS_MB: ${SSAM_O11_WORKER_RSS_MB:-1200}
       # Quality records (DEPLOY.md section 10): codes, counts and times per tool call; 0 turns them off.
       SSAM_QUALITY: ${SSAM_QUALITY:-1}
+      # ssam_code served hosted (marco-a8): empty = as the image says (served); off = unavailable, exactly as before
+      # (HOSTED_UNAVAILABLE, SSAM_CODE_HOSTED_PENDING); on = served. Read once at start: change .env, then up -d ssam-server.
+      SSAM_HOSTED_SSAM_CODE: ${SSAM_HOSTED_SSAM_CODE:-}
     volumes:
       - server-state:/data/server
       - friction:/data/friction

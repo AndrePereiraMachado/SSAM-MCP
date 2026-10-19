@@ -610,6 +610,27 @@ O rollback volta a imagem **e** os arquivos que andam com ela: `compose.prod.yml
    preciso.
 7. Se a versão nova mudou o formato do estado, volte também o backup do passo 1 do upgrade: `sh restore.sh <arquivo>`.
 
+### 8.1 Interruptor do `ssam_code` hospedado (`SSAM_HOSTED_SSAM_CODE`, marco-a8)
+
+Desde o marco-a8 a imagem serve o `ssam_code` (`grammar`, `read`, `check`, `plan`, `write`) com tudo no workspace do cliente.
+O `compose.prod.yml` passa `SSAM_HOSTED_SSAM_CODE` do `.env` ao `ssam-server`, e o servidor lê a variável **uma vez, na
+partida**:
+- ausente ou vazia: como a imagem manda (servido);
+- `off`: o estado de antes do marco-a8, palavra por palavra (`HOSTED_UNAVAILABLE`, causa `SSAM_CODE_HOSTED_PENDING`, continuação
+  `ssam_map`; nada roda); `on`: servido. Maiúsculas e espaços não importam; outro valor não liga nada (o evento diz `ignored`).
+
+Desligar sem imagem nova (recria só o `ssam-server`; as sessões MCP reconectam):
+
+```bash
+cd /opt/ssam/deploy
+printf '\nSSAM_HOSTED_SSAM_CODE=off\n' >> .env       # printf, não echo: um .env sem quebra de linha no fim colaria a linha
+docker compose -f compose.prod.yml up -d ssam-server
+docker compose -f compose.prod.yml logs ssam-server | grep '"event":"hosted-ssam-code"' | tail -n 1   # "served":false,"switch":"off"
+```
+
+Religar: `sed -i '/^SSAM_HOSTED_SSAM_CODE=/d' .env` e o mesmo `up -d ssam-server`; o evento diz `"served":true,"switch":null`.
+O `tools/list` tem os mesmos 92 nomes nos dois estados.
+
 
 ## 9. Backup e restore
 
@@ -910,6 +931,9 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
 | `ANSWER_ORIGIN_UNKNOWN` no `ssam_evidence` de um `ws:o11/answers/...` | Esperado (marco-a7): a resposta foi guardada antes da troca, sem o registro de origem em `<ws>/state/answer-origins`. O cliente repete a chamada que devolveu o caminho. |
 | `REFERENCE_DAY_LIMIT` no `ssam_reference` | Esperado (marco-a7): 256 KB por dia por token, somando todas as sessões do token; volta à meia-noite UTC. `check-job` e `check-delivery` ficam fora do limite. Os totais estão em `/data/server/exposure/served-<dia>.json` (só ids `tok_` e bytes). |
 | `MANAGE_DEPENDENCIES_HOSTED_PENDING` (`HOSTED_UNAVAILABLE`) em `o11_studio refresh-references` com `add` ou `published` | Esperado (marco-a7): o Manage Dependencies por código precisa de um pacote do agente novo; nada foi enviado ao Studio. |
+| `DELIVERY_STILL_RUNNING` numa entrega repetida | Esperado (marco-a8): entregas e criações rodam até o fim numa chamada (sem `running` aos 25 s). A repetição idêntica junta-se à que roda (`joined`) ou, até 10 min depois, recebe a resposta guardada (`resumedFrom`); com outro conteúdo (job, `ws:` ou arquivo `agent:` mudado), `DELIVERY_STILL_RUNNING` "changed" e nada começa. Parar: `ssam_task {id, stop:true}`. Timeout de ferramenta do cliente: 10 min ou mais |
+| `HOSTED_UNAVAILABLE` / `SSAM_CODE_HOSTED_PENDING` no `ssam_code` | O interruptor está em `off` (8.1). Sem ele o `ssam_code` é servido desde o marco-a8 |
+| `AGENT_FOLDER_UNKNOWN` no `ssam_code plan` | O plano leva prompts e `plan.json` à pasta do agente do cliente, e o agente não disse a pasta: o cliente reconecta o agente |
 | `<server>` no lugar de um caminho numa resposta | Esperado (marco-a7): caminho do servidor (volumes de `/data`, `/studio`, `/tmp`, `/app`) nunca sai numa resposta; os do workspace do cliente saem como `ws:...`. |
 
 ## 14. Limitações conhecidas
@@ -965,6 +989,12 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
   caminhos do dono) fica fora da imagem. A guarda de nomes do `build.sh` roda com um `/tmp` em memória, porque os testes
   da fachada agora isolam o perfil em `os.tmpdir()`. As mudanças de comportamento estão em `C:\t\vps-a7\LINHA.md` §8,
   `LINHA-2.md` §6, `LINHA-3.md` §7 e `LINHA-4.md` §3.
+- **marco-a8** (`server/r28-marco-a8`, imagem `prod-20261018-dab1c86`): a cópia saiu de `fase4-26/marco-a8` (`52562a86`), sobre
+  a caixa da `r27` (linha `b606ee7b`). Conferido blob a blob: as 6880 entradas da caixa server que vêm da linha são iguais às de
+  `52562a86`; os compartilhados `docs/FASE2-AGENTE.md` e `docs/O11-BRIDGE-FINA.md` foram para as duas caixas; a caixa agent
+  ganhou as fontes da fina O11 da linha (Manage Dependencies por código; o pacote novo é montado à parte, o de 13/10 continua
+  servido). O `compose.prod.yml` passa `SSAM_HOSTED_SSAM_CODE` (8.1). As mudanças de comportamento estão em
+  `C:\t\vps-a8\LINHA.md` §8 e §12.8.
 - O índice do `ssam_discover` e os outros caches de `/app` se perdem a cada container novo: 1 a 2 min de aquecimento
   (7.3). O índice de módulos e a cópia dos leitores ficam no volume `cache` e passam pela recriação.
 - O container não roda com o sistema de arquivos raiz só de leitura.
