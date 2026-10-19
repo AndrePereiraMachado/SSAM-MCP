@@ -85,6 +85,7 @@ test('bundles: two levels of the application folders, the managed folder found u
     const found = findBundles([m.apps, m.userApps]).sort();
     assert.deepEqual(found, [path.posix.join(m.apps, 'ODC Studio.app'), path.posix.join(m.apps, 'OutSystems', 'Service Studio 11.app'), path.posix.join(m.apps, 'Other.app')].sort());
     assert.equal(managedDirOf(o11).dir, path.posix.join(o11, 'Contents', 'Resources', 'app'));
+    assert.equal(managedDirOf(o11, { folders: 2 }), null, 'the folders read per bundle are bounded');
     assert.equal(managedDirOf(path.posix.join(m.apps, 'Other.app')), null);
     assert.equal(kindOfNames(new Set(['OutSystems.Model.dll', 'ServiceStudio.Framework.dll', 'OutSystems.Model.V1.dll'])), 'odc');
     assert.equal(kindOfNames(new Set(['ServiceStudio.Framework.dll', 'OutSystems.Model.V1.dll'])), 'o11');

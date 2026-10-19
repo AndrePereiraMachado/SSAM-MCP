@@ -91,3 +91,19 @@ Pedido do dono de 18/10: o cliente hospedado tem o Manage Dependencies por códi
   - O ZIP tem sha256 `50d390e4…e386`. A varredura de PI saiu sem achados e sem exceções.
   - O `pack-20261018-221719` da rodada 2 está superado.
 - **Compatibilidade.** O `kernel.json` não muda. O hub aceita o pacote novo e o de 13/10.
+## O pacote do macOS (`server/agent-mac`, 19/10/2026)
+
+Pedido do dono de 19/10: instalar no Mac com UM comando, sem decompilar nada. Plano, resultado e roteiro de prova:
+`C:\t\agent-mac\PLANO.md`, `RESULTADO.md` e `PROVA-MAC.md`. Guia do cliente: `docs/AGENTE-MAC.md`.
+
+- **Agente.** O mesmo `0.3.2`, com o ramo `darwin` de verdade (o Windows não muda): bundles do Studio por DLL marcador,
+  versão de 4 números pelo `ProductVersion` do assembly de entrada (`lib/pe-version.mjs`), attach sem .NET pelo IPC de
+  diagnóstico do .NET (`lib/dotnet-ipc.mjs`, `lib/attach-unix.mjs`), pipe Unix da bridge com um comando por vez
+  (`lib/odc-pipe-unix.mjs`), caminhos POSIX (`lib/workspace.mjs`), `doctor --json` com as checagens do Mac
+  (`lib/mac-doctor.mjs`), `lib/launcher.mjs` + `agent/ssam-agent.sh` e `agent/install.sh` (bash 3.2, sem sudo).
+- **Bridges.** As do pack3, sem recompilar (`odcBridge` v97, `o11BuiltFor` 11.55.92, gancho `dev`): o `kernel.json` não muda.
+- **Montagem.** `scripts\agent-pack.ps1 -Platform mac -NoBuild -Prebuilt <pasta>`: sem `.exe`, sem cliente ODC, sem
+  `Anvil.Connect`; `pack.json` com `platform: darwin`, o pino do Node (`scripts\node-darwin.json`, sha256 do
+  `SHASUMS256.txt` oficial) e sem valores nulos; o tar.gz sai de `scripts\tar-gz.mjs` (0755 nos `.sh`) e a árvore lida de
+  volta passa pela mesma varredura de PI. Montagem a partir do pack3: `C:\t\agent-mac\scripts\prep-mac.ps1`.
+- **Servidor.** `fase4-26/a8-mac` (C26 e os textos com a pasta POSIX do agente). Só entra na próxima imagem, com OK do dono.

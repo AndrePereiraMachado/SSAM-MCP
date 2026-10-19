@@ -122,5 +122,5 @@ export async function macFileVersion(target, mac = {}) {
 }
 // The installed bundle of a lane (the newest version, /Applications first), or null.
 export async function macLocate(kind, mac = {}) {
-  return (await installedBundles(mac)).find(info => info.kind === kind)?.bundle ?? null;
+  return (await installedBundles({ ...mac, inspect: bundle => macBundle(bundle, mac) })).find(info => info.kind === kind)?.bundle ?? null;
 }

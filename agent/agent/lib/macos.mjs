@@ -56,10 +56,13 @@ export function findBundles(roots, { fs: f = fs, depth = 2 } = {}) {
 }
 
 // The folder of the managed DLLs inside a bundle (breadth first under Contents, four levels, nested bundles and frameworks
-// skipped): {dir, names}, or null when no marker DLL is there.
-export function managedDirOf(bundle, { fs: f = fs, depth = 4 } = {}) {
+// skipped, at most `folders` folders read: a large application that is no Studio costs little): {dir, names}, or null
+// when no marker DLL is there.
+export function managedDirOf(bundle, { fs: f = fs, depth = 4, folders = 400 } = {}) {
   const queue = [[posix.join(bundle, 'Contents'), 0]];
+  let read = 0;
   while (queue.length) {
+    if (++read > folders) return null;
     const [dir, level] = queue.shift();
     let items;
     try { items = f.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
@@ -150,9 +153,10 @@ export function officialBundle(bundle, home) {
 export async function installedBundles(deps = {}) {
   const home = deps.home ?? homeOf(deps.env);
   const roots = deps.roots ?? applicationFolders(home);
+  const inspect = deps.inspect ?? (bundle => inspectBundle(bundle, deps));
   const found = [];
   for (const bundle of findBundles(roots, { fs: deps.fs ?? fs })) {
-    const info = await inspectBundle(bundle, deps).catch(() => null);
+    const info = await Promise.resolve(inspect(bundle)).catch(() => null);
     if (info) found.push(info);
   }
   const rank = info => (info.bundle.startsWith('/Applications/') ? 0 : 1);
