@@ -23,9 +23,10 @@
 # The container is found by its compose service label (com.docker.compose.service=ssam-server); SSAM_CONTAINER names it
 # explicitly when the host runs more than one. kernel print/check need ../kernel-pair-check.mjs next to this folder (the
 # deploy folder of the approved commit, as DEPLOY.md section 5 copies it).
-# Tokens live in the postgres service of the same compose (SSAM_DATABASE_URL in the server's environment, COOLIFY.md 6):
-# the token commands run on the compose's network with that URL; backup adds a dump of the database (pg_dump) and
-# restore loads it back (psql). A server without SSAM_DATABASE_URL keeps tokens.json, and the same commands work on it.
+# Tokens live in the Postgres of SSAM_DATABASE_URL (the server's environment; a database resource of Coolify, COOLIFY.md
+# 6): the token commands run on the server's network with that URL; db, psql, the dump of backup (pg_dump) and the load of
+# restore (psql) run a one-off container of the official postgres image (PG_IMAGE) on that network, against that URL. A
+# server without SSAM_DATABASE_URL keeps tokens.json, and the same commands work on it (without dump, psql and db).
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 # Git Bash on Windows (the local rehearsal, COOLIFY.md 10): MSYS would rewrite the container paths of -v and of the
@@ -61,9 +62,17 @@ mounts() {
 # The value of an environment variable of container $1 (empty when unset), its first network, and the postgres container
 # of the same compose project (empty without one).
 env_of() { $DOCKER inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$1" | sed -n "s/^$2=//p" | head -n 1; }
-network_of() { $DOCKER inspect --format '{{range $k, $v := .NetworkSettings.Networks}}{{println $k}}{{end}}' "$1" | head -n 1; }
-project_of() { $DOCKER inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$1"; }
-postgres_of() { $DOCKER ps -a --filter "label=com.docker.compose.project=$(project_of "$1")" --filter label=com.docker.compose.service=postgres --format '{{.Names}}' | head -n 1; }
+# The network of the server that reaches the database: the predefined network of Coolify ("coolify") when the container
+# is on it, else its first network.
+network_of() {
+  nets=$($DOCKER inspect --format '{{range $k, $v := .NetworkSettings.Networks}}{{println $k}}{{end}}' "$1")
+  printf '%s\n' "$nets" | grep -x coolify || printf '%s\n' "$nets" | head -n 1
+}
+# The official postgres client tools (pg_dump, psql), pinned; pulled once.
+PG_IMAGE=${PG_IMAGE:-postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24}
+db_url() { env_of "$1" SSAM_DATABASE_URL; }
+# pg_tool <container> <tool> [args...]: the tool of PG_IMAGE on the server's network, with stdin and stdout as given.
+pg_tool() { c=$1; shift; $DOCKER run --rm -i --network "$(network_of "$c")" --security-opt no-new-privileges:true --cap-drop ALL --user 70:70 "$PG_IMAGE" "$@"; }
 # The docker run options that give a one-off container the tokens' store of the server: the network and the URL when the
 # server has a database, nothing (tokens.json in the volume) otherwise.
 store_opts() {
@@ -84,10 +93,10 @@ case "$cmd" in
     echo "version:   $($DOCKER inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}} rev {{index .Config.Labels "org.opencontainers.image.revision"}}' "$c")"
     echo "state:     $($DOCKER inspect --format '{{.State.Status}}{{if .State.Health}} / {{.State.Health.Status}}{{end}}' "$c")"
     for m in /data/server /data/friction /data/odc-features /data/cache; do echo "volume:    $m = $(volume_of "$c" $m)"; done
-    url=$(env_of "$c" SSAM_DATABASE_URL)
+    url=$(db_url "$c")
     if [ -n "$url" ]; then
-      pg=$(postgres_of "$c")
-      echo "tokens:    postgres ($(printf '%s' "$url" | sed 's#//[^:]*:[^@]*@#//***:***@#')), container ${pg:-?}$( [ -n "$pg" ] && printf ' %s' "$($DOCKER inspect --format '{{.State.Status}}{{if .State.Health}} / {{.State.Health.Status}}{{end}}' "$pg")")"
+      reach=$(pg_tool "$c" psql "$url" -tAc 'select count(*) from server_tokens' 2>&1 | tail -n 1)
+      echo "tokens:    postgres ($(printf '%s' "$url" | sed 's#//[^:]*:[^@]*@#//***:***@#')), $(case "$reach" in [0-9]*) echo "$reach records, reachable";; *) echo "NOT reachable: $reach";; esac)"
     else echo "tokens:    /data/server/tokens.json (no SSAM_DATABASE_URL)"; fi
     ;;
   token)
@@ -128,8 +137,8 @@ case "$cmd" in
     $DOCKER run $hardened $(store_opts "$c") --entrypoint node "$(image_of "$c")" facade/ssam.mjs db "$@"
     ;;
   psql)
-    c=$(container); pg=$(postgres_of "$c"); [ -n "$pg" ] || die "no postgres container in the compose project of $c"
-    if [ $# -gt 0 ]; then $DOCKER exec "$pg" psql -U ssam -d ssam -c "$*"; else $DOCKER exec $tty "$pg" psql -U ssam -d ssam; fi
+    c=$(container); url=$(db_url "$c"); [ -n "$url" ] || die "the server has no SSAM_DATABASE_URL"
+    if [ $# -gt 0 ]; then pg_tool "$c" psql "$url" -c "$*"; else $DOCKER run --rm $tty --network "$(network_of "$c")" --security-opt no-new-privileges:true --cap-drop ALL --user 70:70 "$PG_IMAGE" psql "$url"; fi
     ;;
   features)
     c=$(container); [ "${1:-}" = put ] || die "features put <Features.plain.xml>"
@@ -154,30 +163,30 @@ case "$cmd" in
     stamp=$(date -u +%Y%m%dT%H%M%SZ); archive=$dir/ssam-state-$stamp.tar.gz
     # shellcheck disable=SC2086
     $DOCKER run $hardened --network none $(mounts "$c") "$(image_of "$c")" sh -c 'tar -C /data -czf - server friction odc-features' > "$archive"
-    pg=$(postgres_of "$c")
-    if [ -n "$pg" ]; then
-      # The tokens' database as plain SQL (loads back with psql, which every postgres image has).
-      $DOCKER exec "$pg" pg_dump -U ssam -d ssam --no-owner --no-privileges | gzip > "$dir/ssam-tokens-$stamp.sql.gz"
+    url=$(db_url "$c")
+    if [ -n "$url" ]; then
+      # The tokens' database as plain SQL (loads back with psql).
+      pg_tool "$c" pg_dump "$url" --no-owner --no-privileges < /dev/null | gzip > "$dir/ssam-tokens-$stamp.sql.gz"
       (cd "$dir" && sha256sum "ssam-tokens-$stamp.sql.gz" > "ssam-tokens-$stamp.sql.gz.sha256")
     fi
     (cd "$dir" && sha256sum "$(basename "$archive")" > "$archive.sha256")
     printf 'image=%s\nimageId=%s\nrevision=%s\ncontainer=%s\nmode=%s\n' "$($DOCKER inspect --format '{{.Config.Image}}' "$c")" "$(image_of "$c")" \
       "$($DOCKER inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$c")" "$c" \
       "$([ "$($DOCKER inspect --format '{{.State.Running}}' "$c")" = true ] && echo online || echo stopped)" > "$archive.info"
-    echo "backup: $archive ($(du -h "$archive" | cut -f1))$( [ -n "$pg" ] && printf ' and the tokens database in %s' "$dir/ssam-tokens-$stamp.sql.gz"); the files hold customer data and token hashes: keep them private"
+    echo "backup: $archive ($(du -h "$archive" | cut -f1))$( [ -n "$url" ] && printf ' and the tokens database in %s' "$dir/ssam-tokens-$stamp.sql.gz"); the files hold customer data and token hashes: keep them private"
     ;;
   restore)
     # restore <archive.tar.gz> [<ssam-tokens-....sql.gz>]: the volumes, and the tokens' database when a dump is given (the
-    # postgres service keeps running: Coolify's Stop on ssam-server stops only the server).
+    # database resource keeps running: Coolify's Stop on this resource stops only the server).
     c=$(container); archive=${1:?archive.tar.gz}; dump=${2:-}
     [ "$($DOCKER inspect --format '{{.State.Running}}' "$c")" = false ] || die "stop the server in Coolify first (Stop), then restore"
     [ -f "$archive" ] || die "no $archive"
     if [ -n "$dump" ]; then
-      pg=$(postgres_of "$c"); [ -n "$pg" ] || die "no postgres container for the dump"
+      url=$(db_url "$c"); [ -n "$url" ] || die "the server has no SSAM_DATABASE_URL: nothing to load the dump into"
       [ -f "$dump" ] || die "no $dump"
       (cd "$(dirname "$dump")" && { [ ! -f "$(basename "$dump").sha256" ] || sha256sum -c "$(basename "$dump").sha256"; }) || die "the dump does not match its .sha256"
-      $DOCKER exec "$pg" psql -U ssam -d ssam -v ON_ERROR_STOP=1 -c 'DROP TABLE IF EXISTS server_tokens; DROP TABLE IF EXISTS schema_migrations;' >/dev/null
-      gzip -dc "$dump" | $DOCKER exec -i "$pg" psql -U ssam -d ssam -v ON_ERROR_STOP=1 -f - >/dev/null
+      pg_tool "$c" psql "$url" -v ON_ERROR_STOP=1 -c 'DROP TABLE IF EXISTS server_tokens; DROP TABLE IF EXISTS schema_migrations;' < /dev/null >/dev/null
+      gzip -dc "$dump" | pg_tool "$c" psql "$url" -v ON_ERROR_STOP=1 -f - >/dev/null
       echo "tokens database restored from $dump"
     fi
     (cd "$(dirname "$archive")" && [ ! -f "$(basename "$archive").sha256" ] || sha256sum -c "$(basename "$archive").sha256") || die "the archive does not match its .sha256"

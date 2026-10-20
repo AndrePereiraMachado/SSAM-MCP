@@ -7,10 +7,10 @@
 #                Traefik reaches it on 7310 over the network Coolify gives the resource ("Connect to predefined network",
 #                COOLIFY.md 4). The labels below are the whole routing: Coolify generates none because no domain is set on
 #                the service in its UI (the domain is the variable SSAM_DOMAIN).
-#   postgres     the tokens and the agent credentials (only their SHA-256) of every customer, in a database with its own
-#                volume (pgdata), so a redeploy, a rollback or a container recreated by Coolify never loses a license.
-#                ssam-server reaches it as SSAM_DATABASE_URL and applies the migrations of
-#                platforms/odc/facade/migrations at start (DEPLOY.md 7.4). No host port; only this compose's network.
+#   (database)   the tokens and the agent credentials (only their SHA-256) of every customer live in a Postgres that is
+#                NOT in this compose: a database resource of Coolify (COOLIFY.md 6), reached as SSAM_DATABASE_URL over
+#                the predefined network. The server applies the migrations of platforms/odc/facade/migrations at start
+#                (DEPLOY.md 7.4). A redeploy, a rollback or a container recreated by Coolify never loses a license.
 #   ssam-admin   profile admin: tokens (issue, list, revoke, agent-rotate, import). Coolify never starts it: it runs by
 #                hand over SSH, through ssamctl.sh (which needs no compose at all) or `docker compose --profile admin run`.
 #   ssam-ops     profile ops: file drops into the state volumes (kernel.json, Features.plain.xml) and backups: the same,
@@ -71,12 +71,9 @@ services:
       SSAM_O11_WORKER_RSS_MB: ${SSAM_O11_WORKER_RSS_MB:-1200}
       SSAM_QUALITY: ${SSAM_QUALITY:-1}
       SSAM_HOSTED_SSAM_CODE: ${SSAM_HOSTED_SSAM_CODE:-}
-      # The tokens in Postgres (server-tokens-pg.mjs): the service below, by its compose name. Without this variable
-      # the server would keep them in /data/server/tokens.json, as compose.prod.yml does.
-      SSAM_DATABASE_URL: postgres://ssam:${SSAM_DB_PASSWORD:?set SSAM_DB_PASSWORD (the password of the postgres service; any long random string)}@postgres:5432/ssam
-    depends_on:
-      postgres:
-        condition: service_healthy
+      # The tokens in Postgres (server-tokens-pg.mjs): the internal URL of the Coolify database resource. Without this
+      # variable the server would keep them in /data/server/tokens.json, as compose.prod.yml does.
+      SSAM_DATABASE_URL: ${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL (postgres://user:password@host:5432/database, the internal URL of the Postgres resource)}
     volumes:
       - server-state:/data/server
       - friction:/data/friction
@@ -126,41 +123,8 @@ services:
           memory: ${SSAM_MEMORY:-6g}
           pids: ${SSAM_PIDS:-4096}
 
-  # The tokens' database. Pinned by tag and digest; runs as the postgres user of the image (uid 70) with every
-  # capability dropped, so no step runs as root; its data in the pgdata volume, never in the image. The password is the
-  # one SSAM_DATABASE_URL carries above. Postgres is reached only by ssam-server and ssam-admin, on this compose's network.
-  postgres:
-    <<: *hardening
-    image: postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
-    restart: unless-stopped
-    user: "70:70"
-    environment:
-      POSTGRES_USER: ssam
-      POSTGRES_DB: ssam
-      POSTGRES_PASSWORD: ${SSAM_DB_PASSWORD:?set SSAM_DB_PASSWORD}
-      POSTGRES_INITDB_ARGS: "--data-checksums"
-    command: ["postgres", "-c", "max_connections=40", "-c", "shared_buffers=64MB", "-c", "log_min_duration_statement=2000"]
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    tmpfs:
-      - /tmp:size=64m
-      - /run/postgresql:size=16m,uid=70,gid=70
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ssam -d ssam -h 127.0.0.1"]
-      interval: 10s
-      timeout: 5s
-      start_period: 30s
-      retries: 6
-    stop_grace_period: 30s
-    deploy:
-      resources:
-        limits:
-          cpus: "1"
-          memory: 512m
-          pids: 256
-
   # Tokens, by hand (COOLIFY.md 6): `issue` and `agent-rotate` print the plaintext token and agent credential once; no
-  # log driver, so docker keeps no copy of them. On this compose's network only, to reach postgres.
+  # log driver, so docker keeps no copy of them. It needs the database too (ssamctl.sh gives it the server's network).
   ssam-admin:
     <<: *hardening
     image: ${SSAM_IMAGE:?set SSAM_IMAGE}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG}
@@ -171,10 +135,7 @@ services:
     entrypoint: ["node", "facade/ssam.mjs"]
     command: ["server-token", "list"]
     environment:
-      SSAM_DATABASE_URL: postgres://ssam:${SSAM_DB_PASSWORD:?set SSAM_DB_PASSWORD}@postgres:5432/ssam
-    depends_on:
-      postgres:
-        condition: service_healthy
+      SSAM_DATABASE_URL: ${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL}
     volumes:
       - server-state:/data/server
 
@@ -200,4 +161,3 @@ volumes:
   friction:
   odc-features:
   cache:
-  pgdata:

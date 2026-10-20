@@ -1,7 +1,23 @@
 # Local rehearsal of compose.coolify.yml without Coolify or Traefik (COOLIFY.md 10): the server's port published on the
-# loopback of this machine, so curl reaches /health and /mcp directly. Never on a VPS: there, only Traefik reaches 7310.
+# loopback of this machine, so curl reaches /health and /mcp directly, and a throwaway Postgres in place of the Coolify
+# database resource (SSAM_DATABASE_URL of the rehearsal .env points at it: postgres://ssam:<password>@postgres:5432/ssam).
+# Never on a VPS: there, only Traefik reaches 7310 and the database is a Coolify resource.
 #   docker compose -p ssam-coolify-rehearsal --env-file <.env> -f compose.coolify.yml -f rehearsal.override.yml up -d ssam-server
 services:
   ssam-server:
     ports:
       - "127.0.0.1:27310:7310"
+    depends_on:
+      postgres:
+        condition: service_healthy
+  postgres:
+    image: postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    environment:
+      POSTGRES_USER: ssam
+      POSTGRES_DB: ssam
+      POSTGRES_PASSWORD: ${SSAM_REHEARSAL_DB_PASSWORD:?set SSAM_REHEARSAL_DB_PASSWORD (the password SSAM_DATABASE_URL carries)}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ssam -d ssam -h 127.0.0.1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
