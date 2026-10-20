@@ -138,4 +138,6 @@ ligado a um update server. Está em `app/` (README do dono: `app/README.md`; gui
   empacotada (`dist/win-unpacked`) contra o hub falso, painel guiado por CDP: setup, pacote `pack-20261020-193613`
   (45 arquivos, v97, 11.55.92, montado de `C:\t\agent-mac\round2\pack3-win` com `-NoBuild -Prebuilt -NoNode`),
   conectado, parar, iniciar, sair com parada limpa. Instalador NSIS `ssam-agent-app-0.1.0-setup.exe` (103 MB) com
-  `latest.yml` apontando para `https://dist.ssam.pro/u/ssam-agent`. Falta um Mac para o DMG, a assinatura e a notarização.
+  `latest.yml` apontando para `https://dist.ssam.pro/u/ssam-agent`. O DMG e o ZIP do macOS saem do workflow
+  `.github/workflows/agent-app-mac.yml` (macos-latest, manual, pacote mac como asset de um Release; `app/README.md`);
+  sem os secrets de assinatura e notarização o DMG sai sem assinatura e o updater não atualiza no macOS.

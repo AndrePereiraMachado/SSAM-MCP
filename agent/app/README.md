@@ -78,6 +78,28 @@ Para testar em casa: `SSAM_UPDATE_URL=http://127.0.0.1:<porta>/` (só loopback a
 `npx serve` ou `python -m http.server`; num checkout (`npm start`), o electron-updater só confere com um
 `dev-app-update.yml` ao lado do `package.json`.
 
+## A build do macOS pelo GitHub Actions
+
+O electron-builder só gera o DMG e o ZIP do updater num macOS. O workflow `.github/workflows/agent-app-mac.yml`
+(`macos-latest`, disparo manual) faz isso a partir do pacote mac de `scripts\agent-pack.ps1 -Platform mac`:
+
+1. Envie a branch: `git push origin server/agent-electron`.
+2. Ponha o pacote mac num Release do repositório (rascunho ou pré-release serve), tag `agent-pack-mac`, com o asset
+   `ssam-agent-mac.tar.gz` (o da rodada 2 está em `C:\t\agent-mac\pack2\`, `pack-20261019-072205`, 33 arquivos):
+   `gh release create agent-pack-mac C:\t\agent-mac\pack2\ssam-agent-mac.tar.gz --prerelease --title "macOS agent pack" --notes "pack-20261019-072205"`
+   (ou pela página Releases; para outro pacote, suba o asset de novo com `gh release upload agent-pack-mac <arquivo> --clobber`).
+3. Em Actions, "Agent app (macOS build)", Run workflow, branch `server/agent-electron` (os campos já vêm com o tag,
+   o nome do asset e `https://dist.ssam.pro/u/ssam-agent`).
+4. Baixe o artefato `ssam-agent-app-mac`: `ssam-agent-app-<v>-mac-arm64.dmg`, `-x64.dmg`, os `.zip`, os `.blockmap` e
+   `latest-mac.yml`. Copie tudo para `https://dist.ssam.pro/u/ssam-agent/` ao lado dos arquivos do Windows.
+
+Assinatura e notarização só acontecem quando os secrets existem no repositório: `CSC_LINK` (o certificado Developer
+ID Application como `.p12` em base64) e `CSC_KEY_PASSWORD`; `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` e
+`APPLE_TEAM_ID` (notarização; o workflow passa `--notarize` ao build). **Sem eles o DMG sai sem assinatura: o Gatekeeper
+avisa ao abrir (botão direito, Abrir) e o electron-updater NÃO instala atualizações no macOS**; a app serve, mas
+cada versão nova vai à mão. O `npm test` roda no runner antes do build (no macOS a raiz do teste fica numa pasta
+oculta da home, porque o setup do agente recusa `/var/folders`).
+
 ## Pastas da app e do agente
 
 - A app: `%LOCALAPPDATA%\Programs\ssam-agent-app` (NSIS por usuário, sem administrador) ou `/Applications/SSAM Agent.app`.

@@ -23,11 +23,13 @@ const box = path.resolve(app, '..');
 export const DEFAULT_UPDATE_URL = 'https://dist.ssam.pro/u/ssam-agent';
 
 function parse(argv) {
-  const options = { platform: null, pack: null, updateUrl: process.env.SSAM_UPDATE_URL ?? DEFAULT_UPDATE_URL, noUpdates: false, packOnly: false };
+  const options = { platform: null, pack: null, updateUrl: process.env.SSAM_UPDATE_URL ?? DEFAULT_UPDATE_URL, noUpdates: false, packOnly: false, notarize: false };
   for (let i = 0; i < argv.length; i++) {
     const name = argv[i];
     if (name === '--no-updates') { options.noUpdates = true; continue; }
     if (name === '--pack-only') { options.packOnly = true; continue; }
+    // macOS only: notarize with APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID (electron-builder reads them).
+    if (name === '--notarize') { options.notarize = true; continue; }
     if (!['--platform', '--pack', '--update-url'].includes(name)) throw new Error('unknown option: ' + name);
     if (i + 1 >= argv.length) throw new Error('missing the value of ' + name);
     const value = argv[++i];
@@ -85,6 +87,10 @@ async function main() {
   const args = [cli, options.platform === 'win' ? '--win' : '--mac', '--publish', 'never', '--config', 'electron-builder.yml'];
   if (options.noUpdates) args.push('-c.publish=null');
   else args.push('-c.publish.provider=generic', `-c.publish.url=${options.updateUrl.replace(/\/+$/, '')}`, '-c.publish.channel=latest');
+  if (options.notarize) {
+    for (const name of ['APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID']) if (!process.env[name]) throw new Error(`--notarize needs ${name} in the environment`);
+    args.push('-c.mac.notarize=true');
+  }
   console.log('electron-builder ' + args.slice(1).join(' '));
   const result = spawnSync(process.execPath, args, { cwd: app, stdio: 'inherit', env: { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: process.env.CSC_IDENTITY_AUTO_DISCOVERY ?? 'false' } });
   if (result.status !== 0) throw new Error('electron-builder failed with code ' + result.status);

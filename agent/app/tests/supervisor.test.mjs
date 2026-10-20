@@ -17,7 +17,10 @@ import { verifyPack } from '../src/pack-sync.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const agentDir = path.resolve(here, '..', '..', 'agent');
 const sha = buffer => createHash('sha256').update(buffer).digest('hex');
-const fresh = name => fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-app-' + name + '-'));
+// The root on macOS: the agent's setup refuses the temporary folders macOS cleans (/var/folders), so a hidden folder of the
+// home holds it there; anywhere else, the temp folder.
+const base = process.platform === 'darwin' ? fs.mkdtempSync(path.join(os.homedir(), '.ssam-app-test-')) : os.tmpdir();
+const fresh = name => fs.mkdtempSync(path.join(base, 'ssam-app-' + name + '-'));
 const remove = dir => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 // No LOCALAPPDATA: the temp root of the test lives there, and the agent's setup refuses such a root for real use.
@@ -121,5 +124,6 @@ test('supervisor: sync, setup, start to connected, second start, clean stop, ref
     await supervisor.shutdown();
     hub.close();
     remove(pack); remove(path.dirname(root));
+    if (base !== os.tmpdir()) remove(base);
   }
 });

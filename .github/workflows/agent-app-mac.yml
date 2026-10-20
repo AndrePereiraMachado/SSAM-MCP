@@ -1,0 +1,89 @@
+# The macOS build of the agent's desktop app (agent/app): electron-builder makes the DMG and the ZIP of the updater
+# only on macOS, so this runs on a macOS runner by hand (workflow_dispatch) on the branch you choose.
+#
+# The macOS agent pack (scripts/agent-pack.ps1 -Platform mac: ssam-agent-mac.tar.gz) is not in the repository: upload
+# it as an asset of a GitHub Release of this repository (a draft or pre-release is fine; the default tag is
+# agent-pack-mac) and the workflow downloads it with the token of the run.
+#
+# Signing and notarization happen only when the secrets exist (CSC_LINK + CSC_KEY_PASSWORD: the Developer ID
+# Application certificate as base64 .p12 and its password; APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID:
+# notarization). Without them the DMG is unsigned: Gatekeeper warns, and electron-updater does NOT install updates on
+# macOS (it refuses an unsigned app). The artifacts are the files to copy to the update server as they are.
+name: Agent app (macOS build)
+
+on:
+  workflow_dispatch:
+    inputs:
+      pack_release:
+        description: Tag of the GitHub Release that holds the macOS agent pack
+        required: true
+        default: agent-pack-mac
+      pack_asset:
+        description: Name of the pack asset in that release
+        required: true
+        default: ssam-agent-mac.tar.gz
+      update_url:
+        description: The update server the app will ask (publish.url)
+        required: true
+        default: https://dist.ssam.pro/u/ssam-agent
+
+jobs:
+  build:
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: agent/app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: agent/app/package-lock.json
+
+      - name: Download the macOS agent pack from the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/pack"
+          gh release download "${{ inputs.pack_release }}" --repo "${{ github.repository }}" --pattern "${{ inputs.pack_asset }}" --dir "$RUNNER_TEMP/pack"
+          ls -la "$RUNNER_TEMP/pack"
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        env:
+          ANVIL_WORKER: '0'
+          ANVIL_ODC_NO_WORKER: '1'
+          SSAM_ODC_OFFLINE: '1'
+        run: npm test
+
+      - name: Build (DMG and ZIP, arm64 and x64)
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK != '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NOTARIZE: ${{ secrets.APPLE_ID != '' && secrets.CSC_LINK != '' }}
+        run: |
+          if [ "$CSC_LINK" = "" ]; then echo "::warning::No CSC_LINK secret: the DMG is unsigned (Gatekeeper warns; electron-updater will not auto-update on macOS)."; fi
+          if [ "$NOTARIZE" = "true" ]; then extra="--notarize"; else extra=""; fi
+          node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/pack/${{ inputs.pack_asset }}" --update-url "${{ inputs.update_url }}" $extra
+          ls -la dist
+
+      - name: Upload the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssam-agent-app-mac
+          if-no-files-found: error
+          path: |
+            agent/app/dist/*.dmg
+            agent/app/dist/*.zip
+            agent/app/dist/*.blockmap
+            agent/app/dist/latest-mac.yml
