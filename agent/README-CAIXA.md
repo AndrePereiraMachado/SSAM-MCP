@@ -119,3 +119,22 @@ Pedido do dono de 19/10: instalar no Mac com UM comando, sem decompilar nada. Pl
     Node gravado em `private/node` e conferido, `runtimeconfig.json` ilegível para o attach.
   - Pacote `pack-20261019-072205` (`C:\t\agent-mac\pack2`, sha256 `ea3e459c…d4b7`), mesmos binários do pack3, varredura
     de PI sem achados. O pacote da rodada 1 (`C:\t\agent-mac\pack`) fica como está.
+## A app Electron do agente (`server/agent-electron`, 20/10/2026)
+
+Pedido do dono de 20/10: o agente como app Electron em segundo plano no Windows e no macOS, com ícone na bandeja, e
+ligado a um update server. Está em `app/` (README do dono: `app/README.md`; guia do cliente: `docs/AGENTE-APP.md`).
+
+- **O agente não muda.** A app leva o pacote de `scripts\agent-pack.ps1` (montado com `-NoNode`; no macOS,
+  `-Platform mac`) em `resources/pack` e o sincroniza para a pasta do agente (`app/src/pack-sync.mjs`: o mesmo que
+  extrair o pacote novo por cima, sem tocar `private/`, `inbox/`, `odc/` de dados e `o11/`). O agente roda como
+  `utilityProcess` do Electron 44 (Node 24.22, com `--use-env-proxy` e `--use-system-ca`), com a linha de comando do
+  `.ps1`/`.sh`; parada limpa por `private/agent.stop`; códigos 2, 3 e 4 finais, outros reiniciam com atraso crescente.
+- **Update server.** electron-updater com provider `generic`: uma pasta estática por HTTPS com `latest.yml`,
+  `latest-mac.yml`, instaladores e blockmaps; a URL entra no build (`--update-url`) e pode ser trocada no painel.
+  No macOS a atualização automática exige app assinada e notarizada.
+- **Provado no Windows (20/10):** `app/tests` 14/14 (sync, setup, conectar, parar limpo com DELETE no hub, credencial
+  recusada sem reinício, reinício após kill, doctor, ZIP, inglês); prova ao vivo da app de checkout e da app
+  empacotada (`dist/win-unpacked`) contra o hub falso, painel guiado por CDP: setup, pacote `pack-20261020-193613`
+  (45 arquivos, v97, 11.55.92, montado de `C:\t\agent-mac\round2\pack3-win` com `-NoBuild -Prebuilt -NoNode`),
+  conectado, parar, iniciar, sair com parada limpa. Instalador NSIS `ssam-agent-app-0.1.0-setup.exe` (103 MB) com
+  `latest.yml`. Falta um Mac para o DMG, a assinatura e a notarização, e a URL real do update server.
