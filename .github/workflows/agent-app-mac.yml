@@ -43,7 +43,7 @@ jobs:
   build:
     runs-on: macos-latest
     permissions:
-      contents: read
+      contents: write   # the release app-v<version> that holds the DMG, the ZIP and latest-mac.yml
     defaults:
       run:
         working-directory: agent
@@ -104,3 +104,21 @@ jobs:
             agent/dist/*.zip
             agent/dist/*.blockmap
             agent/dist/latest-mac.yml
+
+      # The same files in a GitHub Release of the app (tag app-v<version>, a pre-release: the DMG is unsigned), so the
+      # DMG is found under Releases and not only in the artifacts of the run. A second build of the same version
+      # replaces the files. These are the files to copy to the update server as they are.
+      - name: Publish the build in the release app-v<version>
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="app-v$version"
+          files=$(ls dist/*.dmg dist/*.zip dist/*.blockmap dist/latest-mac.yml)
+          if gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$tag" $files --repo "${{ github.repository }}" --clobber
+          else
+            gh release create "$tag" $files --repo "${{ github.repository }}" --prerelease --title "SSAM Agent app $version (macOS build, unsigned)" \
+              --notes "DMG (arm64 and x64) and the files of the update server (ZIP, blockmap, latest-mac.yml) built by the workflow 'Agent app (macOS build)' from the pack of the release agent-pack-mac. Unsigned: open once with right-click > Open; no automatic update on macOS. The Windows installer is built on Windows (agent/scripts/build.mjs)."
+          fi
+          gh release view "$tag" --repo "${{ github.repository }}" --json assets --jq '.assets[].name'
