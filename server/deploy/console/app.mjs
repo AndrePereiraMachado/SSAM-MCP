@@ -59,7 +59,8 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
   const host = createHost({ file: config.hostJson, state, tz, now, emit: emitMain, usage });
   const workspaces = createWorkspaces({ serverDir: config.serverDir, state, now, ...(workspaceEntries ? { maxEntries: workspaceEntries } : {}) });
   const alerts = createAlerts({ state, now, emit: emitMain });
-  const auth = createAuth({ state, now });
+  // The access key (the SSH tunnel) or the GitHub sign-in (the Coolify mode), by the configuration.
+  const auth = createAuth({ config, state, history, now, log, emit: emitMain });
   const auditMinutes = createMinutes({ keepMinutes: 20 });
   const readProblems = {};
   let lossAt = null;
@@ -282,6 +283,7 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
     if (indexing !== 'running') { await audit.tick(); await access.tick(); }
     await tickQuality();
     host.poll();
+    await licenses.reconnect();
     licenses.detectExternal();
   });
   const tickAlerts = safe('alerts', () => alerts.evaluate(alertContext()));
@@ -329,6 +331,7 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
     try {
       if (indexing !== 'running') { usage.flushDays(); if (qualityReady()) quality.flushDays(); writeCheckpoint(true); }
     } catch (error) { log({ console: 'checkpoint-failed', code: cap(error?.code ?? 'ERRO', 20) }); }
+    licenses.close();
   }
   // Runs every reader and poll once, in order (tests and the first pass).
   async function tickAll() { await tickLog(); await tickFiles(); await tickAlerts(); }

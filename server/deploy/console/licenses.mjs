@@ -12,6 +12,13 @@
 // auto (default) writes only with a module that has renew and setLanes; on writes with any module; off never writes.
 // Whatever the mode, every write is read back through a fresh store: when the change is not in the file (or the file
 // does not parse) the answer is WRITE_NOT_CONFIRMED, with a history line and a critical alert, and no secret is shown.
+// Backends (the image with the Postgres store, COOLIFY.md 6 and 11): the module's openTokenStore picks tokens.json or,
+// with SSAM_DATABASE_URL (config.databaseUrl), Postgres. The Postgres store's writers return promises and its readers
+// answer over a snapshot, so every verb is awaited here (the file store's values pass through await unchanged) and the
+// read-back goes through store.refresh() + list() (the table read again) instead of a fresh file store. A database that
+// cannot be reached at start leaves the console read-only (every capability off, STORE_UNREADABLE), and the store is
+// opened again on the polls (reconnect, at most once every 30 s) until it answers. An older module without
+// openTokenStore (the 23rd and 24th images) keeps createTokenStore(dir).
 import { pathToFileURL } from 'node:url';
 import { ApiError, invalidField, licenseText } from './texts.mjs';
 
@@ -59,26 +66,63 @@ export function mapStoreError(verb, error, id = null) {
   return new ApiError('INTERNAL', { código: String(error?.name ?? 'ERRO').slice(0, 40) });
 }
 
+export const RECONNECT_MS = 30000;
+
 export async function createLicenses({ config, state, history, tz, now = Date.now, log = () => {}, emit = () => {}, gate }) {
   let store = null;
   let createStore = null;
+  let openStore = null;
   let loadError = null;
+  const fn = f => typeof f === 'function';
+  const writes = config.licenseWrites ?? 'auto';
+  // The capabilities object is shared (views, the listening log line): it is updated in place when the store opens.
+  const caps = { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, readOnly: null };
+  function setCaps() {
+    const verbs = { issue: fn(store?.issue), revoke: fn(store?.revoke), agentRotate: fn(store?.agentRotate), renew: fn(store?.renew), lanes: fn(store?.setLanes) };
+    // renew and setLanes arrived with tokens.json.lock (the 24th image's module): their presence is the sign of the lock.
+    // The Postgres store has them too (one transaction under an advisory lock).
+    const locked = verbs.renew && verbs.lanes;
+    const readOnly = !store ? null : writes === 'off' ? 'desligado' : writes === 'auto' && !locked ? 'sem-trava' : null;
+    Object.assign(caps, readOnly ? { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, readOnly } : { ...verbs, readOnly: null });
+    if (readOnly) log({ console: 'license-writes-off', reason: readOnly });
+  }
+  // The store's own log lines (db-migrated, tokens-store, tokens-store-stale): event and codes only, never the URL.
+  const storeLog = line => log({ console: 'token-store', event: String(line?.event ?? 'log').slice(0, 40),
+    ...(line?.backend ? { backend: String(line.backend).slice(0, 20) } : {}), ...(line?.version ? { version: String(line.version).slice(0, 10) } : {}),
+    ...(line?.code ? { code: String(line.code).slice(0, 40) } : {}) });
+  const storeEnv = () => (config.databaseUrl ? { SSAM_DATABASE_URL: config.databaseUrl } : {});
+  async function attach() {
+    try {
+      store = openStore ? await openStore({ dir: config.serverDir, env: storeEnv(), log: storeLog }) : createStore(config.serverDir);
+      loadError = null;
+    } catch (error) {
+      store = null;
+      loadError = error;
+      log({ console: 'token-module-failed', code: error.code ?? error.name ?? 'IMPORT' });
+    }
+    setCaps();
+  }
   try {
     const mod = await import(pathToFileURL(config.tokenModule).href);
     createStore = mod.createTokenStore;
-    store = createStore(config.serverDir);
+    openStore = fn(mod.openTokenStore) ? mod.openTokenStore : null;
+    await attach();
   } catch (error) {
     loadError = error;
     log({ console: 'token-module-failed', code: error.code ?? error.name ?? 'IMPORT' });
+    setCaps();
   }
-  const fn = f => typeof f === 'function';
-  const verbs = { issue: fn(store?.issue), revoke: fn(store?.revoke), agentRotate: fn(store?.agentRotate), renew: fn(store?.renew), lanes: fn(store?.setLanes) };
-  // renew and setLanes arrived with tokens.json.lock (the 24th image's module): their presence is the sign of the lock.
-  const locked = verbs.renew && verbs.lanes;
-  const writes = config.licenseWrites ?? 'auto';
-  const readOnly = !store ? null : writes === 'off' ? 'desligado' : writes === 'auto' && !locked ? 'sem-trava' : null;
-  const caps = readOnly ? { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, readOnly } : { ...verbs, readOnly: null };
-  if (readOnly) log({ console: 'license-writes-off', reason: readOnly });
+  const backend = () => store?.backend ?? 'file';
+  let reconnecting = null;
+  let reconnectAt = 0;
+  // A store that could not be opened (the database unreachable at start) is opened again on the polls, at most once
+  // every RECONNECT_MS; a module that could not be imported is not retried.
+  function reconnect() {
+    if (store || !openStore || reconnecting || now() - reconnectAt < RECONNECT_MS) return reconnecting ?? Promise.resolve();
+    reconnectAt = now();
+    reconnecting = attach().then(() => { if (store) log({ console: 'token-store-reconnected', backend: backend() }); }).finally(() => { reconnecting = null; });
+    return reconnecting;
+  }
   const names = new Map();
   let listError = null;
   let snapshot = state.readJson(SNAPSHOT);
@@ -180,24 +224,32 @@ export async function createLicenses({ config, state, history, tz, now = Date.no
 
   // ---- mutations: pre-checks here, the store call inside the gate (one at a time, re-checked)
   const notSupported = cap => {
-    if (readOnly) throw new ApiError(readOnly === 'desligado' ? 'WRITES_OFF' : 'WRITES_UNLOCKED');
+    if (caps.readOnly) throw new ApiError(caps.readOnly === 'desligado' ? 'WRITES_OFF' : 'WRITES_UNLOCKED');
     if (!caps[cap]) throw new ApiError('NOT_SUPPORTED');
   };
   const confirmOf = (customer, confirm) => { if (String(confirm ?? '').trim() !== customer) throw new ApiError('CONFIRM_MISMATCH'); };
-  function call(verb, action, target, detail, run) {
-    try { return run(); } catch (error) {
+  // The verb is awaited: the Postgres store answers with a promise, the file store with a value (a synchronous throw of
+  // the file store lands in the same catch).
+  async function call(verb, action, target, detail, run) {
+    try { return await run(); } catch (error) {
       const api = mapStoreError(verb, error, target.id);
       record({ action, token: target.id, customer: target.customer, result: 'error', code: api.apiCode, detail });
       throw api;
     }
   }
   const afterWrite = () => { const { tokens } = tryList(); if (tokens) saveSnapshot(tokens); };
-  // Read-back after every write, through a fresh store (no cache): the record must be in tokens.json with the change, and
-  // the file must parse. Otherwise another writer dropped the change or tore the file: history line, notice (critical
-  // alert), log line and WRITE_NOT_CONFIRMED; the caller never returns a secret for it.
-  function confirmWrite(action, target, detail, holds) {
+  // The records as the backend holds them now, outside any cache: the table read again (refresh) on Postgres, a fresh
+  // store over the file (no cache) on tokens.json.
+  async function readBack() {
+    if (backend() === 'postgres') { await store.refresh(); return store.list(); }
+    return createStore(config.serverDir).list();
+  }
+  // Read-back after every write: the record must be in the backend with the change (and, on tokens.json, the file must
+  // parse). Otherwise another writer dropped the change or tore the file: history line, notice (critical alert), log
+  // line and WRITE_NOT_CONFIRMED; the caller never returns a secret for it.
+  async function confirmWrite(action, target, detail, holds) {
     let rec = null;
-    try { rec = (createStore(config.serverDir).list() ?? []).map(normalize).find(x => x.id === target.id) ?? null; } catch { rec = null; }
+    try { rec = ((await readBack()) ?? []).map(normalize).find(x => x.id === target.id) ?? null; } catch { rec = null; }
     if (rec && holds(rec)) { afterWrite(); return; }
     afterWrite();
     record({ action, token: target.id, customer: target.customer, result: 'error', code: 'WRITE_NOT_CONFIRMED', detail });
@@ -212,15 +264,15 @@ export async function createLicenses({ config, state, history, tz, now = Date.no
     notSupported('issue');
     const name = customer.trim();
     confirmOf(name, confirm);
-    return gate.run(() => {
+    return gate.run(async () => {
       detectExternal();
       const current = tryList().tokens ?? [];
       const duplicates = current.filter(t => t.state === 'active' && t.customer.toLowerCase() === name.toLowerCase()).map(t => t.id);
-      const issued = call('issue', 'issue', { id: null, customer: name }, { days: days ?? null, lanes },
+      const issued = await call('issue', 'issue', { id: null, customer: name }, { days: days ?? null, lanes },
         () => store.issue({ customer: name, ...(days ? { days } : {}), lanes }));
       const { token, agentCredential, ...rest } = issued;
       const view = normalize(rest);
-      confirmWrite('issue', { id: view.id, customer: view.customer }, { days: days ?? null, lanes },
+      await confirmWrite('issue', { id: view.id, customer: view.customer }, { days: days ?? null, lanes },
         r => r.customer === view.customer && lanesKey(r.lanes) === lanesKey(view.lanes) && sameTime(r.expiresAt, view.expiresAt) && !r.revokedAt);
       const audit = record({ action: 'issue', token: view.id, customer: view.customer, detail: { days: days ?? null, expiresAt: view.expiresAt, lanes: view.lanes } });   // null days = sem validade
       return { view, secret: { token, agentCredential }, duplicates, audit };
@@ -231,16 +283,16 @@ export async function createLicenses({ config, state, history, tz, now = Date.no
     const seen = find(id);
     confirmOf(seen.customer, confirm);
     if (!sameTime(expectExpiresAt, seen.expiresAt)) throw new ApiError('STALE');
-    return gate.run(() => {
+    return gate.run(async () => {
       detectExternal();
       const cur = find(id);
       const detail = { days, previousExpiresAt: cur.expiresAt };
       if (!sameTime(expectExpiresAt, cur.expiresAt)) throw refuse('renew', cur, 'STALE', detail);
       if (cur.state === 'revoked') throw refuse('renew', cur, 'TOKEN_REVOKED', detail);
       if (!cur.expiresAt) throw refuse('renew', cur, 'NO_EXPIRY', detail);
-      const result = call('renew', 'renew', cur, { days, previousExpiresAt: cur.expiresAt }, () => store.renew(id, { days }));
+      const result = await call('renew', 'renew', cur, { days, previousExpiresAt: cur.expiresAt }, () => store.renew(id, { days }));
       const view = normalize(result);
-      confirmWrite('renew', cur, detail, r => sameTime(r.expiresAt, view.expiresAt) && !r.revokedAt);
+      await confirmWrite('renew', cur, detail, r => sameTime(r.expiresAt, view.expiresAt) && !r.revokedAt);
       const previousExpiresAt = result.previousExpiresAt ?? cur.expiresAt;
       const audit = record({ action: 'renew', token: id, customer: cur.customer, detail: { days, previousExpiresAt, expiresAt: view.expiresAt } });
       return { view, previousExpiresAt, expiresAt: view.expiresAt, audit };
@@ -251,16 +303,16 @@ export async function createLicenses({ config, state, history, tz, now = Date.no
     const seen = find(id);
     confirmOf(seen.customer, confirm);
     if (lanesKey(expectLanes) !== lanesKey(seen.lanes)) throw new ApiError('STALE');
-    return gate.run(() => {
+    return gate.run(async () => {
       detectExternal();
       const cur = find(id);
       const detail = { lanes, previousLanes: cur.lanes };
       if (lanesKey(expectLanes) !== lanesKey(cur.lanes)) throw refuse('lanes', cur, 'STALE', detail);
       if (cur.state === 'revoked') throw refuse('lanes', cur, 'TOKEN_REVOKED', detail);
       if (lanesKey(lanes) === lanesKey(cur.lanes)) throw refuse('lanes', cur, 'NO_CHANGE', detail);
-      const result = call('setLanes', 'lanes', cur, { lanes, previousLanes: cur.lanes }, () => store.setLanes(id, lanes));
+      const result = await call('setLanes', 'lanes', cur, { lanes, previousLanes: cur.lanes }, () => store.setLanes(id, lanes));
       const view = normalize(result);
-      confirmWrite('lanes', cur, detail, r => lanesKey(r.lanes) === lanesKey(view.lanes));
+      await confirmWrite('lanes', cur, detail, r => lanesKey(r.lanes) === lanesKey(view.lanes));
       const audit = record({ action: 'lanes', token: id, customer: cur.customer, detail: { previousLanes: cur.lanes, lanes: view.lanes } });
       return { view, previousLanes: cur.lanes, audit };
     });
@@ -269,14 +321,14 @@ export async function createLicenses({ config, state, history, tz, now = Date.no
     notSupported('agentRotate');
     const seen = find(id);
     confirmOf(seen.customer, confirm);
-    return gate.run(() => {
+    return gate.run(async () => {
       detectExternal();
       const cur = find(id);
       if (cur.state !== 'active') throw refuse('agent-rotate', cur, 'TOKEN_NOT_ACTIVE');
-      const result = call('agentRotate', 'agent-rotate', cur, {}, () => store.agentRotate(id));
+      const result = await call('agentRotate', 'agent-rotate', cur, {}, () => store.agentRotate(id));
       const { agentCredential, ...rest } = result;
       const view = normalize(rest);
-      confirmWrite('agent-rotate', cur, {}, r => r.agentIssuedAt === view.agentIssuedAt && r.state === 'active');
+      await confirmWrite('agent-rotate', cur, {}, r => r.agentIssuedAt === view.agentIssuedAt && r.state === 'active');
       const audit = record({ action: 'agent-rotate', token: id, customer: cur.customer });
       return { view, secret: { agentCredential }, audit };
     });
@@ -285,20 +337,23 @@ export async function createLicenses({ config, state, history, tz, now = Date.no
     notSupported('revoke');
     const seen = find(id);
     confirmOf(seen.customer, confirm);
-    return gate.run(() => {
+    return gate.run(async () => {
       detectExternal();
       const cur = find(id);
       if (cur.state === 'revoked') throw refuse('revoke', cur, 'ALREADY_REVOKED');
-      const result = call('revoke', 'revoke', cur, {}, () => store.revoke(id));
+      const result = await call('revoke', 'revoke', cur, {}, () => store.revoke(id));
       const view = normalize(result);
-      confirmWrite('revoke', cur, {}, r => !!r.revokedAt);
+      await confirmWrite('revoke', cur, {}, r => !!r.revokedAt);
       const audit = record({ action: 'revoke', token: id, customer: cur.customer });
       return { view, audit };
     });
   }
 
+  // The pool of the Postgres store is closed on stop (the file store's close is a no-op).
+  const close = () => Promise.resolve(store?.close?.()).catch(() => {});
   return {
-    caps, names, list, tryList, find, detectExternal, record,
+    caps, names, list, tryList, find, detectExternal, record, reconnect, close,
+    get backend() { return backend(); },
     // notices of the last NOTICE_DAYS days, oldest first (alert-rules.mjs)
     notices: () => { const floor = now() - NOTICE_DAYS * DAY; return notices.filter(n => Date.parse(n.at) >= floor); },
     nameOf: token => names.get(token) ?? null,
