@@ -1,0 +1,18 @@
+# Dynamic configuration of Coolify's Traefik for the SSAM server (COOLIFY.md 3). Coolify: Servers > the VPS > Proxy >
+# Dynamic Configurations > Add, name "ssam.yaml", this content. The folder is watched: it applies without a restart.
+#
+# serversTransport "ssam" (compose.coolify.yml: traefik.http.services.ssam.loadbalancer.serverstransport=ssam@file):
+#   - idleConnTimeout 4 s: Node closes an idle keep-alive socket after 5 s (http-server.mjs keeps the default). A longer
+#     idle time on the proxy lets a POST /mcp or /agent/v1/messages pick a socket Node has just closed: a 502 Traefik does
+#     not retry (it must not repeat a POST). Traefik's default is 90 s;
+#   - dialTimeout 5 s: a server that is restarting answers 502 after it (Traefik has no "wait for the upstream");
+#   - responseHeaderTimeout 0: no limit; an o11_deliver can take 60 min (the SSE keepalive and the agent ping keep the
+#     connection alive meanwhile). The entry point's writeTimeout is 0 too (Traefik's default).
+# This cannot be a Docker label: Traefik's Docker provider has no serversTransports labels, only the reference to one.
+http:
+  serversTransports:
+    ssam:
+      forwardingTimeouts:
+        dialTimeout: 5s
+        responseHeaderTimeout: 0s
+        idleConnTimeout: 4s

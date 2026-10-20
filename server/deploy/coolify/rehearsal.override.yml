@@ -1,0 +1,7 @@
+# Local rehearsal of compose.coolify.yml without Coolify or Traefik (COOLIFY.md 10): the server's port published on the
+# loopback of this machine, so curl reaches /health and /mcp directly. Never on a VPS: there, only Traefik reaches 7310.
+#   docker compose -p ssam-coolify-rehearsal --env-file <.env> -f compose.coolify.yml -f rehearsal.override.yml up -d ssam-server
+services:
+  ssam-server:
+    ports:
+      - "127.0.0.1:27310:7310"

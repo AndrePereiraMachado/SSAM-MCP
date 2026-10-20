@@ -273,6 +273,11 @@ docker compose -f compose.prod.yml pull ssam-server
 Serve qualquer registro privado: GHCR com pacote privado, GitLab, ECR, ACR ou um `registry:2` próprio atrás de TLS e
 senha. Se o registro tiver tags imutáveis, ligue.
 
+Para publicar uma imagem **já construída e ensaiada** (a da seção 12), sem construir de novo, use `deploy/publish.sh`:
+`sh deploy/publish.sh --image docker.io/<namespace>/ssam-server --tag <tag>`. Ele empurra, imprime a linha com o digest
+e, no Docker Hub, confere sem login que o repositório é privado (público = aviso e código 3). Uma VPS com Coolify
+(Traefik no lugar do Caddy) segue `deploy/coolify/COOLIFY.md`.
+
 ### C. Sem registro (cópia por SSH)
 
 Na máquina do build, depois do `sh deploy/build.sh`, sempre por arquivo e nunca por pipe (no PowerShell 5.1 um pipe de

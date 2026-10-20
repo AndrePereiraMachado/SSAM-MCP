@@ -1,0 +1,154 @@
+# The SSAM hosted server on a VPS run by Coolify, behind the Traefik proxy Coolify installs (no Caddy). Owned by the
+# SSAM-MCP monorepo; runbook in pt-BR: COOLIFY.md, in this folder. The production compose with Caddy stays
+# ../compose.prod.yml (DEPLOY.md); this file is the same server, with the proxy's part written as Traefik labels.
+#
+#   ssam-server  the image published to the PRIVATE registry (../publish.sh), pinned by tag AND digest. No host port:
+#                Traefik reaches it on 7310 over the network Coolify gives the resource ("Connect to predefined network",
+#                COOLIFY.md 4). The labels below are the whole routing: Coolify generates none because no domain is set on
+#                the service in its UI (the domain is the variable SSAM_DOMAIN).
+#   ssam-admin   profile admin: tokens (issue, list, revoke, agent-rotate). Coolify never starts it: it runs by hand over
+#                SSH, through ssamctl.sh (which needs no compose at all) or `docker compose --profile admin run`.
+#   ssam-ops     profile ops: file drops into the state volumes (kernel.json, Features.plain.xml) and backups: the same,
+#                by hand, through ssamctl.sh.
+#
+# What the proxy must do for this server (the same list as ../Caddyfile), and how Traefik does it here:
+#   - no buffering: /mcp answers in SSE and the agent keeps a long GET /agent/v1/stream open in NDJSON. Traefik streams
+#     responses as they come (no buffering middleware is used here, on purpose);
+#   - long calls: an o11_deliver can take 60 min. Traefik puts no limit on the response (responseHeaderTimeout and
+#     writeTimeout are 0 by default). The entry point's readTimeout (60 s in Traefik v3) only bounds reading a request;
+#   - idle upstream connections: Node closes its idle keep-alive sockets after 5 s, so the proxy must drop its own sooner
+#     (a reused dead socket is a 502 Traefik does not retry on a POST). That is the serversTransport `ssam@file`
+#     (traefik-ssam.yaml, idleConnTimeout 4 s), a dynamic configuration Coolify's Traefik reads from its dynamic folder:
+#     it cannot be written as a label (Traefik's Docker provider has no serversTransports labels);
+#   - Host and Origin pass through unchanged; X-Forwarded-For carries the client's address (Traefik trusts no client);
+#   - only what the server serves is routed: /mcp, /agent, /agent/*, /health; anything else is Traefik's 404;
+#   - bodies: the server itself refuses above 16 MiB per MCP request and 4 MiB per agent part (413); no proxy limit;
+#   - security headers: the same as the Caddyfile, as a headers middleware in the labels;
+#   - TLS: Coolify's Let's Encrypt resolver (`letsencrypt`) on the `https` entry point; http redirects to https.
+# Trade-off against compose.prod.yml: there, ssam-server sat on an internal network with no route to the internet; here it
+# must be on the proxy's network, which has one. The server never needs it (every Studio and tenant operation goes
+# through the customer's agent, which connects in). COOLIFY.md 9 shows how to block its egress on the host, if wanted.
+#
+# Coolify reads every ${VAR} here as an environment variable of the resource (${VAR:?} blocks the deploy until set):
+# COOLIFY.md 4 lists them; .env.coolify.example has the same list for a plain `docker compose` run (the rehearsal).
+
+x-hardening: &hardening
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  ssam-server:
+    <<: *hardening
+    # From the private registry, pinned by tag and digest (publish.sh prints the line): a tag pushed again cannot change
+    # what runs here, and a rollback gets exactly the old image.
+    image: ${SSAM_IMAGE:?set SSAM_IMAGE (e.g. docker.io/<namespace>/ssam-server)}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG (prod-<yyyymmdd>-<commit>@sha256:<digest>)}
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      SSAM_PORT: "7310"
+      SSAM_PUBLIC_HOST: ${SSAM_DOMAIN:?set SSAM_DOMAIN (the DNS name of this VPS, e.g. ssam.example.com)}
+      SSAM_SERVER_RATE_PER_MINUTE: ${SSAM_RATE_PER_MINUTE:-240}
+      SSAM_BUILD_WORKERS: ${SSAM_BUILD_WORKERS:-2}
+      SSAM_O11_WORKERS_MAX: ${SSAM_O11_WORKERS_MAX:-2}
+      SSAM_O11_WORKER_IDLE_MS: ${SSAM_O11_WORKER_IDLE_MS:-600000}
+      SSAM_O11_WORKER_MIN_IDLE_MS: ${SSAM_O11_WORKER_MIN_IDLE_MS:-120000}
+      SSAM_O11_WORKER_BASE_CACHE: ${SSAM_O11_WORKER_BASE_CACHE:-off}
+      SSAM_O11_WORKER_HEAP_MB: ${SSAM_O11_WORKER_HEAP_MB:-1536}
+      SSAM_O11_WORKER_MAX_COMMANDS: ${SSAM_O11_WORKER_MAX_COMMANDS:-1000}
+      SSAM_O11_WORKER_RSS_MB: ${SSAM_O11_WORKER_RSS_MB:-1200}
+      SSAM_QUALITY: ${SSAM_QUALITY:-1}
+      SSAM_HOSTED_SSAM_CODE: ${SSAM_HOSTED_SSAM_CODE:-}
+    volumes:
+      - server-state:/data/server
+      - friction:/data/friction
+      - odc-features:/data/odc-features
+      - cache:/data/cache
+    expose:
+      - "7310"
+    labels:
+      - "traefik.enable=true"
+      # https: the domain, only the paths the server serves, Let's Encrypt, the security headers, the upstream transport.
+      - "traefik.http.routers.ssam.rule=Host(`${SSAM_DOMAIN}`) && (Path(`/mcp`) || Path(`/health`) || Path(`/agent`) || PathPrefix(`/agent/`))"
+      - "traefik.http.routers.ssam.entrypoints=https"
+      - "traefik.http.routers.ssam.tls=true"
+      - "traefik.http.routers.ssam.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ssam.middlewares=ssam-headers"
+      - "traefik.http.routers.ssam.service=ssam"
+      - "traefik.http.services.ssam.loadbalancer.server.port=7310"
+      - "traefik.http.services.ssam.loadbalancer.serverstransport=ssam@file"
+      # http: the same paths, redirected to https (the ACME HTTP challenge is Traefik's own, before any router).
+      - "traefik.http.routers.ssam-http.rule=Host(`${SSAM_DOMAIN}`)"
+      - "traefik.http.routers.ssam-http.entrypoints=http"
+      - "traefik.http.routers.ssam-http.middlewares=ssam-to-https"
+      - "traefik.http.routers.ssam-http.service=ssam"
+      - "traefik.http.middlewares.ssam-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.ssam-to-https.redirectscheme.permanent=true"
+      # The headers of ../Caddyfile.
+      - "traefik.http.middlewares.ssam-headers.headers.stsseconds=31536000"
+      - "traefik.http.middlewares.ssam-headers.headers.contenttypenosniff=true"
+      - "traefik.http.middlewares.ssam-headers.headers.framedeny=true"
+      - "traefik.http.middlewares.ssam-headers.headers.referrerpolicy=no-referrer"
+      - "traefik.http.middlewares.ssam-headers.headers.customresponseheaders.Content-Security-Policy=default-src 'none'; frame-ancestors 'none'"
+      - "traefik.http.middlewares.ssam-headers.headers.customresponseheaders.Cross-Origin-Resource-Policy=same-origin"
+      - "traefik.http.middlewares.ssam-headers.headers.customresponseheaders.Server="
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7310/health',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    # SIGTERM closes the sessions and the agent channels before node exits.
+    stop_grace_period: 30s
+    read_only: false
+    deploy:
+      resources:
+        limits:
+          cpus: "${SSAM_CPUS:-2}"
+          memory: ${SSAM_MEMORY:-6g}
+          pids: ${SSAM_PIDS:-4096}
+
+  # Tokens, by hand (COOLIFY.md 6): `issue` and `agent-rotate` print the plaintext token and agent credential once; no
+  # log driver, so docker keeps no copy of them.
+  ssam-admin:
+    <<: *hardening
+    image: ${SSAM_IMAGE:?set SSAM_IMAGE}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG}
+    platform: linux/amd64
+    profiles: [admin]
+    logging:
+      driver: none
+    entrypoint: ["node", "facade/ssam.mjs"]
+    command: ["server-token", "list"]
+    network_mode: none
+    volumes:
+      - server-state:/data/server
+
+  # File drops into the state volumes and backups, by hand (COOLIFY.md 5 and 8), as uid 10001 like the server.
+  ssam-ops:
+    <<: *hardening
+    image: ${SSAM_IMAGE:?set SSAM_IMAGE}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG}
+    platform: linux/amd64
+    profiles: [ops]
+    command: ["sh", "-c", "du -sh /data/server /data/friction /data/odc-features /data/cache"]
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    volumes:
+      - server-state:/data/server
+      - friction:/data/friction
+      - odc-features:/data/odc-features
+      - cache:/data/cache
+
+volumes:
+  server-state:
+  friction:
+  odc-features:
+  cache:
