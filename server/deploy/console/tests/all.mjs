@@ -1,6 +1,7 @@
 // `node --test <this folder>` runs the folder as a module (package.json "main"): this file imports every *.test.mjs.
 // A test file run on its own works too: `node --test tests/security.test.mjs`.
 import './alerts.test.mjs';
+import './github-auth.test.mjs';
 import './host.test.mjs';
 import './licenses.test.mjs';
 import './licenses-pg.test.mjs';

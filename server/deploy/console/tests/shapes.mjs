@@ -69,7 +69,7 @@ export const License = { id: S, customer: S, state: oneOf('active', 'expired', '
 export const Indexing = { state: oneOf('ready', 'running'), progress: N, detail: nS };
 const Capabilities = { issue: B, revoke: B, agentRotate: B, renew: B, lanes: B, readOnly: oneOf(null, 'sem-trava', 'desligado') };
 export const Meta = { ok, console: { version: S, startedAt: T }, now: T, timeZone: S, publicHost: nS, publicUrl: nS, serverUrl: nS,
-  capabilities: Capabilities, indexing: Indexing };
+  capabilities: Capabilities, indexing: Indexing, auth: { mode: oneOf('key', 'github'), login: nS, csrf: nS, expiresAt: nT } };
 const Status = {
   server: { state: oneOf('up', 'down', 'starting', 'unknown'), since: nT, pid: nI, imageTag: nS, health: nullable(oneOf('healthy', 'unhealthy', 'starting')),
     warm: oneOf('warm', 'partial', 'warming', 'cold', 'unknown'), warmDetail: nS },

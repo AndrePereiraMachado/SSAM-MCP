@@ -7,7 +7,7 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { loadConfig, parseTcp } from '../config.mjs';
+import { loadConfig, parseGithub, parseListen, parseTcp } from '../config.mjs';
 import { createEvents } from '../events.mjs';
 import { createGate } from '../http.mjs';
 import { listen } from '../listen.mjs';
@@ -147,6 +147,38 @@ test('checkpoint: schema, written atomically, no partial file left', async t => 
   const key = fs.readFileSync(path.join(env.stateDir, 'access.key'), 'utf8');
   assert.equal(key, c.key);
   if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(env.stateDir, 'access.key')).mode & 0o777, 0o600);
+});
+
+test('the Coolify mode variables: SSAM_DATABASE_URL passed through, the GitHub sign-in checked whole, CONSOLE_LISTEN only with it', () => {
+  assert.equal(loadConfig([], {}).databaseUrl, null);
+  assert.equal(loadConfig([], { SSAM_DATABASE_URL: ' postgres://u:p@db:5432/ssam ' }).databaseUrl, 'postgres://u:p@db:5432/ssam');
+  assert.equal(loadConfig([], {}).github, null);
+  const full = { CONSOLE_GITHUB_CLIENT_ID: 'Iv1.abc', CONSOLE_GITHUB_CLIENT_SECRET: 'shh', CONSOLE_GITHUB_ALLOWED_LOGINS: ' Owner-Login, other ,owner-login', CONSOLE_PUBLIC_URL: 'https://painel.example.com/' };
+  const g = parseGithub(full);
+  assert.deepEqual(g, { clientId: 'Iv1.abc', clientSecret: 'shh', allowedLogins: ['owner-login', 'other'], publicUrl: 'https://painel.example.com', sessionSecret: null,
+    baseUrl: 'https://github.com', apiUrl: 'https://api.github.com' });
+  assert.equal(parseGithub({ ...full, CONSOLE_SESSION_SECRET: 'x'.repeat(32) }).sessionSecret, 'x'.repeat(32));
+  assert.equal(parseGithub({ ...full, CONSOLE_GITHUB_BASE_URL: 'http://127.0.0.1:9', CONSOLE_GITHUB_API_URL: 'http://127.0.0.1:9' }).apiUrl, 'http://127.0.0.1:9');
+  for (const [bad, re] of [
+    [{ ...full, CONSOLE_GITHUB_CLIENT_SECRET: '' }, /CONSOLE_GITHUB_CLIENT_SECRET/],
+    [{ ...full, CONSOLE_GITHUB_ALLOWED_LOGINS: ' , ' }, /CONSOLE_GITHUB_ALLOWED_LOGINS/],
+    [{ ...full, CONSOLE_GITHUB_ALLOWED_LOGINS: undefined }, /CONSOLE_GITHUB_ALLOWED_LOGINS/],
+    [{ ...full, CONSOLE_GITHUB_ALLOWED_LOGINS: 'bad login' }, /CONSOLE_GITHUB_ALLOWED_LOGINS/],
+    [{ ...full, CONSOLE_PUBLIC_URL: 'painel.example.com' }, /CONSOLE_PUBLIC_URL/],
+    [{ ...full, CONSOLE_PUBLIC_URL: 'https://painel.example.com/painel' }, /CONSOLE_PUBLIC_URL/],
+    [{ ...full, CONSOLE_PUBLIC_URL: 'ftp://painel.example.com' }, /CONSOLE_PUBLIC_URL/],
+    [{ ...full, CONSOLE_SESSION_SECRET: 'short' }, /CONSOLE_SESSION_SECRET/],
+  ]) assert.throws(() => parseGithub(bad), re);
+  assert.deepEqual(parseListen('0.0.0.0:7320'), { host: '0.0.0.0', port: 7320 });
+  assert.deepEqual(parseListen('[::]:7320'), { host: '::', port: 7320 });
+  for (const bad of ['', '7320', '0.0.0.0', '0.0.0.0:0', '0.0.0.0:70000']) assert.throws(() => parseListen(bad), bad || '(empty)');
+  assert.throws(() => loadConfig([], { CONSOLE_LISTEN: '0.0.0.0:7320' }), /CONSOLE_LISTEN needs the GitHub sign-in/);
+  const coolify = loadConfig([], { ...full, CONSOLE_LISTEN: '0.0.0.0:7320' });
+  assert.deepEqual(coolify.tcp, { host: '0.0.0.0', port: 7320 });
+  assert.equal(coolify.socket, null);
+  assert.equal(coolify.github.publicUrl, 'https://painel.example.com');
+  // --tcp (loopback) still wins for a local run with the sign-in
+  assert.deepEqual(loadConfig(['--tcp', '127.0.0.1:7399'], { ...full, CONSOLE_LISTEN: '0.0.0.0:7320' }).tcp, { host: '127.0.0.1', port: 7399 });
 });
 
 test('CONSOLE_LICENSE_WRITES: auto by default, on or off; anything else refuses to start', () => {
