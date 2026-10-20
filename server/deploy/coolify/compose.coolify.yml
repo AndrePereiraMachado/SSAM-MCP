@@ -140,8 +140,10 @@ services:
     platform: linux/amd64
     restart: unless-stopped
     user: "10001:10001"
-    entrypoint: ["node", "/console/server.mjs"]
-    command: []
+    # entrypoint + command (not `command: []`, which Coolify's parser refuses): the image's CMD (ssam-server-start) is
+    # replaced by the console's script, so node gets no stray argument.
+    entrypoint: ["node"]
+    command: ["/console/server.mjs"]
     working_dir: /console
     environment:
       SSAM_SERVER_DIR: /data/server
