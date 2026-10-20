@@ -5,6 +5,7 @@
 # network, as the compose.prod.yml services ssam-admin and ssam-ops would.
 #
 #   sh ssamctl.sh status                                   image, volumes, health of the server container
+#   sh ssamctl.sh pull                                     pulls the image reference the server runs (latest): then Redeploy/Restart in Coolify
 #   sh ssamctl.sh token issue --customer "Name" --days 30 --lanes odc,o11
 #   sh ssamctl.sh token list | revoke --id tok_... | agent-rotate --id tok_... | import --from /data/server/tokens.json
 #   sh ssamctl.sh db migrate | status                      the tokens' database (SSAM_DATABASE_URL of the server)
@@ -99,6 +100,14 @@ case "$cmd" in
       reach=$(pg_tool "$c" psql "$url" -tAc 'select count(*) from server_tokens' 2>&1 | tail -n 1)
       echo "tokens:    postgres ($(printf '%s' "$url" | sed 's#//[^:]*:[^@]*@#//***:***@#')), $(case "$reach" in [0-9]*) echo "$reach records, reachable";; *) echo "NOT reachable: $reach";; esac)"
     else echo "tokens:    /data/server/tokens.json (no SSAM_DATABASE_URL)"; fi
+    ;;
+  pull)
+    # The reference the container was created from (SSAM_IMAGE:SSAM_IMAGE_TAG), pulled again: with `latest` that is the
+    # newest published image. Coolify's Redeploy pulls by itself; this is for when it did not (compare the digests).
+    c=$(container); ref=$($DOCKER inspect --format '{{.Config.Image}}' "$c")
+    echo "pulling $ref"; $DOCKER pull "$ref"
+    echo "now: $($DOCKER image inspect --format '{{range .RepoDigests}}{{.}} {{end}}' "$ref")"
+    echo "then Redeploy (or Restart) the resource in Coolify so the containers are recreated from it"
     ;;
   token)
     c=$(container)

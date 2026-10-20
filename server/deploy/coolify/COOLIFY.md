@@ -15,10 +15,10 @@ Arquivos desta pasta:
 | --- | --- |
 | `compose.coolify.yml` | o compose que o Coolify roda: `ssam-server` e `ssam-console` (o painel do dono, seção 11) com os rótulos do Traefik; `ssam-admin` e `ssam-ops` só por perfil (nunca sobem com o Coolify) |
 | `traefik-ssam.yaml` | configuração dinâmica do Traefik do Coolify: o transporte `ssam@file` (keep-alive de 4 s, sem limite de resposta) |
-| `ssamctl.sh` | as operações à mão na VPS, só com `docker`: tokens, `db migrate\|status`, `psql`, `kernel.json`, `Features.plain.xml`, backup (com o dump do banco), restore, log, `console status\|logs\|audit` |
+| `ssamctl.sh` | as operações à mão na VPS, só com `docker`: tokens, `db migrate\|status`, `psql`, `kernel.json`, `Features.plain.xml`, backup (com o dump do banco), restore, log, `console status\|logs\|audit`, `pull` |
 | `.env.coolify.example` | a lista das variáveis (no Coolify, as Environment Variables do recurso) |
 | `rehearsal.override.yml` | só para o ensaio local (seções 10 e 11.7): publica 7310 em 127.0.0.1:27310 e o painel em 127.0.0.1:27320, e sobe um Postgres descartável no lugar do recurso do Coolify |
-| `../publish.sh` | na máquina do dono: empurra uma imagem já construída e provada para o registro privado (nunca uma tag que já existe) e mostra as linhas para fixar |
+| `../publish.sh` | na máquina do dono: empurra uma imagem já construída e provada para o registro privado (nunca uma tag fixa que já existe) e, com `--latest`, move a tag `latest` para ela |
 
 ## 1. Publicar a imagem no registro privado (máquina do dono)
 
@@ -33,15 +33,19 @@ repositório criado pelo primeiro `push` nasce PÚBLICO, a não ser que a conta 
 
    ```bash
    cd server
-   sh deploy/publish.sh --image docker.io/<namespace>/ssam-server --tag prod-20261020-e2ff91b --private-repo-ready
+   sh deploy/publish.sh --image docker.io/<namespace>/ssam-server --tag prod-20261020-e2ff91b --private-repo-ready --latest
    ```
 
-   Ele marca `ssam-server:<tag>` como `<image>:<tag>`, empurra, lê o digest do próprio push e imprime as linhas para
-   fixar: no Coolify, `SSAM_IMAGE` e `SSAM_IMAGE_TAG=<tag>` (a tag SÓ: o parser de compose do Coolify transforma
-   `<tag>@sha256:<digest>` em `<imagem>@sha256@sha256:...` e o pull falha com "invalid reference format", visto em
-   2026-10-20); num `compose.prod.yml` com `.env`, a forma com digest. A tag vale como o digest porque o `publish.sh`
-   **nunca empurra uma tag que já existe no registro** (recusa, código 2): um build novo tem tag nova. O digest sai
-   impresso para comparar na VPS com `ssamctl.sh status`. Antes de empurrar, no Docker Hub, ele confere
+   Ele marca `ssam-server:<tag>` como `<image>:<tag>`, empurra, lê o digest do próprio push e, com `--latest`, empurra
+   a mesma imagem também como `<image>:latest` (conferindo que o digest é o mesmo). No Coolify fica `SSAM_IMAGE` e
+   `SSAM_IMAGE_TAG=latest`, uma vez só: cada publicação nova entra com um **Redeploy**, sem mexer em variável (seção
+   7). Quem quiser fixar uma imagem põe a tag fixa (`prod-<aaaammdd>-<commit>`, a tag SÓ: o parser de compose do
+   Coolify transforma `<tag>@sha256:<digest>` em `<imagem>@sha256@sha256:...` e o pull falha com "invalid reference
+   format", visto em 2026-10-20); num `compose.prod.yml` com `.env`, a forma com digest. A tag fixa vale como o digest
+   porque o `publish.sh` **nunca empurra uma tag fixa que já existe no registro** (recusa, código 2): um build novo
+   tem tag nova; só a `latest` se move. `--latest-only` move a `latest` para uma tag já publicada (o rollback da
+   `latest`, ou a `latest` de uma imagem publicada antes de existir a opção). O digest sai impresso para comparar na
+   VPS com `ssamctl.sh status`. Antes de empurrar, no Docker Hub, ele confere
    sem login que o repositório NÃO é lido por qualquer um (público = recusa, código 3). De fora, um repositório privado e
    um que não existe parecem iguais (404 anônimo; "no such manifest" com login), e um push num repositório que não
    existe o CRIA PÚBLICO: por isso o `--private-repo-ready` é a sua palavra de que o passo 1 foi feito, e sem ele o
@@ -80,7 +84,7 @@ até 60 min). Isso não cabe em rótulo: o provedor Docker do Traefik não tem r
 1. **Projects > o projeto > Add resource > Docker Compose Empty** (ou um repositório git privado com esta pasta; o
    arquivo é `server/deploy/coolify/compose.coolify.yml`). Cole o `compose.coolify.yml`.
 2. **Environment Variables**: o Coolify lê cada `${VAR}` do compose e pede as com `:?` antes do primeiro deploy. Preencha
-   com a lista de `.env.coolify.example`: `SSAM_IMAGE` e `SSAM_IMAGE_TAG` (as duas linhas do `publish.sh`; a tag só, sem
+   com a lista de `.env.coolify.example`: `SSAM_IMAGE` e `SSAM_IMAGE_TAG=latest` (ou uma tag fixa do `publish.sh`, sem
    digest), `SSAM_DATABASE_URL` (a URL interna do recurso Postgres do Coolify, seção 6),
    `SSAM_DOMAIN` (o DNS da VPS, sem `https://`), `SSAM_CPUS`, `SSAM_MEMORY`, `SSAM_BUILD_WORKERS` e o resto pelo tamanho
    da VPS (DEPLOY.md seção 5), mais as do painel do dono (`CONSOLE_DOMAIN` e `CONSOLE_GITHUB_*`, seção 11.3: o deploy
@@ -182,16 +186,21 @@ O painel do dono (`ssam-console`, seção 11) usa o **mesmo banco**: as licença
 A regra é a da seção 8 do DEPLOY.md (anuncie a janela: recriar o container corta as chamadas em curso). O que muda:
 
 1. `sh ssamctl.sh backup` (seção 8) antes: os volumes e o dump do banco.
-2. Na máquina do dono: construa e ensaie a imagem nova (DEPLOY.md 6 e 12) e publique com `publish.sh` (seção 1).
-3. No Coolify, troque `SSAM_IMAGE_TAG` pela tag nova e **Redeploy**. Depois, `ssamctl.sh status` mostra o digest da
-   imagem puxada: compare com o que o `publish.sh` imprimiu. O Traefik responde 502 enquanto
-   o container novo não atende (não há "espere pelo servidor" como no Caddy; são uns segundos).
+2. Na máquina do dono: construa e ensaie a imagem nova (DEPLOY.md 6 e 12) e publique com `publish.sh --latest`
+   (seção 1).
+3. No Coolify, **Redeploy** (com `SSAM_IMAGE_TAG=latest` não há variável a trocar; com uma tag fixa, troque-a antes).
+   Depois, `ssamctl.sh status` mostra o digest da imagem puxada: compare com o que o `publish.sh` imprimiu. Se o
+   Coolify não tiver puxado a `latest` nova (o digest continua o antigo), `sh ssamctl.sh pull` e Redeploy de novo. O
+   Traefik responde 502 enquanto o container novo não atende (não há "espere pelo servidor" como no Caddy; são uns
+   segundos).
 4. Se a versão de um Studio ou da bridge mudou (o `release-record.json` do commit novo diz), a ordem é a do DEPLOY.md 8,
    passo 6: confira o par com a imagem nova (`kernel print`/`check` só funcionam depois do deploy, porque rodam na
    imagem do container), **Stop** no Coolify, `kernel write`, `features put`, **Start**.
-5. Rollback: volte `SSAM_IMAGE_TAG` para a tag anterior (o `.info` do backup guarda a imagem e o id) e Redeploy;
-   depois `kernel print previous` (ou a tag), `check`, Stop, `kernel write`, Start, como no DEPLOY.md 8. A imagem anterior
-   continua no registro: não apague tags.
+5. Rollback: na máquina do dono, `sh deploy/publish.sh --image ... --tag <tag anterior> --private-repo-ready
+   --latest-only` (a `latest` volta a apontar para a imagem anterior; o `.info` do backup guarda a imagem e o id) e
+   Redeploy; ou ponha a tag fixa anterior em `SSAM_IMAGE_TAG` e Redeploy. Depois `kernel print previous` (ou a tag),
+   `check`, Stop, `kernel write`, Start, como no DEPLOY.md 8. As imagens anteriores continuam no registro com as tags
+   fixas: não apague tags.
 
 ## 8. Backup, restore e log
 
@@ -350,7 +359,8 @@ aprovado, que a seção 5 já leva para `/opt/ssam/deploy` (`git archive`). Sem 
 `ssam-console` (o servidor não é tocado). A imagem só precisa mudar quando muda algo dentro dela (o módulo de tokens, o
 servidor): o painel importa `/app/platforms/odc/facade/server-tokens.mjs` da própria imagem, e o `openTokenStore` com
 Postgres existe desde `prod-20261020-2b46244`. A imagem publicada junto com este painel, `prod-20261020-e2ff91b`
-(digest `sha256:5a8c1121ee7c81dfb6832c65eb23263b04192bb8764bb11b76a2163b3c815c47`), tem os mesmos arquivos da `2b46244` por dentro: só a revisão do rótulo muda.
+(digest `sha256:5a8c1121ee7c81dfb6832c65eb23263b04192bb8764bb11b76a2163b3c815c47`, a `latest` do registro desde
+2026-10-20), tem os mesmos arquivos da `2b46244` por dentro: só a revisão do rótulo muda.
 
 ### 11.5 Deploy e conferências
 
