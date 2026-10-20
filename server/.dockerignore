@@ -134,6 +134,14 @@ docker/installers
 # archive left there); state archives of deploy/backup.sh anywhere in the tree (customer data and customer names).
 Dockerfile
 deploy
+# ...except the owner console (deploy/console), which the Coolify compose runs from the image itself as the ssam-console
+# service (node /app/deploy/console/server.mjs; deploy/coolify/COOLIFY.md 11): its code only, never its tests, the UI
+# tests, the mock fixtures or the owner's tunnel script
+!deploy/console
+deploy/console/tests
+deploy/console/ui-tests
+deploy/console/public/mock
+deploy/console/painel-ssam.ps1
 **/ssam-state-*.tar.gz
 **/ssam-state-*.tar.gz.*
 # the decrypted ODC feature cache (deploy/odc-features-export.ps1, tenant feature flags) goes into the volume, never here

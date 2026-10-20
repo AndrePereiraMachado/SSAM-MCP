@@ -344,23 +344,20 @@ lista):
 | `CONSOLE_GITHUB_CLIENT_SECRET` | o client secret da OAuth App (11.1); marque como secreto no Coolify |
 | `CONSOLE_GITHUB_ALLOWED_LOGINS` | o seu login do GitHub (vários separados por vírgula; o painel não sobe com a lista vazia) |
 | `CONSOLE_SESSION_SECRET` | opcional (vazio: gerado na primeira subida e guardado em `/data/server/.console/session.secret`, 0600; uma troca derruba as sessões abertas) |
-| `CONSOLE_CODE_DIR` | opcional: a pasta `console` do deploy na VPS (padrão `/opt/ssam/deploy/console`, a da seção 5) |
 | `CONSOLE_LICENSE_WRITES` | opcional: `auto` (padrão; grava, porque o Postgres trava entre gravadores), `on` ou `off` |
 
 `SSAM_DATABASE_URL` e `SSAM_DOMAIN` são as mesmas do servidor (o painel mostra a URL pública do servidor nas telas de
 emissão). **Advanced > Docker Compose > Connect to predefined network** continua ligado: é por essa rede que o Traefik
 chega ao painel e que o painel chega ao banco.
 
-### 11.4 O código do painel na VPS
+### 11.4 O código do painel vem na imagem
 
-O `ssam-console` roda o código montado (só leitura) de `CONSOLE_CODE_DIR`: a pasta `server/deploy/console` do commit
-aprovado, que a seção 5 já leva para `/opt/ssam/deploy` (`git archive`). Sem a pasta, o container não sobe
-(`create_host_path: false`). Para atualizar o painel sem trocar a imagem: leve a pasta nova e **Restart** no
-`ssam-console` (o servidor não é tocado). A imagem só precisa mudar quando muda algo dentro dela (o módulo de tokens, o
-servidor): o painel importa `/app/platforms/odc/facade/server-tokens.mjs` da própria imagem, e o `openTokenStore` com
-Postgres existe desde `prod-20261020-2b46244`. A imagem publicada junto com este painel, `prod-20261020-e2ff91b`
-(digest `sha256:5a8c1121ee7c81dfb6832c65eb23263b04192bb8764bb11b76a2163b3c815c47`, a `latest` do registro desde
-2026-10-20), tem os mesmos arquivos da `2b46244` por dentro: só a revisão do rótulo muda.
+Desde a imagem publicada em 2026-10-20 depois da `prod-20261020-e2ff91b`, o `.dockerignore` inclui `deploy/console`
+(sem os testes e os mocks) e o `ssam-console` roda `node /app/deploy/console/server.mjs` **da própria imagem**: nada é
+montado da VPS, nenhuma pasta precisa ser copiada, e uma mudança no painel se publica como qualquer outra
+(`publish.sh --latest` e **Redeploy**; seção 7). O painel importa o módulo de tokens da mesma imagem
+(`/app/platforms/odc/facade/server-tokens.mjs`), então servidor e painel nunca divergem de versão. Imagens anteriores
+(`2b46244`, `e2ff91b`) não têm o painel dentro: com elas o serviço `ssam-console` não sobe.
 
 ### 11.5 Deploy e conferências
 
@@ -394,7 +391,7 @@ Postgres existe desde `prod-20261020-2b46244`. A imagem publicada junto com este
 ### 11.7 Ensaio local (Docker Desktop, 2026-10-20)
 
 Feito nesta máquina com a imagem publicada `ssam-server:prod-20261020-2b46244` (a mesma do Docker Hub), o código do
-painel deste commit montado em `/console`, o Postgres descartável do `rehearsal.override.yml` e um GitHub falso: um
+painel deste commit montado em `/console` (o esquema da época), o Postgres descartável do `rehearsal.override.yml` e um GitHub falso: um
 servidor HTTP local (`github.com` e `api.github.com` numa porta só, respondendo o login que se escolhe), apontado pelas
 variáveis de teste `CONSOLE_GITHUB_BASE_URL`/`CONSOLE_GITHUB_API_URL` (no override, `CONSOLE_REHEARSAL_GITHUB_URL`).
 Sem Traefik e sem TLS (`CONSOLE_PUBLIC_URL=http://localhost:27320`).
@@ -404,14 +401,15 @@ cd server/deploy/coolify
 # .env do ensaio: SSAM_IMAGE=ssam-server, SSAM_IMAGE_TAG=prod-20261020-2b46244, SSAM_DOMAIN=ssam.rehearsal.test,
 # SSAM_REHEARSAL_DB_PASSWORD, SSAM_DATABASE_URL=postgres://ssam:<x>@postgres:5432/ssam, CONSOLE_DOMAIN=localhost:27320,
 # CONSOLE_GITHUB_CLIENT_ID/SECRET (os do GitHub falso), CONSOLE_GITHUB_ALLOWED_LOGINS=owner-login,
-# CONSOLE_CODE_DIR=<esta árvore>/server/deploy/console, CONSOLE_REHEARSAL_GITHUB_URL=http://host.docker.internal:27399
+# CONSOLE_REHEARSAL_GITHUB_URL=http://host.docker.internal:27399
 docker compose -p ssam-console-rehearsal --env-file /tmp/ssam-console-rehearsal.env -f compose.coolify.yml -f rehearsal.override.yml up -d ssam-server ssam-console
 ```
 
 Resultado (um cliente Node no papel do navegador, com o cookie e o cabeçalho CSRF; cada passo conferido):
 
 - `config` resolve: o `ssam-console` com `CONSOLE_LISTEN=0.0.0.0:7320`, o roteador `Host(CONSOLE_DOMAIN)` no
-  middleware `ssam-console-headers`, o código montado só leitura; nenhuma porta no host fora do override.
+  middleware `ssam-console-headers`; nenhuma porta no host fora do override. (Neste primeiro ensaio o código do painel
+  era montado da árvore; desde 11.4 ele vem na imagem, e o ensaio foi repetido assim: ver o fim desta seção.)
 - A subida: o log do painel mostra `db-migrated 0001`, `tokens-store` com `backend: postgres`, `session-secret-created`,
   `listening` com todas as capacidades `true` (modo `auto`: o Postgres conta como armazenamento com trava) e `auth` com
   `mode: github`. O healthcheck (com o `Host` do painel) fica `healthy`.

@@ -11,9 +11,9 @@
 #                NOT in this compose: a database resource of Coolify (COOLIFY.md 6), reached as SSAM_DATABASE_URL over
 #                the predefined network. The server applies the migrations of platforms/odc/facade/migrations at start
 #                (DEPLOY.md 7.4). A redeploy, a rollback or a container recreated by Coolify never loses a license.
-#   ssam-console the owner console (DEPLOY.md 15, COOLIFY.md 11): the same image, `node /console/server.mjs` with the
-#                console code bind-mounted read-only from the deploy folder on the VPS (CONSOLE_CODE_DIR), the licenses
-#                in the same Postgres (SSAM_DATABASE_URL) and the audit in the server-state volume. It listens on 7320
+#   ssam-console the owner console (DEPLOY.md 15, COOLIFY.md 11): the same image, running the console code the image
+#                carries (/app/deploy/console; nothing is mounted from the VPS), with the licenses in the same Postgres
+#                (SSAM_DATABASE_URL) and the audit in the server-state volume. It listens on 7320
 #                inside the compose network only (CONSOLE_LISTEN; no host port), behind its own Traefik router on its
 #                own host name (CONSOLE_DOMAIN, e.g. painel.<domain>): never on the public host of /mcp. Sign-in through
 #                the owner's GitHub OAuth App (CONSOLE_GITHUB_*): only the GitHub logins of CONSOLE_GITHUB_ALLOWED_LOGINS
@@ -143,13 +143,13 @@ services:
     # entrypoint + command (not `command: []`, which Coolify's parser refuses): the image's CMD (ssam-server-start) is
     # replaced by the console's script, so node gets no stray argument.
     entrypoint: ["node"]
-    command: ["/console/server.mjs"]
-    working_dir: /console
+    command: ["/app/deploy/console/server.mjs"]
+    working_dir: /app/deploy/console
     environment:
       SSAM_SERVER_DIR: /data/server
       CONSOLE_STATE_DIR: /data/server/.console
       CONSOLE_HOST_JSON: /host/host.json
-      CONSOLE_PUBLIC_DIR: /console/public
+      CONSOLE_PUBLIC_DIR: /app/deploy/console/public
       CONSOLE_TOKEN_MODULE: /app/platforms/odc/facade/server-tokens.mjs
       CONSOLE_DOMAIN: ${SSAM_DOMAIN:?set SSAM_DOMAIN}
       # auto: license actions with a token module that locks between writers (the Postgres store does; DEPLOY.md 15.4)
@@ -169,13 +169,6 @@ services:
       TZ: UTC
     volumes:
       - server-state:/data/server
-      # the console code of the approved commit, on the VPS (COOLIFY.md 5 copies server/deploy to /opt/ssam/deploy)
-      - type: bind
-        source: ${CONSOLE_CODE_DIR:-/opt/ssam/deploy/console}
-        target: /console
-        read_only: true
-        bind:
-          create_host_path: false
     # The image declares VOLUME for these; small read-only tmpfs mounts stop Docker from creating anonymous volumes.
     tmpfs:
       - /tmp:size=16m
