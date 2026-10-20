@@ -31,13 +31,17 @@ repositório criado pelo primeiro `push` nasce PÚBLICO, a não ser que a conta 
 
    ```bash
    cd server
-   sh deploy/publish.sh --image docker.io/<namespace>/ssam-server --tag prod-20261020-7770621
+   sh deploy/publish.sh --image docker.io/<namespace>/ssam-server --tag prod-20261020-7770621 --private-repo-ready
    ```
 
-   Ele marca `ssam-server:<tag>` como `<image>:<tag>`, empurra, lê o digest de volta e imprime as duas linhas para o
-   Coolify (`SSAM_IMAGE` e `SSAM_IMAGE_TAG=<tag>@sha256:<digest>`). No Docker Hub ele ainda confere, sem login, que o
-   repositório NÃO é lido por qualquer um: se for público, avisa e sai com código 3 (torne-o privado na hora ou apague a
-   tag). Uma imagem construída com a árvore suja (`-dirty`) é recusada.
+   Ele marca `ssam-server:<tag>` como `<image>:<tag>`, empurra, lê o digest do próprio push e imprime as duas linhas
+   para o Coolify (`SSAM_IMAGE` e `SSAM_IMAGE_TAG=<tag>@sha256:<digest>`). Antes de empurrar, no Docker Hub, ele confere
+   sem login que o repositório NÃO é lido por qualquer um (público = recusa, código 3). De fora, um repositório privado e
+   um que não existe parecem iguais (404 anônimo; "no such manifest" com login), e um push num repositório que não
+   existe o CRIA PÚBLICO: por isso o `--private-repo-ready` é a sua palavra de que o passo 1 foi feito, e sem ele o
+   script não empurra para o `docker.io`. Depois do push ele confere de novo e, se o repositório estiver público, avisa
+   e sai com 3. Foi o que aconteceu na primeira publicação (2026-10-20): o repositório não existia, nasceu público e
+   teve de ser fechado à mão na hora. Uma imagem construída com a árvore suja (`-dirty`) é recusada.
 
    Serve qualquer registro privado (GHCR, GitLab, ECR, ACR, `registry:2` próprio): só muda o `--image`.
 
