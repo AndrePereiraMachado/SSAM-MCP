@@ -33,7 +33,7 @@ repositório criado pelo primeiro `push` nasce PÚBLICO, a não ser que a conta 
 
    ```bash
    cd server
-   sh deploy/publish.sh --image docker.io/<namespace>/ssam-server --tag prod-20261020-7770621 --private-repo-ready
+   sh deploy/publish.sh --image docker.io/<namespace>/ssam-server --tag prod-20261020-e2ff91b --private-repo-ready
    ```
 
    Ele marca `ssam-server:<tag>` como `<image>:<tag>`, empurra, lê o digest do próprio push e imprime as linhas para
@@ -349,7 +349,8 @@ aprovado, que a seção 5 já leva para `/opt/ssam/deploy` (`git archive`). Sem 
 (`create_host_path: false`). Para atualizar o painel sem trocar a imagem: leve a pasta nova e **Restart** no
 `ssam-console` (o servidor não é tocado). A imagem só precisa mudar quando muda algo dentro dela (o módulo de tokens, o
 servidor): o painel importa `/app/platforms/odc/facade/server-tokens.mjs` da própria imagem, e o `openTokenStore` com
-Postgres existe desde `prod-20261020-2b46244`.
+Postgres existe desde `prod-20261020-2b46244`. A imagem publicada junto com este painel, `prod-20261020-e2ff91b`
+(digest `sha256:5a8c1121ee7c81dfb6832c65eb23263b04192bb8764bb11b76a2163b3c815c47`), tem os mesmos arquivos da `2b46244` por dentro: só a revisão do rótulo muda.
 
 ### 11.5 Deploy e conferências
 
