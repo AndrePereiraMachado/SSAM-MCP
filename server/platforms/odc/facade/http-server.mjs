@@ -24,7 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { createTokenStore, AGENT_PREFIX } from './server-tokens.mjs';
+import { openTokenStore, AGENT_PREFIX } from './server-tokens.mjs';
 import { createAgentHub } from './agent-hub.mjs';
 import { SNAKE, CODE_UNLISTED, isListedCode } from './quality-line.mjs';
 
@@ -68,7 +68,7 @@ function jsonError(res, status, code, message, headers = {}, data) {
 export async function startHttpServer({ createServer, dir, host = DEFAULTS.host, port = DEFAULTS.port, allowRemote = false,
   publicHosts = [], logFile = null, agents = false,
   ratePerMinute = DEFAULTS.ratePerMinute, maxSessionsPerToken = DEFAULTS.maxSessionsPerToken, maxBodyBytes = DEFAULTS.maxBodyBytes,
-  idleMs = DEFAULTS.idleMs, sweepMs = DEFAULTS.sweepMs, keepaliveMs = DEFAULTS.keepaliveMs, log: sink = () => {}, now = () => new Date(),
+  idleMs = DEFAULTS.idleMs, sweepMs = DEFAULTS.sweepMs, keepaliveMs = DEFAULTS.keepaliveMs, log: sink = () => {}, now = () => new Date(), env = process.env,
   // observeCall(params, session) -> {finish(response)} | null: the friction record of stdio (facade/friction-boundary.mjs), per call.
   observeCall = null,
   // quality: a recorder (quality-recorder.mjs) or null (records nothing; --local-studios never passes one).
@@ -92,7 +92,9 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
     sink(event);
     try { fs.appendFileSync(logFile, JSON.stringify({ time: now().toISOString(), ...event }) + '\n'); } catch { /* the log never stops the server */ }
   };
-  const store = createTokenStore(dir, { now });
+  // tokens.json in dir, or Postgres when SSAM_DATABASE_URL is set (server-tokens.mjs openTokenStore): a database that
+  // cannot be reached fails here, before anything listens.
+  const store = await openTokenStore({ dir, env, now, log });
   const hub = agents ? createAgentHub({ dir, store, kernel: agents.kernel, kernelRefused: agents.kernelRefused, log, now, limits: agents.limits,
     onCallSettled: quality ? span => quality.agentSpan(span) : null }) : null;
   const sessions = new Map(); // sid -> {tokenId, customer, served, server, transport, responses:Set, lastSeen, closing}
@@ -315,7 +317,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
   });
   try {
     await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, () => { server.off('error', reject); resolve(); }); });
-  } catch (error) { clearInterval(timer); await hub?.close(); throw error; }
+  } catch (error) { clearInterval(timer); await hub?.close(); await store.close().catch(() => {}); throw error; }
   const actual = server.address();
   const shownHost = actual.family === 'IPv6' ? '[' + actual.address + ']' : actual.address;
   log({ event: 'listening', url: 'http://' + shownHost + ':' + actual.port + '/mcp', mode: hub ? 'hosted' : 'local-studios', pid: process.pid,
@@ -325,6 +327,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
     async close() {
       clearInterval(timer);
       await hub?.close();
+      await store.close().catch(() => {});
       await Promise.all([...sessions.keys()].map(sid => closeSession(sid, 'server-stop')));
       server.closeAllConnections?.();
       await new Promise(resolve => server.close(() => resolve()));

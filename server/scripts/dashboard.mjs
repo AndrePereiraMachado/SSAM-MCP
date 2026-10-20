@@ -11,8 +11,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : fallback; };
 const dir = path.resolve(arg('--dir', process.env.SSAM_SERVER_DIR ?? path.join(here, '..', '.local', 'server')));
 const port = Number(arg('--port', 7320));
-const { createTokenStore } = await import(new URL('../platforms/odc/facade/server-tokens.mjs', import.meta.url));
-const store = createTokenStore(dir);
+const { openTokenStore } = await import(new URL('../platforms/odc/facade/server-tokens.mjs', import.meta.url));
+const store = await openTokenStore({ dir });
 const logFile = path.join(dir, 'server.log');
 
 // The log is read incrementally; the live state is replayed from the last "listening" (the running server process).
@@ -92,7 +92,7 @@ http.createServer(async (req, res) => {
       if (req.headers['x-ssam-dashboard'] !== '1' || !String(req.headers.origin ?? 'http://127.0.0.1:' + port).startsWith('http://127.0.0.1:' + port)) { res.writeHead(403); return res.end(); }
       let body = ''; for await (const chunk of req) body += chunk;
       const { id } = JSON.parse(body || '{}');
-      const out = store.revoke(String(id));
+      const out = await store.revoke(String(id));
       res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ ok: true, revoked: out }));
     }
     res.writeHead(404); res.end();

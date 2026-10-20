@@ -21,6 +21,7 @@ import { ssamPathRoots } from './evidence-roots.mjs';
 //                                       (SERVIDOR-LOCAL.md); hosted by default (FASE2-AGENTE.md), the owner's Studios with
 //                                       --local-studios; no background warm-up (`ssam warm` builds the shared index first)
 //   ssam server-token issue --customer <name> [--days N] | revoke --id <id> | list   local admin of the served tokens
+//   ssam db migrate | status                                                         the Postgres of SSAM_DATABASE_URL (tokens)
 import { DESTRUCTIVE_SUFFIX, callWordsProblems, resultWithoutWordEchoes, taskStepOfCall, wordsRequired, wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import {workspaceRoot, anvilRoot} from './workspace.mjs';
@@ -2144,7 +2145,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (explicit) lane(explicit);
     if (verb === 'mcp') await runStdio({ args, profile: parseMcpProfile(args) });
     else if (verb === 'serve') await runServed(args);
-    else if (verb === 'server-token') { const { tokenCli } = await import('./server-tokens.mjs'); print(tokenCli(args, { root: workspaceRoot })); }
+    else if (verb === 'server-token') { const { runTokenCli } = await import('./server-tokens.mjs'); print(await runTokenCli(args, { root: workspaceRoot })); }
+    else if (verb === 'db') { const { dbCli } = await import('./db.mjs'); print(await dbCli(args)); }
     else if (verb === 'package') { const {routePackage}=await import(pathToFileURL(path.join(workspaceRoot,'facade','package-route.mjs'))); const result=await routePackage(rest,{root:workspaceRoot}); if(!result.stdio)print(result); if(!result.ok)process.exitCode=1; }
     else if (verb === 'debug') {
       // ssam debug invoke ... (ODC only) | run|prepare|release|authorize|reconcile|status --request <json-file> (runner;
@@ -2250,6 +2252,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         if (verb === 'job' && !result.ok) { const { withJobGuidance, jobArgument } = await import('./job-guidance.mjs'); result = await withJobGuidance(chosen.lane, jobArgument(args), result); }
         print({ ...result, laneFrom: chosen.from ?? 'catalog' }); if (!result.ok) process.exitCode = 1;
       }
-    } else fail('Usage: ssam connect [--lane o11|odc] [--pid <pid>] | ssam warm [--lane o11|odc] | ssam ' + verbs.join('|') + ' [--lane ' + laneNames.join('|') + '] <args...> | ssam map [--lane odc|o11] <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key] [--offset N] [--max N] [--budget <bytes>] [--detail] | ssam discover <intent...> [--lane odc|o11] [--app <capture.oml>] [--detail <capability>] [--type <Interface>] [--budget <bytes>] | ssam app <App> [Screen] --lane odc [--environment <origin>] | ssam prototype <folder> --lane o11|odc --module <M> [--base <oml>] [--dry] | ssam mcp | ssam serve [--port 7300] [--host 127.0.0.1] | ssam server-token issue|revoke|list');
+    } else fail('Usage: ssam connect [--lane o11|odc] [--pid <pid>] | ssam warm [--lane o11|odc] | ssam ' + verbs.join('|') + ' [--lane ' + laneNames.join('|') + '] <args...> | ssam map [--lane odc|o11] <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key] [--offset N] [--max N] [--budget <bytes>] [--detail] | ssam discover <intent...> [--lane odc|o11] [--app <capture.oml>] [--detail <capability>] [--type <Interface>] [--budget <bytes>] | ssam app <App> [Screen] --lane odc [--environment <origin>] | ssam prototype <folder> --lane o11|odc --module <M> [--base <oml>] [--dry] | ssam mcp | ssam serve [--port 7300] [--host 127.0.0.1] | ssam server-token issue|revoke|list|import | ssam db migrate|status');
   } catch (error) { fail(error.message); }
 }
