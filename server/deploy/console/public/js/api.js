@@ -1,12 +1,21 @@
 // Fetch wrapper of the owner console (DESIGN.md 4, 6.12): access key header, JSON, pt-BR errors, the clock of the
 // server (every payload's `now`), and the mock switch. The request code is the same in mock and real mode; only the
 // server behind it changes (`?mock=<scenario>` is forwarded as X-Mock-Scenario, which the real API ignores).
+// In the GitHub mode (the painel on the Coolify VPS) there is no key: the session cookie travels by itself and every
+// POST carries the CSRF token of the session (from /api/meta's `auth`) in X-SSAM-Console-CSRF.
 
 const KEY_STORE = 'ssam-console-key';
 const KEY_HEADER = 'X-SSAM-Console-Key';
+const CSRF_HEADER = 'X-SSAM-Console-CSRF';
 const MOCK_RE = /^[a-z][a-z0-9-]{0,31}$/;
 
 let memoryKey = null;
+let csrf = null;
+
+/** The session of /api/meta's `auth` ({mode, login, csrf}): keeps the CSRF token for the POSTs. */
+export function setSession(auth) {
+  csrf = auth && typeof auth.csrf === 'string' ? auth.csrf : null;
+}
 
 export class ApiError extends Error {
   constructor(kind, status, code, message, field) {
@@ -104,6 +113,7 @@ async function request(method, path, body) {
   const headers = { Accept: 'application/json' };
   const key = getKey();
   if (key) headers[KEY_HEADER] = key;
+  if (csrf && method === 'POST') headers[CSRF_HEADER] = csrf;
   const mock = mockScenario();
   if (mock) headers['X-Mock-Scenario'] = mock;
   const init = { method, headers, cache: 'no-store', credentials: 'same-origin', redirect: 'error' };
@@ -127,7 +137,7 @@ async function request(method, path, body) {
   }
   if (res.status === 401) {
     const code = json?.error?.code || 'KEY_INVALID';
-    const err = new ApiError('auth', 401, code, json?.error?.message || 'Chave de acesso inválida.');
+    const err = new ApiError('auth', 401, code, json?.error?.message || 'Credencial inválida.');
     emit('auth', err);
     throw err;
   }
@@ -224,6 +234,8 @@ export const api = {
   revoke: (id, body) => request('POST', `/api/licenses/${encodeURIComponent(id)}/revoke`, body),
   ack: (body) => request('POST', '/api/alerts/ack', body),
   unack: (body) => request('POST', '/api/alerts/unack', body),
+  /** Ends the GitHub session (the Coolify mode); the caller then opens /auth/signin. */
+  logout: () => request('POST', '/api/auth/logout', {}),
 };
 
 /** Shared caches the views read (overview for the status line and alert links, licenses for selects, meta). */

@@ -98,7 +98,8 @@ export function createRoutes({ views, data, quality, licenses, live, alerts, aut
   }
 
   return {
-    'GET /api/meta': () => ({ body: views.meta() }),
+    // the session of the GitHub mode in meta (login, the CSRF token of the POSTs); {mode: 'key'} with the access key
+    'GET /api/meta': ({ session }) => ({ body: { ...views.meta(), auth: auth.describe(session) } }),
     'GET /api/overview': () => ({ body: views.overview() }),
     'GET /api/licenses': () => ({ body: views.licensesPayload() }),
     'GET /api/usage': ({ query }) => ({ body: data.usagePayload(query) }),
@@ -116,6 +117,8 @@ export function createRoutes({ views, data, quality, licenses, live, alerts, aut
     'POST /api/licenses/:id/revoke': revoke,
     'POST /api/alerts/ack': ack,
     'POST /api/alerts/unack': unack,
-    'POST /api/key/rotate': rotateKey,
+    // the key rotation exists in the key mode only; the GitHub mode brings its logout (github-auth.mjs)
+    ...(auth.mode === 'key' ? { 'POST /api/key/rotate': rotateKey } : {}),
+    ...(auth.apiRoutes ?? {}),
   };
 }

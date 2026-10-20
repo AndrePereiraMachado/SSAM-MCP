@@ -70,6 +70,10 @@ export const HISTORY_ACTION = {
   'key-rotate': 'Chave do painel trocada',
   'alert-ack': 'Alerta silenciado',
   'alert-unack': 'Alerta reativado',
+  // the GitHub sign-in (the painel on the Coolify VPS)
+  signin: 'Entrada no painel',
+  'signin-refused': 'Entrada recusada',
+  signout: 'Saída do painel',
   // changes seen outside the console only (actor "externo")
   unrevoke: 'Revogação desfeita',
   removed: 'Licença removida',

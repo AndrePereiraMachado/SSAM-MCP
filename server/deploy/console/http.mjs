@@ -1,15 +1,19 @@
-// HTTP pipeline of the console (DESIGN 2.2, 4): every request passes, in this order, the Host check (DNS rebinding),
-// the Origin and Sec-Fetch-Site checks, /healthz, the key lockout (429 for everything but /healthz), the method check
-// (GET and POST only: OPTIONS and anything else get 405 with no CORS header, before any key is asked), static files
-// (no key, no data), the access key on /api/*, then the route.
+// HTTP pipeline of the console (DESIGN 2.2, 4): every request passes, in this order, the Host check (DNS rebinding;
+// auth.hostAllowed: the loopback in the key mode, the public host in the GitHub mode), the Origin check
+// (auth.originAllowed) and the Sec-Fetch-Site check (on /api/* and on every POST; a page is reached by a top-level
+// navigation, from GitHub's redirect among others), /healthz, the lockout (429 for everything but /healthz), the method
+// check (GET and POST only: OPTIONS and anything else get 405 with no CORS header, before any credential is asked), the
+// auth pages (auth.page: the console's page without a session goes to the sign-in page; auth.routes: /auth/*), static
+// files (no credential, no data), then on /api/*: the credential (auth.check: the key header or the session cookie),
+// the CSRF token on POST (auth.csrfOk), then the route.
 // POST bodies must be application/json, at most 8 KiB, a JSON object; unknown fields are refused by the route.
 // Mutations go through the gate: at most 10 per rolling 60 s, run one at a time.
 import fs from 'node:fs';
 import path from 'node:path';
 import { ApiError, ERRORS } from './texts.mjs';
+export { hostnameOf } from './auth.mjs';
 
 export const MAX_BODY = 8 * 1024;
-const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 const STATIC_TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
 export const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 export const SECURITY_HEADERS = {
@@ -40,13 +44,6 @@ export function createGate({ now = Date.now, max = 10, windowMs = 60000 } = {}) 
   return { run, admit };
 }
 
-// "localhost:7320" -> "localhost"; "[::1]:7320" -> "[::1]"; null when malformed.
-export function hostnameOf(host) {
-  if (typeof host !== 'string' || !host || host.length > 300) return null;
-  const m = /^(\[[0-9a-fA-F:.]+\]|[^:[\]/@\s]+)(?::(\d{1,5}))?$/.exec(host.trim());
-  return m ? m[1].toLowerCase() : null;
-}
-
 export function sendJson(res, status, body, extra = {}) {
   const text = JSON.stringify(body);
   res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(text), ...extra });
@@ -61,6 +58,14 @@ export function sendFile(res, status, file) {
   const body = Buffer.from(String(file?.text ?? ''), 'utf8');
   res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': type, 'Content-Disposition': `attachment; filename="${name}"`, 'Content-Length': body.length });
   res.end(body);
+}
+// A page of the auth (sign-in, refusals) or a redirect: {status, headers, html}; {status, headers, body} is JSON.
+export function sendPage(res, page) {
+  if (page.body !== undefined) return sendJson(res, page.status ?? 200, page.body, page.headers ?? {});
+  const body = Buffer.from(String(page.html ?? ''), 'utf8');
+  res.writeHead(page.status ?? 200, { ...SECURITY_HEADERS, 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, ...(page.headers ?? {}) });
+  res.end(body);
+  return undefined;
 }
 export function sendError(res, error, extra = {}) {
   const api = error instanceof ApiError ? error : new ApiError('INTERNAL', { código: 'ERRO' });
@@ -131,6 +136,7 @@ function compile(routes) {
 
 export function createHttp({ auth, routes, publicDir, log = () => {}, now = Date.now }) {
   const table = compile(routes);
+  const pages = compile(auth.routes ?? {});
   const locked = () => auth.lockedFor();
 
   async function handle(req, res) {
@@ -138,35 +144,43 @@ export function createHttp({ auth, routes, publicDir, log = () => {}, now = Date
     const q = rawUrl.indexOf('?');
     const rawPath = q >= 0 ? rawUrl.slice(0, q) : rawUrl;
     const query = new URLSearchParams(q >= 0 ? rawUrl.slice(q + 1) : '');
+    const isApi = rawPath === '/api' || rawPath.startsWith('/api/');
     // 1. Host
     const hostHeader = req.headers.host;
-    if (!LOCAL_HOSTS.has(hostnameOf(hostHeader))) return sendError(res, new ApiError('HOST_REFUSED'));
-    // 2. Origin and Sec-Fetch-Site
+    if (!auth.hostAllowed(hostHeader)) return sendError(res, new ApiError('HOST_REFUSED'));
+    // 2. Origin and Sec-Fetch-Site (a page may be reached by a top-level navigation from anywhere, GitHub included)
     const origin = req.headers.origin;
-    if (origin !== undefined && origin !== 'http://' + hostHeader) return sendError(res, new ApiError('ORIGIN_REFUSED'));
+    if (origin !== undefined && !auth.originAllowed(origin, hostHeader)) return sendError(res, new ApiError('ORIGIN_REFUSED'));
     const site = req.headers['sec-fetch-site'];
-    if (site !== undefined && site !== 'same-origin' && site !== 'none') return sendError(res, new ApiError('FETCH_SITE_REFUSED'));
-    // 3. /healthz (no key, no data, never locked)
+    if (site !== undefined && site !== 'same-origin' && site !== 'none' && (isApi || req.method !== 'GET')) return sendError(res, new ApiError('FETCH_SITE_REFUSED'));
+    // 3. /healthz (no credential, no data, never locked)
     if (rawPath === '/healthz') {
       if (req.method !== 'GET') return sendError(res, new ApiError('METHOD_NOT_ALLOWED'), { Allow: 'GET' });
       return sendJson(res, 200, { ok: true });
     }
-    // lockout after 10 wrong keys: every other request answers 429
+    // lockout after 10 bad attempts: every other request answers 429
     const wait = locked();
     if (wait) return sendError(res, new ApiError('RATE_LIMITED', { n: wait }, { retryAfter: wait }));
     // methods: GET and POST only (a preflight OPTIONS gets 405 and no CORS header)
     if (req.method !== 'GET' && req.method !== 'POST') return sendError(res, new ApiError('METHOD_NOT_ALLOWED'), { Allow: 'GET, POST' });
-    const isApi = rawPath === '/api' || rawPath.startsWith('/api/');
     if (!isApi) {
-      if (req.method === 'GET' && serveStatic(res, publicDir, rawPath)) return undefined;
+      if (req.method === 'GET') {
+        const page = auth.page(req, rawPath);
+        if (page) return sendPage(res, page);
+        for (const r of pages) {
+          const m = r.re.exec(rawPath);
+          if (!m || r.method !== 'GET') continue;
+          return sendPage(res, await r.handler({ params: Object.fromEntries(r.names.map((n, i) => [n, m[i + 1]])), query, body: null, req }));
+        }
+        if (serveStatic(res, publicDir, rawPath)) return undefined;
+      }
       return sendError(res, new ApiError(req.method === 'GET' ? 'NOT_FOUND' : 'METHOD_NOT_ALLOWED'));
     }
-    // 4. key
-    const verdict = auth.check(req.headers['x-ssam-console-key']);
-    if (verdict === 'missing') return sendError(res, new ApiError('KEY_REQUIRED'));
-    if (verdict !== 'ok') {
-      auth.noteBad();   // the 10th wrong key still gets 401; the lockout answers the requests after it
-      return sendError(res, new ApiError('KEY_INVALID'));
+    // 4. the credential: the key header, or the session cookie
+    const verdict = auth.check(req);
+    if (!verdict.ok) {
+      if (verdict.bad) auth.noteBad();   // the 10th bad one still gets 401; the lockout answers the requests after it
+      return sendError(res, new ApiError(verdict.code));
     }
     // route
     let pathMatched = false;
@@ -178,6 +192,8 @@ export function createHttp({ auth, routes, publicDir, log = () => {}, now = Date
       const params = Object.fromEntries(r.names.map((n, i) => [n, m[i + 1]]));
       let body = null;
       if (req.method === 'POST') {
+        // 5. the CSRF token of the session (the key mode's is the key header itself)
+        if (!auth.csrfOk(req, verdict.session)) { req.resume(); return sendError(res, new ApiError('CSRF_REQUIRED')); }
         const type = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
         if (type !== 'application/json') { req.resume(); return sendError(res, new ApiError('CONTENT_TYPE')); }
         let raw;
@@ -185,9 +201,10 @@ export function createHttp({ auth, routes, publicDir, log = () => {}, now = Date
         try { body = JSON.parse(raw.toString('utf8') || 'null'); } catch { return sendError(res, new ApiError('BAD_JSON')); }
         if (!body || typeof body !== 'object' || Array.isArray(body)) return sendError(res, new ApiError('BAD_JSON'));
       }
-      const out = await r.handler({ params, query, body, req });
+      const out = await r.handler({ params, query, body, req, session: verdict.session });
       if (out?.file) return sendFile(res, out.status ?? 200, out.file);
-      return sendJson(res, out?.status ?? 200, out?.body ?? { ok: true });
+      if (out?.html !== undefined) return sendPage(res, out);
+      return sendJson(res, out?.status ?? 200, out?.body ?? { ok: true }, out?.headers ?? {});
     }
     return sendError(res, new ApiError(pathMatched ? 'METHOD_NOT_ALLOWED' : 'NOT_FOUND'));
   }

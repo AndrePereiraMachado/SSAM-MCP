@@ -3,7 +3,7 @@
 // top bar (server, image, warm, collector, indexing), polling per view (paused while the document is hidden, backoff
 // on errors), theme (dark by default), keyboard shortcuts, toasts.
 
-import { api, initKey, getKey, on, clock, store } from './api.js';
+import { api, initKey, getKey, on, clock, store, setSession } from './api.js';
 import { VIEWS, SERVER_WORD, WARM_WORD } from './labels.js';
 import * as F from './format.js';
 import { h, clear, dot, iconButton, iconChip } from './dom.js';
@@ -223,14 +223,60 @@ function renderMetaBits() {
   if (!m) return;
   $('brand-host').textContent = m.publicHost || '';
   $('side-ver').textContent = m.console?.version ? `Painel v${m.console.version}` : '';
+  // the GitHub mode: the CSRF token of the POSTs and the logout button with the login
+  setSession(m.auth);
+  const out = $('btn-logout');
+  if (m.auth?.mode === 'github') {
+    out.hidden = false;
+    out.textContent = m.auth.login ? `Sair (${m.auth.login})` : 'Sair';
+    out.title = 'Encerrar a sessão do painel';
+  } else {
+    out.hidden = true;
+  }
+}
+
+const isGithubMode = () => store.meta?.auth?.mode === 'github';
+
+/** The logout button: ends the session on the server, then the sign-in page (even when the call fails). */
+async function logout() {
+  const b = $('btn-logout');
+  b.disabled = true;
+  stopTimers();
+  state.dead = true;
+  try {
+    await api.logout();
+  } catch {
+    /* the cookie is cleared by the sign-in page's next entry anyway */
+  }
+  location.replace('/auth/signin?r=saiu');
+}
+
+/**
+ * 401 from the API: in the GitHub mode a missing or ended session goes to the sign-in page; in the key mode a missing
+ * key is the "open through painel-ssam.ps1" card and a wrong one the fatal card.
+ */
+function handleAuthError(err) {
+  const code = String(err?.code || '');
+  stopTimers();
+  state.dead = true;
+  if (code === 'SESSION_REQUIRED' || code === 'SESSION_INVALID') {
+    location.replace(code === 'SESSION_REQUIRED' ? '/auth/signin' : '/auth/signin?r=expirou');
+    return;
+  }
+  if (code === 'KEY_REQUIRED' && !getKey()) {
+    showNoKey();
+    return;
+  }
+  showFatal('Chave de acesso inválida ou trocada (o painel reiniciou ou outra sessão abriu). Feche esta aba e rode painel-ssam.ps1.');
 }
 
 function showConnLost() {
   if (!state.connLostAt) state.connLostAt = clock.now();
   const conn = $('conn');
   clear(conn);
+  const hint = isGithubMode() ? 'A VPS ou o proxy estão fora do ar?' : 'O túnel SSH caiu? Rode painel-ssam.ps1 de novo.';
   conn.append(icon('alert-octagon', 18), h('span', null,
-    `Sem conexão com o painel desde ${F.fmtTimeSec(state.connLostAt)}. O túnel SSH caiu? Rode painel-ssam.ps1 de novo.`));
+    `Sem conexão com o painel desde ${F.fmtTimeSec(state.connLostAt)}. ${hint}`));
   conn.hidden = false;
   $('facts').hidden = true;
 }
@@ -583,16 +629,15 @@ function boot() {
   }
   $('btn-theme').addEventListener('click', cycleTheme);
   $('btn-refresh').addEventListener('click', refreshNow);
+  $('btn-logout').addEventListener('click', logout);
 
-  const key = initKey();
-  if (!key) {
-    showNoKey();
-    return;
-  }
+  // the key of the tunnel mode, when there is one; without it the first /api/meta decides (a session cookie in the
+  // GitHub mode, or the "open through painel-ssam.ps1" card)
+  initKey();
 
   on('network', showConnLost);
   on('ok', clearConnLost);
-  on('auth', () => showFatal('Chave de acesso inválida ou trocada (o painel reiniciou ou outra sessão abriu). Feche esta aba e rode painel-ssam.ps1.'));
+  on('auth', handleAuthError);
 
   dialogs = createDialogs(ctx);
   $('btn-keys').addEventListener('click', (e) => dialogs.shortcuts(e.currentTarget));
@@ -627,10 +672,6 @@ function boot() {
     }
   });
 
-  if (!getKey()) {
-    showNoKey();
-    return;
-  }
   startTicker();
   runMeta(true);
   if (parseHash().id !== 'visao') runStatus(true);

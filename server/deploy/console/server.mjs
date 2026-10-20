@@ -2,7 +2,9 @@
 // container (no network; unix socket CONSOLE_SOCKET) or `node server.mjs --tcp 127.0.0.1:<port>` for tests and local runs.
 // Logs one JSON line per start, mutation, reader problem and uncaught error on stdout: codes only, never request bodies,
 // headers, customer names, keys or secrets. A new access key is made at every start (after the socket is ours) and
-// written to CONSOLE_STATE_DIR/access.key for painel-ssam.ps1. SIGTERM flushes the usage day files and the checkpoint.
+// written to CONSOLE_STATE_DIR/access.key for painel-ssam.ps1; in the GitHub mode (CONSOLE_GITHUB_CLIENT_ID,
+// github-auth.mjs) there is no key, and `node server.mjs` with CONSOLE_LISTEN=<address>:<port> listens inside the
+// compose network of the Coolify VPS. SIGTERM flushes the usage day files and the checkpoint.
 import { createConsole } from './app.mjs';
 import { loadConfig } from './config.mjs';
 import { listen } from './listen.mjs';
@@ -20,6 +22,7 @@ try { where = await listen(app.server, config); } catch (error) { log(errorLine(
 if (where.kind === 'already-running') { log({ console: 'already-running' }); process.exit(1); }
 app.auth.rotate();
 log({ console: 'listening', socket: where.kind === 'socket' ? where.path : `${where.host}:${where.port}`, capabilities: app.capabilities });
+if (app.auth.mode === 'github') log({ console: 'auth', mode: 'github', logins: config.github.allowedLogins.length, publicUrl: config.github.publicUrl });
 app.begin();
 app.startTimers();
 
