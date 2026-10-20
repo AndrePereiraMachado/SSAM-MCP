@@ -61,10 +61,13 @@ test('the release record holds the pair of each image (O.6.1 item 9)', () => {
   // went there), on the same pair as the released one
   // marco-a8 (2026-10-18): the previous image is the marco-a7 prod-20261018-ebb0e9a (on the VPS since 11:28Z), same pair
   // marco-a9 (2026-10-19): the previous image is the marco-a8 prod-20261018-130b493 (on the VPS since the a8 swap), same pair
-  assert.equal(recordEntry(record, 'previous').tag, 'prod-20261018-130b493');
+  // a9 follow-ups (2026-10-20): the previous image is the marco-a9 prod-20261019-b882605 (on the VPS since 2026-10-19 21:52Z), same pair;
+  // prod-20261018-130b493 stays the second rollback, same pair
+  assert.equal(recordEntry(record, 'previous').tag, 'prod-20261019-b882605');
+  assert.deepEqual(recordEntry(record, 'prod-20261018-130b493').kernelV1, recordEntry(record, 'released').kernelV1);
   assert.deepEqual(recordEntry(record, 'prod-20261018-ebb0e9a').kernelV1, recordEntry(record, 'released').kernelV1);
   assert.deepEqual(recordEntry(record, 'prod-20261015-5eba615').kernelV1, recordEntry(record, 'released').kernelV1);
-  assert.equal(recordEntry(record, 'released').tag, 'prod-20261019-b882605');
+  assert.equal(recordEntry(record, 'released').tag, 'prod-20261020-7770621');
   assert.deepEqual(recordEntry(record, 'prod-20261015-bbdbdee').kernelV1, recordEntry(record, 'released').kernelV1);
   assert.deepEqual(recordEntry(record, 'previous').kernelV1, recordEntry(record, 'released').kernelV1);
   assert.deepEqual(recordEntry(record, 'released').kernelV1, { o11: '11.55.92', odc: '1.7.28', odcBridge: 'v97', odcBridgeAccepted: ['v96', 'v48', 'v45'] });

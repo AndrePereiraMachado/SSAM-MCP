@@ -937,6 +937,10 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
 | `PATH_OUTSIDE_WORKSPACE` com o texto genérico ("outside the folders the agent reads … nothing was read there") | Esperado (marco-a9): o caminho não volta na recusa. O cliente põe o arquivo na `inbox` do agente e manda `agent:inbox/<arquivo>` (o `fix` e a continuação dizem como) |
 | `DATA_LOAD_UPDATE_CONFIRMATION_REQUIRED` numa carga por arquivos (`o11_data` `request.files`, `studio_data_insert/update` `files`) | Esperado (marco-a9, CX13): linhas que mudariam param antes de escrever (`updatePreview`, arquivos como `ws:`) até `confirmUpdates` com as palavras do dono. Plano e diário ficam em `ws:o11/data/loads` e `ws:odc/journal/data/loads` do cliente |
 | `patchesApplied` e `nextBasedOn` numa entrega ou num job | Esperado (marco-a9, X3): as correções certas entram na mesma chamada; o job corrigido volta como `ws:o11/jobs/...`. `autoPatch:false` desliga. O licenciado não recebe `patchedJob` |
+| `WORDS_REQUIRED` ao repetir uma continuação do portão (`AGENT_RECONNECTING`, `PATH_OUTSIDE_WORKSPACE`), também a de `studio_authorize` | Esperado (seguimentos do a9, B e N1): o portão nunca devolve as palavras do dono; a continuação leva o marcador `<the user's own words>` e `askOwner`. O cliente pede as palavras ao dono de novo; nada foi escrito |
+| `DATA_READ_UNAVAILABLE` em `/identity` numa carga por arquivos de uma entidade ODC vazia | Esperado (seguimentos do a9, M1, bridge v97): a continuação é `studio_data_insert` com a primeira linha boa (palavras do dono) e depois a mesma carga (`nextCalls`). Com `insertMissing:false`, `DATA_KEY_NOT_FOUND` por linha e nada escrito |
+| `PATH_OUTSIDE_WORKSPACE` que manda copiar o arquivo para a `inbox` do agente | Esperado (seguimentos do a9, M2): o arquivo vai copiado como está (nunca reescrito) e a mesma chamada volta com cada caminho recusado como `agent:inbox/<nome>`, também numa lista |
+| `good`, `slow`, `losing` ou `unknown` no teste de rede do `ssam_doctor` | Esperado (seguimentos do a9, decisão do dono de 19/10): eram `boa`, `lenta`, `perde` e `desconhecida`. Nenhum agente lê esses valores |
 | `<server>` no lugar de um caminho numa resposta | Esperado (marco-a7): caminho do servidor (volumes de `/data`, `/studio`, `/tmp`, `/app`) nunca sai numa resposta; os do workspace do cliente saem como `ws:...`. |
 
 ## 14. Limitações conhecidas
@@ -1004,6 +1008,12 @@ A pilha do ensaio foi derrubada com `docker compose down`, e os volumes do ensai
   `2aede778`; a caixa agent não mudou (o pacote do agente é o mesmo, bridge ODC v97; o `BridgeDataIndexes.cs` novo vai só para a
   caixa server, a bridge não o compila). `compose.prod.yml`, `Caddyfile`, scripts e `kernel.json` não mudam. As mudanças de
   comportamento estão em `C:\t\vps-a9\LINHA.md` §8.
+- **seguimentos do a9** (`server/r29-marco-a9`, imagem `prod-20261020-7770621`): a cópia saiu de `fase4-26/a9-followups` (`492e1889`), sobre a
+  mesma caixa (linha `2aede778`, a `prod-20261019-b882605`). Conferido blob a blob: as 6972 entradas da caixa server que vêm da linha são
+  iguais às de `492e1889`; o compartilhado `docs/FASE2-AGENTE.md` foi para as duas caixas com os bytes da linha (o pacote do agente
+  é o mesmo, bridge ODC v97). `compose.prod.yml`, `Caddyfile`, scripts, contrato do painel e `kernel.json` não mudam. `previous` é
+  a `prod-20261019-b882605` (no ar desde 19/10 21:52Z); a `prod-20261018-130b493` fica como segunda volta. As mudanças de comportamento estão em
+  `C:\t\vps-a10\IMAGEM.md` §6.
 - O índice do `ssam_discover` e os outros caches de `/app` se perdem a cada container novo: 1 a 2 min de aquecimento
   (7.3). O índice de módulos e a cópia dos leitores ficam no volume `cache` e passam pela recriação.
 - O container não roda com o sistema de arquivos raiz só de leitura.
