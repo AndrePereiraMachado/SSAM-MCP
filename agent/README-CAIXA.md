@@ -130,11 +130,12 @@ ligado a um update server. Está em `app/` (README do dono: `app/README.md`; gui
   `utilityProcess` do Electron 44 (Node 24.22, com `--use-env-proxy` e `--use-system-ca`), com a linha de comando do
   `.ps1`/`.sh`; parada limpa por `private/agent.stop`; códigos 2, 3 e 4 finais, outros reiniciam com atraso crescente.
 - **Update server.** electron-updater com provider `generic`: uma pasta estática por HTTPS com `latest.yml`,
-  `latest-mac.yml`, instaladores e blockmaps; a URL entra no build (`--update-url`) e pode ser trocada no painel.
+  `latest-mac.yml`, instaladores e blockmaps: `https://dist.ssam.pro/u/ssam-agent` (o `publish` do build, 20/10); `--update-url`
+  ou o painel trocam.
   No macOS a atualização automática exige app assinada e notarizada.
 - **Provado no Windows (20/10):** `app/tests` 14/14 (sync, setup, conectar, parar limpo com DELETE no hub, credencial
   recusada sem reinício, reinício após kill, doctor, ZIP, inglês); prova ao vivo da app de checkout e da app
   empacotada (`dist/win-unpacked`) contra o hub falso, painel guiado por CDP: setup, pacote `pack-20261020-193613`
   (45 arquivos, v97, 11.55.92, montado de `C:\t\agent-mac\round2\pack3-win` com `-NoBuild -Prebuilt -NoNode`),
   conectado, parar, iniciar, sair com parada limpa. Instalador NSIS `ssam-agent-app-0.1.0-setup.exe` (103 MB) com
-  `latest.yml`. Falta um Mac para o DMG, a assinatura e a notarização, e a URL real do update server.
+  `latest.yml` apontando para `https://dist.ssam.pro/u/ssam-agent`. Falta um Mac para o DMG, a assinatura e a notarização.

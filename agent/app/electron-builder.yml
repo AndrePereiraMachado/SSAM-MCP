@@ -61,5 +61,5 @@ dmg:
   writeUpdateInfo: false
 publish:
   provider: generic
-  url: https://updates.example.invalid/ssam-agent
+  url: https://dist.ssam.pro/u/ssam-agent
   channel: latest

@@ -27,9 +27,12 @@ Node 24 com npm, nesta pasta:
 npm ci
 npm test                       # node --test tests/*.test.mjs (usa agent/tests/fixtures: hub falso, raiz, inglês)
 npm run icons                  # regrava build/icon.png e assets/tray/*.png (já versionados)
-node scripts/build.mjs --platform win --pack <ssam-agent.zip> --update-url https://updates.exemplo.com/ssam-agent
-node scripts/build.mjs --platform mac --pack <ssam-agent-mac.tar.gz> --update-url https://...   # só num Mac
+node scripts/build.mjs --platform win --pack <ssam-agent.zip>
+node scripts/build.mjs --platform mac --pack <ssam-agent-mac.tar.gz>     # só num Mac
 ```
+
+Sem `--update-url`, o build publica para o update server do dono, `https://dist.ssam.pro/u/ssam-agent` (o `publish`
+de `electron-builder.yml`); `--update-url` ou `SSAM_UPDATE_URL` trocam, por exemplo para um teste local.
 
 - O pacote: `scripts\agent-pack.ps1 ... -NoNode` (Windows) ou `-Platform mac` (macOS). O script de build extrai o
   pacote em `app/pack`, confere cada sha256 do `pack.json` e recusa um pacote com `agent/node/` ou da outra plataforma.
@@ -43,22 +46,33 @@ node scripts/build.mjs --platform mac --pack <ssam-agent-mac.tar.gz> --update-ur
   do electron-builder no build. Sem isso o DMG serve para instalar à mão e a app diz "Updates are off" ou falha na
   instalação do update.
 
-## O update server
+## O update server: `https://dist.ssam.pro/u/ssam-agent`
 
-Qualquer pasta estática servida por HTTPS (provider `generic` do electron-updater). Publicar uma versão:
+A configuração do updater (a do dono, 20/10/2026) é o `publish` de `electron-builder.yml`:
+
+```yaml
+publish:
+  provider: generic
+  url: https://dist.ssam.pro/u/ssam-agent
+  channel: latest
+```
+
+É uma pasta estática servida por HTTPS: `https://dist.ssam.pro/u/ssam-agent/` tem de responder, como arquivos
+estáticos, `latest.yml`, `latest-mac.yml`, os instaladores e os `.blockmap` deles. Publicar uma versão:
 
 1. Suba `version` em `package.json` (semver; o updater só instala uma versão maior).
-2. Monte o pacote do agente daquela versão e rode o build de cada plataforma com a MESMA `--update-url`.
-3. Copie para a pasta do servidor, mantendo os nomes: `latest.yml`, `ssam-agent-app-<v>-setup.exe` e
-   `.exe.blockmap` (Windows); `latest-mac.yml`, os `.zip` e `.zip.blockmap` e os `.dmg` (macOS). O `latest*.yml` tem o
-   sha512 de cada arquivo; a app recusa um arquivo que não bata.
+2. Monte o pacote do agente daquela versão e rode o build de cada plataforma (sem `--update-url`: a URL acima).
+3. Copie `dist/` para a pasta servida em `/u/ssam-agent`, mantendo os nomes: `latest.yml`, `ssam-agent-app-<v>-setup.exe`
+   e `.exe.blockmap` (Windows); `latest-mac.yml`, os `.zip` e `.zip.blockmap` e os `.dmg` (macOS). O `latest*.yml` tem o
+   sha512 de cada arquivo; a app recusa um arquivo que não bata. `builder-debug.yml` não precisa ir.
 4. A app instalada pergunta ao servidor 20 s depois de abrir e a cada 6 h (`updateCheckHours` em `settings.json` da
    app), baixa em segundo plano e instala quando a pessoa escolhe "Restart to update" (o agente para limpo antes) ou ao
    sair da app.
 
-No Coolify (Traefik): um serviço de arquivos estáticos (por exemplo a imagem `nginx:alpine` ou `caddy` com um volume
-montado na pasta dos instaladores) com o domínio `updates.<seu-dominio>`; o Traefik do Coolify cuida do TLS. Nada do
-servidor SSAM precisa mudar: o update server é só HTTP estático, e a app fala com ele à parte do canal do agente.
+Um jeito de hospedar `dist.ssam.pro` no Coolify (Traefik): um serviço de arquivos estáticos (a imagem `nginx:alpine`
+ou `caddy` com um volume montado na pasta que tem `u/ssam-agent/`) com o domínio `dist.ssam.pro`; o Traefik do Coolify
+cuida do TLS. Nada do servidor SSAM precisa mudar: o update server é só HTTP estático, e a app fala com ele à parte do
+canal do agente. Conferência rápida: `curl -I https://dist.ssam.pro/u/ssam-agent/latest.yml` responde 200.
 
 Para testar em casa: `SSAM_UPDATE_URL=http://127.0.0.1:<porta>/` (só loopback aceita http) e uma pasta servida por
 `npx serve` ou `python -m http.server`; num checkout (`npm start`), o electron-updater só confere com um

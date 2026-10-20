@@ -4,6 +4,7 @@
 // the app reads at start).
 //   node scripts/build.mjs --platform win|mac --pack <ssam-agent.zip | ssam-agent-mac.tar.gz | folder>
 //                          [--update-url https://...] [--no-updates] [--pack-only]
+//   Without --update-url the build publishes to https://dist.ssam.pro/u/ssam-agent (the owner's update server).
 //   SSAM_UPDATE_URL in the environment stands for --update-url. --pack-only stops after app/pack is ready.
 // A macOS build (DMG, ZIP for the updater, signing) only runs on a Mac; a Windows build runs on Windows (or on
 // Linux with wine, which this script does not set up).
@@ -18,9 +19,11 @@ import { updateUrlProblem } from '../src/settings.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = path.resolve(here, '..');
 const box = path.resolve(app, '..');
+// The owner's update server (the publish url of electron-builder.yml); --update-url or SSAM_UPDATE_URL replace it.
+export const DEFAULT_UPDATE_URL = 'https://dist.ssam.pro/u/ssam-agent';
 
 function parse(argv) {
-  const options = { platform: null, pack: null, updateUrl: process.env.SSAM_UPDATE_URL ?? null, noUpdates: false, packOnly: false };
+  const options = { platform: null, pack: null, updateUrl: process.env.SSAM_UPDATE_URL ?? DEFAULT_UPDATE_URL, noUpdates: false, packOnly: false };
   for (let i = 0; i < argv.length; i++) {
     const name = argv[i];
     if (name === '--no-updates') { options.noUpdates = true; continue; }
