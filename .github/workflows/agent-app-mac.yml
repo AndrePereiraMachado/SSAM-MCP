@@ -13,7 +13,12 @@
 # macOS (it refuses an unsigned app). The artifacts are the files to copy to the update server as they are.
 name: Agent app (macOS build)
 
+# GitHub only offers "Run workflow" for a workflow that is on the default branch, so a push to this branch runs it too,
+# with the same defaults as the inputs (the first build of 2026-10-20 ran that way).
 on:
+  push:
+    branches: [server/agent-electron]
+    paths: ['.github/workflows/agent-app-mac.yml', 'agent/app/**']
   workflow_dispatch:
     inputs:
       pack_release:
@@ -28,6 +33,11 @@ on:
         description: The update server the app will ask (publish.url)
         required: true
         default: https://dist.ssam.pro/u/ssam-agent
+
+env:
+  PACK_RELEASE: ${{ inputs.pack_release || 'agent-pack-mac' }}
+  PACK_ASSET: ${{ inputs.pack_asset || 'ssam-agent-mac.tar.gz' }}
+  UPDATE_URL: ${{ inputs.update_url || 'https://dist.ssam.pro/u/ssam-agent' }}
 
 jobs:
   build:
@@ -51,7 +61,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$RUNNER_TEMP/pack"
-          gh release download "${{ inputs.pack_release }}" --repo "${{ github.repository }}" --pattern "${{ inputs.pack_asset }}" --dir "$RUNNER_TEMP/pack"
+          gh release download "$PACK_RELEASE" --repo "${{ github.repository }}" --pattern "$PACK_ASSET" --dir "$RUNNER_TEMP/pack"
           ls -la "$RUNNER_TEMP/pack"
 
       - name: Install
@@ -76,7 +86,7 @@ jobs:
         run: |
           if [ "$CSC_LINK" = "" ]; then echo "::notice::Unsigned build: no CSC_LINK secret, so nothing is signed. On a Mac open the app once with right-click > Open (Gatekeeper); electron-updater does not auto-update an unsigned app, so new versions are installed by hand."; fi
           if [ "$NOTARIZE" = "true" ]; then extra="--notarize"; else extra=""; fi
-          node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/pack/${{ inputs.pack_asset }}" --update-url "${{ inputs.update_url }}" $extra
+          node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/pack/$PACK_ASSET" --update-url "$UPDATE_URL" $extra
           ls -la dist
 
       - name: Upload the build
