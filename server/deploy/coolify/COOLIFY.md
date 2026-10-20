@@ -352,7 +352,8 @@ chega ao painel e que o painel chega ao banco.
 
 ### 11.4 O código do painel vem na imagem
 
-Desde a imagem publicada em 2026-10-20 depois da `prod-20261020-e2ff91b`, o `.dockerignore` inclui `deploy/console`
+Desde a `prod-20261020-12fae04` (a `latest` do registro desde 2026-10-20; digest
+`sha256:bbeaffad076ac04b0156208b4541ef6d761517c945589ab4b59cbf05999318e5`), o `.dockerignore` inclui `deploy/console`
 (sem os testes e os mocks) e o `ssam-console` roda `node /app/deploy/console/server.mjs` **da própria imagem**: nada é
 montado da VPS, nenhuma pasta precisa ser copiada, e uma mudança no painel se publica como qualquer outra
 (`publish.sh --latest` e **Redeploy**; seção 7). O painel importa o módulo de tokens da mesma imagem
@@ -434,6 +435,12 @@ Resultado (um cliente Node no papel do navegador, com o cookie e o cabeçalho CS
   capacidades `false`) e, 30 s depois, `token-store-reconnected` com `backend: postgres` e as capacidades de volta, sem
   reiniciar o container: é o que acontece no Coolify quando o recurso do banco sobe depois do compose.
 - `ssamctl.sh console status|logs|audit` funcionam ao lado dos comandos do servidor.
+
+**Ensaio repetido com o painel dentro da imagem (2026-10-20, `ssam-server:prod-20261020-12fae04`):** o compose sem o
+bind mount (o container só monta o volume `server-state`), `/app/deploy/console` na imagem sem `tests`, `ui-tests`,
+`public/mock` e `painel-ssam.ps1`; o `ssam-console` sobe `healthy` com `listening` em `0.0.0.0:7320` e `auth` com
+`mode: github`; o mesmo roteiro de cima (entrada, CSRF, as cinco ações no Postgres, saída, login recusado, `Host`
+estranho) passou inteiro. Essa é a imagem publicada como `latest`.
 
 O que o ensaio NÃO prova: o GitHub de verdade (a tela de autorização, o `client_secret` real, a conta do dono), o
 Traefik do Coolify com o roteador do painel e o certificado do Let's Encrypt para `CONSOLE_DOMAIN`, o cookie `Secure`

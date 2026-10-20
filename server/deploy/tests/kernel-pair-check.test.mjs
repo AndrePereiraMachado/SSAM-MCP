@@ -67,14 +67,15 @@ test('the release record holds the pair of each image (O.6.1 item 9)', () => {
   // the registry before the database), same pair; the released one carries the same kernel.json
   // the Coolify owner console (2026-10-20): the previous image is the tokens-in-Postgres prod-20261020-2b46244; the files inside
   // the released image are the same (the console is bind-mounted), so the kernel.json is the same too
-  assert.equal(recordEntry(record, 'previous').tag, 'prod-20261020-2b46244');
+  // the console inside the image (2026-10-20): prod-20261020-e2ff91b is previous; 2b46244 and 7770621 keep the same pair
+  assert.equal(recordEntry(record, 'previous').tag, 'prod-20261020-e2ff91b');
   assert.deepEqual(recordEntry(record, 'prod-20261020-2b46244').kernelV1, recordEntry(record, 'released').kernelV1);
   assert.deepEqual(recordEntry(record, 'prod-20261020-7770621').kernelV1, recordEntry(record, 'released').kernelV1);
   assert.deepEqual(recordEntry(record, 'prod-20261019-b882605').kernelV1, recordEntry(record, 'released').kernelV1);
   assert.deepEqual(recordEntry(record, 'prod-20261018-130b493').kernelV1, recordEntry(record, 'released').kernelV1);
   assert.deepEqual(recordEntry(record, 'prod-20261018-ebb0e9a').kernelV1, recordEntry(record, 'released').kernelV1);
   assert.deepEqual(recordEntry(record, 'prod-20261015-5eba615').kernelV1, recordEntry(record, 'released').kernelV1);
-  assert.equal(recordEntry(record, 'released').tag, 'prod-20261020-e2ff91b');
+  assert.equal(recordEntry(record, 'released').tag, 'prod-20261020-12fae04');
   assert.deepEqual(recordEntry(record, 'prod-20261015-bbdbdee').kernelV1, recordEntry(record, 'released').kernelV1);
   assert.deepEqual(recordEntry(record, 'previous').kernelV1, recordEntry(record, 'released').kernelV1);
   assert.deepEqual(recordEntry(record, 'released').kernelV1, { o11: '11.55.92', odc: '1.7.28', odcBridge: 'v97', odcBridgeAccepted: ['v96', 'v48', 'v45'] });
