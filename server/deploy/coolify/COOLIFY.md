@@ -189,8 +189,10 @@ A regra é a da seção 8 do DEPLOY.md (anuncie a janela: recriar o container co
 2. Na máquina do dono: construa e ensaie a imagem nova (DEPLOY.md 6 e 12) e publique com `publish.sh --latest`
    (seção 1).
 3. No Coolify, **Redeploy** (com `SSAM_IMAGE_TAG=latest` não há variável a trocar; com uma tag fixa, troque-a antes).
-   Depois, `ssamctl.sh status` mostra o digest da imagem puxada: compare com o que o `publish.sh` imprimiu. Se o
-   Coolify não tiver puxado a `latest` nova (o digest continua o antigo), `sh ssamctl.sh pull` e Redeploy de novo. O
+   Depois, `ssamctl.sh status` mostra o digest da imagem puxada: compare com o que o `publish.sh` imprimiu. O compose
+   tem `pull_policy: always` no `ssam-server` e no `ssam-console`: cada `up` do Coolify busca a tag no registro (sem
+   isso o Coolify reaproveitava a `latest` que já estava na VPS, visto em 2026-10-20). Se mesmo assim o digest
+   continuar o antigo, `sh ssamctl.sh pull` e Redeploy de novo. O
    Traefik responde 502 enquanto o container novo não atende (não há "espere pelo servidor" como no Caddy; são uns
    segundos).
 4. Se a versão de um Studio ou da bridge mudou (o `release-record.json` do commit novo diz), a ordem é a do DEPLOY.md 8,

@@ -61,8 +61,10 @@ services:
     <<: *hardening
     # From the private registry, pinned by tag (publish.sh prints the line; it never pushes a tag twice, so the tag names
     # one image for good). Not "<tag>@sha256:<digest>": Coolify turns it into "<image>@sha256@sha256:..." and the pull fails.
-    image: ${SSAM_IMAGE:?set SSAM_IMAGE (e.g. docker.io/<namespace>/ssam-server)}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG (prod-<yyyymmdd>-<commit>)}
+    image: ${SSAM_IMAGE:?set SSAM_IMAGE (e.g. docker.io/<namespace>/ssam-server)}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG (latest, or prod-<yyyymmdd>-<commit>)}
     platform: linux/amd64
+    # every up pulls the tag again: with `latest` a Redeploy takes the newest published image (a fixed tag never changes)
+    pull_policy: always
     restart: unless-stopped
     environment:
       SSAM_PORT: "7310"
@@ -138,6 +140,7 @@ services:
     <<: *hardening
     image: ${SSAM_IMAGE:?set SSAM_IMAGE}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG}
     platform: linux/amd64
+    pull_policy: always
     restart: unless-stopped
     user: "10001:10001"
     # entrypoint + command (not `command: []`, which Coolify's parser refuses): the image's CMD (ssam-server-start) is
