@@ -466,6 +466,13 @@ docker compose -f compose.prod.yml run --rm ssam-admin server-token issue --cust
 - `--lanes odc`, `o11` ou `odc,o11`. `--days` de 1 a 3650. Sem `--days`, o token não expira.
 - O servidor no ar vê o token novo no pedido seguinte, sem reinício.
 
+**Onde os tokens ficam.** Sem `SSAM_DATABASE_URL` (este compose), em `/data/server/tokens.json`, no volume
+`server-state`, só com os hashes. Com `SSAM_DATABASE_URL=postgres://...` no ambiente do `ssam-server` (desde a imagem do
+commit `64d4a72` da caixa server, 2026-10-20), na tabela `server_tokens` desse Postgres: o servidor aplica as migrações
+(`platforms/odc/facade/migrations`) ao subir, `ssam db migrate|status` as mostra, `ssam server-token import --from
+<tokens.json>` copia um arquivo existente para o banco, e o `ssam-admin` precisa da mesma variável e de rede até o banco.
+É o desenho da VPS com Coolify (`coolify/COOLIFY.md`, seção 6); o painel do dono (seção 15) só conhece o `tokens.json`.
+
 Outros comandos:
 
 ```bash

@@ -5,15 +5,17 @@ parte do proxy que o Caddyfile fazia está escrita nos rótulos (labels) do `com
 arquivo de configuração dinâmica do Traefik (`traefik-ssam.yaml`). A imagem vem de um registro PRIVADO, publicada pela
 máquina do dono com `../publish.sh`, fixada por tag e digest. Tudo o que o DEPLOY.md diz sobre o servidor em si continua
 valendo: `kernel.json` (7.1), `Features.plain.xml` (7.2), tokens (7.4), upgrade e rollback (8), limites e cuidados (14).
-Só muda COMO os arquivos chegam aos volumes e como o container sobe: pelo Coolify e pelo `ssamctl.sh`.
+Só muda COMO os arquivos chegam aos volumes e como o container sobe: pelo Coolify e pelo `ssamctl.sh`. E, desde a
+imagem com o armazenamento Postgres (a partir do commit `64d4a72` da caixa server, 2026-10-20), os tokens e as credenciais dos agentes ficam
+num serviço `postgres` do mesmo compose, com volume próprio (seção 6), e não mais em `/data/server/tokens.json`.
 
 Arquivos desta pasta:
 
 | Arquivo | Para quê |
 | --- | --- |
-| `compose.coolify.yml` | o compose que o Coolify roda: `ssam-server` com os rótulos do Traefik; `ssam-admin` e `ssam-ops` só por perfil (nunca sobem com o Coolify) |
+| `compose.coolify.yml` | o compose que o Coolify roda: `ssam-server` com os rótulos do Traefik, `postgres` (os tokens); `ssam-admin` e `ssam-ops` só por perfil (nunca sobem com o Coolify) |
 | `traefik-ssam.yaml` | configuração dinâmica do Traefik do Coolify: o transporte `ssam@file` (keep-alive de 4 s, sem limite de resposta) |
-| `ssamctl.sh` | as operações à mão na VPS, só com `docker`: tokens, `kernel.json`, `Features.plain.xml`, backup, restore, log |
+| `ssamctl.sh` | as operações à mão na VPS, só com `docker`: tokens, `db migrate\|status`, `psql`, `kernel.json`, `Features.plain.xml`, backup (com o dump do banco), restore, log |
 | `.env.coolify.example` | a lista das variáveis (no Coolify, as Environment Variables do recurso) |
 | `rehearsal.override.yml` | só para o ensaio local (seção 10): publica 7310 em 127.0.0.1:27310 |
 | `../publish.sh` | na máquina do dono: empurra uma imagem já construída e provada para o registro privado (nunca uma tag que já existe) e mostra as linhas para fixar |
@@ -79,7 +81,8 @@ até 60 min). Isso não cabe em rótulo: o provedor Docker do Traefik não tem r
    arquivo é `server/deploy/coolify/compose.coolify.yml`). Cole o `compose.coolify.yml`.
 2. **Environment Variables**: o Coolify lê cada `${VAR}` do compose e pede as com `:?` antes do primeiro deploy. Preencha
    com a lista de `.env.coolify.example`: `SSAM_IMAGE` e `SSAM_IMAGE_TAG` (as duas linhas do `publish.sh`; a tag só, sem
-   digest),
+   digest), `SSAM_DB_PASSWORD` (a senha do serviço `postgres`: uma string longa e aleatória, criada uma vez; o volume do
+   banco nasce com ela, então não a troque à mão depois),
    `SSAM_DOMAIN` (o DNS da VPS, sem `https://`), `SSAM_CPUS`, `SSAM_MEMORY`, `SSAM_BUILD_WORKERS` e o resto pelo tamanho
    da VPS (DEPLOY.md seção 5).
 3. **Advanced > Docker Compose > Connect to predefined network**: ligado. O Traefik do Coolify só alcança containers na
@@ -89,9 +92,11 @@ até 60 min). Isso não cabe em rótulo: o provedor Docker do Traefik não tem r
    segurança, redirecionamento de http para https). Um domínio na interface faria o Coolify gerar um segundo roteador
    para o mesmo container, sem o filtro de caminhos nem o transporte.
 5. DNS: o registro A (e AAAA) de `SSAM_DOMAIN` apontando para a VPS antes do deploy, senão o Let's Encrypt falha.
-6. **Deploy**. O Coolify puxa a imagem (seção 2), cria os volumes `server-state`, `friction`, `odc-features` e `cache`
-   (com o prefixo do recurso) e sobe só o `ssam-server`: `ssam-admin` e `ssam-ops` têm `profiles` e nunca sobem
-   sozinhos. O container fica `healthy` em uns 10 s e ainda aquece 1 a 2 minutos (DEPLOY.md 7.3).
+6. **Deploy**. O Coolify puxa a imagem (seção 2), cria os volumes `server-state`, `friction`, `odc-features`, `cache` e
+   `pgdata` (com o prefixo do recurso) e sobe o `postgres` e, quando ele está `healthy`, o `ssam-server`: `ssam-admin` e
+   `ssam-ops` têm `profiles` e nunca sobem sozinhos. Ao subir, o servidor aplica as migrações do banco (o log mostra
+   `db-migrated` na primeira vez e `tokens-store` com `backend: postgres`); sem alcançar o banco, ele NÃO sobe (o log diz
+   por quê). O container fica `healthy` em uns 10 s e ainda aquece 1 a 2 minutos (DEPLOY.md 7.3).
 
 Nesse primeiro `up` o servidor sobe **sem** `kernel.json` (o log mostra `kernel` com `null` e `kernel-version-missing`):
 o hub recusa o pacote de qualquer agente até a seção 5. É esperado.
@@ -125,24 +130,45 @@ Conferências: `curl -fsS https://<domínio>/health` (`{"ok":true,...}`), `curl 
 https://<domínio>/mcp` (401 sem token) e `curl -s -o /dev/null -w '%{http_code}\n' https://<domínio>/` (404 do Traefik:
 o caminho não é roteado).
 
-## 6. Tokens de cliente
+## 6. Tokens de cliente (no Postgres)
+
+Os tokens e as credenciais dos agentes (só o SHA-256 de cada um, mais cliente, datas, faixas e estado) ficam na tabela
+`server_tokens` do serviço `postgres` do compose, no volume `pgdata`. O `ssam-server` chega lá por `SSAM_DATABASE_URL`
+(`postgres://ssam:<senha>@postgres:5432/ssam`, montada no compose a partir de `SSAM_DB_PASSWORD`) e aplica as migrações
+(`platforms/odc/facade/migrations`) ao subir. Um redeploy, um rollback ou um container recriado pelo Coolify não perde
+nenhuma licença: o volume do banco fica. O servidor relê a tabela a cada segundo: um `revoke` vale em até 1 s.
 
 ```bash
 sh ssamctl.sh token issue --customer "Nome do cliente" --days 30 --lanes odc,o11
 sh ssamctl.sh token list
 sh ssamctl.sh token revoke --id tok_...
 sh ssamctl.sh token agent-rotate --id tok_...
+sh ssamctl.sh db status                       # migrações aplicadas e pendentes
+sh ssamctl.sh psql 'select id, customer, expires_at, revoked_at, lanes from server_tokens'
 ```
 
 O `issue` e o `agent-rotate` mostram o token (`ssam_...`) e a credencial do agente (`ssam_agent_...`) **uma vez só**, no
-seu terminal; o container roda sem driver de log, para o Docker não guardar cópia. O volume guarda só o SHA-256. O resto é
-como no DEPLOY.md 7.4 e 7.5.
+seu terminal; o container roda sem driver de log, para o Docker não guardar cópia, e fala com o banco pela rede do
+compose. O resto é como no DEPLOY.md 7.4 e 7.5.
+
+**Vindo de um servidor com `tokens.json`** (o `compose.prod.yml`, ou um deploy anterior desta pasta sem o banco): com o
+volume `server-state` já no lugar, copie os registros uma vez:
+
+```bash
+sh ssamctl.sh token import --from /data/server/tokens.json
+```
+
+Só hashes viajam (nenhum segredo está no arquivo); o arquivo não é alterado e pode ficar como cópia. Um registro já no
+banco com o mesmo id é substituído pelo do arquivo.
+
+O painel do dono (`ssam-console`, DEPLOY.md seção 15) lê e escreve `tokens.json` diretamente e **não** conhece o banco:
+com `SSAM_DATABASE_URL` no ar, não o use; as licenças se administram pelo `ssamctl.sh token`.
 
 ## 7. Upgrade e rollback
 
 A regra é a da seção 8 do DEPLOY.md (anuncie a janela: recriar o container corta as chamadas em curso). O que muda:
 
-1. `sh ssamctl.sh backup` (seção 8) antes.
+1. `sh ssamctl.sh backup` (seção 8) antes: os volumes e o dump do banco.
 2. Na máquina do dono: construa e ensaie a imagem nova (DEPLOY.md 6 e 12) e publique com `publish.sh` (seção 1).
 3. No Coolify, troque `SSAM_IMAGE_TAG` pela tag nova e **Redeploy**. Depois, `ssamctl.sh status` mostra o digest da
    imagem puxada: compare com o que o `publish.sh` imprimiu. O Traefik responde 502 enquanto
@@ -158,9 +184,11 @@ A regra é a da seção 8 do DEPLOY.md (anuncie a janela: recriar o container co
 
 ```bash
 sudo install -d -o root -m 0700 /var/backups/ssam-server
-sh ssamctl.sh backup                     # tar.gz de server, friction e odc-features (+ .sha256 e .info), com o servidor no ar
+sh ssamctl.sh backup                     # tar.gz de server, friction e odc-features (+ .sha256 e .info) E o dump do banco
+                                         # (ssam-tokens-<data>.sql.gz + .sha256), com o servidor no ar
 sh ssamctl.sh backup /outra/pasta
-sh ssamctl.sh restore /var/backups/ssam-server/ssam-state-<data>.tar.gz   # só com o servidor PARADO no Coolify (Stop); depois Start
+sh ssamctl.sh restore /var/backups/ssam-server/ssam-state-<data>.tar.gz [/var/backups/ssam-server/ssam-tokens-<data>.sql.gz]
+                                         # só com o ssam-server PARADO no Coolify (Stop; o postgres fica); depois Start
 sh ssamctl.sh logs 100                   # as últimas linhas do server.log
 sh ssamctl.sh ops sh -c 'du -sh /data/*' # qualquer comando na imagem sobre os volumes, sem rede, como uid 10001
 ```
@@ -168,6 +196,10 @@ sh ssamctl.sh ops sh -c 'du -sh /data/*' # qualquer comando na imagem sobre os v
 O `backup.sh` e o `restore.sh` da pasta de cima dependem do `compose.prod.yml` e não servem aqui. Para uma cópia fora da
 VPS e um heartbeat, use o cron da VPS sobre o `ssamctl.sh backup` (o arquivo tem dados de clientes e hashes de tokens:
 cifre antes de copiar para fora).
+
+O dump é SQL puro (`pg_dump --no-owner`), carregado de volta com o `psql` do próprio container do banco; o restore do
+dump apaga a tabela e a recria do arquivo. Os dois arquivos têm dados de clientes e hashes de tokens: cifre antes de
+copiar para fora.
 
 ## 9. O que é diferente de Caddy para Traefik
 
@@ -218,3 +250,17 @@ Resultado:
 
 O que o ensaio NÃO prova: o Traefik do Coolify (o roteador, o resolvedor `letsencrypt`, o transporte `ssam@file`, a
 rede do proxy) e o `docker login` do registro. Isso só numa VPS com Coolify, DNS e o repositório privado.
+
+**Segundo ensaio (2026-10-20, com o Postgres):** a imagem do commit `64d4a72` (os tokens no banco), o serviço
+`postgres` do compose e `SSAM_DB_PASSWORD` no `.env` do ensaio.
+
+- `up -d ssam-server` sobe o `postgres` (uid 70, `healthy` pelo `pg_isready`) e depois o servidor; o log do servidor
+  mostra `db-migrated 0001 server-tokens`, `tokens-store` com `backend: postgres` e a URL sem a senha, e `listening`.
+- `ssamctl.sh status` mostra a linha `tokens: postgres (...)` com o container do banco `running / healthy`;
+  `db status` lista a migração `0001` aplicada e nenhuma pendente.
+- `token issue` grava na tabela (`psql 'select ...'` mostra o registro, sem segredo); `token list` responde com
+  `database: true`; `/data/server` não tem `tokens.json`.
+- `POST /mcp`: token desconhecido 401; o token emitido 200; depois de `token revoke`, 403 em menos de 2 s.
+- `backup` escreve o tar.gz dos volumes e `ssam-tokens-<data>.sql.gz` com `.sha256`; com o servidor parado, as duas
+  tabelas apagadas no `psql` e `restore <tar.gz> <sql.gz>`, o `start` volta `healthy`, `token list` vê os dois tokens
+  e `db status` a migração.
