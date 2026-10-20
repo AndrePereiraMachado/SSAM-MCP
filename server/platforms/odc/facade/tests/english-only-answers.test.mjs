@@ -91,13 +91,11 @@ const ALLOWED = Object.freeze([
   { file: 'platforms/odc/facade/quality-line.mjs', text: 'entregue-publicado', why: 'deliv code of the quality record contract (quality-line.mjs DELIV, read by the owner\'s console), never in an answer' },
   { file: 'platforms/odc/facade/quality-record.mjs', text: 'entregue', why: 'the older Portuguese delivery result read back (input alias) and the deliv code of the record, never in an answer' },
   { file: 'platforms/odc/facade/quality-record.mjs', text: 'entregue-publicado', why: 'deliv code of the quality record (quality-line.mjs DELIV), never in an answer' },
-  // Structured values of hosted answers that wait for the owner's decision (C:\t\revisoes\english-agent-2\REVISAO.md and
-  // C:\t\revisoes\vps-a7-2\REVISAO.md item 4): the four values of the hosted network check, paths[].status boa | lenta |
-  // perde and the exit key desconhecida (hosted/network-check.mjs UNKNOWN_EXIT, agent-hub.mjs maskAddress). This detector
-  // sees two of them (below); hosted-answers-english.test.mjs declares all four (DATA) and keeps them exactly these.
-  // The markers of withheld data are English since phase 3 of the a7 line (<server>, <customer omitted>, <fixture omitted>).
-  { file: 'platforms/odc/facade/hosted/network-check.mjs', text: 'perde', why: 'status value of the hosted network check, waiting for the owner\'s decision (english-agent-2 review)' },
-  { file: 'platforms/odc/facade/hosted/network-check.mjs', text: 'lenta', why: 'status value of the hosted network check, waiting for the owner\'s decision (english-agent-2 review)' },
+  // The four values of the hosted network check are English since the owner's decision of 2026-10-19 (paths[].status good |
+  // slow | losing, the exit key unknown; they were boa | lenta | perde | desconhecida): no entry is left for them here. The
+  // input alias of an older answer's exit (hosted/network-check.mjs LEGACY_UNKNOWN_EXIT) is declared by
+  // hosted-answers-english.test.mjs. The markers of withheld data are English since phase 3 of the a7 line (<server>,
+  // <customer omitted>, <fixture omitted>).
 ]);
 const allowed = (name, text) => ALLOWED.some(a => a.file === name && (a.text !== undefined ? a.text === text : text.startsWith(a.prefix)));
 

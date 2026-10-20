@@ -95,6 +95,27 @@ chave única da entidade: vale como key e é o primeiro candidato do modelo. IDs
 persistidos da key; aceitá-los permitiria duplicar após uma resposta perdida.
 A bridge ODC retorna identifier inclusive com entidade vazia. Se a versão antiga
 não o informa e não há linha para observá-lo, a operação recusa antes de escrever.
+Na linha hospedada (a bridge `v97`, a de todo pacote em uso, que não informa identifier nem
+identifierAutoNumber), essa recusa é uma só e diz o caminho que existe hoje (seguimento a9, M1):
+`DATA_READ_UNAVAILABLE` no ponteiro `/identity`, com a continuação `studio_data_insert {module, entity,
+records:[a primeira linha do arquivo], authorize}` (as palavras do usuário) e, em `nextCalls`, a mesma carga
+sem as palavras: as chaves dela acham essa linha inalterada e inserem as outras. Nada é escrito pela
+recusa. A recusa de chave de um identificador inteiro não oferece mais "reconnect through a bridge".
+
+Rodada 2 do seguimento a9 (revisão `a9-followups-line`, B): a prévia que `DATA_LOAD_KEYS_REQUIRED` oferece (o índice
+único do modelo, `dryRun`) e o `correctedRequest` não levam as palavras do dono: uma prévia não precisa delas, e o
+`correctedRequest` é um eco que a regra das palavras da saída do hub não mascara.
+
+Rodada 2 (C): um `studio_data_update` com `insertMissing:false` numa entidade vazia não propõe inserir a primeira linha.
+Cada chave dá `DATA_KEY_NOT_FOUND` (como numa entidade com linhas), nada é escrito, e o `next` diz que inserir é a única
+saída e manda perguntar ao dono; não há continuação. Sem `insertMissing` (o upsert), a recusa do M1 fica como era.
+
+Rodada 2 (D): numa carga de escrita, o `nextCalls` leva o marcador `authorize: "<the user's own words>"` e `askOwner`,
+como a continuação: a carga repetida pede as palavras do dono de novo (o servidor nunca as repete); repetido como veio
+dá `WORDS_REQUIRED` e nada é escrito. No `dryRun` o `nextCalls` é outra prévia, sem palavras. A continuação de escrita
+de uma prévia com linhas novas também leva o marcador e `askOwner` (antes vinha sem as palavras e dava uma 2ª recusa
+`INPUT_INVALID /authorization` sem passo), e essa recusa agora traz o `fix` (pedir as palavras ao dono). Sem nenhuma
+linha que possa entrar como está, a recusa não cita passo que não traz (G).
 
 ## Palavras do dono: a regra única da CX15 (revisão 6)
 

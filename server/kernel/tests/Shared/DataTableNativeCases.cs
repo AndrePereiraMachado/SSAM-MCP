@@ -701,6 +701,13 @@ public static class DataTableNativeCases
         attributes.Add(new JsonArray(name, value));
         node["a"] = attributes;
     }
+    // The last two header cells of a table written as one with this colspan.
+    private static void MergeLastHeaderCells(JsonObject table, string colspan)
+    {
+        var header = HeaderRowOf(table);
+        header["c"]!.AsArray().Remove(CellsOf(header)[^1]);
+        SetAttribute(CellsOf(header)[^1], "colspan", colspan);
+    }
 
     /// <summary>The owner's rule of 2026-10-19 in the prototype importer (round 5): FarmaVirtual's data tables with static spans.
     /// Variant 1: colspan="2" on a header cell of MeusPedidos (its rows still hold as many cells), rowspan="2" on a cell of the
@@ -715,12 +722,7 @@ public static class DataTableNativeCases
         var meus = ViewTable(capture, "MeusPedidos");
         var produtos = ViewTable(capture, "GestaoProdutos");
         var pedidos = ViewTable(capture, "GestaoPedidos");
-        void Merged(string colspan)
-        {
-            var header = HeaderRowOf(pedidos);
-            header["c"]!.AsArray().Remove(CellsOf(header)[^1]);
-            SetAttribute(CellsOf(header)[^1], "colspan", colspan);
-        }
+        void Merged(string colspan) => MergeLastHeaderCells(pedidos, colspan);
         if (variant == 1)
         {
             SetAttribute(CellsOf(HeaderRowOf(meus))[1], "colspan", "2");
@@ -798,6 +800,477 @@ public static class DataTableNativeCases
             Assert.Contains(mine, n => n.W == "IAdvancedHtml" && n.Tag == "th" && n.Attributes.Any(a => a.Name == "colspan" && a.Value == "\"3\""));
             Assert.Contains(mine, n => n.W == "IList" && n.Tag == "tbody");
         }
+    }
+
+    // ---- round 6: the old form of the importer takes F1 of the html op --------------------------------------------------------
+
+    /// <summary>What the html op writes on a List that is a part of a table (F1, ScreenVisual), as a set op writes it: the contract
+    /// the importer's old form follows (round 6 of fix/data-table).</summary>
+    public static readonly (string Name, string Value)[] RowGroupAttributes = [("disable-virtualization", "True"), ("data-ssam-rows", "\"1\"")];
+
+    /// <summary>Round 6: FarmaVirtual's data tables made to stay HTML elements and a List, one per reason of TABLE_NOT_NATIVE
+    /// (PrototypeWidgets.DataTable). Variant 1: an event on a header cell of MeusPedidos (a clickable header: the capture's own
+    /// customer-status-filter, with its data-id), a condition on the
+    /// &lt;thead&gt; of GestaoProdutos; GestaoPedidos untouched (the native Table). Variant 2: a computed attribute on the
+    /// &lt;thead&gt; of MeusPedidos, a header cell of GestaoProdutos removed (6 header cells over 7 row cells), the last two header
+    /// cells of GestaoPedidos written as one with colspan="3" (a span that explains nothing).</summary>
+    public static void PrepareNotNative(string capturePath, int variant)
+    {
+        var capture = JsonNode.Parse(File.ReadAllText(capturePath))!.AsObject();
+        var meus = ViewTable(capture, "MeusPedidos");
+        var produtos = ViewTable(capture, "GestaoProdutos");
+        var pedidos = ViewTable(capture, "GestaoPedidos");
+        if (variant == 1)
+        {
+            // an event the capture compiled (the dialect drops any other): the header filters the orders by its data-id
+            var sortable = CellsOf(HeaderRowOf(meus))[0];
+            sortable["events"] = new JsonArray("meus-pedidos:click:customer-status-filter");
+            SetAttribute(sortable, "data-id", "1");
+            Part(produtos, "thead")["if"] = new JsonObject { ["op"] = "truthy", ["l"] = new JsonObject { ["lit"] = true } };
+        }
+        else
+        {
+            Part(meus, "thead")["attrExpr"] = new JsonObject { ["title"] = new JsonObject { ["expr"] = new JsonObject { ["fmt"] = "text", ["value"] = new JsonObject { ["lit"] = "Orders" } } } };
+            var header = HeaderRowOf(produtos);
+            header["c"]!.AsArray().Remove(CellsOf(header)[^1]);
+            MergeLastHeaderCells(pedidos, "3");
+        }
+        File.WriteAllText(capturePath, capture.ToJsonString());
+    }
+
+    /// <summary>The tables of <see cref="PrepareNotNative"/>: the owner and the reason TABLE_NOT_NATIVE names (null: the native Table).</summary>
+    public static (string Owner, string? Reason)[] NotNativeTables(int variant) => variant == 1
+        ? [("MeusPedidos", "a <th> has a condition, an event or a computed attribute of its own"),
+           ("GestaoProdutos", "a part of it (thead, tbody or a row) has a condition, an event or a computed attribute of its own"),
+           ("GestaoPedidos", null)]
+        : [("MeusPedidos", "a part of it (thead, tbody or a row) has a condition, an event or a computed attribute of its own"),
+           ("GestaoProdutos", "its header row has 6 cells and its template row 7"),
+           ("GestaoPedidos", "its header row has 6 cells and its template row 7, which its spans do not explain (colspan=\"3\" on a <th>)")];
+
+    /// <summary>Round 6: the old form of a data table takes F1 of the html op. The List of its &lt;tbody&gt; carries what the html op
+    /// writes on a List that is a table part (disable-virtualization True and data-ssam-rows "1", once), its header row stays the
+    /// prototype's HTML elements in the same &lt;table&gt;, TABLE_NOT_NATIVE says the reason and the row group; the theme of the
+    /// import carries the native layout block once, after the prototype's CSS, and the receipt says it (nativeLayout). The native
+    /// Table of the same import does not change: no List and no marker in its tree.</summary>
+    public static void AssertNotNative(string capturePath, PrototypePlan plan, IEnumerable<(WidgetNode Node, string Owner)> widgets, int variant)
+    {
+        var capture = JsonNode.Parse(File.ReadAllText(capturePath))!.AsObject();
+        var degraded = plan.Report["degraded"]!.AsArray().OfType<JsonObject>().ToList();
+        var all = widgets.ToList();
+        var old = 0;
+        foreach (var (owner, reason) in NotNativeTables(variant))
+        {
+            var table = ViewTable(capture, owner);
+            var mine = all.Where(w => w.Owner == owner).Select(w => w.Node).ToList();
+            if (reason == null)
+            {
+                Assert.Single(mine, n => n.W == "ITableRecords");
+                Assert.DoesNotContain(mine, n => n.W == "IList" && n.Tag is "thead" or "tbody" or "tfoot");
+                Assert.DoesNotContain(mine, n => n.Attributes.Any(a => a.Name == "data-ssam-rows"));
+                continue;
+            }
+            old++;
+            Assert.DoesNotContain(mine, n => n.W == "ITableRecords");
+            var body = Part(table, "tbody")["k"]!.ToString();
+            var list = Assert.Single(mine, n => n.W == "IList" && n.K == body);
+            Assert.Equal("tbody", list.Tag);
+            foreach (var attribute in RowGroupAttributes) Assert.Contains(attribute, list.Attributes);
+            Assert.Single(list.Attributes, a => a.Name == "data-ssam-rows");
+            Assert.Contains(mine, n => n.W == "IAdvancedHtml" && n.Tag == "table" && n.K == table["k"]!.ToString() && n.Children.Any(c => c.K == body));
+            Assert.Contains(mine, n => n.W == "IAdvancedHtml" && n.Tag == "th");
+            var note = Assert.Single(degraded, d => d["code"]?.ToString() == "TABLE_NOT_NATIVE" && d["k"]?.ToString() == table["k"]!.ToString());
+            Assert.Contains(reason, note["message"]!.ToString());
+            Assert.Contains("LIST_RENDERS_ALL_ROWS", note["done"]!.ToString());
+            Assert.Contains("data-ssam-rows", note["done"]!.ToString());
+        }
+        var css = plan.StyleSheet ?? "";
+        Assert.Single(Regex.Matches(css, Regex.Escape(ScreenVisual.NativeLayoutBegin)));
+        Assert.EndsWith(ScreenVisual.NativeLayoutCss, css.TrimEnd());
+        var layout = plan.Report["nativeLayout"]!.AsObject();
+        Assert.Equal("THEME_NATIVE_LAYOUT", layout["code"]!.ToString());
+        Assert.Equal("LIST_RENDERS_ALL_ROWS", layout["lists"]!["code"]!.ToString());
+        Assert.Equal(old, layout["lists"]!["count"]!.GetValue<int>());
+    }
+
+    /// <summary>Round 6: an import whose data tables are all native Tables is what it was: no widget carries the rows marker, the
+    /// theme has no native layout block, the receipt no nativeLayout.</summary>
+    public static void AssertNativeUnchanged(PrototypePlan plan, IEnumerable<WidgetNode> widgets)
+    {
+        Assert.DoesNotContain(widgets, n => n.Attributes.Any(a => a.Name == "data-ssam-rows"));
+        Assert.DoesNotContain(ScreenVisual.NativeLayoutBegin, plan.StyleSheet ?? "");
+        Assert.Null(plan.Report["nativeLayout"]);
+    }
+
+    /// <summary>Round 6, the ODC build: a copy of the minimal capture whose list of tasks (&lt;ul list&gt;) is a data table that stays
+    /// HTML elements and a List: a header row of two &lt;th&gt; over a template row of three &lt;td&gt; (the title and the state, the
+    /// two buttons, the link of a task), the row's computed class and data-id kept (TABLE_NOT_NATIVE: the different count). Answers
+    /// the key of the &lt;table&gt;.</summary>
+    public static string PrepareMinimalTable(string capturePath) => MinimalTable(capturePath, null, ["Task", "Actions"]);
+
+    /// <summary>Round 7 (M1 of the review of round 6): a copy of the minimal capture whose list of tasks is a table with a
+    /// &lt;caption&gt;, a header row of three &lt;th&gt; and a &lt;tbody list&gt; of three &lt;td&gt;. Its parts are not [thead, tbody], so
+    /// it is no data table of the native Table and no TABLE_NOT_NATIVE says it; the List of its body takes F1 all the same (the rows
+    /// marker, the native layout block in the theme). Answers the key of the &lt;table&gt;.</summary>
+    public static string PrepareCaptionTable(string capturePath) => MinimalTable(capturePath, "Tasks", ["Task", "Points", "Actions"]);
+
+    private static string MinimalTable(string capturePath, string? caption, string[] headers)
+    {
+        var capture = JsonNode.Parse(File.ReadAllText(capturePath))!.AsObject();
+        var parent = capture["views"]![0]!["root"]!["c"]![0]!["c"]!.AsArray();
+        var ul = parent.OfType<JsonObject>().Single(n => n["t"]?.ToString() == "ul" && n["list"] is JsonObject);
+        var at = parent.IndexOf(ul);
+        var k = ul["k"]!.ToString();
+        var list = ul["list"]!.DeepClone().AsObject();
+        var item = list["template"]!.AsObject();
+        var content = item["c"]!.AsArray().Select(c => c!.DeepClone()).ToList();
+        static JsonObject Element(string tag, string key, params JsonNode[] children) => new() { ["k"] = key, ["t"] = tag, ["c"] = new JsonArray(children) };
+        var row = item["k"]!.ToString();
+        item["t"] = "tr";
+        item["c"] = new JsonArray(Element("td", row + "/td0", content[0], content[1]), Element("td", row + "/td1", content[2], content[3]), Element("td", row + "/td2", content[4]));
+        var table = k + "t";
+        var head = Element("thead", table + "/0", Element("tr", table + "/0/0",
+            headers.Select((h, i) => (JsonNode)Element("th", table + "/0/0/" + i, new JsonObject { ["k"] = table + "/0/0/" + i + "/0", ["x"] = h })).ToArray()));
+        var body = new JsonObject { ["k"] = k, ["t"] = "tbody", ["c"] = new JsonArray(), ["list"] = list };
+        var parts = new JsonArray();
+        if (caption != null) parts.Add(Element("caption", table + "/c", new JsonObject { ["k"] = table + "/c/0", ["x"] = caption }));
+        parts.Add(head); parts.Add(body);
+        parent[at] = new JsonObject { ["k"] = table, ["t"] = "table", ["a"] = ul["a"]!.DeepClone(), ["c"] = parts };
+        File.WriteAllText(capturePath, capture.ToJsonString());
+        return table;
+    }
+
+    // The runtime's own rules on the List of a table body, as the DemoLATAM read showed them (D1: the List's <tbody> published
+    // display:block; its Width (fill parent) the class OSFillParent, width 100%), written as the platform writes its rules: one
+    // attribute or one class.
+    private const string RuntimeListCss = "[data-list]{display:block}\n.OSFillParent{width:100%}";
+
+    /// <summary>The value the cascade gives a property of an element over CSS texts in the order the page loads them (CSS 2.1 6.4.1:
+    /// important first, then specificity, then order; a rule under a condition is left out).</summary>
+    public static string? Cascaded(DomNode element, IEnumerable<string> sheets, string property)
+    {
+        (bool Important, (int A, int B, int C) Specificity, int Order, string Value)? best = null;
+        var order = 0;
+        foreach (var rule in ScreenVisual.RulesOf(sheets))
+        {
+            order++;
+            if (rule.AtRule != null) continue;
+            foreach (var declaration in rule.Declarations.Where(d => d.Property.Equals(property, StringComparison.OrdinalIgnoreCase)))
+                foreach (var selector in CssStylesheet.SplitSelectors(rule.Selector).Select(s => s.Trim()))
+                {
+                    bool matches;
+                    try { matches = CssSelectors.Matches(element, selector); } catch (Exception) { matches = false; }
+                    if (!matches) continue;
+                    var candidate = (Important: declaration.Important, Specificity: CssSelectors.Specificity(selector), Order: order, Value: declaration.Value.Trim());
+                    if (best is not { } b || (candidate.Important != b.Important ? candidate.Important
+                        : candidate.Specificity.CompareTo(b.Specificity) is var c && c != 0 ? c > 0 : candidate.Order >= b.Order)) best = candidate;
+                }
+        }
+        return best?.Value;
+    }
+
+    /// <summary>Round 6, the proof of the alignment without a published page (the CSS and structure proof of F1, CX17): in the DOM the
+    /// runtime will publish for a root (ScreenVisual.Predict), every List that is a table body sits in its &lt;table&gt; beside the
+    /// header row (thead &gt; tr &gt; th), carries the rows marker and the class the runtime gives it (OSFillParent), renders no
+    /// virtualization sentinel among its rows (only &lt;tr&gt;), and the cascade of the page (the runtime's rules, then the theme the
+    /// import wrote) gives it display table-row-group and width auto: the rule of the native layout block wins. Without the block
+    /// (the theme as the importer wrote it before round 6) the runtime's display:block wins: the D1 misalignment. Answers the count.</summary>
+    public static int RowGroupsLaidOut(ITestOutputHelper output, DomNode root, string theme)
+    {
+        var block = theme.IndexOf(ScreenVisual.NativeLayoutBegin, StringComparison.Ordinal);
+        Assert.True(block >= 0, "the theme carries no native layout block");
+        var end = theme.IndexOf(ScreenVisual.NativeLayoutEnd, block, StringComparison.Ordinal) + ScreenVisual.NativeLayoutEnd.Length;
+        var without = theme[..block] + theme[end..];
+        var bodies = CssSelectors.Select(root, "tbody[data-list]").ToList();
+        foreach (var body in bodies)
+        {
+            // The structure is read through the Content widgets of the ODC prediction (Published, below).
+            var table = body.Parent;
+            while (table is { Widget: "IContent" }) table = table.Parent;
+            Assert.True(table?.Tag == "table", "the parents of the body: " + string.Join(" < ", Ancestors(body).Select(a => a.Tag + "(" + a.Widget + ")")));
+            Assert.Contains(Published(table!), head => head.Tag == "thead" && Published(head).Any(tr => tr.Tag == "tr" && Published(tr).Any(th => th.Tag == "th")));
+            Assert.Equal("1", body.Attr("data-ssam-rows"));
+            Assert.Contains("OSFillParent", body.Classes);
+            Assert.All(Published(body), c => Assert.Equal("tr", c.Tag));
+            Assert.Contains(body, CssSelectors.Select(root, ":is(thead,tbody,tfoot)[data-ssam-rows]"));
+            Assert.Equal("table-row-group", Cascaded(body, [RuntimeListCss, theme], "display"));
+            Assert.Equal("auto", Cascaded(body, [RuntimeListCss, theme], "width"));
+            Assert.Equal("block", Cascaded(body, [RuntimeListCss, without], "display"));
+            output.WriteLine($"<tbody data-list class=\"{body.Attr("class")}\" data-ssam-rows=\"1\">: {Published(body).Count()} row(s), display table-row-group, width auto (without the block: display block)");
+        }
+        return bodies.Count;
+    }
+
+    /// <summary>The seams the importer runs with in production (the html lane's element map, the css lane's stylesheet and render):
+    /// a build that reads its HTML elements back needs the real map (the fakes write no Tag, so every element reads as a span).</summary>
+    public static PrototypeExpander.Seams RegisteredSeams => new(PrototypeSeams.Element, PrototypeSeams.Css, PrototypeSeams.Render);
+
+    /// <summary>The StyleSheet of a theme of a saved module, read by a get op on a copy.</summary>
+    public static string ThemeCss(ModelHost host, string model, string work, string theme)
+    {
+        Directory.CreateDirectory(work);
+        var get = Path.Combine(work, "theme-get.json");
+        File.WriteAllText(get, new JsonObject { ["ops"] = new JsonArray(new JsonObject { ["op"] = "get", ["target"] = "IMobileTheme:" + theme }) }.ToJsonString());
+        var read = JsonSerializer.SerializeToNode(JobRunner.Run(host, model, get, Path.Combine(work, "theme-get.oml")))!;
+        var result = read["results"]![0]!["result"]!;
+        return result["properties"]?["StyleSheet"]?.ToString() ?? result["StyleSheet"]?.ToString() ?? "";
+    }
+
+    /// <summary>Round 6, the build of <see cref="PrepareMinimalTable"/> (O11 over reactive-ui, ODC over insurance-reactive-r8): the
+    /// table stays HTML elements and a List (TABLE_NOT_NATIVE), the List of its &lt;tbody&gt; reads back with the html op's attributes
+    /// (disable-virtualization and data-ssam-rows="1"), the theme of the import carries the native layout block once, the fixed point
+    /// holds (0 ops), and in the DOM the runtime will publish the body is laid out as the table's row group (RowGroupsLaidOut).</summary>
+    public static void MinimalTableBuilt(ITestOutputHelper output, string candidate, JsonObject result, string table, string platform, string work)
+    {
+        var report = result["results"]!.AsArray().OfType<JsonObject>().Single(r => r["op"]?.ToString() == "prototype")["result"]!["prototype"]!.AsObject();
+        Assert.Empty(report["builder"]!["problems"]!.AsArray());
+        Assert.Contains(report["degraded"]!.AsArray(), d => d!["code"]?.ToString() == "TABLE_NOT_NATIVE" && d["k"]?.ToString() == table
+            && d["message"]!.ToString().Contains("its header row has 2 cells and its template row 3", StringComparison.Ordinal));
+        var screen = report["screens"]!.AsArray().Single(s => s!["view"]?.ToString() == "lista")!["name"]!.ToString();
+        var host = new ModelHost(Path.Combine(work, "read"));
+        var bytes = File.ReadAllBytes(candidate);
+        var text = host.HtmlRead(bytes, "MobileScreen:" + screen, withKeys: false)["documents"]![0]!["html"]!.ToString();
+        output.WriteLine(text);
+        var doc = ScreenHtml.Parse(text);
+        var body = Assert.Single(Elements(doc), n => n.Tag == "tbody");
+        Assert.NotNull(body.Get("list"));
+        Assert.Equal("1", body.Get("data-ssam-rows"));
+        Assert.Contains("True", body.Get("disable-virtualization") ?? "");
+        Assert.Contains(Elements(doc), n => n.Tag == "table" && n.Get("list") == null && Elements(n).Contains(body));
+        var check = host.HtmlCheck(bytes)["documents"]!.AsArray().Single(d => d!["root"]!.ToString() == screen)!;
+        Assert.Equal(0, check["ops"]!.GetValue<int>());
+        Assert.Equal(1, report["nativeLayout"]!["lists"]!["count"]!.GetValue<int>());
+        var theme = ThemeCss(host, candidate, Path.Combine(work, "theme"), report["theme"]!.ToString());
+        Assert.Single(Regex.Matches(theme, Regex.Escape(ScreenVisual.NativeLayoutBegin)));
+        Assert.Contains(ScreenVisual.NativeLayoutCss, theme);
+        var prediction = ScreenVisual.PredictOml(host, candidate, platform, n => n == screen)[screen];
+        Assert.Equal(1, RowGroupsLaidOut(output, prediction.Root, theme));
+    }
+
+    // ---- round 7: what the import writes in the theme is said where the job says the theme rules it writes -----------------
+
+    /// <summary>Round 7 (M1 of the review of round 6), the build of <see cref="PrepareCaptionTable"/> (O11 over reactive-ui, ODC over
+    /// insurance-reactive-r8): no TABLE_NOT_NATIVE says the table, yet its body List carries the rows marker and the import's theme
+    /// the native layout block, so the job's receipt says it in normalized, as the html op says the block it writes
+    /// (THEME_NATIVE_LAYOUT: the theme, written, the version, the Lists it lays out and the note), besides the import's report
+    /// (nativeLayout). Every text in English.</summary>
+    public static void CaptionTableSaid(ITestOutputHelper output, string candidate, JsonObject result, string work)
+    {
+        var report = result["results"]!.AsArray().OfType<JsonObject>().Single(r => r["op"]?.ToString() == "prototype")["result"]!["prototype"]!.AsObject();
+        Assert.Empty(report["builder"]!["problems"]!.AsArray());
+        Assert.DoesNotContain(report["degraded"]!.AsArray(), d => d!["code"]?.ToString() == "TABLE_NOT_NATIVE");
+        Assert.Equal(1, report["nativeLayout"]!["lists"]!["count"]!.GetValue<int>());
+        var said = (result["normalized"] as JsonArray ?? []).OfType<JsonObject>().Where(n => n["code"]?.ToString() == ScreenVisual.ThemeNativeLayout).ToList();
+        output.WriteLine("normalized: " + new JsonArray(said.Select(n => (JsonNode)n.DeepClone()).ToArray()).ToJsonString());
+        var entry = Assert.Single(said);
+        Assert.Equal(report["theme"]!.ToString(), entry["theme"]?.ToString());
+        Assert.True(entry["written"]?.GetValue<bool>() == true, entry.ToJsonString());
+        Assert.Equal(ScreenVisual.NativeLayoutVersion, entry["version"]?.ToString());
+        Assert.Equal(1, entry["lists"]?.GetValue<int>());
+        var note = entry["note"]?.ToString() ?? "";
+        Assert.Contains(ScreenVisual.RowsMarker, note);
+        Assert.Matches("^[\\x20-\\x7E]+$", note);
+        var host = new ModelHost(Path.Combine(work, "read"));
+        var screen = report["screens"]!.AsArray().Single(s => s!["view"]?.ToString() == "lista")!["name"]!.ToString();
+        var text = host.HtmlRead(File.ReadAllBytes(candidate), "MobileScreen:" + screen, withKeys: false)["documents"]![0]!["html"]!.ToString();
+        output.WriteLine(text);
+        var body = Assert.Single(Elements(ScreenHtml.Parse(text)), n => n.Tag == "tbody");
+        Assert.Equal("1", body.Get("data-ssam-rows"));
+        Assert.Contains(Elements(ScreenHtml.Parse(text)), n => n.Tag == "caption");
+        var theme = ThemeCss(host, candidate, Path.Combine(work, "theme"), report["theme"]!.ToString());
+        Assert.Single(Regex.Matches(theme, Regex.Escape(ScreenVisual.NativeLayoutBegin)));
+    }
+
+    // ---- round 7: every attribute the importer writes is the prototype's value, quoted once (X1 of review 6) ------------------
+
+    /// <summary>The attributes of the prototype round 7 gives the element of a List (X1 of the review of round 6): a name, a role and a
+    /// data attribute, the kinds a selector or an assistive technology reads.</summary>
+    public static readonly (string Name, string Value)[] ListAttributes = [("aria-label", "Pedidos"), ("role", "list"), ("data-kind", "cards")];
+
+    /// <summary>Round 7: a copy of the minimal capture whose &lt;ul list&gt; of tasks carries <see cref="ListAttributes"/>. Answers its key.</summary>
+    public static string PrepareListAttributes(string capturePath)
+    {
+        var capture = JsonNode.Parse(File.ReadAllText(capturePath))!.AsObject();
+        var ul = Nodes(capture).Values.Single(n => n["t"]?.ToString() == "ul" && n["list"] is JsonObject);
+        foreach (var (name, value) in ListAttributes) SetAttribute(ul, name, value);
+        File.WriteAllText(capturePath, capture.ToJsonString());
+        return ul["k"]!.ToString();
+    }
+
+    /// <summary>Round 7: FarmaVirtual's tables of <see cref="PrepareNotNative"/> variant 1 whose &lt;tbody list&gt; (the old form) carries
+    /// <see cref="ListAttributes"/> (a native Table holds no attribute on its sections: left out and said, TABLE_SECTION_ATTRIBUTE).</summary>
+    public static void PrepareTableBodyAttributes(string capturePath)
+    {
+        PrepareNotNative(capturePath, 1);
+        var capture = JsonNode.Parse(File.ReadAllText(capturePath))!.AsObject();
+        foreach (var (owner, reason) in NotNativeTables(1).Where(t => t.Reason != null))
+            foreach (var (name, value) in ListAttributes) SetAttribute(Part(ViewTable(capture, owner), "tbody"), name, value);
+        File.WriteAllText(capturePath, capture.ToJsonString());
+    }
+
+    /// <summary>The element nodes of a capture by key: views, modals, the shell and its regions after the mount, list templates, else
+    /// branches and toast templates.</summary>
+    public static Dictionary<string, JsonObject> Nodes(JsonObject capture)
+    {
+        var all = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+        void Walk(JsonNode? n)
+        {
+            if (n is not JsonObject o) return;
+            if (o["k"]?.ToString() is { } k && o["t"] != null) all[k] = o;
+            foreach (var c in o["c"] as JsonArray ?? []) Walk(c);
+            foreach (var c in o["else"] as JsonArray ?? []) Walk(c);
+            Walk(o["list"]?["template"]);
+            Walk(o["toast"]?["template"]);
+        }
+        foreach (var v in capture["views"] as JsonArray ?? []) Walk(v?["root"]);
+        foreach (var m in capture["modals"] as JsonArray ?? []) Walk(m?["root"]);
+        if (capture["shell"] is JsonObject shell) { Walk(shell["root"]); foreach (var a in shell["after"] as JsonArray ?? []) Walk(a); }
+        return all;
+    }
+
+    /// <summary>Every widget of a plan with its spec, depth first.</summary>
+    public static IEnumerable<(WidgetNode Node, PrototypeWidgetSpec Spec)> PlanWidgets(PrototypePlan plan)
+    {
+        foreach (var job in plan.Steps.Select(s => s.Widgets).OfType<PrototypeWidgetsJob>())
+        {
+            var stack = new Stack<WidgetNode>(job.Roots.Reverse());
+            while (stack.Count > 0)
+            {
+                var n = stack.Pop();
+                yield return (n, job.Specs.GetValueOrDefault(n) ?? new PrototypeWidgetSpec());
+                foreach (var c in (n.Else ?? []).Reverse()) stack.Push(c);
+                foreach (var c in n.Children.Reverse()) stack.Push(c);
+            }
+        }
+    }
+
+    // The value of a quoted OutSystems text literal ("a ""b"""), or null for any other expression.
+    private static string? LiteralValue(string expression)
+    {
+        if (expression.Length < 2 || expression[0] != '"' || expression[^1] != '"') return null;
+        var inner = expression[1..^1];
+        return inner.Replace("\"\"", "").Contains('"') ? null : inner.Replace("\"\"", "\"");
+    }
+
+    // What the importer rewrites by rule, never the prototype's value as it is: the id references (the widget names) and the
+    // boolean attributes (their own name).
+    private static readonly HashSet<string> RewrittenAttributes = new(StringComparer.OrdinalIgnoreCase)
+    { "aria-labelledby", "aria-describedby", "aria-controls", "aria-owns", "aria-activedescendant", "form", "list" };
+
+    /// <summary>Round 7, the family of X1 (the review of round 6: a List quoted the element map's values again, so aria-label="Pedidos"
+    /// was published "Pedidos", with the quotes): in every widget of a plan (HTML elements, containers, links, buttons, Lists, native
+    /// Tables), every static attribute of the prototype the widget keeps as an extended property is the prototype's value as a text
+    /// literal quoted once. An attribute the capture computes, an id reference and a boolean attribute are rewritten by rule and
+    /// left out; the class and the style are properties. Answers how many were compared, and each List's.</summary>
+    public static (int All, int Lists) AttributesAsThePrototypeWrites(ITestOutputHelper output, string capturePath, PrototypePlan plan)
+    {
+        var nodes = Nodes(JsonNode.Parse(File.ReadAllText(capturePath))!.AsObject());
+        var compared = 0; var lists = 0; var wrong = new List<string>();
+        foreach (var (widget, spec) in PlanWidgets(plan))
+        {
+            if (widget.K == null || !nodes.TryGetValue(widget.K, out var node) || node["icon"] != null || widget.Role == "wrapper") continue;
+            var computed = node["attrExpr"] as JsonObject;
+            foreach (var pair in node["a"] as JsonArray ?? [])
+            {
+                var name = pair![0]!.ToString(); var value = pair[1]?.ToString() ?? "";
+                if (name is "class" or "style" or "id" || name.StartsWith("on", StringComparison.OrdinalIgnoreCase) || RewrittenAttributes.Contains(name)
+                    || PrototypeWidgets.BooleanAttributes.Contains(name) || computed?.Any(c => string.Equals(c.Key, name, StringComparison.OrdinalIgnoreCase)) == true) continue;
+                var written = spec.Extended.LastOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+                if (written.Name == null) continue;
+                compared++;
+                if (widget.W == "IList") lists++;
+                if (LiteralValue(written.Value) != value) wrong.Add($"{widget.W} {widget.K} <{widget.Tag}> {name}: the prototype's {value} written {written.Value}");
+            }
+        }
+        output.WriteLine($"{compared} attribute(s) compared, {lists} on a List; wrong: {wrong.Count}");
+        foreach (var line in wrong.Take(20)) output.WriteLine("  " + line);
+        Assert.True(wrong.Count == 0, string.Join(" | ", wrong.Take(20)));
+        return (compared, lists);
+    }
+
+    /// <summary>Round 7, X1 in the Studio (O11 over reactive-ui, ODC over insurance-reactive-r8, the seams of production): the build of
+    /// <see cref="PrepareListAttributes"/> reads back with the &lt;ul list&gt;'s attributes exactly as the prototype wrote them
+    /// (aria-label "Pedidos", role "list", data-kind "cards": a literal, never an expression of a quoted text), and the fixed point
+    /// holds.</summary>
+    public static void ListAttributesBuilt(ITestOutputHelper output, string candidate, JsonObject result, string work)
+    {
+        var report = result["results"]!.AsArray().OfType<JsonObject>().Single(r => r["op"]?.ToString() == "prototype")["result"]!["prototype"]!.AsObject();
+        Assert.Empty(report["builder"]!["problems"]!.AsArray());
+        var screen = report["screens"]!.AsArray().Single(s => s!["view"]?.ToString() == "lista")!["name"]!.ToString();
+        var host = new ModelHost(Path.Combine(work, "read"));
+        var bytes = File.ReadAllBytes(candidate);
+        var text = host.HtmlRead(bytes, "MobileScreen:" + screen, withKeys: false)["documents"]![0]!["html"]!.ToString();
+        output.WriteLine(text);
+        var ul = Assert.Single(Elements(ScreenHtml.Parse(text)), n => n.Tag == "ul" && n.Get("list") != null);
+        foreach (var (name, value) in ListAttributes) Assert.Equal(value, ul.Get(name));
+        var check = host.HtmlCheck(bytes)["documents"]!.AsArray().Single(d => d!["root"]!.ToString() == screen)!;
+        Assert.Equal(0, check["ops"]!.GetValue<int>());
+    }
+
+    // ---- round 7: the note of the native layout block stays true when the prototype writes markers of the engine (B2 of review 6)
+
+    /// <summary>Round 7 (B2 of the review of round 6): a copy of the minimal capture whose prototype writes markers of the engine
+    /// itself: data-ssam-page on the &lt;section&gt;, data-ssam-gap on the &lt;button&gt;, and, without <paramref name="table"/>,
+    /// data-ssam-rows on the &lt;ul list&gt; of cards (no table part); with it, the task list is the table of
+    /// <see cref="PrepareCaptionTable"/>, whose body List the importer marks. Answers the keys of the elements the prototype marked.</summary>
+    public static string[] PrepareMarkersOfThePrototype(string capturePath, bool table)
+    {
+        if (table) PrepareCaptionTable(capturePath);
+        var capture = JsonNode.Parse(File.ReadAllText(capturePath))!.AsObject();
+        var nodes = Nodes(capture).Values.ToList();
+        var section = nodes.First(n => n["t"]?.ToString() == "section");
+        var button = nodes.First(n => n["t"]?.ToString() == "button");
+        SetAttribute(section, ScreenVisual.PageMarker, "1");
+        SetAttribute(button, ScreenVisual.GapMarker, "1");
+        var keys = new List<string> { section["k"]!.ToString(), button["k"]!.ToString() };
+        if (!table)
+        {
+            var ul = nodes.Single(n => n["t"]?.ToString() == "ul" && n["list"] is JsonObject);
+            SetAttribute(ul, ScreenVisual.RowsMarker, "1");
+            keys.Add(ul["k"]!.ToString());
+        }
+        File.WriteAllText(capturePath, capture.ToJsonString());
+        return [.. keys];
+    }
+
+    /// <summary>Round 7 (B2): what the import says of the native layout block is true when the prototype marks elements itself. The
+    /// Lists of a table part the importer marks are said with their reason (none without a table part, never an empty reason "()");
+    /// the elements the prototype marked are said apart (prototypeMarkers: their keys and markers), the note says the block's rules
+    /// reach them from the import on, and that an html edit of the screen decides data-ssam-gap again; the note never claims that only
+    /// the rules of data-ssam-rows reach the import. Every text in English.</summary>
+    public static void MarkersOfThePrototypeSaid(ITestOutputHelper output, PrototypePlan plan, string[] keys, int tableLists)
+    {
+        var layout = plan.Report["nativeLayout"]!.AsObject();
+        output.WriteLine(layout.ToJsonString());
+        var note = layout["note"]!.ToString();
+        Assert.DoesNotContain("only its rules of", note);
+        Assert.Contains("prototypeMarkers", note);
+        Assert.DoesNotContain("()", layout.ToJsonString());
+        if (tableLists == 0) Assert.Null(layout["lists"]);
+        else Assert.Equal(tableLists, layout["lists"]!["count"]!.GetValue<int>());
+        var marked = layout["prototypeMarkers"]!.AsObject();
+        Assert.Equal(keys.Length, marked["count"]!.GetValue<int>());
+        var elements = marked["elements"]!.AsArray().Select(e => e!.ToString()).ToList();
+        foreach (var key in keys) Assert.Contains(elements, e => e.StartsWith(key + " (", StringComparison.Ordinal));
+        Assert.Contains(elements, e => e.EndsWith("(" + ScreenVisual.GapMarker + ")", StringComparison.Ordinal));
+        Assert.Contains(ScreenVisual.GapMarker, marked["note"]!.ToString());
+        foreach (var text in new[] { note, marked["note"]!.ToString() }) Assert.Matches("^[\\x20-\\x7E]+$", text);
+    }
+
+    private static IEnumerable<DomNode> Ancestors(DomNode node)
+    {
+        for (var at = node.Parent; at is { IsElement: true }; at = at.Parent) yield return at;
+    }
+
+    /// <summary>The element children of a predicted node as the structure checks of round 6 read them. An ODC widget keeps its
+    /// children in a Content widget of the model, which the ODC prediction (inferred: no published ODC page read yet) writes as a
+    /// div of its own (a widget kind with no row of the runtime table); the html read of the same module has no element there, and
+    /// the O11 model has no such widget (its HTML element holds them in a property). Seen through, never removed from the DOM the
+    /// cascade is matched on.</summary>
+    private static IEnumerable<DomNode> Published(DomNode node)
+    {
+        foreach (var child in node.Children.Where(c => c.IsElement))
+            if (child.Widget == "IContent") foreach (var inner in Published(child)) yield return inner;
+            else yield return child;
     }
 
     public static IEnumerable<ScreenHtml.Node> Elements(ScreenHtml.Node node)

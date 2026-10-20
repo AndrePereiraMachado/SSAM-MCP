@@ -284,7 +284,7 @@ public sealed partial class ModelSession
                 KeepFlowReading(baseline, read);
                 problems.Add(new("FLOW_BASE_REQUIRED", "the header names @" + edited.Key + " (an action of a read) and the text has no basedOn: its ids are of that read, "
                     + "and what changed in the Studio since cannot be told from what the text changes", edited.Key,
-                    "send the text with basedOn, the textSha of the read it was written on (ssam_map view flow); data.edit is the action now (textSha " + sha + "), ready to edit and send", read.Text) {
+                    "send the text with basedOn, the textSha of the read it was written on (ssam_map view flow); the edit of this problem is the action now (textSha " + sha + "), ready to edit and send", read.Text) {
                     Data = new JsonObject { ["edit"] = new JsonObject { ["text"] = read.Text, ["basedOn"] = sha } } });
                 return new(edited, action, baseline, read, null, problems);
             }
@@ -303,7 +303,7 @@ public sealed partial class ModelSession
                 if (why != null) {
                     KeepFlowReading(baseline, read);
                     problems.Add(new("FLOW_BASE_CHANGED", "the action changed since the read this text edits (basedOn " + basedOn + ", now " + sha + ") and " + why
-                        + "; its ids may name other elements now", edited.Key, "edit the text below (textSha " + sha + ") and send it with basedOn " + sha + " (data.edit: that edit, ready)", read.Text) {
+                        + "; its ids may name other elements now", edited.Key, "edit the text below (textSha " + sha + ") and send it with basedOn " + sha + " (the edit of this problem: that edit, ready)", read.Text) {
                         Data = new JsonObject { ["edit"] = new JsonObject { ["text"] = read.Text, ["basedOn"] = sha } } });
                     return new(edited, action, baseline, read, null, problems);
                 }

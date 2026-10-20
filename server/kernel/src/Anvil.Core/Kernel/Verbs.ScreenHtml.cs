@@ -115,7 +115,7 @@ public sealed partial class ModelSession
     {
         var problem = JobPreflight.Problem(null, "/basedOn", ScreenHtmlEdit.BaseChanged, "error",
             $"{reading.Root} is not the reading {html[..Math.Min(12, html.Length)]} the edits were written on (now {reading.HtmlSha256[..12]}), and that reading is not kept here",
-            "write the edits again on the current text (basedOn.html " + reading.HtmlSha256 + "); it is in data.current");
+            "write the edits again on the current text (basedOn.html " + reading.HtmlSha256 + "); it is current.text of this problem");
         var current = new JsonObject { ["html"] = reading.HtmlSha256, ["text"] = reading.Html };
         if (oldKeys != null) {
             var byObject = reading.Keys.Where(k => k.Key.Length > 0 && !k.Key.Contains('~')).GroupBy(k => k.Value).ToDictionary(g => g.Key, g => g.First().Key, StringComparer.Ordinal);
@@ -270,7 +270,7 @@ public sealed partial class ModelSession
         if (table?["keys"] is not JsonObject old) {
             var problem = JobPreflight.Problem(null, "/basedOn", ScreenHtmlEdit.BaseChanged, "error",
                 $"{reading.Root} is not the reading {html[..Math.Min(12, html.Length)]} the edit was written on (now {reading.HtmlSha256[..12]}), and that reading's keys are not kept here",
-                "write the edit again on the current text (basedOn.html " + reading.HtmlSha256 + "); it is in data.current");
+                "write the edit again on the current text (basedOn.html " + reading.HtmlSha256 + "); it is current.text of this problem");
             problem["current"] = new JsonObject { ["html"] = reading.HtmlSha256, ["text"] = reading.Html };
             throw new KernelRefusalException(ScreenHtmlEdit.BaseChanged, problem["message"]!.ToString(), new JsonArray(JobPreflight.PublicProblem(problem)));
         }
@@ -308,7 +308,7 @@ public sealed partial class ModelSession
                 var problems = merged.Missing.Select(k => {
                     var problem = JobPreflight.Problem(null, pointer, ScreenHtmlEdit.KeyForeign, "error",
                         $"k=\"{k}\" of the reading {html[..Math.Min(12, html.Length)]} was changed by the edit and removed from {reading.Root} since that reading",
-                        "read the screen again and write the edit on its current text (data.current)");
+                        "write the edit on the screen's current text (current.text of this problem)");
                     problem["k"] = k;
                     problem["current"] = new JsonObject { ["html"] = reading.HtmlSha256, ["text"] = reading.Html };
                     return (JsonNode)JobPreflight.PublicProblem(problem);
@@ -346,7 +346,7 @@ public sealed partial class ModelSession
                 }
                 var problem = JobPreflight.Problem(null, pointer == "/html" ? pointer : pointer + "/" + j, ScreenHtmlEdit.KeyForeign, "error",
                     $"k=\"{k}\" of the reading {html[..Math.Min(12, html.Length)]} names an element of {reading.Root} that no longer exists",
-                    "read the screen again and write the edit on its current text (data.current)");
+                    "write the edit on the screen's current text (current.text of this problem)");
                 problem["k"] = k;
                 missing.Add(problem);
             }

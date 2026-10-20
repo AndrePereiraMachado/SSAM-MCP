@@ -36,12 +36,12 @@ test('macOS folder: a path under it maps to agent:<rel> (case and NFC ignored, a
 test('macOS folder: the refusal names the exact inbox file with / and the same call; the helpers join by the folder style', () => {
   const temp = '/var/folders/x1/abc/T/claude/scratch/job.json';
   const refused = outsideWorkspaceRefusal(temp, { agentRoot, tool: 'studio_deliver', args: { job: temp, module: 'Shop' } });
-  assert.match(refused.fix, /\/Users\/ana\/SSAM-Agent\/inbox\/job\.json with the Write tool \(UTF-8\)/);
+  assert.match(refused.fix, /copy job\.json as it is into \/Users\/ana\/SSAM-Agent\/inbox\/job\.json \(cp; never rewrite/);
   assert.equal(refused.inbox, '/Users/ana/SSAM-Agent/inbox');
   assert.equal(refused.agentRoot, '/Users/ana/SSAM-Agent');
   assert.deepEqual(refused.continuation.arguments, { job: INLINE_JOB_MARKER, module: 'Shop' });
   const oml = outsideWorkspaceRefusal('/Users/ana/Downloads/Quotes.oml', { agentRoot, tool: 'studio_open', args: { module: 'Quotes' }, field: 'localOml' });
-  assert.match(oml.fix, /^write \/Users\/ana\/SSAM-Agent\/inbox\/Quotes\.oml with the Write tool \(UTF-8\) and pass agent:inbox\/Quotes\.oml$/);
+  assert.match(oml.fix, /^copy Quotes\.oml as it is into \/Users\/ana\/SSAM-Agent\/inbox\/Quotes\.oml \(cp; never rewrite its content: a rewritten file can come back cut or changed\) and pass agent:inbox\/Quotes\.oml$/);
   assert.equal(agentJoin(agentRoot, 'inbox'), '/Users/ana/SSAM-Agent/inbox');
   assert.equal(agentJoin(agentRoot, 'odc', 'lab', 'p.html'), '/Users/ana/SSAM-Agent/odc/lab/p.html');
   assert.equal(agentJoin('C:\\SSAM-Agent', 'inbox'), 'C:\\SSAM-Agent\\inbox');

@@ -30,7 +30,7 @@ import { resolvePatchedJob, jobIdentity, failedOpOf, withNamedPatches, appliedJo
 import { hostedContext, seamFields, usesWorkspace, workspacePath } from './executor.mjs';
 import { highWarningsOf } from './delivery-warnings.mjs';
 import { jobSummary } from './job-summary.mjs';
-import { refusalFields, diagnosisOf, normalizationsOf, patchesAppliedOf } from './refusal-problems.mjs';
+import { refusalFields, diagnosisOf, normalizationsOf, patchesAppliedOf, CONTINUATION_FIELDS } from './refusal-problems.mjs';
 import { withNormalizationsOf } from './normalizations.mjs';
 import { textFormRefusal, partReader } from './text-routes.mjs';
 import { normalizeCodeOps } from './ssam-code.mjs';
@@ -109,13 +109,16 @@ function resultsOf(results) {
 // Problems of the single refusal (I2 and primeira-certa A3: {phase, op, pointer, code, severity, message, fix, patch,
 // element, key}) as the answer keeps them: all of them, each text cut at 300 characters, the patch whole (it is the fix
 // that patch + basedOn applies); grouped only to fit the answer (refusal-problems.mjs).
+// Review vps-a9, E1: what a problem carries to go on (refusal-problems.mjs CONTINUATION_FIELDS: the screen's text now, the
+// next basedOn, the k, the edit ready...) stays whole, as the patch does.
 export function problemsOf(list) {
   if (!Array.isArray(list)) return undefined;
   return list.map(p => {
     if (!p || typeof p !== 'object') return clip(typeof p === 'string' ? p : JSON.stringify(p), 300);
     const out = {};
     for (const [k, v] of Object.entries(p)) {
-      if (typeof v === 'string') out[k] = clip(v, 300);
+      if (CONTINUATION_FIELDS.includes(k) && v != null) out[k] = v;
+      else if (typeof v === 'string') out[k] = clip(v, 300);
       else if (k === 'patch' && v != null) out[k] = v;
       else if (v === null || typeof v !== 'object') out[k] = v;
       else out[k] = fitted(v, 300);

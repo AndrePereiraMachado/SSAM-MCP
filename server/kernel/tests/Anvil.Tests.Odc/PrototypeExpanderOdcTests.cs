@@ -90,6 +90,27 @@ public class PrototypeExpanderOdcTests(ITestOutputHelper output)
     /// <summary>A capture planned on ODC with this class's fakes (ScreenHtmlDataTableOdcTests: FarmaVirtual's tables with spans).</summary>
     internal static PrototypePlan PlanCapture(string capture) => Plan(capture, "odc");
 
+    /// <summary>A capture built headless over a copy of the ODC Reactive fixture with this class's fakes, as the minimal capture is
+    /// (ScreenHtmlDataTableOdcTests, round 6 of fix/data-table), or with <paramref name="seams"/>: the job's result;
+    /// <paramref name="candidate"/> the saved module.</summary>
+    internal static JsonObject BuildCapture(string capture, string dir, out string candidate, PrototypeExpander.Seams? seams = null)
+    {
+        Directory.CreateDirectory(dir);
+        var job = Path.Combine(dir, "job.json");
+        File.WriteAllText(job, new JsonObject
+        {
+            ["description"] = "prototype compile lane, ODC", ["expectValid"] = true,
+            ["ops"] = new JsonArray(new JsonObject { ["op"] = "prototype", ["data"] = new JsonObject { ["source"] = "C:\\fixture\\minimal", ["capture"] = capture } }),
+        }.ToJsonString());
+        var baseOml = Path.Combine(dir, "base.oml");
+        File.Copy(Path.Combine(Root, "tests", "fixtures", "odc", "insurance-reactive-r8.oml"), baseOml, true);
+        var host = new ModelHost(dir);
+        var outPath = candidate = Path.Combine(dir, "candidate.oml");
+        var result = PrototypeExpander.WithSeams(seams ?? Seams, () => JsonSerializer.SerializeToNode(JobRunner.Run(host, baseOml, job, outPath))!.AsObject());
+        File.WriteAllText(Path.Combine(dir, "result.json"), result.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        return result;
+    }
+
     private static PrototypePlan Plan(string capture, string platform)
     {
         var problems = new List<PrototypeCapture.Problem>();

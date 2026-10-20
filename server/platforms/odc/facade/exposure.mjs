@@ -41,9 +41,13 @@ export const LICENSEE_CHANGES = Object.freeze([
   'a suite job path in SSAM\'s documentation becomes its example id (ssam_reference {kind:"example", query:"<id>"} returns it)',
   'in SSAM\'s documentation, evidence and proof levels become one seal (proven, refused, not proven, undetermined); proof lists, stamps, mismatches, limit origins and the index identity are left out; guidance and limits stay',
   'stack frames, source file names, kernel class names, suite commands, run dates and sessions, round and review names, owner decisions, blind tests and project document names are left out of SSAM\'s prose',
+  // (review refusal-followups L-C: see WHOLE_FRAME and the record of an engine failure in scrub)
+  'a stack frame SSAM serves as a value of its own (studio_build\'s frame) and the exception type and frames of a failure of SSAM\'s own engine (XIF_ENGINE_FAILED\'s exception and at) are left out; its stage, message and fix stay',
   'ssam_reference answers usage references by part: a whole document becomes its list of parts with the call for each one, within a byte limit per call and per day',
   // (review marco-a6 B1, the Integradora 19/10: see scrub, the patchedJob line)
   'a job SSAM corrected comes back as nextBasedOn (its path and sha256); the server\'s own record of it (patchedJob, with its provenance file) is left out',
+  // (review vps-a9 E2: see EXCEPTION_TYPE)
+  'the type of an exception of SSAM before its message (KernelRefusalException: ...) is left out of SSAM\'s prose and the failure of a job loses its exception field; the message stays, and so do the customer\'s exceptions (the debugger\'s exception field, UserException, DatabaseException...) and SSAM\'s references to exception elements (IUserException:Name)',
 ]);
 export const LICENSEE_INSTRUCTION = 'Answers carry what you need to use SSAM: grammars, op contracts, examples by id with the seal "proven", '
   + 'refusals with fix, patch and continuation. Paths of the server that you never pass back read <server>.';
@@ -129,6 +133,9 @@ const INTERNAL_SENTENCE = new RegExp(BLIND.source + String.raw`|\bno stamp\b|\bs
 const SENTENCES = /((?<=;)[ \t]+|(?<=\.)[ \t]+(?=[A-Z]))/;
 // a stack frame: indented "at Name.Space.Method(...)" with or without " in <file>:line N"
 const STACK_FRAME = /^[ \t]+at [\w.$`<>[\],]+\([^)\r\n]*\)(?: in [^\r\n]*)?(?:\r?\n|$)/gm;
+// (review refusal-followups L-C) the same frame as a whole value of its own, outside the prose (studio_build's frame: lib.mjs
+// builder, the first frame of SSAM's own code in the builder's stderr)
+const WHOLE_FRAME = /^[ \t]*at [\w.$`<>[\],]+\([^)\r\n]*\)(?: in [^\r\n]*)?[ \t]*$/;
 // (round 7: in any suite folder of jobs, jobs-live too, and any folder below it, examples-live too)
 const SUITE_JOB = /\b(?:kernel[\\/])?tests[\\/]jobs(?:-[a-z]+)*[\\/](?:[\w-]+[\\/])*([\w.-]+?)\.json\b/g;
 // (round 7: an html example is also its css, js and json files)
@@ -168,6 +175,18 @@ const DOC_REPO_PATH = /(?<![\w./\\-])(?:kernel|platforms|facade|scripts|publishe
 const RUNTIME_REPO_PATH = /(?<![\w./\\-])(?:kernel|platforms|\.local)[\\/][\w.*\\/-]+(?<!\.)(?::\d+(?:-\d+)?)?|(?<![\w./\\-])docs[\\/][\w.-]+\.md\b/g;
 const SOURCE_FILE = /\b[\w.*-]+\.(?:cs|mjs|py|ps1|csproj|sln)\b(?::line \d+|:\d+(?:-\d+)?|#L\d+|\(\d+(?:,\d+)?\))?/g;
 const ANVIL = /\bAnvil\.[A-Z][\w.]*/g;
+// Review vps-a9, E2: the type of an exception before its message, as the kernel writes it (Errors.Envelope and Errors.Text
+// "<Type>: <message>", Verbs.Apply's Unwrap "op #0 (html Login): KernelRefusalException: ..." and its cause " <- <Type>: ...",
+// EndOfApplyFailure; with or without its namespace), says how SSAM is built, not what to do: it leaves SSAM's prose and the
+// message stays. The OutSystems exceptions a customer's flow raises are the customer's and stay, as does the exception of the
+// customer's app (under an exception key: the debugger's, scrub below).
+// Review refusal-followups M-B: only that form, with the space the kernel always writes after the colon. SSAM's references to
+// exception elements are Type:Name with no space (IUserException:OrderClosed, ISystemException:All Exceptions,
+// IRoleException:...) and stay whole: without its kind a reference is a literal (JobPreflight.BaseReferences), so the fix
+// "use one of: IUserException:OrderClosed" would have told a licensee to write something else.
+const PLATFORM_EXCEPTIONS = ['User', 'Database', 'Security', 'Communication', 'AbortActivityChange', 'NotRegistered'];
+const EXCEPTION_TYPE = new RegExp(String.raw`(?<![\w.])(?:[A-Za-z_]\w*\.)*(?!(?:${PLATFORM_EXCEPTIONS.join('|')})Exception:)[A-Z][A-Za-z0-9]*Exception:[ \t]+`, 'g');
+const withoutExceptionTypes = (text, keep = false) => (keep ? text : text.replace(EXCEPTION_TYPE, ''));
 const SUITE_CLASS = /(?<![$.\w])[A-Z]\w*(?:Tests|Scenarios)\b(?:\.\w+)*/g;
 const ROUND = /\b(?:CX|PA|FA)\d{1,3}\b(?:\s*(?:r|round|review)\s*\d+)?|\bD-M\d+-\d+\b|\bwf_[0-9a-f-]{6,}\b|\bINT-[A-Z0-9-]+\b|\baudit T\d+\b/g;
 const PROJECT_DOC = /\b(?:PLANO|NAO-DA|DECISOES|RETOMADA|HANDOFF|CONHECIMENTO-DO-TIME|COBERTURA-EXEMPLOS-(?:O11|ODC))[\w-]*(?:\.md)?(?::\d+(?:-\d+)?)?/g;
@@ -432,18 +451,18 @@ export function holdPointers(text, pointers, echoes) {
 }
 
 /** SSAM's runtime prose (an error, a message, a fix...): server paths, source files, stack frames and kernel classes only. */
-export function scrubRuntimeText(text, { isHandle = () => false, pointers = [], echoes = null } = {}) {
+export function scrubRuntimeText(text, { isHandle = () => false, pointers = [], echoes = null, customerException = false } = {}) {
   if (typeof text !== 'string' || !text || isHandle(text.trim())) return text;
   const held = holdPointers(text, pointers, echoes);
   // (round 7, B1: the forms of a CLI too)
   let out = withoutCliForms(withoutDocReferences(held.text.replace(STACK_FRAME, '')));
   // (round 6, LOW 4: the suite's paths too, as in the documentation)
-  out = held.restore(paths(suitePaths(out)).replace(RUNTIME_REPO_PATH, MARK).replace(SOURCE_FILE, MARK).replace(ANVIL, MARK));
+  out = held.restore(withoutExceptionTypes(paths(suitePaths(out)), customerException).replace(RUNTIME_REPO_PATH, MARK).replace(SOURCE_FILE, MARK).replace(ANVIL, MARK));
   if (out === text) return text;
   return tidy(out).trim();
 }
 /** SSAM's documentation prose (rules, descriptions, notes of the reference and the discover). */
-export function scrubText(text, { isHandle = () => false, suiteNames = null, pointers = [], echoes = null } = {}) {
+export function scrubText(text, { isHandle = () => false, suiteNames = null, pointers = [], echoes = null, customerException = false } = {}) {
   if (typeof text !== 'string' || !text || isHandle(text.trim())) return text;
   const held = holdPointers(text, pointers, echoes);
   // (round 6c: the internal names of the kernel and of the project, as in a tool definition)
@@ -468,7 +487,7 @@ export function scrubText(text, { isHandle = () => false, suiteNames = null, poi
   // (round 7: the same parenthetical cut at the end of a text cut to its room, with or without a mark: it goes and the cut is
   // marked; a parenthetical left open in a whole text, with a sentence after it inside, is no cut and stays)
   out = out.replace(/ ?\(([^()]{0,600})$/, (m, inner) => (INTERNAL_MARK.test(inner.replace(/#[^#\r\n]*#/g, '')) && !/[.!?]\s+[A-Z]/.test(inner) ? '\u2026' : m));
-  out = held.restore(paths(out).replace(SUITE_COMMAND, MARK).replace(DOC_REPO_PATH, MARK).replace(SOURCE_FILE, MARK).replace(ANVIL, MARK)
+  out = held.restore(withoutExceptionTypes(paths(out), customerException).replace(SUITE_COMMAND, MARK).replace(DOC_REPO_PATH, MARK).replace(SOURCE_FILE, MARK).replace(ANVIL, MARK)
     .replace(SUITE_CLASS, m => (!suiteNames || suiteNames.has(m.split('.')[0]) ? MARK : m)).replace(PROJECT_DOC, MARK).replace(ROUND, '').replace(OWNER, 'the rule')
     .replace(/\blexical,\s*|,\s*lexical\b/g, '')); // the name of the matcher's section, in a recovery hint
   if (out === text) return text;
@@ -498,6 +517,9 @@ function scrubString(value, key, ctx) {
   }
   // (a runtime prose that held only a CLI form is left out; one that held a server path keeps <server>, as before)
   if (proseKey(RUNTIME_PROSE, key)) { const after = scrubRuntimeText(value, ctx); return after.trim() || !value.trim() ? after : DROP; }
+  // (review refusal-followups L-C) a stack frame served as a value of its own leaves, as the frames of SSAM's prose do; the
+  // customer's (under the debugger's exception key) stays
+  if (!ctx.customerException && WHOLE_FRAME.test(value)) return DROP;
   // (marco-a6, the family "no server path reaches a licensee") a whole value that is a path of the server is served only as
   // a handle the next call takes back (under a handle root, in any key: review marco-a6 B1, SSAM answers its handles as
   // path, snapshot, manifest, receipt, evidence, checks, xif... too) or as the very path the caller sent in this call; any
@@ -563,6 +585,13 @@ function scrub(value, ctx, key = null, depth = 0) {
     // sidecar, which no tool takes back; when the server could not verify the corrected file, nextBasedOn names the job that
     // ran, never the unverified one. The owner reads it whole.)
     if (here.mode !== 'doc' && k === 'patchedJob') continue;
+    // (review vps-a9 E2: the type of the exception a job's failure kept apart, job-guidance.mjs failureOf, is SSAM's class)
+    if (k === 'exception' && key === 'failure' && typeof v === 'string') continue;
+    // (review refusal-followups L-C: so is the record of a failure of SSAM's own engine, its exception type kept apart beside its
+    // frames, Anvil.Xif.Engine Program.Unexpected {stage, exception, at}, as o11_extension relays XIF_ENGINE_FAILED: both leave,
+    // the stage and the message stay; an exception object of the customer's app is the debugger's and stays)
+    if ((k === 'exception' || k === 'at') && here.mode !== 'doc' && !here.customerException && typeof value.exception === 'string'
+      && Array.isArray(value.at) && value.at.length && value.at.every(f => typeof f === 'string')) continue;
     // (round 6, LOW 5: the definition of a tool is documentation, its schema code; exposedToolDefinition reads both)
     if (k === 'definition' && value.schemaVersion === 'ssam-tool-definition/1' && isObject(v)) { out[k] = exposedToolDefinition(v, here); continue; }
     if (CODE_KEYS.has(k) && key !== 'operations') { out[k] = here.mode === 'doc' ? docCode(k === 'native' ? withoutRuntimeProvenance(v) : v, here, k) : v; continue; }
@@ -586,7 +615,8 @@ function scrub(value, ctx, key = null, depth = 0) {
     // a problems list, keeps under items the members fitProblems grouped, each with its own message and fix: SSAM's own
     // problems, read by the rule like the group's first message, never the customer's records)
     if (here.mode !== 'doc' && DATA_KEYS.has(k) && !(k === 'data' && here.checkData && depth === 0) && !(k === 'items' && key === 'problems')) { out[k] = v; continue; }
-    const next = scrub(v, here, k, depth + 1);
+    // (review vps-a9 E2: an exception object is the customer's app's, the debugger's: its type stays in its texts)
+    const next = scrub(v, (k === 'exception' || k === 'exceptions') && !here.customerException ? { ...here, customerException: true } : here, k, depth + 1);
     if (next !== DROP) out[k] = next;
   }
   if (here.mode === 'doc' && Array.isArray(out.historical) && Array.isArray(out.proven)) { out.proven = [...out.proven, ...out.historical]; delete out.historical; delete out.text; delete out.coverage; }

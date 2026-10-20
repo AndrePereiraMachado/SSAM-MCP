@@ -11,8 +11,10 @@
 //     versions, a closed Studio and an open one), HOSTED_RESTART_NEXT and the local answer to network:true;
 //   - agent-paths.mjs outsideWorkspaceRefusal and the PATH_OUTSIDE_WORKSPACE continuation (continuations.mjs).
 // Then a static floor: every string literal of hosted/*.mjs and agent-paths.mjs. The structured values of the network check
-// stay as they are until the owner decides (declared, never a text): paths[].status 'boa' | 'lenta' | 'perde' and the exit
-// key 'desconhecida' (UNKNOWN_EXIT). The markers that stand for withheld data are English since phase 3 of the a7 line
+// are English since the owner's decision of 2026-10-19 (they were 'boa' | 'lenta' | 'perde' and 'desconhecida'): paths[].status
+// 'good' | 'slow' | 'losing' and the exit key 'unknown' (UNKNOWN_EXIT); the one Portuguese literal left is the input alias
+// LEGACY_UNKNOWN_EXIT ('desconhecida', an older answer's exit, read as unknown and never answered). The markers that stand for
+// withheld data are English since phase 3 of the a7 line
 // (Integradora, by the owner rule of 15/10): '<server>' (a path of the server, hosted/policy.mjs SERVER_MARK),
 // '<customer omitted>' and '<fixture omitted>' (hosted/evidence.mjs). studio-identity.mjs is translated on
 // feat/studio-build-identity and is not checked here.
@@ -33,21 +35,26 @@ import { CONTINUATIONS } from '../continuations.mjs';
 
 const facade = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // The exit key of an upload whose address the hub could not read (network-check.mjs UNKNOWN_EXIT, agent-hub.mjs maskAddress).
-const UNKNOWN_EXIT = 'desconhecida';
-// The structured values the owner has not decided on: [JSON path pattern, allowed values].
-const STATUSES = ['boa', 'lenta', 'perde'];
-const DATA = [[/\/paths\/\d+\/status$/, STATUSES], [/\/(paths|recent)\/\d+\/via$/, [UNKNOWN_EXIT]]];
-// The same values as literals of the source (the statuses and the exit key; the markers of withheld data are English).
-const MARKERS = [...STATUSES, UNKNOWN_EXIT];
+const UNKNOWN_EXIT = 'unknown';
+// The input alias of an older answer's exit (network-check.mjs LEGACY_UNKNOWN_EXIT): recognized only, never answered.
+const LEGACY_UNKNOWN_EXIT = 'desconhecida';
+const STATUSES = ['good', 'slow', 'losing'];
+// No structured value of an answer is exempt any more: every one of them is English (owner decision of 2026-10-19).
+const DATA = [];
+// The literals of the source that are no text: the input alias only (the markers of withheld data are English).
+const MARKERS = [LEGACY_UNKNOWN_EXIT];
 
-test('the structured values waiting for the owner are exactly the network statuses and the unknown exit; the markers are English', async () => {
-  const { UNKNOWN_EXIT: exit } = await import('../hosted/network-check.mjs');
+test('the network statuses and the unknown exit are English; the older exit is only an input alias; the markers are English', async () => {
+  const { UNKNOWN_EXIT: exit, LEGACY_UNKNOWN_EXIT: legacy } = await import('../hosted/network-check.mjs');
   const { SERVER_MARK } = await import('../hosted/policy.mjs');
   const { OMITTED, CLIENT_OMITTED } = await import('../hosted/evidence.mjs');
   assert.equal(exit, UNKNOWN_EXIT);
+  assert.equal(legacy, LEGACY_UNKNOWN_EXIT);
   const source = fs.readFileSync(path.join(facade, 'hosted', 'network-check.mjs'), 'utf8');
-  assert.deepEqual([...source.matchAll(/status: stalled \? '(\w+)' : slow \? '(\w+)' : '(\w+)'/g)].flatMap(m => m.slice(1)), ['perde', 'lenta', 'boa']);
-  assert.deepEqual([SERVER_MARK, OMITTED, CLIENT_OMITTED].map(portuguese).flat(), []);
+  assert.deepEqual([...source.matchAll(/status: stalled \? '(\w+)' : slow \? '(\w+)' : '(\w+)'/g)].flatMap(m => m.slice(1)), ['losing', 'slow', 'good']);
+  assert.deepEqual([...STATUSES, UNKNOWN_EXIT, SERVER_MARK, OMITTED, CLIENT_OMITTED].map(portuguese).flat(), []);
+  // the only place the alias appears in the source is where it is read as UNKNOWN_EXIT
+  assert.equal(source.split("'" + LEGACY_UNKNOWN_EXIT + "'").length - 1, 1, 'the alias is declared once');
 });
 
 function strings(value, at = '', out = []) {

@@ -90,7 +90,7 @@ public sealed partial class ModelSession
                 if (!node.Attributes.Any(a => a.Key is "disable-virtualization" or "ext:disable-virtualization"))
                     wrote |= Marker(widget, node, "disable-virtualization", "True", "disable-virtualization on the new List");
                 // The rows marker only where the block reaches the page (review 3, M7).
-                if (theme.Reachable && Marker(widget, node, ScreenVisual.RowsMarker, "\"1\"", "the rows marker of the new List")) { wrote = true; marked.Add(ScreenVisual.RowsMarker); }
+                if (theme.Reachable && Marker(widget, node, ScreenVisual.RowsMarker, ScreenVisual.MarkerValue, "the rows marker of the new List")) { wrote = true; marked.Add(ScreenVisual.RowsMarker); }
                 why[ScreenVisual.RowsMarker] = theme.Reachable ? reason : $"the theme the page shows carries no native layout block: {theme.Why}";
                 if (wrote) VisualNote(ScreenVisual.ListRendersAllRows, "List", node, tagText, theme.Reachable ? reason : reason + "; the rows marker is not written: " + theme.Why);
             }
@@ -110,7 +110,7 @@ public sealed partial class ModelSession
                 if (gap is { } d)
                 {
                     var code = ScreenVisual.GutterCode(d);
-                    if (d.Marked && !Marker(widget, node, ScreenVisual.GapMarker, "\"1\"", "the gap marker of the " + kind)) code = "";
+                    if (d.Marked && !Marker(widget, node, ScreenVisual.GapMarker, ScreenVisual.MarkerValue, "the gap marker of the " + kind)) code = "";
                     if (d.Marked && code.Length > 0) marked.Add(ScreenVisual.GapMarker);
                     if (code.Length > 0) VisualNote(code, kind, node, "", "", spacing: d.Spacing);
                 }
@@ -121,7 +121,7 @@ public sealed partial class ModelSession
             // page (and of no other) gets min-width 0. Never in a block: a block goes on pages the op did not create. Review 3, M7:
             // only where the theme the page shows carries the block.
             var atTop = element?.ParentElement is { } top && IsPageTop(top) && PrototypeBuilder.FindMethod(widget, "CreateExtendedProperty") != null;
-            if (atTop && theme.Reachable && Marker(widget, node, ScreenVisual.PageMarker, "\"1\"", "the page marker"))
+            if (atTop && theme.Reachable && Marker(widget, node, ScreenVisual.PageMarker, ScreenVisual.MarkerValue, "the page marker"))
             {
                 marked.Add(ScreenVisual.PageMarker);
                 VisualNote(ScreenVisual.PageMarked, kind, node, "", "");
@@ -223,7 +223,7 @@ public sealed partial class ModelSession
                     {
                         ScreenVisual.GutterZeroedInGap or ScreenVisual.GutterKept or ScreenVisual.GutterAddsToGap => ScreenVisual.GutterNote(code, kind, Theme().Name),
                         ScreenVisual.PageMarked => $"the {kind} at the top of the page is marked {ScreenVisual.PageMarker}: the native layout block gives min-width 0 to the layout chain of this page only",
-                        _ => $"disable-virtualization = True and {ScreenVisual.RowsMarker}: the List renders every row, no virtualization sentinels among the rows; the native layout block lays a table part out as a row group ({why})",
+                        _ => ScreenVisual.AllRowsNote(why),
                     },
                 };
                 visualNotes[key] = note;

@@ -8,11 +8,12 @@ import { withDataLoadLock, normalizeDataTarget } from './data-load-lock.mjs';
 // destructive operations (CX15; CX13 review 6, R6-F15/R6-W1): its predicate of the owner's words (wordsGiven), its notes
 // of the words seen on the host, its previews (bound, valid PREVIEW_TTL_MS) and its execution check. Only the sha256 of
 // the normalized words is ever written or sent (the kernel and the bridge get sha256:<hex>).
-import { OWNER_REPLY, PREVIEW_TTL_MS, WORDS_RULE, callWordsProblems, checkExecute, createPreview, hashedWords, noteWords, wordsGiven, wordsRequired, wordsSha256 } from './destructive-operations.mjs';
+import { ASK_OWNER, ASK_OWNER_SAY, OWNER_REPLY, PREVIEW_TTL_MS, WORDS_RULE, callWordsProblems, checkExecute, createPreview, hashedWords, noteWords, wordsGiven, wordsRequired, wordsSha256 } from './destructive-operations.mjs';
 // servidor/fase4-26 a9: hosted, the native report an ODC write names is a file of the user's machine (the bridge runs on the
 // agent): the server opens only a path inside the customer's own workspace (hosted/mirror.mjs insideVisible, the gate's
 // rule), never one the agent's text names elsewhere (a server file: an oracle and a whole synchronous read).
 import { hostedContext } from './executor.mjs';
+import { WORDS_MARKER } from './next-steps.mjs';
 import { insideVisible } from './hosted/mirror.mjs';
 
 export const DATA_KERNEL_OPS_PER_CALL = 10;
@@ -58,7 +59,9 @@ const generatedIdentifier = entity => identifierOrigin(entity).generated;
 function notNaturalReason(entity){
   return identifierOrigin(entity).known
     ?'The server identifier is auto-number: a generated correlation value, not a natural key; declare stable business attributes as keys'
-    :'This integer identifier may be auto-number and the Studio did not report identifierAutoNumber; declare stable business attributes as keys, or reconnect through a bridge that reports identifierAutoNumber to use a non-auto-number identifier';
+    // (a9 follow-up, review vps-a9 M1: no bridge in use reports identifierAutoNumber, the v97 of every package included, so
+    // the refusal offers no bridge to reconnect through)
+    :'This integer identifier may be auto-number and the Studio did not report identifierAutoNumber; declare stable business attributes as keys';
 }
 export function familyOf(type) {
   type = typeOf(type);
@@ -169,6 +172,8 @@ export const changesOf = (desired,found,attrs,identifier,keys) => Object.fromEnt
   .map(([name,value]) => [name,{from:canonicalValue(attrs.get(name),found[name])??null,to:canonicalValue(attrs.get(name),value)??null}]));
 const issue = (code,reason,extra={}) => ({code,reason,...extra});
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Round 2 of the a9 follow-ups (review a9-followups-line D): the refusal of a write without the owner's words says how to go on.
+const authorizationFix = input => 'ask the owner and pass his own words, verbatim, in '+(input.lane==='o11'?'request.authorization':'authorize')+' of the same call; a marker or a text of the server is never words';
 function configProblems(input,authorization) {
   const problems=[];
   if(!['o11','odc'].includes(input.lane)) problems.push(issue('INPUT_INVALID','lane must be o11 or odc'));
@@ -180,7 +185,7 @@ function configProblems(input,authorization) {
   if(!input.dryRun && !uuidPattern.test(input.operationId ?? '')) problems.push(issue('INPUT_INVALID','operationId must be a stable UUID',{at:'operationId'}));
   // authorization: the load's words resolved by runDataLoad (sha256:<hex>), absent when neither the call (wordsGiven), its
   // plan nor a preview of the same load holds them.
-  if(!input.dryRun && !authorization) problems.push(issue('INPUT_INVALID',"authorization requires the user's own words",{at:'authorization'}));
+  if(!input.dryRun && !authorization) problems.push(issue('INPUT_INVALID',"authorization requires the user's own words",{at:'authorization',fix:authorizationFix(input)}));
   if(input.insertMissing && input.operation!=='update') problems.push(issue('INPUT_INVALID','insertMissing is supported only for update'));
   if(!list(input.keys).length) problems.push(issue('DATA_LOAD_KEYS_REQUIRED','File loads require declared non-null natural keys; choose a candidate or provide a natural key',{at:'keys'}));
   for(const field of ['columns','references']) if(input[field]!==undefined && (!input[field] || typeof input[field]!=='object' || Array.isArray(input[field]))) problems.push(issue('INPUT_INVALID',`${field} must be an object`));
@@ -348,6 +353,47 @@ const newLoadNext = 'Inspect the original receipt and the entity, resolve any am
 const recoveryNext = input => list(input.keys).length?'Resume the same load to reconcile its declared keys; inspect the entity before changing the files':'Inspect the entity, then declare keys in a new load before trying these rows again';
 
 const resumeNext = 'Resume the same load with its original arguments after correcting the reported cause';
+// a9 follow-up (review vps-a9 M1): on ODC the bridge v97 (every package in use) names the identifier of an entity only as the
+// first column of a row, so a load into an EMPTY entity cannot bind its target. The way that exists today, in ONE refusal:
+// the first row of the files inline (studio_data_insert {records}, the continuation, with the user's words; a reference
+// attribute is the parent's identifier, which the marker names), then the same load (nextCalls), whose keys find that row
+// unchanged and insert the others. Nothing is written by the refusal.
+const EMPTY_TARGET_REASON = 'The entity has no rows yet and this Studio names the identifier of an entity only through a row, so the load cannot bind its target; no write was sent';
+const EMPTY_TARGET_FIX = 'insert the first row of the files inline with studio_data_insert {module, entity, records:[that row], authorize} (the continuation), then repeat this same load (nextCalls): its keys find that row unchanged and the other rows insert';
+// (a9 follow-ups round 2, review a9-followups-line G: without a row that can be inserted as it is, the answer has no step and
+// says none)
+const EMPTY_TARGET_NO_ROW_FIX = 'correct the reported rows of the files first: no row of them can be inserted as it is, so this answer carries no step yet';
+// Round 2 of the a9 follow-ups (review a9-followups-line D, the family): a write step of a load carries the owner's words
+// marker where its tool reads them (authorize; request.authorization in o11_data) and askOwner, as every step the hub masks
+// (destructive-operations.mjs withoutWordEchoes): complete once the owner answers with his own words, and WORDS_REQUIRED (nothing
+// sent) replayed as it is. A step without them was a second refusal (INPUT_INVALID /authorization) with no step.
+function askingWords(step){
+  const args=step.arguments??{},field=args.request?'request/authorization':'authorize';
+  return{...step,arguments:args.request?{...args,request:{...args.request,authorization:WORDS_MARKER}}:{...args,authorize:WORDS_MARKER},
+    why:(typeof step.why==='string'&&step.why?step.why.replace(/[\s.;]*$/,'')+'; ':'')+field+': '+ASK_OWNER,askOwner:{fields:[field],say:ASK_OWNER_SAY}};
+}
+function firstRowFirst(input,rows,problems,continuation) {
+  const failed=new Set(problems.filter(p=>p.row!=null).map(p=>`${p.file}/${p.row}`));
+  const row=(rows??[]).find(r=>!failed.has(`${r.file}/${r.row}`)&&Object.keys(r.record??{}).length);
+  const load=withoutWords(continuation??{arguments:input});
+  const refs=input.references&&typeof input.references==='object'?input.references:{};
+  const record=row?Object.fromEntries(Object.entries(row.record).map(([name,value])=>[name,Object.hasOwn(refs,name)?`<the identifier of the ${refs[name]?.entity??name} row whose ${list(refs[name]?.key).join('+')||'key'} is ${typeof value==='string'?value:JSON.stringify(value)}>`:value])):null;
+  if(!record){const identity=problems.find(p=>p.code==='DATA_READ_UNAVAILABLE'&&p.at==='identity');if(identity)identity.fix=EMPTY_TARGET_NO_ROW_FIX;
+    return{next:'No row of the files can be inserted as it is: correct the reported rows, then repeat this same load; its answer then carries the first row inline. Nothing was written'};}
+  // D: the same load after the first row is a write (the owner's words again: the server never repeats them) or a preview.
+  const again={tool:load.tool??toolOf(input),arguments:load.arguments,why:'the same load after the first row: its keys find that row unchanged'};
+  return {next:'Insert the first row of the files inline with the user\'s own words (continuation), then repeat this same load (nextCalls'
+      +(input.dryRun?', a preview that needs no words): its keys find that row unchanged and preview the others':', with the user\'s own words again in place of the marker): its keys find that row unchanged and insert the others')+'; nothing was written',
+    continuation:askingWords({tool:'studio_data_insert',arguments:{module:input.module,entity:input.entity,...(input.pid!=null?{pid:input.pid}:{}),records:[record]},
+      why:'the first row of the files, inline: once the entity has a row, the Studio names its identifier'}),
+    nextCalls:[input.dryRun?again:askingWords(again)]};
+}
+// Round 2 of the a9 follow-ups (review a9-followups-line C): a strict update (insertMissing:false) into an EMPTY entity has no
+// row to update, and inserting is the only way to load its rows: never proposed in place of the user's option. Every key is
+// DATA_KEY_NOT_FOUND, as on an entity with rows (planDataLoad), nothing is written and the owner decides.
+const STRICT_EMPTY_REASON = 'The entity has no rows, so no key of the files exists in it: this update has no row to update, and insertMissing:false refuses to insert them; no write was sent';
+const strictEmptyNext = input => 'Nothing was written. Inserting these rows is the only way to load them into this empty entity, and insertMissing:false refuses it: ask the owner whether to insert them instead. '
+  +'Only if the owner decides so, preview '+(input.lane==='o11'?'o11_data with operation insert':'studio_data_insert')+' with the same files and keys (dryRun:true)';
 
 // One original batch can need both inserts and updates after a fresh key read.
 // Keep its pending marker durable until all parts have acknowledged; a crash
@@ -530,14 +576,14 @@ async function runDataLoadUnlocked(input,channel,{now=Date.now,journalRoot,progr
   const config=configProblems(input,authorization), parsed=readDataFiles(input.files,{delimiter:input.delimiter,module:input.module,entity:input.entity});
   let omlSha256=null;if(input.lane==='o11'&&input.oml)try{omlSha256=crypto.createHash('sha256').update(fs.readFileSync(input.oml)).digest('hex');}catch(error){config.push(issue('INPUT_INVALID','Unable to read the OML for the load fingerprint',{at:'oml'}));}
   const schemaAllowed=config.every(problem=>['authorization','operationId','records','keys'].includes(problem.at));
-  let host=input.host??input.tenant??null,contextIdentifier,contextProblem=null,identityVerified=!(input.lane==='odc'&&channel.context),targetIdentity={lane:input.lane,host,module:input.module,entity:input.entity};
+  let host=input.host??input.tenant??null,contextIdentifier,contextProblem=null,emptyTarget=false,identityVerified=!(input.lane==='odc'&&channel.context),targetIdentity={lane:input.lane,host,module:input.module,entity:input.entity};
   // ODC has no public tenant argument: every call, including completed replay, must bind
   // the connected Studio tenant before a saved plan or its resolved parent ids can be reused.
   if(input.lane==='odc'&&channel.context&&schemaAllowed) {
     try {const context=await channel.context();if(typeof context?.tenant!=='string'||!context.tenant.trim())throw new Error('The connected Studio did not identify its tenant');host=context.tenant;contextIdentifier=context.identifier;identityVerified=true;}
     catch(error){contextProblem=issue('DATA_READ_UNAVAILABLE','Unable to verify the connected ODC tenant',{at:'tenant'});}
   }
-  if(channel.identity&&schemaAllowed&&!contextProblem){try{targetIdentity=normalizeDataTarget(await channel.identity());host=targetIdentity.host;identityVerified=true;}catch(error){identityVerified=false;contextProblem=issue('DATA_READ_UNAVAILABLE','Unable to resolve the canonical data target; no write was sent',{at:'identity'});}}
+  if(channel.identity&&schemaAllowed&&!contextProblem){try{targetIdentity=normalizeDataTarget(await channel.identity());host=targetIdentity.host;identityVerified=true;}catch(error){identityVerified=false;emptyTarget=error?.emptyEntity===true;contextProblem=emptyTarget?issue('DATA_READ_UNAVAILABLE',EMPTY_TARGET_REASON,{at:'identity',fix:EMPTY_TARGET_FIX}):issue('DATA_READ_UNAVAILABLE','Unable to resolve the canonical data target; no write was sent',{at:'identity'});}}
   if(!channel.identity)targetIdentity={...targetIdentity,host};
   const print={lane:input.lane,host,module:targetIdentity.module,entity:targetIdentity.entity,operation:input.operation,...(input.lane==='o11'?{omlSha256}:{}),files:parsed.files,columns:input.columns??{},references:input.references??{},keys:input.keys??[],insertMissing:input.insertMissing??false,batchSize:input.batchSize??100,delimiter:input.delimiter??','};
   const sha256=fingerprint(print),loadName=input.dryRun?`dry-${sha256}`:uuidPattern.test(input.operationId??'')?input.operationId:`invalid-${sha256}`;
@@ -548,7 +594,7 @@ async function runDataLoadUnlocked(input,channel,{now=Date.now,journalRoot,progr
   // carries, so the owner can confirm the dryRun's own update preview in that write (and only there).
   const loadOperationId=input.operationId??(input.dryRun?crypto.randomUUID():null);
   // B-P4: the words of a preview count only for its own load: the same operationId (above) and the same fingerprint.
-  if(fromPreview&&sameLoadPreview.loadSha256!==sha256){authorizationSha256=undefined;authorization=undefined;if(!input.dryRun&&!config.some(problem=>problem.at==='authorization'))config.push(issue('INPUT_INVALID',"authorization requires the user's own words",{at:'authorization'}));}
+  if(fromPreview&&sameLoadPreview.loadSha256!==sha256){authorizationSha256=undefined;authorization=undefined;if(!input.dryRun&&!config.some(problem=>problem.at==='authorization'))config.push(issue('INPUT_INVALID',"authorization requires the user's own words",{at:'authorization',fix:authorizationFix(input)}));}
   const dir=path.join(journalRoot,loadName),planFile=path.join(dir,'plan.json'),receiptFile=path.join(dir,'receipt.json'),problemsFile=path.join(dir,'problems.json'),journalFile=path.join(dir,'journal.jsonl');
   fs.mkdirSync(dir,{recursive:true});
   let previous=input.dryRun?null:withoutPlanWords(readJson(planFile,null),planFile);
@@ -678,17 +724,20 @@ async function runDataLoadUnlocked(input,channel,{now=Date.now,journalRoot,progr
     const mapped=mapRows(parsed.rows,entity,input); allProblems.push(...mapped.problems); notes.push(...mapped.notes);
     // U1: only a unique index of the model may become the continuation, and only as a dryRun (nothing is written; it
     // shows insert / update current -> new / unchanged per row). A column unique only in these files is never chosen
-    // for the owner: it is listed for the owner to decide.
+    // for the owner: it is listed for the owner to decide. Round 2 of the a9 follow-ups (B): the preview needs no words, so
+    // neither it nor correctedRequest (an echo the hub's rule does not mask) carries the owner's words.
     if(!list(input.keys).length){
       const fromModel=candidate=>['entity-identifier','entity-unique-index'].includes(candidate.source);
       const candidates=keyCandidates(mapped.rows,entity),model=candidates.find(fromModel);
-      const corrected=model?loadContinuation(continuation??{arguments:input},{keys:model.keys,dryRun:true}):null,fileOnly=candidates.filter(candidate=>!fromModel(candidate)).map(candidate=>candidate.keys.join('+'));
+      const corrected=model?loadContinuation(withoutWords(continuation??{arguments:input}),{keys:model.keys,dryRun:true}):null,fileOnly=candidates.filter(candidate=>!fromModel(candidate)).map(candidate=>candidate.keys.join('+'));
       return refuse(allProblems,{code:'DATA_LOAD_KEYS_REQUIRED',keyCandidates:candidates,...(corrected?{correctedRequest:corrected.arguments,continuation:corrected}:{}),
         next:model?`Preview this load with the model's unique ${model.source==='entity-identifier'?'identifier':'index'} (${model.keys.join('+')}) as keys: the continuation is a dryRun that writes nothing and shows insert, update (current -> new) or unchanged per row; show it to the owner before any write`
           :fileOnly.length?`Ask the owner which attributes identify a row. ${fileOnly.join(', ')} ${fileOnly.length===1?'is':'are'} unique only in these files, not in the entity, so none is chosen for the owner; then preview the load with the owner's keys (dryRun) before any write`
           :'Ask the owner which attributes identify a row (a stable business key, unique and non-null); add that column to the source data if it is missing, then preview the load with those keys (dryRun) before any write'});
     }
-    if(contextProblem)return refuse(allProblems,{notChecked:['references','keys'],reason:contextProblem.reason});
+    // C (round 2): a strict update into an empty entity is answered by its own rule, never by the insert of the first row.
+    if(contextProblem&&emptyTarget&&input.operation==='update'&&input.insertMissing===false)return refuse([...allProblems.filter(problem=>problem!==contextProblem),...planDataLoad(input,mapped.rows,entity,[]).problems],{notChecked:['references'],reason:STRICT_EMPTY_REASON,next:strictEmptyNext(input)});
+    if(contextProblem)return refuse(allProblems,{notChecked:['references','keys'],reason:contextProblem.reason,...(emptyTarget?firstRowFirst(input,mapped.rows,allProblems,continuation):{})});
     const refs=input.references??{};
     let notChecked=[];
     for(const [attribute,reference] of Object.entries(refs)) {
@@ -769,10 +818,10 @@ async function runDataLoadUnlocked(input,channel,{now=Date.now,journalRoot,progr
     const rowsPreviewFile=path.join(dir,'rows-preview.json');atomic(rowsPreviewFile,dryRows??[]);
     const base=continuation??{arguments:input},updates=dryPreview?.count??0,inserts=plan.inserted,id=input.operationId?{}:{operationId:loadOperationId};
     const next=updates?`This was a preview; nothing was written: ${inserts} new, ${updates} updated (current -> new in rowsPreviewFile), ${plan.unchanged} unchanged. ${updateNext}`
-      :inserts?`This was a preview; nothing was written: ${inserts} new and ${plan.unchanged} unchanged rows, no existing row changes. To write, run the continuation (the same call without dryRun) with the owner's words as its authorization.`
+      :inserts?`This was a preview; nothing was written: ${inserts} new and ${plan.unchanged} unchanged rows, no existing row changes. To write, run the continuation (the same call without dryRun) with the owner's own words in place of the marker.`
       :'This was a preview; nothing was written and nothing would be: every row already holds these values.';
     return{rowsPreview:(dryRows??[]).slice(0,20),rowsPreviewFile,...(dryPreview?{updatePreview:{sha256:dryPreview.sha256,count:updates,inserts,unchanged:plan.unchanged,previewFile:dryPreview.file},confirmWith:updateConfirmWith(updates)}:{}),next,
-      ...(updates?{continuation:loadContinuation(withoutWords(base,[...WORD_FIELDS,'dryRun']),{...id,confirmUpdates:{previewSha256:dryPreview.sha256,authorize:OWNER_REPLY}})}:inserts?{continuation:loadContinuation(withoutWords(base,[...WORD_FIELDS,'dryRun']),id)}:{})};
+      ...(updates?{continuation:loadContinuation(withoutWords(base,[...WORD_FIELDS,'dryRun']),{...id,confirmUpdates:{previewSha256:dryPreview.sha256,authorize:OWNER_REPLY}})}:inserts?{continuation:askingWords(loadContinuation(withoutWords(base,[...WORD_FIELDS,'dryRun']),id))}:{})};
   };
   // The receipt keeps the previous value of every row this load updated (owner decision of 2026-10-17).
   const receipt=(extra={})=>{
@@ -1015,7 +1064,7 @@ export function odcDataChannel({studioData,module,entity,pid,authorize}) {
   const read=async(name,options)=>{const reply=unwrap(await studioData({op:'read',module,entity:name,pid,...options}));if(reply?.ok===false)channelThrow(reply,'Studio data read failed');return reply;};
   const identifiers=new Map(),schemaPages=new Map();
   let contextPage;
-  const context=async()=>{const page=contextPage??await read(entity,{limit:1});contextPage=page;schemaPages.set(entity,page);if(typeof page?.tenant!=='string'||!page.tenant.trim())throw new Error('The connected Studio did not identify its tenant');const rows=pageRows(page),identifier=page.identifier??(rows[0]?Object.keys(rows[0])[0]:undefined);if(identifier)identifiers.set(entity,identifier);return{tenant:page.tenant,moduleKey:page.moduleKey,entityKey:page.entityKey,identifier};};
+  const context=async()=>{const page=contextPage??await read(entity,{limit:1});contextPage=page;schemaPages.set(entity,page);if(typeof page?.tenant!=='string'||!page.tenant.trim())throw new Error('The connected Studio did not identify its tenant');const rows=pageRows(page),identifier=page.identifier??(rows[0]?Object.keys(rows[0])[0]:undefined);if(identifier)identifiers.set(entity,identifier);return{tenant:page.tenant,moduleKey:page.moduleKey,entityKey:page.entityKey,identifier,rows:Array.isArray(rows)?rows.length:null};};
   const text=value=>value==null||value===''?null:typeof value==='string'?value:typeof value==='boolean'?(value?'True':'False'):JSON.stringify(value);
   const nativeRecords=op=>op.records.map((record,index)=>{
     const identifier=op.identifier??identifiers.get(op.entity??entity),id=identifier?text(record[identifier]):null;
@@ -1052,7 +1101,9 @@ export function odcDataChannel({studioData,module,entity,pid,authorize}) {
   };
   return {
     context,
-    identity:async()=>{const target=await context();if(!target.moduleKey||!target.entityKey||!target.identifier)throw new Error('The Studio did not resolve the producer moduleKey/entityKey and identifier; no data write is safe');return{lane:'odc',host:target.tenant,tenant:target.tenant,moduleKey:target.moduleKey,entityKey:target.entityKey,module,entity};},
+    // (a9 follow-up, review vps-a9 M1: the bridge v97 names the identifier only as the first column of a row, so an empty
+    // entity has none: emptyEntity says so, and the load answers with the way that exists)
+    identity:async()=>{const target=await context();if(!target.moduleKey||!target.entityKey||!target.identifier)throw Object.assign(new Error('The Studio did not resolve the producer moduleKey/entityKey and identifier; no data write is safe'),{emptyEntity:Boolean(target.moduleKey&&target.entityKey&&!target.identifier&&target.rows===0)});return{lane:'odc',host:target.tenant,tenant:target.tenant,moduleKey:target.moduleKey,entityKey:target.entityKey,module,entity};},
     schema:async(names)=>({entities:await Promise.all(names.map(async name=>{const page=schemaPages.get(name)??await read(name,{limit:1});schemaPages.delete(name);const rows=pageRows(page);const attrs=Array.isArray(page.attributes)?page.attributes.map(a=>typeof a==='string'?{name:a.slice(0,a.indexOf(':')),type:a.slice(a.indexOf(':')+1)}:a):Object.entries(page.attributes??{}).map(([name,type])=>({name,type}));const identifier=page.identifier??(rows[0]?Object.keys(rows[0])[0]:undefined);identifiers.set(name,identifier);return{name,key:page.entityKey,moduleKey:page.moduleKey,identifier,...(typeof page.identifierAutoNumber==='boolean'?{identifierAutoNumber:page.identifierAutoNumber}:{}),indexes:page.indexes??[],attributes:attrs};}))}),
     readAll:(name,options)=>read(name,options),
     write:async(ops)=>{

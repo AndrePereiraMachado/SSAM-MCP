@@ -1359,8 +1359,68 @@ internal sealed class PrototypePlanner
         var result = _seams.Css!(request);
         _plan.StyleSheet = result.StyleSheet;
         _plan.CssReport = result.Report;
+        NativeLayout();
         var missing = _plan.IconClasses.Where(c => result.IconClasses.Count > 0 && !result.IconClasses.Values.Contains(c)).OrderBy(c => c, StringComparer.Ordinal).ToList();
         if (missing.Count > 0) _plan.Report["iconClassesWithoutRule"] = new JsonArray(missing.Select(m => (JsonNode)m).ToArray());
+    }
+
+    /// <summary>F1 of the html op in the import (round 6 of fix/data-table): when a List of the import is a part of a table (it carries
+    /// the rows marker, PrototypeWidgets.ListWidget), the import's theme carries the native layout block (ScreenVisual.NativeLayoutCss,
+    /// once, after the prototype's CSS) that lays it out as the table's row group, and the receipt says it (nativeLayout). No such
+    /// List, no block: an import of native Tables only is what it was. B2 of the review of round 6 (round 7): a marker of the engine
+    /// the prototype writes itself (data-ssam-page, data-ssam-gap, data-ssam-rows on an element that is no table part; the importer
+    /// neither refuses nor removes it) is said apart (prototypeMarkers), so the note stays true: the block's rules reach those
+    /// elements too, from the import on.</summary>
+    private void NativeLayout()
+    {
+        var lists = new List<(string Key, string Why)>();
+        var marked = new List<(string Key, string Marker)>();
+        var rows = false;
+        var seen = new HashSet<WidgetNode>(ReferenceEqualityComparer.Instance);
+        void Walk(WidgetNode node)
+        {
+            if (!seen.Add(node)) return;
+            var part = node.W == "IList" ? ScreenVisual.TablePartReason(node.Tag ?? "") : null;
+            foreach (var (name, _) in node.Attributes)
+            {
+                if (ScreenVisual.EngineMarkers.FirstOrDefault(m => string.Equals(m, name, StringComparison.OrdinalIgnoreCase)) is not { } marker) continue;
+                // the importer writes only the rows marker, only on the List of a table part: any other marker is the prototype's
+                if (marker == ScreenVisual.RowsMarker && node.W == "IList") rows = true;
+                if (marker == ScreenVisual.RowsMarker && part != null) lists.Add((node.K ?? "", part));
+                else marked.Add((node.K ?? "", marker));
+            }
+            foreach (var child in node.Children) Walk(child);
+            foreach (var child in node.Else ?? []) Walk(child);
+        }
+        foreach (var root in _plan.Roots.Values) Walk(root);
+        // the block is written for a List that carries the rows marker (round 6), whoever wrote it
+        if (!rows) return;
+        _plan.StyleSheet = ScreenVisual.WithNativeLayout(_plan.StyleSheet ?? "", out var action);
+        var keys = lists.Select(l => l.Key).Distinct(StringComparer.Ordinal).ToList();
+        var layout = new JsonObject
+        {
+            ["code"] = ScreenVisual.ThemeNativeLayout, ["theme"] = _plan.ThemeName, ["version"] = ScreenVisual.NativeLayoutVersion, ["action"] = action,
+            ["note"] = marked.Count == 0
+                ? $"the theme of the import carries the native layout block of the html op after the prototype's CSS; only its rules of {ScreenVisual.RowsMarker} reach the import (the importer marks only the List of a table part)"
+                : $"the theme of the import carries the native layout block of the html op after the prototype's CSS; its rules reach "
+                    + (keys.Count > 0 ? $"the List(s) of a table part the importer marks ({ScreenVisual.RowsMarker}, lists) and " : "")
+                    + $"the {marked.Count} marker(s) of the engine the prototype writes itself (prototypeMarkers), from the import on",
+        };
+        if (keys.Count > 0)
+            layout["lists"] = new JsonObject
+            {
+                ["code"] = ScreenVisual.ListRendersAllRows, ["element"] = "List", ["count"] = keys.Count,
+                ["keys"] = new JsonArray(keys.Take(10).Select(k => (JsonNode)k).ToArray()),
+                ["note"] = ScreenVisual.AllRowsNote(string.Join("; ", lists.Select(l => l.Why).Where(w => w.Length > 0).Distinct(StringComparer.Ordinal))),
+            };
+        if (marked.Count > 0)
+            layout["prototypeMarkers"] = new JsonObject
+            {
+                ["count"] = marked.Count,
+                ["elements"] = new JsonArray(marked.Take(10).Select(m => (JsonNode)$"{m.Key} ({m.Marker})").ToArray()),
+                ["note"] = $"markers of the engine the prototype writes itself ({string.Join(", ", ScreenVisual.EngineMarkers.Where(e => marked.Any(m => m.Marker == e)))}): the importer neither writes nor removes them and the block's rules reach those elements from the import on; an html edit of the screen decides {ScreenVisual.GapMarker} again on its links, buttons and forms (HTML_MARKER_DECIDED) and keeps {ScreenVisual.PageMarker} and {ScreenVisual.RowsMarker} as written",
+            };
+        _plan.Report["nativeLayout"] = layout;
     }
 
     // ---- steps ------------------------------------------------------------------------------------------------------------

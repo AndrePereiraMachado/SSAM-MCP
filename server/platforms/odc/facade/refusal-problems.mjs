@@ -2,12 +2,14 @@
 // of the kernel (preflight, base, apply, Verify) and the patch of each certain fix, and the patches apply with patch +
 // basedOn (job-patch.mjs). This is how every refusal of the facade carries them (o11_deliver, studio_deliver, ssam_job,
 // o11_job, ssam_reference check-job):
-//   problemOf(p)            -> {phase?, op, pointer, code, severity, message, fix, patch?, element?, key?}
-//   fitProblems(list, opts) -> {problems, problemsTotal?, grouped?}: the whole list when it fits the budget; else the
-//                              identical ones grouped (same code, phase and mold of fix: one entry with the pointers, the
-//                              ops and one patch that applies all of theirs), then without the per-item detail, then
-//                              without the patch of the biggest groups (patchOmitted), then with 20 pointers a group
-//                              (pointersTotal), then cut (problemsTotal) so the answer stays under the 40 KB ceiling.
+//   problemOf(p)            -> {phase?, op, pointer, code, severity, message, fix, patch?, element?, key?, and whole what it
+//                              carries to go on: current?, next?, k?, edit?, merged?, candidates?, text?, corrected?}
+//   fitProblems(list, opts) -> {problems, grouped?}: the whole list when it fits the budget; else the identical ones
+//                              grouped (same code, phase and mold of fix: one entry with the pointers, the ops and one
+//                              patch that applies all of theirs), then without the per-item detail, then without the
+//                              patch of the biggest groups (patchOmitted), then with 20 pointers a group (pointersTotal);
+//                              never without a problem (review refusal-followups M-A: the owner's rule, one refusal with
+//                              everything): what is still above the budget is the answer's fit (answer-size.mjs).
 //   diagnosisOf(source)     -> {verifyRan?, verifyReason?, phases?, normalizations?}: whether the Verify ran (and why not),
 //                              the phases, and what the kernel rewrote instead of refusing (normalizationsOf).
 //   normalizationsOf(src)   -> {normalizations?: {total, byRule, items, itemsLeft?}}: the kernel's JobNormalizer entries.
@@ -35,7 +37,51 @@ const clip = (text, max) => { const s = String(text ?? ''); return s.length > ma
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const SOURCE_PATCH_OMITTED = 'The patch belongs to the source job, whose own hash-bound basedOn is not offered here; correct that source job before retrying the consumer.';
 
-// One problem as the answers keep it: the fields of the kernel's single refusal, texts cut, the patch whole (it is the fix).
+// Review vps-a9, E1: what a problem carries to go on, which the kernel puts on the problem itself: the text of the screen now
+// (current {html, text, elements?, edits?}: HTML_BASE_CHANGED, HTML_KEY_FOREIGN), the next basedOn (next), the k of the
+// element (k), the edit ready on the module now (edit {text | ddl, basedOn}: a flow or data merge), the merged text (merged),
+// the readings to choose from (candidates), the line or block of a fix (text) and a corrected value (corrected). problemOf
+// copied a closed list of fields and left them all out, for every client. They stay whole (never cut). Two kinds:
+//   - the part of the module to write on (DOCUMENT_FIELDS: current, next, merged, and an edit with its basedOn): two problems
+//     on different ones are never grouped, and its size never cuts a problem or a patch here nor in the answer's editorial
+//     budget; only the ceiling bounds it: a long text goes to the kept answer and the exact read takes its place
+//     (answer-size.mjs fitAnswer);
+//   - the problem's own detail (k, candidates, text, corrected, an edit without basedOn): grouped members keep their k under
+//     items, and an answer above its budget puts a long detail in the kept answer and, in its place, what it was and its exact
+//     read (answer-size.mjs fitAnswer); the k stays: it says where the problem is.
+// Review refusal-followups M-A and a9-followups-line A (the owner's rule, one refusal with everything): neither kind ever
+// takes a problem or a patch out of a refusal. The details counted in the budget of fitProblems, whose last step kept "as
+// many as fit": the two readings of a FLOW_SYNTAX (each the patch of the op with the whole list of its flow texts,
+// JobPreflight.cs) took three of four such problems out, and out of the kept answer too, which is written after this fit.
+// So the budget here measures neither (only the answer's fit bounds them, and it keeps them whole in the kept answer), and a
+// detail that repeats a text a document of the same problem carries is not copied at all: the flow refusals put the action
+// now both in text and in edit.text (Verbs.Flow.cs FLOW_BASE_REQUIRED and FLOW_BASE_CHANGED, FlowMerge.cs ReadyEdit, through
+// FlowTextForm.Problem), the whole action twice in every such problem; the edit holds it, and the fix names the edit.
+export const CONTINUATION_FIELDS = Object.freeze(['current', 'next', 'k', 'edit', 'merged', 'candidates', 'text', 'corrected']);
+export const DOCUMENT_FIELDS = Object.freeze(['current', 'next', 'edit', 'merged']);
+const isDocument = (field, value) => DOCUMENT_FIELDS.includes(field) && (field !== 'edit' || (isObject(value) && value.basedOn != null));
+// The texts the documents of a problem carry (edit.text, current.text, a merged text).
+const documentTexts = p => new Set(DOCUMENT_FIELDS.filter(f => p[f] != null && isDocument(f, p[f]))
+  .flatMap(f => (typeof p[f] === 'string' ? [p[f]] : isObject(p[f]) ? Object.values(p[f]).filter(v => typeof v === 'string' && v) : [])));
+export const continuationOf = p => {
+  if (!isObject(p)) return {};
+  const texts = documentTexts(p);
+  return Object.fromEntries(CONTINUATION_FIELDS.filter(f => p[f] != null && p[f] !== '' && !(typeof p[f] === 'string' && !isDocument(f, p[f]) && texts.has(p[f])))
+    .map(f => [f, p[f]]));
+};
+export const documentsOf = p => Object.fromEntries(Object.entries(continuationOf(p)).filter(([f, v]) => isDocument(f, v)));
+export const detailsOf = p => Object.fromEntries(Object.entries(continuationOf(p)).filter(([f, v]) => !isDocument(f, v)));
+export const withoutDocuments = p => (isObject(p) && DOCUMENT_FIELDS.some(f => Object.hasOwn(p, f) && isDocument(f, p[f]))
+  ? Object.fromEntries(Object.entries(p).filter(([f, v]) => !isDocument(f, v))) : p);
+// What fitProblems measures against its budget: the problems without what they carry to go on (the parts of the module and
+// the details), but the k (where the problem is).
+const withoutCarried = p => (isObject(p) && CONTINUATION_FIELDS.some(f => f !== 'k' && Object.hasOwn(p, f))
+  ? Object.fromEntries(Object.entries(p).filter(([f]) => f === 'k' || !CONTINUATION_FIELDS.includes(f))) : p);
+const measured = list => bytes(list.map(withoutCarried));
+const documentKey = p => { const d = documentsOf(p); return Object.keys(d).length ? JSON.stringify(d) : ''; };
+
+// One problem as the answers keep it: the fields of the kernel's single refusal, texts cut, the patch whole (it is the fix),
+// and what it carries to go on whole (CONTINUATION_FIELDS).
 export function problemOf(p, limit = 600) {
   if (!isObject(p)) return { op: null, pointer: null, code: 'PROBLEM', severity: 'error', message: clip(typeof p === 'string' ? p : JSON.stringify(p), limit), fix: null };
   return { ...(typeof p.phase === 'string' ? { phase: p.phase } : {}), op: Number.isInteger(p.op) ? p.op : null, pointer: typeof p.pointer === 'string' ? p.pointer : null,
@@ -54,7 +100,8 @@ export function problemOf(p, limit = 600) {
     ...(isObject(p.binding) ? { binding: p.binding } : {}),
     // A summary of a cascade (summarizeCascade) keeps what it counts.
     ...(Number.isInteger(p.blocks) ? { blocks: p.blocks } : {}), ...(Number.isInteger(p.count) && p.cascade ? { count: p.count } : {}),
-    ...(p.cascade ? { cascade: true, ops: p.ops, codes: p.codes, because: p.because, ...(Number.isInteger(p.patchesLeftOut) ? { patchesLeftOut: p.patchesLeftOut } : {}) } : {}) };
+    ...(p.cascade ? { cascade: true, ops: p.ops, codes: p.codes, because: p.because, ...(Number.isInteger(p.patchesLeftOut) ? { patchesLeftOut: p.patchesLeftOut } : {}) } : {}),
+    ...continuationOf(p) };
 }
 
 // ---- the cascade (see the head of this file)
@@ -222,15 +269,16 @@ export function fitProblems(list, { budget = PROBLEMS_BUDGET, limit = 600, job =
   // clipping messages, collapsing cascades again, or discarding a group to meet a budget.
   const all = preserveAll ? (Array.isArray(list) ? list : []).map(p => isObject(p) ? structuredClone(p) : problemOf(p, Number.MAX_SAFE_INTEGER))
     : summarizeCascade((Array.isArray(list) ? list : []).map(p => problemOf(p, limit)), job);
-  if (!alwaysGroup && bytes(all) <= budget) return { problems: all };
+  if (!alwaysGroup && measured(all) <= budget) return { problems: all };
   // Identical problems, grouped: same code, phase, severity and mold of fix. A problem of the facade's own input check
   // ({at, error, lines?}: ssam_code write) has no code: only the same error text groups those (integration marco-a2: the
   // eleven different input problems of one write became one group with no code and no message, their lines left out).
   const groups = new Map();
   for (const p of all) {
     const source = isObject(p.sourceJob) ? JSON.stringify([p.sourceJob.role, p.sourceJob.spec, p.sourceJob.job]) : '';
+    // (E1: the part of the module a problem carries is part of the key: two screens with their own current text are two problems)
     const key = [p.code, p.phase ?? '', p.severity, moldOf(p.fix), p.code == null ? String(p.error ?? p.message ?? '') : '',
-      p.patchRule ?? '', p.patchCertain ?? '', p.patchChoice ?? '', source].join('\u0001');
+      p.patchRule ?? '', p.patchCertain ?? '', p.patchChoice ?? '', source, documentKey(p)].join('\u0001');
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(p);
   }
@@ -248,35 +296,36 @@ export function fitProblems(list, { budget = PROBLEMS_BUDGET, limit = 600, job =
       message: first.message, ...(first.code == null && first.error != null ? { error: first.error } : {}), fix: first.fix, ops: [...new Set(members.map(m => m.op).filter(Number.isInteger))],
       pointers: [...new Set(members.flatMap(m => m.pointers ?? ([m.pointer ?? m.at ?? m.part ?? m.key ?? m.element].filter(v => v != null))))], ...(places.length > 1 ? { lines: places } : {}), ...(blocks ? { blocks } : {}), ...(patch.length ? { patch } : {}),
       items: members.map(m => ({ pointer: m.pointer ?? m.at, ...(m.message !== first.message ? { message: m.message } : {}), ...(m.fix !== first.fix ? { fix: m.fix } : {}),
-        ...(m.element ? { element: m.element } : {}), ...(m.key ? { key: m.key } : {}) })) };
+        ...(m.element ? { element: m.element } : {}), ...(m.key ? { key: m.key } : {}), ...(typeof m.k === 'string' && m.k ? { k: m.k } : {}) })),
+      // (E1: the members share the part of the module they carry, the key above holds it; the details are the first member's, as
+      // its message, and each member's k is under items)
+      ...continuationOf(first) };
     // A group of code-less input problems has no code, severity, message or fix: no key for them.
     for (const key of ['code', 'severity', 'message', 'fix']) if (group[key] === undefined) delete group[key];
     return group;
   });
   if (preserveAll) return { problems: grouped, ...(groups.size < all.length ? { grouped: true } : {}) };
-  if (bytes(grouped) <= budget) return { problems: grouped, grouped: true };
+  if (measured(grouped) <= budget) return { problems: grouped, grouped: true };
   const lean = grouped.map(g => (g.items ? (({ items, ...rest }) => rest)(g) : g));
-  if (bytes(lean) <= budget) return { problems: lean, grouped: true };
+  if (measured(lean) <= budget) return { problems: lean, grouped: true };
   // Then the patch of the biggest groups (each says so: the pointers and the fix stay), then their pointers past 20.
   for (const g of [...lean].filter(g => g.count && g.patch).sort((a, b) => bytes(b.patch) - bytes(a.patch))) {
-    if (bytes(lean) <= budget) break;
+    if (measured(lean) <= budget) break;
     delete g.patch; g.patchOmitted = true;
   }
-  if (bytes(lean) <= budget) return { problems: lean, grouped: true };
+  if (measured(lean) <= budget) return { problems: lean, grouped: true };
   for (const g of lean.filter(g => g.count && g.pointers.length > 20)) { g.pointersTotal = g.pointers.length; g.pointers = g.pointers.slice(0, 20); }
-  if (bytes(lean) <= budget) return { problems: lean, grouped: true };
+  if (measured(lean) <= budget) return { problems: lean, grouped: true };
   // Then the patch of single problems, the biggest first (patchOmitted; the union of every patch stays beside the job):
   // a problem is never cut for the size of its patch.
   for (const p of [...lean].filter(p => !p.count && p.patch).sort((a, b) => bytes(b.patch) - bytes(a.patch))) {
-    if (bytes(lean) <= budget) break;
+    if (measured(lean) <= budget) break;
     delete p.patch; p.patchOmitted = true;
   }
-  if (bytes(lean) <= budget) return { problems: lean, grouped: true };
-  // Still too big: as many as fit, in order (the errors of the job first), and how many there were.
-  const ordered = [...lean].sort((a, b) => (a.severity === 'error' ? 0 : 1) - (b.severity === 'error' ? 0 : 1));
-  const kept = [];
-  for (const p of ordered) { if (bytes([...kept, p]) > budget) break; kept.push(p); }
-  return { problems: kept, grouped: true, problemsTotal: all.length };
+  // Still too big: every problem stays (review refusal-followups M-A: "as many as fit" left problems out of the refusal and
+  // out of its kept answer, which is written after this fit). The answer's fit (answer-size.mjs fitAnswer) shortens what it
+  // shows and keeps the whole in the kept answer, with its exact read.
+  return { problems: lean, grouped: true };
 }
 
 // lentidao 2026-10-12 (kernel Preflight/JobNormalizer.cs): what the kernel rewrote in the job instead of refusing it

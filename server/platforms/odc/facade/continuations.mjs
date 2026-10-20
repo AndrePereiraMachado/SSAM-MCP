@@ -192,7 +192,7 @@ const TABLE = {
   EVIDENCE_FILTER_INVALID: c('ssam_evidence', { file: '<file>', where: '<example>' }, 'the same read with the example clause, built from the fields the rows of the file have'),
   STUDIO_WINDOWLESS: c('ssam_connect', { lane: 'o11' }, 'this Service Studio has no main window: SSAM ignores it and the Studio with a window is the one of the lane; SSAM never closes nor ends a Studio'),
   DUPLICATE_MCP_ENTRY: c('ssam_doctor', {}, 'two MCP entries point to the same SSAM server; use only one (one MCP entry per server)'),
-  PATH_OUTSIDE_WORKSPACE: c(SAME_TOOL, { '<arguments>': '<the same, with the job inline or agent:inbox/name>' }, 'job: repeat the same call with the job itself inline (compact JSON); another file of the user: write it to the agent inbox with the Write tool (UTF-8) and repeat with agent:inbox/<name>'),
+  PATH_OUTSIDE_WORKSPACE: c(SAME_TOOL, { '<arguments>': '<the same, with the job inline or agent:inbox/name>' }, 'job: repeat the same call with the job itself inline (compact JSON); another file of the user: copy it as it is into the agent inbox (never rewrite it) and repeat with agent:inbox/<name>'),
 
   // ---- lane wp of the atritos 3 package (the build pool, studio-write-lock.mjs and build-pool.mjs): a delivery whose
   //      module guard or build worker did not come within the queue limit; nothing of it ran.

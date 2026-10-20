@@ -69,7 +69,7 @@ import { jobSummary } from './job-summary.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
 // Lane wp (atritos 3): the build phase of a phased delivery, outside the Studio lock (o11-build-phase.mjs).
 import { phaseGuards, buildBeforeApply, afterApply, validationContract, contractProblems } from './o11-build-phase.mjs';
-import { refusalFields, diagnosisOf, normalizationsOf, patchesAppliedOf } from './refusal-problems.mjs';
+import { refusalFields, diagnosisOf, normalizationsOf, patchesAppliedOf, continuationOf } from './refusal-problems.mjs';
 import { PHASES_META, noteStudioHolder, pendingOperationOf } from './studio-write-lock.mjs';
 import { watchPendingOperation } from './studio-pending-operation.mjs';
 import { stallRecovery } from './studio-recovery.mjs';
@@ -635,14 +635,20 @@ export function validationMessages(state, limit = 20) {
 // Problems of a refused preflight (contract I2), each one line: op, pointer, code, severity, message, fix (and patch when
 // the correction is mechanical). All of them, never a first-error-only answer.
 // primeira-certa A3: with the phase of each (preflight, base, apply, verify), and the element and key of a Verify problem.
+// Review vps-a9, E1: what the kernel problem carries to go on (refusal-problems.mjs CONTINUATION_FIELDS: the screen's text
+// now, the next basedOn, the k, the edit ready...) and the certainty of its patch (X3: patchRule, patchCertain, patchChoice,
+// sourceJob) pass to refusalFields, which keeps them as every refusal does (problemOf); a closed list here left them out.
+// Review refusal-followups (L-A, the family of M-A): the text of a problem (the line or block of its fix, code) comes whole
+// from continuationOf, as ssam_job has it, and never again as clean() prose (cut at 4000, its "sentences" with a shell word
+// dropped: a block lost its end); a text that only repeats the action now of its edit is not copied (continuationOf).
+const PASSED = ['patchRule', 'patchCertain', 'patchChoice', 'sourceJob', 'patchJoins', 'patchOmitted', 'patchOmittedWhy', 'binding'];
 export function preflightProblems(problems, limit = 300) {
   return (Array.isArray(problems) ? problems : []).filter(p => p && typeof p === 'object').map(p => ({
+    ...continuationOf(p), ...Object.fromEntries(PASSED.filter(k => p[k] != null).map(k => [k, p[k]])),
     ...(typeof p.phase === 'string' ? { phase: p.phase } : {}),
     op: Number.isInteger(p.op) ? p.op : null, pointer: typeof p.pointer === 'string' ? p.pointer : null, code: String(p.code ?? 'PREFLIGHT_ERROR'),
     severity: p.severity === 'warning' ? 'warning' : 'error', message: clean(p.message, limit), fix: p.fix == null ? null : clean(p.fix, limit),
     ...(Array.isArray(p.patch) && p.patch.length ? { patch: p.patch } : {}),
-    ...(typeof p.text === 'string' ? { text: clean(p.text, 4000) } : {}),
-    ...(p.corrected != null ? { corrected: p.corrected } : {}),
     ...(typeof p.element === 'string' && p.element ? { element: clean(p.element, limit) } : {}), ...(typeof p.key === 'string' && p.key ? { key: p.key } : {}) }));
 }
 // A refusal of the validation contract (VisitaCerta 2026-10-12; o11_deliver until=apply and o11_access said only "Job

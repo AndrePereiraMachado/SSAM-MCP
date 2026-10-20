@@ -19,12 +19,15 @@ const SMALL_SLOW_MS = 2000;
 // A large upload slower than this (bytes per second, ~2 Mbit/s) is slow.
 const LARGE_SLOW_BYTES_PER_SECOND = 262144;
 
-// The texts are English only (owner rule of 2026-10-15), with a decimal point. The structured values stay as they were
-// (the owner decides whether they change): paths[].status 'boa' | 'lenta' | 'perde' and the exit key UNKNOWN_EXIT of an
-// upload whose address the hub could not read (agent-hub.mjs maskAddress gives the same value); the texts name that exit
-// "unknown".
-export const UNKNOWN_EXIT = 'desconhecida';
-const exitName = via => (via === UNKNOWN_EXIT ? 'unknown' : via);
+// The texts are English only (owner rule of 2026-10-15), with a decimal point. The structured values are English too since
+// the owner's decision of 2026-10-19: paths[].status 'good' | 'slow' | 'losing' (they were 'boa' | 'lenta' | 'perde') and the
+// exit key UNKNOWN_EXIT 'unknown' of an upload whose address the hub could not read (agent-hub.mjs maskAddress gives the same
+// value; it was desconhecida). No agent reads them: the agent only copies the via the hub answered to its upload into its
+// own answer (agent/lib/net-probe.mjs), so an older answer may still name LEGACY_UNKNOWN_EXIT, which reads as UNKNOWN_EXIT.
+export const UNKNOWN_EXIT = 'unknown';
+export const LEGACY_UNKNOWN_EXIT = 'desconhecida';
+const exitOf = via => (via === LEGACY_UNKNOWN_EXIT ? UNKNOWN_EXIT : via);
+const exitName = exitOf;
 const seconds = ms => (ms < 1000 ? Math.round(ms) + ' ms' : (ms / 1000).toFixed(1) + ' s');
 const size = bytes => (bytes >= 1048576 ? (bytes / 1048576).toFixed(bytes % 1048576 ? 1 : 0) + ' MB' : bytes >= 1024 ? Math.round(bytes / 1024) + ' KB' : bytes + ' B');
 const median = values => { if (!values.length) return null; const sorted = [...values].sort((a, b) => a - b); return sorted[Math.floor((sorted.length - 1) / 2)]; };
@@ -50,7 +53,7 @@ export function summarizeProbes(probes = [], records = []) {
   const byId = new Map((Array.isArray(records) ? records : []).map(r => [r.id, r]));
   const rows = (Array.isArray(probes) ? probes : []).map(p => {
     const record = p.id ? byId.get(p.id) : undefined;
-    return { bytes: Number(p.bytes) || 0, ms: Number(p.ms) || 0, ok: p.ok === true, via: record?.via ?? (typeof p.via === 'string' ? p.via : null),
+    return { bytes: Number(p.bytes) || 0, ms: Number(p.ms) || 0, ok: p.ok === true, via: exitOf(record?.via ?? (typeof p.via === 'string' ? p.via : null)),
       state: classify(p, record), received: record?.received ?? null };
   });
   const groups = new Map();
@@ -65,15 +68,15 @@ export function summarizeProbes(probes = [], records = []) {
     const large = list.filter(r => r.ok && r.bytes > SMALL_BYTES);
     const best = large.length ? large.reduce((a, b) => (a.bytes / a.ms >= b.bytes / b.ms ? a : b)) : null;
     const stalled = count('stalled'), slow = count('slow');
-    return { via, status: stalled ? 'perde' : slow ? 'lenta' : 'boa', uploads: list.length, ok: count('ok'), slow, stalled,
+    return { via, status: stalled ? 'losing' : slow ? 'slow' : 'good', uploads: list.length, ok: count('ok'), slow, stalled,
       smallMs: median(small), ...(best ? { largeBytes: best.bytes, largeMs: best.ms } : {}) };
   }).sort((a, b) => b.uploads - a.uploads);
   const unreached = rows.filter(r => r.state === 'unreached').length;
   const ok = rows.filter(r => r.state === 'ok').length;
   const describe = p => exitName(p.via) + (p.largeMs != null ? ' (uploaded ' + size(p.largeBytes) + ' in ' + seconds(p.largeMs) + ')' : p.smallMs != null ? ' (a small upload in ' + seconds(p.smallMs) + ')' : '');
   const exits = list => list.map(p => exitName(p.via)).join(', ');
-  const bad = paths.filter(p => p.status === 'perde');
-  const good = paths.filter(p => p.status === 'boa');
+  const bad = paths.filter(p => p.status === 'losing');
+  const good = paths.filter(p => p.status === 'good');
   let verdict, message;
   if (rows.length === 0) {
     verdict = 'no-probes'; message = 'the agent made no test upload';
@@ -93,7 +96,7 @@ export function summarizeProbes(probes = [], records = []) {
     verdict = 'uploads-lossy';
     message = 'your internet loses packets on uploads: ' + lost + ' of ' + rows.length + ' uploads on a new connection reached the server and stalled'
       + (paths.length > 1 ? ' (exits ' + exits(paths) + ')' : '') + '. Small uploads pass and files stall: SSAM repeats the parts, but each stall costs seconds.';
-  } else if (paths.some(p => p.status === 'lenta')) {
+  } else if (paths.some(p => p.status === 'slow')) {
     const largest = paths.filter(p => p.largeMs != null).map(describe);
     verdict = 'slow';
     message = 'your internet is slow on uploads' + (largest.length ? ': ' + largest.join('; ') : '') + '. Nothing stalled; large deliveries just take longer.';

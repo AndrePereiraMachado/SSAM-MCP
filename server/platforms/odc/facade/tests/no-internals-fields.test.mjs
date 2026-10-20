@@ -205,7 +205,7 @@ test('a CLI flag leaves SSAM\'s documentation; a tool form, a CSS custom propert
   assert.equal(out.rules[1], doc.rules[1], 'a CSS custom property is no flag');
   // (round 7b, review no-internals-7 MEDIUM 2: the run of a lane reads as the lane, so what holds on ODC stays)
   assert.equal(out.text, 'Every detection reads O11 jobs. In a run on ODC, the job stages do not run. The rest applies.');
-  assert.equal(out.error, "ArgumentException: block 'Button' not in OutSystemsUI 2.28.1; try query:{find:\"<words>\"}");
+  assert.equal(out.error, "block 'Button' not in OutSystemsUI 2.28.1; try query:{find:\"<words>\"}", 'review vps-a9 E2: the type of an exception of SSAM leaves the prose, the message stays');
   assert.equal(out.limits[0].text, 'The contract is the signature in the capture (context.signatures with app, or studio_inspect {target:"<capture>"}).');
   assert.deepEqual(out.data.ops, doc.data.ops, 'code stays');
 });

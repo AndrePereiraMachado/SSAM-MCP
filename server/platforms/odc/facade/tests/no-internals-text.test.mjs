@@ -198,7 +198,7 @@ test('a pointer to SSAM\'s own reference reads as the MCP form that serves it (B
   const rule = licensee('ssam_reference', { ok: true, kind: 'api', rule: 'Tag = the tag, class -> extended property; any tag of the platform\'s HTML Element (api --op html, platformTags), tables too; br: an empty Container' }, { kind: 'recipe' });
   assert.equal(rule.rule, 'Tag = the tag, class -> extended property; any tag of the platform\'s HTML Element (' + api('html') + ', platformTags), tables too; br: an empty Container');
   const block = licensee('ssam_reference', { ok: false, error: "ArgumentException: block 'Button' not in OutSystemsUI 2.28.1; try --find" }, { kind: 'ui-block' });
-  assert.equal(block.error, "ArgumentException: block 'Button' not in OutSystemsUI 2.28.1; try query:{find:\"<words>\"}");
+  assert.equal(block.error, "block 'Button' not in OutSystemsUI 2.28.1; try query:{find:\"<words>\"}", 'review vps-a9 E2: the type of an exception of SSAM leaves the prose, the message stays');
   const limits = licensee('ssam_discover', { ok: true, schemaVersion: 'ssam-discovery/1', matches: [{ id: 'x', limits: [{ text: 'The contract is the signature in the capture (context.signatures with --app, or studio_inspect {target:"<capture>"}).' }],
     guidance: 'Read the existing blocks of the module before creating new ones (an --app capture lists them).' }] });
   assert.equal(limits.matches[0].limits[0].text, 'The contract is the signature in the capture (context.signatures with app, or studio_inspect {target:"<capture>"}).');

@@ -913,6 +913,38 @@ function fidelityOf(report, measured) {
   if (m.measured === false) { out.measured = false; out.why = m.why; }
   return out;
 }
+// Round 7 of fix/data-table (M1 of the review of round 6): the receipt says what the kernel did. Every top-level key of the kernel's
+// report.prototype is copied into the receipt or dropped here on purpose, with why (tests/prototype-receipt-keys.test.mjs reads
+// the kernel's sources for the keys): never left out in silence.
+export const RECEIPT_DROPPED = Object.freeze({
+  prefix: 'every name the import creates carries it (flow, screens, blocks, popups)',
+  vanished: 'the plan\'s list before the build; what the build did with each element is removed and kept',
+  logic: 'the same counts as data.serverActions and counts.screenActions; its count of SQL queries is data.sql',
+  builder: 'its problems are in degraded (the kernel adds them there) and its counts are those of counts',
+  steps: 'the time and the op count of each phase of the build; timings has the totals',
+  nativeDom: 'the file of the module read back, which the facade measures the fidelity on (fidelity)',
+  keys: 'the file of widget keys to capture keys, which maps a build or Verify problem to its capture item (degraded)',
+  widgetKeys: 'only in the offline build that validates a binding proposal (PrototypeBindPrepass), never in an import that writes',
+  eventActions: 'only in the offline build that validates a binding proposal (PrototypeBindPrepass), never in an import that writes',
+  planSha256: 'the hash of the plan, the kernel\'s test of an import that changes nothing; noChange says its outcome',
+  samples: 'the example outputs of the producer the fidelity measure renders the bound screens with (prototype-dom.json), never written in the module',
+});
+// What the import did or could not do beyond the counts, copied when the kernel wrote it: names it changed (renamed), elements a
+// re-import deleted (removed) or kept for their consumers (kept; with data.bind, the items kept as the prototype's values), list
+// filters it could not compile (unevaluableFilters, the list shows every record), icon classes without a rule, and the prototype's
+// timers the native screen does not run (runtime). Each list is cut at RECEIPT_LIST_MAX entries, <key>Total its count.
+export const RECEIPT_LIST_MAX = 20;
+const RECEIPT_LISTS = ['renamed', 'removed', 'kept', 'unevaluableFilters', 'iconClassesWithoutRule', 'runtime'];
+function receiptLists(k) {
+  const out = {};
+  for (const key of RECEIPT_LISTS) {
+    const list = Array.isArray(k[key]) ? k[key] : [];
+    if (!list.length) continue;
+    out[key] = list.slice(0, RECEIPT_LIST_MAX);
+    if (list.length > RECEIPT_LIST_MAX) out[key + 'Total'] = list.length;
+  }
+  return out;
+}
 // kernelReport: report.prototype of the kernel (or null). fidelity: the measure (prototype/fidelity.mjs) or {measured:false}.
 // phases: {captureMs, expandMs, buildMs, verifyMs, fidelityMs, mergeMs, publishMs, seedMs} as measured by the facade
 // (null for a phase that did not run). seed: the seed result. degraded: the items of 1.4.1. verify: the new Verify
@@ -954,11 +986,16 @@ export function prototypeReceipt(kernelReport, { fidelity = null, phases = {}, s
     blocks: Array.isArray(k.blocks) ? k.blocks : [],
     popups: Array.isArray(k.popups) ? k.popups : [],
     resources: isObject(k.resources) ? k.resources : { images: [], icons: null, imports: [] },
-    data: { staticEntities: [], extraAttributes: [], serverActions: 0, sql: 0, clientVariables: [], ...data, entities },
+    data: { staticEntities: [], extraAttributes: [], serverActions: 0, sql: num(k.logic?.sql) ?? 0, clientVariables: [], ...data, entities },
     events: { total: num(events.total) ?? 0, compiled: num(events.compiled) ?? 0, ...events, byEffect, notCompiled: Array.isArray(events.notCompiled) ? events.notCompiled : [], targetGuarded: Array.isArray(events.targetGuarded) ? events.targetGuarded : [] },
     fidelity: fidelityOf(k, fidelity),
     verifyWarnings: verifyWarningsOf(k, verify),
     degraded: [...(Array.isArray(k.degraded) ? k.degraded : []), ...degraded.map(d => ({ k: d.k, code: d.code, message: d.message, kind: d.kind, done: d.action }))],
+    // F1 of the html op in the import (round 6): the native layout block the kernel wrote in the theme and the Lists it lays out
+    ...(isObject(k.nativeLayout) ? { nativeLayout: k.nativeLayout } : {}),
+    ...receiptLists(k),
+    // an import that changes nothing (the plan equals the module): no op ran
+    ...(k.noChange === true ? { noChange: true, code: typeof k.code === 'string' && k.code ? k.code : 'NO_CHANGE' } : {}),
     seed: { ran: seeded.ran === true, entities: num(seeded.entities) ?? 0, rows: num(seeded.rows) ?? 0, skippedNotEmpty: Array.isArray(seeded.skippedNotEmpty) ? seeded.skippedNotEmpty : [],
       ...(seeded.reason ? { reason: seeded.reason } : {}), ...(Array.isArray(seeded.failed) && seeded.failed.length ? { failed: seeded.failed } : {}) },
     counts,

@@ -1,6 +1,6 @@
 // Atritos 3, lane fa, C26: the agent's inbox is said before it is needed. A path under the agent root in inbox/, odc/ or
-// o11/ becomes agent:<rel>; any other path is refused with the exact place to write (the inbox, with the Write tool in
-// UTF-8) and the same call with agent:inbox/<name>. Pure; the hosted server binds it (server line).
+// o11/ becomes agent:<rel>; any other path is refused with the exact place to copy the file into as it is (the inbox; a9
+// follow-up M2: never rewritten with the Write tool) and the same call with agent:inbox/<name>. Pure; the hosted server binds it (server line).
 import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,12 +19,13 @@ test('C26: a path under the agent root maps to agent:<rel> (case and separators 
   assert.equal(agentPath('C:\\SSAM-Agent\\inbox\\job.json', {}), null);
 });
 
-test('C26: a path outside is refused with the exact inbox path, the Write tool in UTF-8, and the same call with agent:inbox/<name>', () => {
+test('C26: a path outside is refused with the exact inbox path, copied as it is, and the same call with agent:inbox/<name>', () => {
   const temp = 'C:\\Users\\a\\AppData\\Local\\Temp\\claude\\scratch\\job.json';
   const refused = outsideWorkspaceRefusal(temp, { agentRoot, tool: 'studio_deliver', args: { job: temp, module: 'Shop' } });
   assert.equal(refused.code, PATH_OUTSIDE_WORKSPACE);
   assert.match(refused.fix, /C:\\SSAM-Agent\\inbox\\job\.json/);
-  assert.match(refused.fix, /the Write tool \(UTF-8\)/);
+  assert.match(refused.fix, /copy job\.json as it is into C:\\SSAM-Agent\\inbox\\job\.json \(Copy-Item; never rewrite/);
+  assert.doesNotMatch(refused.fix, /Write tool/);
   assert.match(refused.fix, /agent:inbox\/job\.json/);
   assert.equal(refused.inbox, 'C:\\SSAM-Agent\\inbox');
   assert.equal(refused.continuation.tool, 'studio_deliver');
@@ -35,6 +36,6 @@ test('C26: a path outside is refused with the exact inbox path, the Write tool i
   // Any other file of the user (an OML) still goes to the inbox.
   const oml = 'C:\\Users\\a\\Downloads\\Quotes.oml';
   const file = outsideWorkspaceRefusal(oml, { agentRoot, tool: 'studio_open', args: { module: 'Quotes', localOml: oml }, field: 'localOml' });
-  assert.match(file.fix, /^write C:\\SSAM-Agent\\inbox\\Quotes\.oml with the Write tool \(UTF-8\) and pass agent:inbox\/Quotes\.oml$/);
+  assert.match(file.fix, /^copy Quotes\.oml as it is into C:\\SSAM-Agent\\inbox\\Quotes\.oml \(Copy-Item; never rewrite its content: a rewritten file can come back cut or changed\) and pass agent:inbox\/Quotes\.oml$/);
   assert.deepEqual(file.continuation.arguments, { module: 'Quotes', localOml: 'agent:inbox/Quotes.oml' });
 });

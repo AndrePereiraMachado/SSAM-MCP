@@ -311,16 +311,9 @@ public sealed class PrototypeWidgets
         var dynamicAttributes = node["attrExpr"] as JsonObject;
         // an inline style the capture (or data.bind) computes is the expression's alone: never the static one beside it
         if (dynamicAttributes?["style"] is JsonObject) spec.Properties.RemoveAll(p => p.Property == "CustomStyle");
-        // the map's extended values are already what a set op writes (quoted literals, ElementWidgetMap): written as they are; an
-        // id reference is the literal with the ids resolved to the widget names
-        foreach (var (name, value) in mapping.ExtendedProperties)
-        {
-            // the map writes attribute names in lower case (viewbox) and the capture as written (viewBox): one attribute, once
-            if (dynamicAttributes?.Any(d => string.Equals(d.Key, name, StringComparison.OrdinalIgnoreCase)) == true || string.Equals(name, "class", StringComparison.OrdinalIgnoreCase)) continue;
-            if (IdReferences.Contains(name) && Literal(value) is { Length: > 0 } ids) { spec.Extended.Add((name, PrototypeExpr.Quote(ResolveIds(node, name, ids)))); continue; }
-            if (BooleanAttributes.Contains(name) && IsLiteral(value)) { spec.Extended.Add((name, PrototypeExpr.Quote(name.ToLowerInvariant()))); continue; }
-            spec.Extended.Add((name, value));
-        }
+        // the map's extended values as every widget made from the map writes them (MappedAttributes); an attribute the capture
+        // computes is its expression's, below
+        spec.Extended.AddRange(MappedAttributes(node, mapping, dynamicAttributes));
         if (dynamicAttributes != null)
             foreach (var (name, value) in dynamicAttributes)
             {
@@ -523,6 +516,26 @@ public sealed class PrototypeWidgets
         return string.Join(" + ", folded);
     }
 
+    /// <summary>The extended properties of the element map as a widget writes them: one rule for every widget the importer makes from
+    /// the map (the HTML element, the List of an element, the native Table; X1 of the review of round 6, round 7 of fix/data-table: a
+    /// List quoted them again, so aria-label="Pedidos" was published with the quotes). The map's values are already what a set op
+    /// writes (quoted literals, ElementWidgetMap): written as they are, never quoted again; an id reference is the literal with the
+    /// ids resolved to the widget names, a boolean attribute its own name (the runtime drops an empty one); the class is the
+    /// widget's Style. <paramref name="computed"/>: the attributes the capture computes, written by the caller as their expressions
+    /// (the HTML element); null keeps the static value the capture rendered (a List or a Table writes no expression of its own
+    /// element).</summary>
+    private IEnumerable<(string Name, string Value)> MappedAttributes(JsonObject node, ElementMapping mapping, JsonObject? computed)
+    {
+        foreach (var (name, value) in mapping.ExtendedProperties)
+        {
+            // the map writes attribute names in lower case (viewbox) and the capture as written (viewBox): one attribute, once
+            if (computed?.Any(d => string.Equals(d.Key, name, StringComparison.OrdinalIgnoreCase)) == true || string.Equals(name, "class", StringComparison.OrdinalIgnoreCase)) continue;
+            if (IdReferences.Contains(name) && Literal(value) is { Length: > 0 } ids) { yield return (name, PrototypeExpr.Quote(ResolveIds(node, name, ids))); continue; }
+            if (BooleanAttributes.Contains(name) && IsLiteral(value)) { yield return (name, PrototypeExpr.Quote(name.ToLowerInvariant())); continue; }
+            yield return (name, value);
+        }
+    }
+
     private static bool IsLiteral(string text) => text.Length >= 2 && text[0] == '"' && text[^1] == '"' && !text[1..^1].Replace("\"\"", "").Contains('"');
 
     /// <summary>The text of a quoted literal ("a ""b""" -> a "b"); a value that is no literal is itself.</summary>
@@ -718,7 +731,9 @@ public sealed class PrototypeWidgets
             why = $"a <{cell["t"]}> has a condition, an event or a computed attribute of its own (a sortable header, a clickable cell)";
         if (why != null)
         {
-            _c.Degraded.Add(new JsonObject { ["k"] = node["k"]?.ToString(), ["code"] = "TABLE_NOT_NATIVE", ["message"] = "a data table stays HTML elements and a List: " + why, ["done"] = "HTML elements and a List" });
+            // The List of its <tbody> takes F1 of the html op (ListWidget): its rows stay the table's row group, under the header.
+            _c.Degraded.Add(new JsonObject { ["k"] = node["k"]?.ToString(), ["code"] = "TABLE_NOT_NATIVE", ["message"] = "a data table stays HTML elements and a List: " + why,
+                ["done"] = $"HTML elements and a List whose rows are the table's row group ({ScreenVisual.ListRendersAllRows}: disable-virtualization and {ScreenVisual.RowsMarker} on the List, the native layout block in the theme)" });
             return null;
         }
         // What a section or a row says beside its class (a data attribute of the prototype's own script, data-admin-product="1"):
@@ -747,9 +762,9 @@ public sealed class PrototypeWidgets
         spec.Properties.Add(("Style", style.Expression ?? PrototypeExpr.Quote(style.Static)));
         spec.Properties.Add(("StyleHeader", RowStyle(head, headRow, scope)));
         spec.Properties.Add(("StyleRow", RowStyle(body, template, itemScope)));
-        // the attributes of the table as the map keeps them (what a set op writes); its inline style an attribute (no CustomStyle)
-        foreach (var (name, value) in mapping.ExtendedProperties)
-            if (!string.Equals(name, "class", StringComparison.OrdinalIgnoreCase)) spec.Extended.Add((name, value));
+        // the attributes of the table as every widget made from the map writes them (MappedAttributes); its inline style an
+        // attribute (no CustomStyle)
+        spec.Extended.AddRange(MappedAttributes(node, mapping, null));
         if (mapping.Properties.FirstOrDefault(p => p.Property == "CustomStyle").Value is { Length: > 0 } inline
             && !spec.Extended.Any(x => string.Equals(x.Name, "style", StringComparison.OrdinalIgnoreCase)))
             spec.Extended.Add(("style", PrototypeExpr.Quote(inline)));
@@ -891,8 +906,9 @@ public sealed class PrototypeWidgets
             style = string.Join(" ", classes);
             // the inline style of the list element, as the element map writes it for any element (CustomStyle)
             foreach (var (property, value) in mapping.Properties.Where(p => p.Property == "CustomStyle")) spec.Properties.Add((property, value));
-            foreach (var (name, value) in mapping.ExtendedProperties)
-                if (!string.Equals(name, "class", StringComparison.OrdinalIgnoreCase)) spec.Extended.Add((name, PrototypeExpr.Quote(value)));
+            // the attributes of the list's own element as every widget made from the map writes them (MappedAttributes): the map's
+            // values are quoted literals already (X1 of the review of round 6: quoted again here, they were published with the quotes)
+            spec.Extended.AddRange(MappedAttributes(node, mapping, null));
             // the inline style of the list's own element (a React column: display flex, direction column): an attribute of the
             // list, as the class is its Style
             if (mapping.Properties.FirstOrDefault(p => p.Property == "CustomStyle").Value is { Length: > 0 } inline
@@ -900,6 +916,13 @@ public sealed class PrototypeWidgets
                 spec.Extended.Add(("style", PrototypeExpr.Quote(inline)));
             if (mapping.SubstitutedFrom != null) _c.SubstitutedTags.Add(mapping.SubstitutedFrom);
             _c.Elements++;
+            // F1 of the html op (ScreenVisual; the DemoLATAM D1 the owner saw in VpBookings, round 6 of fix/data-table): a List that
+            // is a part of a table (the body of a data table that stays HTML elements and a List, TABLE_NOT_NATIVE, or of any other
+            // table) renders every row (disable-virtualization above) and carries the rows marker, so the native layout block the
+            // planner writes in the import's theme lays it out as the table's row group at auto width. Without it the runtime
+            // publishes it display:block with OSFillParent and its cells no longer line up under the header cells.
+            if (ScreenVisual.TablePartReason(tag) != null && !spec.Extended.Any(x => string.Equals(x.Name, ScreenVisual.RowsMarker, StringComparison.OrdinalIgnoreCase)))
+                spec.Extended.Add((ScreenVisual.RowsMarker, ScreenVisual.MarkerValue));
         }
         else { tag = "div"; style = "ssam-list"; }
         spec.Name ??= _c.Names.Free(bound ? "List" : "ListLiteral");

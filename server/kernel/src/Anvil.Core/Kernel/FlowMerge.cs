@@ -246,7 +246,7 @@ public static class FlowMerge
                     result.Problems.Add(new("FLOW_RENAME_CAPTURED", "the mapping `" + Clip(value) + "` the delivery wrote on an older read names " + named + " in a field value, and " + named
                         + " is both an element of the action and an attribute of its source `" + mapping.Source + "` now: inside a mapping the attribute comes first, and a value written on "
                         + "an older read may mean the element (an attribute renamed in the Studio onto that name since), so it cannot be told which one it reads", null,
-                        "if it reads the attribute, write the value on the action now (data.edit) and send it with that basedOn; if it reads the element, assign it to a local of "
+                        "if it reads the attribute, write the value on the action now (the edit of this problem) and send it with that basedOn; if it reads the element, assign it to a local of "
                         + "another name before the mapping and read the local", currentRead.Text) { Data = ReadyEdit() });
                 }
             }
@@ -255,7 +255,7 @@ public static class FlowMerge
                 result.Problems.Add(new("FLOW_RENAME_CAPTURED", "since the read the Studio renamed " + from + " to " + to + ", and the mapping `" + Clip(value) + "` the delivery wrote names "
                     + from + " in a field value: inside a mapping the attributes of its source `" + source + "` come first, and " + to
                     + (exact ? " is one of them" : " may be one of them (the module could not type the source)") + ", so the value would read that attribute", null,
-                    "write the value through a local of another name (assigned before the mapping), or give " + to + " a name no attribute of the source has; data.edit is the action now",
+                    "write the value through a local of another name (assigned before the mapping), or give " + to + " a name no attribute of the source has; the edit of this problem is the action now",
                     currentRead.Text) { Data = ReadyEdit() });
             static IEnumerable<string> Values(FlowItem item) => item.Props.Values.Where(v => v.Type == 'e').Select(v => v.Text).Concat(item.Items.SelectMany(Values));
         }
@@ -339,7 +339,7 @@ public static class FlowMerge
         private void RemovedUsed(string key, string element, string use) =>
             result.Problems.Add(new("FLOW_MERGE_REMOVED_USED", "the text removes " + element + " (@" + IdBase(key) + " of the read), and since the read the Studio wrote `"
                 + Clip(use) + "`, which names it: removing it would leave that without it", IdBase(key),
-                "keep " + element + " in the text, or also change what names it: the action now is in data.edit (edit it and send it with that basedOn)", currentRead.Text) {
+                "keep " + element + " in the text, or also change what names it: the action now is in the edit of this problem (edit it and send it with that basedOn)", currentRead.Text) {
                 Data = ReadyEdit() });
 
         private JsonObject ReadyEdit() => new() { ["edit"] = new JsonObject { ["text"] = currentRead.Text, ["basedOn"] = ModuleFlow.TextSha(currentRead.Text) } };
@@ -667,7 +667,7 @@ public static class FlowMerge
         private void NameTaken(IEnumerable<string> elements, FlowItem item) =>
             result.Problems.Add(new("FLOW_MERGE_NAME_TAKEN", "since the read the Studio and the text gave one name to two elements (" + string.Join(", ", elements)
                 + "): they are not the same element, and an expression could not say which one it names", IdBase(item.Key),
-                "give the text's element another name, or write it on the action now (data.edit: the action now, with its basedOn)", currentRead.Text) { Data = ReadyEdit() });
+                "give the text's element another name, or write it on the action now (the edit of this problem: the action now, with its basedOn)", currentRead.Text) { Data = ReadyEdit() });
 
         // ---- nodes --------------------------------------------------------------------------------------------------------------
 

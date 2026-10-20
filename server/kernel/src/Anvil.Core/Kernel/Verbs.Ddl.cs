@@ -130,7 +130,7 @@ public sealed partial class ModelSession
             return (edit, basedOn == null ? null : new JsonObject { ["merge"] = "none", ["basedOn"] = basedOn, ["note"] = "the statements name no element of a read (no -- @key): nothing to merge" });
         if (basedOn == null)
             throw BaseRefusal("DDL_BASE_REQUIRED", edit, current, built, "names elements of a read by their keys (-- @key) and the op has no basedOn: what changed in the Studio since that read cannot be told from what the statement changes",
-                "send the statements with basedOn: the sourceSha256 of the read (ssam_map view ddl) or the nextBasedOn of the last receipt; data.edit is the edit ready on the module now");
+                "send the statements with basedOn: the sourceSha256 of the read (ssam_map view ddl) or the nextBasedOn of the last receipt; the edit of this problem is ready on the module now (its ddl and basedOn)");
         string? read;
         if (BaseSha256 != null && string.Equals(basedOn, BaseSha256, StringComparison.OrdinalIgnoreCase)) {
             // Written on the capture this job runs on: compared with the module now while no earlier op of the job changed its
@@ -151,7 +151,7 @@ public sealed partial class ModelSession
         }
         if (@base.ModuleKey != null && current.ModuleKey != null && !string.Equals(@base.ModuleKey, current.ModuleKey, StringComparison.Ordinal))
             throw BaseRefusal("DDL_BASE_FOREIGN", edit, current, built, "is written on a read of another module (basedOn " + basedOn + " is the data text of @" + @base.ModuleKey
-                + ", this module is @" + current.ModuleKey + "): its keys name nothing here", "send the statements on a read of this module: data.edit is the edit ready on the module now");
+                + ", this module is @" + current.ModuleKey + "): its keys name nothing here", "send the statements on a read of this module: the edit of this problem is ready on the module now (its ddl and basedOn)");
         var result = DdlMerge.ThreeWay(@base, current, edit, lane);
         if (result.Problems.Count > 0) throw RefuseDdl(result.Problems.Select(p => p.Code).Distinct().Count() == 1 ? result.Problems[0].Code : "DDL_MERGE_REFUSED", result.Problems, edit, current, built);
         var note = new JsonObject { ["merge"] = "three-way", ["basedOn"] = basedOn,
@@ -186,7 +186,7 @@ public sealed partial class ModelSession
         return RefuseDdl(code, problems, edit, current, built);
     }
 
-    // Every problem with the ready edit: its declarations as the patch of /ddl and data.edit with the basedOn to send.
+    // Every problem with the ready edit: its declarations as the patch of /ddl and the problem's edit with the basedOn to send.
     private KernelRefusalException RefuseDdl(string code, IReadOnlyList<DdlProblem> problems, DdlDocument edit, DdlDocument current, DataDdl built)
     {
         var (ddl, data) = ReadyDdl(edit, current, built);

@@ -5,7 +5,8 @@ namespace Anvil.Core;
 /// <summary>
 /// The markers of the native layout block are the engine's (CX17 review 2, M4). Every rule of the block needs one
 /// (data-ssam-gap, data-ssam-page, data-ssam-rows), so the block reaches only what carries one: the html op writes them by its
-/// own rules on the elements it creates, and nothing else may. One rule, in one place, that every text form calls (the document
+/// own rules on the elements it creates (and the prototype importer the rows marker on the List of a table part it creates,
+/// round 6 of fix/data-table), and nothing else may. One rule, in one place, that every text form calls (the document
 /// form, the edit form and the fragment form): an author's marker is refused, with the patch that removes it (or puts back the
 /// one the reading had); an element of a reading keeps the marker it was read with. And what the block reaches is measured,
 /// never written by hand: the roots of the module whose widgets carry a marker.

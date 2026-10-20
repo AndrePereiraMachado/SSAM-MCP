@@ -2,12 +2,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { fitProblems } from './refusal-problems.mjs';
-import { missingCall } from './paged-answer.mjs';
+import { fitProblems, CONTINUATION_FIELDS, withoutDocuments, detailsOf } from './refusal-problems.mjs';
+import { missingCall, READER_BUDGET } from './paged-answer.mjs';
 import { VERBATIM } from './responses.mjs';
 import { writeAnswerOrigin } from './reference-files.mjs';
 
-import { ANSWER_BUDGETS, EXPANSION_DEFAULT_BYTES, RECOVERY_PART_BYTES } from './context-budget.mjs';
+import { ANSWER_BUDGETS, EXPANSION_DEFAULT_BYTES, RECOVERY_PART_BYTES, budgetCeiling, maxAnswerBytes } from './context-budget.mjs';
 export { ANSWER_BUDGETS } from './context-budget.mjs';
 const bytes = value => Buffer.byteLength(JSON.stringify(value) ?? '', 'utf8');
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -42,6 +42,15 @@ export function normalizeOutputWarnings(full) {
 const PROSE_FIELDS = new Set(['error', 'errors', 'message', 'messages', 'warnings', 'fix', 'why', 'note', 'notes', 'hint', 'description', 'summary', 'title', 'detail', 'details', 'guidance', 'reason', 'recover', 'next']);
 const token = key => String(key).replace(/~/g, '~0').replace(/\//g, '~1');
 const pointer = keys => keys.map(k => '/' + token(k)).join('');
+// What stands in a refusal for a value a problem carries that went to the kept answer (a long detail, a text past the ceiling):
+// what it was (its items, characters or bytes) and the exact read that returns it.
+const DETAIL_INLINE_BYTES = 512;
+const PAGES_TEXT = 'longer than one read: send the same read again with offset set to the next it returns, until no next comes';
+const PAGES_PARTS = PAGES_TEXT + '; a part longer than one read is read by its own pointer (this pointer and /<index> after it)';
+const markerOf = (value, read) => ({ omitted: true,
+  ...(Array.isArray(value) ? { count: value.length } : typeof value === 'string' ? { characters: value.length } : { bytes: bytes(value) }), read,
+  ...(bytes(value) + 512 > READER_BUDGET ? { pages: typeof value === 'string' ? PAGES_TEXT : PAGES_PARTS } : {}) });
+const isMarker = value => object(value) && value.omitted === true && object(value.read) && value.read.tool === 'ssam_evidence';
 const delivery = new Set(['o11_deliver', 'studio_deliver', 'ssam_job', 'o11_job']);
 export function answerKind(tool, args = {}, value) {
   if (value?.ok === false) return 'refusal';
@@ -114,7 +123,8 @@ function recoveryCall(full, file, paths) {
   return omitted;
 }
 
-export function fitAnswer(tool, args = {}, full, { root, directory, budgets = ANSWER_BUDGETS, origin = null } = {}) {
+// maxBytes: the ceiling the server pages above (ssam.mjs pageAnswer; the environment's by default).
+export function fitAnswer(tool, args = {}, full, { root, directory, budgets = ANSWER_BUDGETS, origin = null, maxBytes = maxAnswerBytes() } = {}) {
   const originalFull = full;
   full = normalizeOutputWarnings(full);
   if (VERBATIM.has(tool) || full?.omitted?.tool === 'ssam_evidence' || full?.paged) return full;
@@ -144,11 +154,15 @@ export function fitAnswer(tool, args = {}, full, { root, directory, budgets = AN
     }
     delete parent[key]; mark(keys);
   } };
-  const measured = v => bytes(kind === 'read' ? answerEnvelope(v) : v);
+  // (review vps-a9, E1: the part of the module a problem of a refusal carries to go on, refusal-problems.mjs DOCUMENT_FIELDS: the
+  // screen's text now, the edit ready..., is outside the editorial budget, as the problems are: only the ceiling bounds it, below)
+  const measured = v => bytes(kind === 'read' ? answerEnvelope(v)
+    : kind === 'refusal' && Array.isArray(v?.problems) ? { ...v, problems: v.problems.map(withoutDocuments) } : v);
   let saved;
+  const keep = () => (saved ??= keepAnswer(originalFull, root, origin, { directory }));
   const withOmitted = () => {
     if (!changed.length) return value;
-    saved ??= keepAnswer(originalFull, root, origin, { directory });
+    keep();
     return { ...value, ...(typeof full.omitted === 'number' ? { omittedCount: full.omitted } : {}), omitted: recoveryCall(originalFull, saved.file, changed) };
   };
   const tooLarge = () => measured(withOmitted()) > budget;
@@ -175,6 +189,28 @@ export function fitAnswer(tool, args = {}, full, { root, directory, budgets = AN
       if (value.verifiedPatch && p.patch && bytes(p.patch) > 512) { delete p.patch; p.patchIn = 'verifiedPatch'; mark(['problems']); }
     });
     if (value.verifiedPatch && value.patch && bytes(value.patch) > 512) { delete value.patch; value.patchIn = 'verifiedPatch'; mark(['patch']); }
+  }
+
+  // Review refusal-followups M-A (the owner's rule, one refusal with everything): before anything else leaves the answer, the
+  // long details of its problems (refusal-problems.mjs detailsOf: the readings of a FLOW_SYNTAX, each the patch of the op with
+  // the whole list of its flow texts; a long text), the longest first, go to the kept answer, and in the place of each the
+  // problem says what it was and its exact read (markerOf). Every problem stays with its code, pointer, fix and k (where it is).
+  let moved = false;
+  if (kind === 'refusal' && Array.isArray(value.problems) && tooLarge()) {
+    const source = Array.isArray(originalFull?.problems) ? originalFull.problems : [];
+    const long = [];
+    value.problems.forEach((p, i) => {
+      if (object(p)) for (const [field, v] of Object.entries(detailsOf(p))) if (field !== 'k' && !isMarker(v) && bytes(v) > DETAIL_INLINE_BYTES) long.push({ i, field, v, size: bytes(v) });
+    });
+    for (const d of long.sort((a, b) => b.size - a.size)) {
+      if (!tooLarge()) break;
+      const same = JSON.stringify(d.v);
+      // the same detail of a problem of the kept answer (a group carries its first member's)
+      const j = source.findIndex(p => object(p) && JSON.stringify(p[d.field]) === same);
+      if (j < 0) { delete value.problems[d.i][d.field]; mark(['problems']); continue; }
+      value.problems[d.i][d.field] = markerOf(d.v, { tool: 'ssam_evidence', arguments: { file: keep().file, pointer: pointer(['problems', String(j), d.field]), budgetBytes: READER_BUDGET } });
+      moved = true;
+    }
   }
 
   if (value.continuation?.why && Array.isArray(value.nextCalls)) value.nextCalls.forEach((call, i) => {
@@ -296,13 +332,48 @@ export function fitAnswer(tool, args = {}, full, { root, directory, budgets = AN
       remove(value, key, [key]);
     }
   }
+  // (review vps-a9, E1: then the problems' own short details, candidates, text, corrected, an edit without basedOn: they stay in
+  // the kept answer, read back exactly by the omitted call; the part of the module a problem carries stays, and so does its k,
+  // where it is: review refusal-followups M-A)
+  if (kind === 'refusal' && tooLarge()) {
+    for (const p of value.problems ?? []) {
+      if (!tooLarge()) break;
+      const details = object(p) ? Object.entries(detailsOf(p)).filter(([key, v]) => key !== 'k' && !isMarker(v)).map(([key]) => key) : [];
+      if (details.length) { for (const key of details) delete p[key]; mark(['problems']); }
+    }
+  }
   if (kind === 'refusal' && tooLarge()) {
     for (const p of value.problems ?? []) {
       if (!tooLarge()) break;
       if (p.patch) { delete p.patch; p.patchIn = value.verifiedPatch ? 'verifiedPatch' : 'omitted'; mark(['problems']); }
     }
   }
-  if (!changed.length) return full;
+  // Review vps-a9, E1: a long text a problem carries to go on (the screen's text now, the edit ready...) that would take the
+  // answer past the ceiling goes, the longest first, to the kept answer, and in its place the problem says exactly where it is:
+  // {omitted: true, characters, read: ssam_evidence {file, pointer, budgetBytes}}; a text longer than one read pages by
+  // characters (pages says how). One answer under the ceiling, never a page of it and never a second refusal.
+  const ceiling = budgetCeiling(maxBytes);
+  if (Array.isArray(value.problems) && bytes(withOmitted()) > ceiling) {
+    const leaves = [];
+    const walk = (node, keys, i) => {
+      if (isMarker(node)) return;
+      if (typeof node === 'string') { if (node.length >= 256) leaves.push({ i, keys, text: node }); return; }
+      if (Array.isArray(node)) node.forEach((child, j) => walk(child, [...keys, j], i));
+      else if (object(node)) for (const [k, child] of Object.entries(node)) walk(child, [...keys, k], i);
+    };
+    value.problems.forEach((p, i) => { if (object(p)) for (const field of CONTINUATION_FIELDS) if (p[field] != null) walk(p[field], [field], i); });
+    const source = Array.isArray(originalFull?.problems) ? originalFull.problems : [];
+    for (const leaf of leaves.sort((a, b) => b.text.length - a.text.length)) {
+      if (bytes(withOmitted()) <= ceiling) break;
+      // the same text at the same place of a problem of the kept answer (a group keeps its first member's)
+      const j = source.findIndex(p => at(p, leaf.keys) === leaf.text);
+      if (j < 0) continue;
+      const read = { tool: 'ssam_evidence', arguments: { file: keep().file, pointer: pointer(['problems', String(j), ...leaf.keys.map(String)]), budgetBytes: READER_BUDGET } };
+      at(value.problems[leaf.i], leaf.keys.slice(0, -1))[leaf.keys.at(-1)] = markerOf(leaf.text, read);
+      moved = true;
+    }
+  }
+  if (!changed.length && !moved) return full;
   const result = withOmitted();
   if (kind === 'discoverFirst' && object(result.size) && typeof result.size.bytes === 'number') {
     for (let i = 0; i < 6 && result.size.bytes !== bytes(result); i++) result.size.bytes = bytes(result);

@@ -41,7 +41,7 @@ import { createHash } from 'node:crypto';
 import * as z from 'zod/v4';
 import { shapeCall } from './call-shapes.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
-import { WORD_KEYS, bridgeEchoWithoutWords, maskWords } from './destructive-operations.mjs';
+import { LINE_WORD_TOOLS, TOOL_WORD_FIELDS, WORD_KEYS, bridgeEchoWithoutWords, maskWords } from './destructive-operations.mjs';
 
 export const INPUT_INVALID = 'INPUT_INVALID';
 export const NEVER_ADJUSTED = Object.freeze(['authorize', 'words', 'text', 'job', 'patch', 'basedOn', 'html', 'request', 'records']);
@@ -50,8 +50,11 @@ export const BATCHED = Object.freeze(['select']);
 export const WORDS_MARKER = "<the user's own words>"; // the one marker of next-steps.mjs and continuations.mjs
 export const AS_SENT = '<as sent>';
 const NEVER = new Set(NEVER_ADJUSTED);
-// CX15 r5 (N-1): the same keys as destructive-operations.mjs WORD_KEYS (authorize, authorization, words, ownerRequest).
+// CX15 r5 (N-1): the same keys as destructive-operations.mjs WORD_KEYS (authorize, authorization, words, ownerRequest);
+// review a9-followups-2 (N1): plus the first-level fields its TOOL_WORD_FIELDS names for the tool (studio_authorize's text),
+// the one rule of the detector and of every echo.
 const WORDS = new Set(WORD_KEYS);
+const wordsOf = name => (typeof name === 'string' && Object.hasOwn(TOOL_WORD_FIELDS, name) ? new Set([...WORDS, ...TOOL_WORD_FIELDS[name]]) : WORDS);
 const LARGE_ECHO = 2048, MAX_VIOLATIONS = 50, MAX_REF_DEPTH = 32, MAX_PASSES = 3;
 const SUMMED = new Set(['requested', 'count', 'total', 'bytes']);
 const IDENTIFIER = /^(?:pid|port)$|(?:Id|Key|Uuid)$/;
@@ -406,9 +409,10 @@ function readNormalized(jsonSchema, args) {
 }
 
 // ---- answers
-// CX15 r6 (M-2): for studio_command the words sit in command/args where the bridge reads them (bridgeEchoWithoutWords).
+// CX15 r6 (M-2): for studio_command (LINE_WORD_TOOLS) the words sit in command/args where the bridge reads them
+// (bridgeEchoWithoutWords).
 function forEcho(args, words, name) {
-  if (name === 'studio_command' && isObject(args)) args = bridgeEchoWithoutWords(args);
+  if (LINE_WORD_TOOLS.has(name) && isObject(args)) args = bridgeEchoWithoutWords(args);
   if (!isObject(args)) return args;
   const out = {};
   for (const [k, v] of Object.entries(args)) {
@@ -514,7 +518,7 @@ export function relaxTool(name, config, handler, { prepare } = {}) {
     const std = standard['~standard'];
     const json = jsonSchemaOf(standard);
     if (!isObject(json)) return { config, handler };
-    const words = name === 'studio_authorize' ? new Set([...WORDS, 'text']) : WORDS;
+    const words = wordsOf(name);
     // Only a tool that declares it changes nothing runs corrected arguments (G7); no annotation is a write.
     const normalize = config.annotations?.readOnlyHint === true ? readNormalized : normalizeArguments;
     // Listed exactly as before (the SDK reads jsonSchema.input for tools/list); validated by the handler below.

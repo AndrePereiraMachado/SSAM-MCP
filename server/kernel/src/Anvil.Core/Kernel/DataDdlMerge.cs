@@ -85,7 +85,7 @@ public static class DdlMerge
     private static DdlProblem Unknown(int line, string what, string why, string? current, string? fix) =>
         new(line, "DDL_BASE_UNKNOWN", what + ", and " + why + ": what changed in the Studio since cannot be told from what the statement changes, so nothing of it is written"
             + (current != null ? " (its declaration now is the patch)" : ""),
-            fix ?? "write the statement on the declaration as the module has it now (the patch; data.edit carries every declaration this text names, with the basedOn to send), or read the data again (ssam_map view ddl)",
+            fix ?? "write the statement on the declaration as the module has it now (the patch; the edit of this problem carries every declaration this text names, with the basedOn to send), or read the data again (ssam_map view ddl)",
             current);
 
     // The declaration of a top-level element in a data text: its block (the statement and the ones of its own after it, up to
@@ -226,7 +226,7 @@ public static class DdlMerge
 
         private void NameTaken(int line, string name, string other, string? current) =>
             result.Problems.Add(new DdlProblem(line, "DDL_MERGE_NAME_TAKEN", "the statement names an element " + name + ", and since the read the Studio gave that name to "
-                + other + ": two elements of one name that are not the same element", "give it another name, or write the statement on the module as it is now (data.edit)", current));
+                + other + ": two elements of one name that are not the same element", "give it another name, or write the statement on the module as it is now (the edit of this problem)", current));
 
         // ---- top-level statements ----------------------------------------------------------------------------------------------
 

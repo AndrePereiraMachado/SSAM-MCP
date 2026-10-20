@@ -122,6 +122,23 @@ public static partial class ScreenVisual
     /// <summary>The tags of a List that is a part of a table or of an HTML list: its rows are the table's or the list's rows.</summary>
     public static readonly IReadOnlySet<string> RowGroupTags = new HashSet<string>(StringComparer.Ordinal) { "thead", "tbody", "tfoot", "ul", "ol" };
 
+    /// <summary>The tags of a List that is a part of a table: the native layout block lays it out as the table's row group
+    /// (its rule is written from this list, <see cref="NativeLayoutCss"/>).</summary>
+    public static readonly IReadOnlyList<string> TablePartTags = ["thead", "tbody", "tfoot"];
+
+    /// <summary>The value of a marker of the native layout block (an extended property, an attribute at runtime).</summary>
+    public const string MarkerValue = "\"1\"";
+
+    /// <summary>F1 where no document is compiled (the prototype importer, round 6 of fix/data-table): why a List of this tag renders
+    /// every row and carries the rows marker, the html op's reason (<see cref="AllRowsReason"/>), or null when the List is no part
+    /// of a table. Only a table part: the block lays out nothing else, and an HTML list or a layout container of a prototype keeps
+    /// the CSS its prototype gave it.</summary>
+    public static string? TablePartReason(string tag) => TablePartTags.Contains(tag) ? AllRowsReason(tag, null, []) : null;
+
+    /// <summary>The note of F1 (LIST_RENDERS_ALL_ROWS), the same in the html op and the importer.</summary>
+    public static string AllRowsNote(string why) =>
+        $"disable-virtualization = True and {RowsMarker}: the List renders every row, no virtualization sentinels among the rows; the native layout block lays a table part out as a row group ({why})";
+
     /// <summary>The display values that make the children of an element its layout items.</summary>
     private static readonly Regex LayoutDisplay = new(@"^\s*(inline-)?(grid|flex)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -170,8 +187,9 @@ public static partial class ScreenVisual
     public const string NativeLayoutVersion = "3";
 
     /// <summary>The markers the html op writes on the elements it creates (extended properties, attributes at runtime); every
-    /// rule of the block needs one, so a screen or block the op did not create keeps its CSS (review 1, A1). Only the op writes
-    /// them: an author's is refused (ScreenVisual.AuthorMarkers, review 2, M4).</summary>
+    /// rule of the block needs one, so a screen or block the op did not create keeps its CSS (review 1, A1). Only the engine writes
+    /// them: an author's is refused (ScreenVisual.AuthorMarkers, review 2, M4). The prototype importer writes the rows marker on
+    /// the List of a table part it creates, with the block in the import's theme (TablePartReason, round 6 of fix/data-table).</summary>
     public const string PageMarker = "data-ssam-page", GapMarker = "data-ssam-gap", RowsMarker = "data-ssam-rows";
 
     /// <summary>What the block does, for the note.</summary>
@@ -193,7 +211,7 @@ public static partial class ScreenVisual
     public static string NativeLayoutCss => NativeLayoutBegin + "\n/* version " + NativeLayoutVersion + ", written by the html op (CX17); replaced whole, never by hand; every rule needs a data-ssam-* marker of the op */\n"
         + "[" + GapMarker + "].ThemeGrid_MarginGutter{margin-left:0}\n"
         + ".layout :is(.main,.content,.main-content):has([" + PageMarker + "]){min-width:0}\n"
-        + ":is(thead,tbody,tfoot)[" + RowsMarker + "]{display:table-row-group;width:auto}\n"
+        + ":is(" + string.Join(",", TablePartTags) + ")[" + RowsMarker + "]{display:table-row-group;width:auto}\n"
         + "[" + RowsMarker + "]>script{display:none!important}\n"
         + NativeLayoutEnd;
     /// <summary>The author CSS of a theme with the native layout block of this version: appended once ("added"), an older block

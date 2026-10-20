@@ -149,6 +149,10 @@ public sealed partial class ModelSession
                 property.SetValue(theme, step.Arguments["styleSheet"]!.ToString());
                 if (ThemeCss.Of(theme) is { } sheet && ThemeCss.IsSplit(sheet)) ThemeCss.Recompute(sheet);
                 ThemeWritten(theme);
+                // M1 of the review of round 6 (round 7 of fix/data-table): the native layout block the plan put in the import's theme
+                // (nativeLayout: F1 of the html op on a List that is a table part) is said in normalized too, where the job says the
+                // other rules it writes in a theme (THEME_NATIVE_WIDGETS) and the html op the block it writes (InstallNativeLayout).
+                if (report["nativeLayout"] is JsonObject layout) Report("normalized", NativeLayoutWritten(layout));
                 opsMs += sw.ElapsedMilliseconds;
             }
             else if (step.Special == "handles")
@@ -206,6 +210,21 @@ public sealed partial class ModelSession
         }
         Report("prototype", new JsonObject { ["flow"] = plan.FlowName, ["screens"] = plan.Screens.Count, ["buildMs"] = total.ElapsedMilliseconds });
         return new JsonObject { ["prototype"] = report };
+    }
+
+    /// <summary>The normalized entry of the native layout block an import wrote in its theme (round 7 of fix/data-table): the code and
+    /// the fields of the html op's entry (THEME_NATIVE_LAYOUT: theme, written, action, version), the count of the Lists it lays out,
+    /// the count of the markers the prototype writes itself when there are any (B2) and the note of the import's report (nativeLayout).</summary>
+    private static JsonObject NativeLayoutWritten(JsonObject layout)
+    {
+        var entry = new JsonObject
+        {
+            ["code"] = ScreenVisual.ThemeNativeLayout, ["theme"] = layout["theme"]?.DeepClone(), ["written"] = true, ["action"] = layout["action"]?.DeepClone(),
+            ["version"] = layout["version"]?.DeepClone(), ["lists"] = layout["lists"]?["count"]?.DeepClone() ?? JsonValue.Create(0),
+        };
+        if (layout["prototypeMarkers"]?["count"] is { } marked) entry["prototypeMarkers"] = marked.DeepClone();
+        entry["note"] = layout["note"]?.DeepClone();
+        return entry;
     }
 
     /// <summary>The public surface of data.bind's producer: read from its model when it is bound as an .oml (the plan then references

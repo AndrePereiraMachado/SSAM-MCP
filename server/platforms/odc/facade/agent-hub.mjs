@@ -29,6 +29,7 @@ import { spawn } from 'node:child_process';
 import { currentCall } from './quality-meter.mjs';
 import { agentVerbOf } from './quality-line.mjs';
 import { buildPolicyOf, servedBuildOf, studioIdentity, studioRefusal, studioVersions, studioWarningOf, threePart } from './studio-identity.mjs';
+import { UNKNOWN_EXIT } from './hosted/network-check.mjs';
 
 // A Windows balloon on the server machine (owner test, 2026-10-08); off with SSAM_ACCESS_NOTIFY=0, never fails a call.
 function notifyOwner(title, text) {
@@ -88,13 +89,14 @@ const bytesDown = (kind, params, blob) => sizeOf(blob?.ref) + (kind === 'file.pu
 // The public address a request came from: the first X-Forwarded-For hop (Caddy sets it), else the socket's.
 const addressOf = req => (String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || req.socket?.remoteAddress || '').slice(0, 64);
 // The exit of the customer's internet an address stands for, as the doctor shows it (fase4-24, 2.10): an IPv4 address
-// without its last number (177.26.87.x), an IPv6 address by its /48, never the whole address.
+// without its last number (177.26.87.x), an IPv6 address by its /48, never the whole address; an address it cannot read is
+// the network check's UNKNOWN_EXIT ('unknown' since the owner's decision of 2026-10-19).
 export function maskAddress(address) {
   const value = String(address ?? '').trim().replace(/^::ffff:/i, '');
   const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$/.exec(value);
   if (v4) return v4[1] + '.' + v4[2] + '.' + v4[3] + '.x';
   if (value.includes(':')) return value.split('%')[0].split(':').slice(0, 3).map(g => g || '0').join(':') + '::/48';
-  return value ? 'desconhecida' : null;
+  return value ? UNKNOWN_EXIT : null;
 }
 // An upload part that took longer than 3 s plus 1 s per 128 KiB (a floor of about 1 Mbit/s) is slow: the production test of
 // 2026-10-11 had parts of 60 KB in 26 s and of 2.2 MB in 135 s on one exit, 0.2-0.7 s on the other.

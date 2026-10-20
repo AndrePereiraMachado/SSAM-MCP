@@ -43,6 +43,7 @@ import { hostedCatalog } from './served.mjs';
 import { causeOf, studioIdentity, studioRefusal, studioWarningOf } from '../studio-identity.mjs';
 import { destructiveUnavailable, hostedDestructive, hostedDestructiveFiles } from './destructive.mjs';
 import { withStudioScope } from './studio-scope.mjs';
+import { withoutWordEchoes } from '../destructive-operations.mjs';
 
 // The catalog is hosted/served.mjs's, the one switch the session texts read too (a8 review, M1).
 export { TOOLS_FILE } from './served.mjs';
@@ -54,7 +55,13 @@ const LANED = new Set(['odc', 'o11']);
 // create-blank), never the base the job declares (the suite's own fixture is a customer capture).
 export const NEUTRAL_ODC_BASE = path.join(anvilRoot, 'tests', 'fixtures', 'odc', 'blank-crossdevice.oml');
 const doctor = why => ({ tool: 'ssam_doctor', arguments: {}, why });
-const refusal = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, isError: true });
+// Round 2 of the a9 follow-ups (review a9-followups-line, B): every answer the gate gives by itself leaves before the hub's
+// exit, so it passes here the hub's one rule of the owner's words (destructive-operations.mjs withoutWordEchoes, CX15 r5 N-1 /
+// r6 M-2): a step {tool, arguments} that repeats the call (PATH_OUTSIDE_WORKSPACE at any pointer, AGENT_RECONNECTING, patch
+// "verified") carries the words marker and askOwner, never the user's words; replayed as it is, it is WORDS_REQUIRED.
+// Review a9-followups-2 (N1): every words field of that one rule, studio_authorize's text included; a corrected of the
+// answer is masked by the rule of the tool called (tool).
+const gateRefusal = (raw, tool) => { const value = withoutWordEchoes(raw, { tool }); return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, isError: true }; };
 
 // 6.3 rule 3: what looks like a path. In arguments that take a module OR a path, anything else is a module name.
 export const looksLikePath = value => typeof value === 'string'
@@ -190,9 +197,11 @@ const pathRefused = (code, error) => ({ ok: false, code, error,
   continuation: doctor('Pass paths as SSAM tools return them (ws:odc/..., ws:o11/..., ws:inbox/...), or agent:inbox/<file> for a file the user put in the agent inbox folder.') });
 // Item 1: a path inside the job (base, a part, a producer, an html file, a document...) outside the workspace, named by its
 // job pointer (/job/ops/2/file; /job/jobs/0 > /ops/1/file inside a part file); the fix says where to put that file.
-function jobPathRefused(error, agentRoot) {
+// (a9 follow-up, review vps-a9 L1: shown is the workspace's presenter, so a message that names a path of the workspace, the
+// destination of a copy from the agent, reads ws:<rel>, never the real folder)
+function jobPathRefused(error, agentRoot, shown = text => text) {
   const pointer = error.pointer ?? null;
-  if (error.code !== 'PATH_OUTSIDE_WORKSPACE') return { ...pathRefused(error.code, error.message), ...(pointer ? { pointer } : {}), ...(error.fields ?? {}), ...(error.fix ? { fix: error.fix } : {}) };
+  if (error.code !== 'PATH_OUTSIDE_WORKSPACE') return { ...pathRefused(error.code, shown(error.message)), ...(pointer ? { pointer } : {}), ...(error.fields ?? {}), ...(error.fix ? { fix: error.fix } : {}) };
   // a9: generic, as outsideWorkspaceRefusal: the path is never said back (the gate answers before any presenter).
   return { ok: false, ...outsideWorkspaceRefusal(error.value, { agentRoot }), pointer,
     error: 'The job names, at ' + pointer + ', a path outside your own workspace. Files a job names (base, composite parts, a reference producer, an html file, '
@@ -354,6 +363,24 @@ async function resolveValue(value, role, lane, context, agentRoot = null) {
   const abs = path.resolve(workspace, ...base, value);
   if (!insideVisible(workspace, abs)) throw outside(value);
   return abs;
+}
+
+// a9 follow-up (review vps-a9 M2): whether the gate refuses a value as outside the workspace, by resolveValue's own rule,
+// with nothing brought from the agent: the refusal names every such path of the same pointer at once.
+function outsideValue(value, role, lane, context, agentRoot = null) {
+  if (typeof value !== 'string' || value === '') return false;
+  const workspace = path.resolve(context.workspace);
+  const mapped = isAgentMachinePath(value, agentRoot) ? agentPath(value, { agentRoot }) : null;
+  if (mapped) value = mapped;
+  if (value.startsWith('ws:') || value.startsWith('agent:')) {
+    const agent = value.startsWith('agent:');
+    const parsed = agentSegments('agent:' + value.slice(agent ? 6 : 3));
+    if (parsed.error || (agent && !agentReadable(parsed.segments))) return true;
+    return !insideVisible(workspace, path.join(workspace, ...parsed.segments));
+  }
+  if (path.isAbsolute(value) || /^[A-Za-z]:/.test(value) || /^[\\/]/.test(value)) return !insideVisible(workspace, path.resolve(value));
+  const base = role === 'out' ? (lane === 'o11' ? ['o11'] : ['odc', 'lab']) : LANED.has(lane) ? [lane] : [];
+  return !insideVisible(workspace, path.resolve(workspace, ...base, value));
 }
 
 // The arguments with every path pointer of tools.json resolved to an absolute workspace path (a fresh copy).
@@ -716,6 +743,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
   const refusesPrototype = prototypeOp !== 'allow' && (PROTOTYPE_TOOLS.includes(name) || name === CODE_TOOL);
   const refusesGenerators = generatorOps !== 'allow' && (GENERATOR_TOOLS.includes(name) || name === CODE_TOOL);
   const refusesDestructive = destructive !== 'allow';
+  const refusal = raw => gateRefusal(raw, name);
   return async (...params) => {
     const hasArgs = config?.inputSchema != null && params.length > 1;
     // R1: the arguments the tool runs (a field the input layer renames is confined under its own name).
@@ -752,12 +780,17 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
       try { resolved = await resolvePaths(name, entry, args, lane, context, { agentRoot: info?.agentRoot ?? null }); }
       catch (error) {
         if (!(error instanceof PathRefusal)) throw error;
-        // C26: a path outside the workspace names the exact place to write it (the agent's inbox) and the same call to repeat.
+        // C26: a path outside the workspace names the exact place to copy it into (the agent's inbox) and the same call to
+        // repeat. a9 follow-up (review vps-a9 M2): at any pointer of the call (a list too: /request/files/*, /files/*), with
+        // every path of that pointer the gate refuses (outsideValue, its own rule, nothing brought) as agent:inbox/<name>.
         if (error.code === 'PATH_OUTSIDE_WORKSPACE') {
-          const field = /^\/[^/*]+$/.test(error.pointer ?? '') ? error.pointer.slice(1).replaceAll('~1', '/').replaceAll('~0', '~') : null;
-          return refusal({ ok: false, ...outsideWorkspaceRefusal(error.value, { agentRoot: info?.agentRoot ?? null, ...(field ? { tool: name, args, field } : {}) }) });
+          const role = (entry.paths?.out ?? []).includes(error.pointer) ? 'out' : 'in';
+          const agentRoot = info?.agentRoot ?? null;
+          return refusal({ ok: false, ...outsideWorkspaceRefusal(error.value, { agentRoot, role, ...(error.pointer ? { tool: name, args, pointer: error.pointer,
+            refused: value => pathOnlyWhen(name, entry, error.pointer, args, value) && outsideValue(value, role, lane, context, agentRoot) } : {}) }) });
         }
-        return refusal(pathRefused(error.code, error.message));
+        // (a9 follow-up, review vps-a9 L1: a copy from the agent that failed names its destination in the workspace)
+        return refusal(pathRefused(error.code, present.string(String(error.message ?? ''))));
       }
       // D2 and item 1: the jobs of the call (inline, a job file, the job of basedOn and the job a patch makes of it) with
       // every composite part and job:<name> target they reach, read strictly inside the workspace: first the prototype op
@@ -766,7 +799,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
       const jobs = await confineJobs(name, resolved, { workspace: context.workspace, prototype: refusesPrototype,
         generator: refusesGenerators ? pendingGenerator : null, resolve: value => resolveValue(value, 'in', lane, context, info?.agentRoot ?? null) });
       if (jobs.prototype) return refusal(prototypeUnavailable(name, lane));
-      if (jobs.refusal) return refusal(jobPathRefused(jobs.refusal, info?.agentRoot ?? null));
+      if (jobs.refusal) return refusal(jobPathRefused(jobs.refusal, info?.agentRoot ?? null, text => present.string(String(text ?? ''))));
       // servidor/fase4-25: after the paths (a part the gate refused is named by its own refusal, never as 'unreadable').
       if (jobs.generator) return refusal(generatorUnavailable(name, lane, jobs.generator));
       resolved = jobs.resolved;

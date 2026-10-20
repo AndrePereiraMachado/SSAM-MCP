@@ -128,7 +128,8 @@ test('a refused preflight answers PREFLIGHT_REFUSED with every problem, from the
   assert.equal(preflightProblems([{ message: 'm'.repeat(1000) }])[0].message.length, 300);
   const [mapping] = preflightProblems([{ message: 'map', text: 't'.repeat(5000), corrected: { steps: [{ call: 'ListAppendAll' }] },
     patch: [{ op: 'replace', path: '/ops/0/data/actions/0/steps/0', value: { call: 'ListAppendAll' } }] }]);
-  assert.equal(mapping.text.length, 4000);
+  // (review refusal-followups L-A: the text of a problem is code, the line or block of its fix: whole, as ssam_job has it)
+  assert.equal(mapping.text.length, 5000);
   assert.deepEqual(mapping.corrected, { steps: [{ call: 'ListAppendAll' }] });
   assert.equal(mapping.patch[0].value.call, 'ListAppendAll');
 });

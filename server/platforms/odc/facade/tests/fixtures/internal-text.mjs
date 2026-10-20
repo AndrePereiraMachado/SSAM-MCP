@@ -12,6 +12,10 @@ export const GUARD_FAMILIES = Object.freeze({
   'internal reason': /\bblind[- ]tests?\b|\bowner's decision\b|\bauthor's report\b|\bblind-test-pending\b/i,
   'project document': /\bNAO-DA\b|\bPLANO\b|\bCOBERTURA-EXEMPLOS\b|\bCONHECIMENTO-DO-TIME\b|\bdocs[\\/][\w-]+\.md\b/,
   'kernel class': /\bAnvil\.(?:Core|Cli|Bridge)\b|\b[A-Z]\w+Tests\b|\bJobRunner\b|\bCommandSurface\b|^\s+at \S+\(/m,
+  // (review vps-a9 E2: the type of an exception of SSAM before its message; the OutSystems exceptions a flow raises are the
+  // customer's, and so is an exception object of the customer's app: findings skips it; review refusal-followups M-B: a space
+  // after the colon, as the kernel writes it; SSAM's references Type:Name, IUserException:OrderClosed, are no type)
+  'exception type': /(?<![\w.])(?:[A-Za-z_]\w*\.)*(?!(?:User|Database|Security|Communication|AbortActivityChange|NotRegistered)Exception:)[A-Z][A-Za-z0-9]*Exception:[ \t]/,
   'packet mechanism': /\bby keywords?\b|\bup to \d+ rules\b|\beach takes its share of the room\b/i,
 });
 // Keys whose presence alone tells how SSAM is built.
@@ -21,12 +25,13 @@ export const GUARD_KEYS = Object.freeze(['provenance', 'proofs', 'mismatches', '
 const HANDLE_KEYS = new Set(['job', 'out', 'result', 'resultFile', 'file', 'capture', 'output', 'target', 'oml', 'answer', 'reservation']);
 const handlePath = text => /^[A-Za-z]:[\\/]/.test(text) && /[\\/]\.local[\\/]/.test(text) && !/[\\/](?:cli|test-work|discovery|readers)[\\/]/i.test(text);
 
-export function findings(value, at = '', ctx = { inArguments: false, key: null }) {
+export function findings(value, at = '', ctx = { inArguments: false, key: null, inException: false }) {
   const out = [];
   if (typeof value === 'string') {
     for (const [family, re] of Object.entries(GUARD_FAMILIES)) {
       if (!re.test(value)) continue;
       if ((family === 'absolute path' || family === 'kernel or suite path') && (ctx.inArguments || HANDLE_KEYS.has(ctx.key)) && handlePath(value.trim())) continue;
+      if (family === 'exception type' && ctx.inException) continue;
       const m = value.match(re);
       out.push({ family, at, sample: value.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40) });
     }
@@ -36,7 +41,8 @@ export function findings(value, at = '', ctx = { inArguments: false, key: null }
   if (value && typeof value === 'object') {
     for (const [k, v] of Object.entries(value)) {
       if (GUARD_KEYS.includes(k)) out.push({ family: 'internal key', at: at + '/' + k, sample: k });
-      out.push(...findings(v, at + '/' + k, { inArguments: ctx.inArguments || (k === 'arguments' && typeof value.tool === 'string'), key: k }));
+      out.push(...findings(v, at + '/' + k, { inArguments: ctx.inArguments || (k === 'arguments' && typeof value.tool === 'string'), key: k,
+        inException: ctx.inException || k === 'exception' || k === 'exceptions' }));
     }
   }
   return out;

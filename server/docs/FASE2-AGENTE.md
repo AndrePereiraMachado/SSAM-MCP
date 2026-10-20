@@ -247,6 +247,14 @@ Jobs inline:
   (`job-patch.mjs plainJob`).
 - `PATH_OUTSIDE_WORKSPACE` de um job (`agent-paths.mjs`): a correção é o job inline na mesma chamada (o marcador
   `INLINE_JOB_MARKER` na continuação); outros arquivos continuam indo para o inbox.
+  Seguimento a9 (M2): o arquivo vai para o inbox COPIADO como está (`Copy-Item`, `cp`), nunca reescrito (com o Write
+  um CSV de dados podia voltar cortado ou alterado); a continuação é a mesma chamada em qualquer ponteiro (também uma
+  lista: `o11_data /request/files/*`, `studio_data_insert/update /files/*`), com cada caminho recusado desse ponteiro
+  como `agent:inbox/<nome>`, numa recusa só (antes, um ponteiro que não era de primeiro nível ia para `ssam_doctor`).
+  Rodada 2 (revisão `a9-followups-line`, B): toda resposta que o portão dá sozinho (esta, `AGENT_RECONNECTING`, patch
+  "verified" e as outras de `hosted/policy.mjs`) passa pela mesma regra das palavras da saída do hub
+  (`withoutWordEchoes`): a continuação leva o marcador `<the user's own words>` e `askOwner`, nunca as palavras do
+  usuário; repetida como veio dá `WORDS_REQUIRED` e nada é escrito; com as palavras novas do dono ela roda.
 - `base_drift` de um `studio_deliver` com job inline: a continuação nomeia o arquivo que o proxy gravou
   (`nextBasedOn.job`) em vez de devolver o job inteiro.
 
@@ -263,11 +271,15 @@ Teste de rede (`ssam_doctor {network:true}`, só no hospedado, uns 5 s):
   chegou e quando. O hub só manda `net.probe` a um agente cujo Hello lista o tipo (`link.supports`).
 - `hosted/network-check.mjs` junta o que o agente mediu com o que o hub viu e classifica cada subida: `ok`, `slow`,
   `stalled` (chegou ao servidor e andou a menos de 32 KiB/s ou parou) ou `unreached` (a conexão nova nunca chegou).
-  Por saída: `boa`, `lenta` ou `perde`. Veredito em palavras simples: `ok`, `slow`, `one-exit-lossy` ("one of your
+  Por saída: `good`, `slow` ou `losing`. Veredito em palavras simples: `ok`, `slow`, `one-exit-lossy` ("one of your
   internet exits (177.26.87.x) loses packets on uploads..."), `uploads-lossy` e `new-connections-fail` (um quarto
   ou mais das conexões novas não chegou: o caso do 5G ancorado da nota da integradora). As mensagens são em inglês
-  desde `server/english-agent` (16/10/2026). Os valores `boa`/`lenta`/`perde` e a saída `desconhecida` continuam como
-  estão até o dono decidir.
+  desde `server/english-agent` (16/10/2026); os valores também, desde a decisão do dono de 19/10/2026 (seguimento a9,
+  rodada 2): `good`/`slow`/`losing` eram `boa`/`lenta`/`perde`, e a saída que o hub não lê é `unknown` (era `desconhecida`;
+  `UNKNOWN_EXIT`, o mesmo valor de `agent-hub.mjs maskAddress`). Nenhum agente lê esses valores: o agente só copia, na
+  própria resposta, o `via` que o hub respondeu à subida (`agent/lib/net-probe.mjs`), então nenhum pacote novo é
+  obrigatório; uma resposta antiga que ainda diga `desconhecida` é lida como `unknown` (`LEGACY_UNKNOWN_EXIT`). Mudam
+  `network.paths[].status`, `network.paths[].via`, `agent.uploads.recent[].via` e o `via` do log `agent-upload-slow`.
 - Sem `network:true`, o hub mede cada parte de arquivo que sobe (`noteUpload`): uma parte acima de 3 s + 1 s por 128 KiB
   é lenta (log `agent-upload-slow`). Com partes lentas nos últimos 30 min, o doctor mostra `agent.uploads` e
   `network: {ran:false, code:"UPLOADS_SLOW", continuation: ssam_doctor {network:true}}`. O `ok` do doctor não muda.

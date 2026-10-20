@@ -180,6 +180,35 @@ export const HASHED_WORDS = /^sha256:[0-9a-f]{64}$/;
 export const hashedWords = words => (HASHED_WORDS.test(text(words).trim()) ? text(words).trim() : text(words).trim() ? 'sha256:' + wordsSha256(words) : words);
 // The answer of a bridge or the kernel repeats what it got as the words: never spread into an answer (CX15 r3, CT-6; r4 W-2).
 export const WORD_KEYS = Object.freeze(new Set(['authorization', 'authorize', 'words', 'ownerRequest']));
+// Review a9-followups-2 (N1, the family of B): THE one rule of where the arguments of a call {tool, arguments} hold the
+// owner's authorization words. The detector (callWordsProblems: the hub's WORDS_REQUIRED before any handler), the mask of
+// every echo (maskCallWords: a refusal's corrected and any step {tool, arguments}, through withoutWordEchoes, the hosted
+// gate's refusal() and the input layer of tool-input.mjs) and the scan that decides whether an answer is masked
+// (resultWithoutWordEchoes) all read it, so no echo keeps a field the detector reads as words (studio_authorize's text came
+// back word for word in the gate's AGENT_RECONNECTING and PATH_OUTSIDE_WORKSPACE, and replayed as it came it recorded the
+// authorization without the owner):
+//   - a string under a WORD_KEYS key, at any depth;
+//   - a first-level field TOOL_WORD_FIELDS names for its tool (studio_authorize's text, the bridge's authorize <manifest>
+//     <kind> <text>);
+//   - the words of the bridge line of a LINE_WORD_TOOLS tool (studio_command's command/args, read as the bridge reads them:
+//     bridgeLineWords finds them, bridgeEchoWithoutWords masks them).
+export const TOOL_WORD_FIELDS = Object.freeze({ studio_authorize: Object.freeze(['text']) });
+export const LINE_WORD_TOOLS = Object.freeze(new Set(['studio_command']));
+// The tools whose words sit outside WORD_KEYS: a step that names one is masked by that tool's own rule.
+export const WORD_FIELD_TOOLS = Object.freeze([...Object.keys(TOOL_WORD_FIELDS), ...LINE_WORD_TOOLS]);
+// keys: the place of a string in the arguments of tool, from the top (array indexes included).
+export const isWordsField = (tool, keys) => keys.length > 0 && (WORD_KEYS.has(keys.at(-1))
+  || (keys.length === 1 && typeof tool === 'string' && Object.hasOwn(TOOL_WORD_FIELDS, tool) && TOOL_WORD_FIELDS[tool].includes(keys[0])));
+// The one walk of those places (the line apart): a copy of value with visit(text, path) at every string isWordsField names
+// (path 'request/batch/0/authorization'); every other value as it is.
+function mapWordFields(tool, value, visit, keys = []) {
+  if (Array.isArray(value)) return value.map((v, i) => mapWordFields(tool, v, visit, [...keys, i]));
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => {
+    const at = [...keys, k];
+    return [k, typeof v === 'string' && isWordsField(tool, at) ? visit(v, at.join('/')) : mapWordFields(tool, v, visit, at)];
+  }));
+}
 export const withoutWords = value => (Array.isArray(value) ? value.map(withoutWords)
   : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).filter(([k]) => !WORD_KEYS.has(k)).map(([k, v]) => [k, withoutWords(v)])) : value);
 // CX15 r5 (N-1): an echo of the input (a refusal's corrected, any {tool, arguments} step) never carries the owner's words:
@@ -215,36 +244,32 @@ export function wordsRequired(fields, { tool } = {}) {
     error: `${tool ?? 'this write'} needs the owner's own words (${fields.map(f => f.path).join(', ')}): ask the owner and pass his literal words; a marker or template of the server is never words. Nothing was sent.`,
     problems, askOwner: { fields: fields.map(f => f.path), say: ASK_OWNER_SAY } };
 }
-// CX15 r7 (M-1, M-3, the family): the words fields of a call, at any depth — every string under WORD_KEYS, the text of
-// studio_authorize and the words of a studio_command line — that are present, not blank and not the owner's words
-// (wordsGiven). The hub refuses such a call before any handler runs (one WORDS_REQUIRED with every field); a blank or
-// absent field is each tool's own rule (a standing grant, a preview). -> [{path, value}]
+// CX15 r7 (M-1, M-3, the family): the words fields of a call (the one rule above: WORD_KEYS at any depth, TOOL_WORD_FIELDS,
+// the words of a LINE_WORD_TOOLS line) that are present, not blank and not the owner's words (wordsGiven). The hub refuses
+// such a call before any handler runs (one WORDS_REQUIRED with every field); a blank or absent field is each tool's own rule
+// (a standing grant, a preview). -> [{path, value}]
 export function callWordsProblems(tool, args) {
   const fields = [];
   const bad = value => typeof value === 'string' && value.trim() !== '' && !wordsGiven(value);
-  const walk = (v, at) => {
-    if (Array.isArray(v)) { v.forEach((x, i) => walk(x, at + '/' + i)); return; }
-    if (!v || typeof v !== 'object') return;
-    for (const [k, x] of Object.entries(v)) {
-      if (WORD_KEYS.has(k) && typeof x === 'string') { if (bad(x)) fields.push({ path: (at + '/' + k).replace(/^\//, ''), value: x }); }
-      else walk(x, at + '/' + k);
-    }
-  };
-  walk(args, '');
-  if (tool === 'studio_authorize' && bad(args?.text)) fields.push({ path: 'text', value: args.text });
-  if (tool === 'studio_command' && args && typeof args === 'object') {
+  mapWordFields(tool, args, (value, at) => { if (bad(value)) fields.push({ path: at, value }); return value; });
+  if (LINE_WORD_TOOLS.has(tool) && args && typeof args === 'object') {
     const tokens = [...String(args.command ?? '').split(' '), ...(Array.isArray(args.args) ? args.args : typeof args.args === 'string' ? [args.args] : [])];
     const found = bridgeLineWords(tokens).find(bad);
     if (found !== undefined) fields.push({ path: 'command/args', value: found });
   }
   return fields;
 }
-// maskWords(value, at, seen): the masked value; seen collects the paths it masked.
-export const maskWords = (value, at = '', seen = null) => (Array.isArray(value) ? value.map((v, i) => maskWords(v, at + '/' + i, seen))
-  : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([k, v]) => {
-    if (WORD_KEYS.has(k) && typeof v === 'string' && !placeholderOrHash(v)) { seen?.push((at + '/' + k).replace(/^\//, '')); return [k, WORDS_ECHO]; }
-    return [k, maskWords(v, at + '/' + k, seen)];
-  })) : value);
+// N1 (review a9-followups-2): the arguments of a call of tool as an echo may show them, by the same rule as the detector:
+// each words string (not a <placeholder>, not a sha256) becomes WORDS_ECHO and its path joins seen; the line of a
+// LINE_WORD_TOOLS tool keeps its shape with one WORDS_ECHO per run of words. Replayed as it is, it is WORDS_REQUIRED.
+export function maskCallWords(tool, args, seen = null) {
+  const masked = mapWordFields(tool, args, (value, at) => { if (placeholderOrHash(value)) return value; seen?.push(at); return WORDS_ECHO; });
+  return LINE_WORD_TOOLS.has(tool) ? bridgeEchoWithoutWords(masked, seen) : masked;
+}
+// maskWords(value, at, seen): a value of no particular tool (WORD_KEYS at any depth) masked; seen collects the paths
+// (under the prefix at).
+export const maskWords = (value, at = '', seen = null) => mapWordFields(null, value,
+  (v, p) => { if (placeholderOrHash(v)) return v; seen?.push(p); return WORDS_ECHO; }, String(at).split('/').filter(Boolean));
 // CX15 r6 (M-2): the arguments of studio_command ({command, args}) hold words where the bridge reads them: the text of
 // "authorize <manifest> <kind> <text...>", the tokens after --authorize up to the next --option and --authorize=<words>
 // (the rule of argsWithoutWords / bridgeArgsWithoutWords). In an echo each run of those tokens becomes one WORDS_ECHO; the
@@ -276,21 +301,16 @@ export function bridgeEchoWithoutWords(args, seen = null) {
 // continuations, next steps), at any depth. The rest of the answer is unchanged. CX15 r6 (M-1): a step whose arguments
 // were masked says so: its why ends with "; <fields>: the owner's own words in place of the marker" and it carries askOwner
 // (the fields the owner must fill) — replaying it as it is gives WORDS_REQUIRED. tool: the tool whose answer this is (its
-// corrected is masked by the rules of that tool: studio_command, M-2).
+// corrected is masked by the rules of that tool: studio_command, M-2; studio_authorize's text, N1). Both by maskCallWords,
+// the rule of the detector.
 export function withoutWordEchoes(value, { tool } = {}) {
   if (Array.isArray(value)) return value.map(v => withoutWordEchoes(v, { tool }));
   if (!value || typeof value !== 'object') return value;
   const out = {};
-  for (const [k, v] of Object.entries(value)) {
-    if (k !== 'corrected') { out[k] = withoutWordEchoes(v, { tool }); continue; }
-    const masked = maskWords(v);
-    out[k] = tool === 'studio_command' ? bridgeEchoWithoutWords(masked) : masked;
-  }
+  for (const [k, v] of Object.entries(value)) out[k] = k === 'corrected' ? maskCallWords(tool, v) : withoutWordEchoes(v, { tool });
   if (typeof out.tool === 'string' && out.arguments && typeof out.arguments === 'object') {
     const seen = [];
-    let args = maskWords(out.arguments, '', seen);
-    if (out.tool === 'studio_command') args = bridgeEchoWithoutWords(args, seen);
-    out.arguments = args;
+    out.arguments = maskCallWords(out.tool, out.arguments, seen);
     if (seen.length) {
       const fields = [...new Set(seen)];
       out.why = (typeof out.why === 'string' && out.why ? out.why.replace(/[\s.;]*$/, '') + '; ' : '') + fields.join(', ') + ': ' + ASK_OWNER;
@@ -300,23 +320,24 @@ export function withoutWordEchoes(value, { tool } = {}) {
   return out;
 }
 // The same over an MCP result ({content:[{type:'text', text: JSON}], structuredContent}): both views, only when they change.
-// CX15 r6 (L-5 on the way): an answer with no key the mask touches (WORD_KEYS, corrected) is returned as it is, found by a
-// scan of the text (no parse) and of the structured value (no copy); only answers that have one are parsed and masked.
-const ECHO_KEY = /"(authorize|authorization|words|ownerRequest|corrected)"\s*:|"studio_command"/;
+// CX15 r6 (L-5 on the way): an answer with no key the mask touches (WORD_KEYS, corrected, a step of a WORD_FIELD_TOOLS tool:
+// the one rule above, N1) is returned as it is, found by a scan of the text (no parse) and of the structured value (no
+// copy); only answers that have one are parsed and masked.
+const ECHO_KEY = new RegExp('"(' + [...WORD_KEYS, 'corrected'].join('|') + ')"\\s*:|"(' + WORD_FIELD_TOOLS.join('|') + ')"');
 function hasEchoKeys(value) {
   const stack = [value];
   while (stack.length) {
     const v = stack.pop();
     if (Array.isArray(v)) { for (const x of v) if (x && typeof x === 'object') stack.push(x); continue; }
     if (!v || typeof v !== 'object') continue;
-    if (v.tool === 'studio_command') return true;
+    if (WORD_FIELD_TOOLS.includes(v.tool)) return true;
     for (const k of Object.keys(v)) { if (k === 'corrected' || WORD_KEYS.has(k)) return true; const x = v[k]; if (x && typeof x === 'object') stack.push(x); }
   }
   return false;
 }
 export function resultWithoutWordEchoes(result, options) {
   if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
-  if (options?.tool !== 'studio_command' && !result.content.some(c => typeof c?.text === 'string' && ECHO_KEY.test(c.text))
+  if (!LINE_WORD_TOOLS.has(options?.tool) && !result.content.some(c => typeof c?.text === 'string' && ECHO_KEY.test(c.text))
     && (result.structuredContent === undefined || !hasEchoKeys(result.structuredContent))) return result;
   let changed = false;
   const content = result.content.map(c => {

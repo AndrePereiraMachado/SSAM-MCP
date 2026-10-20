@@ -137,6 +137,7 @@ test('hub: PUT /agent/v1/probe/<id> counts and discards the body, answers the ex
   assert.equal(maskAddress('::ffff:127.0.0.1'), '127.0.0.x');
   assert.equal(maskAddress('2804:14c:5b:1::2'), '2804:14c:5b::/48');
   assert.equal(maskAddress(''), null);
+  assert.equal(maskAddress('not-an-address'), 'unknown', 'an address it cannot read is the unknown exit (English since 19/10)');
 });
 
 test('hub: a slow upload part is noted per token (agent.uploads, log agent-upload-slow); a fast one only counts', async t => {
@@ -189,7 +190,7 @@ test('summarizeProbes: per exit, in plain words: one exit loses packets, all goo
     ok(5, 1048576, 700, '177.26.82.x'), stalled(6, 1048576, 14000, '177.26.87.x')]);
   assert.equal(oneExit.verdict, 'one-exit-lossy');
   assert.match(oneExit.message, /^one of your internet exits \(177\.26\.87\.x\) loses packets on uploads: 1 of 3 uploads through it stalled; the other one, 177\.26\.82\.x \(uploaded 1 MB in 700 ms\), is fine\./);
-  assert.deepEqual(oneExit.paths.map(p => [p.via, p.status, p.uploads, p.ok, p.stalled]), [['177.26.82.x', 'boa', 3, 3, 0], ['177.26.87.x', 'perde', 3, 2, 1]]);
+  assert.deepEqual(oneExit.paths.map(p => [p.via, p.status, p.uploads, p.ok, p.stalled]), [['177.26.82.x', 'good', 3, 3, 0], ['177.26.87.x', 'losing', 3, 2, 1]]);
 
   const good = of([ok(1, 1024, 80, '127.0.0.x'), ok(2, 1024, 85, '127.0.0.x'), ok(3, 1048576, 400, '127.0.0.x')]);
   assert.equal(good.verdict, 'ok');
@@ -288,8 +289,8 @@ test('end to end over the real hub: the agent\'s channel and net.mjs, every othe
   assert.equal(result.verdict, 'one-exit-lossy', JSON.stringify(result));
   assert.match(result.message, /^one of your internet exits \(177\.26\.87\.x\) loses packets on uploads: 1 of 5 uploads through it stalled; the other one, 177\.26\.82\.x \(uploaded 1 MB in [\d.]+ (ms|s)\), is fine\./);
   const byVia = Object.fromEntries(result.paths.map(p => [p.via, p]));
-  assert.deepEqual([byVia['177.26.82.x'].status, byVia['177.26.82.x'].ok, byVia['177.26.82.x'].uploads], ['boa', 5, 5]);
-  assert.deepEqual([byVia['177.26.87.x'].status, byVia['177.26.87.x'].ok, byVia['177.26.87.x'].stalled], ['perde', 4, 1]);
+  assert.deepEqual([byVia['177.26.82.x'].status, byVia['177.26.82.x'].ok, byVia['177.26.82.x'].uploads], ['good', 5, 5]);
+  assert.deepEqual([byVia['177.26.87.x'].status, byVia['177.26.87.x'].ok, byVia['177.26.87.x'].stalled], ['losing', 4, 1]);
   // The same agent without the kind in its Hello is never asked.
   const old = await hub();
   t.after(() => old.handle.close());
@@ -320,4 +321,30 @@ test('the real agent (createAgent) runs net.probe through the hub once kinds.mjs
   assert.equal(result.ran, true, JSON.stringify(result));
   assert.equal(result.verdict, 'ok', JSON.stringify(result));
   assert.equal(result.uploads, 10);
+});
+
+// a9 follow-ups round 2 (owner decision of 2026-10-19): the structured values of the check are English. paths[].status good |
+// slow | losing (they were boa | lenta | perde) and the exit the hub cannot read unknown (it was desconhecida; UNKNOWN_EXIT,
+// maskAddress). No agent reads them: the agent copies the via the hub answered to its upload (agent/lib/net-probe.mjs), so an
+// older answer that still names desconhecida (LEGACY_UNKNOWN_EXIT) reads as unknown, and no new agent package is required.
+test('the statuses are good, slow and losing and an unreadable exit is unknown; an older answer\'s desconhecida reads as unknown', async () => {
+  const { UNKNOWN_EXIT, LEGACY_UNKNOWN_EXIT } = await import('../hosted/network-check.mjs');
+  assert.deepEqual([UNKNOWN_EXIT, LEGACY_UNKNOWN_EXIT], ['unknown', 'desconhecida']);
+  assert.equal(maskAddress('not-an-address'), 'unknown');
+  const id = n => n.toString(16).padStart(32, '0');
+  let n = 0;
+  const probe = (bytes, ms, ok, via) => ({ id: id(++n), bytes, ms, ok, status: ok ? 200 : 0, via });
+  const good = [probe(1024, 80, true, '203.0.113.x'), probe(1024, 90, true, '203.0.113.x'), probe(1048576, 400, true, '203.0.113.x')];
+  const lossy = [probe(1024, 85, true, '198.51.100.x'), probe(1048576, 4500, false, '198.51.100.x')];
+  const slow = [probe(1024, 2600, true, '192.0.2.x')];
+  const all = [...good, ...lossy, ...slow];
+  const summary = summarizeProbes(all.map(({ via, ...p }) => p), all.map(p => ({ id: p.id, via: p.via, received: p.ok ? p.bytes : 4096, complete: p.ok, ms: p.ms })));
+  assert.deepEqual(Object.fromEntries(summary.paths.map(p => [p.via, p.status])), { '203.0.113.x': 'good', '198.51.100.x': 'losing', '192.0.2.x': 'slow' }, JSON.stringify(summary.paths));
+  assert.equal(summary.verdict, 'one-exit-lossy');
+  // an upload the hub has no record of, whose exit the agent names as an older answer of the hub did
+  const old = summarizeProbes([{ id: id(++n), bytes: 1024, ms: 70, ok: true, status: 200, via: LEGACY_UNKNOWN_EXIT }], []);
+  assert.deepEqual(old.paths.map(p => [p.via, p.status]), [['unknown', 'good']], JSON.stringify(old));
+  assert.doesNotMatch(JSON.stringify(old), /desconhecida/);
+  const hint = uploadsHint({ uploads: () => ({ parts: 3, slow: 1, recent: [{ bytes: 70000, ms: 21000, via: LEGACY_UNKNOWN_EXIT }] }) });
+  assert.match(hint.message, /through the exit unknown/);
 });
