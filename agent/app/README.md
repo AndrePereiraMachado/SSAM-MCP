@@ -93,7 +93,10 @@ O electron-builder só gera o DMG e o ZIP do updater num macOS. O workflow `.git
 4. Baixe o artefato `ssam-agent-app-mac`: `ssam-agent-app-<v>-mac-arm64.dmg`, `-x64.dmg`, os `.zip`, os `.blockmap` e
    `latest-mac.yml`. Copie tudo para `https://dist.ssam.pro/u/ssam-agent/` ao lado dos arquivos do Windows.
 
-Assinatura e notarização só acontecem quando os secrets existem no repositório: `CSC_LINK` (o certificado Developer
+**Escolha do dono (20/10/2026): o DMG sai sem assinatura.** Sem o secret `CSC_LINK`, o workflow roda o electron-builder
+com `CSC_IDENTITY_AUTO_DISCOVERY=false` e nada é assinado; não há passo de assinatura a configurar. Num Mac, a app abre
+com o contorno do Gatekeeper (botão direito no `SSAM Agent.app`, Abrir, uma vez) e NÃO se atualiza sozinha: cada
+versão nova vai à mão, pelo DMG. Assinatura e notarização só acontecem quando os secrets existirem no repositório: `CSC_LINK` (o certificado Developer
 ID Application como `.p12` em base64) e `CSC_KEY_PASSWORD`; `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` e
 `APPLE_TEAM_ID` (notarização; o workflow passa `--notarize` ao build). **Sem eles o DMG sai sem assinatura: o Gatekeeper
 avisa ao abrir (botão direito, Abrir) e o electron-updater NÃO instala atualizações no macOS**; a app serve, mas

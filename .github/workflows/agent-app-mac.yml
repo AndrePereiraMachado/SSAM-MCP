@@ -5,7 +5,9 @@
 # it as an asset of a GitHub Release of this repository (a draft or pre-release is fine; the default tag is
 # agent-pack-mac) and the workflow downloads it with the token of the run.
 #
-# Signing and notarization happen only when the secrets exist (CSC_LINK + CSC_KEY_PASSWORD: the Developer ID
+# Unsigned by default (the owner's choice of 2026-10-20): with no CSC_LINK secret, CSC_IDENTITY_AUTO_DISCOVERY is false
+# and electron-builder signs nothing. Signing and notarization happen only when the secrets exist (CSC_LINK +
+# CSC_KEY_PASSWORD: the Developer ID
 # Application certificate as base64 .p12 and its password; APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID:
 # notarization). Without them the DMG is unsigned: Gatekeeper warns, and electron-updater does NOT install updates on
 # macOS (it refuses an unsigned app). The artifacts are the files to copy to the update server as they are.
@@ -72,7 +74,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           NOTARIZE: ${{ secrets.APPLE_ID != '' && secrets.CSC_LINK != '' }}
         run: |
-          if [ "$CSC_LINK" = "" ]; then echo "::warning::No CSC_LINK secret: the DMG is unsigned (Gatekeeper warns; electron-updater will not auto-update on macOS)."; fi
+          if [ "$CSC_LINK" = "" ]; then echo "::notice::Unsigned build: no CSC_LINK secret, so nothing is signed. On a Mac open the app once with right-click > Open (Gatekeeper); electron-updater does not auto-update an unsigned app, so new versions are installed by hand."; fi
           if [ "$NOTARIZE" = "true" ]; then extra="--notarize"; else extra=""; fi
           node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/pack/${{ inputs.pack_asset }}" --update-url "${{ inputs.update_url }}" $extra
           ls -la dist
