@@ -11,6 +11,13 @@
 #                NOT in this compose: a database resource of Coolify (COOLIFY.md 6), reached as SSAM_DATABASE_URL over
 #                the predefined network. The server applies the migrations of platforms/odc/facade/migrations at start
 #                (DEPLOY.md 7.4). A redeploy, a rollback or a container recreated by Coolify never loses a license.
+#   ssam-console the owner console (DEPLOY.md 15, COOLIFY.md 11): the same image, `node /console/server.mjs` with the
+#                console code bind-mounted read-only from the deploy folder on the VPS (CONSOLE_CODE_DIR), the licenses
+#                in the same Postgres (SSAM_DATABASE_URL) and the audit in the server-state volume. It listens on 7320
+#                inside the compose network only (CONSOLE_LISTEN; no host port), behind its own Traefik router on its
+#                own host name (CONSOLE_DOMAIN, e.g. painel.<domain>): never on the public host of /mcp. Sign-in through
+#                the owner's GitHub OAuth App (CONSOLE_GITHUB_*): only the GitHub logins of CONSOLE_GITHUB_ALLOWED_LOGINS
+#                get in. The SSH tunnel and the access key of DEPLOY.md 15 do not exist here.
 #   ssam-admin   profile admin: tokens (issue, list, revoke, agent-rotate, import). Coolify never starts it: it runs by
 #                hand over SSH, through ssamctl.sh (which needs no compose at all) or `docker compose --profile admin run`.
 #   ssam-ops     profile ops: file drops into the state volumes (kernel.json, Features.plain.xml) and backups: the same,
@@ -122,6 +129,95 @@ services:
           cpus: "${SSAM_CPUS:-2}"
           memory: ${SSAM_MEMORY:-6g}
           pids: ${SSAM_PIDS:-4096}
+
+  # Owner console (COOLIFY.md 11). Its own state (checkpoint, aggregates, the session secret) lives in /data/server/.console
+  # of the server-state volume: a named volume of its own would be created root-owned by Docker (the path is not in the
+  # image) and the console runs as uid 10001; the server never reads that folder, and the backup carries it. The host
+  # collector of DEPLOY.md 15 (host.json) does not run on a Coolify VPS: the VPS tab shows the collector as absent.
+  ssam-console:
+    <<: *hardening
+    image: ${SSAM_IMAGE:?set SSAM_IMAGE}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG}
+    platform: linux/amd64
+    restart: unless-stopped
+    user: "10001:10001"
+    entrypoint: ["node", "/console/server.mjs"]
+    command: []
+    working_dir: /console
+    environment:
+      SSAM_SERVER_DIR: /data/server
+      CONSOLE_STATE_DIR: /data/server/.console
+      CONSOLE_HOST_JSON: /host/host.json
+      CONSOLE_PUBLIC_DIR: /console/public
+      CONSOLE_TOKEN_MODULE: /app/platforms/odc/facade/server-tokens.mjs
+      CONSOLE_DOMAIN: ${SSAM_DOMAIN:?set SSAM_DOMAIN}
+      # auto: license actions with a token module that locks between writers (the Postgres store does; DEPLOY.md 15.4)
+      CONSOLE_LICENSE_WRITES: ${CONSOLE_LICENSE_WRITES:-auto}
+      # the licenses in the same Postgres as the server (the console's own read-back goes through the table)
+      SSAM_DATABASE_URL: ${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL}
+      # TCP inside the compose network (Traefik reaches it; no host port); allowed only with the GitHub sign-in below
+      CONSOLE_LISTEN: 0.0.0.0:7320
+      CONSOLE_PUBLIC_URL: https://${CONSOLE_DOMAIN:?set CONSOLE_DOMAIN (the DNS name of the console, e.g. painel.ssam.example.com)}
+      # the GitHub OAuth App of the owner (COOLIFY.md 11): id, secret, and the GitHub logins allowed in (comma-separated)
+      CONSOLE_GITHUB_CLIENT_ID: ${CONSOLE_GITHUB_CLIENT_ID:?set CONSOLE_GITHUB_CLIENT_ID (the OAuth App's Client ID)}
+      CONSOLE_GITHUB_CLIENT_SECRET: ${CONSOLE_GITHUB_CLIENT_SECRET:?set CONSOLE_GITHUB_CLIENT_SECRET (the OAuth App's client secret)}
+      CONSOLE_GITHUB_ALLOWED_LOGINS: ${CONSOLE_GITHUB_ALLOWED_LOGINS:?set CONSOLE_GITHUB_ALLOWED_LOGINS (your GitHub login)}
+      # empty: made at the first start and kept in CONSOLE_STATE_DIR/session.secret (a restart keeps the session)
+      CONSOLE_SESSION_SECRET: ${CONSOLE_SESSION_SECRET:-}
+      TZ: UTC
+    volumes:
+      - server-state:/data/server
+      # the console code of the approved commit, on the VPS (COOLIFY.md 5 copies server/deploy to /opt/ssam/deploy)
+      - type: bind
+        source: ${CONSOLE_CODE_DIR:-/opt/ssam/deploy/console}
+        target: /console
+        read_only: true
+        bind:
+          create_host_path: false
+    # The image declares VOLUME for these; small read-only tmpfs mounts stop Docker from creating anonymous volumes.
+    tmpfs:
+      - /tmp:size=16m
+      - /data/friction:size=64k,mode=0555
+      - /data/odc-features:size=64k,mode=0555
+      - /data/cache:size=64k,mode=0555
+    read_only: true
+    expose:
+      - "7320"
+    labels:
+      - "traefik.enable=true"
+      # https on the console's own host name, every path (the console routes them itself), Let's Encrypt, headers.
+      - "traefik.http.routers.ssam-console.rule=Host(`${CONSOLE_DOMAIN}`)"
+      - "traefik.http.routers.ssam-console.entrypoints=https"
+      - "traefik.http.routers.ssam-console.tls=true"
+      - "traefik.http.routers.ssam-console.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ssam-console.middlewares=ssam-console-headers"
+      - "traefik.http.routers.ssam-console.service=ssam-console"
+      - "traefik.http.services.ssam-console.loadbalancer.server.port=7320"
+      # http: redirected to https (the same middleware as the server's).
+      - "traefik.http.routers.ssam-console-http.rule=Host(`${CONSOLE_DOMAIN}`)"
+      - "traefik.http.routers.ssam-console-http.entrypoints=http"
+      - "traefik.http.routers.ssam-console-http.middlewares=ssam-to-https"
+      - "traefik.http.routers.ssam-console-http.service=ssam-console"
+      # The headers of ssam-headers minus the two the console sets itself (its CSP allows its own scripts and styles;
+      # a customResponseHeaders CSP here would replace it and the page would not run).
+      - "traefik.http.middlewares.ssam-console-headers.headers.stsseconds=31536000"
+      - "traefik.http.middlewares.ssam-console-headers.headers.contenttypenosniff=true"
+      - "traefik.http.middlewares.ssam-console-headers.headers.framedeny=true"
+      - "traefik.http.middlewares.ssam-console-headers.headers.referrerpolicy=no-referrer"
+      - "traefik.http.middlewares.ssam-console-headers.headers.customresponseheaders.Server="
+    # /healthz answers only to the console's own Host (the DNS-rebinding check comes first).
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get({host:'127.0.0.1',port:7320,path:'/healthz',timeout:3000,headers:{Host:new URL(process.env.CONSOLE_PUBLIC_URL).host}},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    stop_grace_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256m
+          pids: 64
 
   # Tokens, by hand (COOLIFY.md 6): `issue` and `agent-rotate` print the plaintext token and agent credential once; no
   # log driver, so docker keeps no copy of them. It needs the database too (ssamctl.sh gives it the server's network).

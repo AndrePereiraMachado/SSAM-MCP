@@ -1079,6 +1079,10 @@ painel-ssam.ps1                               sshd :22
   `/var/lib/ssam-console/state`.
 - Um segredo novo (token e credencial do agente) aparece uma vez só, na tela da ação. O painel não o guarda, não o
   registra e não o manda de novo.
+- **Na VPS com Coolify** (`deploy/coolify`, COOLIFY.md seção 11) o mesmo painel roda de outro jeito: sem túnel e sem
+  chave de acesso, num domínio próprio atrás do Traefik, com login pela conta do GitHub do dono (OAuth App), e as
+  licenças no Postgres do servidor em vez do `tokens.json`. Tudo o que esta seção diz sobre as abas e as ações vale lá;
+  15.1, 15.7 e 15.8 (instalação, chave, proxy) não se aplicam.
 
 ### 15.1 Instalação
 

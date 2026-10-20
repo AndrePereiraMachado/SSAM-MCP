@@ -1,12 +1,25 @@
 # Local rehearsal of compose.coolify.yml without Coolify or Traefik (COOLIFY.md 10): the server's port published on the
 # loopback of this machine, so curl reaches /health and /mcp directly, and a throwaway Postgres in place of the Coolify
 # database resource (SSAM_DATABASE_URL of the rehearsal .env points at it: postgres://ssam:<password>@postgres:5432/ssam).
-# Never on a VPS: there, only Traefik reaches 7310 and the database is a Coolify resource.
-#   docker compose -p ssam-coolify-rehearsal --env-file <.env> -f compose.coolify.yml -f rehearsal.override.yml up -d ssam-server
+# The console (COOLIFY.md 11) on 127.0.0.1:27320 with its public URL set to that address (no https, no Traefik), and a
+# fake GitHub on the host when CONSOLE_REHEARSAL_GITHUB_URL names one (http://host.docker.internal:<port>, reachable
+# from the container and from the browser); empty keeps github.com.
+# Never on a VPS: there, only Traefik reaches 7310 and 7320, and the database is a Coolify resource.
+#   docker compose -p ssam-coolify-rehearsal --env-file <.env> -f compose.coolify.yml -f rehearsal.override.yml up -d ssam-server ssam-console
 services:
   ssam-server:
     ports:
       - "127.0.0.1:27310:7310"
+    depends_on:
+      postgres:
+        condition: service_healthy
+  ssam-console:
+    ports:
+      - "127.0.0.1:27320:7320"
+    environment:
+      CONSOLE_PUBLIC_URL: ${CONSOLE_REHEARSAL_PUBLIC_URL:-http://localhost:27320}
+      CONSOLE_GITHUB_BASE_URL: ${CONSOLE_REHEARSAL_GITHUB_URL:-}
+      CONSOLE_GITHUB_API_URL: ${CONSOLE_REHEARSAL_GITHUB_URL:-}
     depends_on:
       postgres:
         condition: service_healthy

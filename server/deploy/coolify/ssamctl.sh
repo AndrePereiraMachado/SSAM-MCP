@@ -19,6 +19,7 @@
 #   sh ssamctl.sh backup [<folder>]                        tar.gz of server, friction and odc-features (+ .sha256, .info)
 #   sh ssamctl.sh restore <archive.tar.gz>                 the three folders back, with the server STOPPED (Coolify: Stop)
 #   sh ssamctl.sh logs [<n>]                               the last n lines of the server's log (default 50)
+#   sh ssamctl.sh console status | logs [<n>] | audit [<n>]   the owner console (COOLIFY.md 11): state, its log, its audit
 #
 # The container is found by its compose service label (com.docker.compose.service=ssam-server); SSAM_CONTAINER names it
 # explicitly when the host runs more than one. kernel print/check need ../kernel-pair-check.mjs next to this folder (the
@@ -197,6 +198,29 @@ case "$cmd" in
     c=$(container); n=${1:-50}
     # shellcheck disable=SC2086
     $DOCKER run $hardened --network none $(mounts "$c") "$(image_of "$c")" sh -c "tail -n $n /data/server/server.log | cut -c1-200"
+    ;;
+  console)
+    # The console container of the same compose project (label com.docker.compose.service=ssam-console). Its log is JSON
+    # lines on stdout (codes only, no secret); its audit is /data/server/console-audit.jsonl in the server-state volume.
+    sub=${1:-status}; [ $# -gt 0 ] && shift
+    k=$($DOCKER ps -a --filter label=com.docker.compose.service=ssam-console --format '{{.Names}}' | head -n 1)
+    [ -n "$k" ] || die "no ssam-console container on this host (COOLIFY.md 11)"
+    case "$sub" in
+      status)
+        echo "container: $k"
+        echo "image:     $($DOCKER inspect --format '{{.Config.Image}}' "$k")"
+        echo "state:     $($DOCKER inspect --format '{{.State.Status}}{{if .State.Health}} / {{.State.Health.Status}}{{end}}' "$k")"
+        echo "url:       $(env_of "$k" CONSOLE_PUBLIC_URL)"
+        echo "logins:    $(env_of "$k" CONSOLE_GITHUB_ALLOWED_LOGINS)"
+        ;;
+      logs) $DOCKER logs --tail "${1:-50}" "$k" 2>&1 | cut -c1-300 ;;
+      audit)
+        c=$(container); n=${1:-50}
+        # shellcheck disable=SC2086
+        $DOCKER run $hardened --network none $(mounts "$c") "$(image_of "$c")" sh -c "tail -n $n /data/server/console-audit.jsonl 2>/dev/null || echo '(no audit yet)'"
+        ;;
+      *) die "console status|logs [n]|audit [n]" ;;
+    esac
     ;;
   *)
     sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
