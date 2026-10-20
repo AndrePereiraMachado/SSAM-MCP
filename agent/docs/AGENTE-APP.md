@@ -43,8 +43,9 @@ once only: keep both in a password manager, never in a repository or a chat.
 4. **Run doctor** in the panel checks the same things the agent's own `doctor` checks: the folder, the pack, the
    runtimes, the Studios and whether the server answers.
 
-"Start SSAM Agent when I log in" (on by default in the setup, changeable in the tray and the panel) registers the app
-as a login item of your user; off, nothing starts by itself, as with the command-line agent.
+The app opens with the computer: it registers itself as a login item of your user and, at login, starts minimized to
+the tray (no window) with the agent connected. "Open SSAM Agent when I log in" in the panel and the tray turns that
+off; then nothing starts by itself, as with the command-line agent.
 
 ## The tray
 
@@ -80,8 +81,9 @@ and the tools of your MCP client answer `AGENT_RECONNECTING`.
 ## App updates
 
 The owner publishes new versions of the app on an update server. The app asks it shortly after each start and every
-6 hours, downloads a new version in the background and installs it when you choose **Restart to update** (the agent
-is stopped cleanly first) or when you quit the app. A new version of the app carries the agent pack that goes with it:
+6 hours, downloads a new version in the background and installs it by itself a few seconds later: the agent is
+stopped cleanly, the app restarts and the agent reconnects. No click is needed; the panel shows what is going on, and
+**Restart to update now** installs it at once. A new version of the app carries the agent pack that goes with it:
 on the next start the app puts the new pack in the agent folder, keeping `private\`, `inbox\`, `odc\` and `o11\` as
 they are, the same as extracting a new pack over the folder by hand. Quit ODC Studio and Service Studio before, as the
 guides say: a Studio keeps the old bridge loaded until it quits.

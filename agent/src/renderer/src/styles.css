@@ -33,3 +33,5 @@ details { margin: 0 0 10px; } summary { cursor: pointer; color: var(--muted); ma
 .report .ok { color: var(--green); } .report .fail { color: var(--red); } .report .warn { color: var(--amber); }
 code { font-family: ui-monospace, Consolas, Menlo, monospace; }
 [hidden] { display: none !important; }
+
+.loading { padding: 40px; text-align: center; color: var(--muted); }

@@ -11,8 +11,8 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { fakeHub } from '../../agent/tests/fixtures/fake-hub.mjs';
 import { CREDENTIAL } from '../../agent/tests/fixtures/agent-root.mjs';
-import { createSupervisor, forkWithNode, supportedFlags } from '../src/supervisor.mjs';
-import { verifyPack } from '../src/pack-sync.mjs';
+import { createSupervisor, forkWithNode, supportedFlags } from '../../src/main/core/supervisor.mjs';
+import { verifyPack } from '../../src/main/core/pack-sync.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const agentDir = path.resolve(here, '..', '..', 'agent');

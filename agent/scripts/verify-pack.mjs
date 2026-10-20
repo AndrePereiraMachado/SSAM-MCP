@@ -1,7 +1,7 @@
 // The pack folder checked against its pack.json (every file present with its sha256), as the app does at start and
 // the agent's doctor does in the root. Exit 0 when whole, 1 otherwise.
 //   node scripts/verify-pack.mjs <folder> [--platform windows|mac]
-import { verifyPack } from '../src/pack-sync.mjs';
+import { verifyPack } from '../src/main/core/pack-sync.mjs';
 
 const [folder = 'pack', ...rest] = process.argv.slice(2);
 const platform = rest.includes('--platform') ? rest[rest.indexOf('--platform') + 1] : null;

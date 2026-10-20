@@ -2,7 +2,7 @@
 // on the icon opens the panel on Windows and Linux; on macOS a click shows the menu, as every menu bar item does.
 import path from 'node:path';
 import { Tray, Menu, nativeImage } from 'electron';
-import { menuFor, iconFor, tooltipFor } from '../tray-model.mjs';
+import { menuFor, iconFor, tooltipFor } from '../core/tray-model.mjs';
 
 export function createTray({ iconsDir, platform = process.platform, onAction }) {
   const images = new Map();

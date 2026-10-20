@@ -1,10 +1,11 @@
 // The app's own settings (not the agent's: those stay in <root>/private/config.json, written by the agent's setup):
-// the agent root, start at login, the update server and how often to ask it. One JSON file in the app's user data
-// folder; a missing or broken file means the defaults.
+// the agent root, start at login (on by default: the app opens with the computer, minimized to the tray), the update
+// server, how often to ask it and whether an update installs by itself (on by default: no click needed). One JSON
+// file in the app's user data folder; a missing or broken file means the defaults.
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const DEFAULTS = Object.freeze({ root: null, autostart: false, updateUrl: null, updateCheckHours: 6 });
+export const DEFAULTS = Object.freeze({ root: null, autostart: true, updateUrl: null, updateCheckHours: 6, updateAutoInstall: true });
 export const KEYS = Object.freeze(Object.keys(DEFAULTS));
 
 // Why an update server URL is not usable, or null: https, or plain http only on this machine (a test server).
@@ -20,7 +21,8 @@ export function updateUrlProblem(url) {
 export function normalize(input = {}) {
   const settings = { ...DEFAULTS };
   if (typeof input.root === 'string' && input.root.trim()) settings.root = input.root.trim();
-  settings.autostart = input.autostart === true;
+  settings.autostart = input.autostart !== false;
+  settings.updateAutoInstall = input.updateAutoInstall !== false;
   if (typeof input.updateUrl === 'string' && input.updateUrl.trim() && !updateUrlProblem(input.updateUrl.trim())) settings.updateUrl = input.updateUrl.trim().replace(/\/+$/, '');
   const hours = Number(input.updateCheckHours);
   if (Number.isFinite(hours) && hours >= 1 && hours <= 168) settings.updateCheckHours = Math.round(hours);

@@ -5,20 +5,25 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { DEFAULTS, normalize, loadSettings, saveSettings, updateUrlProblem, resolveUpdateUrl } from '../src/settings.mjs';
-import { summarize, exitPolicy, restartDelayMs, readState, EXIT_TEXT } from '../src/agent-state.mjs';
-import { INITIAL, reduce, updateText, canCheck } from '../src/update-model.mjs';
-import { menuFor, iconFor, tooltipFor } from '../src/tray-model.mjs';
-import { defaultRoot, rootFiles } from '../src/paths.mjs';
+import { DEFAULTS, normalize, loadSettings, saveSettings, updateUrlProblem, resolveUpdateUrl } from '../../src/main/core/settings.mjs';
+import { summarize, exitPolicy, restartDelayMs, readState, EXIT_TEXT } from '../../src/main/core/agent-state.mjs';
+import { INITIAL, reduce, updateText, canCheck } from '../../src/main/core/update-model.mjs';
+import { menuFor, iconFor, tooltipFor } from '../../src/main/core/tray-model.mjs';
+import { defaultRoot, rootFiles } from '../../src/main/core/paths.mjs';
 
 test('settings: defaults, a round trip, and only https (or loopback http) as the update server', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-app-settings-'));
   try {
     const file = path.join(dir, 'settings.json');
     assert.deepEqual(loadSettings(file), { ...DEFAULTS });
-    const saved = saveSettings(file, { root: 'C:\\SSAM-Agent ', autostart: true, updateUrl: 'https://updates.example.com/ssam-agent/', updateCheckHours: '12' });
-    assert.deepEqual(saved, { root: 'C:\\SSAM-Agent', autostart: true, updateUrl: 'https://updates.example.com/ssam-agent', updateCheckHours: 12 });
+    // Start at login and the automatic install are on unless turned off.
+    assert.equal(DEFAULTS.autostart, true);
+    assert.equal(DEFAULTS.updateAutoInstall, true);
+    const saved = saveSettings(file, { root: 'C:\\SSAM-Agent ', autostart: false, updateUrl: 'https://updates.example.com/ssam-agent/', updateCheckHours: '12', updateAutoInstall: false });
+    assert.deepEqual(saved, { root: 'C:\\SSAM-Agent', autostart: false, updateUrl: 'https://updates.example.com/ssam-agent', updateCheckHours: 12, updateAutoInstall: false });
     assert.deepEqual(loadSettings(file), saved);
+    assert.equal(normalize({}).autostart, true);
+    assert.equal(normalize({ autostart: 'no' }).autostart, true);
     assert.equal(normalize({ updateUrl: 'http://updates.example.com/x' }).updateUrl, null);
     assert.equal(normalize({ updateUrl: 'http://127.0.0.1:7340/x' }).updateUrl, 'http://127.0.0.1:7340/x');
     assert.equal(normalize({ updateCheckHours: 0 }).updateCheckHours, 6);

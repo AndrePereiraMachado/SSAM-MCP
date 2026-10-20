@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { planSync, applySync, syncPack, verifyPack, readPackJson, DATA_FOLDERS, safeRelative } from '../src/pack-sync.mjs';
+import { planSync, applySync, syncPack, verifyPack, readPackJson, DATA_FOLDERS, safeRelative } from '../../src/main/core/pack-sync.mjs';
 
 const sha = text => createHash('sha256').update(text).digest('hex');
 const fresh = name => fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-app-' + name + '-'));

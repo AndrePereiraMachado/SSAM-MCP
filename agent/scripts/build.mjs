@@ -1,11 +1,11 @@
-// The installers of the app: the agent pack of the platform put in app/pack (extracted from the ZIP or tar.gz
+// The installers of the app: the agent pack of the platform put in pack/ (extracted from the ZIP or tar.gz
 // scripts/agent-pack.ps1 made, or copied from a folder), checked against its pack.json, then electron-builder over
 // electron-builder.yml with the owner's update server as the publish URL (written to resources/app-update.yml, which
 // the app reads at start).
 //   node scripts/build.mjs --platform win|mac --pack <ssam-agent.zip | ssam-agent-mac.tar.gz | folder>
 //                          [--update-url https://...] [--no-updates] [--pack-only]
 //   Without --update-url the build publishes to https://dist.ssam.pro/u/ssam-agent (the owner's update server).
-//   SSAM_UPDATE_URL in the environment stands for --update-url. --pack-only stops after app/pack is ready.
+//   SSAM_UPDATE_URL in the environment stands for --update-url. --pack-only stops after pack/ is ready.
 // A macOS build (DMG, ZIP for the updater, signing) only runs on a Mac; a Windows build runs on Windows (or on
 // Linux with wine, which this script does not set up).
 import fs from 'node:fs';
@@ -13,12 +13,11 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { extractZip } from './zip.mjs';
-import { verifyPack } from '../src/pack-sync.mjs';
-import { updateUrlProblem } from '../src/settings.mjs';
+import { verifyPack } from '../src/main/core/pack-sync.mjs';
+import { updateUrlProblem } from '../src/main/core/settings.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = path.resolve(here, '..');
-const box = path.resolve(app, '..');
 // The owner's update server (the publish url of electron-builder.yml); --update-url or SSAM_UPDATE_URL replace it.
 export const DEFAULT_UPDATE_URL = 'https://dist.ssam.pro/u/ssam-agent';
 
@@ -54,11 +53,11 @@ function copyFolder(from, to) {
   }
 }
 
-// app/pack filled from the source and checked; returns the pack.json.
+// pack/ filled from the source and checked; returns the pack.json.
 export async function preparePack(source, platform, packDir = path.join(app, 'pack')) {
   if (!source) {
     const check = verifyPack(packDir);
-    if (!check.ok) throw new Error(`no --pack given and app/pack is not a whole pack (${check.detail})`);
+    if (!check.ok) throw new Error(`no --pack given and pack/ is not a whole pack (${check.detail})`);
     return check.pack;
   }
   fs.rmSync(packDir, { recursive: true, force: true });
@@ -66,7 +65,7 @@ export async function preparePack(source, platform, packDir = path.join(app, 'pa
   const stat = fs.statSync(source);
   if (stat.isDirectory()) copyFolder(source, packDir);
   else if (/\.zip$/i.test(source)) extractZip(source, packDir);
-  else if (/\.tar\.gz$/i.test(source)) { const { extractTarGz } = await import(pathToFileURL(path.join(box, 'scripts', 'tar-gz.mjs')).href); extractTarGz(source, packDir); }
+  else if (/\.tar\.gz$/i.test(source)) { const { extractTarGz } = await import(pathToFileURL(path.join(here, 'tar-gz.mjs')).href); extractTarGz(source, packDir); }
   else throw new Error('the pack must be a .zip, a .tar.gz or a folder: ' + source);
   const check = verifyPack(packDir);
   if (!check.ok) throw new Error('the pack is not whole: ' + check.detail);
@@ -79,10 +78,13 @@ export async function preparePack(source, platform, packDir = path.join(app, 'pa
 async function main() {
   const options = parse(process.argv.slice(2));
   const pack = await preparePack(options.pack, options.platform);
-  console.log(`pack ${pack.id} ready in app/pack (${pack.files.length} files, lanes ${(pack.lanes ?? []).join(',')}, ODC bridge ${pack.odcBridge ?? '-'}, Service Studio ${pack.o11BuiltFor ?? '-'})`);
+  console.log(`pack ${pack.id} ready in pack/ (${pack.files.length} files, lanes ${(pack.lanes ?? []).join(',')}, ODC bridge ${pack.odcBridge ?? '-'}, Service Studio ${pack.o11BuiltFor ?? '-'})`);
   if (options.packOnly) return;
   if (options.platform === 'mac' && process.platform !== 'darwin') throw new Error('a macOS build (DMG, ZIP, signing) only runs on a Mac');
   if (options.platform === 'win' && process.platform === 'darwin') throw new Error('build the Windows installer on Windows');
+  // electron-vite first: src/ -> out/ (main, preload, the React panel), what electron-builder packs.
+  const vite = spawnSync(process.execPath, [path.join(app, 'node_modules', 'electron-vite', 'bin', 'electron-vite.js'), 'build'], { cwd: app, stdio: 'inherit' });
+  if (vite.status !== 0) throw new Error('electron-vite build failed with code ' + vite.status);
   const cli = path.join(app, 'node_modules', 'electron-builder', 'cli.js');
   const args = [cli, options.platform === 'win' ? '--win' : '--mac', '--publish', 'never', '--config', 'electron-builder.yml'];
   if (options.noUpdates) args.push('-c.publish=null');

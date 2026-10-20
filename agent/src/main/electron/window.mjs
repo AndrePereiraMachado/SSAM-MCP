@@ -1,10 +1,10 @@
-// The panel: one window (status, setup, updates, doctor, log) over ui/index.html, isolated from Node (contextIsolation,
-// sandbox, no nodeIntegration) and talking to the main process only through src/preload.cjs. Closing it hides nothing
-// but the window itself: the app stays in the tray.
-import path from 'node:path';
+// The panel: one window (status, setup, updates, doctor, log) over the React page of src/renderer (the Vite dev server
+// in `npm run dev`, out/renderer/index.html otherwise), isolated from Node (contextIsolation, sandbox, no
+// nodeIntegration) and talking to the main process only through the preload. Closing it hides nothing but the window
+// itself: the app stays in the tray.
 import { BrowserWindow, shell } from 'electron';
 
-export function createPanel({ uiDir, preload, iconPath = null, onReady = () => {} }) {
+export function createPanel({ rendererUrl = null, rendererFile, preload, iconPath = null, onReady = () => {} }) {
   let win = null;
 
   function open() {
@@ -13,11 +13,11 @@ export function createPanel({ uiDir, preload, iconPath = null, onReady = () => {
       ...(iconPath ? { icon: iconPath } : {}),
       webPreferences: { preload, contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false } });
     win.setMenuBarVisibility(false);
-    win.loadFile(path.join(uiDir, 'index.html'));
+    if (rendererUrl) win.loadURL(rendererUrl); else win.loadFile(rendererFile);
     win.once('ready-to-show', () => { win.show(); onReady(win); });
     // Links of the panel open in the browser, never inside the app.
     win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
-    win.webContents.on('will-navigate', event => event.preventDefault());
+    win.webContents.on('will-navigate', (event, url) => { if (url !== win.webContents.getURL()) event.preventDefault(); });
     win.on('closed', () => { win = null; });
     return win;
   }

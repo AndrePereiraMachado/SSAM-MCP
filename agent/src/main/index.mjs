@@ -1,26 +1,31 @@
 // SSAM Agent, the desktop app: the agent of docs/AGENTE-CLIENTE.md and docs/AGENTE-MAC.md kept running in the
 // background, with an icon in the tray (Windows) or the menu bar (macOS), no window until the person opens the panel,
-// and the app itself updated from the owner's update server. What the agent does and what it never does is unchanged:
-// this app only puts the pack in the agent root, starts `ssam-agent.mjs run` as a child process, shows its state and
-// stops it cleanly. One instance per user; a second launch opens the panel of the first.
+// opened with the computer (a login item, minimized to the tray) and updated by itself from the owner's update
+// server. What the agent does and what it never does is unchanged: this app only puts the pack in the agent root,
+// starts `ssam-agent.mjs run` as a child process, shows its state and stops it cleanly. One instance per user; a
+// second launch opens the panel of the first. Built by electron-vite to out/main/index.mjs; the preload is
+// out/preload/index.cjs and the React panel out/renderer (the Vite dev server in `npm run dev`).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, ipcMain, dialog, shell, Notification } from 'electron';
-import { createSupervisor } from './supervisor.mjs';
+import { createSupervisor } from './core/supervisor.mjs';
 import { forkWithUtilityProcess } from './electron/runtime.mjs';
 import { createAppLog } from './electron/app-log.mjs';
 import { createTray } from './electron/tray.mjs';
 import { createPanel } from './electron/window.mjs';
 import { createUpdates, buildUpdateUrl } from './electron/updates.mjs';
-import { loadSettings, saveSettings, resolveUpdateUrl, updateUrlProblem } from './settings.mjs';
-import { defaultRoot, bundledPackDir } from './paths.mjs';
-import { verifyPack } from './pack-sync.mjs';
-import { INITIAL } from './update-model.mjs';
+import { loadSettings, saveSettings, resolveUpdateUrl, updateUrlProblem } from './core/settings.mjs';
+import { defaultRoot, bundledPackDir } from './core/paths.mjs';
+import { verifyPack } from './core/pack-sync.mjs';
+import { INITIAL } from './core/update-model.mjs';
 
+// out/main -> the app folder (the agent box: assets/, build/, pack/ in a checkout; the asar when packaged).
 const here = path.dirname(fileURLToPath(import.meta.url));
-const appDir = path.resolve(here, '..');
+const appDir = path.resolve(here, '..', '..');
 const APP_ID = 'com.ssam.agent';
+// --hidden: started by the system at login (the login item passes it): no panel, even when not set up.
+const startedHidden = process.argv.includes('--hidden');
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else void run();
@@ -36,7 +41,7 @@ async function run() {
   let settings = loadSettings(settingsFile);
   const packDir = bundledPackDir({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, appPath: appDir });
   const appVersion = app.getVersion();
-  log.write('app-start', { version: appVersion, electron: process.versions.electron, node: process.version, platform: process.platform, packaged: app.isPackaged, packDir });
+  log.write('app-start', { version: appVersion, electron: process.versions.electron, node: process.version, platform: process.platform, packaged: app.isPackaged, hidden: startedHidden, packDir });
 
   const packCheck = verifyPack(packDir);
   if (!packCheck.ok) log.write('pack-problem', { detail: packCheck.detail });
@@ -49,15 +54,16 @@ async function run() {
   let busy = false;
   let notified = null;
 
-  const panel = createPanel({ uiDir: path.join(appDir, 'ui'), preload: path.join(here, 'preload.cjs'),
+  const panel = createPanel({ rendererUrl: !app.isPackaged && process.env.ELECTRON_RENDERER_URL ? process.env.ELECTRON_RENDERER_URL : null,
+    rendererFile: path.join(here, '..', 'renderer', 'index.html'), preload: path.join(here, '..', 'preload', 'index.cjs'),
     iconPath: process.platform === 'win32' ? path.join(appDir, 'build', 'icon.png') : null, onReady: () => push() });
   const tray = createTray({ iconsDir: path.join(appDir, 'assets', 'tray'), onAction: action => act(action).catch(error => log.write('action-failed', { action, error: error.message })) });
 
   const updateUrl = resolveUpdateUrl({ env: process.env, settings, build: buildUpdateUrl(process.resourcesPath) });
-  const updates = createUpdates({ url: updateUrl.url, hours: settings.updateCheckHours, log, isPackaged: app.isPackaged,
-    onChange: state => { updateState = state; push(); }, stopAgent: async () => { if (supervisor) await supervisor.stop(); } });
+  const updates = createUpdates({ url: updateUrl.url, hours: settings.updateCheckHours, autoInstall: settings.updateAutoInstall, log, isPackaged: app.isPackaged,
+    devConfig: path.join(appDir, 'dev-app-update.yml'), onChange: state => { updateState = state; push(); }, stopAgent: async () => { if (supervisor) await supervisor.stop(); } });
   updateState = updates.state;
-  log.write('updates', { url: updateUrl.url, source: updateUrl.source });
+  log.write('updates', { url: updateUrl.url, source: updateUrl.source, autoInstall: settings.updateAutoInstall });
 
   function makeSupervisor(target) {
     return createSupervisor({ root: target, packDir, fork: forkWithUtilityProcess(), env: process.env, log: log.write, onChange: () => push() });
@@ -113,8 +119,11 @@ async function run() {
     await shell.openPath(file);
   }
 
+  // The login item of this user: the app opens with the computer, hidden (minimized to the tray). Only the installed
+  // app registers itself (a checkout run would register Electron's own executable).
   function applyLoginItem() {
-    try { app.setLoginItemSettings({ openAtLogin: settings.autostart === true, openAsHidden: true }); }
+    if (!app.isPackaged) return;
+    try { app.setLoginItemSettings({ openAtLogin: settings.autostart === true, openAsHidden: true, args: ['--hidden'] }); }
     catch (error) { log.write('login-item-failed', { error: error.message }); }
   }
 
@@ -176,13 +185,15 @@ async function run() {
     Promise.resolve(supervisor.shutdown()).catch(() => {}).then(() => { updates.dispose(); tray.destroy(); app.quit(); });
   });
 
+  // The login item is (re)registered at every start, so a fresh install opens with the computer from then on.
   applyLoginItem();
   push();
   updates.schedule();
 
-  // Set up: the agent starts with the app (that is what a background app is for). Not set up: the panel opens.
+  // Set up: the agent starts with the app (that is what a background app is for). Not set up: the panel opens,
+  // unless the system started the app hidden at login (the tray icon says "Not set up" and a click opens the panel).
   const state = fullState();
   if (packCheck.ok && state.agent.setUp && state.agent.view.status !== 'external') {
     supervisor.start().then(result => log.write('autostart', result)).catch(error => log.write('autostart-failed', { error: error.message }));
-  } else panel.open();
+  } else if (!startedHidden) panel.open();
 }

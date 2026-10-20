@@ -1,6 +1,6 @@
-// The bridge between the panel (ui/) and the main process: a fixed set of calls, nothing else of Node or Electron
-// reaches the page. CommonJS because the preload runs in the sandbox.
-const { contextBridge, ipcRenderer } = require('electron');
+// The bridge between the panel (src/renderer, React) and the main process: a fixed set of calls, nothing else of Node
+// or Electron reaches the page. Built to out/preload/index.cjs (the panel runs sandboxed).
+import { contextBridge, ipcRenderer } from 'electron';
 
 const invoke = (channel, payload) => ipcRenderer.invoke(channel, payload);
 

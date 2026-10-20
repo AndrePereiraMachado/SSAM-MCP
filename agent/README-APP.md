@@ -3,7 +3,27 @@
 O agente de `docs/AGENTE-CLIENTE.md` e `docs/AGENTE-MAC.md` entregue como app de desktop em segundo plano: ícone na
 bandeja (Windows) ou na barra de menus (macOS), sem janela até a pessoa abrir o painel, o agente iniciado junto e
 mantido no ar, e a app atualizada a partir de um update server do dono. Guia do cliente: `docs/AGENTE-APP.md` (em
-inglês, como todo texto que o licenciado lê). Este README não vai no instalador.
+inglês, como todo texto que o licenciado lê).
+
+A caixa `agent/` é o projeto Electron, no layout do **electron-vite** (`electron.vite.config.mjs`):
+
+- `src/main/index.mjs`: o processo principal; `src/main/core/` os módulos puros (sync do pacote, settings, estado do
+  agente, modelo da tray e do updater, supervisor); `src/main/electron/` a cola com o Electron (utility process, tray,
+  janela, updater, log);
+- `src/preload/index.mjs`: a ponte `window.ssam` (compilada para CommonJS, `out/preload/index.cjs`, porque o painel
+  roda em sandbox);
+- `src/renderer/`: o painel, uma app **React** (`src/main.jsx`, `App.jsx`, `components/`, `styles.css`);
+- `assets/` e `build/` (ícones), `scripts/build.mjs`, `electron-builder.yml`; o código do agente Node fica em `agent/`,
+  as bridges em `kernel/` e `platforms/`, os testes da app em `tests/app/`.
+
+`npm run build` (electron-vite) escreve `out/main`, `out/preload` e `out/renderer`; é isso que entra no asar, com
+`assets/` e `build/icon.png`. Este README e o resto da caixa chegam ao cliente só pelo pacote.
+
+Dois comportamentos padrão, pedidos pelo dono em 20/10: a app **abre com o computador, minimizada na bandeja**
+(login item do usuário, com `--hidden`; registrado a cada abertura da app instalada; `autostart: false` em
+`settings.json` ou o painel desligam) e **uma atualização instala sozinha** 15 s depois de baixada (o agente para
+limpo, a app reinicia em silêncio e o agente volta; `updateAutoInstall: false` em `settings.json` faz esperar pelo
+botão "Restart to update now" ou pela saída da app).
 
 ## O que a app faz e o que não muda
 
@@ -21,11 +41,13 @@ inglês, como todo texto que o licenciado lê). Este README não vai no instalad
 
 ## Compilar
 
-Node 24 com npm, nesta pasta:
+Node 24 com npm, na raiz da caixa (`agent/`):
 
 ```powershell
 npm ci
-npm test                       # node --test tests/*.test.mjs (usa agent/tests/fixtures: hub falso, raiz, inglês)
+npm test                       # node --test tests/app/*.test.mjs (usa agent/tests/fixtures: hub falso, raiz, inglês)
+npm run dev                    # electron-vite dev: a app com o painel React servido pelo Vite (hot reload)
+npm run build                  # electron-vite build: src/ -> out/ (o scripts/build.mjs faz isso antes do instalador)
 npm run icons                  # regrava build/icon.png e assets/tray/*.png (já versionados)
 node scripts/build.mjs --platform win --pack <ssam-agent.zip>
 node scripts/build.mjs --platform mac --pack <ssam-agent-mac.tar.gz>     # só num Mac
@@ -35,7 +57,7 @@ Sem `--update-url`, o build publica para o update server do dono, `https://dist.
 de `electron-builder.yml`); `--update-url` ou `SSAM_UPDATE_URL` trocam, por exemplo para um teste local.
 
 - O pacote: `scripts\agent-pack.ps1 ... -NoNode` (Windows) ou `-Platform mac` (macOS). O script de build extrai o
-  pacote em `app/pack`, confere cada sha256 do `pack.json` e recusa um pacote com `agent/node/` ou da outra plataforma.
+  pacote em `pack/`, confere cada sha256 do `pack.json` e recusa um pacote com `agent/node/` ou da outra plataforma.
   `--pack-only` para depois disso; `--no-updates` gera uma app que nunca se atualiza (sem `publish`).
 - A URL do update server vai para `resources/app-update.yml` (o electron-updater lê de lá). `SSAM_UPDATE_URL` no
   ambiente vale como `--update-url`.

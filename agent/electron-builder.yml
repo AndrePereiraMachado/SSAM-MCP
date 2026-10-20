@@ -12,17 +12,24 @@ artifactName: ${name}-${version}-${os}-${arch}.${ext}
 directories:
   output: dist
   buildResources: build
+# Only the built app goes in the asar: out/ (electron-vite: main, preload, renderer), the tray icons and the window
+# icon. The rest of this folder (the agent code in agent/, the bridges in kernel/ and platforms/, the pack scripts,
+# the docs, the tests, src/) reaches the customer only through the pack (extraResources).
 files:
-  - src/**/*
-  - ui/**/*
+  - out/**/*
   - assets/**/*
+  - build/icon.png
   - package.json
-  - "!**/*.test.mjs"
+  - "!src/**"
+  - "!agent/**"
+  - "!kernel/**"
+  - "!platforms/**"
+  - "!docs/**"
   - "!tests/**"
   - "!scripts/**"
   - "!pack/**"
   - "!dist/**"
-  - "!README.md"
+  - "!*.md"
 extraResources:
   - from: pack
     to: pack

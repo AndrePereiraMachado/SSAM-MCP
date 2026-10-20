@@ -1,4 +1,4 @@
-# The macOS build of the agent's desktop app (agent/app): electron-builder makes the DMG and the ZIP of the updater
+# The macOS build of the agent's desktop app (the agent box, agent/package.json): electron-builder makes the DMG and the ZIP of the updater
 # only on macOS, so this runs on a macOS runner by hand (workflow_dispatch) on the branch you choose.
 #
 # The macOS agent pack (scripts/agent-pack.ps1 -Platform mac: ssam-agent-mac.tar.gz) is not in the repository: upload
@@ -18,7 +18,7 @@ name: Agent app (macOS build)
 on:
   push:
     branches: [server/agent-electron]
-    paths: ['.github/workflows/agent-app-mac.yml', 'agent/app/**']
+    paths: ['.github/workflows/agent-app-mac.yml', 'agent/src/**', 'agent/assets/**', 'agent/scripts/build.mjs', 'agent/electron-builder.yml', 'agent/electron.vite.config.mjs', 'agent/package.json']
   workflow_dispatch:
     inputs:
       pack_release:
@@ -46,7 +46,7 @@ jobs:
       contents: read
     defaults:
       run:
-        working-directory: agent/app
+        working-directory: agent
     steps:
       - uses: actions/checkout@v4
 
@@ -54,7 +54,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: agent/app/package-lock.json
+          cache-dependency-path: agent/package-lock.json
 
       - name: Download the macOS agent pack from the release
         env:
@@ -100,7 +100,7 @@ jobs:
           name: ssam-agent-app-mac
           if-no-files-found: error
           path: |
-            agent/app/dist/*.dmg
-            agent/app/dist/*.zip
-            agent/app/dist/*.blockmap
-            agent/app/dist/latest-mac.yml
+            agent/dist/*.dmg
+            agent/dist/*.zip
+            agent/dist/*.blockmap
+            agent/dist/latest-mac.yml
