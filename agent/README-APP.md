@@ -112,8 +112,10 @@ O electron-builder só gera o DMG e o ZIP do updater num macOS. O workflow `.git
    (ou pela página Releases; para outro pacote, suba o asset de novo com `gh release upload agent-pack-mac <arquivo> --clobber`).
 3. Em Actions, "Agent app (macOS build)", Run workflow, branch `server/agent-electron` (os campos já vêm com o tag,
    o nome do asset e `https://dist.ssam.pro/u/ssam-agent`).
-4. Baixe o artefato `ssam-agent-app-mac`: `ssam-agent-app-<v>-mac-arm64.dmg`, `-x64.dmg`, os `.zip`, os `.blockmap` e
-   `latest-mac.yml`. Copie tudo para `https://dist.ssam.pro/u/ssam-agent/` ao lado dos arquivos do Windows.
+4. O workflow publica a build na release **`app-v<versão>`** (pré-release; um build novo da mesma versão substitui os
+   arquivos): `ssam-agent-app-<v>-mac-arm64.dmg`, `-x64.dmg`, os `.zip`, os `.blockmap` e `latest-mac.yml`. Os mesmos
+   arquivos ficam no artefato `ssam-agent-app-mac` da execução. Copie tudo para `https://dist.ssam.pro/u/ssam-agent/`
+   ao lado dos arquivos do Windows. A release `agent-pack-mac` é só a ENTRADA (o pacote do agente), não a app.
 
 **Escolha do dono (20/10/2026): o DMG sai sem assinatura.** Sem o secret `CSC_LINK`, o workflow roda o electron-builder
 com `CSC_IDENTITY_AUTO_DISCOVERY=false` e nada é assinado; não há passo de assinatura a configurar. Num Mac, a app abre
