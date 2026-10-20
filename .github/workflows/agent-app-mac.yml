@@ -84,7 +84,12 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           NOTARIZE: ${{ secrets.APPLE_ID != '' && secrets.CSC_LINK != '' }}
         run: |
-          if [ "$CSC_LINK" = "" ]; then echo "::notice::Unsigned build: no CSC_LINK secret, so nothing is signed. On a Mac open the app once with right-click > Open (Gatekeeper); electron-updater does not auto-update an unsigned app, so new versions are installed by hand."; fi
+          # An EMPTY CSC_LINK still counts as "a certificate file" for electron-builder (it fails with "<folder> not a
+          # file", the first run of 2026-10-20): the signing variables must not exist at all for an unsigned build.
+          if [ "$CSC_LINK" = "" ]; then
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+            echo "::notice::Unsigned build: no CSC_LINK secret, so nothing is signed. On a Mac open the app once with right-click > Open (Gatekeeper); electron-updater does not auto-update an unsigned app, so new versions are installed by hand."
+          fi
           if [ "$NOTARIZE" = "true" ]; then extra="--notarize"; else extra=""; fi
           node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/pack/$PACK_ASSET" --update-url "$UPDATE_URL" $extra
           ls -la dist
