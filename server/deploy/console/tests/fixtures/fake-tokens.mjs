@@ -1,6 +1,11 @@
 // Test double of the 24th image's token module (DESIGN 7.1 TOKENS lane): the same file format and verbs as
 // server/platforms/odc/facade/server-tokens.mjs plus renew(id, {days}) and setLanes(id, lanes), with error codes and the
 // old messages. Used by the console tests to exercise the Renovar/Faixas paths; never shipped.
+// openTokenStore mirrors the image with the Postgres store (server-tokens.mjs): with env.SSAM_DATABASE_URL it answers a
+// store with the SHAPE of the Postgres one (backend 'postgres', promise-returning writers, refresh(), close()) over the
+// same tokens.json, so the console's await paths run without a database. Test switches (globalThis, never shipped):
+// SSAM_TEST_OPEN_FAIL = n makes the next n openTokenStore calls fail with STORE_UNAVAILABLE (the reconnect path);
+// SSAM_TEST_ASYNC_LOSE = '<verb>' makes that verb's write vanish after it answered (another writer's copy landed last).
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
@@ -93,5 +98,27 @@ export function createTokenStore(dir, { now = () => new Date() } = {}) {
     },
     list() { return load().map(view); },
     stateOf(id) { const t = load().find(x => x.id === id); return t ? stateOf(t) : 'unknown'; },
+  };
+}
+
+export async function openTokenStore({ dir, env = {} } = {}) {
+  if (globalThis.SSAM_TEST_OPEN_FAIL > 0) {
+    globalThis.SSAM_TEST_OPEN_FAIL -= 1;
+    throw fail('STORE_UNAVAILABLE', 'Token store unavailable: test switch');
+  }
+  const file = createTokenStore(dir);
+  if (!env.SSAM_DATABASE_URL) return file;
+  const tokensFile = path.join(dir, 'tokens.json');
+  const wrap = verb => async (...args) => {
+    const before = fs.existsSync(tokensFile) ? fs.readFileSync(tokensFile) : null;
+    const value = file[verb](...args);
+    if (globalThis.SSAM_TEST_ASYNC_LOSE === verb) { if (before) fs.writeFileSync(tokensFile, before); else fs.unlinkSync(tokensFile); }
+    return value;
+  };
+  return {
+    backend: 'postgres', file: null,
+    ready: async () => {}, refresh: async () => {}, close: async () => {},
+    issue: wrap('issue'), agentRotate: wrap('agentRotate'), renew: wrap('renew'), setLanes: wrap('setLanes'), revoke: wrap('revoke'),
+    list: () => file.list(), stateOf: id => file.stateOf(id),
   };
 }

@@ -1,13 +1,15 @@
 // DESIGN 3.5, 4.1 and 7.2 "licenses": capability flags with and without renew/setLanes (501 NOT_SUPPORTED), revoke twice
 // (409 ALREADY_REVOKED), store errors mapped by code then by message, external changes become "externo" history lines,
-// console-audit line shape, unreadable store (503) and a failing console-audit append.
+// console-audit line shape, unreadable store (503) and a failing console-audit append. The Postgres-shaped store
+// (openTokenStore with SSAM_DATABASE_URL: promise-returning writers, the read-back through refresh() + list()) with the
+// test double; the real Postgres store in licenses-pg.test.mjs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { mapStoreError } from '../licenses.mjs';
-import { FAKE_MODULE, IMAGE23_MODULE, RACING_MODULE, REAL_MODULE, SECRET, makeEnv, startConsole } from './helpers.mjs';
+import { FAKE_MODULE, IMAGE23_MODULE, RACING_MODULE, REAL_MODULE, SECRET, clock, makeEnv, startConsole } from './helpers.mjs';
 import { createTz } from '../tz.mjs';
 import { buildScenario } from './scenario.mjs';
 
@@ -406,4 +408,74 @@ test('license writes: auto is read-only on a module without the writers lock (23
   r = await c.post('/api/licenses', { customer: 'Cliente Delta', days: 30, lanes: ['odc'], confirm: 'Cliente Delta' });
   assert.equal(r.status, 501);
   assert.deepEqual(r.body.error, { code: 'WRITES_OFF', message: 'Ações de licença desligadas neste painel (CONSOLE_LICENSE_WRITES=off).' });
+});
+
+test('the Postgres-shaped store (openTokenStore with SSAM_DATABASE_URL): promise-returning verbs awaited, auto writes, every action end to end, a lost write refused', async t => {
+  const env = makeEnv({ tokenModule: FAKE_MODULE, licenseWrites: 'auto', databaseUrl: 'postgres://ssam:x@db:5432/ssam' });
+  const sc = await buildScenario(env, { module: FAKE_MODULE });
+  const c = await startConsole(env);
+  t.after(() => { delete globalThis.SSAM_TEST_ASYNC_LOSE; return c.close(); });
+  assert.equal(c.app.parts.licenses.backend, 'postgres');
+  // auto writes: the Postgres store has renew and setLanes (one transaction under an advisory lock)
+  assert.deepEqual((await c.get('/api/meta')).body.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, readOnly: null });
+  let r = await c.post('/api/licenses', { customer: 'Cliente Delta', days: 30, lanes: ['odc'], confirm: 'Cliente Delta' });
+  assert.equal(r.status, 201);
+  assert.match(r.body.secret.token, SECRET);
+  const delta = r.body.license;
+  r = await c.post(`/api/licenses/${delta.id}/renew`, { days: 10, confirm: 'Cliente Delta', expectExpiresAt: delta.expiresAt });
+  assert.equal(r.status, 200);
+  assert.ok(Date.parse(r.body.expiresAt) > Date.parse(delta.expiresAt));
+  r = await c.post(`/api/licenses/${delta.id}/lanes`, { lanes: ['odc', 'o11'], confirm: 'Cliente Delta', expectLanes: ['odc'] });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.license.lanes, ['odc', 'o11']);
+  r = await c.post(`/api/licenses/${delta.id}/agent-rotate`, { confirm: 'Cliente Delta' });
+  assert.equal(r.status, 200);
+  assert.match(r.body.secret.agentCredential, SECRET);
+  r = await c.post(`/api/licenses/${delta.id}/revoke`, { confirm: 'Cliente Delta' });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.license.state, 'revoked');
+  // a refusal of the store is a rejection on this backend: mapped like a synchronous throw
+  r = await c.post(`/api/licenses/${delta.id}/renew`, { days: 10, confirm: 'Cliente Delta', expectExpiresAt: r.body.license.expiresAt });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error.code, 'TOKEN_REVOKED');
+  // the read-back goes through refresh() + list(): a write that vanished (another writer's copy landed last) is refused
+  globalThis.SSAM_TEST_ASYNC_LOSE = 'revoke';
+  r = await c.post(`/api/licenses/${sc.beta.id}/revoke`, { confirm: 'Cliente Beta' });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error.code, 'WRITE_NOT_CONFIRMED');
+  delete globalThis.SSAM_TEST_ASYNC_LOSE;
+  assert.equal((await c.get('/api/licenses')).body.licenses.find(l => l.id === sc.beta.id).state, 'active');
+  assert.deepEqual(auditLines(env).map(l => [l.action, l.result, l.code]),
+    [['issue', 'ok', null], ['renew', 'ok', null], ['lanes', 'ok', null], ['agent-rotate', 'ok', null], ['revoke', 'ok', null], ['renew', 'error', 'TOKEN_REVOKED'], ['revoke', 'error', 'WRITE_NOT_CONFIRMED']]);
+  assert.ok(c.logs.some(l => l.includes('"console":"write-not-confirmed"') && l.includes('"action":"revoke"')));
+});
+
+test('a store that cannot be opened at start leaves the console read-only and is opened again on the polls, at most once every 30 s', async t => {
+  const env = makeEnv({ tokenModule: FAKE_MODULE, databaseUrl: 'postgres://ssam:x@db:5432/ssam' });
+  await buildScenario(env, { module: FAKE_MODULE });
+  const now = clock();
+  globalThis.SSAM_TEST_OPEN_FAIL = 2;
+  const c = await startConsole(env, { now });
+  t.after(() => { delete globalThis.SSAM_TEST_OPEN_FAIL; return c.close(); });
+  assert.ok(c.logs.some(l => l.includes('"console":"token-module-failed","code":"STORE_UNAVAILABLE"')));
+  assert.deepEqual((await c.get('/api/meta')).body.capabilities, { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, readOnly: null });
+  let r = await c.get('/api/licenses');
+  assert.equal(r.status, 503);
+  assert.equal(r.body.error.code, 'STORE_UNREADABLE');
+  assert.equal((await c.post('/api/licenses', { customer: 'Cliente Alfa', days: 30, lanes: ['odc'], confirm: 'Cliente Alfa' })).status, 501);
+  // first poll: opened again, fails once more (the switch); the next poll within 30 s does not try
+  await c.app.tickAll();
+  assert.equal(globalThis.SSAM_TEST_OPEN_FAIL, 0);
+  assert.equal((await c.get('/api/licenses')).status, 503);
+  await c.app.tickAll();
+  assert.equal((await c.get('/api/licenses')).status, 503, 'no retry within 30 s');
+  now.advance(30001);
+  await c.app.tickAll();
+  assert.ok(c.logs.some(l => l.includes('"console":"token-store-reconnected","backend":"postgres"')));
+  assert.deepEqual((await c.get('/api/meta')).body.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, readOnly: null });
+  r = await c.get('/api/licenses');
+  assert.equal(r.status, 200);
+  assert.equal(r.body.licenses.length, 3);
+  // no external change is invented from the first snapshot taken after the reconnect
+  assert.ok(!(await c.get('/api/history')).body.entries.some(e => e.actor === 'externo'));
 });

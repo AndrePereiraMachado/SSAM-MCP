@@ -3,6 +3,7 @@
 import './alerts.test.mjs';
 import './host.test.mjs';
 import './licenses.test.mjs';
+import './licenses-pg.test.mjs';
 import './live.test.mjs';
 import './misc.test.mjs';
 import './quality-line.test.mjs';

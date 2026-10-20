@@ -36,7 +36,9 @@ export function tempDir(prefix = 'c') {
 // serverDir, stateDir, publicDir (index.html, app.css, js/main.js, favicon.svg and a mock fixture that must never be served).
 // licenseWrites defaults to 'on' here so the tests drive every action with the image's module; production defaults to
 // 'auto' (licenses.mjs, DEPLOY.md 15.4), which the license tests cover on their own.
-export function makeEnv({ tokenModule = REAL_MODULE, domain = 'ssam.example.com', kernel = KERNEL_JSON, licenseWrites = 'on' } = {}) {
+// databaseUrl: the tokens in Postgres through the module's openTokenStore (null keeps tokens.json); github: the GitHub
+// sign-in (config.mjs parseGithub's shape) in place of the access key; port: a fixed loopback port (freePort()).
+export function makeEnv({ tokenModule = REAL_MODULE, domain = 'ssam.example.com', kernel = KERNEL_JSON, licenseWrites = 'on', databaseUrl = null, github = null, port = 0 } = {}) {
   const root = tempDir('env');
   const env = { root, serverDir: path.join(root, 'server'), stateDir: path.join(root, 'state'), publicDir: path.join(root, 'public'),
     hostJson: path.join(root, 'host', 'host.json') };
@@ -48,9 +50,18 @@ export function makeEnv({ tokenModule = REAL_MODULE, domain = 'ssam.example.com'
   fs.writeFileSync(path.join(env.publicDir, 'mock', 'overview.json'), '{"mock":true}');
   fs.writeFileSync(path.join(env.publicDir, 'notes.txt'), 'not whitelisted');
   if (kernel) fs.writeFileSync(path.join(env.serverDir, 'kernel.json'), JSON.stringify(kernel));
-  env.config = { serverDir: env.serverDir, socket: null, tcp: { host: '127.0.0.1', port: 0 }, stateDir: env.stateDir, hostJson: env.hostJson,
-    publicDir: env.publicDir, tokenModule, domain, timeZone: 'America/Sao_Paulo', licenseWrites };
+  env.config = { serverDir: env.serverDir, socket: null, tcp: { host: '127.0.0.1', port }, stateDir: env.stateDir, hostJson: env.hostJson,
+    publicDir: env.publicDir, tokenModule, domain, timeZone: 'America/Sao_Paulo', licenseWrites, databaseUrl, github };
   return env;
+}
+
+// A loopback port nothing listens on right now (for a console whose public URL must be known before it listens).
+export function freePort() {
+  return new Promise((resolve, reject) => {
+    const probe = http.createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => { const { port } = probe.address(); probe.close(() => resolve(port)); });
+  });
 }
 
 export function clock(start = Date.now()) {
