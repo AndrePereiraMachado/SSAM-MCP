@@ -62,7 +62,8 @@ case "$cmd" in
   status)
     c=$(container)
     echo "container: $c"
-    echo "image:     $($DOCKER inspect --format '{{.Config.Image}}' "$c") ($(image_of "$c"))"
+    echo "image:     $($DOCKER inspect --format '{{.Config.Image}}' "$c") (id $(image_of "$c"))"
+    echo "digest:    $($DOCKER image inspect --format '{{range .RepoDigests}}{{.}} {{end}}' "$(image_of "$c")" 2>/dev/null || echo '(not from a registry)')"
     echo "version:   $($DOCKER inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}} rev {{index .Config.Labels "org.opencontainers.image.revision"}}' "$c")"
     echo "state:     $($DOCKER inspect --format '{{.State.Status}}{{if .State.Health}} / {{.State.Health.Status}}{{end}}' "$c")"
     for m in /data/server /data/friction /data/odc-features /data/cache; do echo "volume:    $m = $(volume_of "$c" $m)"; done

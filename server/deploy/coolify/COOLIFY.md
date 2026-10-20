@@ -16,7 +16,7 @@ Arquivos desta pasta:
 | `ssamctl.sh` | as operações à mão na VPS, só com `docker`: tokens, `kernel.json`, `Features.plain.xml`, backup, restore, log |
 | `.env.coolify.example` | a lista das variáveis (no Coolify, as Environment Variables do recurso) |
 | `rehearsal.override.yml` | só para o ensaio local (seção 10): publica 7310 em 127.0.0.1:27310 |
-| `../publish.sh` | na máquina do dono: empurra uma imagem já construída e provada para o registro privado e mostra a linha com o digest |
+| `../publish.sh` | na máquina do dono: empurra uma imagem já construída e provada para o registro privado (nunca uma tag que já existe) e mostra as linhas para fixar |
 
 ## 1. Publicar a imagem no registro privado (máquina do dono)
 
@@ -34,8 +34,12 @@ repositório criado pelo primeiro `push` nasce PÚBLICO, a não ser que a conta 
    sh deploy/publish.sh --image docker.io/<namespace>/ssam-server --tag prod-20261020-7770621 --private-repo-ready
    ```
 
-   Ele marca `ssam-server:<tag>` como `<image>:<tag>`, empurra, lê o digest do próprio push e imprime as duas linhas
-   para o Coolify (`SSAM_IMAGE` e `SSAM_IMAGE_TAG=<tag>@sha256:<digest>`). Antes de empurrar, no Docker Hub, ele confere
+   Ele marca `ssam-server:<tag>` como `<image>:<tag>`, empurra, lê o digest do próprio push e imprime as linhas para
+   fixar: no Coolify, `SSAM_IMAGE` e `SSAM_IMAGE_TAG=<tag>` (a tag SÓ: o parser de compose do Coolify transforma
+   `<tag>@sha256:<digest>` em `<imagem>@sha256@sha256:...` e o pull falha com "invalid reference format", visto em
+   2026-10-20); num `compose.prod.yml` com `.env`, a forma com digest. A tag vale como o digest porque o `publish.sh`
+   **nunca empurra uma tag que já existe no registro** (recusa, código 2): um build novo tem tag nova. O digest sai
+   impresso para comparar na VPS com `ssamctl.sh status`. Antes de empurrar, no Docker Hub, ele confere
    sem login que o repositório NÃO é lido por qualquer um (público = recusa, código 3). De fora, um repositório privado e
    um que não existe parecem iguais (404 anônimo; "no such manifest" com login), e um push num repositório que não
    existe o CRIA PÚBLICO: por isso o `--private-repo-ready` é a sua palavra de que o passo 1 foi feito, e sem ele o
@@ -74,7 +78,8 @@ até 60 min). Isso não cabe em rótulo: o provedor Docker do Traefik não tem r
 1. **Projects > o projeto > Add resource > Docker Compose Empty** (ou um repositório git privado com esta pasta; o
    arquivo é `server/deploy/coolify/compose.coolify.yml`). Cole o `compose.coolify.yml`.
 2. **Environment Variables**: o Coolify lê cada `${VAR}` do compose e pede as com `:?` antes do primeiro deploy. Preencha
-   com a lista de `.env.coolify.example`: `SSAM_IMAGE` e `SSAM_IMAGE_TAG` (as duas linhas do `publish.sh`, com o digest),
+   com a lista de `.env.coolify.example`: `SSAM_IMAGE` e `SSAM_IMAGE_TAG` (as duas linhas do `publish.sh`; a tag só, sem
+   digest),
    `SSAM_DOMAIN` (o DNS da VPS, sem `https://`), `SSAM_CPUS`, `SSAM_MEMORY`, `SSAM_BUILD_WORKERS` e o resto pelo tamanho
    da VPS (DEPLOY.md seção 5).
 3. **Advanced > Docker Compose > Connect to predefined network**: ligado. O Traefik do Coolify só alcança containers na
@@ -139,12 +144,13 @@ A regra é a da seção 8 do DEPLOY.md (anuncie a janela: recriar o container co
 
 1. `sh ssamctl.sh backup` (seção 8) antes.
 2. Na máquina do dono: construa e ensaie a imagem nova (DEPLOY.md 6 e 12) e publique com `publish.sh` (seção 1).
-3. No Coolify, troque `SSAM_IMAGE_TAG` pela linha nova (com o digest) e **Redeploy**. O Traefik responde 502 enquanto
+3. No Coolify, troque `SSAM_IMAGE_TAG` pela tag nova e **Redeploy**. Depois, `ssamctl.sh status` mostra o digest da
+   imagem puxada: compare com o que o `publish.sh` imprimiu. O Traefik responde 502 enquanto
    o container novo não atende (não há "espere pelo servidor" como no Caddy; são uns segundos).
 4. Se a versão de um Studio ou da bridge mudou (o `release-record.json` do commit novo diz), a ordem é a do DEPLOY.md 8,
    passo 6: confira o par com a imagem nova (`kernel print`/`check` só funcionam depois do deploy, porque rodam na
    imagem do container), **Stop** no Coolify, `kernel write`, `features put`, **Start**.
-5. Rollback: volte `SSAM_IMAGE_TAG` para a linha anterior (o `.info` do backup guarda a imagem e o digest) e Redeploy;
+5. Rollback: volte `SSAM_IMAGE_TAG` para a tag anterior (o `.info` do backup guarda a imagem e o id) e Redeploy;
    depois `kernel print previous` (ou a tag), `check`, Stop, `kernel write`, Start, como no DEPLOY.md 8. A imagem anterior
    continua no registro: não apague tags.
 

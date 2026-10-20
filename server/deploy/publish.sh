@@ -14,7 +14,10 @@
 #      So the script refuses to push to docker.io without --private-repo-ready, the person's word that the private
 #      repository is there, and refuses outright a repository anyone can already read (anonymous 200);
 #   3. the local image <source>:<tag> is tagged <image>:<tag> and pushed; the digest is taken from the push itself;
-#   4. the line to pin in Coolify (or in .env) is printed: SSAM_IMAGE=<image> and SSAM_IMAGE_TAG=<tag>@sha256:<digest>;
+#   4. the lines to pin are printed: SSAM_IMAGE=<image> and SSAM_IMAGE_TAG=<tag> for Coolify (its compose parser breaks a
+#      reference with a digest into "<image>@sha256@sha256:..."), or SSAM_IMAGE_TAG=<tag>@sha256:<digest> for a plain
+#      compose.prod.yml (.env). A tag already in the registry is never pushed again (step 3), so the tag alone is as fixed
+#      as the digest; the digest is what ssamctl.sh status shows on the VPS, to compare;
 #   5. on Docker Hub the repository is checked ANONYMOUSLY again after the push: readable by anyone = exit 3 and a loud
 #      message (the image carries OutSystems Studio binaries: LICENSE, DEPLOY.md section 2).
 set -eu
@@ -57,6 +60,11 @@ if [ -n "$hub_repo" ]; then
   esac
 fi
 
+# A tag already in the registry is never pushed again: what a VPS pinned by tag keeps meaning the same bits (Coolify
+# cannot take the digest form: COOLIFY.md 1). A new build gets a new tag.
+if $DOCKER manifest inspect "$IMAGE:$TAG" >/dev/null 2>&1; then
+  echo "publish: REFUSED: $IMAGE:$TAG already exists in the registry; a tag is never pushed twice. Build with a new tag (deploy/build.sh --tag)." >&2; exit 2
+fi
 echo "publish: $SOURCE:$TAG (revision $revision) -> $IMAGE:$TAG"
 $DOCKER tag "$SOURCE:$TAG" "$IMAGE:$TAG"
 out=$(mktemp)
@@ -70,9 +78,11 @@ if [ -z "$digest" ]; then
   digest=$($DOCKER image inspect --format '{{range .RepoDigests}}{{.}}{{"\n"}}{{end}}' "$IMAGE:$TAG" | sed -n "s#^\($IMAGE\|$short\)@##p" | head -n 1)
 fi
 [ -n "$digest" ] || { echo "publish: pushed, but the digest could not be read: docker buildx imagetools inspect $IMAGE:$TAG shows it" >&2; exit 1; }
-echo "publish: pushed. Pin it in Coolify (Environment Variables) or in .env:"
+echo "publish: pushed. Pin it:"
 echo "  SSAM_IMAGE=$IMAGE"
-echo "  SSAM_IMAGE_TAG=$TAG@$digest"
+echo "  SSAM_IMAGE_TAG=$TAG                 (Coolify: the tag alone; its parser breaks a reference with a digest)"
+echo "  SSAM_IMAGE_TAG=$TAG@$digest   (compose.prod.yml .env: with the digest)"
+echo "publish: the digest to compare on the VPS (ssamctl.sh status, or docker image inspect RepoDigests): $digest"
 
 if [ -n "$hub_repo" ]; then
   case "$(hub_visibility "$hub_repo")" in

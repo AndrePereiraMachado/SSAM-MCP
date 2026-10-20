@@ -2,7 +2,8 @@
 # SSAM-MCP monorepo; runbook in pt-BR: COOLIFY.md, in this folder. The production compose with Caddy stays
 # ../compose.prod.yml (DEPLOY.md); this file is the same server, with the proxy's part written as Traefik labels.
 #
-#   ssam-server  the image published to the PRIVATE registry (../publish.sh), pinned by tag AND digest. No host port:
+#   ssam-server  the image published to the PRIVATE registry (../publish.sh), pinned by tag (Coolify's parser cannot take
+#                a digest; publish.sh never pushes a tag twice, and ssamctl.sh status shows the digest). No host port:
 #                Traefik reaches it on 7310 over the network Coolify gives the resource ("Connect to predefined network",
 #                COOLIFY.md 4). The labels below are the whole routing: Coolify generates none because no domain is set on
 #                the service in its UI (the domain is the variable SSAM_DOMAIN).
@@ -47,9 +48,9 @@ x-hardening: &hardening
 services:
   ssam-server:
     <<: *hardening
-    # From the private registry, pinned by tag and digest (publish.sh prints the line): a tag pushed again cannot change
-    # what runs here, and a rollback gets exactly the old image.
-    image: ${SSAM_IMAGE:?set SSAM_IMAGE (e.g. docker.io/<namespace>/ssam-server)}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG (prod-<yyyymmdd>-<commit>@sha256:<digest>)}
+    # From the private registry, pinned by tag (publish.sh prints the line; it never pushes a tag twice, so the tag names
+    # one image for good). Not "<tag>@sha256:<digest>": Coolify turns it into "<image>@sha256@sha256:..." and the pull fails.
+    image: ${SSAM_IMAGE:?set SSAM_IMAGE (e.g. docker.io/<namespace>/ssam-server)}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG (prod-<yyyymmdd>-<commit>)}
     platform: linux/amd64
     restart: unless-stopped
     environment:
