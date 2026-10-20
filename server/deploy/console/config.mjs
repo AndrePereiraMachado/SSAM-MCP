@@ -10,8 +10,9 @@
 // openTokenStore; without it tokens.json), the GitHub sign-in (CONSOLE_GITHUB_CLIENT_ID, CONSOLE_GITHUB_CLIENT_SECRET,
 // CONSOLE_GITHUB_ALLOWED_LOGINS, CONSOLE_PUBLIC_URL, CONSOLE_SESSION_SECRET; github-auth.mjs) and CONSOLE_LISTEN
 // (host:port inside the compose network, any address: allowed only with the GitHub sign-in, since the console then
-// answers to whoever reaches that port). CONSOLE_GITHUB_BASE_URL and CONSOLE_GITHUB_API_URL exist for the tests' fake
-// GitHub only.
+// answers to whoever reaches that port; with the sign-in and no CONSOLE_LISTEN the default is 0.0.0.0:7320, the port
+// the compose and its healthcheck name, so a variable the platform drops never sends the console to the unix socket).
+// CONSOLE_GITHUB_BASE_URL and CONSOLE_GITHUB_API_URL exist for the tests' fake GitHub only.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -31,6 +32,7 @@ export function parseTcp(value) {
   return { host: LOOPBACK.get(host), port };
 }
 
+export const DEFAULT_LISTEN = '0.0.0.0:7320';
 export const LICENSE_WRITES = ['auto', 'on', 'off'];
 export function parseLicenseWrites(value) {
   const v = String(value ?? '').trim().toLowerCase() || 'auto';
@@ -77,7 +79,7 @@ export function parseGithub(env) {
 export function loadConfig(argv = process.argv.slice(2), env = process.env) {
   const at = argv.indexOf('--tcp');
   const github = parseGithub(env);
-  const listen = text(env.CONSOLE_LISTEN) ? parseListen(env.CONSOLE_LISTEN) : null;
+  const listen = text(env.CONSOLE_LISTEN) ? parseListen(env.CONSOLE_LISTEN) : github ? parseListen(DEFAULT_LISTEN) : null;
   if (listen && !github) throw new Error('CONSOLE_LISTEN needs the GitHub sign-in (CONSOLE_GITHUB_CLIENT_ID...): without it the console listens on loopback (--tcp) or the unix socket only');
   const tcp = at >= 0 ? parseTcp(argv[at + 1]) : listen;
   const dir = (value, fallback) => path.resolve(value || fallback);

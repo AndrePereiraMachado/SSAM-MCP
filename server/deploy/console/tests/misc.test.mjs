@@ -176,6 +176,10 @@ test('the Coolify mode variables: SSAM_DATABASE_URL passed through, the GitHub s
   const coolify = loadConfig([], { ...full, CONSOLE_LISTEN: '0.0.0.0:7320' });
   assert.deepEqual(coolify.tcp, { host: '0.0.0.0', port: 7320 });
   assert.equal(coolify.socket, null);
+  // the sign-in without CONSOLE_LISTEN: the compose's port, never the unix socket
+  assert.deepEqual(loadConfig([], full).tcp, { host: '0.0.0.0', port: 7320 });
+  assert.equal(loadConfig([], full).socket, null);
+  assert.deepEqual(loadConfig([], { ...full, CONSOLE_LISTEN: '[::]:7321' }).tcp, { host: '::', port: 7321 });
   assert.equal(coolify.github.publicUrl, 'https://painel.example.com');
   // --tcp (loopback) still wins for a local run with the sign-in
   assert.deepEqual(loadConfig(['--tcp', '127.0.0.1:7399'], { ...full, CONSOLE_LISTEN: '0.0.0.0:7320' }).tcp, { host: '127.0.0.1', port: 7399 });

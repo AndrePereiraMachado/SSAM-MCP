@@ -295,7 +295,7 @@ servidor e do uso), no mesmo compose, com três diferenças em relação ao modo
 
 | DEPLOY.md 15 (compose.prod.yml) | Aqui (Coolify) |
 | --- | --- |
-| sem rede: socket unix, túnel SSH pelo `painel-ssam.ps1`, chave de acesso em `access.key` | TCP na rede do compose (`CONSOLE_LISTEN=0.0.0.0:7320`, sem porta no host), roteador próprio do Traefik em `https://CONSOLE_DOMAIN`, **login pelo GitHub** |
+| sem rede: socket unix, túnel SSH pelo `painel-ssam.ps1`, chave de acesso em `access.key` | TCP na rede do compose (`CONSOLE_LISTEN`, padrão `0.0.0.0:7320` no modo GitHub, sem porta no host), roteador próprio do Traefik em `https://CONSOLE_DOMAIN`, **login pelo GitHub** |
 | licenças em `tokens.json` | licenças no Postgres do servidor (`SSAM_DATABASE_URL`): a gravação é relida da tabela antes de o painel responder |
 | coletor do host (`host.json`, aba VPS) | não existe: a aba VPS mostra o coletor como ausente; o resto (servidor, sessões, agentes, uso, qualidade, eventos, histórico) é o mesmo |
 

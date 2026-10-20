@@ -156,8 +156,9 @@ services:
       CONSOLE_LICENSE_WRITES: ${CONSOLE_LICENSE_WRITES:-auto}
       # the licenses in the same Postgres as the server (the console's own read-back goes through the table)
       SSAM_DATABASE_URL: ${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL}
-      # TCP inside the compose network (Traefik reaches it; no host port); allowed only with the GitHub sign-in below
-      CONSOLE_LISTEN: 0.0.0.0:7320
+      # TCP inside the compose network (Traefik reaches it; no host port); allowed only with the GitHub sign-in below,
+      # and the console's own default with it (a platform that drops this value changes nothing)
+      CONSOLE_LISTEN: "0.0.0.0:7320"
       CONSOLE_PUBLIC_URL: https://${CONSOLE_DOMAIN:?set CONSOLE_DOMAIN (the DNS name of the console, e.g. painel.ssam.example.com)}
       # the GitHub OAuth App of the owner (COOLIFY.md 11): id, secret, and the GitHub logins allowed in (comma-separated)
       CONSOLE_GITHUB_CLIENT_ID: ${CONSOLE_GITHUB_CLIENT_ID:?set CONSOLE_GITHUB_CLIENT_ID (the OAuth App's Client ID)}
