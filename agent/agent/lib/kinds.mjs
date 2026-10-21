@@ -250,11 +250,24 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
     if (candidates.length === 0) throw refuse('STUDIO_NOT_SELECTED', 'No matching Service Studio is open. Open it normally, then connect.');
     if (candidates.length > 1) throw refuse('STUDIO_NOT_SELECTED', 'Several Service Studios are open (' + candidates.map(p => p.pid).join(', ') + '); select one with pid.');
     const target = await checkPid('o11', candidates[0].pid);
-    if (pack.o11BuiltFor && !sameVersion(target.version, pack.o11BuiltFor))
-      throw refuse('STUDIO_VERSION_MISMATCH', `Service Studio ${target.pid} is version ${target.version ?? 'unknown'}; the agent pack bridge is built for ${pack.o11BuiltFor}`);
+    // The server's version window (servedVersions of the hello reply) decides, not the pack alone: a bridge built for one
+    // served version is loaded into another served Service Studio with a warning. Without a window from the server, or
+    // with either version outside it, the built-for version must match as before.
+    let warning;
+    if (pack.o11BuiltFor && !sameVersion(target.version, pack.o11BuiltFor)) {
+      const served = kernel()?.servedVersions?.o11;
+      const window = Array.isArray(served) ? served.filter(v => typeof v === 'string') : [];
+      const inWindow = version => window.some(v => sameVersion(v, version));
+      if (!inWindow(target.version) || !inWindow(pack.o11BuiltFor))
+        throw refuse('STUDIO_VERSION_MISMATCH', `Service Studio ${target.pid} is version ${target.version ?? 'unknown'}; the agent pack bridge is built for ${pack.o11BuiltFor}`
+          + (window.length ? `, and the server serves Service Studio ${window.join(', ')}. Install the current agent package.` : ''));
+      warning = { code: 'O11_BRIDGE_BUILT_FOR_DIFFERS', builtFor: pack.o11BuiltFor, studio: target.version,
+        message: `The agent's Service Studio bridge was built for Service Studio ${pack.o11BuiltFor} and is loaded into Service Studio ${target.version}; `
+          + `the server serves both versions. Check the result in Service Studio before publishing.` };
+    }
     // pack.json decides the hook (o11Hook "h1": the signed release layout) and the bridge file of the version handshake.
     const record = await connectO11({ root, pid: target.pid, port: o11Port, studioVersion: target.version, describe: deps.describe,
-      attach: deps.attachO11, sleep: deps.sleep, now: deps.now, pack, ...(deps.env ? { env: deps.env } : {}) });
+      attach: deps.attachO11, sleep: deps.sleep, now: deps.now, pack, warning, ...(deps.env ? { env: deps.env } : {}) });
     onConnection(record);
     return record;
   }

@@ -444,7 +444,8 @@ async function connectO11Studios(o11, { pid, onlyLane }) {
     else if (!entry.target) entry.note = pid === undefined && processes.length > 1
       ? 'several Service Studios are open (' + processes.map(x => x.pid).join(', ') + '); select one with pid' : 'not the Studio asked for';
     else {
-      try { await o11.connect(p.pid); entry.attached = true; }
+      // A bridge built for another served version connects with the agent's warning (kinds.mjs O11_BRIDGE_BUILT_FOR_DIFFERS).
+      try { const record = await o11.connect(p.pid); entry.attached = true; if (record?.warning) entry.warning = record.warning; }
       catch (error) { entry.error = message(error); }
     }
     if (entry.attached) Object.assign(entry, await o11.session(o11.record()).catch(() => ({ tenant: null, account: null })));

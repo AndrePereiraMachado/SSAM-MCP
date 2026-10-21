@@ -154,7 +154,7 @@ const nonThin = (port, executed = false) =>
 const failedReceipt = hook => { try { return readJson(hook + '.receipt.json').ok === false; } catch { return false; } };
 
 export async function connectO11({ root, pid, port, studioVersion = null, describe, attach, probe = probeBridge, request = bridgeRequest,
-  sleep = delay, now = Date.now, pack = null, env = process.env }) {
+  sleep = delay, now = Date.now, pack = null, env = process.env, warning = null }) {
   const folder = path.join(root, 'private', 'runtime-connect');
   fs.mkdirSync(folder, { recursive: true });
   const lock = path.join(folder, 'port-' + port + '.lock');
@@ -230,7 +230,8 @@ export async function connectO11({ root, pid, port, studioVersion = null, descri
     if (confirmed.startedUtc !== target.startedUtc) throw fail('The Studio changed before the connection was confirmed.', null);
     const record = { ok: true, lane: 'o11', connected: true, reused, pid: target.pid, startedUtc: target.startedUtc,
       studioVersion: studioVersion ?? target.version ?? null, port, uiResponsive: alive.data?.alive === true, connectedAt: new Date(now()).toISOString(),
-      hook: releaseHook ? HOOK_ABI : 'dev', bridgeId: probed.manifest?.bridgeId ?? null, bridgeSha256: probed.manifest?.bridgeSha256 ?? null };
+      hook: releaseHook ? HOOK_ABI : 'dev', bridgeId: probed.manifest?.bridgeId ?? null, bridgeSha256: probed.manifest?.bridgeSha256 ?? null,
+      ...(warning ? { warning } : {}) };
     const file = connectionFile(root);
     const temporary = file + '.' + process.pid + '.tmp';
     fs.writeFileSync(temporary, JSON.stringify(record, null, 2));
