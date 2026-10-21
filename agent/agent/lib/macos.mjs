@@ -126,6 +126,11 @@ export function plistVersion(short, build) {
 // One bundle: {bundle, kind, managedDir, executable, exePath, identifier, shortVersion, bundleVersion, entry, productVersion,
 // version, versionSource, environment, runtimeConfig} or null when it is no Studio.
 export async function inspectBundle(bundle, deps = {}) {
+  const info = await inspectBundleCandidate(bundle, deps);
+  return info?.candidate ? null : info;
+}
+
+export async function inspectBundleCandidate(bundle, deps = {}) {
   const f = deps.fs ?? fs;
   const managed = managedDirOf(bundle, { fs: f });
   if (!managed) return null;
@@ -136,9 +141,14 @@ export async function inspectBundle(bundle, deps = {}) {
   const s = plist.strings;
   const configs = [...managed.names].filter(name => name.endsWith('.runtimeconfig.json')).sort();
   const preferred = MAC_STUDIOS[kind].entry;
-  const entry = (managed.names.has(preferred + '.dll') || configs.includes(preferred + '.runtimeconfig.json')) ? preferred
-    : configs.length === 1 ? configs[0].slice(0, -'.runtimeconfig.json'.length)
-    : s.CFBundleExecutable && managed.names.has(s.CFBundleExecutable + '.dll') ? s.CFBundleExecutable : null;
+  const identity = managed.names.has(preferred + '.dll') || /^com\.outsystems\..+/i.test(s.CFBundleIdentifier ?? '')
+    || String(s.CFBundleExecutable ?? '').toLowerCase() === preferred.toLowerCase();
+  if (!identity) return { bundle, candidate: true, reason: 'candidate with OutSystems assemblies and no Studio identity',
+    markers: [...managed.files].filter(([name]) => Object.values(MAC_STUDIOS).some(studio => studio.requires.includes(name))).map(([,file]) => posix.relative(bundle, file)),
+    runtimeConfigs: configs.map(name => posix.relative(bundle, managed.files.get(name))),
+    plist: Object.fromEntries(['CFBundleIdentifier', 'CFBundleExecutable', 'CFBundleShortVersionString', 'CFBundleVersion'].map(key => [key, s[key] ?? null])) };
+  const paired = name => name && managed.names.has(name + '.dll') && managed.names.has(name + '.runtimeconfig.json');
+  const entry = paired(preferred) ? preferred : paired(s.CFBundleExecutable) ? s.CFBundleExecutable : null;
   const candidates = [...new Set([...(entry ? [entry + '.dll'] : []), ...MAC_STUDIOS[kind].requires])];
   let productVersion = null; let versionDll = null;
   for (const name of candidates) {
@@ -148,9 +158,9 @@ export async function inspectBundle(bundle, deps = {}) {
   }
   const fromPlist = plistVersion(s.CFBundleShortVersionString, s.CFBundleVersion);
   const version = numbers(productVersion) ? productVersion : fromPlist;
-  let runtimeConfig = null;
+  let runtimeConfig = { missing: true };
   if (entry && managed.names.has(entry + '.runtimeconfig.json')) {
-    try { runtimeConfig = JSON.parse(f.readFileSync(managed.files.get(entry + '.runtimeconfig.json'), 'utf8').replace(/^﻿/, '')); } catch { runtimeConfig = { unreadable: true }; }
+    try { runtimeConfig = JSON.parse(f.readFileSync(managed.files.get(entry + '.runtimeconfig.json'), 'utf8').replace(/^﻿/, '')); if (!runtimeConfig || typeof runtimeConfig !== 'object' || Array.isArray(runtimeConfig)) throw new Error('Invalid runtime configuration'); } catch { runtimeConfig = { unreadable: true }; }
   }
   return { bundle, kind, managedDir: managed.dir, executable: s.CFBundleExecutable ?? null,
     exePath: s.CFBundleExecutable ? posix.join(bundle, 'Contents', 'MacOS', s.CFBundleExecutable) : null, identifier: s.CFBundleIdentifier ?? null,

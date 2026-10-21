@@ -61,8 +61,8 @@ export function createMacAttach(deps = {}) {
     const name = MAC_STUDIOS[lane].name;
     if (!p.official) throw fail(`${name} ${p.pid} runs from ${p.bundle}, which is not in /Applications or ~/Applications; the agent attaches only an installed Studio.`);
     // A runtimeconfig.json that cannot be read cannot tell whether startup hooks are on (review B7): stop before sending.
-    if (p.info.runtimeConfig?.unreadable === true)
-      throw fail(`The ${p.info.entry}.runtimeconfig.json of ${name} ${p.pid} (${p.info.managedDir}) cannot be read, so the agent cannot tell whether the Studio allows startup hooks. Nothing was sent; reinstall the Studio from its official installer, then run agent/ssam-agent.sh doctor.`);
+    if (!p.info.entry || p.info.runtimeConfig?.missing === true || p.info.runtimeConfig?.unreadable === true)
+      throw fail(`The ${p.info.entry ?? MAC_STUDIOS[lane].entry}.runtimeconfig.json of ${name} ${p.pid} (${p.info.managedDir}) cannot be read, so the agent cannot tell whether the Studio allows startup hooks. Nothing was sent; reinstall the Studio from its official installer, then run agent/ssam-agent.sh doctor.`);
     const hooks = p.info.runtimeConfig?.runtimeOptions?.configProperties?.['System.StartupHookProvider.IsSupported'];
     if (hooks === false || hooks === 'false')
       throw fail(`${name} turns startup hooks off (System.StartupHookProvider.IsSupported=false in ${p.info.entry}.runtimeconfig.json): no bridge can be attached to it. Nothing was sent.`);
@@ -80,6 +80,17 @@ export function createMacAttach(deps = {}) {
     try { info = await ipc.processInfo2(endpoint.path, { timeoutMs: 10000 }); }
     catch (error) { throw fail(`The .NET diagnostic socket of ${name} ${p.pid} did not answer ProcessInfo2 (${error.message}). Nothing was sent.`); }
     if (Number(info.pid) !== p.pid) throw fail(`The diagnostic socket of ${name} ${p.pid} answers for process ${info.pid}. Nothing was sent.`);
+    const entrypoint = String(info.entrypoint ?? '').replace(/\.(dll|exe)$/i, '');
+    if (entrypoint.toLowerCase() !== MAC_STUDIOS[lane].entry.toLowerCase())
+      throw fail(`The diagnostic entrypoint of ${name} ${p.pid} is not ${MAC_STUDIOS[lane].entry}. Nothing was sent.`);
+    const command = String(info.commandLine ?? '');
+    let executable;
+    try { executable = f.realpathSync(p.path); } catch { throw fail('The Studio executable cannot be resolved. Nothing was sent.'); }
+    const starts = prefix => command === prefix || (command.startsWith(prefix) && /^\s/.test(command.slice(prefix.length)));
+    if (!command || ![executable, '"' + executable + '"', "'" + executable + "'"].some(starts))
+      throw fail(command ? 'The diagnostic command line does not start with the real Studio executable. Nothing was sent.' : 'The diagnostic command line is empty; the Studio executable cannot be confirmed. Nothing was sent.');
+    if (p.info.entry.toLowerCase() !== entrypoint.toLowerCase())
+      throw fail('The runtimeconfig.json of the diagnostic entrypoint cannot be read, so the agent cannot tell whether the Studio allows startup hooks. Nothing was sent.');
     const major = runtimeMajor(info.clrVersion);
     if (major === null || major < 8) throw fail('Runtime connection requires .NET 8 or later. The Studio has not been changed.');
     return { p, endpoint, startSeconds: keySeconds, runtime: info.clrVersion };

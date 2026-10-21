@@ -6,7 +6,7 @@
 // sleep} (the last four: the check of the start time readers on processes of the agent, macos.mjs calibrateReaders).
 import fs from 'node:fs';
 import path from 'node:path';
-import { installedBundles, studioProcesses, tempFolders, START_READERS, machOArchs, runTool, TOOLS, homeOf, officialBundle, MAC_STUDIOS,
+import { findBundles, applicationFolders, inspectBundleCandidate, installedBundles, studioProcesses, tempFolders, START_READERS, machOArchs, runTool, TOOLS, homeOf, officialBundle, MAC_STUDIOS,
   parsePs, psText, openFiles, bundleOfExe, calibrateReaders } from './macos.mjs';
 import { unixEndpoints, processInfo2 } from './dotnet-ipc.mjs';
 import { unixPipeName, UNIX_PATH_MAX } from './odc-pipe-unix.mjs';
@@ -54,6 +54,11 @@ export async function macDoctor({ pack = {}, deps = {} } = {}) {
   // ---- installed Studios
   let bundles = [];
   try { bundles = await installedBundles({ run, fs: f, env, home }); } catch (error) { add(false, 'Studios', 'the application folders could not be read: ' + firstLine(error)); }
+  facts.candidates = [];
+  for (const bundle of findBundles(applicationFolders(home), { fs: f, includeRejected: true })) {
+    const info = await inspectBundleCandidate(bundle, { fs: f, run }).catch(() => null);
+    if (info?.candidate) { facts.candidates.push(info); add(false, 'Studio candidate', info.bundle + ': ' + info.reason); }
+  }
   facts.studios = [];
   for (const info of bundles) {
     const name = MAC_STUDIOS[info.kind].name;
@@ -66,7 +71,7 @@ export async function macDoctor({ pack = {}, deps = {} } = {}) {
     const official = officialBundle(info.bundle, home);
     const fact = { lane: info.kind, bundle: info.bundle, official, executable: info.executable, archs, managedDir: info.managedDir, entry: info.entry,
       productVersion: info.productVersion, shortVersion: info.shortVersion, bundleVersion: info.bundleVersion, version: info.version, versionSource: info.versionSource,
-      startupHooks: info.runtimeConfig?.unreadable === true ? 'unknown' : hooks === false || hooks === 'false' ? 'off' : 'on', diagnosticsEnvironment: diagnostics, sandboxed, entitlementsRead: entitlements !== null };
+      startupHooks: !info.entry || info.runtimeConfig?.missing === true || info.runtimeConfig?.unreadable === true ? 'unknown' : hooks === false || hooks === 'false' ? 'off' : 'on', diagnosticsEnvironment: diagnostics, sandboxed, entitlementsRead: entitlements !== null };
     facts.studios.push(fact);
     const problems = [];
     if (!official) problems.push('it is not in /Applications or ~/Applications: move it there (the agent attaches only an installed Studio)');

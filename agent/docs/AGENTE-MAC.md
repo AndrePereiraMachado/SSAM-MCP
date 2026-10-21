@@ -196,3 +196,11 @@ For a detection problem, send the output of `bash ~/SSAM-Agent/agent/ssam-agent.
 `private` folder, `credential`, `config.json` or keys. If the bundle is still absent, the owner may also need a
 list of DLL and runtimeconfig file paths under its `Contents` and the Info.plist version and executable fields;
 no Studio DLL needs to be sent.
+
+### Studio identity and safe attachment
+
+A family marker anywhere under Contents is necessary, but not sufficient: the bundle must also contain the family's entry DLL (ODCStudio.dll or ServiceStudio.dll), declare a com.outsystems.* bundle identifier, or use the family entry name as CFBundleExecutable (case-insensitive). ODC takes precedence. A dependency-only bundle is reported by doctor as a candidate, with relative marker and runtimeconfig paths and the four identity/version plist fields, without DLL contents.
+
+The selected entry must have both its DLL and runtimeconfig.json; prefer the family entry, otherwise the CFBundleExecutable pair. Without a readable configuration, hooks are unknown and attachment stops. ProcessInfo2 must confirm the family entrypoint (without .dll or .exe, case-insensitive), the PID and a command line starting with the real bundle executable, with proper argument boundaries. An empty command line is refused. The selected configuration must belong to that entrypoint.
+
+Neither the .app nor Contents may be a link. Doctor reports these rejected candidates. Child links remain ignored; scans exceeding 400 folders do not classify a partial result. The real bundle must be under an application folder (at most one vendor level), and the real process executable must stay inside the real bundle. These checks do not certify a vendor signature and still need a real Mac proof.
