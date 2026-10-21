@@ -1,10 +1,11 @@
-# Agente SSAM nesta maquina (cliente da fase 2, docs\AGENTE-CLIENTE.md).
+# The SSAM agent on this machine (the customer side of phase 2, docs\AGENTE-CLIENTE.md).
 #   .\agent\ssam-agent.ps1 start
 #   .\agent\ssam-agent.ps1 status
 #   .\agent\ssam-agent.ps1 stop
-# Processo node em segundo plano, sem servico do Windows e sem administrador. Antes, uma vez: setup (o guia mostra).
-# O pid, o estado e o log ficam em private\ (so este usuario le). So conexao de SAIDA para o servidor; nenhuma porta
-# aberta aqui. Proxy corporativo: HTTPS_PROXY (o node sobe com --use-env-proxy); CA corporativa: --use-system-ca.
+# A node process in the background, with no Windows service and no administrator. Once, before: setup (the guide shows
+# it). The pid, the state and the log stay in private\ (only this user reads it). Only an OUTBOUND connection to the
+# server; no port is opened here. Corporate proxy: HTTPS_PROXY (node starts with --use-env-proxy); corporate CA:
+# --use-system-ca.
 param(
   [Parameter(Position = 0, Mandatory = $true)][ValidateSet('start', 'stop', 'status')][string]$Action
 )
@@ -18,12 +19,12 @@ $logFile = Join-Path $private 'agent.log'
 $script = Join-Path $PSScriptRoot 'ssam-agent.mjs'
 
 function Get-Node {
-  # O node do pacote (-NodeExe), SSAM_NODE, ou o node do PATH.
+  # The node of the pack (-NodeExe), SSAM_NODE, or the node on the PATH.
   $candidates = @((Join-Path $PSScriptRoot 'node\node.exe'), $env:SSAM_NODE)
   foreach ($c in $candidates) { if ($c -and (Test-Path $c)) { return $c } }
   $cmd = Get-Command node -ErrorAction SilentlyContinue
   if ($cmd) { return $cmd.Source }
-  throw 'Node nao encontrado: instale o Node 24 (docs\AGENTE-CLIENTE.md) ou defina SSAM_NODE.'
+  throw 'Node not found: install Node 24 (docs\AGENTE-CLIENTE.md) or set SSAM_NODE.'
 }
 
 function Read-State {
@@ -34,7 +35,7 @@ function Read-State {
 function Get-AgentProcess([int]$id) {
   if ($id -le 0) { return $null }
   $proc = Get-Process -Id $id -ErrorAction SilentlyContinue
-  # Um pid reaproveitado por outro programa nao conta como agente.
+  # A pid reused by another program does not count as the agent.
   if ($proc -and $proc.ProcessName -eq 'node') { return $proc }
   return $null
 }
@@ -52,34 +53,34 @@ function Get-Running {
 
 function Get-ExitText([int]$code) {
   switch ($code) {
-    2 { return 'credencial recusada, revogada, vencida ou trocada pelo dono do servidor: peca uma nova e rode setup de novo' }
-    3 { return 'outro agente com a mesma credencial assumiu esta conta' }
-    4 { return 'o servidor nao aceita esta versao do agente: peca o pacote atual ao dono do servidor' }
-    default { return ('veja o log {0}; para ver o erro na tela: node "{1}" run --root "{2}"' -f $logFile, $script, $root) }
+    2 { return 'credential refused, revoked, expired or replaced by the server owner: ask for a new one and run setup again' }
+    3 { return 'another agent with the same credential took over this account' }
+    4 { return 'the server does not accept this agent version: ask the server owner for the current pack' }
+    default { return ('see the log {0}; to see the error on screen: node "{1}" run --root "{2}"' -f $logFile, $script, $root) }
   }
 }
 
 switch ($Action) {
   'start' {
     $running = Get-Running
-    if ($running) { Write-Output ("Ja esta rodando: pid {0}. Log: {1}" -f $running.Id, $logFile); exit 0 }
+    if ($running) { Write-Output ("Already running: pid {0}. Log: {1}" -f $running.Id, $logFile); exit 0 }
     if (-not (Test-Path (Join-Path $private 'credential')) -or -not (Test-Path (Join-Path $private 'config.json'))) {
-      Write-Output 'Agente sem configuracao: rode setup primeiro (docs\AGENTE-CLIENTE.md).'; exit 1
+      Write-Output 'The agent is not set up: run setup first (docs\AGENTE-CLIENTE.md).'; exit 1
     }
     Remove-Item $stopFile -Force -ErrorAction SilentlyContinue
     $node = Get-Node
-    # Sem redirecionamento: Start-Process com -RedirectStandardOutput/-Error faz o node herdar os handles de quem chamou
-    # e uma chamada com saida capturada nunca volta. O agente grava o proprio log (--log-file).
+    # No redirection: Start-Process with -RedirectStandardOutput/-Error makes node inherit the handles of the caller, and
+    # a call with captured output never returns. The agent writes its own log (--log-file).
     $arguments = @('--use-env-proxy', '--use-system-ca', ('"{0}"' -f $script), 'run', '--root', ('"{0}"' -f $root), '--log-file', ('"{0}"' -f $logFile))
     $proc = Start-Process -FilePath $node -ArgumentList $arguments -WorkingDirectory $root -WindowStyle Hidden -PassThru
     Set-Content -Path $pidFile -Value $proc.Id -Encoding ascii
-    # So conta como no ar quando o estado gravado e do processo iniciado agora (pid igual) e esta conectado.
+    # It counts as up only when the saved state is of the process started now (same pid) and says connected.
     $deadline = (Get-Date).AddSeconds(30)
     $state = $null
     while ((Get-Date) -lt $deadline) {
       $state = Read-State
       if ($state -and [int]$state.pid -eq $proc.Id -and $state.state -eq 'connected') {
-        Write-Output ("Agente conectado: pid {0}, servidor {1}. Log: {2}" -f $proc.Id, $state.server, $logFile); exit 0
+        Write-Output ("Agent connected: pid {0}, server {1}. Log: {2}" -f $proc.Id, $state.server, $logFile); exit 0
       }
       if ($proc.HasExited) { break }
       Start-Sleep -Milliseconds 300
@@ -87,31 +88,31 @@ switch ($Action) {
     if ($proc.HasExited -or -not (Get-AgentProcess $proc.Id)) {
       $code = if ($state -and [int]$state.pid -eq $proc.Id -and $null -ne $state.exitCode) { [int]$state.exitCode } else { 1 }
       Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
-      Write-Output ("O agente parou (codigo {0}): {1}" -f $code, (Get-ExitText $code)); exit 1
+      Write-Output ("The agent stopped (code {0}): {1}" -f $code, (Get-ExitText $code)); exit 1
     }
-    Write-Output ("Agente iniciado (pid {0}), ainda sem conexao com o servidor; ele continua tentando. Veja status e o log {1}" -f $proc.Id, $logFile)
+    Write-Output ("Agent started (pid {0}), not connected to the server yet; it keeps trying. See status and the log {1}" -f $proc.Id, $logFile)
     exit 0
   }
   'status' {
     $running = Get-Running
     $state = Read-State
     if (-not $running) {
-      $last = if ($state -and $null -ne $state.exitCode -and [int]$state.exitCode -ne 0) { ' Ultima parada: ' + (Get-ExitText ([int]$state.exitCode)) + '.' } else { '' }
-      Write-Output ("Parado.{0}" -f $last); exit 3
+      $last = if ($state -and $null -ne $state.exitCode -and [int]$state.exitCode -ne 0) { ' Last stop: ' + (Get-ExitText ([int]$state.exitCode)) + '.' } else { '' }
+      Write-Output ("Stopped.{0}" -f $last); exit 3
     }
     $since = if ($state) { $state.at } else { '?' }
     $now = if ($state) { $state.state } else { '?' }
-    Write-Output ("Rodando: pid {0}, estado {1} (desde {2}). Log: {3}" -f $running.Id, $now, $since, $logFile)
+    Write-Output ("Running: pid {0}, state {1} (since {2}). Log: {3}" -f $running.Id, $now, $since, $logFile)
     exit 0
   }
   'stop' {
     $running = Get-Running
-    if (-not $running) { Write-Output 'Ja estava parado.'; Remove-Item $pidFile, $stopFile -Force -ErrorAction SilentlyContinue; exit 0 }
-    # Parada limpa: o agente ve private\agent.stop, avisa o servidor e sai; depois de 5 s, encerra a forca.
+    if (-not $running) { Write-Output 'Already stopped.'; Remove-Item $pidFile, $stopFile -Force -ErrorAction SilentlyContinue; exit 0 }
+    # Clean stop: the agent sees private\agent.stop, tells the server and exits; after 5 s it is ended by force.
     Set-Content -Path $stopFile -Value 'stop' -Encoding ascii
     if (-not $running.WaitForExit(5000)) { Stop-Process -Id $running.Id -Force -Confirm:$false }
     Remove-Item $pidFile, $stopFile -Force -ErrorAction SilentlyContinue
-    Write-Output ("Parado: pid {0}" -f $running.Id)
+    Write-Output ("Stopped: pid {0}" -f $running.Id)
     exit 0
   }
 }

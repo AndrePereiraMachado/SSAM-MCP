@@ -35,32 +35,32 @@ test('ssam-agent.ps1: start with captured output returns connected, status, a se
     const start = await ps1('start');
     assert.equal(start.code, 0, start.stdout + start.stderr);
     assert.ok(start.ms < 45000, 'start returned with its output captured');
-    pid = Number(/Agente conectado: pid (\d+)/.exec(start.stdout)?.[1]);
+    pid = Number(/Agent connected: pid (\d+)/.exec(start.stdout)?.[1]);
     assert.ok(pid > 0 && alive(pid), start.stdout);
     assert.equal(hub.hellos[0].pack.id, 'pack-test');
     assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'private', 'agent.json'), 'utf8')).pid, pid);
 
     const status = await ps1('status');
     assert.equal(status.code, 0);
-    assert.match(status.stdout, new RegExp('Rodando: pid ' + pid));
-    assert.match((await ps1('start')).stdout, /Ja esta rodando/);
+    assert.match(status.stdout, new RegExp('Running: pid ' + pid));
+    assert.match((await ps1('start')).stdout, /Already running/);
     // Without the pid file (an agent started by hand), the state file still tells.
     fs.rmSync(path.join(root, 'private', 'agent.pid'));
-    assert.match((await ps1('start')).stdout, /Ja esta rodando/);
+    assert.match((await ps1('start')).stdout, /Already running/);
     // A second agent process for the same folder refuses to start.
     const second = await run(process.execPath, [path.join(root, 'agent', 'ssam-agent.mjs'), 'run', '--root', root], env);
     assert.equal(second.code, 1);
-    assert.match(second.stderr, new RegExp('outro agente já roda nesta pasta \\(pid ' + pid + '\\)'));
+    assert.match(second.stderr, new RegExp('another agent already runs in this folder \\(pid ' + pid + '\\)'));
     assert.equal(hub.hellos.length, 1);
 
     const stop = await ps1('stop');
     assert.equal(stop.code, 0, stop.stdout + stop.stderr);
-    assert.match(stop.stdout, /Parado: pid/);
+    assert.match(stop.stdout, /Stopped: pid/);
     assert.equal(alive(pid), false);
     assert.equal(hub.deletes, 1, 'clean stop: the server was told');
     const after = await ps1('status');
     assert.equal(after.code, 3);
-    assert.match(after.stdout, /Parado\./);
+    assert.match(after.stdout, /Stopped\./);
     const log = fs.readFileSync(path.join(root, 'private', 'agent.log'), 'utf8');
     assert.match(log, /"event":"connected"/);
     assert.equal(log.includes(CREDENTIAL), false);

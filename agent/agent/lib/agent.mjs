@@ -15,9 +15,11 @@ import { createKinds, KINDS } from './kinds.mjs';
 import { createWorkspace } from './workspace.mjs';
 import { uploadBlob, downloadBlob, PART_BYTES, MAX_FILE_BYTES } from './blobs.mjs';
 import { createHttp } from './net.mjs';
-import { listProcesses, fileVersion, locateInstalled, installedStudios } from './studios.mjs';
+import { listProcesses, fileVersion, locateInstalled, installedStudios, macFileVersion, macLocate } from './studios.mjs';
 import { attachOdc } from './odc-attach.mjs';
 import { connector, readConnection } from './o11-connect.mjs';
+import { createMacAttach } from './attach-unix.mjs';
+import { createUnixPipe } from './odc-pipe-unix.mjs';
 import { AgentError } from './errors.mjs';
 
 // 0.2.0 (servidor/fase4): C03 (POST of 10 s, pong in its own POST, stream headers in 15 s), C26 (agent.root in the Hello),
@@ -28,7 +30,12 @@ import { AgentError } from './errors.mjs';
 // 0.2.1 (fase4-24/agente-rede): net.mjs (idle reuse of 2 s, TCP keep-alive probes, fresh connection after a failure), a deadline per
 // blob part with the retry on a fresh connection, the hello in 15 s.
 // 0.3.1 (servidor/fase4-24): 0.3.0 and 0.2.1 together, plus the net.probe kind for ssam_doctor {network:true}.
-export const AGENT_VERSION = '0.3.1';
+// 0.3.2 (servidor/fase4-26 a8, the next agent pack): the English agent (server/english-agent) with the O11 thin bridge that
+// runs the Studio's own Manage Dependencies by code (refresh_references:add); the kinds and the wire are those of 0.3.1.
+// 0.3.3 (server/agent-mac): the macOS side (bundles, the diagnostic IPC attach, the Unix bridge pipe, POSIX paths,
+// install.sh and ssam-agent.sh); Windows, the kinds and the wire are those of 0.3.2. The server only shows and logs this
+// version (agent-hub.mjs info().agentVersion and agent-connected, 87e12565): no server change.
+export const AGENT_VERSION = '0.3.3';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const STUDIOS_REFRESH_MS = 5 * 60000;
@@ -37,10 +44,14 @@ const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/
 
 // The machine this agent runs on (owner test, 2026-10-08; disclosed in docs/AGENTE-CLIENTE.md): the computer name, the
 // Windows user, and an id that is a hash of the Windows MachineGuid with both. Nothing else about the machine is sent.
-export function machineIdentity() {
+// On macOS the id hashes the IOPlatformUUID of the Mac (ioreg) the same way, with the computer name and the macOS user.
+export function machineIdentity({ platform = process.platform, run = execFileSync } = {}) {
   let guid = '';
-  try {
-    const out = execFileSync('reg', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid'], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+  if (platform === 'darwin') {
+    try { guid = /"IOPlatformUUID"\s*=\s*"([^"]+)"/.exec(run('/usr/sbin/ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'], { encoding: 'utf8', timeout: 5000 }))?.[1] ?? ''; }
+    catch { /* no ioreg: the id still covers name and user */ }
+  } else try {
+    const out = run('reg', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid'], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
     guid = /MachineGuid\s+REG_SZ\s+(\S+)/i.exec(out)?.[1] ?? '';
   } catch { /* not Windows or no access: the id still covers name and user */ }
   let user = '';
@@ -65,24 +76,31 @@ export function readPack(root) {
   } catch { return { id: null, lanes: [], odcBridge: null, o11BuiltFor: null, o11Hook: null, o11Bridge: null }; }
 }
 
+// deps.platform (tests): 'darwin' wires the macOS side (macos.mjs, attach-unix.mjs, odc-pipe-unix.mjs; deps.mac goes to
+// createMacAttach); the default is this system.
 export function createAgent({ root, config = {}, deps = {}, log = () => {}, onState = () => {} }) {
   const base = path.resolve(root);
-  const d = { processes: listProcesses, fileVersion, locate: kind => locateInstalled(kind), describe: null, attachOdc, attachO11: null,
+  const platform = deps.platform ?? process.platform;
+  const mac = platform === 'darwin' ? createMacAttach(deps.mac ?? {}) : null;
+  const d = { processes: image => listProcesses(image, { platform }), fileVersion: mac ? macFileVersion : fileVersion,
+    locate: kind => (mac ? macLocate(kind) : locateInstalled(kind)), describe: null, attachOdc: mac ? mac.attachOdc : attachOdc, attachO11: null,
+    pipeCall: mac ? createUnixPipe({ folders: mac.pipeFolders }) : undefined,
     fetch: undefined, now: Date.now, setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout, random: Math.random,
     sleep: undefined, partMs: undefined, ...deps };
   const transport = d.fetch || process.env.SSAM_AGENT_HTTP === 'fetch' ? null : createHttp();
   d.fetch ??= transport ? transport.fetch : globalThis.fetch;
   const run = connector(base);
-  d.describe ??= pid => run(['describe', pid]);
-  d.attachO11 ??= (pid, startedUtc, hook) => run(['attach', pid, startedUtc, hook]);
+  // macOS: describe and attach of Service Studio through the diagnostic IPC (no Anvil.Connect, no .NET).
+  d.describe ??= mac ? mac.describeO11 : pid => run(['describe', pid]);
+  d.attachO11 ??= mac ? mac.attachO11 : (pid, startedUtc, hook) => run(['attach', pid, startedUtc, hook]);
 
   const credential = config.credential ?? fs.readFileSync(credentialFile(base), 'utf8').trim();
   const pack = readPack(base);
-  const ws = createWorkspace(base);
+  const ws = createWorkspace(base, { platform });
   const outbox = createOutbox();
   const instance = randomUUID();
   const startedAt = new Date(d.now()).toISOString();
-  const machine = deps.machine === undefined ? machineIdentity() : deps.machine;
+  const machine = deps.machine === undefined ? machineIdentity({ platform }) : deps.machine;
   let studios = null; let studiosAt = 0; let connection = null; let reported = null;
 
   const limits = () => {
@@ -104,7 +122,7 @@ export function createAgent({ root, config = {}, deps = {}, log = () => {}, onSt
     return running.some(p => Number(p.pid) === record.pid) ? view(record) : null;
   }
   async function refreshStudios() {
-    studios = await installedStudios({ locate: d.locate, version: d.fileVersion });
+    studios = await installedStudios({ locate: d.locate, version: d.fileVersion, platform });
     studiosAt = d.now();
   }
 
@@ -115,7 +133,7 @@ export function createAgent({ root, config = {}, deps = {}, log = () => {}, onSt
     return { t: 'hello', protocol: PROTOCOL, instance,
       // root (C26): the folder of this agent, so the server names its inbox exactly; kinds: what this agent runs (file.sync
       // since 0.2.0), so the server never asks an older agent for a kind it does not have.
-      agent: { version: AGENT_VERSION, node: process.version, platform: process.platform, startedAt, root: base, kinds: [...KINDS], machine },
+      agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: [...KINDS], machine },
       pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: pack.o11BuiltFor, o11Hook: pack.o11Hook },
       studios, o11Connection: connection };
   }
@@ -133,7 +151,7 @@ export function createAgent({ root, config = {}, deps = {}, log = () => {}, onSt
   // probe: the uploads of the network check (kind net.probe, net-probe.mjs); a kinds.mjs without that kind ignores it.
   const kinds = createKinds({ root: base, ws, pack, kernel: () => channel.welcome()?.kernel ?? null, deps: d, blobs, limits,
     o11Port: Number.isInteger(config.o11Port) ? config.o11Port : 4516, onConnection: record => { connection = view(record); },
-    probe: (id, body, options) => channel.probePut(id, body, options) });
+    probe: (id, body, options) => channel.probePut(id, body, options), platform });
 
   // One call -> its result message. A value above inlineMaxBytes (measured on the whole serialized message) goes as
   // a blob, up to maxValueBytes (the server assembles a value in memory and refuses a larger one: VALUE_TOO_LARGE, sent
