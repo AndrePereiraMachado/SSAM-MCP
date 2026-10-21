@@ -1,3 +1,5 @@
+import {createChannel} from '../../../agent/agent/lib/channel.mjs';
+import {createOutbox} from '../../../agent/agent/lib/outbox.mjs';
 import {toolListingBytes} from '../../platforms/odc/facade/tool-listing.mjs';
 import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {spawnSync,spawn} from 'node:child_process';import assert from 'node:assert/strict';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
@@ -51,7 +53,7 @@ try{
  let health;for(let i=0;i<90;i++){try{health=await fetch(url+'/health').then(r=>r.json());if(health.ok&&health.versions.every(v=>v.ok))break;}catch{}await wait(1000);}assert.ok(health?.ok&&health.versions.every(v=>v.ok));checks.push({name:'health',ok:true,backends:2});
  const post=async(endpoint,token,body,extra={})=>{const r=await fetch(url+endpoint,{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json',accept:'application/json, text/event-stream',...extra},body:JSON.stringify(body)});return {status:r.status,text:await r.text(),sid:r.headers.get('mcp-session-id')};};
  const hello=(version,id)=>({t:'hello',protocol:'ssam-agent/1',instance:id,agent:{version:'0.3.1',machine:{id,name:'Rehearsal',user:'Test'}},pack:{id:'rehearsal',lanes:['odc','o11'],odcBridge:'v97',o11BuiltFor:'11.55.92',o11Hook:'dev'},studios:{odc:{installed:{version,dir:'C:/Synthetic'}},o11:{installed:{version:'11.55.92.65269',dir:'C:/Synthetic'}}}});
- const ha=await post('/agent/v1/hello',a.agentCredential,hello('1.7.29.10940','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'));assert.equal(ha.status,200);assert.equal(JSON.parse(ha.text).compatible.odc.ok,true);assert.equal(JSON.parse(ha.text).compatible.o11.ok,true);
+ const ha=await post('/agent/v1/hello',a.agentCredential,hello('1.7.29.10940','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'));assert.equal(ha.status,200);assert.equal(JSON.parse(ha.text).compatible.odc.ok,true);assert.equal(JSON.parse(ha.text).compatible.o11.ok,false);checks.push({name:'mixed pair refuses nonlocal O11',ok:true});
  const hb=await post('/agent/v1/hello',b.agentCredential,hello('1.7.28.10850','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'));assert.equal(hb.status,200);assert.equal(JSON.parse(hb.text).compatible.odc.ok,true);assert.equal(JSON.parse(hb.text).compatible.o11.ok,true);
  const routing=JSON.parse(fs.readFileSync(path.join(out,'segredo/runtime/state/routing.json'),'utf8'));assert.equal(routing.routes[a.id].backend,'v1');assert.equal(routing.routes[b.id].backend,'v2');checks.push({name:'agent routing',ok:true});
  const init={jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'rehearsal',version:'1'}}};
@@ -73,6 +75,27 @@ try{
  const controller=new AbortController();const started=performance.now();const stream=await fetch(url+'/agent/v1/stream?channel='+JSON.parse(ha.text).channel,{headers:{authorization:'Bearer '+a.agentCredential},signal:controller.signal});assert.equal(stream.status,200);assert.match(stream.headers.get('content-type'),/ndjson/);const chunk=await stream.body.getReader().read();const firstByteMs=performance.now()-started;controller.abort();assert.ok(chunk.value?.length&&firstByteMs<1000);checks.push({name:'first byte through Traefik',ok:true,firstByteMs});
  assert.equal((await post('/agent/v1/hello',b.agentCredential,hello('1.7.29.10940','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'))).status,200);
  const rerouted=await post('/mcp',b.token,{jsonrpc:'2.0',id:30,method:'tools/list',params:{}},{'mcp-session-id':sb.sid});assert.equal(rerouted.status,409);assert.match(rerouted.text,/SESSION_REROUTED/);assert.equal((await post('/mcp',b.token,init)).status,200);checks.push({name:'reroute and new MCP session',ok:true});
+ const changing = hello('1.7.28.10850','cccccccccccccccccccccccccccccccc');
+ let connections=0;
+ const agent=createChannel({server:url,credential:b.agentCredential,hello:()=>changing,pongVersions:()=>({studios:changing.studios}),outbox:createOutbox(),onCall:()=>{},onState:state=>{if(state==='connected')connections++;}});
+ const running=agent.run();
+ try {
+  for(let i=0;i<100&&!agent.connected();i++)await wait(100);
+  assert.ok(agent.connected());assert.equal(agent.welcome().kernel.odc,'1.7.28');
+  const prior=await post('/mcp',b.token,init);assert.equal(prior.status,200);
+  await post('/mcp',b.token,{jsonrpc:'2.0',method:'notifications/initialized'},{'mcp-session-id':prior.sid});
+  changing.studios.odc.installed.version='1.7.29.10940';
+  for(let i=0;i<400&&!(connections>=2&&agent.connected()&&agent.welcome().kernel.odc==='1.7.29');i++)await wait(100);
+  assert.ok(connections>=2&&agent.connected());assert.equal(agent.welcome().kernel.odc,'1.7.29');
+  const stale=await post('/mcp',b.token,{jsonrpc:'2.0',id:40,method:'tools/list',params:{}},{'mcp-session-id':prior.sid});assert.equal(stale.status,409);assert.match(stale.text,/SESSION_REROUTED/);
+  assert.equal((await post('/mcp',b.token,init,{'mcp-session-id':prior.sid})).status,404);
+  const next=await post('/mcp',b.token,init);assert.equal(next.status,200);
+  await post('/mcp',b.token,{jsonrpc:'2.0',method:'notifications/initialized'},{'mcp-session-id':next.sid});
+  const answer=await post('/mcp',b.token,{jsonrpc:'2.0',id:41,method:'tools/call',params:{name:'ssam_reference',arguments:{kind:'tool',query:'ssam_doctor'}}},{'mcp-session-id':next.sid});assert.equal(answer.status,200);
+  assert.ok(fs.readFileSync(path.join(out,'segredo/runtime/versions/v1/server.log'),'utf8').includes(next.sid));
+  assert.ok(fs.readFileSync(path.join(out,'segredo/runtime/versions/v2/server.log'),'utf8').includes('agent-studio-version-changed'));
+  checks.push({name:'live pong reconnects the real agent channel and reroutes the next call once',ok:true,connections});
+ }finally{await agent.stop();await running;}
  for(const name of ['v1','v2']){const folder=path.join(out,'segredo/runtime/versions',name);const files=fs.readdirSync(folder).filter(n=>n.endsWith('.jsonl'));let lines=0;for(const file of files)for(const line of fs.readFileSync(path.join(folder,file),'utf8').split('\n').filter(Boolean)){JSON.parse(line);lines++;}assert.ok(lines>0);JSON.parse(fs.readFileSync(path.join(folder,'machine-pins.json'),'utf8'));JSON.parse(fs.readFileSync(path.join(folder,'state/studio-versions.json'),'utf8'));checks.push({name:'valid concurrent state '+name,ok:true,lines});}
  result.ok=true;
 }catch(e){result.error=e.message;process.exitCode=1;}

@@ -762,11 +762,16 @@ test('a full hub session leaves tokens.json with the same content and mtime', as
     const file = path.join(dir, 'tokens.json');
     const before = { text: fs.readFileSync(file, 'utf8'), mtime: fs.statSync(file).mtimeMs };
     const a = agentOf(base, t.agentCredential);
-    await a.hello();
-    const s = await a.stream();
+    const hello = helloOf();
+    await a.hello(hello);
+    let s = await a.stream();
     const link = handle.hub.link(t.id);
     const ping = await s.lines.next(m => m.t === 'ping');
     await a.post([{ t: 'pong', seq: ping.seq, versions: { studios: studios('1.7.28.5000'), o11Connection: null } }]);
+    assert.equal((await s.lines.next(m => m.t === 'close')).reason, 'studio-version-changed');
+    s.lines.cancel();
+    await a.hello({ ...hello, studios: studios('1.7.28.5000') });
+    s = await a.stream();
     const getting = link.call('file.get', { path: 'agent:o11/x.oml' }, { timeoutMs: 5000 });
     const call = await s.lines.next(m => m.t === 'call');
     const ref = await a.upload(randomBytes(3000), 1024);

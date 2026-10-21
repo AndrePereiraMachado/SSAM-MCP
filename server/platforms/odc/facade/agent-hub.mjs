@@ -659,7 +659,15 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
   async function uplink(state, m) {
     if (m?.t === 'pong') {
       if (m.versions && typeof m.versions === 'object' && state.hello) {
-        if ('studios' in m.versions) state.hello.studios = m.versions.studios ?? null;
+        if ('studios' in m.versions) {
+          const before = studioVersions(state.hello.studios);
+          const after = studioVersions(m.versions.studios);
+          state.hello.studios = m.versions.studios ?? null;
+          if (JSON.stringify(before) !== JSON.stringify(after)) {
+            log({ event: 'agent-studio-version-changed', token: state.tokenId, before, after });
+            closeChannel(state, 'studio-version-changed', 'Your Studio version changed and your agent is being redirected.');
+          }
+        }
         if ('o11Connection' in m.versions) state.hello.o11Connection = m.versions.o11Connection ?? null;
         // a Studio that changed under a connected agent is judged now (the gate reads info() on every call)
         if ('studios' in m.versions) noteUnserved(state, compatibility(state.hello, serverKernel, state.lanes, { refused: kernelRefused }));

@@ -23,7 +23,9 @@ export function selectBackend(backends, hello) {
   const studios=hello?.studios;
   const lane=studios?.odc?.installed?'odc':studios?.o11?.installed?'o11':null;
   const version=lane?threePart(studios[lane].installed.version):null;
-  return backends.find(b=>lane&&threePart(b[lane])===version) ?? backends.find(b=>b.default);
+  const installed=['odc','o11'].filter(l=>studios?.[l]?.installed);
+  return backends.find(b=>installed.length && installed.every(l=>threePart(b[l])===threePart(studios[l].installed.version)))
+    ?? backends.find(b=>lane&&threePart(b[lane])===version) ?? backends.find(b=>b.default);
 }
 const hop=new Set(['connection','keep-alive','proxy-authenticate','proxy-authorization','te','trailer','transfer-encoding','upgrade']);
 function headersOf(headers) {

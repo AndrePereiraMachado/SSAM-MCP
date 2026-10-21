@@ -94,7 +94,7 @@ export function studioIdentity(lane, installed, kernel) {
   const byVersion = compare(numbers, three.split('.').map(Number), 3);
   if (byVersion !== 0) {
     const window = servedVersions(lane, kernel);
-    if (window.includes(threePart(version))) return { ...out('same', version, { ok: true }), window };
+    if (window.includes(threePart(version))) return { ...out('served-elsewhere', version), window };
     const newer = compare(numbers, window.at(-1).split('.').map(Number), 3) > 0;
     return { ...out(newer ? 'newer' : 'older', version,
       newer ? { direction: 'newer', ok: true, warn: true } : { direction: 'older' }), window };
@@ -110,6 +110,7 @@ export function studioIdentity(lane, installed, kernel) {
 // The cause of a Studio the server does not serve (what the user does), or null when it is served or not installed.
 export function causeOf(identity) {
   if (!identity || identity.ok || identity.relation === 'not-installed') return null;
+  if (identity.relation === 'served-elsewhere') return 'STUDIO_VERSION_CHANGED';
   if (identity.relation === 'unknown') return 'STUDIO_VERSION_UNKNOWN';
   if (identity.relation === 'build-unknown') return 'STUDIO_BUILD_UNKNOWN';
   return identity.direction === 'older' ? 'STUDIO_UPDATE_REQUIRED' : 'STUDIO_VERSION_NOT_SERVED_YET';
@@ -148,6 +149,9 @@ function words(identity) {
   };
   let user, en;
   switch (`${identity.relation}:${identity.direction}`) {
+    case 'served-elsewhere:null':
+      user = en = 'Your Studio version changed and your agent is being redirected. Reconnect the agent and repeat the request. If this persists, ask the SSAM owner to serve both installed Studio versions together.';
+      break;
     case 'older:older': {
       const range = identity.window?.length > 1 ? identity.window[0] + '–' + identity.window.at(-1) : identity.window?.[0] ?? served;
       user = en = `Your ${S} ${installed} is older than the versions this server serves (${range}). Update ${S} and reconnect.`;
@@ -199,6 +203,10 @@ export function studioWarningOf(identity) {
   const S = STUDIO[identity.lane];
   const { lane, installed, served, relation, policy } = identity;
   const three = threePart(served);
+  if (relation === 'served-elsewhere') {
+    const message = 'Your Studio version changed and your agent is being redirected. This request ran on the server only; no operation ran on your Studio. Reconnect the agent and repeat the request.';
+    return { code: 'studioNotServed', lane, cause: 'STUDIO_VERSION_CHANGED', installed, served, relation, policy, userMessage: message, error: message + ' Show this warning to the user.' };
+  }
   if (identity.ok && relation === 'newer') {
     const message = `The server does not serve ${S} ${installed} yet; the owner was notified. This request uses the newest served version. Check the result in ${S} before publishing.`;
     return { code: 'studioNewerThanServed', lane, installed, served, relation, policy, userMessage: message, error: message + ' Show this warning to the user.' };
