@@ -745,7 +745,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
   const refusesGenerators = generatorOps !== 'allow' && (GENERATOR_TOOLS.includes(name) || name === CODE_TOOL);
   const refusesDestructive = destructive !== 'allow';
   const refusal = raw => gateRefusal(raw, name);
-  return async (...params) => {
+  const execute = async (...params) => {
     const hasArgs = config?.inputSchema != null && params.length > 1;
     // R1: the arguments the tool runs (a field the input layer renames is confined under its own name).
     let args = hasArgs ? effectiveArgs(argsOf, params[0] ?? {}) : {};
@@ -825,5 +825,16 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
     if (verdict.refusal) return refusal(verdict.refusal);
     return withStudioFields(present.result(name === 'ssam_discover' ? scrubDiscover(result, thirdPartyJobs()) : scrubEvidence(result, thirdPartyJobs())),
       verdict.fields);
+  };
+  return async (...params) => {
+    const answer = await execute(...params);
+    let info;
+    try { info = link?.info?.(); } catch { return answer; }
+    const newer = ['odc', 'o11'].map(lane => studioNotice(lane, info)).filter(w => w?.code === 'studioNewerThanServed');
+    if (!newer.length) return answer;
+    const existing = answer?.structuredContent;
+    const warnings = new Map([...(existing?.studioWarnings ?? (existing?.studioWarning ? [existing.studioWarning] : [])), ...newer].map(w => [w.lane, w]));
+    const values = [...warnings.values()];
+    return withStudioFields(answer, { studioWarning: values[0], ...(values.length > 1 ? { studioWarnings: values } : {}) });
   };
 }

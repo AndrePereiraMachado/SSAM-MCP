@@ -176,14 +176,14 @@ test('E2: a server-only tool answers with studioNotServed while the Studio is no
     assert.deepEqual(textOf(r).studioWarning, w, name + ': the text carries it too');
   }
   assert.deepEqual(notServed.calls.map(c => c.name), ['ssam_discover', 'odc_search_operations', 'ssam_map', 'studio_build', 'studio_doctor']);
-  // the other lane says nothing about the ODC Studio
+  // The deployment warning accompanies every served response, including the other lane.
   for (const [name, args] of [['ssam_discover', { intent: 'x', lane: 'o11' }], ['o11_inspect', { oml: 'ws:o11/M.oml' }]])
-    assert.equal((await notServed.gate(name)(args)).structuredContent.studioWarning, undefined, name);
+    assert.equal((await notServed.gate(name)(args)).structuredContent.studioWarning?.code, 'studioNewerThanServed', name);
   // A2 of the review (round 2), changed on purpose: a tool without a lane carries the warnings of the lanes it may touch
   // (here every lane of the token; ssam_task only o11). Until c812dc4 it said nothing.
   for (const [name, args] of [['ssam_doctor', {}], ['ssam_evidence', { file: 'ws:odc/x.json' }]])
     assert.equal((await notServed.gate(name)(args)).structuredContent.studioWarning?.code, 'studioNewerThanServed', name);
-  assert.equal((await notServed.gate('ssam_task')({ id: 'tarefa-1' })).structuredContent.studioWarning, undefined, 'ssam_task touches only o11');
+  assert.equal((await notServed.gate('ssam_task')({ id: 'tarefa-1' })).structuredContent.studioWarning?.code, 'studioNewerThanServed', 'the deployment warning also covers tasks');
   // another build served with the warning (default policy): every answer of the lane, the Studio tools included
   const differs = harness({ info: studioInfo('1.7.28.5023') });
   for (const [name, args] of [['studio_status', {}], ['studio_deliver', { module: 'M', job: { ops: [] } }], ['ssam_discover', { intent: 'x', lane: 'odc' }], ['odc_search_operations', { query: 'x' }]]) {

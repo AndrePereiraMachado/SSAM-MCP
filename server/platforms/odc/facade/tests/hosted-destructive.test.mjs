@@ -245,7 +245,7 @@ test('every destructive call is refused at the gate: HOSTED_UNAVAILABLE / DESTRU
     assert.equal(result.isError, true, name + ' ' + JSON.stringify(args));
     if (hostedTools()[name].class === 'unavailable') {
       // A tool unavailable on hosted servers (o11_extension, odc_external_library) answers its own HOSTED_UNAVAILABLE first.
-      assert.equal(value.code, 'HOSTED_UNAVAILABLE', name); assert.deepEqual(h.calls, [], name); assert.deepEqual(h.touched, [], name);
+      assert.equal(value.code, 'HOSTED_UNAVAILABLE', name); assert.deepEqual(h.calls, [], name); assert.deepEqual(h.touched, ['info'], name);
       continue;
     }
     assert.deepEqual({ ok: value.ok, code: value.code, cause: value.cause, policy: value.policy, tool: value.tool, outcome: value.outcome },
@@ -253,7 +253,7 @@ test('every destructive call is refused at the gate: HOSTED_UNAVAILABLE / DESTRU
     assert.equal('continuation' in value, false, name + ': no continuation, no workaround');
     assert.equal('alternatives' in value || 'next' in value, false, name);
     assert.deepEqual(h.calls, [], name + ': the handler never runs');
-    assert.deepEqual(h.touched, [], name + ': the agent link is never consulted');
+    assert.deepEqual(h.touched, ['info'], name + ': only cached version metadata is read');
     assert.deepEqual(h.executorCalls, [], name + ': no path brought, no quota, no O11 record, no send');
     assert.equal(JSON.stringify(result).includes(WORDS), false, name + ': the words never come back');
     assert.equal(fs.readdirSync(h.workspace).length, 0, name + ': nothing written in the workspace');
@@ -276,7 +276,7 @@ test('the refusal tells the model, in English only, that the user deletes in Ser
 test('the refusal comes before the agent: disconnected agent, lane outside the token and an agent: path change nothing', async () => {
   const offline = harness({ connected: false });
   assert.equal(valueOf(await offline.gate('odc_asset_delete')({ assetKey: ASSET, authorizationContext: 'agent:inbox/approval.json' })).cause, 'DESTRUCTIVE_HOSTED_OFF');
-  assert.deepEqual(offline.touched, []); assert.deepEqual(offline.executorCalls, []);
+  assert.deepEqual(offline.touched, ['info']); assert.deepEqual(offline.executorCalls, []);
   const odcOnly = harness({ lanes: ['odc'] });
   assert.equal(valueOf(await odcOnly.gate('o11_environment')({ action: 'delete-app', app: 'ZZRV One' })).cause, 'DESTRUCTIVE_HOSTED_OFF');
   // The incident replay: the first call and the retry with confirmHost are both refused; nothing is ever sent.
