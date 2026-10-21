@@ -7,8 +7,8 @@
 //   - The server's: kernel.builds[lane], the FileVersion of ServiceStudio.Framework.dll of the image's Studio folder
 //     (kernel-image.mjs imageKernel), else the ProductVersion of this machine's Studio (detectKernel); only a build with the
 //     lane's three numbers counts. A server that knows no build of its own compares three numbers, as before.
-//   - Another three-part version is never served. Older: STUDIO_UPDATE_REQUIRED (update the Studio). Newer:
-//     STUDIO_VERSION_NOT_SERVED_YET (the server does not serve it yet, the owner was notified, never roll the Studio back).
+//   - Below the window: STUDIO_UPDATE_REQUIRED. Above it: served on the default with studioNewerThanServed.
+//     The router selects an exact in-window version; the kernel remains one Studio pair per process.
 //   - The same three numbers and another build, or a version without its fourth number: kernel.json studioBuildPolicy
 //     decides, per lane or for both: "warn" (the default, owner option D-M2a: served, every answer carries
 //     studioWarning studioBuildDiffers) or "refuse" (D-M2b: refused by direction like another version; a version without
@@ -38,6 +38,21 @@ export const threePart = value => { const n = numbersOf(value); return n ? n.sli
 export const fourPart = value => { const n = numbersOf(value); return n?.length === 4 ? n.join('.') : null; };
 // -1, 0 or 1 over the first count numbers.
 const compare = (a, b, count) => { for (let i = 0; i < count; i++) if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1; return 0; };
+
+// The deployment window supplements the image; it never replaces its local kernel.
+export function servedVersions(lane, kernel = {}, env = process.env) {
+  let injected = {};
+  if (env.SSAM_SERVED_VERSIONS) {
+    injected = JSON.parse(env.SSAM_SERVED_VERSIONS);
+    if (!injected || typeof injected !== 'object' || Array.isArray(injected)) throw new Error('Invalid served versions configuration');
+  }
+  const configured = kernel?.servedVersions?.[lane] ?? [];
+  const deployed = injected[lane] ?? [];
+  if (!Array.isArray(configured) || !Array.isArray(deployed)) throw new Error('Invalid served versions configuration');
+  const values = [kernel?.[lane], env[lane === 'odc' ? 'SSAM_IMAGE_ODC' : 'SSAM_IMAGE_O11'], ...configured, ...deployed];
+  return [...new Set(values.map(v => threePart(typeof v === 'object' ? v?.version : v)).filter(Boolean))]
+    .sort((a,b) => compare(a.split('.').map(Number), b.split('.').map(Number), 3));
+}
 
 // kernel.json studioBuildPolicy: "warn" | "refuse" for both lanes, or {odc, o11} per lane (a missing lane is "warn").
 export function buildPolicyOf(value) {
@@ -77,8 +92,13 @@ export function studioIdentity(lane, installed, kernel) {
   if (!numbers) return out('unknown', null);
   const version = numbers.join('.');
   const byVersion = compare(numbers, three.split('.').map(Number), 3);
-  if (byVersion < 0) return out('older', version, { direction: 'older' });
-  if (byVersion > 0) return out('newer', version, { direction: 'newer' });
+  if (byVersion !== 0) {
+    const window = servedVersions(lane, kernel);
+    if (window.includes(threePart(version))) return { ...out('same', version, { ok: true }), window };
+    const newer = compare(numbers, window.at(-1).split('.').map(Number), 3) > 0;
+    return { ...out(newer ? 'newer' : 'older', version,
+      newer ? { direction: 'newer', ok: true, warn: true } : { direction: 'older' }), window };
+  }
   if (!build) return out('same', version, { ok: true });
   if (numbers.length < 4) return out('build-unknown', version, policy === 'warn' ? { ok: true, warn: true } : {});
   const byBuild = compare(numbers, build.split('.').map(Number), 4);
@@ -128,10 +148,11 @@ function words(identity) {
   };
   let user, en;
   switch (`${identity.relation}:${identity.direction}`) {
-    case 'older:older':
-      user = `The ${S} on this computer (${installed}) is older than the ${S} the SSAM server serves (${served}). Update ${S} to ${served} and open it again; then repeat the request. Reinstalling the agent does not fix this.`;
-      en = `This SSAM server serves ${S} ${served}; the user's machine has ${S} ${installed}, which is older: update ${S} to ${served} and reopen it; no agent package changes that.`;
+    case 'older:older': {
+      const range = identity.window?.length > 1 ? identity.window[0] + '–' + identity.window.at(-1) : identity.window?.[0] ?? served;
+      user = en = `Your ${S} ${installed} is older than the versions this server serves (${range}). Update ${S} and reconnect.`;
       break;
+    }
     case 'newer:newer':
       user = `The ${S} on this computer (${installed}) is newer than the ${S} the SSAM server serves today (${served}). The server does not have this version yet; ${notified.user}. ${wait.user}`;
       en = `This SSAM server serves ${S} ${served}; the user's machine has ${S} ${installed}, which is newer: the server does not serve this version yet; ${notified.en}. ${wait.en}`;
@@ -166,7 +187,7 @@ export function studioRefusal(identity, { stillWorks = null } = {}) {
   if (!cause) return null;
   const list = Array.isArray(stillWorks) && stillWorks.length ? [...stillWorks] : [...SERVER_ONLY_EXAMPLES[identity.lane]];
   const w = words(identity);
-  return { ok: false, code: 'STUDIO_VERSION_MISMATCH', cause, lane: identity.lane, installed: identity.installed, served: [identity.served],
+  return { ok: false, code: 'STUDIO_VERSION_MISMATCH', cause, lane: identity.lane, installed: identity.installed, served: identity.window ?? [identity.served],
     relation: identity.relation, policy: identity.policy, outcome: 'not-sent', stillWorks: list,
     error: w.en, userMessage: w.user, continuation: { tool: 'ssam_doctor', arguments: {}, why: w.why } };
 }
@@ -178,6 +199,10 @@ export function studioWarningOf(identity) {
   const S = STUDIO[identity.lane];
   const { lane, installed, served, relation, policy } = identity;
   const three = threePart(served);
+  if (identity.ok && relation === 'newer') {
+    const message = `The server does not serve ${S} ${installed} yet; the owner was notified. This request uses the newest served version. Check the result in ${S} before publishing.`;
+    return { code: 'studioNewerThanServed', lane, installed, served, relation, policy, userMessage: message, error: message + ' Show this warning to the user.' };
+  }
   if (identity.warn) {
     const unknown = relation === 'build-unknown';
     return { code: 'studioBuildDiffers', lane, installed, served, relation, policy,

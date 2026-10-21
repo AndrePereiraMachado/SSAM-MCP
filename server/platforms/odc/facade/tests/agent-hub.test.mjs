@@ -158,7 +158,7 @@ test('hello answers welcome with the kernel and the compatibility per lane (equa
     // Different version: the first three numbers decide.
     const different = (await a.hello(helloOf({ studios: studios('1.7.27.100') }))).body.compatible;
     assert.equal(different.odc.code, 'STUDIO_VERSION_MISMATCH');
-    assert.match(different.odc.message, /ODC Studio 1\.7\.28.*ODC Studio 1\.7\.27\.100/);
+    assert.match(different.odc.message, /ODC Studio 1\.7\.27\.100.*1\.7\.28/);
     assert.deepEqual(different.o11, { ok: true });
     // No Studio installed.
     assert.equal((await a.hello(helloOf({ studios: studios('1.7.28.1', null) }))).body.compatible.o11.code, 'STUDIO_NOT_INSTALLED');
@@ -211,12 +211,13 @@ test('A-M1: the hub compares the four-part build; another build is served with s
     // another version, newer or older: refused by direction, before any package check (a stale package changes nothing)
     const stalePack = { id: 'old', lanes: ['odc', 'o11'], odcBridge: 'v34', o11BuiltFor: '11.54.10' };
     const newer = (await a.hello(helloOf({ studios: studios('1.7.29.10'), pack: stalePack }))).body.compatible.odc;
-    assert.deepEqual({ ok: newer.ok, code: newer.code, cause: newer.cause, served: newer.served, installed: newer.installed },
-      { ok: false, code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_VERSION_NOT_SERVED_YET', served: ['1.7.28.4021'], installed: '1.7.29.10' });
-    assert.match(newer.message, /does not serve this version yet; the owner was notified/);
+    assert.equal(newer.code, 'AGENT_PACK_MISMATCH', 'newer Studio does not bypass the package check');
+    const current = (await a.hello(helloOf({ studios: studios('1.7.29.10') }))).body.compatible.odc;
+    assert.equal(current.ok, true);
+    assert.equal(current.warning.code, 'studioNewerThanServed');
     const older = (await a.hello(helloOf({ studios: studios('1.7.27.100', '11.55.90.1') }))).body.compatible;
     assert.equal(older.odc.cause, 'STUDIO_UPDATE_REQUIRED'); assert.equal(older.o11.cause, 'STUDIO_UPDATE_REQUIRED');
-    assert.match(older.odc.message, /update ODC Studio to 1\.7\.28\.4021/);
+    assert.match(older.odc.message, /Update ODC Studio and reconnect/);
   } finally { await handle.close(); }
   // kernel.json {"studioBuildPolicy":"refuse"}: another build is refused like another version, by direction
   const strict = await start({}, { kernel: { ...BUILT, studioBuildPolicy: 'refuse' } });
@@ -1038,5 +1039,21 @@ test('quality: a settled call reports kind, verb, times, outcome, size and the t
     const timeout = spans.find(sp => sp.kind === 'studio.processes');
     assert.deepEqual([timeout.ok, timeout.code, timeout.callKey], [false, 'AGENT_TIMEOUT', key]);
     s.lines.cancel();
+  } finally { await handle.close(); }
+});
+test('window detection persists a new Studio even when the agent package is refused', async () => {
+  const {handle,store,base,dir,events} = await start();
+  try {
+    const account = store.issue({customer:'Window detection'});
+    const a = agentOf(base, account.agentCredential);
+    const welcome = await a.hello(helloOf({studios:studios('1.7.30.1'),pack:{lanes:['odc'],odcBridge:'v0'}}));
+    assert.equal(welcome.body.compatible.odc.code,'AGENT_PACK_MISMATCH');
+    const data = JSON.parse(fs.readFileSync(path.join(dir,'state','studio-versions.json'),'utf8'));
+    assert.deepEqual(data.unserved.odc['1.7.30'].tokens,[account.id]);
+    assert.ok(events.some(e=>e.event==='studio-version-unserved' && e.installed==='1.7.30.1'));
+    const raw=JSON.stringify(data);
+    assert.equal(raw.includes(account.token),false);
+    assert.equal(raw.includes(account.agentCredential),false);
+    assert.equal(raw.includes('Program Files'),false);
   } finally { await handle.close(); }
 });

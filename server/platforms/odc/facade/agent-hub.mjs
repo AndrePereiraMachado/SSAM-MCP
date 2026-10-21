@@ -28,7 +28,8 @@ import { AGENT_PREFIX } from './server-tokens.mjs';
 import { spawn } from 'node:child_process';
 import { currentCall } from './quality-meter.mjs';
 import { agentVerbOf } from './quality-line.mjs';
-import { buildPolicyOf, servedBuildOf, studioIdentity, studioRefusal, studioVersions, studioWarningOf, threePart } from './studio-identity.mjs';
+import { buildPolicyOf, servedBuildOf, studioIdentity, studioRefusal, studioVersions, studioWarningOf, threePart, servedVersions, causeOf } from './studio-identity.mjs';
+import { recordStudioVersions } from './studio-version-state.mjs';
 import { UNKNOWN_EXIT } from './hosted/network-check.mjs';
 
 // A Windows balloon on the server machine (owner test, 2026-10-08); off with SSAM_ACCESS_NOTIFY=0, never fails a call.
@@ -132,6 +133,7 @@ export const normalizeKernel = (kernel = {}) => {
     const { odc, o11 } = buildPolicyOf(kernel.studioBuildPolicy);
     out.studioBuildPolicy = { odc, o11 };
   }
+  if (kernel?.servedVersions || process.env.SSAM_SERVED_VERSIONS) out.servedVersions = Object.fromEntries(LANES.map(lane => [lane, servedVersions(lane, kernel)]));
   return out;
 };
 // The O11 hooks an agent package may declare (pack.json o11Hook, docs/O11-BRIDGE-FINA.md 13): the development hook and
@@ -171,7 +173,7 @@ function laneCompatibility(lane, hello, kernel, lanes, refused) {
     return no('AGENT_PACK_MISMATCH', 'The agent package has no ' + lane + ' lane. Ask the server owner for the current agent package.');
   if (lane === 'odc' && pack.odcBridge !== kernel.odcBridge && !(kernel.odcBridgeAccepted ?? []).includes(pack.odcBridge))
     return no('AGENT_PACK_MISMATCH', 'The agent package carries ODC bridge ' + (pack.odcBridge ?? 'none') + '; this server uses ' + kernel.odcBridge + '. Ask the server owner for the current agent package.');
-  if (lane === 'o11' && threePart(pack.o11BuiltFor) !== server)
+  if (lane === 'o11' && !servedVersions(lane, kernel).includes(threePart(pack.o11BuiltFor)))
     return no('AGENT_PACK_MISMATCH', 'The O11 bridge of the agent package was built for Service Studio ' + (pack.o11BuiltFor ?? 'none') + '; this server has the kernel for Service Studio ' + server + '. Ask the server owner for the current agent package.');
   if (lane === 'o11') {
     const hook = pack.o11Hook ?? 'dev';
@@ -533,10 +535,16 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
   // a Studio update (or a server update) cut, before the first refused call. The token id, the lane, version numbers and
   // codes only: never a credential, a folder or an argument. A lane served again forgets its entry.
   function noteUnserved(state, compatible) {
+    const observed = Object.fromEntries(LANES.filter(lane => state.lanes.includes(lane)).map(lane => {
+      const studio = studioIdentity(lane, state.hello?.studios?.[lane]?.installed, serverKernel);
+      return [lane, {studio, ok: studio?.ok, cause: causeOf(studio)}];
+    }));
+    try { recordStudioVersions(dir, state, observed, iso()); }
+    catch (error) { log({ event: 'studio-versions-write-failed', code: error.code ?? 'EIO' }); }
     for (const lane of LANES) {
-      const entry = compatible?.[lane];
-      if (!entry?.studio || entry.ok !== false) { state.unserved.delete(lane); continue; }
-      logUnserved(state, lane, entry.studio, entry.cause);
+      const entry = observed[lane];
+      if (!entry?.studio || !entry.studio.installed || (entry.ok !== false && entry.studio.relation !== 'newer')) { state.unserved.delete(lane); continue; }
+      logUnserved(state, lane, entry.studio, entry.cause ?? 'STUDIO_VERSION_NOT_SERVED_YET');
     }
   }
   // A1 (round 2): the same line for a refusal of the PROCESS a call goes to (AgentLink studioUnserved, from the

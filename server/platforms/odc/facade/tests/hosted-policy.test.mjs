@@ -103,7 +103,7 @@ test('a version mismatch names both versions; a pack mismatch asks for the packa
   const refused = (await h.gate('studio_snapshot')({ module: 'M' })).structuredContent;
   assert.equal(refused.code, 'STUDIO_VERSION_MISMATCH');
   assert.equal(refused.lane, 'odc');
-  assert.match(refused.error, /ODC Studio 1\.7\.28/);
+  assert.match(refused.error, /versions this server serves \(1\.7\.28\)/);
   assert.match(refused.error, /ODC Studio 1\.7\.27\.100/);
   assert.equal(refused.serverKernel, '1.7.28');
   assert.equal(refused.agentStudio, '1.7.27.100');
@@ -132,33 +132,27 @@ const PT_BR = /[ãõçáéíóúâêôà]|\b(não|deste|computador|Atualize|Avis
 test('A-M1 gate: one refusal per direction with both builds, in English for the user and for the model (B3: no pt-BR), what still works and nothing ran', async () => {
   const newer = harness({ info: studioInfo('1.7.29.10900') });
   const r = await newer.gate('studio_snapshot')({ module: 'M' });
-  assert.equal(r.isError, true);
+  assert.notEqual(r.isError, true);
   const v = r.structuredContent;
-  assert.deepEqual({ code: v.code, cause: v.cause, lane: v.lane, installed: v.installed, served: v.served, outcome: v.outcome, serverKernel: v.serverKernel, agentStudio: v.agentStudio },
-    { code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_VERSION_NOT_SERVED_YET', lane: 'odc', installed: '1.7.29.10900', served: ['1.7.28.5000'], outcome: 'not-sent', serverKernel: '1.7.28', agentStudio: '1.7.29.10900' });
-  assert.match(v.userMessage, /is newer than the ODC Studio the SSAM server serves today \(1\.7\.28\.5000\)\. The server does not have this version yet; the SSAM owner was already notified/);
-  assert.match(v.userMessage, /Do not roll ODC Studio back/); assert.match(v.userMessage, /Nothing ran on your Studio\./);
-  assert.doesNotMatch(JSON.stringify(v), PT_BR, 'B3: no pt-BR text');
-  assert.match(v.error, /does not serve this version yet; the owner was notified/); assert.match(v.error, /Nothing ran on the user's Studio\./);
-  // what still works: the server-only tools of this lane in the hosted catalog, never a tool that touches the Studio
-  for (const name of ['ssam_discover', 'ssam_reference', 'ssam_job', 'studio_build', 'odc_search_operations']) assert.ok(v.stillWorks.includes(name), name);
-  for (const name of ['studio_snapshot', 'studio_deliver', 'o11_inspect', 'o11_job', 'ssam_debug']) assert.ok(!v.stillWorks.includes(name), name);
-  assert.equal(v.continuation.tool, 'ssam_doctor');
-  assert.doesNotMatch(JSON.stringify(r), /install ODC Studio|instal(e|ar) o ODC Studio|someone/i, 'never "install the server version"; no folder of the user');
-  assert.deepEqual(textOf(r), v, 'the text is the same answer');
-  assert.deepEqual(newer.calls, [], 'nothing ran');
+  assert.equal(v.ok, true);
+  assert.equal(v.studioWarning.code, 'studioNewerThanServed');
+  assert.match(v.studioWarning.userMessage, /the owner was notified/);
+  assert.doesNotMatch(JSON.stringify(v), PT_BR);
+  assert.deepEqual(textOf(r), v);
+  assert.deepEqual(newer.calls.map(c => c.name), ['studio_snapshot']);
   const older = (await harness({ info: studioInfo('1.7.27.10846') }).gate('studio_deliver')({ module: 'M', job: { ops: [] } })).structuredContent;
   assert.equal(older.cause, 'STUDIO_UPDATE_REQUIRED');
-  assert.match(older.userMessage, /Update ODC Studio to 1\.7\.28\.5000/);
+  assert.match(older.userMessage, /Update ODC Studio and reconnect/);
   assert.match(older.continuation.why, /update/);
   // the O11 lane: its own builds and its own server-only tools
   const o11 = (await harness({ info: studioInfo('1.7.28.5000', '11.55.93.7000') }).gate('o11_studio')({ command: 'status' })).structuredContent;
-  assert.deepEqual({ cause: o11.cause, lane: o11.lane, installed: o11.installed, served: o11.served }, { cause: 'STUDIO_VERSION_NOT_SERVED_YET', lane: 'o11', installed: '11.55.93.7000', served: ['11.55.92.6000'] });
-  assert.ok(o11.stillWorks.includes('o11_job') && o11.stillWorks.includes('o11_inspect') && !o11.stillWorks.includes('studio_build'));
+  assert.equal(o11.ok, true);
+  assert.equal(o11.studioWarning.code, 'studioNewerThanServed');
+  assert.equal(o11.studioWarning.lane, 'o11');
   // a hub answer without the identity (STUDIO_VERSION_MISMATCH alone): the gate judges the same way from the versions it has
   const bare = harness({ info: { kernel: BUILT, compatible: { odc: { ok: false, code: 'STUDIO_VERSION_MISMATCH', message: 'm' }, o11: { ok: true } },
     studios: { odc: { installed: { version: '1.7.29.10900' } } } } });
-  assert.equal((await bare.gate('studio_status')({})).structuredContent.cause, 'STUDIO_VERSION_NOT_SERVED_YET');
+  assert.equal((await bare.gate('studio_status')({})).structuredContent.studioWarning.code, 'studioNewerThanServed');
   // kernel.json studioBuildPolicy "refuse": another build is refused, by direction
   const strict = harness({ info: studioInfo('1.7.28.5023', '11.55.92.6000', { ...BUILT, studioBuildPolicy: 'refuse' }) });
   const refusedBuild = (await strict.gate('studio_status')({})).structuredContent;
@@ -176,8 +170,8 @@ test('E2: a server-only tool answers with studioNotServed while the Studio is no
     assert.notEqual(r.isError, true, name);
     const w = r.structuredContent.studioWarning;
     assert.deepEqual({ code: w?.code, lane: w?.lane, cause: w?.cause, installed: w?.installed, served: w?.served },
-      { code: 'studioNotServed', lane: 'odc', cause: 'STUDIO_VERSION_NOT_SERVED_YET', installed: '1.7.29.10900', served: '1.7.28.5000' }, name);
-    assert.match(w.userMessage, /^Warning: this tool ran on the server only, with the kernel of ODC Studio 1\.7\.28\.5000/);
+      { code: 'studioNewerThanServed', lane: 'odc', cause: undefined, installed: '1.7.29.10900', served: '1.7.28.5000' }, name);
+    assert.match(w.userMessage, /The server does not serve ODC Studio 1\.7\.29\.10900 yet; the owner was notified/);
     assert.doesNotMatch(JSON.stringify(w), PT_BR, name + ': B3, no pt-BR text');
     assert.deepEqual(textOf(r).studioWarning, w, name + ': the text carries it too');
   }
@@ -188,7 +182,7 @@ test('E2: a server-only tool answers with studioNotServed while the Studio is no
   // A2 of the review (round 2), changed on purpose: a tool without a lane carries the warnings of the lanes it may touch
   // (here every lane of the token; ssam_task only o11). Until c812dc4 it said nothing.
   for (const [name, args] of [['ssam_doctor', {}], ['ssam_evidence', { file: 'ws:odc/x.json' }]])
-    assert.equal((await notServed.gate(name)(args)).structuredContent.studioWarning?.code, 'studioNotServed', name);
+    assert.equal((await notServed.gate(name)(args)).structuredContent.studioWarning?.code, 'studioNewerThanServed', name);
   assert.equal((await notServed.gate('ssam_task')({ id: 'tarefa-1' })).structuredContent.studioWarning, undefined, 'ssam_task touches only o11');
   // another build served with the warning (default policy): every answer of the lane, the Studio tools included
   const differs = harness({ info: studioInfo('1.7.28.5023') });
@@ -239,10 +233,10 @@ test('A2 refuse: ssam_task {id, close} is judged as o11 and never runs the close
   assert.deepEqual(connect.studioSkipped?.map(s => ({ code: s.code, lane: s.lane, cause: s.cause, installed: s.installed, served: s.served })),
     [{ code: 'STUDIO_VERSION_MISMATCH', lane: 'o11', cause: 'STUDIO_VERSION_NOT_SERVED_YET', installed: '11.55.92.6011', served: ['11.55.92.6000'] }]);
   // no lane served: one refusal, every lane in it
-  const none = harness({ info: twoLanes('1.7.29.100', '11.55.91.65258', REFUSE) });
+  const none = harness({ info: twoLanes('1.7.27.100', '11.55.91.65258', REFUSE) });
   const refused = (await none.gate('ssam_connect')({})).structuredContent;
   assert.equal(refused.code, 'STUDIO_VERSION_MISMATCH');
-  assert.deepEqual(refused.lanes?.map(r => [r.lane, r.cause]), [['odc', 'STUDIO_VERSION_NOT_SERVED_YET'], ['o11', 'STUDIO_UPDATE_REQUIRED']]);
+  assert.deepEqual(refused.lanes?.map(r => [r.lane, r.cause]), [['odc', 'STUDIO_UPDATE_REQUIRED'], ['o11', 'STUDIO_UPDATE_REQUIRED']]);
   assert.deepEqual(none.calls, []);
   // the token's lanes decide: an O11-only token is the O11 refusal itself
   const o11Only = harness({ lanes: ['o11'], info: twoLanes('1.7.29.100', '11.55.91.65258', REFUSE) });
