@@ -19,7 +19,7 @@
       "environment": {
         "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL}"
       },
-      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-4d84d6b-o115593-odc1729",
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-90e2af7-o115593-odc1729",
       "init": true,
       "logging": {
         "driver": "none"
@@ -94,7 +94,7 @@
         ],
         "timeout": "5s"
       },
-      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-4d84d6b-o115593-odc1729",
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-90e2af7-o115593-odc1729",
       "init": true,
       "logging": {
         "driver": "json-file",
@@ -140,7 +140,7 @@
         "-c",
         "du -sh /data/server /data/friction /data/odc-features /data/cache"
       ],
-      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-4d84d6b-o115593-odc1729",
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-90e2af7-o115593-odc1729",
       "init": true,
       "logging": {
         "driver": "json-file",
@@ -235,14 +235,14 @@
         ],
         "timeout": "5s"
       },
-      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-4d84d6b-o115593-odc1729",
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-90e2af7-o115593-odc1729",
       "init": true,
       "labels": {
         "ssam.backend": "true",
         "ssam.odc": "1.7.29",
         "ssam.o11": "11.55.93",
         "ssam.default": "true",
-        "ssam.image.digest": "sha256:29b3fa97cb6add5a02c2ab12426b9a2968ed7b3a1de731d2f0f45cf568782ef4"
+        "ssam.image.digest": "sha256:0884ab21e77eebaba8eb2b30cae04b9fad20b2d21dea533f94c311fced56de22"
       },
       "logging": {
         "driver": "json-file",
@@ -336,14 +336,14 @@
         ],
         "timeout": "5s"
       },
-      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-4d84d6b-o115592-odc1728",
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-90e2af7-o115592-odc1728",
       "init": true,
       "labels": {
         "ssam.backend": "true",
         "ssam.odc": "1.7.28",
         "ssam.o11": "11.55.92",
         "ssam.default": "false",
-        "ssam.image.digest": "sha256:82bc85e10fa5522b44d8ba62eccb3c4a156f809bf9dbf01295e17b5343b35099"
+        "ssam.image.digest": "sha256:20330f4c9b3d3ff384d79d4cce1c841d8d6251ae73f1becce10aad7e03d8ebab"
       },
       "logging": {
         "driver": "json-file",
@@ -429,7 +429,7 @@
         ],
         "timeout": "7s"
       },
-      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-4d84d6b-o115593-odc1729",
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-90e2af7-o115593-odc1729",
       "init": true,
       "labels": {
         "traefik.enable": "true",
