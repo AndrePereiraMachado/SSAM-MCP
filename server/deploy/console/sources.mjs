@@ -1,3 +1,4 @@
+import {runtimeDirectories} from '../../platforms/odc/facade/hosted/storage.mjs';
 // Small read-only sources of the state volume (DESIGN 3.1): machine-pins.json and kernel.json (re-read on mtime change),
 // the access alert lines of access-alerts.jsonl (kept for 30 days, counted per token) and the sizes of server.log*,
 // audit-*, quality-* (DESIGN-QUALIDADE 4.1) and console-audit.jsonl (stat every 60 s). Customer-controlled fields are
@@ -25,11 +26,16 @@ function onChange(file, parse) {
 const machine = m => (m && typeof m === 'object' ? { id: cap(m.id ?? null, 32), name: cap(m.name ?? null, 64), user: cap(m.user ?? null, 64), at: typeof m.at === 'string' ? m.at : null } : null);
 
 export function createSources({ serverDir, now = Date.now }) {
-  const pins = onChange(path.join(serverDir, 'machine-pins.json'), data => {
-    const out = {};
-    if (data && typeof data === 'object') for (const [tok, m] of Object.entries(data)) if (TOKEN.test(tok)) out[tok] = machine(m);
+  const pinReaders=new Map();
+  const pins=()=>{
+    const out={};
+    for(const dir of runtimeDirectories(serverDir)){
+      if(!pinReaders.has(dir))pinReaders.set(dir,onChange(path.join(dir,'machine-pins.json'),data=>data));
+      const data=pinReaders.get(dir)();
+      if(data&&typeof data==='object')for(const [tok,m]of Object.entries(data))if(TOKEN.test(tok)&&(!out[tok]||m.at<out[tok].at))out[tok]=machine(m);
+    }
     return out;
-  });
+  };
   const kernel = onChange(path.join(serverDir, 'kernel.json'), data => (data && typeof data === 'object' ? {
     o11: data.o11 ?? null, odc: data.odc ?? null, odcBridge: data.odcBridge ?? null, o11Hook: data.o11Hook ?? null,
     odcBridgeAccepted: Array.isArray(data.odcBridgeAccepted) ? data.odcBridgeAccepted.map(String) : null,

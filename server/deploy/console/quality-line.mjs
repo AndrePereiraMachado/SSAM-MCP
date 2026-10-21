@@ -506,7 +506,7 @@ XIF_SPEC_SHAPE XIF_SPEC_TYPE_COLLISION XIF_SPEC_TYPE_UNKNOWN XIF_STUBS_REFUSED X
 `;
 export const RULES = Object.freeze(['LIST_ENTITY_SEGMENT_DROPPED', 'NULL_FUNCTION_REWRITTEN', 'PROPERTY_SET_DROPPED', 'SORT_KEYS_SPLIT']);
 // </generated quality-registry>
-export const CODES = Object.freeze(CODE_TEXT.split(/\s+/).filter(Boolean));
+export const CODES = Object.freeze([...CODE_TEXT.split(/\s+/).filter(Boolean), 'SESSION_REROUTED', 'BACKEND_UNAVAILABLE', 'ROUTING_UNAVAILABLE', 'SESSION_NOT_FOUND', 'HOST_NOT_ALLOWED']);
 // The placeholders the record itself writes: a code slot without a code, an uncoded problem, a fold, an unlisted value.
 export const PLACEHOLDER_CODES = Object.freeze(['TOOL_ERROR', 'PROBLEM_UNCODED', 'VALIDATION_UNCODED', OTHER_CODES, NATIVE_UNLISTED, CODE_UNLISTED]);
 const CODE_SET = new Set([...CODES, ...PLACEHOLDER_CODES]);

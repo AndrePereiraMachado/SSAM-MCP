@@ -259,7 +259,7 @@ if [ ! -s "$authority/bridge.key" ]; then
   printf '%s' "$key" > "$authority/bridge.key.$$"
   mv -f "$authority/bridge.key.$$" "$authority/bridge.key"
 fi
-exec node facade/ssam.mjs serve --host 0.0.0.0 --allow-remote --port "${SSAM_PORT:-7310}" --log-file /data/server/server.log ${SSAM_PUBLIC_HOST:+--public-host "$SSAM_PUBLIC_HOST"}
+exec node facade/ssam.mjs serve --host 0.0.0.0 --allow-remote --port "${SSAM_PORT:-7310}" --log-file "${SSAM_RUNTIME_DIR:-/data/server}/server.log" ${SSAM_PUBLIC_HOST:+--public-host "$SSAM_PUBLIC_HOST"}
 EOF
 
 # State lives in volumes, never in the image:

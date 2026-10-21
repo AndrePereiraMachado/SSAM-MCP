@@ -1,0 +1,358 @@
+{
+  "name": "ssam-multiver-template",
+  "networks": {
+    "default": {
+      "name": "ssam-multiver-template_default"
+    }
+  },
+  "services": {
+    "ssam-admin": {
+      "cap_drop": [
+        "ALL"
+      ],
+      "command": [
+        "server-token",
+        "list"
+      ],
+      "entrypoint": [
+        "node",
+        "facade/ssam.mjs"
+      ],
+      "environment": {
+        "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL}"
+      },
+      "image": "${SSAM_IMAGE:?set SSAM_IMAGE}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG}",
+      "init": true,
+      "logging": {
+        "driver": "none"
+      },
+      "networks": {
+        "default": null
+      },
+      "platform": "linux/amd64",
+      "profiles": [
+        "admin"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "volumes": [
+        {
+          "source": "server-state",
+          "target": "/data/server",
+          "type": "volume",
+          "volume": {}
+        }
+      ]
+    },
+    "ssam-console": {
+      "cap_drop": [
+        "ALL"
+      ],
+      "command": [
+        "/app/deploy/console/server.mjs"
+      ],
+      "deploy": {
+        "resources": {
+          "limits": {
+            "cpus": "0.50",
+            "memory": "256m",
+            "pids": 64
+          }
+        }
+      },
+      "entrypoint": [
+        "node"
+      ],
+      "environment": {
+        "CONSOLE_DOMAIN": "${SSAM_DOMAIN:?set SSAM_DOMAIN}",
+        "CONSOLE_GITHUB_ALLOWED_LOGINS": "${CONSOLE_GITHUB_ALLOWED_LOGINS:?set CONSOLE_GITHUB_ALLOWED_LOGINS (your GitHub login)}",
+        "CONSOLE_GITHUB_CLIENT_ID": "${CONSOLE_GITHUB_CLIENT_ID:?set CONSOLE_GITHUB_CLIENT_ID (the OAuth App's Client ID)}",
+        "CONSOLE_GITHUB_CLIENT_SECRET": "${CONSOLE_GITHUB_CLIENT_SECRET:?set CONSOLE_GITHUB_CLIENT_SECRET (the OAuth App's client secret)}",
+        "CONSOLE_HOST_JSON": "/host/host.json",
+        "CONSOLE_LICENSE_WRITES": "${CONSOLE_LICENSE_WRITES:-auto}",
+        "CONSOLE_LISTEN": "0.0.0.0:7320",
+        "CONSOLE_PUBLIC_DIR": "/app/deploy/console/public",
+        "CONSOLE_PUBLIC_URL": "https://${CONSOLE_DOMAIN:?set CONSOLE_DOMAIN (the DNS name of the console, e.g. painel.ssam.example.com)}",
+        "CONSOLE_SESSION_SECRET": "${CONSOLE_SESSION_SECRET:-}",
+        "CONSOLE_STATE_DIR": "/data/server/.console",
+        "CONSOLE_TOKEN_MODULE": "/app/platforms/odc/facade/server-tokens.mjs",
+        "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL}",
+        "SSAM_SERVER_DIR": "/data/server",
+        "TZ": "UTC"
+      },
+      "expose": [
+        "7320"
+      ],
+      "healthcheck": {
+        "interval": "30s",
+        "retries": 3,
+        "start_period": "20s",
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get({host:'127.0.0.1',port:7320,path:'/healthz',timeout:3000,headers:{Host:new URL(process.env.CONSOLE_PUBLIC_URL).host}},r=\u003eprocess.exit(r.statusCode===200?0:1)).on('error',()=\u003eprocess.exit(1))"
+        ],
+        "timeout": "5s"
+      },
+      "image": "${SSAM_IMAGE:?set SSAM_IMAGE}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG}",
+      "init": true,
+      "labels": [
+        "traefik.enable=true",
+        "traefik.http.routers.ssam-console.rule=Host(`${CONSOLE_DOMAIN}`)",
+        "traefik.http.routers.ssam-console.entrypoints=https",
+        "traefik.http.routers.ssam-console.tls=true",
+        "traefik.http.routers.ssam-console.tls.certresolver=letsencrypt",
+        "traefik.http.routers.ssam-console.middlewares=ssam-console-headers",
+        "traefik.http.routers.ssam-console.service=ssam-console",
+        "traefik.http.services.ssam-console.loadbalancer.server.port=7320",
+        "traefik.http.routers.ssam-console-http.rule=Host(`${CONSOLE_DOMAIN}`)",
+        "traefik.http.routers.ssam-console-http.entrypoints=http",
+        "traefik.http.routers.ssam-console-http.middlewares=ssam-to-https",
+        "traefik.http.routers.ssam-console-http.service=ssam-console",
+        "traefik.http.middlewares.ssam-console-headers.headers.stsseconds=31536000",
+        "traefik.http.middlewares.ssam-console-headers.headers.contenttypenosniff=true",
+        "traefik.http.middlewares.ssam-console-headers.headers.framedeny=true",
+        "traefik.http.middlewares.ssam-console-headers.headers.referrerpolicy=no-referrer",
+        "traefik.http.middlewares.ssam-console-headers.headers.customresponseheaders.Server="
+      ],
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-file": "5",
+          "max-size": "20m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "platform": "linux/amd64",
+      "pull_policy": "always",
+      "read_only": true,
+      "restart": "unless-stopped",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "stop_grace_period": "10s",
+      "tmpfs": [
+        "/tmp:size=16m",
+        "/data/friction:size=64k,mode=0555",
+        "/data/odc-features:size=64k,mode=0555",
+        "/data/cache:size=64k,mode=0555"
+      ],
+      "user": "10001:10001",
+      "volumes": [
+        {
+          "source": "server-state",
+          "target": "/data/server",
+          "type": "volume",
+          "volume": {}
+        }
+      ],
+      "working_dir": "/app/deploy/console"
+    },
+    "ssam-ops": {
+      "cap_drop": [
+        "ALL"
+      ],
+      "command": [
+        "sh",
+        "-c",
+        "du -sh /data/server /data/friction /data/odc-features /data/cache"
+      ],
+      "image": "${SSAM_IMAGE:?set SSAM_IMAGE}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG}",
+      "init": true,
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-file": "5",
+          "max-size": "20m"
+        }
+      },
+      "network_mode": "none",
+      "platform": "linux/amd64",
+      "profiles": [
+        "ops"
+      ],
+      "read_only": true,
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:size=64m"
+      ],
+      "volumes": [
+        {
+          "source": "server-state",
+          "target": "/data/server",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "friction",
+          "target": "/data/friction",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "odc-features",
+          "target": "/data/odc-features",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "cache",
+          "target": "/data/cache",
+          "type": "volume",
+          "volume": {}
+        }
+      ]
+    },
+    "ssam-server": {
+      "cap_drop": [
+        "ALL"
+      ],
+      "deploy": {
+        "resources": {
+          "limits": {
+            "cpus": "${SSAM_CPUS:-2}",
+            "memory": "${SSAM_MEMORY:-6g}",
+            "pids": "${SSAM_PIDS:-4096}"
+          }
+        }
+      },
+      "environment": {
+        "SSAM_BUILD_WORKERS": "${SSAM_BUILD_WORKERS:-2}",
+        "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL (postgres://user:password@host:5432/database, the internal URL of the Postgres resource)}",
+        "SSAM_HOSTED_SSAM_CODE": "${SSAM_HOSTED_SSAM_CODE:-}",
+        "SSAM_O11_WORKERS_MAX": "${SSAM_O11_WORKERS_MAX:-2}",
+        "SSAM_O11_WORKER_BASE_CACHE": "${SSAM_O11_WORKER_BASE_CACHE:-off}",
+        "SSAM_O11_WORKER_HEAP_MB": "${SSAM_O11_WORKER_HEAP_MB:-1536}",
+        "SSAM_O11_WORKER_IDLE_MS": "${SSAM_O11_WORKER_IDLE_MS:-600000}",
+        "SSAM_O11_WORKER_MAX_COMMANDS": "${SSAM_O11_WORKER_MAX_COMMANDS:-1000}",
+        "SSAM_O11_WORKER_MIN_IDLE_MS": "${SSAM_O11_WORKER_MIN_IDLE_MS:-120000}",
+        "SSAM_O11_WORKER_RSS_MB": "${SSAM_O11_WORKER_RSS_MB:-1200}",
+        "SSAM_PORT": "7310",
+        "SSAM_PUBLIC_HOST": "${SSAM_DOMAIN:?set SSAM_DOMAIN (the DNS name of this VPS, e.g. ssam.example.com)}",
+        "SSAM_QUALITY": "${SSAM_QUALITY:-1}",
+        "SSAM_SERVER_RATE_PER_MINUTE": "${SSAM_RATE_PER_MINUTE:-240}"
+      },
+      "expose": [
+        "7310"
+      ],
+      "healthcheck": {
+        "interval": "30s",
+        "retries": 3,
+        "start_period": "60s",
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:7310/health',{signal:AbortSignal.timeout(4000)}).then(r=\u003eprocess.exit(r.ok?0:1)).catch(()=\u003eprocess.exit(1))"
+        ],
+        "timeout": "5s"
+      },
+      "image": "${SSAM_IMAGE:?set SSAM_IMAGE (e.g. docker.io/\u003cnamespace\u003e/ssam-server)}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG (latest, or prod-\u003cyyyymmdd\u003e-\u003ccommit\u003e)}",
+      "init": true,
+      "labels": [
+        "traefik.enable=true",
+        "traefik.http.routers.ssam.rule=Host(`${SSAM_DOMAIN}`) \u0026\u0026 (Path(`/mcp`) || Path(`/health`) || Path(`/agent`) || PathPrefix(`/agent/`))",
+        "traefik.http.routers.ssam.entrypoints=https",
+        "traefik.http.routers.ssam.tls=true",
+        "traefik.http.routers.ssam.tls.certresolver=letsencrypt",
+        "traefik.http.routers.ssam.middlewares=ssam-headers",
+        "traefik.http.routers.ssam.service=ssam",
+        "traefik.http.services.ssam.loadbalancer.server.port=7310",
+        "traefik.http.services.ssam.loadbalancer.serverstransport=ssam@file",
+        "traefik.http.routers.ssam-http.rule=Host(`${SSAM_DOMAIN}`)",
+        "traefik.http.routers.ssam-http.entrypoints=http",
+        "traefik.http.routers.ssam-http.middlewares=ssam-to-https",
+        "traefik.http.routers.ssam-http.service=ssam",
+        "traefik.http.middlewares.ssam-to-https.redirectscheme.scheme=https",
+        "traefik.http.middlewares.ssam-to-https.redirectscheme.permanent=true",
+        "traefik.http.middlewares.ssam-headers.headers.stsseconds=31536000",
+        "traefik.http.middlewares.ssam-headers.headers.contenttypenosniff=true",
+        "traefik.http.middlewares.ssam-headers.headers.framedeny=true",
+        "traefik.http.middlewares.ssam-headers.headers.referrerpolicy=no-referrer",
+        "traefik.http.middlewares.ssam-headers.headers.customresponseheaders.Content-Security-Policy=default-src 'none'; frame-ancestors 'none'",
+        "traefik.http.middlewares.ssam-headers.headers.customresponseheaders.Cross-Origin-Resource-Policy=same-origin",
+        "traefik.http.middlewares.ssam-headers.headers.customresponseheaders.Server="
+      ],
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-file": "5",
+          "max-size": "20m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "platform": "linux/amd64",
+      "pull_policy": "always",
+      "read_only": false,
+      "restart": "unless-stopped",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "stop_grace_period": "30s",
+      "volumes": [
+        {
+          "source": "server-state",
+          "target": "/data/server",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "friction",
+          "target": "/data/friction",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "odc-features",
+          "target": "/data/odc-features",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "cache",
+          "target": "/data/cache",
+          "type": "volume",
+          "volume": {}
+        }
+      ]
+    }
+  },
+  "volumes": {
+    "cache": {
+      "name": "ssam-multiver-template_cache"
+    },
+    "friction": {
+      "name": "ssam-multiver-template_friction"
+    },
+    "odc-features": {
+      "name": "ssam-multiver-template_odc-features"
+    },
+    "server-state": {
+      "name": "ssam-multiver-template_server-state"
+    }
+  },
+  "x-hardening": {
+    "cap_drop": [
+      "ALL"
+    ],
+    "init": true,
+    "logging": {
+      "driver": "json-file",
+      "options": {
+        "max-file": "5",
+        "max-size": "20m"
+      }
+    },
+    "security_opt": [
+      "no-new-privileges:true"
+    ]
+  }
+}

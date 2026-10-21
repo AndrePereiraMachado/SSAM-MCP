@@ -1,3 +1,4 @@
+import {ensureRuntime,customerStateDir,readMachinePin} from './hosted/storage.mjs';
 // The agent channel of the hosted mode (phase 2 of the distribution, docs/FASE2-AGENTE.md sections 2, 3 and 7): the
 // customer's thin agent connects OUT to this server and runs only the operations that must touch the customer's
 // machine. This module is the server side of protocol ssam-agent/1 and the AgentLink (I-1) the hosted executor uses.
@@ -244,12 +245,13 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
   if (!dir) throw new Error('dir is required');
   if (!store?.verifyAgent || !store?.lookup) throw new Error('store with verifyAgent and lookup is required');
   const limits = { ...LIMITS, ...overrides };
+  const runtime = ensureRuntime(dir);
   const serverKernel = normalizeKernel(kernel);
   const nowMs = () => +now();
   const iso = () => new Date(nowMs()).toISOString();
   const links = new Map();    // tokenId -> state
   const windows = new Map();  // tokenId -> {start, count}
-  const transfersDir = tokenId => path.join(dir, 'customers', tokenId, 'state', 'transfers');
+  const transfersDir = tokenId => path.join(customerStateDir(path.join(dir,'customers',tokenId)), 'transfers');
 
   const record = tokenId => { try { return store.lookup(tokenId); } catch { return undefined; } };
 
@@ -573,17 +575,17 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
     if (dir && machineId) {
       const seen = { id: machineId, name: String(h.agent.machine.name ?? '').slice(0, 64), user: String(h.agent.machine.user ?? '').slice(0, 64) };
       const ip = (String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || req.socket?.remoteAddress || '').slice(0, 64);
-      const pinFile = path.join(dir, 'machine-pins.json');
+      const pinFile = path.join(runtime, 'machine-pins.json');
       let pins = {};
       try { pins = JSON.parse(fs.readFileSync(pinFile, 'utf8')); } catch { pins = {}; }
-      const first = pins[state.tokenId];
+      const first = readMachinePin(dir, state.tokenId);
       if (!first) {
         pins[state.tokenId] = { ...seen, at: iso() };
         try { fs.writeFileSync(pinFile, JSON.stringify(pins, null, 2)); log({ event: 'agent-machine-pinned', token: state.tokenId, machine: pins[state.tokenId], ip }); } catch { /* recorded on the next hello */ }
       } else if (first.id !== machineId) {
         const alert = { time: iso(), event: 'agent-machine-changed', token: state.tokenId, customer: auth.customer, first, machine: seen, ip };
         log(alert);
-        try { fs.appendFileSync(path.join(dir, 'access-alerts.jsonl'), JSON.stringify(alert) + '\n'); } catch { /* the log line stays */ }
+        try { fs.appendFileSync(path.join(runtime, 'access-alerts.jsonl'), JSON.stringify(alert) + '\n'); } catch { /* the log line stays */ }
         notifyOwner('SSAM: access from another machine', `${auth.customer}: ${seen.name} (${seen.user}) instead of ${first.name} (${first.user}). IP ${ip}`);
       }
     }

@@ -1,3 +1,4 @@
+import {versionReader} from './version-reader.mjs';
 // Wiring of the console (DESIGN 1.2, 3): builds every part over CONSOLE_STATE_DIR and SSAM_SERVER_DIR, restores the
 // checkpoint (or replays every retained file in the background: cold start), runs the readers and polls on their
 // cadences (server.log 2 s; audit, access alerts, host.json and the token store 5 s; alerts 10 s; checkpoint 10 s when
@@ -100,12 +101,12 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
       text: r.ok ? eventText.callOk(c, r.tool, r.ms) : eventText.callFailed(c, r.tool, r.code, r.ms), code: r.code });
   }
   const dir = config.serverDir;
-  const serverLog = createServerLogReader({ dir, onRecord: e => live.apply(e), onLoss, onProblem: problem, onOk: ok, progress });
-  const audit = createAuditReader({ dir, onRecord: onAudit, onProblem: problem, onOk: ok, now, progress });
-  const access = createAccessAlertsReader({ dir, onRecord: l => sources.addAccess(l), onReset: () => sources.resetAccess(), onProblem: problem, progress });
+  const serverLog = versionReader(createServerLogReader, { dir, onRecord: e => live.apply(e), onLoss, onProblem: problem, onOk: ok, progress });
+  const audit = versionReader(createAuditReader, { dir, onRecord: onAudit, onProblem: problem, onOk: ok, now, progress });
+  const access = versionReader(createAccessAlertsReader, { dir, onRecord: l => sources.addAccess(l), onReset: () => sources.resetAccess(), onProblem: problem, progress });
   // quality-YYYYMMDD.jsonl: lines above 4096 bytes are skipped before any parse; every parsed line goes through the
   // contract (quality.addRecord: sanitizeQualityLine with the native ids; what returns null is dropped and counted).
-  const qualityReader = createDailyReader({ dir, prefix: 'quality', maxLineBytes: QUALITY_LINE_BYTES, onRecord: r => quality.addRecord(r),
+  const qualityReader = versionReader(createDailyReader, { dir, prefix: 'quality', maxLineBytes: QUALITY_LINE_BYTES, onRecord: r => quality.addRecord(r),
     onProblem: problem, onOk: ok, now, progress: qProgress });
 
   // ---- checkpoint

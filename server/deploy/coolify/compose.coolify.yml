@@ -1,258 +1,428 @@
-# The SSAM hosted server on a VPS run by Coolify, behind the Traefik proxy Coolify installs (no Caddy). Owned by the
-# SSAM-MCP monorepo; runbook in pt-BR: COOLIFY.md, in this folder. The production compose with Caddy stays
-# ../compose.prod.yml (DEPLOY.md); this file is the same server, with the proxy's part written as Traefik labels.
-#
-#   ssam-server  the image published to the PRIVATE registry (../publish.sh), pinned by tag (Coolify's parser cannot take
-#                a digest; publish.sh never pushes a tag twice, and ssamctl.sh status shows the digest). No host port:
-#                Traefik reaches it on 7310 over the network Coolify gives the resource ("Connect to predefined network",
-#                COOLIFY.md 4). The labels below are the whole routing: Coolify generates none because no domain is set on
-#                the service in its UI (the domain is the variable SSAM_DOMAIN).
-#   (database)   the tokens and the agent credentials (only their SHA-256) of every customer live in a Postgres that is
-#                NOT in this compose: a database resource of Coolify (COOLIFY.md 6), reached as SSAM_DATABASE_URL over
-#                the predefined network. The server applies the migrations of platforms/odc/facade/migrations at start
-#                (DEPLOY.md 7.4). A redeploy, a rollback or a container recreated by Coolify never loses a license.
-#   ssam-console the owner console (DEPLOY.md 15, COOLIFY.md 11): the same image, running the console code the image
-#                carries (/app/deploy/console; nothing is mounted from the VPS), with the licenses in the same Postgres
-#                (SSAM_DATABASE_URL) and the audit in the server-state volume. It listens on 7320
-#                inside the compose network only (CONSOLE_LISTEN; no host port), behind its own Traefik router on its
-#                own host name (CONSOLE_DOMAIN, e.g. painel.<domain>): never on the public host of /mcp. Sign-in through
-#                the owner's GitHub OAuth App (CONSOLE_GITHUB_*): only the GitHub logins of CONSOLE_GITHUB_ALLOWED_LOGINS
-#                get in. The SSH tunnel and the access key of DEPLOY.md 15 do not exist here.
-#   ssam-admin   profile admin: tokens (issue, list, revoke, agent-rotate, import). Coolify never starts it: it runs by
-#                hand over SSH, through ssamctl.sh (which needs no compose at all) or `docker compose --profile admin run`.
-#   ssam-ops     profile ops: file drops into the state volumes (kernel.json, Features.plain.xml) and backups: the same,
-#                by hand, through ssamctl.sh.
-#
-# What the proxy must do for this server (the same list as ../Caddyfile), and how Traefik does it here:
-#   - no buffering: /mcp answers in SSE and the agent keeps a long GET /agent/v1/stream open in NDJSON. Traefik streams
-#     responses as they come (no buffering middleware is used here, on purpose);
-#   - long calls: an o11_deliver can take 60 min. Traefik puts no limit on the response (responseHeaderTimeout and
-#     writeTimeout are 0 by default). The entry point's readTimeout (60 s in Traefik v3) only bounds reading a request;
-#   - idle upstream connections: Node closes its idle keep-alive sockets after 5 s, so the proxy must drop its own sooner
-#     (a reused dead socket is a 502 Traefik does not retry on a POST). That is the serversTransport `ssam@file`
-#     (traefik-ssam.yaml, idleConnTimeout 4 s), a dynamic configuration Coolify's Traefik reads from its dynamic folder:
-#     it cannot be written as a label (Traefik's Docker provider has no serversTransports labels);
-#   - Host and Origin pass through unchanged; X-Forwarded-For carries the client's address (Traefik trusts no client);
-#   - only what the server serves is routed: /mcp, /agent, /agent/*, /health; anything else is Traefik's 404;
-#   - bodies: the server itself refuses above 16 MiB per MCP request and 4 MiB per agent part (413); no proxy limit;
-#   - security headers: the same as the Caddyfile, as a headers middleware in the labels;
-#   - TLS: Coolify's Let's Encrypt resolver (`letsencrypt`) on the `https` entry point; http redirects to https.
-# Trade-off against compose.prod.yml: there, ssam-server sat on an internal network with no route to the internet; here it
-# must be on the proxy's network, which has one. The server never needs it (every Studio and tenant operation goes
-# through the customer's agent, which connects in). COOLIFY.md 9 shows how to block its egress on the host, if wanted.
-#
-# Coolify reads every ${VAR} here as an environment variable of the resource (${VAR:?} blocks the deploy until set):
-# COOLIFY.md 4 lists them; .env.coolify.example has the same list for a plain `docker compose` run (the rehearsal).
-
-x-hardening: &hardening
-  init: true
-  security_opt:
-    - no-new-privileges:true
-  cap_drop:
-    - ALL
-  logging:
-    driver: json-file
-    options:
-      max-size: "20m"
-      max-file: "5"
-
-services:
-  ssam-server:
-    <<: *hardening
-    # From the private registry, pinned by tag (publish.sh prints the line; it never pushes a tag twice, so the tag names
-    # one image for good). Not "<tag>@sha256:<digest>": Coolify turns it into "<image>@sha256@sha256:..." and the pull fails.
-    image: ${SSAM_IMAGE:?set SSAM_IMAGE (e.g. docker.io/<namespace>/ssam-server)}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG (latest, or prod-<yyyymmdd>-<commit>)}
-    platform: linux/amd64
-    # every up pulls the tag again: with `latest` a Redeploy takes the newest published image (a fixed tag never changes)
-    pull_policy: always
-    restart: unless-stopped
-    environment:
-      SSAM_PORT: "7310"
-      SSAM_PUBLIC_HOST: ${SSAM_DOMAIN:?set SSAM_DOMAIN (the DNS name of this VPS, e.g. ssam.example.com)}
-      SSAM_SERVER_RATE_PER_MINUTE: ${SSAM_RATE_PER_MINUTE:-240}
-      SSAM_BUILD_WORKERS: ${SSAM_BUILD_WORKERS:-2}
-      SSAM_O11_WORKERS_MAX: ${SSAM_O11_WORKERS_MAX:-2}
-      SSAM_O11_WORKER_IDLE_MS: ${SSAM_O11_WORKER_IDLE_MS:-600000}
-      SSAM_O11_WORKER_MIN_IDLE_MS: ${SSAM_O11_WORKER_MIN_IDLE_MS:-120000}
-      SSAM_O11_WORKER_BASE_CACHE: ${SSAM_O11_WORKER_BASE_CACHE:-off}
-      SSAM_O11_WORKER_HEAP_MB: ${SSAM_O11_WORKER_HEAP_MB:-1536}
-      SSAM_O11_WORKER_MAX_COMMANDS: ${SSAM_O11_WORKER_MAX_COMMANDS:-1000}
-      SSAM_O11_WORKER_RSS_MB: ${SSAM_O11_WORKER_RSS_MB:-1200}
-      SSAM_QUALITY: ${SSAM_QUALITY:-1}
-      SSAM_HOSTED_SSAM_CODE: ${SSAM_HOSTED_SSAM_CODE:-}
-      # The tokens in Postgres (server-tokens-pg.mjs): the internal URL of the Coolify database resource. Without this
-      # variable the server would keep them in /data/server/tokens.json, as compose.prod.yml does.
-      SSAM_DATABASE_URL: ${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL (postgres://user:password@host:5432/database, the internal URL of the Postgres resource)}
-    volumes:
-      - server-state:/data/server
-      - friction:/data/friction
-      - odc-features:/data/odc-features
-      - cache:/data/cache
-    expose:
-      - "7310"
-    labels:
-      - "traefik.enable=true"
-      # https: the domain, only the paths the server serves, Let's Encrypt, the security headers, the upstream transport.
-      - "traefik.http.routers.ssam.rule=Host(`${SSAM_DOMAIN}`) && (Path(`/mcp`) || Path(`/health`) || Path(`/agent`) || PathPrefix(`/agent/`))"
-      - "traefik.http.routers.ssam.entrypoints=https"
-      - "traefik.http.routers.ssam.tls=true"
-      - "traefik.http.routers.ssam.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.ssam.middlewares=ssam-headers"
-      - "traefik.http.routers.ssam.service=ssam"
-      - "traefik.http.services.ssam.loadbalancer.server.port=7310"
-      - "traefik.http.services.ssam.loadbalancer.serverstransport=ssam@file"
-      # http: the same paths, redirected to https (the ACME HTTP challenge is Traefik's own, before any router).
-      - "traefik.http.routers.ssam-http.rule=Host(`${SSAM_DOMAIN}`)"
-      - "traefik.http.routers.ssam-http.entrypoints=http"
-      - "traefik.http.routers.ssam-http.middlewares=ssam-to-https"
-      - "traefik.http.routers.ssam-http.service=ssam"
-      - "traefik.http.middlewares.ssam-to-https.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.ssam-to-https.redirectscheme.permanent=true"
-      # The headers of ../Caddyfile.
-      - "traefik.http.middlewares.ssam-headers.headers.stsseconds=31536000"
-      - "traefik.http.middlewares.ssam-headers.headers.contenttypenosniff=true"
-      - "traefik.http.middlewares.ssam-headers.headers.framedeny=true"
-      - "traefik.http.middlewares.ssam-headers.headers.referrerpolicy=no-referrer"
-      - "traefik.http.middlewares.ssam-headers.headers.customresponseheaders.Content-Security-Policy=default-src 'none'; frame-ancestors 'none'"
-      - "traefik.http.middlewares.ssam-headers.headers.customresponseheaders.Cross-Origin-Resource-Policy=same-origin"
-      - "traefik.http.middlewares.ssam-headers.headers.customresponseheaders.Server="
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7310/health',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 30s
-      timeout: 5s
-      start_period: 60s
-      retries: 3
-    # SIGTERM closes the sessions and the agent channels before node exits.
-    stop_grace_period: 30s
-    read_only: false
-    deploy:
-      resources:
-        limits:
-          cpus: "${SSAM_CPUS:-2}"
-          memory: ${SSAM_MEMORY:-6g}
-          pids: ${SSAM_PIDS:-4096}
-
-  # Owner console (COOLIFY.md 11). Its own state (checkpoint, aggregates, the session secret) lives in /data/server/.console
-  # of the server-state volume: a named volume of its own would be created root-owned by Docker (the path is not in the
-  # image) and the console runs as uid 10001; the server never reads that folder, and the backup carries it. The host
-  # collector of DEPLOY.md 15 (host.json) does not run on a Coolify VPS: the VPS tab shows the collector as absent.
-  ssam-console:
-    <<: *hardening
-    image: ${SSAM_IMAGE:?set SSAM_IMAGE}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG}
-    platform: linux/amd64
-    pull_policy: always
-    restart: unless-stopped
-    user: "10001:10001"
-    # entrypoint + command (not `command: []`, which Coolify's parser refuses): the image's CMD (ssam-server-start) is
-    # replaced by the console's script, so node gets no stray argument.
-    entrypoint: ["node"]
-    command: ["/app/deploy/console/server.mjs"]
-    working_dir: /app/deploy/console
-    environment:
-      SSAM_SERVER_DIR: /data/server
-      CONSOLE_STATE_DIR: /data/server/.console
-      CONSOLE_HOST_JSON: /host/host.json
-      CONSOLE_PUBLIC_DIR: /app/deploy/console/public
-      CONSOLE_TOKEN_MODULE: /app/platforms/odc/facade/server-tokens.mjs
-      CONSOLE_DOMAIN: ${SSAM_DOMAIN:?set SSAM_DOMAIN}
-      # auto: license actions with a token module that locks between writers (the Postgres store does; DEPLOY.md 15.4)
-      CONSOLE_LICENSE_WRITES: ${CONSOLE_LICENSE_WRITES:-auto}
-      # the licenses in the same Postgres as the server (the console's own read-back goes through the table)
-      SSAM_DATABASE_URL: ${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL}
-      # TCP inside the compose network (Traefik reaches it; no host port); allowed only with the GitHub sign-in below,
-      # and the console's own default with it (a platform that drops this value changes nothing)
-      CONSOLE_LISTEN: "0.0.0.0:7320"
-      CONSOLE_PUBLIC_URL: https://${CONSOLE_DOMAIN:?set CONSOLE_DOMAIN (the DNS name of the console, e.g. painel.ssam.example.com)}
-      # the GitHub OAuth App of the owner (COOLIFY.md 11): id, secret, and the GitHub logins allowed in (comma-separated)
-      CONSOLE_GITHUB_CLIENT_ID: ${CONSOLE_GITHUB_CLIENT_ID:?set CONSOLE_GITHUB_CLIENT_ID (the OAuth App's Client ID)}
-      CONSOLE_GITHUB_CLIENT_SECRET: ${CONSOLE_GITHUB_CLIENT_SECRET:?set CONSOLE_GITHUB_CLIENT_SECRET (the OAuth App's client secret)}
-      CONSOLE_GITHUB_ALLOWED_LOGINS: ${CONSOLE_GITHUB_ALLOWED_LOGINS:?set CONSOLE_GITHUB_ALLOWED_LOGINS (your GitHub login)}
-      # empty: made at the first start and kept in CONSOLE_STATE_DIR/session.secret (a restart keeps the session)
-      CONSOLE_SESSION_SECRET: ${CONSOLE_SESSION_SECRET:-}
-      TZ: UTC
-    volumes:
-      - server-state:/data/server
-    # The image declares VOLUME for these; small read-only tmpfs mounts stop Docker from creating anonymous volumes.
-    tmpfs:
-      - /tmp:size=16m
-      - /data/friction:size=64k,mode=0555
-      - /data/odc-features:size=64k,mode=0555
-      - /data/cache:size=64k,mode=0555
-    read_only: true
-    expose:
-      - "7320"
-    labels:
-      - "traefik.enable=true"
-      # https on the console's own host name, every path (the console routes them itself), Let's Encrypt, headers.
-      - "traefik.http.routers.ssam-console.rule=Host(`${CONSOLE_DOMAIN}`)"
-      - "traefik.http.routers.ssam-console.entrypoints=https"
-      - "traefik.http.routers.ssam-console.tls=true"
-      - "traefik.http.routers.ssam-console.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.ssam-console.middlewares=ssam-console-headers"
-      - "traefik.http.routers.ssam-console.service=ssam-console"
-      - "traefik.http.services.ssam-console.loadbalancer.server.port=7320"
-      # http: redirected to https (the same middleware as the server's).
-      - "traefik.http.routers.ssam-console-http.rule=Host(`${CONSOLE_DOMAIN}`)"
-      - "traefik.http.routers.ssam-console-http.entrypoints=http"
-      - "traefik.http.routers.ssam-console-http.middlewares=ssam-to-https"
-      - "traefik.http.routers.ssam-console-http.service=ssam-console"
-      # The headers of ssam-headers minus the two the console sets itself (its CSP allows its own scripts and styles;
-      # a customResponseHeaders CSP here would replace it and the page would not run).
-      - "traefik.http.middlewares.ssam-console-headers.headers.stsseconds=31536000"
-      - "traefik.http.middlewares.ssam-console-headers.headers.contenttypenosniff=true"
-      - "traefik.http.middlewares.ssam-console-headers.headers.framedeny=true"
-      - "traefik.http.middlewares.ssam-console-headers.headers.referrerpolicy=no-referrer"
-      - "traefik.http.middlewares.ssam-console-headers.headers.customresponseheaders.Server="
-    # /healthz answers only to the console's own Host (the DNS-rebinding check comes first).
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get({host:'127.0.0.1',port:7320,path:'/healthz',timeout:3000,headers:{Host:new URL(process.env.CONSOLE_PUBLIC_URL).host}},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
-      interval: 30s
-      timeout: 5s
-      start_period: 20s
-      retries: 3
-    stop_grace_period: 10s
-    deploy:
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 256m
-          pids: 64
-
-  # Tokens, by hand (COOLIFY.md 6): `issue` and `agent-rotate` print the plaintext token and agent credential once; no
-  # log driver, so docker keeps no copy of them. It needs the database too (ssamctl.sh gives it the server's network).
-  ssam-admin:
-    <<: *hardening
-    image: ${SSAM_IMAGE:?set SSAM_IMAGE}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG}
-    platform: linux/amd64
-    profiles: [admin]
-    logging:
-      driver: none
-    entrypoint: ["node", "facade/ssam.mjs"]
-    command: ["server-token", "list"]
-    environment:
-      SSAM_DATABASE_URL: ${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL}
-    volumes:
-      - server-state:/data/server
-
-  # File drops into the state volumes and backups, by hand (COOLIFY.md 5 and 8), as uid 10001 like the server.
-  ssam-ops:
-    <<: *hardening
-    image: ${SSAM_IMAGE:?set SSAM_IMAGE}:${SSAM_IMAGE_TAG:?set SSAM_IMAGE_TAG}
-    platform: linux/amd64
-    profiles: [ops]
-    command: ["sh", "-c", "du -sh /data/server /data/friction /data/odc-features /data/cache"]
-    network_mode: none
-    read_only: true
-    tmpfs:
-      - /tmp:size=64m
-    volumes:
-      - server-state:/data/server
-      - friction:/data/friction
-      - odc-features:/data/odc-features
-      - cache:/data/cache
-
-volumes:
-  server-state:
-  friction:
-  odc-features:
-  cache:
+# Generated by gen-compose.mjs. Edit versions.json and regenerate.
+{
+  "networks": {
+    "default": {}
+  },
+  "services": {
+    "ssam-admin": {
+      "cap_drop": [
+        "ALL"
+      ],
+      "command": [
+        "server-token",
+        "list"
+      ],
+      "entrypoint": [
+        "node",
+        "facade/ssam.mjs"
+      ],
+      "environment": {
+        "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL}"
+      },
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-ac614ad",
+      "init": true,
+      "logging": {
+        "driver": "none"
+      },
+      "networks": {
+        "default": null
+      },
+      "platform": "linux/amd64",
+      "profiles": [
+        "admin"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "volumes": [
+        {
+          "source": "server-state",
+          "target": "/data/server",
+          "type": "volume",
+          "volume": {}
+        }
+      ]
+    },
+    "ssam-console": {
+      "cap_drop": [
+        "ALL"
+      ],
+      "command": [
+        "/app/deploy/console/server.mjs"
+      ],
+      "deploy": {
+        "resources": {
+          "limits": {
+            "cpus": "0.50",
+            "memory": "256m",
+            "pids": 64
+          }
+        }
+      },
+      "entrypoint": [
+        "node"
+      ],
+      "environment": {
+        "CONSOLE_DOMAIN": "${SSAM_DOMAIN:?set SSAM_DOMAIN}",
+        "CONSOLE_GITHUB_ALLOWED_LOGINS": "${CONSOLE_GITHUB_ALLOWED_LOGINS:?set CONSOLE_GITHUB_ALLOWED_LOGINS (your GitHub login)}",
+        "CONSOLE_GITHUB_CLIENT_ID": "${CONSOLE_GITHUB_CLIENT_ID:?set CONSOLE_GITHUB_CLIENT_ID (the OAuth App's Client ID)}",
+        "CONSOLE_GITHUB_CLIENT_SECRET": "${CONSOLE_GITHUB_CLIENT_SECRET:?set CONSOLE_GITHUB_CLIENT_SECRET (the OAuth App's client secret)}",
+        "CONSOLE_HOST_JSON": "/host/host.json",
+        "CONSOLE_LICENSE_WRITES": "${CONSOLE_LICENSE_WRITES:-auto}",
+        "CONSOLE_LISTEN": "0.0.0.0:7320",
+        "CONSOLE_PUBLIC_DIR": "/app/deploy/console/public",
+        "CONSOLE_PUBLIC_URL": "https://${CONSOLE_DOMAIN:?set CONSOLE_DOMAIN (the DNS name of the console, e.g. painel.ssam.example.com)}",
+        "CONSOLE_SESSION_SECRET": "${CONSOLE_SESSION_SECRET:-}",
+        "CONSOLE_STATE_DIR": "/data/server/.console",
+        "CONSOLE_TOKEN_MODULE": "/app/platforms/odc/facade/server-tokens.mjs",
+        "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL}",
+        "SSAM_SERVER_DIR": "/data/server",
+        "TZ": "UTC"
+      },
+      "expose": [
+        "7320"
+      ],
+      "healthcheck": {
+        "interval": "30s",
+        "retries": 3,
+        "start_period": "20s",
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get({host:'127.0.0.1',port:7320,path:'/healthz',timeout:3000,headers:{Host:new URL(process.env.CONSOLE_PUBLIC_URL).host}},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+        ],
+        "timeout": "5s"
+      },
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-ac614ad",
+      "init": true,
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-file": "5",
+          "max-size": "20m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "platform": "linux/amd64",
+      "pull_policy": "always",
+      "read_only": true,
+      "restart": "unless-stopped",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "stop_grace_period": "10s",
+      "tmpfs": [
+        "/tmp:size=16m",
+        "/data/friction:size=64k,mode=0555",
+        "/data/odc-features:size=64k,mode=0555",
+        "/data/cache:size=64k,mode=0555"
+      ],
+      "user": "10001:10001",
+      "volumes": [
+        {
+          "source": "server-state",
+          "target": "/data/server",
+          "type": "volume",
+          "volume": {}
+        }
+      ],
+      "working_dir": "/app/deploy/console"
+    },
+    "ssam-ops": {
+      "cap_drop": [
+        "ALL"
+      ],
+      "command": [
+        "sh",
+        "-c",
+        "du -sh /data/server /data/friction /data/odc-features /data/cache"
+      ],
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-ac614ad",
+      "init": true,
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-file": "5",
+          "max-size": "20m"
+        }
+      },
+      "network_mode": "none",
+      "platform": "linux/amd64",
+      "profiles": [
+        "ops"
+      ],
+      "read_only": true,
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:size=64m"
+      ],
+      "volumes": [
+        {
+          "source": "server-state",
+          "target": "/data/server",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "friction",
+          "target": "/data/friction",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "odc-features",
+          "target": "/data/odc-features",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "cache",
+          "target": "/data/cache",
+          "type": "volume",
+          "volume": {}
+        }
+      ]
+    },
+    "ssam-server-v1": {
+      "cap_drop": [
+        "ALL"
+      ],
+      "deploy": {
+        "resources": {
+          "limits": {
+            "cpus": "${SSAM_CPUS:-2}",
+            "memory": "${SSAM_MEMORY:-6g}",
+            "pids": "${SSAM_PIDS:-4096}"
+          }
+        }
+      },
+      "environment": {
+        "SSAM_BUILD_WORKERS": "${SSAM_BUILD_WORKERS:-2}",
+        "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL (postgres://user:password@host:5432/database, the internal URL of the Postgres resource)}",
+        "SSAM_HOSTED_SSAM_CODE": "${SSAM_HOSTED_SSAM_CODE:-}",
+        "SSAM_O11_WORKERS_MAX": "${SSAM_O11_WORKERS_MAX:-2}",
+        "SSAM_O11_WORKER_BASE_CACHE": "${SSAM_O11_WORKER_BASE_CACHE:-off}",
+        "SSAM_O11_WORKER_HEAP_MB": "${SSAM_O11_WORKER_HEAP_MB:-1536}",
+        "SSAM_O11_WORKER_IDLE_MS": "${SSAM_O11_WORKER_IDLE_MS:-600000}",
+        "SSAM_O11_WORKER_MAX_COMMANDS": "${SSAM_O11_WORKER_MAX_COMMANDS:-1000}",
+        "SSAM_O11_WORKER_MIN_IDLE_MS": "${SSAM_O11_WORKER_MIN_IDLE_MS:-120000}",
+        "SSAM_O11_WORKER_RSS_MB": "${SSAM_O11_WORKER_RSS_MB:-1200}",
+        "SSAM_PORT": "7310",
+        "SSAM_PUBLIC_HOST": "${SSAM_DOMAIN:?set SSAM_DOMAIN (the DNS name of this VPS, e.g. ssam.example.com)}",
+        "SSAM_QUALITY": "${SSAM_QUALITY:-1}",
+        "SSAM_SERVER_RATE_PER_MINUTE": "${SSAM_RATE_PER_MINUTE:-240}",
+        "SSAM_BACKEND_NAME": "o11-11.55.92-odc-1.7.28",
+        "SSAM_RUNTIME_DIR": "/data/server/versions/o11-11.55.92-odc-1.7.28",
+        "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.28\"],\"o11\":[\"11.55.92\"]}"
+      },
+      "expose": [
+        "7310"
+      ],
+      "healthcheck": {
+        "interval": "30s",
+        "retries": 3,
+        "start_period": "60s",
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:7310/health',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ],
+        "timeout": "5s"
+      },
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-ac614ad",
+      "init": true,
+      "labels": {
+        "ssam.backend": "true",
+        "ssam.odc": "1.7.28",
+        "ssam.o11": "11.55.92",
+        "ssam.default": "true"
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-file": "5",
+          "max-size": "20m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "platform": "linux/amd64",
+      "pull_policy": "always",
+      "read_only": false,
+      "restart": "unless-stopped",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "stop_grace_period": "30s",
+      "volumes": [
+        {
+          "source": "server-state",
+          "target": "/data/server",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "friction",
+          "target": "/data/friction",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "odc-features-o11-11-55-92-odc-1-7-28",
+          "target": "/data/odc-features",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "cache-o11-11-55-92-odc-1-7-28",
+          "target": "/data/cache",
+          "type": "volume",
+          "volume": {}
+        }
+      ]
+    },
+    "ssam-router": {
+      "cap_drop": [
+        "ALL"
+      ],
+      "deploy": {
+        "resources": {
+          "limits": {
+            "cpus": "${SSAM_CPUS:-2}",
+            "memory": "${SSAM_MEMORY:-6g}",
+            "pids": "${SSAM_PIDS:-4096}"
+          }
+        }
+      },
+      "environment": {
+        "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL (postgres://user:password@host:5432/database, the internal URL of the Postgres resource)}",
+        "SSAM_PORT": "7300",
+        "SSAM_HOST": "0.0.0.0",
+        "SSAM_SERVER_DIR": "/data/server",
+        "SSAM_PUBLIC_HOST": "${SSAM_DOMAIN:?set SSAM_DOMAIN (the DNS name of this VPS, e.g. ssam.example.com)}",
+        "SSAM_CONSOLE_HOST": "${CONSOLE_DOMAIN}",
+        "SSAM_CONSOLE_URL": "http://ssam-console:7320",
+        "SSAM_VERSION_WINDOW": "3",
+        "SSAM_ROUTER_BACKENDS": "[{\"name\":\"o11-11.55.92-odc-1.7.28\",\"url\":\"http://ssam-server-v1:7310\",\"odc\":\"1.7.28\",\"o11\":\"11.55.92\",\"default\":true}]"
+      },
+      "expose": [
+        "7300"
+      ],
+      "healthcheck": {
+        "interval": "30s",
+        "retries": 3,
+        "start_period": "60s",
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:7300/health',{signal:AbortSignal.timeout(6000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ],
+        "timeout": "7s"
+      },
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-ac614ad",
+      "init": true,
+      "labels": {
+        "traefik.enable": "true",
+        "traefik.http.routers.ssam.rule": "Host(`${SSAM_DOMAIN}`) && (Path(`/mcp`) || Path(`/health`) || Path(`/agent`) || PathPrefix(`/agent/`))",
+        "traefik.http.routers.ssam.entrypoints": "https",
+        "traefik.http.routers.ssam.tls": "true",
+        "traefik.http.routers.ssam.tls.certresolver": "letsencrypt",
+        "traefik.http.routers.ssam.middlewares": "ssam-headers",
+        "traefik.http.routers.ssam.service": "ssam",
+        "traefik.http.services.ssam.loadbalancer.server.port": "7300",
+        "traefik.http.services.ssam.loadbalancer.serverstransport": "ssam@file",
+        "traefik.http.routers.ssam-http.rule": "Host(`${SSAM_DOMAIN}`)",
+        "traefik.http.routers.ssam-http.entrypoints": "http",
+        "traefik.http.routers.ssam-http.middlewares": "ssam-to-https",
+        "traefik.http.routers.ssam-http.service": "ssam",
+        "traefik.http.middlewares.ssam-to-https.redirectscheme.scheme": "https",
+        "traefik.http.middlewares.ssam-to-https.redirectscheme.permanent": "true",
+        "traefik.http.middlewares.ssam-headers.headers.stsseconds": "31536000",
+        "traefik.http.middlewares.ssam-headers.headers.contenttypenosniff": "true",
+        "traefik.http.middlewares.ssam-headers.headers.framedeny": "true",
+        "traefik.http.middlewares.ssam-headers.headers.referrerpolicy": "no-referrer",
+        "traefik.http.middlewares.ssam-headers.headers.customresponseheaders.Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+        "traefik.http.middlewares.ssam-headers.headers.customresponseheaders.Cross-Origin-Resource-Policy": "same-origin",
+        "traefik.http.middlewares.ssam-headers.headers.customresponseheaders.Server": "",
+        "traefik.http.routers.ssam-console.rule": "Host(`${CONSOLE_DOMAIN}`)",
+        "traefik.http.routers.ssam-console.entrypoints": "https",
+        "traefik.http.routers.ssam-console.tls": "true",
+        "traefik.http.routers.ssam-console.tls.certresolver": "letsencrypt",
+        "traefik.http.routers.ssam-console.middlewares": "ssam-console-headers",
+        "traefik.http.routers.ssam-console.service": "ssam-console",
+        "traefik.http.services.ssam-console.loadbalancer.server.port": "7300",
+        "traefik.http.routers.ssam-console-http.rule": "Host(`${CONSOLE_DOMAIN}`)",
+        "traefik.http.routers.ssam-console-http.entrypoints": "http",
+        "traefik.http.routers.ssam-console-http.middlewares": "ssam-to-https",
+        "traefik.http.routers.ssam-console-http.service": "ssam-console",
+        "traefik.http.middlewares.ssam-console-headers.headers.stsseconds": "31536000",
+        "traefik.http.middlewares.ssam-console-headers.headers.contenttypenosniff": "true",
+        "traefik.http.middlewares.ssam-console-headers.headers.framedeny": "true",
+        "traefik.http.middlewares.ssam-console-headers.headers.referrerpolicy": "no-referrer",
+        "traefik.http.middlewares.ssam-console-headers.headers.customresponseheaders.Server": ""
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-file": "5",
+          "max-size": "20m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "platform": "linux/amd64",
+      "pull_policy": "always",
+      "read_only": false,
+      "restart": "unless-stopped",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "stop_grace_period": "30s",
+      "volumes": [
+        {
+          "source": "server-state",
+          "target": "/data/server",
+          "type": "volume",
+          "volume": {}
+        }
+      ],
+      "entrypoint": [
+        "node"
+      ],
+      "command": [
+        "facade/router.mjs"
+      ]
+    }
+  },
+  "volumes": {
+    "server-state": {},
+    "friction": {},
+    "odc-features-o11-11-55-92-odc-1-7-28": {},
+    "cache-o11-11-55-92-odc-1-7-28": {}
+  },
+  "x-hardening": {
+    "cap_drop": [
+      "ALL"
+    ],
+    "init": true,
+    "logging": {
+      "driver": "json-file",
+      "options": {
+        "max-file": "5",
+        "max-size": "20m"
+      }
+    },
+    "security_opt": [
+      "no-new-privileges:true"
+    ]
+  }
+}
