@@ -25,7 +25,7 @@ test('setup refuses a root with a space (and asks for --root) before touching an
   assert.match(stderr.text(), /C:\\SSAM-Agent/);
   assert.equal(calls.length, 0);
   assert.equal(fs.existsSync(path.dirname(root)), false);
-  assert.match(rootProblem('C:\\Users\\John Smith\\SSAM-Agent', {}), /espaço/);
+  assert.match(rootProblem('C:\\Users\\John Smith\\SSAM-Agent', {}), /has a space/);
   assert.match(rootProblem('C:\\Users\\x\\AppData\\Local\\SSAM-Agent', { LOCALAPPDATA: 'C:\\Users\\x\\AppData\\Local' }), /LOCALAPPDATA/);
   assert.equal(rootProblem('C:\\SSAM-Agent', {}), null);
   assert.equal(defaultRoot({ env: { USERPROFILE: 'C:\\Users\\cliente' }, scriptDir: path.join(os.tmpdir(), 'no-pack-here', 'agent') }), 'C:\\Users\\cliente\\SSAM-Agent');
@@ -100,16 +100,16 @@ test('doctor checks the two Node options and reports without printing the creden
     assert.equal(await doctor({ root, stdout: good, deps: { ...deps, flags: new Set(['--use-env-proxy', '--use-system-ca']) } }), 0, good.text());
     assert.match(good.text(), /\[ok\] Node --use-env-proxy/);
     assert.match(good.text(), /\[ok\] Node --use-system-ca/);
-    assert.match(good.text(), /\[aviso\] Service Studio/);
+    assert.match(good.text(), /\[warn\] Service Studio/);
     assert.equal(good.text().includes(CREDENTIAL), false);
     const old = sink();
     assert.equal(await doctor({ root, stdout: old, deps: { ...deps, flags: new Set(['--use-system-ca']) } }), 1);
-    assert.match(old.text(), /\[falha\] Node --use-env-proxy/);
+    assert.match(old.text(), /\[fail\] Node --use-env-proxy/);
     // A changed pack file fails too.
     fs.writeFileSync(agentFile, 'tampered');
     const tampered = sink();
     assert.equal(await doctor({ root, stdout: tampered, deps: { ...deps, flags: new Set(['--use-env-proxy', '--use-system-ca']) } }), 1);
-    assert.match(tampered.text(), /\[falha\] pacote: agent\/ssam-agent\.mjs \(alterado\)/);
+    assert.match(tampered.text(), /\[fail\] pack: agent\/ssam-agent\.mjs \(changed\)/);
   } finally { removeRoot(root); }
 });
 

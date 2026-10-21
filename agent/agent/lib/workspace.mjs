@@ -2,6 +2,10 @@
 // cross the channel. The server names files only as `agent:<rel>`; every other form is refused before any file
 // access. Read: odc/snapshots, odc/journal, odc/lab, o11 and inbox. Write: the same but inbox. Everything else
 // (agent/, bin/, private/, odc/studio/, odc/README.md, pack.json) is never readable nor writable by the server.
+// The segment grammar is the wire's and the same on every system (the server's mirror refuses the same names); only the
+// absolute paths follow the system: Windows (drive letter, '\', no case) and, on macOS, POSIX ('/', NFC; an absolute path
+// names the agent folder only with the root and the prefix spelled exactly, case included, since a case-sensitive volume
+// holds other folders in other cases; agent: paths take any case of a prefix and are written as the prefix spells it).
 import fs from 'node:fs';
 import path from 'node:path';
 import { refuse } from './errors.mjs';
@@ -50,7 +54,15 @@ export function prefixOf(parts, role) {
 
 const inside = (child, parent) => { const c = child.toLowerCase(); const p = parent.toLowerCase(); return c === p || c.startsWith(p + '\\'); };
 
-export function createWorkspace(root) {
+// macOS: POSIX paths compared in NFC (every APFS volume is normalization-insensitive) and WITH case (review B3): a volume
+// can be case-sensitive, and there another case is another folder. agent: paths still take any case of a prefix: the
+// agent writes the prefix as the prefix spells it.
+const nfc = text => text.normalize('NFC');
+const insidePosix = (child, parent) => { const c = nfc(child); const p = nfc(parent).replace(/\/$/, ''); return c === p || c.startsWith(p + '/'); };
+
+// platform (tests): 'darwin' for the macOS rules, anything else the Windows ones. files (tests): {lstatSync, realpathSync}.
+export function createWorkspace(root, { platform = process.platform, files = fs } = {}) {
+  if (platform === 'darwin') return createPosixWorkspace(root, files);
   const base = win.resolve(root);
   const lowerBase = base.toLowerCase();
   let realBase = null;
@@ -78,6 +90,7 @@ export function createWorkspace(root) {
 
   const workspace = {
     root: base,
+    segmentsOf,
     // `agent:<rel>` -> absolute path, for a role ('read' | 'write'). Any other form: PATH_NOT_AGENT.
     resolve(value, role = 'read') {
       if (typeof value !== 'string' || !value.startsWith('agent:'))
@@ -121,6 +134,106 @@ export function createWorkspace(root) {
       return object;
     },
     // json:"agent-paths" on file.get: the inverse, absolute path under the root -> agent:<rel>.
+    agentPathsOut(object) {
+      for (const [key, value, role] of manifestFields(object)) {
+        if (typeof value === 'string' && value.startsWith('agent:')) { workspace.resolve(value, role); continue; }
+        const agent = workspace.toAgent(value, role);
+        if (!agent) throw forbidden(`Manifest field ${key} is not a path the server may see: ${JSON.stringify(value)}`);
+        object[key] = agent;
+      }
+      return object;
+    },
+  };
+  return workspace;
+}
+
+// The macOS workspace: the same roles, prefixes and segment grammar; absolute paths are POSIX.
+function createPosixWorkspace(root, files) {
+  const P = path.posix;
+  const base = P.resolve(root);
+  const realOf = target => (files.realpathSync.native ? files.realpathSync.native(target) : files.realpathSync(target));
+  let realBase = null;
+  const realRoot = () => (realBase ??= realOf(base));
+
+  function confine(parts, role, original) {
+    const prefix = prefixOf(parts, role);
+    if (!prefix) throw forbidden(`${original} is outside the folders the server may ${role === 'write' ? 'write' : 'read'} (${(role === 'write' ? WRITABLE : READABLE).join(', ')})`);
+    const head = prefix.split('/');
+    const target = P.join(base, ...head, ...parts.slice(head.length));
+    let existing = target; const tail = [];
+    for (;;) {
+      try { files.lstatSync(existing); break; }
+      catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw forbidden(`${original} cannot be checked (${error.code})`); }
+      const up = P.dirname(existing);
+      if (up === existing) throw forbidden(`${original} has no existing folder`);
+      tail.unshift(P.basename(existing)); existing = up;
+    }
+    let real;
+    try { real = realOf(existing); } catch { throw forbidden(`${original} goes through a broken link`); }
+    if (!insidePosix(P.join(real, ...tail), P.join(realRoot(), ...head))) throw forbidden(`${original} leaves ${prefix} through a link`);
+    return target;
+  }
+  // The part of an absolute path under the root (as given, or its real path), or null; compared segment by segment, so
+  // an NFD spelling of the root (longer than its NFC one) still cuts at the right place. The root must be spelled exactly
+  // (case included): the bridge receives the text as it is (review B3).
+  const under = text => {
+    const segments = P.normalize(text).split('/');
+    for (const top of [base, realRoot()]) {
+      const head = top.replace(/\/$/, '').split('/');
+      if (segments.length > head.length && head.every((part, i) => nfc(part) === nfc(segments[i]))) return segments.slice(head.length).join('/');
+    }
+    return null;
+  };
+  // The segments of the part under the root and its prefix for the role, with the prefix spelled exactly, or null.
+  const exactPrefix = (rest, role) => {
+    const parts = segmentsOf(rest);
+    const prefix = prefixOf(parts, role);
+    return prefix && parts.slice(0, prefix.split('/').length).join('/') === prefix ? { parts, prefix } : null;
+  };
+  const absolute = text => typeof text === 'string' && text.startsWith('/') && !text.startsWith('//') && !/[\x00-\x1f]/.test(text);
+
+  const workspace = {
+    root: base,
+    segmentsOf,
+    resolve(value, role = 'read') {
+      if (typeof value !== 'string' || !value.startsWith('agent:'))
+        throw refuse('PATH_NOT_AGENT', `A path position takes agent:<relative path>, not ${typeof value === 'string' ? JSON.stringify(value) : typeof value}`);
+      return confine(segmentsOf(value.slice('agent:'.length)), role, value);
+    },
+    checkAbsolute(text, role = 'read') {
+      if (DOT_SEGMENT.test(text)) throw forbidden(`${JSON.stringify(text)} has a '..' segment`);
+      if (!absolute(text)) throw forbidden(`${JSON.stringify(text)} is not a path under the agent folder`);
+      let rest = null;
+      try { rest = under(text); } catch { rest = null; }
+      if (!rest) throw forbidden(`${JSON.stringify(text)} is outside the agent folder (spelled exactly as ${base}, case included)`);
+      const parts = segmentsOf(rest);
+      const prefix = prefixOf(parts, role);
+      if (prefix && parts.slice(0, prefix.split('/').length).join('/') !== prefix)
+        throw forbidden(`${JSON.stringify(text)} spells ${prefix} in another case; on a case-sensitive volume that is another folder`);
+      return confine(parts, role, text);
+    },
+    toAgent(text, role = 'read') {
+      if (!absolute(text) || DOT_SEGMENT.test(text)) return null;
+      let rest = null;
+      try { rest = under(text); } catch { return null; }
+      if (!rest) return null;
+      let found;
+      try { found = exactPrefix(rest, role); } catch { return null; }
+      return found ? 'agent:' + found.parts.join('/') : null;
+    },
+    relativize(value, paths = null, keys = []) {
+      if (typeof value === 'string') { const agent = workspace.toAgent(value); if (agent === null) return value; paths?.push(keys); return agent; }
+      if (Array.isArray(value)) return value.map((item, index) => workspace.relativize(item, paths, [...keys, index]));
+      if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, workspace.relativize(item, paths, [...keys, key])]));
+      return value;
+    },
+    agentPathsIn(object) {
+      for (const [key, value, role] of manifestFields(object)) {
+        if (typeof value !== 'string' || !value.startsWith('agent:')) throw forbidden(`Manifest field ${key} must be agent:<relative path>, not ${JSON.stringify(value)}`);
+        object[key] = workspace.resolve(value, role);
+      }
+      return object;
+    },
     agentPathsOut(object) {
       for (const [key, value, role] of manifestFields(object)) {
         if (typeof value === 'string' && value.startsWith('agent:')) { workspace.resolve(value, role); continue; }

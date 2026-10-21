@@ -31,6 +31,13 @@
 #                     2. o dono assina essa pasta (servidor MCP do publicador: release_sign {releaseDir:<pasta>});
 #                     3. -FromStage <pasta> -Out <zip>: confere que release.sig.jws cobre cada arquivo da arvore (tamanho e
 #                        sha256; a assinatura e conferida pelo gancho, com as raizes compiladas nele), compacta e varre.
+#   -Platform mac (docs\AGENTE-MAC.md): o pacote do macOS, ssam-agent-mac.tar.gz, com os MESMOS binarios (bridge ODC, gancho
+#        e fina O11) e sem nenhum .exe: sem node.exe (o install.sh acha ou baixa o Node 24 de nodejs.org e confere o sha256
+#        de scripts\node-darwin.json, copiado no pack.json como node), sem o cliente ODC e sem o Anvil.Connect (no macOS o
+#        agente fala o IPC de diagnostico do .NET), com agent\ssam-agent.sh no lugar do .ps1, install.sh na raiz e
+#        docs\AGENTE-MAC.md. O pack.json diz platform darwin e nao tem valores nulos (o install.sh le com plutil). O tar.gz
+#        sai de scripts\tar-gz.mjs (modo 0755 nos .sh), e lido de volta e conferido, e a arvore lida de volta passa pela
+#        mesma varredura de PI (num ZIP temporario, pack-ip-scan.ps1 -Zip sem mudanca). So -Hook dev; -Out termina em .tar.gz.
 param(
   [string]$Out,
   [string]$Lanes = 'odc,o11',
@@ -44,9 +51,17 @@ param(
   [string]$ReleaseVersion,
   [string]$Stage,
   [string]$FromStage,
-  [string]$ExpectO11
+  [string]$ExpectO11,
+  [ValidateSet('windows', 'mac')][string]$Platform = 'windows'
 )
 $ErrorActionPreference = 'Stop'
+$mac = $Platform -eq 'mac'
+if ($mac) {
+  if ($Hook -ne 'dev' -or $HookH1 -or $ReleaseVersion -or $Stage -or $FromStage) { throw '-Platform mac so monta o pacote com o gancho dev (sem -Hook h1, -Stage nem -FromStage).' }
+  if ($NodeExe -or $NodeLicense) { throw '-Platform mac nao leva node.exe: o install.sh acha ou baixa o Node 24 (scripts\node-darwin.json).' }
+  if ($Out -and $Out -notmatch '\.tar\.gz$') { throw '-Platform mac escreve um .tar.gz: use -Out <pasta>\ssam-agent-mac.tar.gz' }
+  $NoNode = [switch]$true
+}
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
 $root = Split-Path -Parent $PSScriptRoot
 $laneList = @($Lanes -split '[,\s]+' | Where-Object { $_ })
@@ -157,6 +172,46 @@ function Write-PackZip([string]$base, [string]$out, [string]$id, [string[]]$lane
   Write-Output ("Pacote {0}: {1} ({2} arquivos, faixas {3})" -f $id, $target, $count, ($lanes -join ','))
 }
 
+# -Platform mac: the tar.gz of scripts\tar-gz.mjs (Unix modes: 0755 for the .sh), read back and compared with the tree,
+# then the tree READ BACK from the tar.gz goes through the same intellectual property scan (a temporary ZIP of it and
+# pack-ip-scan.ps1 -Zip, unchanged): any finding deletes the tar.gz.
+function Write-PackTar([string]$base, [string]$out, [string]$id, [string[]]$lanes) {
+  $target = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($out)
+  New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
+  if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
+  $node = Get-Node
+  $tarScript = Join-Path $PSScriptRoot 'tar-gz.mjs'
+  $mtime = [int64]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
+  & $node $tarScript write $base $target $mtime
+  if ($LASTEXITCODE -ne 0) { throw "tar-gz.mjs write falhou: $target" }
+  $verified = (& $node $tarScript verify $target $base) -join "`n"
+  if ($LASTEXITCODE -ne 0) { Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue; throw "O tar.gz lido de volta nao confere com a arvore: $verified" }
+  $back = Join-Path $work 'read-back'
+  & $node $tarScript extract $target $back
+  if ($LASTEXITCODE -ne 0) { Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue; throw "tar-gz.mjs extract falhou: $target" }
+  $scanZip = Join-Path $work 'scan.zip'
+  $count = 0
+  $zip = [IO.Compression.ZipFile]::Open($scanZip, 'Create')
+  try {
+    foreach ($file in Get-ChildItem -LiteralPath $back -Recurse -File -Force | Sort-Object FullName) {
+      $name = $file.FullName.Substring($back.Length + 1) -replace '\\', '/'
+      [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName, $name, 'Optimal')
+      $count++
+    }
+  } finally { $zip.Dispose() }
+  try { $report = ((& (Join-Path $PSScriptRoot 'pack-ip-scan.ps1') -Zip $scanZip) -join "`n") | ConvertFrom-Json }
+  catch { Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue; throw "Varredura de PI falhou: $($_.Exception.Message)" }
+  foreach ($item in @($report.allowed | Where-Object { $_ })) {
+    Write-Warning ("Excecao conhecida no pacote: {0} ({1}: {2}; {3})" -f $item.entry, $item.rule, $item.detail, $item.why)
+  }
+  if ($report.ok -ne $true) {
+    Remove-Item -LiteralPath $target -Force
+    $failed = @($report.findings | Where-Object { $_ } | ForEach-Object { '{0} ({1})' -f $_.entry, $_.rule } | Select-Object -Unique)
+    throw ('Varredura de PI falhou: ' + ($failed -join '; '))
+  }
+  Write-Output ("Pacote {0}: {1} ({2} arquivos, faixas {3}, macOS)" -f $id, $target, $count, ($lanes -join ','))
+}
+
 function ConvertFrom-Base64Url([string]$text) {
   $b64 = $text.Replace('-', '+').Replace('_', '/')
   switch ($b64.Length % 4) { 2 { $b64 += '==' } 3 { $b64 += '=' } 1 { throw 'base64url invalido' } }
@@ -223,8 +278,21 @@ try {
   # Agent code: ssam-agent.mjs, ssam-agent.ps1 and lib\*.mjs (never the tests).
   $agentOut = Join-Path $tree 'agent'
   New-Item -ItemType Directory -Force (Join-Path $agentOut 'lib') | Out-Null
-  Copy-Item -LiteralPath (Join-Path $root 'agent\ssam-agent.mjs'), (Join-Path $root 'agent\ssam-agent.ps1') -Destination $agentOut
+  # macOS: ssam-agent.sh in place of the .ps1, and install.sh at the root of the pack.
+  $launcher = $(if ($mac) { 'agent\ssam-agent.sh' } else { 'agent\ssam-agent.ps1' })
+  Copy-Item -LiteralPath (Join-Path $root 'agent\ssam-agent.mjs'), (Join-Path $root $launcher) -Destination $agentOut
   Copy-Item -Path (Join-Path $root 'agent\lib\*.mjs') -Destination (Join-Path $agentOut 'lib')
+  if ($mac) {
+    Copy-Item -LiteralPath (Join-Path $root 'agent\install.sh') -Destination (Join-Path $tree 'install.sh')
+    # bash on macOS stops at a CR: the scripts go with LF only (the box's .gitattributes says eol=lf).
+    foreach ($sh in (Join-Path $tree 'install.sh'), (Join-Path $agentOut 'ssam-agent.sh')) {
+      if ([IO.File]::ReadAllText($sh).Contains("`r")) { throw "Fim de linha CR em ${sh}: o bash do macOS nao roda o script." }
+    }
+  }
+  # The customer guide (English), which the agent, its script and the server hints cite as docs\AGENTE-CLIENTE.md.
+  New-Item -ItemType Directory -Force (Join-Path $tree 'docs') | Out-Null
+  Copy-Item -LiteralPath (Join-Path $root 'docs\AGENTE-CLIENTE.md') -Destination (Join-Path $tree 'docs\AGENTE-CLIENTE.md')
+  if ($mac) { Copy-Item -LiteralPath (Join-Path $root 'docs\AGENTE-MAC.md') -Destination (Join-Path $tree 'docs\AGENTE-MAC.md') }
   if ($nodeSource) {
     New-Item -ItemType Directory -Force (Join-Path $agentOut 'node') | Out-Null
     Copy-Item -LiteralPath $nodeSource -Destination (Join-Path $agentOut 'node\node.exe')
@@ -273,10 +341,14 @@ try {
     Copy-Item -LiteralPath $bridgeDll -Destination $bridgeOut
     $deps = Join-Path $bridgeFrom "ODC3.Bridge.$odcBridge.deps.json"
     if (Test-Path -LiteralPath $deps) { Copy-Item -LiteralPath $deps -Destination $bridgeOut }
-    Copy-Folder $clientFrom (Join-Path $tree 'odc\studio\bridge\client\bin\Release\net10.0')
-    if (-not (Test-Path -LiteralPath (Join-Path $tree 'odc\studio\bridge\client\bin\Release\net10.0\ODC3.Bridge.Client.dll'))) { throw "Falta ODC3.Bridge.Client.dll em $clientFrom" }
+    # macOS: no attach client (the agent speaks the diagnostic IPC itself).
+    if (-not $mac) {
+      Copy-Folder $clientFrom (Join-Path $tree 'odc\studio\bridge\client\bin\Release\net10.0')
+      if (-not (Test-Path -LiteralPath (Join-Path $tree 'odc\studio\bridge\client\bin\Release\net10.0\ODC3.Bridge.Client.dll'))) { throw "Falta ODC3.Bridge.Client.dll em $clientFrom" }
+    }
     # The ODC bridge finds its root by walking up from its DLL to a folder with studio\ and README.md.
-    [IO.File]::WriteAllText((Join-Path $tree 'odc\README.md'), "Raiz da bridge ODC do agente SSAM (nao apague nem mova). Dados em snapshots\, journal\ e lab\.`r`n", $utf8)
+    if ($mac) { [IO.File]::WriteAllText((Join-Path $tree 'odc\README.md'), "Root of the ODC bridge of the SSAM agent (do not delete or move it). Data in snapshots/, journal/ and lab/.`n", $utf8) }
+    else { [IO.File]::WriteAllText((Join-Path $tree 'odc\README.md'), "Root of the ODC bridge of the SSAM agent (do not delete or move it). Data in snapshots\, journal\ and lab\.`r`n", $utf8) }
   }
 
   if ($laneList -contains 'o11') {
@@ -284,7 +356,8 @@ try {
     # dev: bin\o11\hook (development hook) and bin\o11\bridge; h1: studio\o11\hook\Anvil.Hook.h1.dll and
     # studio\o11\bridge\b1 (the release layout the hook h1 checks: <release>\studio\o11\bridge\<bridgeId>).
     $bridgeOut = $(if ($Hook -eq 'h1') { Join-Path $tree 'studio\o11\bridge\b1' } else { Join-Path $o11Out 'bridge' })
-    $parts = $(if ($Hook -eq 'h1') { @('connect', 'bridge') } else { @('connect', 'hook', 'bridge') })
+    # macOS: no Anvil.Connect (the agent describes and attaches the Studio through the diagnostic IPC).
+    $parts = $(if ($Hook -eq 'h1') { @('connect', 'bridge') } elseif ($mac) { @('hook', 'bridge') } else { @('connect', 'hook', 'bridge') })
     if ($Prebuilt) {
       foreach ($part in $parts) { Copy-Folder (Join-Path $Prebuilt "o11\$part") $(if ($part -eq 'bridge') { $bridgeOut } else { Join-Path $o11Out $part }) }
       $builtFor = Join-Path $Prebuilt 'o11\built-for.txt'
@@ -314,6 +387,7 @@ try {
       if (Test-Path -LiteralPath $hookDeps) { Copy-Item -LiteralPath $hookDeps -Destination $hookOut }
     }
     $required = $(if ($Hook -eq 'h1') { @('bin\o11\connect\Anvil.Connect.dll', 'studio\o11\hook\Anvil.Hook.h1.dll', 'studio\o11\bridge\b1\Anvil.Bridge.dll') }
+      elseif ($mac) { @('bin\o11\hook\Anvil.RuntimeHook.Agent.dll', 'bin\o11\bridge\Anvil.Bridge.dll') }
       else { @('bin\o11\connect\Anvil.Connect.dll', 'bin\o11\hook\Anvil.RuntimeHook.Agent.dll', 'bin\o11\bridge\Anvil.Bridge.dll') })
     foreach ($file in $required) { if (-not (Test-Path -LiteralPath (Join-Path $tree $file))) { throw "Falta $file" } }
     $bridgeRel = $(if ($Hook -eq 'h1') { 'studio/o11/bridge/b1/Anvil.Bridge.dll' } else { 'bin/o11/bridge/Anvil.Bridge.dll' })
@@ -331,11 +405,42 @@ try {
 
   # Last check over the whole tree, then pack.json with the sha256 of every file.
   $base = (Resolve-Path -LiteralPath $tree).Path.TrimEnd('\')
+  if ($mac) {
+    # macOS: the guides, the scripts and the agent code with LF only, whatever line ends the checkout gave them (docs\ has
+    # no eol attribute, so a core.autocrlf checkout writes the guides with CRLF): the same bytes from any checkout. The
+    # binaries and their .deps.json stay the bytes of the prebuilt.
+    foreach ($file in Get-ChildItem -LiteralPath $base -Recurse -File -Force | Where-Object { $_.Extension -in '.md', '.mjs', '.sh' }) {
+      $bytes = [IO.File]::ReadAllBytes($file.FullName)
+      if ([Array]::IndexOf($bytes, [byte]13) -ge 0) {
+        [IO.File]::WriteAllText($file.FullName, [Text.Encoding]::UTF8.GetString($bytes).Replace("`r`n", "`n"), (New-Object Text.UTF8Encoding($false)))
+      }
+    }
+  }
   $files = @()
   foreach ($file in Get-ChildItem -LiteralPath $base -Recurse -File -Force | Sort-Object FullName) {
     $rel = $file.FullName.Substring($base.Length + 1)
     if ((Test-Forbidden $rel) -or ($rel -match '\.(mjs|js)$' -and $rel -notmatch '^agent\\')) { throw "Arquivo proibido no pacote: $rel" }
+    if ($mac -and ($rel -match '\.(exe|ps1)$')) { throw "Arquivo proibido no pacote do macOS: $rel" }
     $files += [ordered]@{ path = ($rel -replace '\\', '/'); sha256 = (Get-Sha256 $file.FullName); size = $file.Length }
+  }
+  if ($mac) {
+    # pack.json of macOS: no null value (install.sh reads it with plutil), the platform and the pinned Node.
+    $pin = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'node-darwin.json') -Raw | ConvertFrom-Json
+    if ($pin.version -notmatch '^\d+\.\d+\.\d+$') { throw "scripts\node-darwin.json sem version" }
+    $node = [ordered]@{ version = [string]$pin.version; source = [string]$pin.source }
+    foreach ($arch in 'arm64', 'x64') {
+      $entry = $pin.$arch
+      if ($entry.file -ne "node-v$($pin.version)-darwin-$arch.tar.gz" -or $entry.sha256 -notmatch '^[0-9a-f]{64}$') { throw "scripts\node-darwin.json: $arch invalido" }
+      $node[$arch] = [ordered]@{ file = [string]$entry.file; sha256 = [string]$entry.sha256 }
+    }
+    $pack = [ordered]@{ id = 'pack-' + (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss'); platform = 'darwin'; lanes = @($laneList) }
+    if ($odcBridge) { $pack.odcBridge = $odcBridge }
+    if ($o11BuiltFor) { $pack.o11BuiltFor = $o11BuiltFor; $pack.o11Hook = $Hook; $pack.o11Bridge = [ordered]@{ path = $o11Bridge.path; sha256 = $o11Bridge.sha256 } }
+    $pack.node = $node
+    $pack.files = $files
+    [IO.File]::WriteAllText((Join-Path $tree 'pack.json'), ($pack | ConvertTo-Json -Depth 5).Replace("`r`n", "`n"), $utf8)
+    Write-PackTar $base $Out $pack.id $laneList
+    return
   }
   $pack = [ordered]@{
     id = 'pack-' + (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
