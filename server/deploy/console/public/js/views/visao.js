@@ -450,6 +450,23 @@ export default function createVisao(ctx, section) {
   const cards = createCards('visao', AREA_ORDER.map((a) => ({ id: a, label: SUMMARY_AREA[a], icon: AREA_ICON[a], span: AREA_SPAN[a] })),
     { heading: 'Áreas', cls: 'areas' });
 
+  const versionsP = panel('h-studio-versions', 'Studio versions');
+  const versionsNote = h('p', { class: 'panel-note' }, 'Clientes por container; versões não servidas aparecem também em uma linha própria.');
+  const versionsTable = createTable({
+    label: 'Studio versions',
+    columns: [
+      {key:'lane',label:'Studio',sort:r=>r.lane,cell:(r,td)=>{td.textContent=r.lane==='odc'?'ODC Studio':'Service Studio';}},
+      {key:'version',label:'Versão',sort:r=>r.version,cell:(r,td)=>{td.textContent=r.version;}},
+      {key:'backend',label:'Container',sort:r=>r.backend,cell:(r,td)=>{td.textContent=r.backend||F.DASH;}},
+      {key:'status',label:'Situação',sort:r=>r.status,cell:(r,td)=>td.append(status(r.status==='unserved'||r.status==='leaving'?'warn':'ok',r.status))},
+      {key:'customers',label:'Clientes',sort:r=>r.customers,cell:(r,td)=>{td.textContent=F.fmtInt(r.customers);}},
+      {key:'lastSeen',label:'Último visto',sort:relSort('lastSeen'),cell:(r,td)=>relTime(td,r.lastSeen,clock.now())},
+    ],
+    rowKey:r=>r.lane+':'+r.version+':'+(r.backend||'unserved'),
+    empty:'Nenhuma versão observada.',
+  });
+  versionsP.el.append(versionsNote,versionsTable.el);
+
   // ---- Últimos eventos
   const evP = panel('h-ultimos', 'Últimos eventos', {
     icon: 'eventos',
@@ -464,7 +481,7 @@ export default function createVisao(ctx, section) {
   });
   evP.el.append(evTable.el);
 
-  section.append(head.el, alertsP.el, ackedP.el, cards.el, evP.el);
+  section.append(head.el, alertsP.el, ackedP.el, cards.el, versionsP.el, evP.el);
 
   function paintSeverityPills(a) {
     clear(alertsP.extra);
@@ -478,6 +495,8 @@ export default function createVisao(ctx, section) {
     const ov = ctx.store.overview;
     if (!ov) return;
     const now = clock.now();
+    versionsTable.setRows(ov.studioVersions?.rows || []);
+    versionsP.setStale(ov.studioVersions?.error || '');
     const alerts = Array.isArray(ov.alerts) ? ov.alerts : [];
     const acked = Array.isArray(ov.acked) ? ov.acked : [];
     head.setSub(alertsSubtitle(ov.status?.alerts));
@@ -523,7 +542,7 @@ export default function createVisao(ctx, section) {
       } catch (e) {
         if (e.kind === 'auth') throw e;
         const msg = errorMessage(e);
-        for (const [t, p] of [[alertsTable, alertsP], [evTable, evP]]) {
+        for (const [t, p] of [[alertsTable, alertsP], [versionsTable, versionsP], [evTable, evP]]) {
           t.setError(msg);
           if (t.hasRows()) p.setStale(staleText(lastOk));
         }

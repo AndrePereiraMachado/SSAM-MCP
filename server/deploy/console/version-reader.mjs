@@ -2,7 +2,7 @@ import path from 'node:path';
 import {runtimeDirectories} from '../../platforms/odc/facade/hosted/storage.mjs';
 export function versionReader(create,options){
  const readers=new Map();let saved={};
- function refresh(){for(const dir of runtimeDirectories(options.dir)){const key=path.relative(options.dir,dir)||'.';if(!readers.has(key)){const reader=create({...options,dir});reader.restore(saved[key]);readers.set(key,reader);}}return [...readers.values()];}
+ function refresh(){for(const dir of runtimeDirectories(options.dir)){const key=path.relative(options.dir,dir)||'.';if(!readers.has(key)){const reader=create({...options,dir,onRecord:record=>options.onRecord?.(record,key),onReset:()=>options.onReset?.(key)});reader.restore(saved[key]);readers.set(key,reader);}}return [...readers.values()];}
  return {
   async tick(){let done=true;for(const r of refresh())if(!await r.tick())done=false;return done;},
   async coldStart(){for(const r of refresh())if(r.coldStart)await r.coldStart();else await r.tick();},

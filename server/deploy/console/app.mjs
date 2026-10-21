@@ -103,7 +103,7 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
   const dir = config.serverDir;
   const serverLog = versionReader(createServerLogReader, { dir, onRecord: e => live.apply(e), onLoss, onProblem: problem, onOk: ok, progress });
   const audit = versionReader(createAuditReader, { dir, onRecord: onAudit, onProblem: problem, onOk: ok, now, progress });
-  const access = versionReader(createAccessAlertsReader, { dir, onRecord: l => sources.addAccess(l), onReset: () => sources.resetAccess(), onProblem: problem, progress });
+  const access = versionReader(createAccessAlertsReader, { dir, onRecord: (l, origin) => sources.addAccess(l, origin), onReset: origin => sources.resetAccess(origin), onProblem: problem, progress });
   // quality-YYYYMMDD.jsonl: lines above 4096 bytes are skipped before any parse; every parsed line goes through the
   // contract (quality.addRecord: sanitizeQualityLine with the native ids; what returns null is dropped and counted).
   const qualityReader = versionReader(createDailyReader, { dir, prefix: 'quality', maxLineBytes: QUALITY_LINE_BYTES, onRecord: r => quality.addRecord(r),
@@ -270,7 +270,7 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
       serverErrors: live.serverErrors(), serverLogB: sources.statFiles().serverLogB,
       hostStatus: c.state === 'missing' ? 'missing' : c.state === 'invalid' ? 'invalid' : 'ok', hostSchema: c.schema,
       doc: host.doc, facts: host.facts, failedSections: host.failedSections(), restarts24h,
-      kernelFile: sources.kernel(), workspaces: { ...(workspaces.all.byToken ?? {}) }, access: sources.access(),
+      studioVersions: sources.studioVersions(), kernelFile: sources.kernel(), workspaces: { ...(workspaces.all.byToken ?? {}) }, access: sources.access(),
       activityBetween, readProblems: { ...readProblems }, lossAt,
     };
   }

@@ -31,3 +31,9 @@ test('Coolify uses immutable tags and retains expected digests for verification'
  for(const service of Object.values(c.services))assert.ok(!service.image.includes('@'),'Coolify 4.4.6 rewrites digest references');
  assert.equal(c.services['ssam-server-v1'].labels['ssam.image.digest'],'sha256:'+digest);
 });
+
+test('Traefik response header timeout matches the 65 minute router timeout',async()=>{
+ const {readFileSync}=await import('node:fs');const {TIMEOUT_MS}=await import('../../platforms/odc/facade/hosted/router.mjs');
+ const text=readFileSync(new URL('./traefik-ssam.yaml',import.meta.url),'utf8');
+ assert.equal(Number(/responseHeaderTimeout:\s*(\d+)s/.exec(text)?.[1])*1000,TIMEOUT_MS);
+});

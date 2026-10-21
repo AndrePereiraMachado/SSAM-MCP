@@ -90,7 +90,7 @@ export const SUMMARY_FACTS = {
   coletor: { collectedAt: nT, ageS: nI, sectionErrors: I },
 };
 export const SummaryRow = { area: S, state: oneOf('ok', 'warning', 'critical', 'unknown'), facts: 'object', view: S };
-export const Overview = { ok, now: T, status: Status, alerts: arrayOf(Alert), acked: arrayOf(Alert), summary: arrayOf(SummaryRow, 10), recentEvents: arrayOf(Event), indexing: Indexing };
+export const Overview = { studioVersions: {window: I, error:nS, rows:arrayOf({lane:oneOf('odc','o11'),version:S,backend:nS,status:oneOf('served','default','unserved','leaving'),customers:I,lastSeen:nT})}, ok, now: T, status: Status, alerts: arrayOf(Alert), acked: arrayOf(Alert), summary: arrayOf(SummaryRow, 10), recentEvents: arrayOf(Event), indexing: Indexing };
 export const Licenses = { ok, now: T, capabilities: Capabilities, licenses: arrayOf(License) };
 export const Usage = { ok, range: { kind: oneOf('today', '7d', '30d', 'day'), from: 'day', to: 'day', days: I, timeZone: S }, indexing: Indexing,
   totals: { calls: I, failures: I, p50Ms: nN, p90Ms: nN, maxMs: nN, customersActive: I, sessionsOpened: I, agentCalls: I, agentFailures: I },
