@@ -2,12 +2,12 @@
 // a Studio. Every tool is the system's own, called by its absolute path, and every call is injectable (deps.run, deps.fs)
 // so the rules are tested on any system.
 //   Studios    an installed Studio is an application bundle (*.app) in /Applications or ~/Applications (two levels) whose
-//              Contents hold the managed DLLs: ODC Studio has OutSystems.Model.dll; Service Studio 11 has
-//              ServiceStudio.Framework.dll and OutSystems.Model.V1.dll and no OutSystems.Model.dll (the ODC Studio folder
-//              also carries ServiceStudio.Framework.dll). The bundle and executable names are never assumed: the
+//              Contents hold any marker of the family (MAC_STUDIOS.requires), at any depth within the scan budget.
+//              ODC takes precedence across the bundle because it can carry O11 assemblies too.
+//              The bundle and executable names are never assumed: the
 //              executable is CFBundleExecutable of Info.plist.
 //   version    the ProductVersion of the managed entry assembly (ODCStudio.dll, ServiceStudio.dll), the same four-number
-//              build the Windows apphost carries; else CFBundleShortVersionString with CFBundleVersion.
+//              build the Windows apphost carries; else a family marker DLL, then Info.plist's version fields.
 //   processes  ps (C locale): a Studio process runs exactly <bundle>/Contents/MacOS/<CFBundleExecutable>.
 //   start time the microseconds the O11 runtime hook compares (Process.StartTime of .NET on macOS: pbi_start_tvsec and
 //              pbi_start_tvusec of proc_pidinfo), read by perl (sysctl kern.proc), osascript (proc_pidinfo) or
@@ -28,11 +28,10 @@ export const runTool = async (file, args, options = {}) => (await execFileAsync(
 export const TOOLS = Object.freeze({ ps: '/bin/ps', plutil: '/usr/bin/plutil', ioreg: '/usr/sbin/ioreg', getconf: '/usr/bin/getconf', perl: '/usr/bin/perl',
   osascript: '/usr/bin/osascript', sysctl: '/usr/sbin/sysctl', lsof: '/usr/sbin/lsof', codesign: '/usr/bin/codesign', swVers: '/usr/bin/sw_vers' });
 export const MAC_STUDIOS = Object.freeze({
-  odc: Object.freeze({ name: 'ODC Studio', entry: 'ODCStudio', requires: Object.freeze(['OutSystems.Model.dll']), absent: Object.freeze([]) }),
-  o11: Object.freeze({ name: 'Service Studio', entry: 'ServiceStudio', requires: Object.freeze(['ServiceStudio.Framework.dll', 'OutSystems.Model.V1.dll']), absent: Object.freeze(['OutSystems.Model.dll']) }),
+  odc: Object.freeze({ name: 'ODC Studio', entry: 'ODCStudio', requires: Object.freeze(['ODCStudio.dll', 'OutSystems.Model.dll']), absent: Object.freeze([]) }),
+  o11: Object.freeze({ name: 'Service Studio', entry: 'ServiceStudio', requires: Object.freeze(['ServiceStudio.dll', 'ServiceStudio.Framework.dll', 'OutSystems.Model.V1.dll']), absent: Object.freeze(['OutSystems.Model.dll']) }),
 });
-const MARKERS = ['OutSystems.Model.dll', 'ServiceStudio.Framework.dll', 'OutSystems.Model.V1.dll'];
-const NESTED = /\.(app|framework|bundle|plugin|appex|xpc|dSYM)$/i;
+const NESTED = /\.(app|appex|xpc|dSYM)$/i;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export const homeOf = (env = process.env) => (env.HOME && env.HOME.startsWith('/') ? env.HOME : os.homedir());
@@ -56,27 +55,37 @@ export function findBundles(roots, { fs: f = fs, depth = 2 } = {}) {
   return out;
 }
 
-// The folder of the managed DLLs inside a bundle (breadth first under Contents, four levels, nested bundles and frameworks
-// skipped, at most `folders` folders read: a large application that is no Studio costs little): {dir, names}, or null
-// when no marker DLL is there.
-export function managedDirOf(bundle, { fs: f = fs, depth = 4, folders = 400 } = {}) {
+// Read the whole Contents tree, including framework resources, without following links or entering helper apps.
+// No layout depth is assumed. The folder budget bounds unrelated apps; an incomplete scan is never classified.
+// Family markers are alternatives, not a Windows DLL set required in one folder. ODC takes precedence because
+// it may carry the O11 markers too. files keeps the first occurrence in deterministic breadth-first order.
+export function managedDirOf(bundle, { fs: f = fs, depth = Infinity, folders = 400 } = {}) {
   const queue = [[posix.join(bundle, 'Contents'), 0]];
+  const files = new Map();
   let read = 0;
   while (queue.length) {
     if (++read > folders) return null;
     const [dir, level] = queue.shift();
     let items;
     try { items = f.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
-    const names = new Set(items.filter(item => !item.isDirectory()).map(item => item.name));
-    if (MARKERS.some(marker => names.has(marker))) return { dir, names };
-    if (level < depth) for (const item of items) if (item.isDirectory() && !NESTED.test(item.name) && item.name !== '_CodeSignature') queue.push([posix.join(dir, item.name), level + 1]);
+    items.sort((a, b) => a.name.localeCompare(b.name, 'en'));
+    for (const item of items) {
+      if (item.isSymbolicLink?.()) continue;
+      if (item.isDirectory()) {
+        if (level < depth && !NESTED.test(item.name) && item.name !== '_CodeSignature') queue.push([posix.join(dir, item.name), level + 1]);
+      } else if (item.isFile() && !files.has(item.name)) files.set(item.name, posix.join(dir, item.name));
+    }
   }
-  return null;
+  const names = new Set(files.keys());
+  const kind = kindOfNames(names);
+  if (!kind) return null;
+  const marker = MAC_STUDIOS[kind].requires.find(name => names.has(name));
+  return { dir: posix.dirname(files.get(marker)), names, files };
 }
 
-// The lane of a managed folder, or null.
+// ODC can contain O11 assemblies, so classify it first across the entire bundle.
 export function kindOfNames(names) {
-  for (const [kind, studio] of Object.entries(MAC_STUDIOS)) if (studio.requires.every(n => names.has(n)) && studio.absent.every(n => !names.has(n))) return kind;
+  for (const [kind, studio] of Object.entries(MAC_STUDIOS)) if (studio.requires.some(n => names.has(n)) && studio.absent.every(n => !names.has(n))) return kind;
   return null;
 }
 
@@ -127,20 +136,26 @@ export async function inspectBundle(bundle, deps = {}) {
   const s = plist.strings;
   const configs = [...managed.names].filter(name => name.endsWith('.runtimeconfig.json')).sort();
   const preferred = MAC_STUDIOS[kind].entry;
-  const entry = configs.includes(preferred + '.runtimeconfig.json') ? preferred
+  const entry = (managed.names.has(preferred + '.dll') || configs.includes(preferred + '.runtimeconfig.json')) ? preferred
     : configs.length === 1 ? configs[0].slice(0, -'.runtimeconfig.json'.length)
     : s.CFBundleExecutable && managed.names.has(s.CFBundleExecutable + '.dll') ? s.CFBundleExecutable : null;
-  const productVersion = entry && managed.names.has(entry + '.dll') ? productVersionOf(posix.join(managed.dir, entry + '.dll'), { readFile: f.readFileSync }) : null;
+  const candidates = [...new Set([...(entry ? [entry + '.dll'] : []), ...MAC_STUDIOS[kind].requires])];
+  let productVersion = null; let versionDll = null;
+  for (const name of candidates) {
+    if (!managed.files.has(name)) continue;
+    const value = productVersionOf(managed.files.get(name), { readFile: (...args) => f.readFileSync(...args) });
+    if (numbers(value)) { productVersion = value; versionDll = name; break; }
+  }
   const fromPlist = plistVersion(s.CFBundleShortVersionString, s.CFBundleVersion);
   const version = numbers(productVersion) ? productVersion : fromPlist;
   let runtimeConfig = null;
   if (entry && managed.names.has(entry + '.runtimeconfig.json')) {
-    try { runtimeConfig = JSON.parse(f.readFileSync(posix.join(managed.dir, entry + '.runtimeconfig.json'), 'utf8').replace(/^﻿/, '')); } catch { runtimeConfig = { unreadable: true }; }
+    try { runtimeConfig = JSON.parse(f.readFileSync(managed.files.get(entry + '.runtimeconfig.json'), 'utf8').replace(/^﻿/, '')); } catch { runtimeConfig = { unreadable: true }; }
   }
   return { bundle, kind, managedDir: managed.dir, executable: s.CFBundleExecutable ?? null,
     exePath: s.CFBundleExecutable ? posix.join(bundle, 'Contents', 'MacOS', s.CFBundleExecutable) : null, identifier: s.CFBundleIdentifier ?? null,
     shortVersion: s.CFBundleShortVersionString ?? null, bundleVersion: s.CFBundleVersion ?? null, entry, productVersion, version,
-    versionSource: numbers(productVersion) ? 'ProductVersion of ' + entry + '.dll' : fromPlist ? 'Info.plist' : null,
+    versionSource: numbers(productVersion) ? 'ProductVersion of ' + versionDll : fromPlist ? 'Info.plist' : null,
     environment: plist.environment, runtimeConfig };
 }
 

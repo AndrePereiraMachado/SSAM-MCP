@@ -79,7 +79,7 @@ export async function macDoctor({ pack = {}, deps = {} } = {}) {
       + (problems.length ? '. ' + problems.join('; ') : ''));
   }
   for (const lane of lanes) if (!bundles.some(b => b.kind === lane))
-    add(false, MAC_STUDIOS[lane].name, `not found in /Applications or ~/Applications (an application bundle whose Contents hold ${MAC_STUDIOS[lane].requires.join(' and ')})`);
+    add(false, MAC_STUDIOS[lane].name, `not found in /Applications or ~/Applications (an application bundle whose Contents hold ${MAC_STUDIOS[lane].requires.join(' or ')})`);
   const o11Installed = bundles.some(b => b.kind === 'o11');
   add(working.length > 0, 'start time with microseconds (Service Studio hook)', calibration.results.map(r => (r.ok
     ? `${r.name} ok (${r.offsetsMs.map(ms => ms.toFixed(3)).join(' and ')} ms after the start of processes the agent started)` : `${r.name} failed: ${r.error}`)).join('; ')

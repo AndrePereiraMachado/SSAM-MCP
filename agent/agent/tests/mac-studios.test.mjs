@@ -89,7 +89,7 @@ test('bundles: two levels of the application folders, the managed folder found u
     assert.equal(managedDirOf(path.posix.join(m.apps, 'Other.app')), null);
     assert.equal(kindOfNames(new Set(['OutSystems.Model.dll', 'ServiceStudio.Framework.dll', 'OutSystems.Model.V1.dll'])), 'odc');
     assert.equal(kindOfNames(new Set(['ServiceStudio.Framework.dll', 'OutSystems.Model.V1.dll'])), 'o11');
-    assert.equal(kindOfNames(new Set(['ServiceStudio.Framework.dll'])), null);
+    assert.equal(kindOfNames(new Set(['ServiceStudio.Framework.dll'])), 'o11');
     const info = await inspectBundle(odc);
     assert.equal(info.kind, 'odc'); assert.equal(info.entry, 'ODCStudio'); assert.equal(info.version, '1.7.28.10873');
     assert.equal(info.versionSource, 'ProductVersion of ODCStudio.dll'); assert.equal(info.exePath, path.posix.join(odc, 'Contents', 'MacOS', 'ODC Studio'));
@@ -231,4 +231,70 @@ test('Mach-O architectures: thin arm64 and x86_64, universal, and not a Mach-O',
   const fat = Buffer.alloc(8 + 40); fat.writeUInt32BE(0xcafebabe, 0); fat.writeUInt32BE(2, 4); fat.writeUInt32BE(0x01000007, 8); fat.writeUInt32BE(0x0100000c, 28);
   assert.deepEqual(machOArchs(fat), ['x86_64', 'arm64']);
   assert.deepEqual(machOArchs(Buffer.from('#!/bin/sh')), []);
+});
+
+test('O11 family: one marker anywhere under Contents; no Windows DLL pair or entry config required', async () => {
+  const m = machine();
+  try {
+    for (const marker of ['ServiceStudio.dll', 'ServiceStudio.Framework.dll', 'OutSystems.Model.V1.dll']) {
+      const root = m.bundle(m.apps, marker + '.app', { kind: 'o11', executable: 'ServiceStudio', entry: null,
+        managed: 'Resources/runtime/a/b/c/d/e', short: '11.55.71', build: '12345' });
+      const dir = path.posix.join(root, 'Contents/Resources/runtime/a/b/c/d/e');
+      for (const name of fs.readdirSync(dir)) fs.unlinkSync(path.posix.join(dir, name));
+      fs.writeFileSync(path.posix.join(dir, marker), fakePe({ productVersion: '11.55.71.54321' }));
+      const info = await inspectBundle(root);
+      assert.equal(info.kind, 'o11', marker);
+      assert.equal(info.managedDir, dir);
+      assert.equal(info.version, '11.55.71.54321');
+      assert.equal(info.versionSource, 'ProductVersion of ' + marker);
+      assert.equal(info.exePath, path.posix.join(root, 'Contents/MacOS/ServiceStudio'));
+      assert.equal(info.runtimeConfig, null);
+    }
+    assert.equal((await installedBundles({ roots: [m.apps], home: m.home })).length, 3);
+  } finally { m.remove(); }
+});
+
+test('split markers: ODC wins over O11 even when its marker is deeper in Contents', async () => {
+  const m = machine();
+  try {
+    const root = m.bundle(m.apps, 'Mixed.app', { kind: 'o11', executable: 'ODCStudio', entry: null });
+    const deep = path.posix.join(root, 'Contents/Resources/a/b/c/d/e');
+    fs.mkdirSync(deep, { recursive: true });
+    fs.writeFileSync(path.posix.join(deep, 'OutSystems.Model.dll'), 'marker');
+    assert.equal((await inspectBundle(root)).kind, 'odc');
+    assert.equal(managedDirOf(root, { folders: 2 }), null, 'never classify a partial scan as O11');
+  } finally { m.remove(); }
+});
+
+test('framework resources and split runtimeconfig are read; missing PE version falls back to Info.plist', async () => {
+  const m = machine();
+  try {
+    const root = m.bundle(m.apps, 'ServiceStudio.app', { kind: 'o11', entry: null, executable: 'ServiceStudio',
+      managed: 'Frameworks/Managed.framework/Versions/A/Resources/assemblies', short: '11.55.71', build: '12345' });
+    const config = path.posix.join(root, 'Contents/MacOS/ServiceStudio.runtimeconfig.json');
+    fs.writeFileSync(config, JSON.stringify({ runtimeOptions: { configProperties: { 'System.StartupHookProvider.IsSupported': false } } }));
+    const info = await inspectBundle(root);
+    assert.equal(info.kind, 'o11');
+    assert.equal(info.version, '11.55.71.12345');
+    assert.equal(info.versionSource, 'Info.plist');
+    assert.equal(info.runtimeConfig.runtimeOptions.configProperties['System.StartupHookProvider.IsSupported'], false);
+    fs.writeFileSync(config, '{broken');
+    assert.equal((await inspectBundle(root)).runtimeConfig.unreadable, true);
+  } finally { m.remove(); }
+});
+
+test('an app name or helper marker cannot identify the parent as a Studio', async () => {
+  const m = machine();
+  try {
+    const root = path.posix.join(m.apps, 'ServiceStudio.app');
+    const helper = path.posix.join(root, 'Contents/Helpers/Helper.app/Contents/MacOS');
+    fs.mkdirSync(helper, { recursive: true });
+    fs.writeFileSync(path.posix.join(helper, 'ServiceStudio.dll'), 'marker');
+    assert.equal(await inspectBundle(root), null);
+    const external = path.join(m.top, 'outside');
+    fs.mkdirSync(external);
+    fs.writeFileSync(path.join(external, 'ServiceStudio.dll'), 'marker');
+    fs.symlinkSync(external, path.posix.join(root, 'Contents/linked'), process.platform === 'win32' ? 'junction' : 'dir');
+    assert.equal(await inspectBundle(root), null, 'links outside Contents are not followed');
+  } finally { m.remove(); }
 });

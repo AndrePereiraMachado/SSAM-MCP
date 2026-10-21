@@ -169,3 +169,30 @@ already loaded stays in an open Studio until it quits.
   shows which ones work on your Mac and why the others do not.
 - The bridges are the ones of the Windows pack; dialogs and windows of the Studio on macOS have not been proven in
   every operation yet. Report anything odd with `ssam_friction` and send `doctor --json` to the owner.
+
+### Bundle detection and connection are separate checks
+
+On macOS the lane names `ServiceStudio.exe` and `ODCStudio.exe` are protocol labels, not files to find.
+The agent reads application bundles in `/Applications` and `~/Applications` (also one vendor folder below them).
+Within `Contents` it looks for any marker of the family:
+
+- ODC: `ODCStudio.dll` or `OutSystems.Model.dll`.
+- Service Studio 11: `ServiceStudio.dll`, `ServiceStudio.Framework.dll` or `OutSystems.Model.V1.dll`.
+
+ODC markers take precedence across the bundle, since ODC can include Service Studio assemblies too.
+The markers need not share a folder. There is no fixed depth limit inside `Contents`; framework resource folders
+are included. The scan reads at most 400 folders, does not follow links and does not enter nested helper apps.
+A bundle name alone is not enough. A scan that exceeds the folder budget is not classified.
+The version comes from the entry DLL's ProductVersion, then a family marker DLL, then `Info.plist`.
+The running process must still match `Contents/MacOS/CFBundleExecutable` exactly.
+
+Detection does not mean the bridge supports that Studio version. The pack's built-for version and the server's
+version checks still apply. Connecting also needs the .NET diagnostic socket, .NET 8 or newer, startup hooks,
+and for Service Studio the checked start time and readable loaded DLL list. A Studio using another runtime or
+process layout can be detected without being attachable. These conditions need a test on the actual Mac.
+
+For a detection problem, send the output of `bash ~/SSAM-Agent/agent/ssam-agent.sh doctor --json` and only the
+`agent.log` file, with the installed pack ID, the Studio version and whether it was open. Never send the whole
+`private` folder, `credential`, `config.json` or keys. If the bundle is still absent, the owner may also need a
+list of DLL and runtimeconfig file paths under its `Contents` and the Info.plist version and executable fields;
+no Studio DLL needs to be sent.
