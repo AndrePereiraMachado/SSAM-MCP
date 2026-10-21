@@ -165,11 +165,16 @@ RUN --mount=type=bind,from=studio-odc,source=/studio/odc,target=/studio/odc \
 
 # ---- ODC builder / reader (ODC3.Builder.dll), against /studio/odc -------------------------------------------------------------------
 FROM sdk AS builder-odc
-# The builder links a few kernel sources (CandidateReceipt.cs, SecurityWarnings.cs) so both judge alike.
+# The builder links kernel sources. Export its input trees BEFORE compilation, with their timestamps.
+# Runtime COPY . can have newer checkout mtimes even when BuildKit reuses this build by content.
+# Keeping the inputs and DLL in the same cached stage prevents false COMPONENT_STALE refusals.
 COPY platforms/odc/studio/ platforms/odc/studio/
 RUN --mount=type=bind,from=studio-odc,source=/studio/odc,target=/studio/odc \
     --mount=type=cache,id=ssam-nuget-builder-odc,sharing=locked,target=/root/.nuget/packages \
-    dotnet build platforms/odc/studio/builder/Builder.csproj -c Release -nologo -v q -nodeReuse:false \
+    mkdir -p /out/platforms/odc \
+ && cp -a kernel /out/ \
+ && cp -a platforms/odc/studio /out/platforms/odc/ \
+ && dotnet build platforms/odc/studio/builder/Builder.csproj -c Release -nologo -v q -nodeReuse:false \
       -p:OdcInstall=/studio/odc \
  && mkdir -p /out/platforms/odc/studio/builder/bin/Release \
  && cp -r platforms/odc/studio/builder/bin/Release/net10.0 /out/platforms/odc/studio/builder/bin/Release/
@@ -240,6 +245,16 @@ RUN install -d -o ssam -g ssam -m 0750 /data/server /data/friction /data/odc-fea
  && install -d -m 0755 /app/platforms/odc/studio/builder/features \
  && chown root:ssam /app/kernel/.local /app/kernel/.local/lane-odc \
  && chmod 1770 /app/kernel/.local /app/kernel/.local/lane-odc
+
+# Fail the image build if the builder or its runtime files are missing, or the warm would reject it.
+RUN node --input-type=module <<'JS'
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { paths, builderNeedsBuild } from './platforms/odc/facade/lib.mjs';
+for (const file of [paths.builder, paths.builder.replace(/\.dll$/, '.deps.json'), paths.builder.replace(/\.dll$/, '.runtimeconfig.json')])
+  assert.ok(fs.statSync(file).size > 0, `Missing builder runtime file: ${file}`);
+assert.equal(builderNeedsBuild(), false, 'The ODC warm would reject this image: builder missing or stale');
+JS
 
 # The start of the server (CMD). Before node, the server's own trusted-controller key (bridge.key of ANVIL_AUTHORITY_DIR,
 # in the container layer: a new one per container) is made the way the kernel's BridgeAccess.Initialize makes it (64 hex
