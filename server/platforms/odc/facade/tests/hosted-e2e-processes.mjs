@@ -1088,7 +1088,7 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
     if (!text.includes(from)) return edits.push(rel + ': no ' + from); fs.writeFileSync(file, text.replace(from, to)); };
   downgrade('agent/lib/kinds.mjs', "'reference-snapshot', 'reference-producers', 'data',", "'reference-snapshot', 'data',");
   downgrade('agent/lib/kinds.mjs', "'sc_web', 'sc_http', 'studio_login',", "'sc_web', 'studio_login',");
-  downgrade('agent/lib/agent.mjs', "export const AGENT_VERSION = '0.3.1';", "export const AGENT_VERSION = '0.2.0';");
+  downgrade('agent/lib/agent.mjs', "export const AGENT_VERSION = '0.3.3';", "export const AGENT_VERSION = '0.2.0';");
   const packC = JSON.parse(fs.readFileSync(path.join(C.root, 'pack.json'), 'utf8').replace(/^﻿/, ''));
   const bridgeDir = path.join(C.root, 'odc', 'studio', 'bridge', 'bin', 'Release', 'net8.0');
   for (const suffix of ['.dll', '.deps.json']) {
