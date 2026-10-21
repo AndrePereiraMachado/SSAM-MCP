@@ -120,12 +120,12 @@ test('bundle version: the entry assembly first, else Info.plist (binary plists g
 });
 
 test('official places: /Applications and ~/Applications, two levels; anything else is not', () => {
-  assert.equal(officialBundle('/Applications/ODC Studio.app', '/Users/ana'), true);
-  assert.equal(officialBundle('/Applications/OutSystems/ODC Studio.app', '/Users/ana'), true);
-  assert.equal(officialBundle('/Users/ana/Applications/ODC Studio.app', '/Users/ana'), true);
-  assert.equal(officialBundle('/Users/ana/Downloads/ODC Studio.app', '/Users/ana'), false);
-  assert.equal(officialBundle('/Applications/a/b/ODC Studio.app', '/Users/ana'), false);
-  assert.equal(officialBundle('/Volumes/ODC/ODC Studio.app', '/Users/ana'), false);
+  assert.equal(officialBundle('/Applications/ODC Studio.app', '/Users/ana', { fs: { realpathSync: p => p } }), true);
+  assert.equal(officialBundle('/Applications/OutSystems/ODC Studio.app', '/Users/ana', { fs: { realpathSync: p => p } }), true);
+  assert.equal(officialBundle('/Users/ana/Applications/ODC Studio.app', '/Users/ana', { fs: { realpathSync: p => p } }), true);
+  assert.equal(officialBundle('/Users/ana/Downloads/ODC Studio.app', '/Users/ana', { fs: { realpathSync: p => p } }), false);
+  assert.equal(officialBundle('/Applications/a/b/ODC Studio.app', '/Users/ana', { fs: { realpathSync: p => p } }), false);
+  assert.equal(officialBundle('/Volumes/ODC/ODC Studio.app', '/Users/ana', { fs: { realpathSync: p => p } }), false);
 });
 
 test('ps: pid, start (local time) and the executable with spaces; the bundle of an executable', () => {

@@ -68,7 +68,7 @@ export async function macDoctor({ pack = {}, deps = {} } = {}) {
     const diagnostics = info.environment?.DOTNET_EnableDiagnostics ?? info.environment?.COMPlus_EnableDiagnostics ?? null;
     const entitlements = await tool(TOOLS.codesign, ['-d', '--entitlements', ':-', info.bundle]);
     const sandboxed = entitlements !== null && /<key>com\.apple\.security\.app-sandbox<\/key>\s*<true\s*\/>/.test(entitlements);
-    const official = officialBundle(info.bundle, home);
+    const official = officialBundle(info.bundle, home, { fs: f });
     const fact = { lane: info.kind, bundle: info.bundle, official, executable: info.executable, archs, managedDir: info.managedDir, entry: info.entry,
       productVersion: info.productVersion, shortVersion: info.shortVersion, bundleVersion: info.bundleVersion, version: info.version, versionSource: info.versionSource,
       startupHooks: !info.entry || info.runtimeConfig?.missing === true || info.runtimeConfig?.unreadable === true ? 'unknown' : hooks === false || hooks === 'false' ? 'off' : 'on', diagnosticsEnvironment: diagnostics, sandboxed, entitlementsRead: entitlements !== null };

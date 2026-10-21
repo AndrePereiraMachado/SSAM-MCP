@@ -39,15 +39,18 @@ export const applicationFolders = home => ['/Applications', posix.join(home, 'Ap
 
 // The application bundles of the folders, two levels deep (/Applications/X.app, /Applications/Vendor/X.app). Links are
 // never followed; a bundle is never entered.
-export function findBundles(roots, { fs: f = fs, depth = 2 } = {}) {
+export function findBundles(roots, { fs: f = fs, depth = 2, includeRejected = false } = {}) {
   const out = [];
   const walk = (dir, level) => {
     let items;
     try { items = f.readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const item of items) {
-      if (!item.isDirectory()) continue;
       const full = posix.join(dir, item.name);
-      if (/\.app$/i.test(item.name)) out.push(full);
+      let stat;
+      try { stat = f.lstatSync(full); } catch { continue; }
+      if (/\.app$/i.test(item.name) && stat.isSymbolicLink()) { if (includeRejected) out.push(full); continue; }
+      if (!stat.isDirectory() || stat.isSymbolicLink()) continue;
+      if (/\.app$/i.test(item.name)) { if (includeRejected || !bundleLinkReason(full, f)) out.push(full); }
       else if (level < depth) walk(full, level + 1);
     }
   };
@@ -59,7 +62,16 @@ export function findBundles(roots, { fs: f = fs, depth = 2 } = {}) {
 // No layout depth is assumed. The folder budget bounds unrelated apps; an incomplete scan is never classified.
 // Family markers are alternatives, not a Windows DLL set required in one folder. ODC takes precedence because
 // it may carry the O11 markers too. files keeps the first occurrence in deterministic breadth-first order.
+export function bundleLinkReason(bundle, f = fs) {
+  for (const file of [bundle, posix.join(bundle, 'Contents')]) {
+    try { if (f.lstatSync(file).isSymbolicLink()) return file === bundle ? 'application bundle is a symbolic link' : 'Contents is a symbolic link'; }
+    catch { return null; }
+  }
+  return null;
+}
+
 export function managedDirOf(bundle, { fs: f = fs, depth = Infinity, folders = 400 } = {}) {
+  if (bundleLinkReason(bundle, f)) return null;
   const queue = [[posix.join(bundle, 'Contents'), 0]];
   const files = new Map();
   let read = 0;
@@ -132,6 +144,8 @@ export async function inspectBundle(bundle, deps = {}) {
 
 export async function inspectBundleCandidate(bundle, deps = {}) {
   const f = deps.fs ?? fs;
+  const reason = bundleLinkReason(bundle, f);
+  if (reason) return { bundle, candidate: true, reason };
   const managed = managedDirOf(bundle, { fs: f });
   if (!managed) return null;
   const kind = kindOfNames(managed.names);
@@ -170,9 +184,21 @@ export async function inspectBundleCandidate(bundle, deps = {}) {
 }
 
 // A bundle in /Applications or ~/Applications (two levels), the places an installer puts a Studio.
-export function officialBundle(bundle, home) {
-  const parent = posix.dirname(bundle);
-  return applicationFolders(home).some(root => parent === root || posix.dirname(parent) === root);
+export function realPath(file, f = fs) {
+  try { return f.realpathSync(file).replace(/\\/g, '/'); } catch { return null; }
+}
+export function officialBundle(bundle, home, { fs: f = fs } = {}) {
+  const real = realPath(bundle, f);
+  if (!real) return false;
+  const parent = posix.dirname(real);
+  return applicationFolders(home).some(root => {
+    const allowed = realPath(root, f);
+    return allowed && (parent === allowed || posix.dirname(parent) === allowed);
+  });
+}
+export function bundleOwnsExecutable(bundle, executable, { fs: f = fs } = {}) {
+  const real = realPath(bundle, f); const exe = realPath(executable, f);
+  return Boolean(real && exe && exe.startsWith(real + '/'));
 }
 
 // The installed Studios: [{...inspectBundle}] of the application folders, newest version first, /Applications first.
@@ -226,7 +252,7 @@ export async function studioProcesses(kind, deps = {}) {
     if (!seen.has(bundle)) seen.set(bundle, await Promise.resolve(inspect(bundle)).catch(() => null));
     const info = seen.get(bundle);
     if (!info || info.kind !== kind || info.exePath !== p.exe) continue;
-    out.push({ pid: p.pid, path: p.exe, version: info.version, startSeconds: p.startSeconds, bundle, official: officialBundle(bundle, home), info });
+    out.push({ pid: p.pid, path: p.exe, version: info.version, startSeconds: p.startSeconds, bundle, official: officialBundle(bundle, home, deps), info });
   }
   return out;
 }

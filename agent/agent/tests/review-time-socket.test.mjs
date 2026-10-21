@@ -70,14 +70,14 @@ function fakeMac({ sockets, startLocal = 'Sun Oct 19 08:12:33 2025', pidInfo = 5
   const files = { [bundle + '/Contents/Info.plist']: Buffer.from('<plist><dict><key>CFBundleExecutable</key><string>ODC Studio</string><key>CFBundleShortVersionString</key><string>1.7.28</string><key>CFBundleVersion</key><string>10873</string></dict></plist>'),
     [managed + '/ODCStudio.runtimeconfig.json']: Buffer.from(JSON.stringify({ runtimeOptions: { configProperties: hooksOff ? { 'System.StartupHookProvider.IsSupported': false } : {} } })),
     [managed + '/ODCStudio.dll']: Buffer.from('MZ not a real PE') };
-  const fsFake = {
+  const fsFake = { realpathSync: file => file, lstatSync: () => ({ isSymbolicLink: () => false, isDirectory: () => true }),
     readdirSync: (dir, opts) => { const d = dir.replace(/\/+$/, ''); if (opts?.withFileTypes) { if (!tree[d]) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); return tree[d]; } return sockets[dir] ?? sockets[d + '/'] ?? []; },
     readFileSync: (file, enc) => { if (!files[file]) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); return enc ? files[file].toString(enc) : files[file]; },
     statSync: file => ({ mtimeMs: 1, isSocket: () => true }), existsSync: () => true };
   const sent = [];
   const deps = { fs: fsFake, home: '/Users/ana', env: { TMPDIR: '/var/folders/x/T/' }, run: async (tool, args) => { if (tool === mac.TOOLS.getconf) return '/var/folders/x/T/\n'; throw new Error('no ' + tool); },
     ps: async () => `  501 ${startLocal}     ${exe}\n  777 ${startLocal}     /usr/bin/other\n`,
-    ipc: { processInfo2: async () => ({ pid: pidInfo, clrVersion: clr }), applyStartupHook: async (endpoint, file) => { sent.push({ endpoint, file }); return { applied: true }; } } };
+    ipc: { processInfo2: async () => ({ pid: pidInfo, clrVersion: clr, entrypoint: 'ODCStudio', commandLine: '"' + exe + '"' }), applyStartupHook: async (endpoint, file) => { sent.push({ endpoint, file }); return { applied: true }; } } };
   return { deps, sent, exe };
 }
 const localSeconds = () => Math.floor(new Date(2025, 9, 19, 8, 12, 33).getTime() / 1000);

@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AgentError } from './errors.mjs';
 import { applyStartupHook, processInfo2, unixEndpoints, runtimeMajor } from './dotnet-ipc.mjs';
-import { studioProcesses, tempFolders, startTime, dotnetStartTimeText, openFiles, MAC_STUDIOS, runTool, START_READERS, calibrateReaders, calibrationText } from './macos.mjs';
+import { homeOf, officialBundle, bundleOwnsExecutable, studioProcesses, tempFolders, startTime, dotnetStartTimeText, openFiles, MAC_STUDIOS, runTool, START_READERS, calibrateReaders, calibrationText } from './macos.mjs';
 
 const fail = (message, executed = false) => new AgentError('ATTACH_FAILED', message, { executed });
 const ODC_NOTE = 'Run status before any other command; a bridge stays loaded until the Studio closes.';
@@ -59,7 +59,8 @@ export function createMacAttach(deps = {}) {
   async function identify(lane, pid, { requireEndpoint }) {
     const p = await processOf(lane, pid);
     const name = MAC_STUDIOS[lane].name;
-    if (!p.official) throw fail(`${name} ${p.pid} runs from ${p.bundle}, which is not in /Applications or ~/Applications; the agent attaches only an installed Studio.`);
+    if (!officialBundle(p.bundle, deps.home ?? homeOf(deps.env), { fs: f })) throw fail(`${name} ${p.pid} runs from ${p.bundle}, which is not in /Applications or ~/Applications; the agent attaches only an installed Studio.`);
+    if (!bundleOwnsExecutable(p.bundle, p.path, { fs: f })) throw fail('The real Studio executable is outside its application bundle. Nothing was sent.');
     // A runtimeconfig.json that cannot be read cannot tell whether startup hooks are on (review B7): stop before sending.
     if (!p.info.entry || p.info.runtimeConfig?.missing === true || p.info.runtimeConfig?.unreadable === true)
       throw fail(`The ${p.info.entry ?? MAC_STUDIOS[lane].entry}.runtimeconfig.json of ${name} ${p.pid} (${p.info.managedDir}) cannot be read, so the agent cannot tell whether the Studio allows startup hooks. Nothing was sent; reinstall the Studio from its official installer, then run agent/ssam-agent.sh doctor.`);
