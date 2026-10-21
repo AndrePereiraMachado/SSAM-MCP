@@ -59,3 +59,63 @@ Em 2026-10-12 (`server/r24-qualidade`): node 86/86 de novo (só um doc mudou nes
 
 Os arquivos que também existem em `server/` estão em `../SHARED.md`. Mantenha os dois lados iguais.
 `platforms/odc/facade/odc-pipe.mjs` e `o11-bridge.mjs` aqui são só espelho para o teste de deriva.
+
+## O próximo pacote (`server/agent-next`, 18/10/2026)
+
+Pedido do dono de 18/10: o cliente hospedado tem o Manage Dependencies por código e os componentes do ambiente no
+`ssam_discover`. Plano, resultado e prova ao vivo: `C:\t\agent-pack-next\PLANO.md`, `RESULTADO.md` e `PROVA-AO-VIVO.md`.
+
+- **Fina O11.** Os quatro arquivos de `kernel/src/Anvil.Bridge.Thin` vêm da linha `fase4-26/a8-agent` com os mesmos blobs:
+  - `Dispatch.cs` (a capacidade `refresh_references:add`);
+  - `ManageDependencies.cs` (novo, a cópia fina do Manage Dependencies do kernel, só com tipos do Studio);
+  - `QuietCommand.cs` (novo);
+  - `MergeHandler.cs` (o merge de assinaturas dentro do comando, sem `CompareAndMergeCommands.Merge`).
+- **Agente.** `0.3.2`: o agente em inglês de `server/english-agent`. As listas e o fio são os do `0.3.1`.
+- **Montagem.** `-NoBuild -Prebuilt`, com estes binários:
+  - a bridge ODC v97, o cliente ODC, o `Anvil.Connect`, o `Anvil.RuntimeHook.Agent`, o `node.exe` e a `LICENSE`, que
+    são os bytes do pacote de 13/10 (`pack-20261013-040746`, conferidos contra o `pack.json` dele);
+  - só a fina é compilada, contra o Service Studio 11.55.92.65269 de `C:\Program Files`.
+  O script é `C:\t\agent-pack-next\scripts\prep-pack.ps1`.
+- **Pacote (rodada 2, depois da revisão `C:\t\revisoes\agent-pack-next\REVISAO.md`).** `pack-20261018-221719`, 41 entradas.
+  - `odcBridge` v97, `o11BuiltFor` 11.55.92, `o11Hook` dev.
+  - A fina tem sha256 `8a72236b…3b16`, compilada com `DebugType=none`: sem caminho de PDB e sem texto de produto do
+    Manage Dependencies.
+  - O ZIP tem sha256 `50da9f1b…f73f`.
+  - A varredura de PI saiu sem achados e sem exceções.
+  - O `pack-20261018-203453` da rodada 1 está superado.
+- **Pacote (rodada 3, depois da re-revisão `C:\t\revisoes\agent-pack-next-2\REVISAO.md`).** `pack-20261018-230621`,
+  41 entradas.
+  - A fina (`30f8612`, a cópia de `45ba64d7` da linha) fecha só o relatório de erro do Studio, o diálogo de
+    dependências e a caixa só com OK. Qualquer outra janela fica, e a resposta é pendente com o título.
+  - A fina tem sha256 `2cb18ced…98a4`, 492 032 bytes, compilada com `DebugType=none`.
+  - O ZIP tem sha256 `50d390e4…e386`. A varredura de PI saiu sem achados e sem exceções.
+  - O `pack-20261018-221719` da rodada 2 está superado.
+- **Compatibilidade.** O `kernel.json` não muda. O hub aceita o pacote novo e o de 13/10.
+## O pacote do macOS (`server/agent-mac`, 19/10/2026)
+
+Pedido do dono de 19/10: instalar no Mac com UM comando, sem decompilar nada. Plano, resultado e roteiro de prova:
+`C:\t\agent-mac\PLANO.md`, `RESULTADO.md` e `PROVA-MAC.md`. Guia do cliente: `docs/AGENTE-MAC.md`.
+
+- **Agente.** O mesmo `0.3.2`, com o ramo `darwin` de verdade (o Windows não muda): bundles do Studio por DLL marcador,
+  versão de 4 números pelo `ProductVersion` do assembly de entrada (`lib/pe-version.mjs`), attach sem .NET pelo IPC de
+  diagnóstico do .NET (`lib/dotnet-ipc.mjs`, `lib/attach-unix.mjs`), pipe Unix da bridge com um comando por vez
+  (`lib/odc-pipe-unix.mjs`), caminhos POSIX (`lib/workspace.mjs`), `doctor --json` com as checagens do Mac
+  (`lib/mac-doctor.mjs`), `lib/launcher.mjs` + `agent/ssam-agent.sh` e `agent/install.sh` (bash 3.2, sem sudo).
+- **Bridges.** As do pack3, sem recompilar (`odcBridge` v97, `o11BuiltFor` 11.55.92, gancho `dev`): o `kernel.json` não muda.
+- **Montagem.** `scripts\agent-pack.ps1 -Platform mac -NoBuild -Prebuilt <pasta>`: sem `.exe`, sem cliente ODC, sem
+  `Anvil.Connect`; `pack.json` com `platform: darwin`, o pino do Node (`scripts\node-darwin.json`, sha256 do
+  `SHASUMS256.txt` oficial) e sem valores nulos; o tar.gz sai de `scripts\tar-gz.mjs` (0755 nos `.sh`) e a árvore lida de
+  volta passa pela mesma varredura de PI. Montagem a partir do pack3: `C:\t\agent-mac\scripts\prep-mac.ps1`.
+- **Servidor.** `fase4-26/a8-mac` (C26 e os textos com a pasta POSIX do agente). Só entra na próxima imagem, com OK do dono.
+- **Rodada 2 (depois da revisão `C:\t\revisoes\agent-mac\REVISAO.md`).** Agente `0.3.3` (o servidor só mostra e registra a
+  versão; no Windows é o mesmo agente do `0.3.2`).
+  - `uninstall` nunca apaga através de link (lstat componente a componente a partir da raiz real) e tira de `private/` só
+    o que o registro do setup lista (`private/installed.json`); `install.sh` e o `setup` recusam `/`, o próprio `$HOME`,
+    pastas de sistema, `~/Library` e pasta com conteúdo que não seja do pacote (M1, M2).
+  - O gancho O11 só recebe a hora de leitores que acertaram os microssegundos em processos do próprio agente
+    (`calibrateReaders`); sem nenhum, recusa antes de tocar o Studio (M4).
+  - B1 a B7 e B9: pipe Unix sem corrida no fim do prazo, pacote do Mac com LF em qualquer checkout, grafia exata da raiz
+    em caminho absoluto, `--credential-file` fora de pastas guardadas com lembrete de apagar, doctor com Studio fechado,
+    Node gravado em `private/node` e conferido, `runtimeconfig.json` ilegível para o attach.
+  - Pacote `pack-20261019-072205` (`C:\t\agent-mac\pack2`, sha256 `ea3e459c…d4b7`), mesmos binários do pack3, varredura
+    de PI sem achados. O pacote da rodada 1 (`C:\t\agent-mac\pack`) fica como está.

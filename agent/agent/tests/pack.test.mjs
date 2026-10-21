@@ -102,6 +102,7 @@ test('agent-pack.ps1 -NoBuild -Prebuilt -NoNode builds the 6.2 layout with the t
     const expected = ['agent/ssam-agent.mjs', 'agent/ssam-agent.ps1', ...libs,
       'bin/o11/bridge/Anvil.Bridge.deps.json', THIN,
       CONNECT, 'bin/o11/connect/Anvil.Connect.runtimeconfig.json', 'bin/o11/connect/Microsoft.Diagnostics.NETCore.Client.dll', HOOK,
+      'docs/AGENTE-CLIENTE.md',
       'odc/README.md', 'odc/studio/bridge/bin/Release/net8.0/ODC3.Bridge.v35.deps.json', ODC_BRIDGE,
       ODC_DIAG, 'odc/studio/bridge/client/bin/Release/net10.0/ODC3.Bridge.Client.deps.json',
       ODC_CLIENT, 'odc/studio/bridge/client/bin/Release/net10.0/ODC3.Bridge.Client.runtimeconfig.json',
@@ -111,8 +112,8 @@ test('agent-pack.ps1 -NoBuild -Prebuilt -NoNode builds the 6.2 layout with the t
       assert.doesNotMatch(file, /\.(cs|csproj|pdb|key)$|(^|\/)\.local\/|tokens\.json|OutSystems\.|ServiceStudio\.|^agent\/tests\/|^agent\/node\//, file);
       if (file.endsWith('.mjs')) assert.match(file, /^agent\//);
     }
-    // The agent code in the pack is the repository's, byte for byte.
-    for (const file of files.filter(f => f.startsWith('agent/'))) assert.equal(sha(entries.get(file)), sha(fs.readFileSync(path.join(repo, file))), file);
+    // The agent code and the customer guide in the pack are the repository's, byte for byte.
+    for (const file of files.filter(f => f.startsWith('agent/') || f.startsWith('docs/'))) assert.equal(sha(entries.get(file)), sha(fs.readFileSync(path.join(repo, file))), file);
 
     const manifest = JSON.parse(entries.get('pack.json').toString('utf8').replace(/^﻿/, ''));
     assert.match(manifest.id, /^pack-\d{8}-\d{6}$/);

@@ -19,6 +19,11 @@ recusa também as ferramentas só do servidor e esvazia os caches dela). A branc
 (`fase4-26/a9-followups` `492e1889`) levou às duas caixas o `docs/FASE2-AGENTE.md` da linha: o arquivo fora da pasta do
 agente copiado como está (M2), as palavras do dono nunca repetidas pelo portão e os valores do teste de rede em inglês.
 
+A integração de `server/agent-mac` (`0ccc95e`) preserva esses contratos atuais e incorpora o agente macOS 0.3.3.
+A linha `server/english-agent`, ancestral do agente Mac, também trouxe o guia do cliente em inglês
+(`docs/AGENTE-CLIENTE.md`) e os testes `odc-bridge-version.test.mjs` das duas caixas: a bridge ODC continua v97,
+e uma mudança no código dela exige uma versão nova.
+
 ## A regra
 
 - Os dois lados têm de ficar iguais. Mudou um, copie para o outro no mesmo commit.
