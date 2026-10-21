@@ -21,7 +21,8 @@ export function versionPairs(manifest,window=manifest.window??3){
  });
 }
 export function generateCompose(manifest,{window=manifest.window??3}={}){
- const pairs=versionPairs(manifest,window),c=structuredClone(template),source=c.services['ssam-server'];
+ // Coolify 4.4.6 corrupts image@sha256 references. Immutable tags are checked against the recorded digest.
+ const pairs=versionPairs(manifest,window).map(p=>({...p,digest:p.image.split('@')[1]??null,image:p.image.split('@')[0]})),c=structuredClone(template),source=c.services['ssam-server'];
  delete c.name;c.networks.default={};c.volumes={'server-state':{},friction:{}};
  const served=JSON.stringify({odc:[...new Set(pairs.map(p=>p.odc))],o11:[...new Set(pairs.map(p=>p.o11))]});
  const routing=pairs.map((p,i)=>({name:p.name,url:`http://ssam-server-v${i+1}:7310`,odc:p.odc,o11:p.o11,default:i===0}));
@@ -29,7 +30,7 @@ export function generateCompose(manifest,{window=manifest.window??3}={}){
  for(const service of Object.values(c.services)){delete service.labels;service.image=pairs[0].image;}
  pairs.forEach((p,i)=>{
   const s=structuredClone(source);s.image=p.image;
-  s.labels={'ssam.backend':'true','ssam.odc':p.odc,'ssam.o11':p.o11,'ssam.default':String(i===0)};
+  s.labels={'ssam.backend':'true','ssam.odc':p.odc,'ssam.o11':p.o11,'ssam.default':String(i===0),...(p.digest?{'ssam.image.digest':p.digest}:{})};
   Object.assign(s.environment,{SSAM_BACKEND_NAME:p.name,SSAM_RUNTIME_DIR:`/data/server/versions/${p.name}`,SSAM_SERVED_VERSIONS:served});
   for(const v of s.volumes)if(['cache','odc-features'].includes(v.source)){v.source=`${v.source}-${p.name.replaceAll('.','-')}`;c.volumes[v.source]={};}
   c.services[`ssam-server-v${i+1}`]=s;

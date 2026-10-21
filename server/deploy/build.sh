@@ -99,6 +99,13 @@ $DOCKER buildx build -f Dockerfile --platform linux/amd64 --build-context "insta
   "$@" --build-arg "SSAM_VERSION=$TAG" --build-arg "VCS_REF=$ref" --build-arg "BUILD_DATE=$created" \
   --metadata-file "$meta" $NOCACHE $output -t "$IMAGE:$TAG" .
 
+# Retain the BuildKit manifest digest even for an unpublished local build.
+record=$(setting SSAM_BUILD_METADATA_FILE)
+if [ -n "$record" ]; then
+  mkdir -p "$(dirname "$record")"
+  cp "$meta" "$record"
+fi
+
 # 3. What was built.
 echo "build: done in $(( $(date +%s) - started )) s: $IMAGE:$TAG"
 if [ "$PUSH" = 1 ]; then

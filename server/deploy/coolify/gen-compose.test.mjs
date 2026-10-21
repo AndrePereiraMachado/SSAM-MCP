@@ -24,3 +24,10 @@ test('compose has a fixed pair window, only router Traefik labels, shared data a
  assert.throws(()=>generateCompose({...manifest,o11:[]}));
  assert.throws(()=>generateCompose({...manifest,odc:[{...manifest.odc[0],tag:'latest'}]}));
 });
+test('Coolify uses immutable tags and retains expected digests for verification',()=>{
+ const digest='a'.repeat(64),pinned=structuredClone(manifest);
+ for(const lane of ['odc','o11'])for(const entry of pinned[lane])entry.sha256=digest;
+ const c=generateCompose(pinned);
+ for(const service of Object.values(c.services))assert.ok(!service.image.includes('@'),'Coolify 4.4.6 rewrites digest references');
+ assert.equal(c.services['ssam-server-v1'].labels['ssam.image.digest'],'sha256:'+digest);
+});

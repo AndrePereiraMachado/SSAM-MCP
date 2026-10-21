@@ -19,7 +19,7 @@
       "environment": {
         "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL}"
       },
-      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-ac614ad",
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-cfc3f9c-o115593-odc1729",
       "init": true,
       "logging": {
         "driver": "none"
@@ -94,7 +94,7 @@
         ],
         "timeout": "5s"
       },
-      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-ac614ad",
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-cfc3f9c-o115593-odc1729",
       "init": true,
       "logging": {
         "driver": "json-file",
@@ -140,7 +140,7 @@
         "-c",
         "du -sh /data/server /data/friction /data/odc-features /data/cache"
       ],
-      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-ac614ad",
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-cfc3f9c-o115593-odc1729",
       "init": true,
       "logging": {
         "driver": "json-file",
@@ -216,9 +216,9 @@
         "SSAM_PUBLIC_HOST": "${SSAM_DOMAIN:?set SSAM_DOMAIN (the DNS name of this VPS, e.g. ssam.example.com)}",
         "SSAM_QUALITY": "${SSAM_QUALITY:-1}",
         "SSAM_SERVER_RATE_PER_MINUTE": "${SSAM_RATE_PER_MINUTE:-240}",
-        "SSAM_BACKEND_NAME": "o11-11.55.92-odc-1.7.28",
-        "SSAM_RUNTIME_DIR": "/data/server/versions/o11-11.55.92-odc-1.7.28",
-        "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.28\"],\"o11\":[\"11.55.92\"]}"
+        "SSAM_BACKEND_NAME": "o11-11.55.93-odc-1.7.29",
+        "SSAM_RUNTIME_DIR": "/data/server/versions/o11-11.55.93-odc-1.7.29",
+        "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.29\",\"1.7.28\"],\"o11\":[\"11.55.93\",\"11.55.92\"]}"
       },
       "expose": [
         "7310"
@@ -235,13 +235,115 @@
         ],
         "timeout": "5s"
       },
-      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-ac614ad",
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-cfc3f9c-o115593-odc1729",
+      "init": true,
+      "labels": {
+        "ssam.backend": "true",
+        "ssam.odc": "1.7.29",
+        "ssam.o11": "11.55.93",
+        "ssam.default": "true",
+        "ssam.image.digest": "sha256:f75086de34697902283c19c3a6c433a9c88c82e545554e60ac20da4f79e6f446"
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-file": "5",
+          "max-size": "20m"
+        }
+      },
+      "networks": {
+        "default": null
+      },
+      "platform": "linux/amd64",
+      "pull_policy": "always",
+      "read_only": false,
+      "restart": "unless-stopped",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "stop_grace_period": "30s",
+      "volumes": [
+        {
+          "source": "server-state",
+          "target": "/data/server",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "friction",
+          "target": "/data/friction",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "odc-features-o11-11-55-93-odc-1-7-29",
+          "target": "/data/odc-features",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "cache-o11-11-55-93-odc-1-7-29",
+          "target": "/data/cache",
+          "type": "volume",
+          "volume": {}
+        }
+      ]
+    },
+    "ssam-server-v2": {
+      "cap_drop": [
+        "ALL"
+      ],
+      "deploy": {
+        "resources": {
+          "limits": {
+            "cpus": "${SSAM_CPUS:-2}",
+            "memory": "${SSAM_MEMORY:-6g}",
+            "pids": "${SSAM_PIDS:-4096}"
+          }
+        }
+      },
+      "environment": {
+        "SSAM_BUILD_WORKERS": "${SSAM_BUILD_WORKERS:-2}",
+        "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL (postgres://user:password@host:5432/database, the internal URL of the Postgres resource)}",
+        "SSAM_HOSTED_SSAM_CODE": "${SSAM_HOSTED_SSAM_CODE:-}",
+        "SSAM_O11_WORKERS_MAX": "${SSAM_O11_WORKERS_MAX:-2}",
+        "SSAM_O11_WORKER_BASE_CACHE": "${SSAM_O11_WORKER_BASE_CACHE:-off}",
+        "SSAM_O11_WORKER_HEAP_MB": "${SSAM_O11_WORKER_HEAP_MB:-1536}",
+        "SSAM_O11_WORKER_IDLE_MS": "${SSAM_O11_WORKER_IDLE_MS:-600000}",
+        "SSAM_O11_WORKER_MAX_COMMANDS": "${SSAM_O11_WORKER_MAX_COMMANDS:-1000}",
+        "SSAM_O11_WORKER_MIN_IDLE_MS": "${SSAM_O11_WORKER_MIN_IDLE_MS:-120000}",
+        "SSAM_O11_WORKER_RSS_MB": "${SSAM_O11_WORKER_RSS_MB:-1200}",
+        "SSAM_PORT": "7310",
+        "SSAM_PUBLIC_HOST": "${SSAM_DOMAIN:?set SSAM_DOMAIN (the DNS name of this VPS, e.g. ssam.example.com)}",
+        "SSAM_QUALITY": "${SSAM_QUALITY:-1}",
+        "SSAM_SERVER_RATE_PER_MINUTE": "${SSAM_RATE_PER_MINUTE:-240}",
+        "SSAM_BACKEND_NAME": "o11-11.55.92-odc-1.7.28",
+        "SSAM_RUNTIME_DIR": "/data/server/versions/o11-11.55.92-odc-1.7.28",
+        "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.29\",\"1.7.28\"],\"o11\":[\"11.55.93\",\"11.55.92\"]}"
+      },
+      "expose": [
+        "7310"
+      ],
+      "healthcheck": {
+        "interval": "30s",
+        "retries": 3,
+        "start_period": "60s",
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:7310/health',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ],
+        "timeout": "5s"
+      },
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-cfc3f9c-o115592-odc1728",
       "init": true,
       "labels": {
         "ssam.backend": "true",
         "ssam.odc": "1.7.28",
         "ssam.o11": "11.55.92",
-        "ssam.default": "true"
+        "ssam.default": "false",
+        "ssam.image.digest": "sha256:c23da1d071990afb8ffecf134d7443c2e6aef90246975a35206b00179f1a4c3a"
       },
       "logging": {
         "driver": "json-file",
@@ -310,7 +412,7 @@
         "SSAM_CONSOLE_HOST": "${CONSOLE_DOMAIN}",
         "SSAM_CONSOLE_URL": "http://ssam-console:7320",
         "SSAM_VERSION_WINDOW": "3",
-        "SSAM_ROUTER_BACKENDS": "[{\"name\":\"o11-11.55.92-odc-1.7.28\",\"url\":\"http://ssam-server-v1:7310\",\"odc\":\"1.7.28\",\"o11\":\"11.55.92\",\"default\":true}]"
+        "SSAM_ROUTER_BACKENDS": "[{\"name\":\"o11-11.55.93-odc-1.7.29\",\"url\":\"http://ssam-server-v1:7310\",\"odc\":\"1.7.29\",\"o11\":\"11.55.93\",\"default\":true},{\"name\":\"o11-11.55.92-odc-1.7.28\",\"url\":\"http://ssam-server-v2:7310\",\"odc\":\"1.7.28\",\"o11\":\"11.55.92\",\"default\":false}]"
       },
       "expose": [
         "7300"
@@ -327,7 +429,7 @@
         ],
         "timeout": "7s"
       },
-      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-ac614ad",
+      "image": "docker.io/andrepereiramachado/ssam-server:prod-20261021-cfc3f9c-o115593-odc1729",
       "init": true,
       "labels": {
         "traefik.enable": "true",
@@ -406,6 +508,8 @@
   "volumes": {
     "server-state": {},
     "friction": {},
+    "odc-features-o11-11-55-93-odc-1-7-29": {},
+    "cache-o11-11-55-93-odc-1-7-29": {},
     "odc-features-o11-11-55-92-odc-1-7-28": {},
     "cache-o11-11-55-92-odc-1-7-28": {}
   },
