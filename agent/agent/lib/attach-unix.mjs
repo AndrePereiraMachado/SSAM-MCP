@@ -15,10 +15,26 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AgentError } from './errors.mjs';
 import { applyStartupHook, processInfo2, unixEndpoints, runtimeMajor } from './dotnet-ipc.mjs';
-import { studioProcesses, tempFolders, startTime, dotnetStartTimeText, openFiles, MAC_STUDIOS, runTool, START_READERS, calibrateReaders, calibrationText } from './macos.mjs';
+import { homeOf, officialBundle, bundleOwnsExecutable, studioProcesses, tempFolders, startTime, dotnetStartTimeText, openFiles, MAC_STUDIOS, runTool, START_READERS, calibrateReaders, calibrationText } from './macos.mjs';
 
 const fail = (message, executed = false) => new AgentError('ATTACH_FAILED', message, { executed });
 const ODC_NOTE = 'Run status before any other command; a bridge stays loaded until the Studio closes.';
+
+// Shared by attachment and doctor: preserve the diagnostic text, but bound command-line excerpts in refusals.
+export function diagnosticIdentity(lane, info, executablePath, { fs: f = fs } = {}) {
+  const entrypoint = String(info.entrypoint ?? '').replace(/\.(dll|exe)$/i, '');
+  const command = String(info.commandLine ?? '');
+  let executableReal = null;
+  try { executableReal = f.realpathSync(executablePath); } catch { /* reported below */ }
+  const notes = [];
+  if (entrypoint.toLowerCase() !== MAC_STUDIOS[lane].entry.toLowerCase())
+    notes.push(`entrypoint ${JSON.stringify(info.entrypoint ?? '')} is not ${MAC_STUDIOS[lane].entry}.`);
+  const starts = prefix => command === prefix || (command.startsWith(prefix) && /^\s/.test(command.slice(prefix.length)));
+  if (!executableReal) notes.push('The Studio executable cannot be resolved.');
+  else if (!command || ![executableReal, '"' + executableReal + '"', "'" + executableReal + "'"].some(starts))
+    notes.push(`command line ${command ? 'does not start with' : 'is empty; expected'} the real executable ${executableReal}; observed ${JSON.stringify(command.slice(0, 200))}${command.length > 200 ? ' (first 200 characters)' : ''}.`);
+  return { entrypoint, executableReal, notes };
+}
 
 // deps: {run, fs, env, home, ps, readers, ipc: {processInfo2, applyStartupHook}, now, calibrate, spawnChild, clock, sleep}
 // (calibrate replaces the check of the readers; spawnChild, clock and sleep go to calibrateReaders).
@@ -59,10 +75,11 @@ export function createMacAttach(deps = {}) {
   async function identify(lane, pid, { requireEndpoint }) {
     const p = await processOf(lane, pid);
     const name = MAC_STUDIOS[lane].name;
-    if (!p.official) throw fail(`${name} ${p.pid} runs from ${p.bundle}, which is not in /Applications or ~/Applications; the agent attaches only an installed Studio.`);
+    if (!officialBundle(p.bundle, deps.home ?? homeOf(deps.env), { fs: f })) throw fail(`${name} ${p.pid} runs from ${p.bundle}, which is not in /Applications or ~/Applications; the agent attaches only an installed Studio.`);
+    if (!bundleOwnsExecutable(p.bundle, p.path, { fs: f })) throw fail('The real Studio executable is outside its application bundle. Nothing was sent.');
     // A runtimeconfig.json that cannot be read cannot tell whether startup hooks are on (review B7): stop before sending.
-    if (p.info.runtimeConfig?.unreadable === true)
-      throw fail(`The ${p.info.entry}.runtimeconfig.json of ${name} ${p.pid} (${p.info.managedDir}) cannot be read, so the agent cannot tell whether the Studio allows startup hooks. Nothing was sent; reinstall the Studio from its official installer, then run agent/ssam-agent.sh doctor.`);
+    if (!p.info.entry || p.info.runtimeConfig?.missing === true || p.info.runtimeConfig?.unreadable === true)
+      throw fail(`The ${p.info.entry ?? MAC_STUDIOS[lane].entry}.runtimeconfig.json of ${name} ${p.pid} (${p.info.managedDir}) cannot be read, so the agent cannot tell whether the Studio allows startup hooks. Nothing was sent; reinstall the Studio from its official installer, then run agent/ssam-agent.sh doctor.`);
     const hooks = p.info.runtimeConfig?.runtimeOptions?.configProperties?.['System.StartupHookProvider.IsSupported'];
     if (hooks === false || hooks === 'false')
       throw fail(`${name} turns startup hooks off (System.StartupHookProvider.IsSupported=false in ${p.info.entry}.runtimeconfig.json): no bridge can be attached to it. Nothing was sent.`);
@@ -80,6 +97,11 @@ export function createMacAttach(deps = {}) {
     try { info = await ipc.processInfo2(endpoint.path, { timeoutMs: 10000 }); }
     catch (error) { throw fail(`The .NET diagnostic socket of ${name} ${p.pid} did not answer ProcessInfo2 (${error.message}). Nothing was sent.`); }
     if (Number(info.pid) !== p.pid) throw fail(`The diagnostic socket of ${name} ${p.pid} answers for process ${info.pid}. Nothing was sent.`);
+    const identity = diagnosticIdentity(lane, info, p.path, { fs: f });
+    if (identity.notes.length) throw fail(identity.notes[0] + ' Nothing was sent.');
+    const entrypoint = identity.entrypoint;
+    if (p.info.entry.toLowerCase() !== entrypoint.toLowerCase())
+      throw fail('The runtimeconfig.json of the diagnostic entrypoint cannot be read, so the agent cannot tell whether the Studio allows startup hooks. Nothing was sent.');
     const major = runtimeMajor(info.clrVersion);
     if (major === null || major < 8) throw fail('Runtime connection requires .NET 8 or later. The Studio has not been changed.');
     return { p, endpoint, startSeconds: keySeconds, runtime: info.clrVersion };

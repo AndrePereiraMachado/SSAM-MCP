@@ -64,7 +64,7 @@ function attachWith(s, readers, sent) {
   const p = probes();
   return createMacAttach({ env: { TMPDIR: s.top + '/tmp' }, home: s.top + '/home', ps: async () => s.ps, readers, spawnChild: p.spawnChild, clock: p.now, sleep: p.sleep,
     run: async file => { if (file === '/usr/sbin/lsof') return 'n/x/ServiceStudio.Framework.dll\n'; throw new Error('no ' + file); },
-    ipc: { processInfo2: async () => ({ pid: 601, clrVersion: '8.0.31' }), applyStartupHook: async (...args) => { sent.push(args); return { applied: true }; } } });
+    ipc: { processInfo2: async () => ({ pid: 601, clrVersion: '8.0.31', entrypoint: 'ServiceStudio', commandLine: '"' + fs.realpathSync(s.top + '/home/Applications/Service Studio.app/Contents/MacOS/Service Studio') + '"' }), applyStartupHook: async (...args) => { sent.push(args); return { applied: true }; } } });
 }
 
 test('Service Studio describe: one reader with wrong microseconds is refused before anything is sent; one reader that passed is enough', async () => {

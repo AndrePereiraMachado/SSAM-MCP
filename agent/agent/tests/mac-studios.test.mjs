@@ -38,7 +38,7 @@ function machine() {
     }
     const exe = Buffer.alloc(32); exe.writeUInt32LE(0xfeedfacf, 0); exe.writeUInt32LE(0x0100000c, 4);
     fs.writeFileSync(path.posix.join(root, 'Contents', 'MacOS', executable), exe);
-    const xml = plist({ CFBundleExecutable: executable, CFBundleIdentifier: 'com.example.' + kind, CFBundleShortVersionString: short, CFBundleVersion: build }, environment);
+    const xml = plist({ CFBundleExecutable: executable, CFBundleIdentifier: 'com.outsystems.' + kind, CFBundleShortVersionString: short, CFBundleVersion: build }, environment);
     fs.writeFileSync(path.posix.join(root, 'Contents', 'Info.plist'), binary ? Buffer.concat([Buffer.from('bplist00'), Buffer.from(xml)]) : xml);
     return root;
   };
@@ -120,12 +120,12 @@ test('bundle version: the entry assembly first, else Info.plist (binary plists g
 });
 
 test('official places: /Applications and ~/Applications, two levels; anything else is not', () => {
-  assert.equal(officialBundle('/Applications/ODC Studio.app', '/Users/ana'), true);
-  assert.equal(officialBundle('/Applications/OutSystems/ODC Studio.app', '/Users/ana'), true);
-  assert.equal(officialBundle('/Users/ana/Applications/ODC Studio.app', '/Users/ana'), true);
-  assert.equal(officialBundle('/Users/ana/Downloads/ODC Studio.app', '/Users/ana'), false);
-  assert.equal(officialBundle('/Applications/a/b/ODC Studio.app', '/Users/ana'), false);
-  assert.equal(officialBundle('/Volumes/ODC/ODC Studio.app', '/Users/ana'), false);
+  assert.equal(officialBundle('/Applications/ODC Studio.app', '/Users/ana', { fs: { realpathSync: p => p } }), true);
+  assert.equal(officialBundle('/Applications/OutSystems/ODC Studio.app', '/Users/ana', { fs: { realpathSync: p => p } }), true);
+  assert.equal(officialBundle('/Users/ana/Applications/ODC Studio.app', '/Users/ana', { fs: { realpathSync: p => p } }), true);
+  assert.equal(officialBundle('/Users/ana/Downloads/ODC Studio.app', '/Users/ana', { fs: { realpathSync: p => p } }), false);
+  assert.equal(officialBundle('/Applications/a/b/ODC Studio.app', '/Users/ana', { fs: { realpathSync: p => p } }), false);
+  assert.equal(officialBundle('/Volumes/ODC/ODC Studio.app', '/Users/ana', { fs: { realpathSync: p => p } }), false);
 });
 
 test('ps: pid, start (local time) and the executable with spaces; the bundle of an executable', () => {
@@ -248,7 +248,7 @@ test('O11 family: one marker anywhere under Contents; no Windows DLL pair or ent
       assert.equal(info.version, '11.55.71.54321');
       assert.equal(info.versionSource, 'ProductVersion of ' + marker);
       assert.equal(info.exePath, path.posix.join(root, 'Contents/MacOS/ServiceStudio'));
-      assert.equal(info.runtimeConfig, null);
+      assert.deepEqual(info.runtimeConfig, { missing: true });
     }
     assert.equal((await installedBundles({ roots: [m.apps], home: m.home })).length, 3);
   } finally { m.remove(); }
@@ -271,6 +271,7 @@ test('framework resources and split runtimeconfig are read; missing PE version f
   try {
     const root = m.bundle(m.apps, 'ServiceStudio.app', { kind: 'o11', entry: null, executable: 'ServiceStudio',
       managed: 'Frameworks/Managed.framework/Versions/A/Resources/assemblies', short: '11.55.71', build: '12345' });
+    fs.writeFileSync(path.posix.join(root, 'Contents/Frameworks/Managed.framework/Versions/A/Resources/assemblies/ServiceStudio.dll'), 'not a PE');
     const config = path.posix.join(root, 'Contents/MacOS/ServiceStudio.runtimeconfig.json');
     fs.writeFileSync(config, JSON.stringify({ runtimeOptions: { configProperties: { 'System.StartupHookProvider.IsSupported': false } } }));
     const info = await inspectBundle(root);

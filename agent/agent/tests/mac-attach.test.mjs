@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createMacAttach } from '../lib/attach-unix.mjs';
-import { dotnetStartTimeText } from '../lib/macos.mjs';
+import { dotnetStartTimeText, parsePs } from '../lib/macos.mjs';
 import { connectO11 } from '../lib/o11-connect.mjs';
 import { createKinds } from '../lib/kinds.mjs';
 import { createWorkspace } from '../lib/workspace.mjs';
@@ -57,7 +57,7 @@ function attachFor(m, { ps, info = pid => ({ pid, clrVersion: '8.0.31+abc', arch
   // Every reader here passed the check on processes of the agent (mac-start-check.test.mjs covers that check).
   const attach = createMacAttach({ run, env: { TMPDIR: m.tmp }, home: m.home, ps: typeof ps === 'function' ? ps : async () => ps,
     readers: chosen, calibrate: async () => ({ trusted: Object.keys(chosen), results: Object.keys(chosen).map(name => ({ name, ok: true, offsetsMs: [0.5], error: null })) }),
-    ipc: { processInfo2: async (endpoint) => { calls.info++; return info(Number(/dotnet-diagnostic-(\d+)-/.exec(endpoint)[1])); },
+    ipc: { processInfo2: async (endpoint) => { calls.info++; const pid = Number(/dotnet-diagnostic-(\d+)-/.exec(endpoint)[1]); const exe = parsePs(typeof ps === 'function' ? await ps() : ps).find(p => p.pid === pid).exe; return { entrypoint: exe.endsWith('/ODC Studio') ? 'ODCStudio' : 'ServiceStudio', commandLine: '"' + fs.realpathSync(exe) + '"', ...info(pid) }; },
       applyStartupHook: async (endpoint, file) => { calls.apply.push([endpoint, file]); return apply(endpoint, file); } } });
   return { attach, calls };
 }
