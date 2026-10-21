@@ -618,6 +618,11 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
     if (channel.stream) { clearInterval(channel.pingTimer); channel.stream.end(); channel.stream = null; }
     res.writeHead(200, { 'content-type': 'application/x-ndjson', 'cache-control': 'no-store', 'x-accel-buffering': 'no' });
     res.flushHeaders();
+    // A first byte right behind the headers: a reverse proxy written in Go (Traefik, as Coolify runs it) holds the
+    // response headers until the first byte of the body arrives, and the first ping only comes after heartbeatMs
+    // (15 s), exactly the time the agent waits for the headers of its stream (STREAM_HEADERS_MS): behind such a proxy
+    // every stream was aborted at 15 s (2026-10-21). An empty NDJSON line is skipped by the agent (channel.mjs).
+    res.write('\n');
     channel.stream = res;
     res.on('close', () => { if (channel.stream === res) { channel.stream = null; clearInterval(channel.pingTimer); } });
     channel.pingTimer = setInterval(() => write(channel, { t: 'ping', seq: ++state.seq, at: nowMs() }), limits.heartbeatMs);
