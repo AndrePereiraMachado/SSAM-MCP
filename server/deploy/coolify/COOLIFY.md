@@ -95,13 +95,13 @@ Na pasta deploy/coolify, para a janela inicial:
 
 ```sh
 sh ssamctl.sh status
-sh ssamctl.sh kernel write --version 1.7.29 /tmp/ssam-multiver/kernel-new.json
-sh ssamctl.sh features put --version 1.7.29 /tmp/ssam-multiver/features-new.xml
-sh ssamctl.sh kernel write --version 1.7.28 /tmp/ssam-multiver/kernel-old.json
-sh ssamctl.sh features put --version 1.7.28 /tmp/ssam-multiver/features-old.xml
+sh ssamctl.sh kernel write --version odc=1.7.29 /tmp/ssam-multiver/kernel-new.json
+sh ssamctl.sh features put --version odc=1.7.29 /tmp/ssam-multiver/features-new.xml
+sh ssamctl.sh kernel write --version odc=1.7.28 /tmp/ssam-multiver/kernel-old.json
+sh ssamctl.sh features put --version odc=1.7.28 /tmp/ssam-multiver/features-old.xml
 ```
 
-Os arquivos e hashes exatos estão na proposta. kernel write executa o pair-check na imagem selecionada antes de escrever e exige exit 0. O kernel fica em /data/server/versions/<par>/kernel.json; features e cache são volumes próprios. Se uma versão de faixa aparecer em mais de um par, use SSAM_CONTAINER com o nome exato e omita --version. Não escreva um kernel compartilhado para todos.
+Os arquivos e hashes exatos estão na proposta. kernel write executa o pair-check na imagem selecionada antes de escrever e exige exit 0. O kernel fica em /data/server/versions/<par>/kernel.json; features e cache são volumes próprios. Se uma versão de faixa aparecer em mais de um par, use SSAM_CONTAINER com o nome exato: ele tem precedência sobre --version e SSAM_VERSION. Não escreva um kernel compartilhado para todos.
 
 Depois de todos os pares preparados, Redeploy. Verifique /health agregado, eventos kernel e warm de cada backend (índices, builder e worker ok), os dois agentes e a reconexão MCP. Não basta healthy: o warm precisa completar. Credenciais e tokens continuam no mesmo Postgres.
 
@@ -428,3 +428,5 @@ O painel exibe Studio versions: versão, container, situação, clientes e últi
 Para sinalizar uma saída antes do deploy, o dono pode fornecer state/proposed-versions.json no volume compartilhado, com {"leaving":{"odc":["1.7.28"],"o11":["11.55.92"]}}. O painel nunca deduz leaving só porque a janela está cheia. Remova o arquivo após aprovar ou abandonar a proposta. Esse arquivo não muda o roteamento.
 
 O vigia Windows está em ../vigia/README.md. Detecta versões locais ou instaladores O11 baixados, aceita cópia local opcional das observações, faz bundle, testes filtrados sequenciais, imagem e smoke local. Deixa branch e PROPOSTA.md para o dono. Nesta rodada não publica nem acessa a VPS. O pacote do agente permanece igual; as provas ao vivo O11 11.55.92→11.55.93 e ODC v97→1.7.29 estão pendentes do dono.
+
+O seletor --version aceita odc=1.7.29 e o11=11.55.93; a forma sem faixa também é aceita quando identifica um único container. Uma seleção ambígua lista os candidatos. Sem SSAM_CONTAINER, --version prevalece sobre SSAM_VERSION; sem ambos, usa-se o padrão. Atualizar só uma faixa mantém a outra na versão do par vigente, sem repetir combinações na janela.

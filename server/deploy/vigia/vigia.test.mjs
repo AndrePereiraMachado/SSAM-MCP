@@ -60,3 +60,17 @@ test('old observations do not trigger a release and skipped suites cannot approv
  assert.equal(planWindow(manifest,[],{unserved:{odc:{'1.7.12':{tokens:['old']}}}}).requested.length,0);
  assert.throws(()=>readTrx('<Results><UnitTestResult testName="Skipped" outcome="NotExecuted"/></Results>'),/No executed tests/);
 });
+
+for(const lane of ['odc','o11']) test(`single ${lane} rotation carries the current other lane and never duplicates a pair`,()=>{
+ const other=lane==='odc'?'o11':'odc',value=lane==='odc'?'1.7.30':'11.55.94';
+ const pair={[lane]:value,image,tag:'single',sha256:'b'.repeat(64)};
+ const next=rotateWindow(manifest,pair).manifest;
+ assert.equal(next[lane][0].version,value);assert.equal(next[other][0].version,manifest[other][0].version);
+ const repeated=rotateWindow(next,pair).manifest;assert.deepEqual(repeated,next);
+});
+test('O11-only proposal uses the changed lane selector and documents container precedence',async t=>{
+ const f=fixture(t,['Known']);f.ops.build=async()=>({odc:'1.7.29',o11:'11.55.94',image,tag:'single',sha256:'b'.repeat(64)});f.ops.propose=async()=>{};
+ const result=await runVigia({manifest,observed:[{lane:'o11',version:'11.55.94'}],outDir:f.outDir},f.ops);
+ assert.equal(result.status,'proposed');const proposal=fs.readFileSync(path.join(result.dir,'PROPOSTA.md'),'utf8');
+ assert.match(proposal,/--version o11=11.55.94/);assert.match(proposal,/SSAM_CONTAINER.*precedence/);assert.match(proposal,/entire window/);
+});

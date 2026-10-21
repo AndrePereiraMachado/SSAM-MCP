@@ -42,9 +42,13 @@ containers() {
   $DOCKER ps -a --filter label=ssam.backend=true --format '{{.Names}}'
 }
 container() {
+  if [ -n "${SSAM_CONTAINER:-}" ]; then printf '%s' "$SSAM_CONTAINER"; return; fi
   if [ -n "${SSAM_VERSION:-}" ]; then
-    found=$({ $DOCKER ps -a --filter label=ssam.backend=true --filter "label=ssam.odc=$SSAM_VERSION" --format '{{.Names}}'; $DOCKER ps -a --filter label=ssam.backend=true --filter "label=ssam.o11=$SSAM_VERSION" --format '{{.Names}}'; } | sort -u)
-    [ -n "$found" ] && [ "$(printf '%s\n' "$found" | wc -l)" -eq 1 ] || die "version must identify exactly one container; set SSAM_CONTAINER for an ambiguous pair"
+    case "$SSAM_VERSION" in
+      odc=*|o11=*) lane=${SSAM_VERSION%%=*}; value=${SSAM_VERSION#*=}; found=$($DOCKER ps -a --filter label=ssam.backend=true --filter "label=ssam.$lane=$value" --format '{{.Names}}');;
+      *) found=$({ $DOCKER ps -a --filter label=ssam.backend=true --filter "label=ssam.odc=$SSAM_VERSION" --format '{{.Names}}'; $DOCKER ps -a --filter label=ssam.backend=true --filter "label=ssam.o11=$SSAM_VERSION" --format '{{.Names}}'; } | sort -u);;
+    esac
+    [ -n "$found" ] && [ "$(printf '%s\n' "$found" | wc -l)" -eq 1 ] || die "version must identify exactly one container; candidates: ${found:-none}. SSAM_CONTAINER takes precedence over --version and SSAM_VERSION"
     printf '%s' "$found"; return
   fi
   if [ -z "${SSAM_CONTAINER:-}" ]; then

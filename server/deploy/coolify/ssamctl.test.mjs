@@ -16,3 +16,14 @@ test('restore refuses shared state while any version backend is running',()=>{
  try{const r=spawnSync(bash,[slash(script),'restore',slash(archive)],{encoding:'utf8',env:{...process.env,SSAM_CONTAINER:'backend-old',DOCKER:`sh ${slash(mock)}`,CALLS:slash(log),MSYS_NO_PATHCONV:'1'}});assert.notEqual(r.status,0);assert.match(r.stderr,/stop all version backends/);assert.doesNotMatch(fs.readFileSync(log,'utf8'),/rm -rf/);}
  finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('explicit container wins and qualified selectors list ambiguous candidates',()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'selector-')),mock=path.join(dir,'docker.sh'),log=path.join(dir,'calls');
+ fs.writeFileSync(mock,`#!/bin/sh\nprintf '%s\\n' "$*" >> "$CALLS"\ncase "$*" in\n*'ps -a'*'ssam.o11=11.55.94'*) echo next;;\n*'ps -a'*) printf 'backend-new\\nbackend-old\\n';;\n*'inspect'*'.Config.Env'*) echo SSAM_RUNTIME_DIR=/data/server;;\n*'inspect'*) echo fixture;;\n*'run'*) echo read;;\nesac\n`);
+ const call=(version,container='')=>spawnSync(bash,[slash(script),'kernel','show','--version',version],{encoding:'utf8',env:{...process.env,SSAM_CONTAINER:container,DOCKER:`sh ${slash(mock)}`,CALLS:slash(log),MSYS_NO_PATHCONV:'1'}});
+ try{
+  assert.equal(call('1.7.29','backend-new').status,0);
+  const ambiguous=call('odc=1.7.29');assert.notEqual(ambiguous.status,0);assert.match(ambiguous.stderr,/backend-new/);assert.match(ambiguous.stderr,/backend-old/);
+  assert.equal(call('o11=11.55.94').status,0);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
