@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DEFAULTS, normalize, loadSettings, saveSettings, updateUrlProblem, resolveUpdateUrl } from '../../src/main/core/settings.mjs';
 import { summarize, exitPolicy, restartDelayMs, readState, EXIT_TEXT } from '../../src/main/core/agent-state.mjs';
-import { INITIAL, reduce, updateText, canCheck } from '../../src/main/core/update-model.mjs';
+import { INITIAL, reduce, updateText, canCheck, describeUpdateError } from '../../src/main/core/update-model.mjs';
 import { menuFor, iconFor, tooltipFor } from '../../src/main/core/tray-model.mjs';
 import { defaultRoot, rootFiles } from '../../src/main/core/paths.mjs';
 
@@ -111,6 +111,12 @@ test('the update reducer follows electron-updater and the text says what to do',
   const upToDate = reduce(INITIAL, { type: 'update-not-available', at: '2026-10-20T10:00:00Z' });
   assert.equal(upToDate.status, 'up-to-date');
   assert.match(updateText(upToDate, '0.1.0'), /up to date/);
+  // The words of an error: a 404 on latest.yml is an empty update server, DNS and refused connections are the network.
+  assert.match(describeUpdateError('Cannot find channel "latest.yml" update info: HttpError: 404 "method: GET url: https://dist.ssam.pro/u/ssam-agent/latest.yml?noCache=1\n\nPlease double check that your authentication token is correct.'), /no version published yet/);
+  assert.match(describeUpdateError('HttpError: 404 latest-mac.yml'), /no version published yet/);
+  assert.match(describeUpdateError('net::ERR_NAME_NOT_RESOLVED'), /could not be found/);
+  assert.match(describeUpdateError('connect ECONNREFUSED 1.2.3.4:443'), /did not answer/);
+  assert.equal(describeUpdateError('something else\nsecond line'), 'something else');
 });
 
 test('the tray: icon colour, tooltip and menu for each situation', () => {

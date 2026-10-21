@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import updater from 'electron-updater';
-import { INITIAL, reduce, canCheck } from '../core/update-model.mjs';
+import { INITIAL, reduce, canCheck, describeUpdateError } from '../core/update-model.mjs';
 
 const { autoUpdater } = updater;
 const FIRST_CHECK_MS = 20000;
@@ -49,7 +49,7 @@ export function createUpdates({ url, hours = 6, autoInstall = true, log, onChang
         installTimer = setTimeout(() => { installTimer = null; installNow().catch(error => log.write('update-install-failed', { error: error.message })); }, AUTO_INSTALL_DELAY_MS);
       }
     });
-    autoUpdater.on('error', error => { emit({ type: 'error', message: error?.message ?? String(error) }); log.write('update-error', { message: error?.message ?? String(error) }); });
+    autoUpdater.on('error', error => { emit({ type: 'error', message: describeUpdateError(error?.message ?? String(error)) }); log.write('update-error', { message: String(error?.message ?? error).slice(0, 500) }); });
   }
 
   async function check({ force = false } = {}) {
@@ -57,7 +57,7 @@ export function createUpdates({ url, hours = 6, autoInstall = true, log, onChang
     if (!force && !canCheck(state)) return state;
     if (!canCheck(state)) return state;
     try { await autoUpdater.checkForUpdates(); }
-    catch (error) { emit({ type: 'error', message: error?.message ?? String(error) }); }
+    catch (error) { emit({ type: 'error', message: describeUpdateError(error?.message ?? String(error)) }); }
     return state;
   }
 
