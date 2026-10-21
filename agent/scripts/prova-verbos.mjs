@@ -30,14 +30,14 @@ export function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === '--publish') { options.publish = true; continue; }
-    if (!['--root', '--host', '--module'].includes(flag)) throw new Error('Opcao desconhecida: ' + flag);
+    if (!['--root', '--host', '--module'].includes(flag)) throw new Error('Unknown option: ' + flag);
     const value = argv[++i];
-    if (!value || value.startsWith('--')) throw new Error(flag + ' precisa de um valor');
+    if (!value || value.startsWith('--')) throw new Error(flag + ' requires a value');
     options[flag.slice(2)] = value;
   }
-  if (!options.root) throw new Error('Uso: node scripts/prova-verbos.mjs --root <pasta do agente> [--host <host O11>] [--module <modulo de teste>] [--publish]');
-  if (options.host && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(options.host)) throw new Error('--host e o nome DNS do ambiente, sem esquema nem caminho');
-  if (options.publish && !options.module) throw new Error('--publish exige --module <modulo de teste>');
+  if (!options.root) throw new Error('Usage: node scripts/prova-verbos.mjs --root <agent folder> [--host <O11 host>] [--module <test module>] [--publish]');
+  if (options.host && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(options.host)) throw new Error('--host is the environment DNS name, without a scheme or path');
+  if (options.publish && !options.module) throw new Error('--publish requires --module <test module>');
   return options;
 }
 
@@ -45,7 +45,7 @@ export function parseArgs(argv) {
 export function agentTarget(root) {
   const record = JSON.parse(fs.readFileSync(path.join(root, 'private', 'o11-connection.json'), 'utf8').replace(/^\uFEFF/, ''));
   const key = fs.readFileSync(path.join(root, 'private', 'authority', 'bridge.key'), 'utf8').trim();
-  if (!Number.isInteger(record?.port) || !key) throw new Error('Sem conexao O11 do agente em ' + root + ' (rode ssam_connect {lane:"o11"} antes).');
+  if (!Number.isInteger(record?.port) || !key) throw new Error('No agent O11 connection in ' + root + ' (run ssam_connect {lane:"o11"} first).');
   return { port: record.port, authorization: key, pid: record.pid };
 }
 
