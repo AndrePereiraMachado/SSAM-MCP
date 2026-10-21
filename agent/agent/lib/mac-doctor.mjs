@@ -5,6 +5,7 @@
 // here so the person runs nothing by hand. deps: {run, fs, env, home, readers, ipc, arch, calibrate, spawnChild, clock,
 // sleep} (the last four: the check of the start time readers on processes of the agent, macos.mjs calibrateReaders).
 import fs from 'node:fs';
+import { diagnosticIdentity } from './attach-unix.mjs';
 import path from 'node:path';
 import { findBundles, applicationFolders, inspectBundleCandidate, installedBundles, studioProcesses, tempFolders, START_READERS, machOArchs, runTool, TOOLS, homeOf, officialBundle, MAC_STUDIOS,
   parsePs, psText, openFiles, bundleOfExe, calibrateReaders } from './macos.mjs';
@@ -107,6 +108,9 @@ export async function macDoctor({ pack = {}, deps = {} } = {}) {
       let ok = Boolean(endpoint);
       if (endpoint) {
         try { const info = await ipc.processInfo2(endpoint.path, { timeoutMs: 5000 }); fact.runtime = info.clrVersion; fact.arch = info.arch; fact.os = info.os; fact.ipcPid = info.pid;
+          fact.entrypoint = info.entrypoint ?? null; fact.commandLine = info.commandLine ?? null;
+          const identity = diagnosticIdentity(lane, info, p.path, { fs: f }); fact.executableReal = identity.executableReal;
+          if (identity.notes.length) { ok = false; notes.push(...identity.notes); }
           if (info.pid !== p.pid) { ok = false; notes.push(`the socket answers for pid ${info.pid}`); } else notes.push(`.NET ${info.clrVersion} (${info.arch})`); }
         catch (error) { ok = false; fact.ipcError = firstLine(error); notes.push('ProcessInfo2 failed: ' + fact.ipcError); }
         if (lane === 'odc' && pack.odcBridge) {

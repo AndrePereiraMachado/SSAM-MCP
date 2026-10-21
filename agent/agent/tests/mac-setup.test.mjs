@@ -131,7 +131,7 @@ function macDeps(h, { readers, socket = true, sw = '15.5' } = {}) {
     mac: { run, env: { HOME: h.home, TMPDIR: h.tmp }, home: h.home, ...probes(),
       readers: readers ?? { perl: async pid => ({ sec: START, usec: { 9001: 120400, 9002: 420300 }[pid] ?? 123456 }), osascript: async () => { throw new Error('ObjC bridge refused'); } },
       ps: async () => [psLine(501, START, h.odcExe), psLine(601, START, h.o11Exe), psLine(777, START, '/Applications/OutSystems Thing.app/Contents/MacOS/Thing')].join('\n'),
-      ipc: { processInfo2: async endpoint => ({ pid: Number(/diagnostic-(\d+)-/.exec(endpoint)[1]), clrVersion: '8.0.31+abc', arch: 'arm64', os: 'MacOS' }) } } };
+      ipc: { processInfo2: async endpoint => ({ pid: Number(/diagnostic-(\d+)-/.exec(endpoint)[1]), clrVersion: '8.0.31+abc', arch: 'arm64', os: 'MacOS', entrypoint: endpoint.includes('diagnostic-501-') ? 'ODCStudio' : 'ServiceStudio', commandLine: '"' + fs.realpathSync(endpoint.includes('diagnostic-501-') ? h.odcExe : h.o11Exe) + '"' }) } } };
 }
 
 test('doctor on macOS: no .NET needed, each Studio bundle and running Studio with its socket, runtime, bridge and start readers; JSON for the owner', async () => {
