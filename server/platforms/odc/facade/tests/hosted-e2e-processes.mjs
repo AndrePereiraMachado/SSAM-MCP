@@ -65,13 +65,16 @@ class Stop extends Error {}
 function must(name, ok, detail) { if (!check(name, ok, detail)) throw new Stop(name); }
 
 // ---------------------------------------------------------------- folders and environments
-const T = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-f2e2e-'));
+const privateTemp = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-f2e2e-'));
+const runRoot = fs.mkdtempSync('C:/t/multiver-impl/etapa2/e2e-');
+const T = path.join(runRoot, 'segredo');
+fs.mkdirSync(T);
 const serverDir = path.join(T, 'server');
-const secrets = path.join(T, 'secrets');
+const secrets = path.join(T, 'credentials');
 const ownerHome = path.join(T, 'owner-home');
-for (const dir of [serverDir, secrets, path.join(ownerHome, 'AppData', 'Local'), path.join(ownerHome, 'AppData', 'Roaming'), path.join(T, 'owner-authority'), path.join(T, 'owner-tmp')])
+for (const dir of [serverDir, secrets, path.join(ownerHome, 'AppData', 'Local'), path.join(ownerHome, 'AppData', 'Roaming'), path.join(T, 'owner-authority'), path.join(privateTemp, 'owner-tmp')])
   fs.mkdirSync(dir, { recursive: true });
-const clean = env => Object.fromEntries(Object.entries(env).filter(([k]) => !/^(ANVIL_|SSAM_)/i.test(k)));
+const clean = env => ({...Object.fromEntries(Object.entries(env).filter(([k]) => !/^(ANVIL_|SSAM_)/i.test(k))), PSModulePath: path.join(env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/Modules') + path.delimiter + (env.PSModulePath || '')});
 // The owner's machine has its Anvil authority initialized (bridge.key): the server's own resident readers (ssam_map, the
 // module digest) trust it. Hosted child processes never get it (hosted-roots.test.mjs): each customer has its relay key.
 fs.writeFileSync(path.join(T, 'owner-authority', 'bridge.key'), randomBytes(32).toString('base64url'));
@@ -79,10 +82,11 @@ fs.writeFileSync(path.join(T, 'owner-authority', 'bridge.key'), randomBytes(32).
 // model runtime only, never a Studio process.
 const serverStudio = process.env.ANVIL_STUDIO_DIR || path.join(process.env.ProgramFiles || 'C:\\Program Files', 'OutSystems', 'Service Studio 11', 'Service Studio');
 const ownerEnv = { ...clean(process.env), SSAM_SERVER_DIR: serverDir, SSAM_NODE: process.execPath, ANVIL_STUDIO_DIR: serverStudio,
-  SSAM_MODULE_INDEX_ROOT: path.join(T, 'module-index'), SSAM_READER_CACHE_ROOT: path.join(T, 'readers'),
+  ...(process.env.ANVIL_ODC_STUDIO_DIR ? {ANVIL_ODC_STUDIO_DIR:process.env.ANVIL_ODC_STUDIO_DIR}:{}),
+  SSAM_MODULE_INDEX_ROOT: path.join(privateTemp, 'module-index'), SSAM_READER_CACHE_ROOT: path.join(T, 'readers'),
   ANVIL_WORKER: '0', ANVIL_ODC_NO_WORKER: '1', SSAM_ODC_OFFLINE: '1', ANVIL_AUTHORITY_DIR: path.join(T, 'owner-authority'),
   USERPROFILE: ownerHome, HOME: ownerHome, APPDATA: path.join(ownerHome, 'AppData', 'Roaming'), LOCALAPPDATA: path.join(ownerHome, 'AppData', 'Local'),
-  TEMP: path.join(T, 'owner-tmp'), TMP: path.join(T, 'owner-tmp'),
+  TEMP: path.join(privateTemp, 'owner-tmp'), TMP: path.join(privateTemp, 'owner-tmp'),
   ...(process.env.ANVIL_ODC_FEATURES_DIR ? { ANVIL_ODC_FEATURES_DIR: process.env.ANVIL_ODC_FEATURES_DIR } : {}) };
 // The server's kernel is pinned (the fake Studios report these versions); detection would read the installed Studios.
 // The 24th release keeps serving the packs of v48 and v45 (PLANO-24-PRODUCAO 6): customer C of step 9i is on v48.
@@ -91,10 +95,10 @@ write(path.join(serverDir, 'kernel.json'), JSON.stringify({ o11: '11.55.92', odc
 function customerMachine(name) {
   const base = path.join(T, name);
   const home = path.join(base, 'home');
-  for (const dir of [path.join(home, 'AppData', 'Local'), path.join(home, 'AppData', 'Roaming'), path.join(base, 'tmp')]) fs.mkdirSync(dir, { recursive: true });
+  for (const dir of [path.join(home, 'AppData', 'Local'), path.join(home, 'AppData', 'Roaming'), path.join(privateTemp, name, 'tmp')]) fs.mkdirSync(dir, { recursive: true });
   return { name, base, root: path.join(base, 'SSAM-Agent'), studiosFile: path.join(base, 'studios.json'),
     env: { ...clean(process.env), USERPROFILE: home, HOME: home, APPDATA: path.join(home, 'AppData', 'Roaming'), LOCALAPPDATA: path.join(home, 'AppData', 'Local'),
-      TEMP: path.join(base, 'tmp'), TMP: path.join(base, 'tmp') } };
+      TEMP: path.join(privateTemp, name, 'tmp'), TMP: path.join(privateTemp, name, 'tmp') } };
 }
 
 // ---------------------------------------------------------------- processes
@@ -163,7 +167,7 @@ const guarded = {
 
 // ---------------------------------------------------------------- MCP over HTTP
 const { Client, StreamableHTTPClientTransport } = await import('@modelcontextprotocol/client');
-let port, url;
+let port, backendPort, url, router, routerStore;
 const clients = new Set();
 async function connect(token) {
   const client = new Client({ name: 'e2e-processes', version: '1' });
@@ -275,7 +279,7 @@ try {
   for (const name of ['Anvil.Bridge.dll', 'Anvil.Bridge.deps.json']) write(path.join(prebuilt, 'o11', 'bridge', name), name);
   write(path.join(prebuilt, 'o11', 'built-for.txt'), '11.55.92\r\n');
   const zip = path.join(T, 'ssam-agent.zip');
-  const pack = await powershell(['-File', path.join(repo, 'scripts', 'agent-pack.ps1'), '-Out', zip, '-Lanes', 'odc,o11', '-NoNode', '-NoBuild', '-Prebuilt', prebuilt], ownerEnv);
+  const pack = await powershell(['-File', path.join(repo, '..', 'agent', 'scripts', 'agent-pack.ps1'), '-Out', zip, '-Lanes', 'odc,o11', '-NoNode', '-NoBuild', '-Prebuilt', prebuilt], ownerEnv);
   // The prebuilt files are placeholders: the scan ran, but over no real binary (the real pack is the acceptance of
   // docs/O11-BRIDGE-FINA.md 8.8; the thin DLL's own bytes are checked by Anvil.Bridge.Thin.Tests BoundaryTests).
   must('agent pack built by scripts\\agent-pack.ps1 -NoBuild -Prebuilt -NoNode (placeholder binaries)', pack.code === 0 && fs.existsSync(zip), pack.out);
@@ -288,7 +292,7 @@ try {
     JSON.stringify(bridgeFolder) === JSON.stringify(['Anvil.Bridge.deps.json', 'Anvil.Bridge.dll']) && !fs.existsSync(path.join(A.root, 'agent', 'node')), bridgeFolder);
 
   // 2. Hosted server through scripts\servidor.ps1, with captured output (it must return).
-  port = await freePort();
+  port = await freePort();backendPort=port;
   url = `http://127.0.0.1:${port}/mcp`;
   const started = await powershell(['-File', path.join(repo, 'scripts', 'servidor.ps1'), 'start', '-Port', String(port)], ownerEnv, 60000);
   must('servidor.ps1 start returns with captured output and the server is up', started.code === 0 && /Servidor no ar/.test(started.out), started.out + ' (' + started.ms + ' ms)');
@@ -297,6 +301,12 @@ try {
   const listening = fs.readFileSync(path.join(serverDir, 'server.log'), 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return {}; } }).find(e => e.event === 'listening');
   check('the server runs the hosted mode (not --local-studios)', listening?.mode === 'hosted', listening);
 
+  // The same end-to-end checks now traverse the production router.
+  const {createRouter}=await import('../hosted/router.mjs');
+  const {openTokenStore}=await import('../server-tokens.mjs');
+  routerStore=await openTokenStore({dir:serverDir});
+  router=await createRouter({store:routerStore,dir:path.join(T,'router'),port:0,backends:[{name:'e2e',preserveHost:false,url:'http://127.0.0.1:'+port,odc:'1.7.28',o11:'11.55.92',default:true}]});
+  port=router.server.address().port;url=router.url+'/mcp';
   // 3. Tokens (to files only).
   const issued = {};
   for (const [key, customer] of [['a', 'Cliente A'], ['b', 'Cliente B'], ['c', 'Cliente C']]) {
@@ -408,7 +418,7 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
   // 9b. The O11 relay of customer A, spoken to as the server's O11 kernel (BridgeClient) does: one line with A's relay
   //     key. Only A has a hosted context now, so the server process listens on exactly one port besides /mcp.
   const relayPorts = await listeningPorts(health.pid);
-  const relayPort = relayPorts.filter(p => p !== port);
+  const relayPort = relayPorts.filter(p => p !== backendPort);
   const relayKeyA = fs.readFileSync(path.join(issued.a.workspace, 'state', 'relay-authority', 'bridge.key'), 'ascii').trim();
   const o11Count = () => studioLog(A).filter(e => e.studio === 'o11').length;
   if (check('the server opened one O11 relay (loopback) for customer A', relayPort.length === 1, relayPorts)) {
@@ -1078,7 +1088,7 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
     if (!text.includes(from)) return edits.push(rel + ': no ' + from); fs.writeFileSync(file, text.replace(from, to)); };
   downgrade('agent/lib/kinds.mjs', "'reference-snapshot', 'reference-producers', 'data',", "'reference-snapshot', 'data',");
   downgrade('agent/lib/kinds.mjs', "'sc_web', 'sc_http', 'studio_login',", "'sc_web', 'studio_login',");
-  downgrade('agent/lib/agent.mjs', "export const AGENT_VERSION = '0.3.1';", "export const AGENT_VERSION = '0.2.0';");
+  downgrade('agent/lib/agent.mjs', "export const AGENT_VERSION = '0.3.3';", "export const AGENT_VERSION = '0.2.0';");
   const packC = JSON.parse(fs.readFileSync(path.join(C.root, 'pack.json'), 'utf8').replace(/^﻿/, ''));
   const bridgeDir = path.join(C.root, 'odc', 'studio', 'bridge', 'bin', 'Release', 'net8.0');
   for (const suffix of ['.dll', '.deps.json']) {
@@ -1201,6 +1211,7 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
 
   // 13. Nothing outside customers/<tokenId> (and the server's own files); no secret in the logs.
   await delay(300);
+  fs.rmSync(secrets,{recursive:true,force:true});
   for (const [key, take] of Object.entries(guarded)) {
     const now = take();
     const changed = [...new Set([...Object.keys(before[key] ?? {}), ...Object.keys(now ?? {})])]
@@ -1211,7 +1222,7 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
   // machine-pins.json and access-alerts.jsonl: the access trail of each token (agent-hub.mjs), as hosted-e2e.test.mjs allows.
   // The quality record (docs/QUALIDADE.md) lives beside the audit.
   // a7 (no-internals list item 7): exposure/ holds the bytes each token is served per day (served-<day>.json, sizes only).
-  const top = fs.readdirSync(serverDir).filter(name => !['customers', 'tokens.json', 'kernel.json', 'server.log', 'server.pid', 'server.json', 'machine-pins.json', 'access-alerts.jsonl', 'exposure'].includes(name) && !/^(audit|quality)-\d{8}\.jsonl$/.test(name));
+  const top = fs.readdirSync(serverDir).filter(name => !['customers', 'tokens.json', 'kernel.json', 'server.log', 'server.pid', 'server.json', 'machine-pins.json', 'access-alerts.jsonl', 'exposure', 'state'].includes(name) && !/^(audit|quality)-\d{8}\.jsonl$/.test(name));
   check('the server folder holds only tokens, kernel.json, servidor.ps1 files, audit, quality, the access trail, the served bytes and customers', top.length === 0, top);
   const served = (() => { try { return fs.readdirSync(path.join(serverDir, 'exposure')); } catch { return []; } })();
   const servedText = served.map(n => fs.readFileSync(path.join(serverDir, 'exposure', n), 'utf8')).join('\n');
@@ -1224,6 +1235,7 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
   if (!(error instanceof Stop)) { failure = error; check('unexpected error', false, error.stack ?? error.message); }
 } finally {
   for (const client of clients) await client.close().catch(() => {});
+  await router?.close();await routerStore?.close?.();
   for (const machine of [A, B, C]) if (machine.agent && machine.agent.code === null) {
     try { fs.writeFileSync(path.join(machine.root, 'private', 'agent.stop'), ''); } catch { /* folder gone */ }
     await Promise.race([machine.agent.exit, delay(5000)]);
@@ -1239,7 +1251,7 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
   for (const folder of ['readers', 'readers-prefetch']) findStates(path.join(T, folder));
   for (const file of states) { try { const pid = JSON.parse(fs.readFileSync(file, 'utf8')).pid; if (Number.isInteger(pid)) process.kill(pid); } catch { /* already gone */ } }
   await delay(300);
-  try { fs.rmSync(T, { recursive: true, force: true }); } catch { /* best effort */ }
+  try { fs.rmSync(runRoot, { recursive: true, force: true }); fs.rmSync(privateTemp, { recursive: true, force: true }); } catch { /* best effort */ }
 }
 const report = { ok: checks.length > 0 && checks.every(c => c.ok) && !failure, checks };
 if (reportFile) fs.writeFileSync(reportFile, JSON.stringify(report, null, 2));

@@ -1,3 +1,4 @@
+import {runtimeDir,runtimeDirectories} from '../platforms/odc/facade/hosted/storage.mjs';
 // Local metadata only. Operation records never persist arguments, stdout, error text, model content or credentials.
 // A manual report (ssam_friction {view:"report"}, A31 of the 2026-10-06 package) is the one exception: it keeps only the
 // short fields the session writes on purpose (kind, tool, intent, attempted, workaround, cost, summary), each bounded;
@@ -151,7 +152,9 @@ export function createStore({ root, directory, env = process.env, warning = code
   // index/.complete says the index holds every operation. A store that had operations before the index (or an index write
   // that failed, which removes the mark) is rebuilt from the operation files once, by the next reader. Lines are only
   // appended, so a rebuild racing a writer makes duplicates, never losses; readers keep the first line of each kind.
-  const indexDir = path.join(dir, 'index'), indexMark = path.join(indexDir, '.complete');
+  const indexRoot=path.join(dir,'index');
+  const indexDir = runtimeDir(indexRoot,env.SSAM_BACKEND_NAME), indexMark = path.join(indexDir, '.complete');
+  const indexFiles = () => runtimeDirectories(indexRoot).flatMap(folder=>{try{return fs.readdirSync(folder).filter(n=>n.endsWith('.jsonl')).map(n=>path.join(folder,n));}catch{return [];}});
   const indexDay = iso => (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10).replace(/-/g, '') : 'undated');
   const INDEX_FIELDS = ['startedAt', 'operation', 'lane', 'profile', 'taskRef', 'sessionId', 'interface'];
   const END_FIELDS = ['endedAt', 'outcome', 'code', 'step', 'signal'];
@@ -213,10 +216,10 @@ export function createStore({ root, directory, env = process.env, warning = code
     if (!complete && rebuild) rebuildIndex();
     const starts = new Map(), ends = new Map(); let damaged = 0;
     let names = [];
-    try { names = fs.readdirSync(indexDir).filter(n => n.endsWith('.jsonl')); } catch { names = []; }
+    try { names = indexFiles(); } catch { names = []; }
     for (const name of names) {
       let text = '';
-      try { text = fs.readFileSync(path.join(indexDir, name), 'utf8'); } catch { damaged++; continue; }
+      try { text = fs.readFileSync(name, 'utf8'); } catch { damaged++; continue; }
       damaged += indexLines(text, starts, ends);
     }
     return { operations: ordered(starts, ends), health: { damagedRecords: damaged, partialRecords: 0, localWriteLosses: losses, source: 'index',
@@ -227,13 +230,13 @@ export function createStore({ root, directory, env = process.env, warning = code
   function sessionTail(session, count) {
     const starts = new Map(), ends = new Map();
     let names = [];
-    try { names = fs.readdirSync(indexDir).filter(n => /^\d{8}\.jsonl$/.test(n)).sort().reverse(); } catch { names = []; }
+    try { names = indexFiles().filter(n => /^\d{8}\.jsonl$/.test(path.basename(n))).sort((a,b)=>path.basename(b).localeCompare(path.basename(a))); } catch { names = []; }
     let budget = TAIL_BYTES;
     for (const name of names) {
       if (budget <= 0 || starts.size >= count) break;
       let fd;
       try {
-        fd = fs.openSync(path.join(indexDir, name), 'r');
+        fd = fs.openSync(name, 'r');
         const size = fs.fstatSync(fd).size, length = Math.min(size, budget);
         const buffer = Buffer.alloc(length);
         fs.readSync(fd, buffer, 0, length, size - length);

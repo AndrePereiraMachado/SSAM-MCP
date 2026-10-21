@@ -1,0 +1,39 @@
+import '../../platforms/odc/facade/tests/fixtures/isolated-profile.mjs';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {generateCompose} from './gen-compose.mjs';
+const image='docker.io/andrepereiramachado/ssam-server';
+const manifest={window:3,odc:[{version:'1.7.29',tag:'candidate-new',image},{version:'1.7.28',tag:'candidate-old',image}],o11:[{version:'11.55.93',tag:'candidate-new',image},{version:'11.55.92',tag:'candidate-old',image}]};
+test('compose has a fixed pair window, only router Traefik labels, shared data and isolated version volumes',()=>{
+ const c=generateCompose(manifest);
+ assert.ok(c.services['ssam-server-v1']);assert.ok(c.services['ssam-server-v2']);assert.equal(c.services['ssam-server-v3'],undefined);
+ for(const [name,service] of Object.entries(c.services))if(name!=='ssam-router')assert.ok(!Object.keys(service.labels??{}).some(k=>k.startsWith('traefik.')));
+ const a=c.services['ssam-server-v1'],b=c.services['ssam-server-v2'];
+ const source=(s,target)=>s.volumes.find(v=>v.target===target).source;
+ assert.equal(source(a,'/data/server'),source(b,'/data/server'));
+ assert.equal(source(a,'/data/friction'),source(b,'/data/friction'));
+ assert.notEqual(source(a,'/data/cache'),source(b,'/data/cache'));
+ assert.notEqual(source(a,'/data/odc-features'),source(b,'/data/odc-features'));
+ assert.deepEqual(JSON.parse(a.environment.SSAM_SERVED_VERSIONS),{odc:['1.7.29','1.7.28'],o11:['11.55.93','11.55.92']});
+ assert.equal(c.services['ssam-router'].labels['traefik.http.services.ssam.loadbalancer.server.port'],'7300');
+ assert.equal(c.services['ssam-router'].environment.SSAM_VERSION_WINDOW,'3');
+ assert.equal(c.services['ssam-router'].healthcheck.timeout,'7s');
+ assert.match(c.services['ssam-router'].healthcheck.test.at(-1),/timeout\(6000\)/);
+ assert.equal(generateCompose(manifest,{window:2}).services['ssam-router'].environment.SSAM_VERSION_WINDOW,'2');
+ assert.throws(()=>generateCompose({...manifest,window:1}));
+ assert.throws(()=>generateCompose({...manifest,o11:[]}));
+ assert.throws(()=>generateCompose({...manifest,odc:[{...manifest.odc[0],tag:'latest'}]}));
+});
+test('Coolify uses immutable tags and retains expected digests for verification',()=>{
+ const digest='a'.repeat(64),pinned=structuredClone(manifest);
+ for(const lane of ['odc','o11'])for(const entry of pinned[lane])entry.sha256=digest;
+ const c=generateCompose(pinned);
+ for(const service of Object.values(c.services))assert.ok(!service.image.includes('@'),'Coolify 4.4.6 rewrites digest references');
+ assert.equal(c.services['ssam-server-v1'].labels['ssam.image.digest'],'sha256:'+digest);
+});
+
+test('Traefik response header timeout matches the 65 minute router timeout',async()=>{
+ const {readFileSync}=await import('node:fs');const {TIMEOUT_MS}=await import('../../platforms/odc/facade/hosted/router.mjs');
+ const text=readFileSync(new URL('./traefik-ssam.yaml',import.meta.url),'utf8');
+ assert.equal(Number(/responseHeaderTimeout:\s*(\d+)s/.exec(text)?.[1])*1000,TIMEOUT_MS);
+});

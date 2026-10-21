@@ -22,6 +22,11 @@ export function evaluateRules(ctx) {
   const doc = ctx.hostStatus === 'ok' ? ctx.doc : null;
   const sec = name => (doc && doc[name] && doc[name].ok === true ? doc[name] : null);
 
+  for(const row of ctx.studioVersions?.rows??[])if(row.status==='unserved'&&row.customers>0){
+    const studio=row.lane==='odc'?'ODC Studio':'Service Studio';
+    add('studio-version-unserved',row.lane+'-'+row.version,'warning','servidor','visao',studio+' '+row.version+' not served: '+row.customers+' customers',
+      'Review the local watcher proposal before changing the versions window.',{lane:row.lane,version:row.version});
+  }
   // ---- licenses
   for (const t of ctx.licenses ?? []) {
     const exp = t.expiresAt ? Date.parse(t.expiresAt) : null;

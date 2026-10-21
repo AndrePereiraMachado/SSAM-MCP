@@ -1,3 +1,4 @@
+import {ensureRuntime} from './hosted/storage.mjs';
 // The served mode of the SSAM MCP (docs/SERVIDOR-LOCAL.md, docs/FASE2-AGENTE.md): the SAME server that `ssam mcp`
 // puts on stdio, now behind Streamable HTTP at /mcp. No tool code is forked: every client session gets its own server
 // from the same factory (createSsamServer), so tools, schemas and instructions are those of stdio.
@@ -101,7 +102,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
   const windows = new Map();  // tokenId -> {start, count}
 
   const audit = (entry, time = now()) => {
-    const file = path.join(dir, 'audit-' + time.toISOString().slice(0, 10).replaceAll('-', '') + '.jsonl');
+    const file = path.join(ensureRuntime(dir), 'audit-' + time.toISOString().slice(0, 10).replaceAll('-', '') + '.jsonl');
     try { fs.appendFileSync(file, JSON.stringify({ time: time.toISOString(), ...entry }) + '\n'); }
     catch (error) { log({ event: 'audit-failed', error: error.code ?? 'EIO' }); }
   };

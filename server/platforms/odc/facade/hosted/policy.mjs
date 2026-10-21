@@ -151,6 +151,7 @@ export function incompatible(lane, compat, info) {
   // refusal with the direction (cause), both builds, what still works and "nothing ran", in English for the user (userMessage)
   // and for the model (error; B3 of round 3, owner rule of 2026-10-15: every SSAM text in English, no bilingual line). It
   // replaces the old continuation "install the Studio at the server's version", impossible for the ODC Studio.
+  if (compat.code === 'STUDIO_VERSION_MISMATCH' && studioOf(lane, compat, info)?.ok) return null;
   const notServed = compat.code === 'STUDIO_VERSION_MISMATCH' ? studioRefusal(studioOf(lane, compat, info), { stillWorks: serverOnlyTools(lane) }) : null;
   if (notServed) return { ...notServed, serverKernel, agentStudio };
   if (compat.cause === 'KERNEL_VERSION_MISSING') return { ok: false, code: compat.code, cause: compat.cause, lane, serverKernel, agentStudio,
@@ -744,7 +745,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
   const refusesGenerators = generatorOps !== 'allow' && (GENERATOR_TOOLS.includes(name) || name === CODE_TOOL);
   const refusesDestructive = destructive !== 'allow';
   const refusal = raw => gateRefusal(raw, name);
-  return async (...params) => {
+  const execute = async (...params) => {
     const hasArgs = config?.inputSchema != null && params.length > 1;
     // R1: the arguments the tool runs (a field the input layer renames is confined under its own name).
     let args = hasArgs ? effectiveArgs(argsOf, params[0] ?? {}) : {};
@@ -766,7 +767,10 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
       }
       if (!connected || info?.credential === false) return refusal(agentNotConnected(info, { tool: name, args }));
       const compat = LANED.has(lane) ? info?.compatible?.[lane] : null;
-      if (compat && compat.ok === false) return refusal(incompatible(lane, compat, info));
+      if (compat && compat.ok === false) {
+        const problem = incompatible(lane, compat, info);
+        if (problem) return refusal(problem);
+      }
       if (lane === 'o11' && name !== 'ssam_connect' && !context.executor?.o11Connection?.()) return refusal(o11NotConnected());
       // A1 + A2 (review round 2): the process each touched lane runs (O11 record) and the lanes a tool without a lane touches.
       const studio = studioGate({ name, lane, args, info, context, lanes, link });
@@ -821,5 +825,16 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
     if (verdict.refusal) return refusal(verdict.refusal);
     return withStudioFields(present.result(name === 'ssam_discover' ? scrubDiscover(result, thirdPartyJobs()) : scrubEvidence(result, thirdPartyJobs())),
       verdict.fields);
+  };
+  return async (...params) => {
+    const answer = await execute(...params);
+    let info;
+    try { info = link?.info?.(); } catch { return answer; }
+    const newer = ['odc', 'o11'].map(lane => studioNotice(lane, info)).filter(w => w?.code === 'studioNewerThanServed');
+    if (!newer.length) return answer;
+    const existing = answer?.structuredContent;
+    const warnings = new Map([...(existing?.studioWarnings ?? (existing?.studioWarning ? [existing.studioWarning] : [])), ...newer].map(w => [w.lane, w]));
+    const values = [...warnings.values()];
+    return withStudioFields(answer, { studioWarning: values[0], ...(values.length > 1 ? { studioWarnings: values } : {}) });
   };
 }

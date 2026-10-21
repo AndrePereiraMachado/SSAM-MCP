@@ -20,7 +20,7 @@ test('identity: the four-part build against the served build; another three-part
   assert.deepEqual(pick(at('odc', '1.7.28.5000')), { lane: 'odc', installed: '1.7.28.5000', served: '1.7.28.5000', relation: 'same', direction: null, policy: 'warn', ok: true, warn: false });
   assert.deepEqual(pick(at('odc', '1.7.28.5023')), { lane: 'odc', installed: '1.7.28.5023', served: '1.7.28.5000', relation: 'build-differs', direction: 'newer', policy: 'warn', ok: true, warn: true });
   assert.deepEqual(pick(at('odc', '1.7.28.4990')), { lane: 'odc', installed: '1.7.28.4990', served: '1.7.28.5000', relation: 'build-differs', direction: 'older', policy: 'warn', ok: true, warn: true });
-  assert.deepEqual(pick(at('odc', '1.7.29.100')), { lane: 'odc', installed: '1.7.29.100', served: '1.7.28.5000', relation: 'newer', direction: 'newer', policy: 'warn', ok: false, warn: false });
+  assert.deepEqual(pick(at('odc', '1.7.29.100')), { lane: 'odc', installed: '1.7.29.100', served: '1.7.28.5000', relation: 'newer', direction: 'newer', policy: 'warn', ok: true, warn: true });
   assert.deepEqual(pick(at('o11', '11.55.91.65258')), { lane: 'o11', installed: '11.55.91.65258', served: '11.55.92.6000', relation: 'older', direction: 'older', policy: 'warn', ok: false, warn: false });
   assert.equal(at('odc', '1.7.100.1').relation, 'newer', 'numbers, not text: 1.7.100 is newer than 1.7.28');
   assert.equal(at('odc', '1.7.3.99999').relation, 'older');
@@ -65,31 +65,20 @@ const PT_BR = /[ãõçáéíóúâêôà]|\b(não|deste|computador|Atualize|Avis
 test('one refusal per direction: both builds, what to do, what still works and "nothing ran", in English for the user and for the model', () => {
   const older = studioRefusal(at('odc', '1.7.27.10846'), { stillWorks: STILL });
   assert.deepEqual({ ok: older.ok, code: older.code, cause: older.cause, lane: older.lane, installed: older.installed, served: older.served, relation: older.relation, outcome: older.outcome, stillWorks: older.stillWorks },
-    { ok: false, code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_UPDATE_REQUIRED', lane: 'odc', installed: '1.7.27.10846', served: ['1.7.28.5000'], relation: 'older', outcome: 'not-sent', stillWorks: STILL });
-  assert.match(older.userMessage, /^The ODC Studio on this computer \(1\.7\.27\.10846\) is older than the ODC Studio the SSAM server serves \(1\.7\.28\.5000\)\./);
-  assert.match(older.userMessage, /Update ODC Studio to 1\.7\.28\.5000 and open it again; then repeat the request\./);
+    { ok: false, code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_UPDATE_REQUIRED', lane: 'odc', installed: '1.7.27.10846', served: ['1.7.28'], relation: 'older', outcome: 'not-sent', stillWorks: STILL });
+  assert.match(older.userMessage, /Your ODC Studio 1\.7\.27\.10846 is older than the versions this server serves \(1\.7\.28\)/);
+  assert.match(older.userMessage, /Update ODC Studio and reconnect/);
   assert.match(older.userMessage, /Nothing ran on your Studio\./);
   assert.match(older.userMessage, /the server-only tools \(ssam_discover, ssam_reference, ssam_map, ssam_job, odc_search_operations\) keep working, with a warning\./);
-  assert.match(older.error, /^This SSAM server serves ODC Studio 1\.7\.28\.5000; the user's machine has ODC Studio 1\.7\.27\.10846, which is older: update ODC Studio to 1\.7\.28\.5000/);
+  assert.match(older.error, /older than the versions this server serves/);
   assert.match(older.error, /Nothing ran on the user's Studio\./);
   assert.match(older.error, /Server-only tools \(ssam_discover, ssam_reference, ssam_map, ssam_job, odc_search_operations\) still work/);
   assert.equal(older.continuation.tool, 'ssam_doctor');
   assert.match(older.continuation.why, /userMessage/);
   assert.doesNotMatch(older.continuation.why, /pt-BR/, 'B3: the why no longer names pt-BR');
 
-  const newer = studioRefusal(at('odc', '1.7.29.10900'), { stillWorks: STILL });
-  assert.equal(newer.cause, 'STUDIO_VERSION_NOT_SERVED_YET');
-  assert.match(newer.userMessage, /^The ODC Studio on this computer \(1\.7\.29\.10900\) is newer than the ODC Studio the SSAM server serves today \(1\.7\.28\.5000\)\./);
-  assert.match(newer.userMessage, /The server does not have this version yet; the SSAM owner was already notified/);
-  assert.match(newer.userMessage, /Do not roll ODC Studio back to the previous version and do not reinstall the agent/);
-  assert.match(newer.userMessage, /Nothing ran on your Studio\./);
-  assert.match(newer.error, /the server does not serve this version yet; the owner was notified/);
-  assert.match(newer.error, /Do not roll the Studio back and do not reinstall the agent/);
-  assert.match(newer.continuation.why, /never ask the user to roll the Studio back or to reinstall the agent/);
-  for (const r of [older, newer]) {
-    // the impossible continuation of the old gate ("install the Studio at the server's version") is gone
-    assert.doesNotMatch(JSON.stringify(r), /install ODC Studio|instal(e|ar) o ODC Studio|to install/i);
-  }
+  assert.equal(studioRefusal(at('odc', '1.7.29.10900')), null, 'newer Studio is served with a warning');
+  assert.equal(studioWarningOf(at('odc', '1.7.29.10900')).code, 'studioNewerThanServed');
 
   // the same three numbers, another build, under "refuse": the direction decides the text
   const refuse = { ...K, studioBuildPolicy: 'refuse' };
@@ -110,10 +99,10 @@ test('one refusal per direction: both builds, what to do, what still works and "
   assert.match(unread.userMessage, /could not read the version of the Service Studio on this computer/);
   // the O11 lane names the Service Studio and its own server-only tools
   const o11 = studioRefusal(at('o11', '11.55.91.65258'));
-  assert.match(o11.userMessage, /Update Service Studio to 11\.55\.92\.6000/);
+  assert.match(o11.userMessage, /Update Service Studio and reconnect/);
   assert.match(o11.userMessage, /o11_job/);
   assert.deepEqual(o11.stillWorks, SERVER_ONLY_EXAMPLES.o11, 'without a list, the short examples of the lane');
-  for (const r of [older, newer, buildNewer, buildOlder, unknownBuild, unread, o11]) {
+  for (const r of [older, buildNewer, buildOlder, unknownBuild, unread, o11]) {
     assert.equal(r.outcome, 'not-sent');
     assert.match(r.userMessage, /Nothing ran on your Studio\./);
     assert.doesNotMatch(JSON.stringify(r), PT_BR, 'B3: no pt-BR text');
@@ -132,11 +121,10 @@ test('warnings: studioBuildDiffers when another build is served; studioNotServed
   assert.match(differs.error, /^Warning: the user's ODC Studio is build 1\.7\.28\.5023; this SSAM server runs the kernel of build 1\.7\.28\.5000 \(same version 1\.7\.28, another build\)/);
   assert.match(studioWarningOf(at('odc', '1.7.28')).userMessage, /without its build/);
   const notServed = studioWarningOf(at('odc', '1.7.29.10900'));
-  assert.deepEqual({ code: notServed.code, cause: notServed.cause, installed: notServed.installed, served: notServed.served },
-    { code: 'studioNotServed', cause: 'STUDIO_VERSION_NOT_SERVED_YET', installed: '1.7.29.10900', served: '1.7.28.5000' });
-  assert.match(notServed.userMessage, /^Warning: this tool ran on the server only, with the kernel of ODC Studio 1\.7\.28\.5000, but the ODC Studio on this computer \(1\.7\.29\.10900\) is not served by this server/);
-  assert.match(notServed.userMessage, /the SSAM owner was already notified/);
-  assert.match(notServed.error, /^Warning: this tool ran on the server only, with the kernel of ODC Studio 1\.7\.28\.5000, but the user's ODC Studio 1\.7\.29\.10900 is not served/);
+  assert.equal(notServed.code, 'studioNewerThanServed');
+  assert.equal(notServed.installed, '1.7.29.10900');
+  assert.match(notServed.userMessage, /the owner was notified/);
+  assert.doesNotMatch(notServed.userMessage, /tools.*refused|Nothing ran/);
   assert.equal(studioWarningOf(at('o11', '11.55.91.1')).cause, 'STUDIO_UPDATE_REQUIRED');
   assert.equal(studioWarningOf(at('odc', '1.7.28.5000')), null);
   assert.equal(studioWarningOf(at('odc', null)), null, 'no Studio installed: no claim about it');

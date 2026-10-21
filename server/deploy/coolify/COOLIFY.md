@@ -13,12 +13,12 @@ Arquivos desta pasta:
 
 | Arquivo | Para quê |
 | --- | --- |
-| `compose.coolify.yml` | o compose que o Coolify roda: `ssam-server` e `ssam-console` (o painel do dono, seção 11) com os rótulos do Traefik; `ssam-admin` e `ssam-ops` só por perfil (nunca sobem com o Coolify) |
+| `compose.coolify.yml` | o compose que o Coolify roda: gerado de `versions.json`: roteador, backends por par e painel; somente o roteador recebe rótulos Traefik; admin/ops só por perfil |
 | `traefik-ssam.yaml` | configuração dinâmica do Traefik do Coolify: o transporte `ssam@file` (keep-alive de 4 s, sem limite de resposta) |
 | `ssamctl.sh` | as operações à mão na VPS, só com `docker`: tokens, `db migrate\|status`, `psql`, `kernel.json`, `Features.plain.xml`, backup (com o dump do banco), restore, log, `console status\|logs\|audit`, `pull` |
 | `.env.coolify.example` | a lista das variáveis (no Coolify, as Environment Variables do recurso) |
 | `rehearsal.override.yml` | só para o ensaio local (seções 10 e 11.7): publica 7310 em 127.0.0.1:27310 e o painel em 127.0.0.1:27320, e sobe um Postgres descartável no lugar do recurso do Coolify |
-| `../publish.sh` | na máquina do dono: empurra uma imagem já construída e provada para o registro privado (nunca uma tag fixa que já existe) e, com `--latest`, move a tag `latest` para ela |
+| `../publish.sh` | na máquina do dono: empurra uma imagem já construída e provada para o registro privado (nunca uma tag fixa que já existe) sem mover a tag `latest` nesta linha |
 
 ## 1. Publicar a imagem no registro privado (máquina do dono)
 
@@ -29,31 +29,12 @@ repositório criado pelo primeiro `push` nasce PÚBLICO, a não ser que a conta 
    Private). Com um plano gratuito, só um repositório privado por conta.
 2. Na máquina do build (Git Bash com Docker Desktop, WSL ou Linux), entre no registro você mesmo, uma vez:
    `docker login` (Docker Hub) ou `docker login <registro>`. O `publish.sh` nunca recebe senha.
-3. Publique a imagem já construída e ensaiada (DEPLOY.md seções 6 e 12):
+3. Publique cada imagem já construída e ensaiada com sua tag imutável. Use as tags e os digests da proposta aprovada:
 
-   ```bash
-   cd server
-   sh deploy/publish.sh --image docker.io/<namespace>/ssam-server --tag prod-20261020-e2ff91b --private-repo-ready --latest
-   ```
+   `sh server/deploy/publish.sh --source docker.io/andrepereiramachado/ssam-server --image docker.io/andrepereiramachado/ssam-server --tag <tag-da-proposta> --private-repo-ready`
 
-   Ele marca `ssam-server:<tag>` como `<image>:<tag>`, empurra, lê o digest do próprio push e, com `--latest`, empurra
-   a mesma imagem também como `<image>:latest` (conferindo que o digest é o mesmo). No Coolify fica `SSAM_IMAGE` e
-   `SSAM_IMAGE_TAG=latest`, uma vez só: cada publicação nova entra com um **Redeploy**, sem mexer em variável (seção
-   7). Quem quiser fixar uma imagem põe a tag fixa (`prod-<aaaammdd>-<commit>`, a tag SÓ: o parser de compose do
-   Coolify transforma `<tag>@sha256:<digest>` em `<imagem>@sha256@sha256:...` e o pull falha com "invalid reference
-   format", visto em 2026-10-20); num `compose.prod.yml` com `.env`, a forma com digest. A tag fixa vale como o digest
-   porque o `publish.sh` **nunca empurra uma tag fixa que já existe no registro** (recusa, código 2): um build novo
-   tem tag nova; só a `latest` se move. `--latest-only` move a `latest` para uma tag já publicada (o rollback da
-   `latest`, ou a `latest` de uma imagem publicada antes de existir a opção). O digest sai impresso para comparar na
-   VPS com `ssamctl.sh status`. Antes de empurrar, no Docker Hub, ele confere
-   sem login que o repositório NÃO é lido por qualquer um (público = recusa, código 3). De fora, um repositório privado e
-   um que não existe parecem iguais (404 anônimo; "no such manifest" com login), e um push num repositório que não
-   existe o CRIA PÚBLICO: por isso o `--private-repo-ready` é a sua palavra de que o passo 1 foi feito, e sem ele o
-   script não empurra para o `docker.io`. Depois do push ele confere de novo e, se o repositório estiver público, avisa
-   e sai com 3. Foi o que aconteceu na primeira publicação (2026-10-20): o repositório não existia, nasceu público e
-   teve de ser fechado à mão na hora. Uma imagem construída com a árvore suja (`-dirty`) é recusada.
+   Não use latest nesta linha. O publicador recusa tags imutáveis existentes e árvores de build sujas. Compare o digest publicado com a proposta. O compose usa a tag fixa porque o parser do Coolify 4.4.6 corrompe referências tag@sha256; o digest esperado fica em versions.json e no rótulo ssam.image.digest.
 
-   Serve qualquer registro privado (GHCR, GitLab, ECR, ACR, `registry:2` próprio): só muda o `--image`.
 
 ## 2. Login do registro na VPS (Coolify)
 
@@ -76,7 +57,7 @@ No Coolify: **Servers > a VPS > Proxy > Dynamic Configurations > Add**, nome `ss
 
 Por que existe: o Node fecha um socket keep-alive ocioso depois de 5 s; o Traefik guarda os dele por 90 s. Um
 `POST /mcp` que pegue um socket que o Node acabou de fechar vira 502, e o Traefik não repete POST. O transporte `ssam`
-derruba os ociosos em 4 s, como o Caddyfile fazia (`keepalive 4s`), e não põe limite na resposta (um `o11_deliver` leva
+derruba os ociosos em 4 s, como o Caddyfile fazia (`keepalive 4s`), e espera cabeçalhos por até 65 minutos, como o roteador (um `o11_deliver` leva
 até 60 min). Isso não cabe em rótulo: o provedor Docker do Traefik não tem rótulo de `serversTransports`.
 
 ## 4. O recurso no Coolify
@@ -84,8 +65,7 @@ até 60 min). Isso não cabe em rótulo: o provedor Docker do Traefik não tem r
 1. **Projects > o projeto > Add resource > Docker Compose Empty** (ou um repositório git privado com esta pasta; o
    arquivo é `server/deploy/coolify/compose.coolify.yml`). Cole o `compose.coolify.yml`.
 2. **Environment Variables**: o Coolify lê cada `${VAR}` do compose e pede as com `:?` antes do primeiro deploy. Preencha
-   com a lista de `.env.coolify.example`: `SSAM_IMAGE` e `SSAM_IMAGE_TAG=latest` (ou uma tag fixa do `publish.sh`, sem
-   digest), `SSAM_DATABASE_URL` (a URL interna do recurso Postgres do Coolify, seção 6),
+   com a lista de `.env.coolify.example`: as imagens vêm de `versions.json`; configure `SSAM_DATABASE_URL` (a URL interna do recurso Postgres do Coolify, seção 6),
    `SSAM_DOMAIN` (o DNS da VPS, sem `https://`), `SSAM_CPUS`, `SSAM_MEMORY`, `SSAM_BUILD_WORKERS` e o resto pelo tamanho
    da VPS (DEPLOY.md seção 5), mais as do painel do dono (`CONSOLE_DOMAIN` e `CONSOLE_GITHUB_*`, seção 11.3: o deploy
    não sobe sem elas).
@@ -98,7 +78,7 @@ até 60 min). Isso não cabe em rótulo: o provedor Docker do Traefik não tem r
    o filtro de caminhos nem o transporte.
 5. DNS: o registro A (e AAAA) de `SSAM_DOMAIN` e o de `CONSOLE_DOMAIN` apontando para a VPS antes do deploy, senão o
    Let's Encrypt falha.
-6. **Deploy**. O Coolify puxa a imagem (seção 2), cria os volumes `server-state`, `friction`, `odc-features` e `cache`
+6. Prepare os containers na janela de manutenção, antes de liberar o tráfego (seção 5). O Coolify puxa as imagens (seção 2), cria os volumes compartilhados `server-state`, `friction` e os volumes de features/cache próprios de cada par
    (com o prefixo do recurso) e sobe o `ssam-server` e o `ssam-console` (seção 11): `ssam-admin` e `ssam-ops` têm
    `profiles` e nunca sobem sozinhos. Ao subir, o servidor aplica as migrações no banco da seção 6 (o log mostra `db-migrated` na primeira vez e
    `tokens-store` com `backend: postgres`); sem alcançar o banco, ele NÃO sobe (o log diz por quê). O container fica
@@ -107,34 +87,23 @@ até 60 min). Isso não cabe em rótulo: o provedor Docker do Traefik não tem r
 Nesse primeiro `up` o servidor sobe **sem** `kernel.json` (o log mostra `kernel` com `null` e `kernel-version-missing`):
 o hub recusa o pacote de qualquer agente até a seção 5. É esperado.
 
-## 5. Primeira subida: `kernel.json` e `Features.plain.xml` (SSH na VPS)
+## 5. Preparar kernel e features de cada versão (somente o dono)
 
-Leve para a VPS a pasta `server/deploy` do commit aprovado (DEPLOY.md seção 5, `git archive`): o `ssamctl.sh` precisa de
-`kernel-pair-check.mjs` e `release-record.json` ao lado da pasta `coolify`. Tudo abaixo roda de `deploy/coolify`, com
-`docker` (sem compose e sem `.env`): o script acha o container `ssam-server` que o Coolify criou pelo rótulo
-`com.docker.compose.service` e usa a imagem e os volumes dele.
+Antes da primeira migração, faça backup. Leve a pasta deploy/ do commit aprovado para a VPS. O ssamctl seleciona containers pelos rótulos ssam.backend, ssam.odc e ssam.o11. Os containers precisam existir, parados, com a imagem e os volumes do compose novo. Não libere o roteador antes dos pins. Use a janela de manutenção para essa preparação inicial; uma instância sem kernel é recusada pelo backend.
 
-```bash
-cd /opt/ssam/deploy/coolify
-sh ssamctl.sh status                                      # imagem, digest, estado, os 4 volumes
-sh ssamctl.sh kernel print released > /tmp/kernel.json    # o kernel.json da imagem no ar, do registro (nunca digitado)
-cat /tmp/kernel.json
-sh ssamctl.sh kernel check /tmp/kernel.json; echo "exit $?"   # a conferência do par dentro da imagem: só siga com 0
-sh ssamctl.sh kernel write /tmp/kernel.json               # grava e esvazia os caches de versão
-rm /tmp/kernel.json
+Na pasta deploy/coolify, para a janela inicial:
+
+```sh
+sh ssamctl.sh status
+sh ssamctl.sh kernel write --version odc=1.7.29 /tmp/ssam-multiver/kernel-new.json
+sh ssamctl.sh features put --version odc=1.7.29 /tmp/ssam-multiver/features-new.xml
+sh ssamctl.sh kernel write --version odc=1.7.28 /tmp/ssam-multiver/kernel-old.json
+sh ssamctl.sh features put --version odc=1.7.28 /tmp/ssam-multiver/features-old.xml
 ```
 
-Depois, no Coolify, **Restart** no `ssam-server` (o servidor lê o `kernel.json` ao subir): o log passa a mostrar
-`kernel` com as versões e `kernel-cache-reset`. O `Features.plain.xml` sai da máquina Windows como no DEPLOY.md 7.2 e
-entra com:
+Os arquivos e hashes exatos estão na proposta. kernel write executa o pair-check na imagem selecionada antes de escrever e exige exit 0. O kernel fica em /data/server/versions/<par>/kernel.json; features e cache são volumes próprios. Se uma versão de faixa aparecer em mais de um par, use SSAM_CONTAINER com o nome exato: ele tem precedência sobre --version e SSAM_VERSION. Não escreva um kernel compartilhado para todos.
 
-```bash
-sh ssamctl.sh features put /tmp/Features.plain.xml && rm /tmp/Features.plain.xml
-```
-
-Conferências: `curl -fsS https://<domínio>/health` (`{"ok":true,...}`), `curl -s -o /dev/null -w '%{http_code}\n'
-https://<domínio>/mcp` (401 sem token) e `curl -s -o /dev/null -w '%{http_code}\n' https://<domínio>/` (404 do Traefik:
-o caminho não é roteado).
+Depois de todos os pares preparados, Redeploy. Verifique /health agregado, eventos kernel e warm de cada backend (índices, builder e worker ok), os dois agentes e a reconexão MCP. Não basta healthy: o warm precisa completar. Credenciais e tokens continuam no mesmo Postgres.
 
 ## 6. Tokens de cliente (no Postgres)
 
@@ -183,26 +152,12 @@ O painel do dono (`ssam-console`, seção 11) usa o **mesmo banco**: as licença
 
 ## 7. Upgrade e rollback
 
-A regra é a da seção 8 do DEPLOY.md (anuncie a janela: recriar o container corta as chamadas em curso). O que muda:
-
-1. `sh ssamctl.sh backup` (seção 8) antes: os volumes e o dump do banco.
-2. Na máquina do dono: construa e ensaie a imagem nova (DEPLOY.md 6 e 12) e publique com `publish.sh --latest`
-   (seção 1).
-3. No Coolify, **Redeploy** (com `SSAM_IMAGE_TAG=latest` não há variável a trocar; com uma tag fixa, troque-a antes).
-   Depois, `ssamctl.sh status` mostra o digest da imagem puxada: compare com o que o `publish.sh` imprimiu. O compose
-   tem `pull_policy: always` no `ssam-server` e no `ssam-console`: cada `up` do Coolify busca a tag no registro (sem
-   isso o Coolify reaproveitava a `latest` que já estava na VPS, visto em 2026-10-20). Se mesmo assim o digest
-   continuar o antigo, `sh ssamctl.sh pull` e Redeploy de novo. O
-   Traefik responde 502 enquanto o container novo não atende (não há "espere pelo servidor" como no Caddy; são uns
-   segundos).
-4. Se a versão de um Studio ou da bridge mudou (o `release-record.json` do commit novo diz), a ordem é a do DEPLOY.md 8,
-   passo 6: confira o par com a imagem nova (`kernel print`/`check` só funcionam depois do deploy, porque rodam na
-   imagem do container), **Stop** no Coolify, `kernel write`, `features put`, **Start**.
-5. Rollback: na máquina do dono, `sh deploy/publish.sh --image ... --tag <tag anterior> --private-repo-ready
-   --latest-only` (a `latest` volta a apontar para a imagem anterior; o `.info` do backup guarda a imagem e o id) e
-   Redeploy; ou ponha a tag fixa anterior em `SSAM_IMAGE_TAG` e Redeploy. Depois `kernel print previous` (ou a tag),
-   `check`, Stop, `kernel write`, Start, como no DEPLOY.md 8. As imagens anteriores continuam no registro com as tags
-   fixas: não apague tags.
+1. Avise os clientes da janela de manutenção: recriar containers interrompe chamadas; depois reconecte o MCP.
+2. Execute ssamctl.sh backup da janela inteira antes de mudar qualquer imagem ou estado. O manifesto interno relaciona container, versões, destino e volume. A restauração exige todos os backends parados e os mesmos mapeamentos de volumes.
+3. Revise a proposta local do vigia e seus testes por nome. Publique as tags imutáveis testadas, sem latest, e compare os digests.
+4. Aprove o commit de versions.json e do compose gerado. No Coolify, substitua o compose e prepare os containers parados. Grave kernel e features por versão como na seção 5.
+5. Faça Redeploy. Compare ssamctl.sh status com a proposta e confira health, warm, roteamento e SESSION_REROUTED.
+6. Rollback é restaurar o compose e a janela anteriores, suas tags, pins e features, e fazer Redeploy. Não mova latest nem apague tags. Restore de dados exige todos os backends parados e só é necessário se os dados precisarem ser recuperados.
 
 ### 7.1 Imagens publicadas no registro
 
@@ -215,7 +170,7 @@ A regra é a da seção 8 do DEPLOY.md (anuncie a janela: recriar o container co
 
 ```bash
 sudo install -d -o root -m 0700 /var/backups/ssam-server
-sh ssamctl.sh backup                     # tar.gz de server, friction e odc-features (+ .sha256 e .info) E o dump do banco
+sh ssamctl.sh backup                     # tar.gz da janela inteira: server-state, friction, Features e cache de cada backend (+ .sha256 e .info) E o dump do banco
                                          # (ssam-tokens-<data>.sql.gz + .sha256), com o servidor no ar
 sh ssamctl.sh backup /outra/pasta
 sh ssamctl.sh restore /var/backups/ssam-server/ssam-state-<data>.tar.gz [/var/backups/ssam-server/ssam-tokens-<data>.sql.gz]
@@ -237,7 +192,7 @@ copiar para fora.
 | Caddyfile | Aqui | Observação |
 | --- | --- | --- |
 | sem buffer (`flush_interval -1`) | padrão do Traefik | nenhum middleware de buffering é usado |
-| timeouts de 65 min | `responseHeaderTimeout 0` e `writeTimeout 0` (padrão) | sem limite de resposta; o `readTimeout` do entrypoint (60 s no Traefik v3) só limita a leitura do pedido |
+| timeouts de 65 min | `responseHeaderTimeout 3900s` e `writeTimeout 0` (padrão) | 65 minutos para cabeçalhos; o `readTimeout` do entrypoint (60 s no Traefik v3) só limita a leitura do pedido |
 | `keepalive 4s` para o upstream | `idleConnTimeout 4s` em `traefik-ssam.yaml` | obrigatório (seção 3) |
 | `lb_try_duration 15s` | não existe | 502 por alguns segundos num redeploy |
 | `request_body max_size 20MB` | nenhum limite no proxy | o servidor recusa acima de 16 MiB (MCP) e 4 MiB (parte do agente) com 413 |
@@ -365,7 +320,7 @@ Desde a `prod-20261020-12fae04` (a `latest` do registro desde 2026-10-20; digest
 `sha256:bbeaffad076ac04b0156208b4541ef6d761517c945589ab4b59cbf05999318e5`), o `.dockerignore` inclui `deploy/console`
 (sem os testes e os mocks) e o `ssam-console` roda `node /app/deploy/console/server.mjs` **da própria imagem**: nada é
 montado da VPS, nenhuma pasta precisa ser copiada, e uma mudança no painel se publica como qualquer outra
-(`publish.sh --latest` e **Redeploy**; seção 7). O painel importa o módulo de tokens da mesma imagem
+(publicação da tag imutável e **Redeploy** da janela; seção 7). O painel importa o módulo de tokens da mesma imagem
 (`/app/platforms/odc/facade/server-tokens.mjs`), então servidor e painel nunca divergem de versão. Imagens anteriores
 (`2b46244`, `e2ff91b`) não têm o painel dentro: com elas o serviço `ssam-console` não sobe.
 
@@ -455,3 +410,23 @@ O que o ensaio NÃO prova: o GitHub de verdade (a tela de autorização, o `clie
 Traefik do Coolify com o roteador do painel e o certificado do Let's Encrypt para `CONSOLE_DOMAIN`, o cookie `Secure`
 atrás do TLS do proxy (no ensaio o cliente Node o aceita em http; um navegador exige https, ou `localhost`). Isso só
 numa VPS com Coolify e DNS.
+
+## 12. Versions window
+
+A janela padrão é 3 pares, configurada em versions.json (window) e injetada como SSAM_VERSION_WINDOW. A janela inicial tem dois pares: O11 11.55.93 + ODC 1.7.29 (padrão) e O11 11.55.92 + ODC 1.7.28. Cada imagem leva os dois Studios. Uma versão de faixa é servida se aparecer em qualquer par. Ao entrar um par além do limite, sai o mais antigo. Volumes de pares removidos podem permanecer para rollback, mas nenhum container fora da janela deve continuar rodando.
+
+```sh
+node server/deploy/coolify/gen-compose.mjs
+```
+
+O arquivo gerado permanece no Git. Não edite seus serviços manualmente. Os nomes dos volumes de features/cache usam o par, não a posição v1/v2, e não trocam de significado quando a janela roda. server-state e friction são compartilhados; arquivos mutáveis por processo ficam sob versions/<par>. Somente ssam-router recebe rótulos Traefik, inclusive para encaminhar o painel. Seus timeouts são 65 minutos e ele repassa cabeçalhos e bytes sem buffering.
+
+O Hello do agente escolhe primeiro a versão ODC instalada; sem ODC, escolhe O11; sem nenhuma, o padrão. MCP usa a mesma associação por licença, persistida em state/routing.json. Uma mudança de associação encerra a afinidade antiga com SESSION_REROUTED uma vez; o cliente abre outra sessão. Não há migração do estado MCP entre containers.
+
+O painel exibe Studio versions: versão, container, situação, clientes e último visto. default é o par padrão, served é servido, unserved é versão observada fora da janela, leaving é uma saída explicitamente proposta. A contagem dos pares é por associação do cliente; uma versão não servida aparece também em linha própria. O aviso "ODC Studio X.Y.Z not served: N customers" usa o motor de alertas existente. Leituras combinam a observação mais nova de cada licença e não expõem credenciais.
+
+Para sinalizar uma saída antes do deploy, o dono pode fornecer state/proposed-versions.json no volume compartilhado, com {"leaving":{"odc":["1.7.28"],"o11":["11.55.92"]}}. O painel nunca deduz leaving só porque a janela está cheia. Remova o arquivo após aprovar ou abandonar a proposta. Esse arquivo não muda o roteamento.
+
+O vigia Windows está em ../vigia/README.md. Detecta versões locais ou instaladores O11 baixados, aceita cópia local opcional das observações, faz bundle, testes filtrados sequenciais, imagem e smoke local. Deixa branch e PROPOSTA.md para o dono. Nesta rodada não publica nem acessa a VPS. O pacote do agente permanece igual; as provas ao vivo O11 11.55.92→11.55.93 e ODC v97→1.7.29 estão pendentes do dono.
+
+O seletor --version aceita odc=1.7.29 e o11=11.55.93; a forma sem faixa também é aceita quando identifica um único container. Uma seleção ambígua lista os candidatos. Sem SSAM_CONTAINER, --version prevalece sobre SSAM_VERSION; sem ambos, usa-se o padrão. Atualizar só uma faixa mantém a outra na versão do par vigente, sem repetir combinações na janela.

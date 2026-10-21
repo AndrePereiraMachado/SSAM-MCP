@@ -236,13 +236,13 @@ test('hub: a Service Studio 11.55.91 customer gets STUDIO_UPDATE_REQUIRED on the
     assert.equal(c.o11.code, 'STUDIO_VERSION_MISMATCH', pack);
     assert.equal(c.o11.cause, 'STUDIO_UPDATE_REQUIRED');
     assert.deepEqual(c.o11.served, ['11.55.92']); assert.equal(c.o11.installed, '11.55.91.65258');
-    assert.match(c.o11.message, /^This SSAM server serves Service Studio 11\.55\.92; the user's machine has Service Studio 11\.55\.91\.65258, which is older: update Service Studio to 11\.55\.92 and reopen it; no agent package changes that\./);
+    assert.match(c.o11.message, /Your Service Studio 11\.55\.91\.65258 is older than the versions this server serves \(11\.55\.92\)/);
     assert.deepEqual(c.odc, { ok: true }, 'the ODC lane is judged on its own');
   }
   assert.deepEqual(compatibility(hello('11.55.92.65269'), INTERIM, ['odc', 'o11']).o11, { ok: true });
   assert.equal(compatibility(hello('11.55.92.65269', '11.55.91.65258'), INTERIM, ['odc', 'o11']).o11.code, 'AGENT_PACK_MISMATCH', 'an 11.55.92 Studio with the old package: the new package helps');
   const newer = compatibility(hello('11.55.93.65300'), INTERIM, ['odc', 'o11']).o11;
-  assert.equal(newer.code, 'STUDIO_VERSION_MISMATCH'); assert.equal(newer.cause, 'STUDIO_VERSION_NOT_SERVED_YET', 'a newer Studio waits for the owner');
+  assert.equal(newer.ok, true); assert.equal(newer.warning.code, 'studioNewerThanServed');
 });
 
 test('hub and gate: a lane refused at start answers KERNEL_UNAVAILABLE with cause KERNEL_VERSION_MISSING', () => {
@@ -256,7 +256,7 @@ test('hub and gate: a lane refused at start answers KERNEL_UNAVAILABLE with caus
   const notServed = compatibility(hello('11.55.91.65258'), INTERIM, ['odc', 'o11']).o11;
   const g2 = incompatible('o11', notServed, { kernel: INTERIM, studios: hello('11.55.91.65258').studios });
   assert.deepEqual({ code: g2.code, cause: g2.cause, served: g2.served }, { code: 'STUDIO_VERSION_MISMATCH', cause: 'STUDIO_UPDATE_REQUIRED', served: ['11.55.92'] });
-  assert.match(g2.error, /no agent package changes that/); assert.match(g2.continuation.why, /update Service Studio to 11\.55\.92/);
+  assert.match(g2.error, /Update Service Studio and reconnect/); assert.match(g2.continuation.why, /update Service Studio to 11\.55\.92/);
 });
 
 test('gate: a lane refused at start is off for the server-only tools too (ssam_job, ssam_map, ssam_discover, o11_job...); the state reports still answer', async () => {

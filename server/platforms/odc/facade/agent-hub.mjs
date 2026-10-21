@@ -1,3 +1,4 @@
+import {ensureRuntime,customerStateDir,readMachinePin} from './hosted/storage.mjs';
 // The agent channel of the hosted mode (phase 2 of the distribution, docs/FASE2-AGENTE.md sections 2, 3 and 7): the
 // customer's thin agent connects OUT to this server and runs only the operations that must touch the customer's
 // machine. This module is the server side of protocol ssam-agent/1 and the AgentLink (I-1) the hosted executor uses.
@@ -28,7 +29,8 @@ import { AGENT_PREFIX } from './server-tokens.mjs';
 import { spawn } from 'node:child_process';
 import { currentCall } from './quality-meter.mjs';
 import { agentVerbOf } from './quality-line.mjs';
-import { buildPolicyOf, servedBuildOf, studioIdentity, studioRefusal, studioVersions, studioWarningOf, threePart } from './studio-identity.mjs';
+import { buildPolicyOf, servedBuildOf, studioIdentity, studioRefusal, studioVersions, studioWarningOf, threePart, servedVersions, causeOf } from './studio-identity.mjs';
+import { recordStudioVersions } from './studio-version-state.mjs';
 import { UNKNOWN_EXIT } from './hosted/network-check.mjs';
 
 // A Windows balloon on the server machine (owner test, 2026-10-08); off with SSAM_ACCESS_NOTIFY=0, never fails a call.
@@ -132,6 +134,7 @@ export const normalizeKernel = (kernel = {}) => {
     const { odc, o11 } = buildPolicyOf(kernel.studioBuildPolicy);
     out.studioBuildPolicy = { odc, o11 };
   }
+  if (kernel?.servedVersions || process.env.SSAM_SERVED_VERSIONS) out.servedVersions = Object.fromEntries(LANES.map(lane => [lane, servedVersions(lane, kernel)]));
   return out;
 };
 // The O11 hooks an agent package may declare (pack.json o11Hook, docs/O11-BRIDGE-FINA.md 13): the development hook and
@@ -171,7 +174,7 @@ function laneCompatibility(lane, hello, kernel, lanes, refused) {
     return no('AGENT_PACK_MISMATCH', 'The agent package has no ' + lane + ' lane. Ask the server owner for the current agent package.');
   if (lane === 'odc' && pack.odcBridge !== kernel.odcBridge && !(kernel.odcBridgeAccepted ?? []).includes(pack.odcBridge))
     return no('AGENT_PACK_MISMATCH', 'The agent package carries ODC bridge ' + (pack.odcBridge ?? 'none') + '; this server uses ' + kernel.odcBridge + '. Ask the server owner for the current agent package.');
-  if (lane === 'o11' && threePart(pack.o11BuiltFor) !== server)
+  if (lane === 'o11' && !servedVersions(lane, kernel).includes(threePart(pack.o11BuiltFor)))
     return no('AGENT_PACK_MISMATCH', 'The O11 bridge of the agent package was built for Service Studio ' + (pack.o11BuiltFor ?? 'none') + '; this server has the kernel for Service Studio ' + server + '. Ask the server owner for the current agent package.');
   if (lane === 'o11') {
     const hook = pack.o11Hook ?? 'dev';
@@ -242,12 +245,13 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
   if (!dir) throw new Error('dir is required');
   if (!store?.verifyAgent || !store?.lookup) throw new Error('store with verifyAgent and lookup is required');
   const limits = { ...LIMITS, ...overrides };
+  const runtime = ensureRuntime(dir);
   const serverKernel = normalizeKernel(kernel);
   const nowMs = () => +now();
   const iso = () => new Date(nowMs()).toISOString();
   const links = new Map();    // tokenId -> state
   const windows = new Map();  // tokenId -> {start, count}
-  const transfersDir = tokenId => path.join(dir, 'customers', tokenId, 'state', 'transfers');
+  const transfersDir = tokenId => path.join(customerStateDir(path.join(dir,'customers',tokenId)), 'transfers');
 
   const record = tokenId => { try { return store.lookup(tokenId); } catch { return undefined; } };
 
@@ -533,10 +537,16 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
   // a Studio update (or a server update) cut, before the first refused call. The token id, the lane, version numbers and
   // codes only: never a credential, a folder or an argument. A lane served again forgets its entry.
   function noteUnserved(state, compatible) {
+    const observed = Object.fromEntries(LANES.filter(lane => state.lanes.includes(lane)).map(lane => {
+      const studio = studioIdentity(lane, state.hello?.studios?.[lane]?.installed, serverKernel);
+      return [lane, {studio, ok: studio?.ok, cause: causeOf(studio)}];
+    }));
+    try { recordStudioVersions(dir, state, observed, iso()); }
+    catch (error) { log({ event: 'studio-versions-write-failed', code: error.code ?? 'EIO' }); }
     for (const lane of LANES) {
-      const entry = compatible?.[lane];
-      if (!entry?.studio || entry.ok !== false) { state.unserved.delete(lane); continue; }
-      logUnserved(state, lane, entry.studio, entry.cause);
+      const entry = observed[lane];
+      if (!entry?.studio || !entry.studio.installed || (entry.ok !== false && entry.studio.relation !== 'newer')) { state.unserved.delete(lane); continue; }
+      logUnserved(state, lane, entry.studio, entry.cause ?? 'STUDIO_VERSION_NOT_SERVED_YET');
     }
   }
   // A1 (round 2): the same line for a refusal of the PROCESS a call goes to (AgentLink studioUnserved, from the
@@ -565,17 +575,17 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
     if (dir && machineId) {
       const seen = { id: machineId, name: String(h.agent.machine.name ?? '').slice(0, 64), user: String(h.agent.machine.user ?? '').slice(0, 64) };
       const ip = (String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || req.socket?.remoteAddress || '').slice(0, 64);
-      const pinFile = path.join(dir, 'machine-pins.json');
+      const pinFile = path.join(runtime, 'machine-pins.json');
       let pins = {};
       try { pins = JSON.parse(fs.readFileSync(pinFile, 'utf8')); } catch { pins = {}; }
-      const first = pins[state.tokenId];
+      const first = readMachinePin(dir, state.tokenId);
       if (!first) {
         pins[state.tokenId] = { ...seen, at: iso() };
         try { fs.writeFileSync(pinFile, JSON.stringify(pins, null, 2)); log({ event: 'agent-machine-pinned', token: state.tokenId, machine: pins[state.tokenId], ip }); } catch { /* recorded on the next hello */ }
       } else if (first.id !== machineId) {
         const alert = { time: iso(), event: 'agent-machine-changed', token: state.tokenId, customer: auth.customer, first, machine: seen, ip };
         log(alert);
-        try { fs.appendFileSync(path.join(dir, 'access-alerts.jsonl'), JSON.stringify(alert) + '\n'); } catch { /* the log line stays */ }
+        try { fs.appendFileSync(path.join(runtime, 'access-alerts.jsonl'), JSON.stringify(alert) + '\n'); } catch { /* the log line stays */ }
         notifyOwner('SSAM: access from another machine', `${auth.customer}: ${seen.name} (${seen.user}) instead of ${first.name} (${first.user}). IP ${ip}`);
       }
     }
@@ -649,7 +659,15 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
   async function uplink(state, m) {
     if (m?.t === 'pong') {
       if (m.versions && typeof m.versions === 'object' && state.hello) {
-        if ('studios' in m.versions) state.hello.studios = m.versions.studios ?? null;
+        if ('studios' in m.versions) {
+          const before = studioVersions(state.hello.studios);
+          const after = studioVersions(m.versions.studios);
+          state.hello.studios = m.versions.studios ?? null;
+          if (JSON.stringify(before) !== JSON.stringify(after)) {
+            log({ event: 'agent-studio-version-changed', token: state.tokenId, before, after });
+            closeChannel(state, 'studio-version-changed', 'Your Studio version changed and your agent is being redirected.');
+          }
+        }
         if ('o11Connection' in m.versions) state.hello.o11Connection = m.versions.o11Connection ?? null;
         // a Studio that changed under a connected agent is judged now (the gate reads info() on every call)
         if ('studios' in m.versions) noteUnserved(state, compatibility(state.hello, serverKernel, state.lanes, { refused: kernelRefused }));

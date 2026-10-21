@@ -1,3 +1,4 @@
+import {ensureRuntime} from './hosted/storage.mjs';
 import { installToolListing, listedTool } from './tool-listing.mjs';
 import { serverProfile, profileServes, parseMcpProfile } from './server-profiles.mjs';
 import { bindingKeyOf, listedKeyOf, slotKeyOf, sameProducer, separatorKeyProblems } from './producer-names.mjs';
@@ -2067,7 +2068,7 @@ export async function runServed(args) {
   hostedServerEnv(process.env);
   const executor = await import('./executor.mjs');
   executor.setDefaultExecutor(new executor.DenyExecutor());
-  const { kernel, refused: kernelRefused } = await startupKernel({ dir, fileVersion: executor.fileVersion, log });
+  const { kernel, refused: kernelRefused } = await startupKernel({ dir: ensureRuntime(dir), fileVersion: executor.fileVersion, log });
   // a8 phase 6 (owner request): the hosted catalog is read here, at the start, with SSAM_HOSTED_SSAM_CODE (off | on); the
   // log names what this server serves of ssam_code and whether the variable switched it ({served, switch, ignored?}).
   log({ event: 'hosted-ssam-code', ...(await import('./hosted/served.mjs')).codeSwitchState() });
@@ -2095,7 +2096,7 @@ export async function runServed(args) {
   // a7 (no-internals list item 7): ONE store of the bytes a token is served per day for every session of this process, in
   // the server's own folder (sizes only, by token id); an alert past the day's limit is one line of server.log.
   const { servedBytesStore } = await import('./served-bytes.mjs');
-  const exposure = { store: servedBytesStore({ dir: path.join(dir, 'exposure') }),
+  const exposure = { store: servedBytesStore({ dir: path.join(ensureRuntime(dir), 'exposure') }),
     onAlert: line => { let value; try { value = JSON.parse(line); } catch { value = { line: String(line) }; } log({ event: 'served-bytes-alert', ...value }); } };
   const stores = new Map();
   const storeOf = workspace => { let store = stores.get(workspace); if (!store) stores.set(workspace, store = frictionStore.createStore({ root: workspace, directory: customerFrictionDirectory(workspace) })); return store; };
@@ -2106,7 +2107,7 @@ export async function runServed(args) {
     return server;
   };
   const observeCall = (params, session) => session?.workspace ? observer(storeOf(session.workspace))(params) : null;
-  const quality = await qualityRecorder({ dir, log });
+  const quality = await qualityRecorder({ dir: ensureRuntime(dir), log });
   // The audit and server.log keep a tool name only when it is a tool of the hosted catalog; another name is '?'.
   const { hostedTools } = await import('./hosted/policy.mjs');
   const handle = served(await startHttpServer({ ...options, agents: { kernel, kernelRefused }, dir, createServer, observeCall, log, quality,

@@ -165,3 +165,6 @@ kernel/debug/tests
 kernel/debug/tests-o11
 kernel/debug/tests-odc
 kernel/debug/tests-witness
+
+# Tests may live beside their implementation (the version router).
+**/*.test.mjs

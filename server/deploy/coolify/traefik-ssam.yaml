@@ -6,7 +6,7 @@
 #     idle time on the proxy lets a POST /mcp or /agent/v1/messages pick a socket Node has just closed: a 502 Traefik does
 #     not retry (it must not repeat a POST). Traefik's default is 90 s;
 #   - dialTimeout 5 s: a server that is restarting answers 502 after it (Traefik has no "wait for the upstream");
-#   - responseHeaderTimeout 0: no limit; an o11_deliver can take 60 min (the SSE keepalive and the agent ping keep the
+#   - responseHeaderTimeout 3900s: the same 65 minute limit as ssam-router; an o11_deliver can take 60 min (the SSE keepalive and the agent ping keep the
 #     connection alive meanwhile). The entry point's writeTimeout is 0 too (Traefik's default).
 # This cannot be a Docker label: Traefik's Docker provider has no serversTransports labels, only the reference to one.
 http:
@@ -14,5 +14,5 @@ http:
     ssam:
       forwardingTimeouts:
         dialTimeout: 5s
-        responseHeaderTimeout: 0s
+        responseHeaderTimeout: 3900s
         idleConnTimeout: 4s

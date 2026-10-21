@@ -38,7 +38,23 @@ hostpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else p
 
 die() { echo "ssamctl: $*" >&2; exit 2; }
 
+containers() {
+  $DOCKER ps -a --filter label=ssam.backend=true --format '{{.Names}}'
+}
 container() {
+  if [ -n "${SSAM_CONTAINER:-}" ]; then printf '%s' "$SSAM_CONTAINER"; return; fi
+  if [ -n "${SSAM_VERSION:-}" ]; then
+    case "$SSAM_VERSION" in
+      odc=*|o11=*) lane=${SSAM_VERSION%%=*}; value=${SSAM_VERSION#*=}; found=$($DOCKER ps -a --filter label=ssam.backend=true --filter "label=ssam.$lane=$value" --format '{{.Names}}');;
+      *) found=$({ $DOCKER ps -a --filter label=ssam.backend=true --filter "label=ssam.odc=$SSAM_VERSION" --format '{{.Names}}'; $DOCKER ps -a --filter label=ssam.backend=true --filter "label=ssam.o11=$SSAM_VERSION" --format '{{.Names}}'; } | sort -u);;
+    esac
+    [ -n "$found" ] && [ "$(printf '%s\n' "$found" | wc -l)" -eq 1 ] || die "version must identify exactly one container; candidates: ${found:-none}. SSAM_CONTAINER takes precedence over --version and SSAM_VERSION"
+    printf '%s' "$found"; return
+  fi
+  if [ -z "${SSAM_CONTAINER:-}" ]; then
+    found=$($DOCKER ps -a --filter label=ssam.backend=true --filter label=ssam.default=true --format '{{.Names}}')
+    if [ -n "$found" ]; then [ "$(printf '%s\n' "$found" | wc -l)" -eq 1 ] || die "multiple defaults; set SSAM_CONTAINER"; printf '%s' "$found"; return; fi
+  fi
   if [ -n "${SSAM_CONTAINER:-}" ]; then printf '%s' "$SSAM_CONTAINER"; return; fi
   found=$($DOCKER ps -a --filter label=com.docker.compose.service=ssam-server --format '{{.Names}}' | head -n 2)
   [ -n "$found" ] || die "no ssam-server container on this host (deploy it in Coolify first, or set SSAM_CONTAINER)"
@@ -85,10 +101,12 @@ hardened="--rm --init --security-opt no-new-privileges:true --cap-drop ALL --use
 # A terminal for the interactive commands only when there is one (a script or a pipe gets -i).
 tty=-i; [ -t 0 ] && [ -t 1 ] && tty=-it
 
+. "$here/window-backup.sh"
 cmd=${1:-}; [ $# -gt 0 ] && shift
 case "$cmd" in
   status)
-    c=$(container)
+    found=$(containers); [ -n "$found" ] || found=$(container)
+    for c in $found; do
     echo "container: $c"
     echo "image:     $($DOCKER inspect --format '{{.Config.Image}}' "$c") (id $(image_of "$c"))"
     echo "digest:    $($DOCKER image inspect --format '{{range .RepoDigests}}{{.}} {{end}}' "$(image_of "$c")" 2>/dev/null || echo '(not from a registry)')"
@@ -100,6 +118,7 @@ case "$cmd" in
       reach=$(pg_tool "$c" psql "$url" -tAc 'select count(*) from server_tokens' 2>&1 | tail -n 1)
       echo "tokens:    postgres ($(printf '%s' "$url" | sed 's#//[^:]*:[^@]*@#//***:***@#')), $(case "$reach" in [0-9]*) echo "$reach records, reachable";; *) echo "NOT reachable: $reach";; esac)"
     else echo "tokens:    /data/server/tokens.json (no SSAM_DATABASE_URL)"; fi
+    done
     ;;
   pull)
     # The reference the container was created from (SSAM_IMAGE:SSAM_IMAGE_TAG), pulled again: with `latest` that is the
@@ -116,7 +135,11 @@ case "$cmd" in
     $DOCKER run $hardened $(store_opts "$c") --log-driver none $tty -v "$(volume_of "$c" /data/server):/data/server" --entrypoint node "$(image_of "$c")" facade/ssam.mjs server-token "$@"
     ;;
   kernel)
-    c=$(container); sub=${1:-}; [ $# -gt 0 ] && shift
+    sub=${1:-}; [ $# -gt 0 ] && shift
+    if [ "${1:-}" = --version ]; then SSAM_VERSION=${2:?version}; shift 2; fi
+    c=$(container)
+    runtime=$(env_of "$c" SSAM_RUNTIME_DIR); runtime=${runtime:-/data/server}
+    case "$runtime" in /data/server|/data/server/versions/*) ;; *) die "invalid runtime directory";; esac
     check=$here/../kernel-pair-check.mjs
     case "$sub" in
       print)
@@ -130,13 +153,15 @@ case "$cmd" in
         ;;
       write)
         file=${1:?kernel.json}
+        [ -f "$check" ] || die "no pair checker"
+        $DOCKER run --rm --network none --entrypoint node -v "$(hostpath "$check"):/c.mjs:ro" -v "$(hostpath "$(cd "$(dirname "$file")" && pwd)/$(basename "$file")"):/k.json:ro" "$(image_of "$c")" /c.mjs check /k.json
         node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' "$file" 2>/dev/null || { command -v node >/dev/null 2>&1 && die "$file is not valid JSON"; }
         # shellcheck disable=SC2086
-        $DOCKER run $hardened --network none -i $(mounts "$c") "$(image_of "$c")" sh -c 'cat > /data/server/kernel.json && rm -rf /data/cache/module-index/v1/o11 /data/cache/module-index/v1/odc /data/cache/readers/ss4 /data/cache/readers-prefetch/ss4 /data/cache/readers/ss4-prefetch /data/cache/module-index/kernel-studio.json && echo "kernel.json written, version caches emptied"' < "$file"
+        $DOCKER run $hardened --network none -i $(mounts "$c") -e SSAM_RUNTIME_DIR="$runtime" "$(image_of "$c")" sh -c 'mkdir -p "$SSAM_RUNTIME_DIR" && cat > "$SSAM_RUNTIME_DIR/kernel.json" && rm -rf /data/cache/module-index/v1/o11 /data/cache/module-index/v1/odc /data/cache/readers/ss4 /data/cache/readers-prefetch/ss4 /data/cache/readers/ss4-prefetch /data/cache/module-index/kernel-studio.json && echo "kernel.json written, version caches emptied"' < "$file"
         ;;
       show)
         # shellcheck disable=SC2086
-        $DOCKER run $hardened --network none $(mounts "$c") "$(image_of "$c")" cat /data/server/kernel.json
+        $DOCKER run $hardened --network none $(mounts "$c") "$(image_of "$c")" cat "$runtime/kernel.json"
         ;;
       *) die "kernel print|check|write|show" ;;
     esac
@@ -151,8 +176,11 @@ case "$cmd" in
     if [ $# -gt 0 ]; then pg_tool "$c" psql "$url" -c "$*"; else $DOCKER run --rm $tty --network "$(network_of "$c")" --security-opt no-new-privileges:true --cap-drop ALL --user 70:70 "$PG_IMAGE" psql "$url"; fi
     ;;
   features)
-    c=$(container); [ "${1:-}" = put ] || die "features put <Features.plain.xml>"
-    file=${2:?Features.plain.xml}
+    [ "${1:-}" = put ] || die "features put [--version x.y.z] <Features.plain.xml>"
+    shift
+    if [ "${1:-}" = --version ]; then SSAM_VERSION=${2:?version}; shift 2; fi
+    c=$(container)
+    file=${1:?Features.plain.xml}
     # shellcheck disable=SC2086
     $DOCKER run $hardened --network none -i $(mounts "$c") "$(image_of "$c")" sh -c 'cat > /data/odc-features/Features.plain.xml && echo "Features.plain.xml written"' < "$file"
     ;;
@@ -172,7 +200,7 @@ case "$cmd" in
     [ -d "$dir" ] && [ -w "$dir" ] || die "the folder $dir must exist and be writable (sudo install -d -o \$USER -m 0700 $dir)"
     stamp=$(date -u +%Y%m%dT%H%M%SZ); archive=$dir/ssam-state-$stamp.tar.gz
     # shellcheck disable=SC2086
-    $DOCKER run $hardened --network none $(mounts "$c") "$(image_of "$c")" sh -c 'tar -C /data -czf - server friction odc-features' > "$archive"
+    window_backup
     url=$(db_url "$c")
     if [ -n "$url" ]; then
       # The tokens' database as plain SQL (loads back with psql).
@@ -190,6 +218,9 @@ case "$cmd" in
     # database resource keeps running: Coolify's Stop on this resource stops only the server).
     c=$(container); archive=${1:?archive.tar.gz}; dump=${2:-}
     [ "$($DOCKER inspect --format '{{.State.Running}}' "$c")" = false ] || die "stop the server in Coolify first (Stop), then restore"
+    for other in $(containers); do
+      [ "$($DOCKER inspect --format '{{.State.Running}}' "$other")" = false ] || die "stop all version backends before restoring shared state"
+    done
     [ -f "$archive" ] || die "no $archive"
     if [ -n "$dump" ]; then
       url=$(db_url "$c"); [ -n "$url" ] || die "the server has no SSAM_DATABASE_URL: nothing to load the dump into"
@@ -199,14 +230,15 @@ case "$cmd" in
       gzip -dc "$dump" | pg_tool "$c" psql "$url" -v ON_ERROR_STOP=1 -f - >/dev/null
       echo "tokens database restored from $dump"
     fi
-    (cd "$(dirname "$archive")" && [ ! -f "$(basename "$archive").sha256" ] || sha256sum -c "$(basename "$archive").sha256") || die "the archive does not match its .sha256"
+    (cd "$(dirname "$archive")" && { [ ! -f "$(basename "$archive").sha256" ] || sha256sum -c "$(basename "$archive").sha256"; }) || die "the archive does not match its .sha256"
     # shellcheck disable=SC2086
-    $DOCKER run $hardened --network none -i $(mounts "$c") "$(image_of "$c")" sh -c 'rm -rf /data/server/* /data/friction/* /data/odc-features/* && tar -C /data -xzf - && echo "restored; start the server in Coolify"' < "$archive"
+    window_restore
     ;;
   logs)
     c=$(container); n=${1:-50}
+    runtime=$(env_of "$c" SSAM_RUNTIME_DIR); runtime=${runtime:-/data/server}
     # shellcheck disable=SC2086
-    $DOCKER run $hardened --network none $(mounts "$c") "$(image_of "$c")" sh -c "tail -n $n /data/server/server.log | cut -c1-200"
+    $DOCKER run $hardened --network none $(mounts "$c") "$(image_of "$c")" sh -c "tail -n $n $runtime/server.log | cut -c1-200"
     ;;
   console)
     # The console container of the same compose project (label com.docker.compose.service=ssam-console). Its log is JSON

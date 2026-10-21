@@ -181,7 +181,7 @@ export function createViews(app) {
         host: hostSec ? { cpuPct: num(hostSec.cpu?.pct), memUsedPct: memUsedPct(hostSec), diskUsedPct: diskUsedPct(hostSec) } : null,
         publicHost: urls().publicHost,
       },
-      alerts: active, acked, summary: summaryRows(tokens, st, active), recentEvents: events.recent(10), indexing: indexing(),
+      studioVersions: sources.studioVersions(), alerts: active, acked, summary: summaryRows(tokens, st, active), recentEvents: events.recent(10), indexing: indexing(),
     };
   }
 

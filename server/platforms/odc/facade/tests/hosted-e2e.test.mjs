@@ -226,7 +226,7 @@ const stdio = await ssam.createSsamServer({ ...ssam.servedLanes(), profile: 'all
   // A-M1 (the build identity, 01ac9596): one refusal by direction, both builds named; the older Studio is to be updated.
   assert.equal(mismatch.cause, 'STUDIO_UPDATE_REQUIRED', JSON.stringify(mismatch).slice(0, 400));
   assert.equal(mismatch.installed, '1.7.27.10846');
-  assert.match(mismatch.error, /serves ODC Studio 1\.7\.28[.\d]*; the user's machine has ODC Studio 1\.7\.27\.10846, which is older/);
+  assert.match(mismatch.error, /Your ODC Studio 1\.7\.27\.10846 is older than the versions this server serves \(1\.7\.28\)/);
 
   // A reply naming agent:..\..\x is a protocol violation and writes nothing.
   const evil = await call('studio_snapshot', { module: 'Evil' });

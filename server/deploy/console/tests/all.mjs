@@ -15,3 +15,7 @@ import './security.test.mjs';
 import './usage.test.mjs';
 import './views.test.mjs';
 import './write-scope.test.mjs';
+
+import './studio-versions.test.mjs';
+import './version-sources.test.mjs';
+import './version-reader.test.mjs';

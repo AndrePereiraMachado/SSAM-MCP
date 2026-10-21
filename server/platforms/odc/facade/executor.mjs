@@ -1,3 +1,4 @@
+import {customerStateDir} from './hosted/storage.mjs';
 // The executor seam of the facade (docs/FASE2-AGENTE.md 4.1): every call that touches a machine (Studio processes, the
 // ODC bridge pipe, attaching the ODC bridge, the O11 bridge, connecting or checking the selected Service Studio) goes
 // through currentExecutor().call(kind, params). LocalExecutor is today's code and the default in stdio, the CLI and the
@@ -206,7 +207,7 @@ export const servedWithoutContext = () => !hostedContext() && currentExecutor() 
 export function workspacePath(...segments) {
   const context = hostedContext();
   if (!context) throw servedWithoutContext() ? contextLost('a workspace path') : new Error('workspacePath is only valid inside a hosted call.');
-  return path.join(context.workspace, ...segments);
+  return segments[0]==='state' ? path.join(customerStateDir(context.workspace),...segments.slice(1)) : path.join(context.workspace,...segments);
 }
 
 // The root rule: true when this call is hosted and `root` is missing or one of the default data roots, so the caller uses
@@ -240,14 +241,14 @@ export function hostedSpawnEnv(lane) {
   const env = {};
   for (const name of SPAWN_ALLOWED) if (process.env[name] !== undefined) env[name] = process.env[name];
   const cwd = path.join(context.workspace, lane);
-  const tmp = path.join(cwd, 'tmp');
+  const tmp = process.env.SSAM_BACKEND_NAME ? path.join(customerStateDir(context.workspace), lane, 'tmp') : path.join(cwd,'tmp');
   fs.mkdirSync(tmp, { recursive: true });
   // TMPDIR is the temp folder of .NET on Linux (Path.GetTempPath; TEMP/TMP only on Windows). Without it the kernel of the
   // Linux image (server/Dockerfile) wrote to /tmp, shared by every customer and outside the workspace: the thin O11
   // bridge's snapshot_module path (ThinBridge.cs, <temp>/thin-bridge/<guid>.oml) was refused PATH_OUTSIDE_WORKSPACE.
   env.TEMP = tmp; env.TMP = tmp; env.TMPDIR = tmp;
   // Also for ODC: without the variable the kernel's BridgeAccess would read the owner's HKCU value.
-  env.ANVIL_AUTHORITY_DIR = path.join(context.workspace, 'state', 'relay-authority');
+  env.ANVIL_AUTHORITY_DIR = path.join(customerStateDir(context.workspace), 'relay-authority');
   if (lane === 'o11') {
     env.ANVIL_BRIDGE_PORT = String(bridgePort);
     const studioDir = context.o11?.studioDir ?? record?.studioDir, anvilLane = context.o11?.lane ?? record?.anvilLane;
@@ -276,7 +277,7 @@ export function hostedSpawnEnv(lane) {
   // measured on a disposable copy of the customer's module and kept per user profile (<profile>/.ssam-hybrid/studio-defaults,
   // whose file names the module and flow measured). Hosted, the customer's own folder (state/: internal, never read back by
   // ssam_evidence), never the server's profile or HOME shared by every customer.
-  env.SSAM_STUDIO_DEFAULTS_ROOT = path.join(context.workspace, 'state', 'studio-defaults');
+  env.SSAM_STUDIO_DEFAULTS_ROOT = path.join(customerStateDir(context.workspace), 'studio-defaults');
   return { env, cwd };
 }
 
@@ -302,8 +303,9 @@ export const WORKSPACE_FOLDERS = Object.freeze([
 export function prepareWorkspace(workspace) {
   for (const folder of WORKSPACE_FOLDERS) fs.mkdirSync(path.join(workspace, ...folder.split('/')), { recursive: true });
   const tenants = path.join(workspace, 'odc', 'tenants.json');
-  if (!fs.existsSync(tenants)) fs.writeFileSync(tenants, JSON.stringify({ default: null, tenants: {} }, null, 2));
-  const relayAuthorityDir = path.join(workspace, 'state', 'relay-authority');
+  try { fs.writeFileSync(tenants, JSON.stringify({ default: null, tenants: {} }, null, 2),{flag:'wx'}); } catch(e) { if(e.code!=='EEXIST')throw e; }
+  const relayAuthorityDir = path.join(customerStateDir(workspace), 'relay-authority');
+  fs.mkdirSync(relayAuthorityDir,{recursive:true});
   fs.writeFileSync(path.join(relayAuthorityDir, 'bridge.key'), randomBytes(32).toString('base64url'), { mode: 0o600 });
   return relayAuthorityDir;
 }
