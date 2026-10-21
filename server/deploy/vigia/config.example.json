@@ -1,0 +1,39 @@
+{
+  "workspace": "C:/path/to/SSAM-worktree",
+  "tempRoot": "C:/path/to/SSAM-worktree/.test-tmp/vigia",
+  "outDir": "C:/t/vigia",
+  "bundleRoot": "C:/t/studio-bundles",
+  "dockerContext": "desktop-linux",
+  "builder": "ssam-multiver-impl",
+  "image": "docker.io/andrepereiramachado/ssam-server",
+  "notify": true,
+  "studios": {
+    "odc": "C:/Program Files/OutSystems/ODC Studio/ODC Studio",
+    "o11": "C:/Program Files/OutSystems/Service Studio 11/Service Studio"
+  },
+  "previousStudios": {
+    "odc": "C:/t/odc1729/studio-1.7.29.10940/ODC Studio",
+    "o11": "C:/t/studio-bundles/o11-11.55.93/snapshot/files"
+  },
+  "previousFeaturesDir": "C:/private/current-default-features",
+  "featuresSource": "C:/Users/OWNER/AppData/Local/OutSystems/ODC Studio/Features.xml",
+  "featuresFile": "C:/t/odc1729/features/Features.plain.xml",
+  "bundles": {
+    "odc": {
+      "version": "1.7.29",
+      "file": "C:/t/odc1729/installers/odc-studio-1.7.29.10940.tar.gz",
+      "sha256": "b64f5381439e1fcc3be1f0cc298bd86c71ae8ffaeec2a704e2c21f1ec7e112ca"
+    },
+    "o11": {
+      "version": "11.55.93",
+      "file": "C:/t/studio-bundles/o11-11.55.93/o11-studio-11.55.93.65289.tar.gz",
+      "sha256": "ad4f23b53db20ff9d5ae4d6899cbe9c41bab9f7a7b88c41be3d6b2ee47b0de95"
+    }
+  },
+  "agentPack": {
+    "odcBridge": "v97",
+    "o11BuiltFor": "11.55.92",
+    "o11Hook": "dev"
+  },
+  "installersDir": "C:/t/comb/installers"
+}
