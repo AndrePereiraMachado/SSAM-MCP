@@ -204,6 +204,13 @@ A regra é a da seção 8 do DEPLOY.md (anuncie a janela: recriar o container co
    `check`, Stop, `kernel write`, Start, como no DEPLOY.md 8. As imagens anteriores continuam no registro com as tags
    fixas: não apague tags.
 
+### 7.1 Imagens publicadas no registro
+
+| Tag | `latest` desde | Digest | O que muda |
+| --- | --- | --- | --- |
+| `prod-20261021-ac614ad` | 2026-10-21 | `sha256:ccb135efc6082bf14fbc1c9e2934a42cf4edefa3522c1089ebda0d411afcd01e` | o hub escreve um primeiro byte logo atrás dos cabeçalhos do stream do agente (`agent-hub.mjs`): o Traefik (proxy em Go) só repassa os cabeçalhos com o primeiro byte do corpo, e o primeiro ping vinha aos 15 s, o prazo do agente; atrás do Traefik todo stream era abortado aos 15 s (visto em 2026-10-21). Testes do hub 28/28. |
+| `prod-20261020-12fae04` | 2026-10-20 | `sha256:bbeaffad076ac04b0156208b4541ef6d761517c945589ab4b59cbf05999318e5` | painel dentro da imagem (11.4) |
+
 ## 8. Backup, restore e log
 
 ```bash
