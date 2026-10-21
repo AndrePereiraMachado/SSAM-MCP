@@ -97,6 +97,7 @@ hardened="--rm --init --security-opt no-new-privileges:true --cap-drop ALL --use
 # A terminal for the interactive commands only when there is one (a script or a pipe gets -i).
 tty=-i; [ -t 0 ] && [ -t 1 ] && tty=-it
 
+. "$here/window-backup.sh"
 cmd=${1:-}; [ $# -gt 0 ] && shift
 case "$cmd" in
   status)
@@ -195,7 +196,7 @@ case "$cmd" in
     [ -d "$dir" ] && [ -w "$dir" ] || die "the folder $dir must exist and be writable (sudo install -d -o \$USER -m 0700 $dir)"
     stamp=$(date -u +%Y%m%dT%H%M%SZ); archive=$dir/ssam-state-$stamp.tar.gz
     # shellcheck disable=SC2086
-    $DOCKER run $hardened --network none $(mounts "$c") "$(image_of "$c")" sh -c 'tar -C /data -czf - server friction odc-features' > "$archive"
+    window_backup
     url=$(db_url "$c")
     if [ -n "$url" ]; then
       # The tokens' database as plain SQL (loads back with psql).
@@ -225,9 +226,9 @@ case "$cmd" in
       gzip -dc "$dump" | pg_tool "$c" psql "$url" -v ON_ERROR_STOP=1 -f - >/dev/null
       echo "tokens database restored from $dump"
     fi
-    (cd "$(dirname "$archive")" && [ ! -f "$(basename "$archive").sha256" ] || sha256sum -c "$(basename "$archive").sha256") || die "the archive does not match its .sha256"
+    (cd "$(dirname "$archive")" && { [ ! -f "$(basename "$archive").sha256" ] || sha256sum -c "$(basename "$archive").sha256"; }) || die "the archive does not match its .sha256"
     # shellcheck disable=SC2086
-    $DOCKER run $hardened --network none -i $(mounts "$c") "$(image_of "$c")" sh -c 'rm -rf /data/server/* /data/friction/* /data/odc-features/* && tar -C /data -xzf - && echo "restored; start the server in Coolify"' < "$archive"
+    window_restore
     ;;
   logs)
     c=$(container); n=${1:-50}

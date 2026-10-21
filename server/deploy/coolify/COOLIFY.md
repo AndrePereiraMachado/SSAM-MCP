@@ -153,7 +153,7 @@ O painel do dono (`ssam-console`, seção 11) usa o **mesmo banco**: as licença
 ## 7. Upgrade e rollback
 
 1. Avise os clientes da janela de manutenção: recriar containers interrompe chamadas; depois reconecte o MCP.
-2. Execute ssamctl.sh backup antes de mudar qualquer imagem ou estado.
+2. Execute ssamctl.sh backup da janela inteira antes de mudar qualquer imagem ou estado. O manifesto interno relaciona container, versões, destino e volume. A restauração exige todos os backends parados e os mesmos mapeamentos de volumes.
 3. Revise a proposta local do vigia e seus testes por nome. Publique as tags imutáveis testadas, sem latest, e compare os digests.
 4. Aprove o commit de versions.json e do compose gerado. No Coolify, substitua o compose e prepare os containers parados. Grave kernel e features por versão como na seção 5.
 5. Faça Redeploy. Compare ssamctl.sh status com a proposta e confira health, warm, roteamento e SESSION_REROUTED.
@@ -170,7 +170,7 @@ O painel do dono (`ssam-console`, seção 11) usa o **mesmo banco**: as licença
 
 ```bash
 sudo install -d -o root -m 0700 /var/backups/ssam-server
-sh ssamctl.sh backup                     # tar.gz de server, friction e odc-features (+ .sha256 e .info) E o dump do banco
+sh ssamctl.sh backup                     # tar.gz da janela inteira: server-state, friction, Features e cache de cada backend (+ .sha256 e .info) E o dump do banco
                                          # (ssam-tokens-<data>.sql.gz + .sha256), com o servidor no ar
 sh ssamctl.sh backup /outra/pasta
 sh ssamctl.sh restore /var/backups/ssam-server/ssam-state-<data>.tar.gz [/var/backups/ssam-server/ssam-tokens-<data>.sql.gz]
