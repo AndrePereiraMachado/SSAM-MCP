@@ -4,6 +4,10 @@ import { PAGE_FIELDS, pageInteger, paginationDiagnostic } from './pagination-dia
 import { normalizeTraceResult } from './trace-result.mjs';
 import { normalizeTraceSearchResult, normalizeTraceSummary } from './trace-metadata-result.mjs';
 import { PORTAL_READS } from './portal-routes.mjs';
+import { createLogScreenDefaults } from './log-screen-defaults.mjs';
+
+const logScreen = createLogScreenDefaults().screen;
+const logDiagnosticFields = new Set([...Object.keys(logScreen.GetSettings), ...Object.keys(logScreen.SelectedEnviroment)]);
 
 // Fresh adapter built from observed wire contracts. It does not import GitSSAM,
 // recover browser cookies, accept headers/tokens, or implement password login.
@@ -248,7 +252,8 @@ export class PortalReadAdapter {
         const timeout = ['AbortError', 'TimeoutError'].includes(error?.name) || ['READ_DEADLINE_EXCEEDED', 'PORTAL_TIMEOUT'].includes(error?.code);
         const code = timeout ? 'PORTAL_TIMEOUT' : codes.has(error?.code) ? error.code : 'PORTAL_BROKER_FAILED';
         fail(code, 'Managed Portal read failed. No raw exception or credential is returned.', {
-          ...(['trace-stage', 'trace-settings', 'trace-summary'].includes(error?.details?.diagnosticStage) ? { diagnosticStage: error.details.diagnosticStage } : {}),
+          ...(['trace-stage', 'trace-settings', 'trace-summary', 'log-settings', 'log-stage', 'log-search'].includes(error?.details?.diagnosticStage) ? { diagnosticStage: error.details.diagnosticStage } : {}),
+          ...(['log-settings', 'log-stage'].includes(error?.details?.diagnosticStage) && logDiagnosticFields.has(error?.details?.diagnosticField) ? { diagnosticField: error.details.diagnosticField } : {}),
           causeCategory: timeout ? 'timeout' : error?.code === 'PORTAL_REQUEST_FAILED' ? 'server-response' : codes.has(error?.code) ? 'contract-or-access' : 'transport-or-local',
           ...(Number.isInteger(error?.details?.status) ? { status: error.details.status } : {}), ...(typeof error?.details?.sent === 'boolean' ? { sent: error.details.sent } : {}),
           ...(typeof error?.details?.remoteCode === 'string' && /^OS-[A-Z0-9]{2,12}-\d{3,8}$/.test(error.details.remoteCode) ? { remoteCode: error.details.remoteCode } : {}),
