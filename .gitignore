@@ -28,3 +28,8 @@
 
 # Cache de features do ODC decifrado (server/deploy/odc-features-export.ps1): flags do tenant, vai só para o volume
 **/Features.plain.xml
+
+# A app Electron do agente (agent/package.json): o pacote extraído para o build e os instaladores gerados
+/agent/pack/
+/agent/dist/
+/agent/out/

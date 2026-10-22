@@ -1,0 +1,33 @@
+{
+  "name": "ssam-agent-app",
+  "productName": "SSAM Agent",
+  "version": "0.1.0",
+  "description": "The SSAM agent as a background desktop app: tray icon, the agent supervised in a child process, updates from the owner's update server.",
+  "private": true,
+  "type": "module",
+  "main": "out/main/index.js",
+  "author": "SSAM",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "test": "node --test tests/app/*.test.mjs",
+    "icons": "node scripts/make-icons.mjs",
+    "pack:verify": "node scripts/verify-pack.mjs pack",
+    "dist:win": "node scripts/build.mjs --platform win",
+    "dist:mac": "node scripts/build.mjs --platform mac"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "6.1.2",
+    "electron": "44.9.2",
+    "electron-builder": "26.15.3",
+    "electron-vite": "6.0.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "vite": "8.3.4"
+  }
+}

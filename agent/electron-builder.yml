@@ -1,0 +1,72 @@
+# electron-builder: the installers of SSAM Agent (scripts/build.mjs runs it; see README.md of this folder).
+#   - resources/pack: the agent pack of the platform, synced into the agent root by the app (extraResources);
+#   - Windows: a per-user NSIS installer (no administrator), one click, the app started at the end;
+#   - macOS: a DMG for the person and a ZIP for the updater (electron-updater needs the ZIP), no Dock icon
+#     (LSUIElement), hardened runtime (signing and notarization are the owner's step: README.md);
+#   - publish: the generic provider of electron-updater; the URL is the owner's update server, given to the build
+#     (scripts/build.mjs --update-url or SSAM_UPDATE_URL) and written to resources/app-update.yml.
+appId: com.ssam.agent
+productName: SSAM Agent
+copyright: SSAM
+artifactName: ${name}-${version}-${os}-${arch}.${ext}
+directories:
+  output: dist
+  buildResources: build
+# Only the built app goes in the asar: out/ (electron-vite: main, preload, renderer), the tray icons and the window
+# icon. The rest of this folder (the agent code in agent/, the bridges in kernel/ and platforms/, the pack scripts,
+# the docs, the tests, src/) reaches the customer only through the pack (extraResources).
+files:
+  - out/**/*
+  - assets/**/*
+  - build/icon.png
+  - package.json
+  - "!src/**"
+  - "!agent/**"
+  - "!kernel/**"
+  - "!platforms/**"
+  - "!docs/**"
+  - "!tests/**"
+  - "!scripts/**"
+  - "!pack/**"
+  - "!dist/**"
+  - "!*.md"
+extraResources:
+  - from: pack
+    to: pack
+    filter: ["**/*"]
+asar: true
+npmRebuild: false
+electronLanguages: [en]
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  # verifyUpdateCodeSignature is left on: a signed build is checked by the updater; an unsigned one is accepted as is.
+nsis:
+  oneClick: true
+  perMachine: false
+  allowElevation: false
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  shortcutName: SSAM Agent
+  artifactName: ${name}-${version}-setup.${ext}
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  icon: build/icon.png
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  extendInfo:
+    LSUIElement: true
+    NSHumanReadableCopyright: SSAM
+dmg:
+  writeUpdateInfo: false
+publish:
+  provider: generic
+  url: https://dist.ssam.pro/u/ssam-agent
+  channel: latest
