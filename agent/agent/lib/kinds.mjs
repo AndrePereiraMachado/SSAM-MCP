@@ -42,6 +42,12 @@ const MAX_LIST = 2000;
 const invalid = message => refuse('PARAMS_INVALID', message);
 const three = version => { const match = /^(\d+)\.(\d+)\.(\d+)/.exec(String(version ?? '')); return match ? match.slice(1, 4).map(Number).join('.') : null; };
 export const sameVersion = (a, b) => three(a) !== null && three(a) === three(b);
+// a newer than b (first three numbers); false when either is unreadable.
+export const newerVersion = (a, b) => { const x = three(a)?.split('.').map(Number), y = three(b)?.split('.').map(Number); if (!x || !y) return false; for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]; return false; };
+// The server's version window of a lane (hello reply servedVersions), [] when the server sends none.
+const windowOf = (kernel, lane) => (Array.isArray(kernel?.servedVersions?.[lane]) ? kernel.servedVersions[lane].filter(v => typeof v === 'string') : []);
+// A Studio newer than every version of the window: the server serves it on its newest pair with a warning (studio-identity.mjs).
+const newerThanWindow = (version, window) => window.length > 0 && window.every(v => newerVersion(version, v));
 const pathLike = token => /^[A-Za-z]:/.test(token) || /^[\\/]/.test(token) || DOT_SEGMENT.test(token);
 
 // Path positions of an ODC bridge command (4.5/4.8), as {index: role} over a list of words. Used twice: on the args
@@ -91,7 +97,7 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
     if (known?.image !== image) throw refuse('STUDIO_NOT_SELECTED', `No ${platform === 'darwin' ? STUDIO_NAME[lane] : image} process ${pid} is running on this machine`);
     const expected = kernel()?.[lane] ?? null;
     if (!expected) throw refuse('STUDIO_VERSION_MISMATCH', `The server reports no kernel for the ${lane} lane`);
-    if (!sameVersion(known.version, expected))
+    if (!sameVersion(known.version, expected) && !newerThanWindow(known.version, windowOf(kernel(), lane)))
       throw refuse('STUDIO_VERSION_MISMATCH', `${STUDIO_NAME[lane]} ${pid} is version ${known.version ?? 'unknown'}; the server kernel is for ${STUDIO_NAME[lane]} ${expected}`);
     return { pid, ...known };
   }
@@ -255,15 +261,14 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
     // with either version outside it, the built-for version must match as before.
     let warning;
     if (pack.o11BuiltFor && !sameVersion(target.version, pack.o11BuiltFor)) {
-      const served = kernel()?.servedVersions?.o11;
-      const window = Array.isArray(served) ? served.filter(v => typeof v === 'string') : [];
+      const window = windowOf(kernel(), 'o11');
       const inWindow = version => window.some(v => sameVersion(v, version));
-      if (!inWindow(target.version) || !inWindow(pack.o11BuiltFor))
+      if (!(inWindow(target.version) || newerThanWindow(target.version, window)) || !inWindow(pack.o11BuiltFor))
         throw refuse('STUDIO_VERSION_MISMATCH', `Service Studio ${target.pid} is version ${target.version ?? 'unknown'}; the agent pack bridge is built for ${pack.o11BuiltFor}`
           + (window.length ? `, and the server serves Service Studio ${window.join(', ')}. Install the current agent package.` : ''));
       warning = { code: 'O11_BRIDGE_BUILT_FOR_DIFFERS', builtFor: pack.o11BuiltFor, studio: target.version,
         message: `The agent's Service Studio bridge was built for Service Studio ${pack.o11BuiltFor} and is loaded into Service Studio ${target.version}; `
-          + `the server serves both versions. Check the result in Service Studio before publishing.` };
+          + (inWindow(target.version) ? 'the server serves both versions. ' : 'this Service Studio is newer than the versions the server serves (' + window.join(', ') + '). ') + 'Check the result in Service Studio before publishing.' };
     }
     // pack.json decides the hook (o11Hook "h1": the signed release layout) and the bridge file of the version handshake.
     const record = await connectO11({ root, pid: target.pid, port: o11Port, studioVersion: target.version, describe: deps.describe,

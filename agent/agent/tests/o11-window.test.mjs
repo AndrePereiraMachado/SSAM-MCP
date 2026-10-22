@@ -94,3 +94,25 @@ test('o11 window: a server that sends no window keeps the exact built-for rule',
     assert.equal(attached, false);
   } finally { removeRoot(root); }
 });
+
+test('o11 window: a Service Studio newer than the whole window connects with a warning (the server serves it on its newest pair)', async () => {
+  const root = makeRoot({ o11BuiltFor: '11.55.92' });
+  const port = await freePort();
+  const fake = await connectable(root, port, '11.55.94.70000');
+  try {
+    const record = await kindsFor(root, WINDOW, fake.deps).execute('o11.connect', {});
+    assert.equal(record.connected, true);
+    assert.equal(record.warning?.code, 'O11_BRIDGE_BUILT_FOR_DIFFERS');
+    assert.match(record.warning.message, /newer than the versions the server serves \(11\.55\.92, 11\.55\.93\)/);
+  } finally { await fake.close(); removeRoot(root); }
+});
+
+test('o11 window: a Service Studio older than the window is refused before anything is attached', async () => {
+  const root = makeRoot({ o11BuiltFor: '11.55.92' });
+  let attached = false;
+  try {
+    const kinds = kindsFor(root, WINDOW, { processes: studio('11.55.91.65000'), attachO11: async () => { attached = true; } });
+    await refused(kinds.execute('o11.connect', {}), 'STUDIO_VERSION_MISMATCH');
+    assert.equal(attached, false);
+  } finally { removeRoot(root); }
+});
