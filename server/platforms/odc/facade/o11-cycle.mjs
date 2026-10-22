@@ -64,7 +64,7 @@ import * as standingGrants from './standing-grants.mjs';
 import { prepareIntegrationJob } from './integration-documents.mjs';
 import { textFormRefusal, partReader } from './text-routes.mjs';
 import { CODE_JOB_TEXT, removedOf } from './ssam-code.mjs';
-import { taskWarnings, warningFields } from './delivery-warnings.mjs';
+import { taskWarnings, warningFields, producerHashWarningsOf } from './delivery-warnings.mjs';
 import { jobSummary } from './job-summary.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
 // Lane wp (atritos 3): the build phase of a phased delivery, outside the Studio lock (o11-build-phase.mjs).
@@ -840,7 +840,14 @@ function o11Unpublished(state, { producerModels, input, job, holder }) {
   return { code: refusal.code, error: refusal.error, problems: refusal.problems, unpublished: refusal.producers, sequence: refusal.sequence, continuation: refusal.continuation };
 }
 
-export function deliverOutcome(run, { trackId, work, job, taskId, since, input = {}, pendingContext, producerModels = null }) {
+// Every exit, including a blocked or refused delivery, discloses incomplete producer verification.
+export function deliverOutcome(run, options) {
+  const answer = deliverOutcomeCore(run, options);
+  const state = run?.envelope?.data ?? findKernelTask(options.work, options);
+  return producerHashWarningsOf(state).length ? { ...answer, ...warningFields(taskWarnings(state)) } : answer;
+}
+
+function deliverOutcomeCore(run, { trackId, work, job, taskId, since, input = {}, pendingContext, producerModels = null }) {
   let state = run?.envelope?.data;
   // The CLI's own refusal of the job (Program.ErrorEnvelope with code and problems): nothing reached the Studio. The single
   // refusal (PREFLIGHT_REFUSED) or one of the apply alone with its own code and problems (primeira-certa A7).

@@ -1409,7 +1409,7 @@ public sealed partial class ModelSession
         var snap = ModelHost.Describe(producer, 0);
         if (!snap.IsValid) throw new InvalidOperationException($"reference: producer {producerName} is not valid ({snap.Validation.Total} messages): fix it first");
         var psession = new ModelSession(producer);
-        var names = op["elements"]?.AsArray().Select(e => e!.GetValue<string>()).ToList() ?? throw new InvalidOperationException("reference: 'elements' (list of Tipo:Nome) is required");
+        var names = op["elements"]?.AsArray().Select(e => e!.GetValue<string>()).ToList() ?? throw new InvalidOperationException("reference: 'elements' (list of Type:Name) is required");
         var shareables = new List<IShareable>();
         foreach (var n in names)
         {

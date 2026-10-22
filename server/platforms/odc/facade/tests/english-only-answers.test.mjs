@@ -9,6 +9,7 @@ import './fixtures/isolated-profile.mjs';
 // reports, and the module texts a user asks for in Portuguese (language:"pt"). Error codes are the contract and file
 // names are names: neither counts as prose.
 import test from 'node:test';
+import { parse } from 'acorn';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,7 +26,6 @@ const SKIP_DIRS = new Set(['tests', 'node_modules', 'bin', 'obj']);
 // Files whose Portuguese never reaches a licensee, each with its reason.
 const NOT_EMITTED = Object.freeze({
   'platforms/odc/facade/coverage-inventory.mjs': 'generator of the owner\'s internal coverage report (internal reports stay pt-BR)',
-  'platforms/odc/facade/debug-final-matrix.mjs': 'generator of the owner\'s internal debugger matrix report under .local/debugger (internal reports stay pt-BR)',
   'kernel/src/Anvil.Core/Kernel/EntityActionsExpander.cs': 'module descriptions in Portuguese only behind language:"pt", the user\'s choice of the language of his own module (L(en, pt) pairs; en by default)',
   'kernel/src/Anvil.Core/Kernel/ScreenGenerator.cs': 'screen labels in Portuguese only behind texts:"pt", the user\'s choice (en by default), plus Portuguese name matching of the user\'s entities',
   'kernel/src/Anvil.Core/Recipes/TemporadaRecipe.cs': 'internal demonstration recipe (the owner\'s Portuguese demo app), never run by a tool',
@@ -129,7 +129,13 @@ function findings() {
   for (const file of sources()) {
     const name = rel(file);
     if (Object.hasOwn(NOT_EMITTED, name) || PENDING.some(p => p.file === name)) continue;
+    // Only the internal Markdown renderer is exempt, never public pointers or errors.
+    const report = name === 'platforms/odc/facade/debug-final-matrix.mjs'
+      ? parse(fs.readFileSync(file, 'utf8'), { ecmaVersion: 'latest', sourceType: 'module', locations: true }).body
+        .find(n => n.type === 'ExportNamedDeclaration' && n.declaration?.id?.name === 'renderMarkdown')?.declaration
+      : null;
     for (const hit of portugueseLiterals(file)) {
+      if (report && hit.line >= report.loc.start.line && hit.line <= report.loc.end.line) continue;
       if (Object.hasOwn(VOCABULARY, name) && vocabularyShaped(hit.text)) continue;
       if (allowed(name, hit.text) || PENDING_TEXTS.some(p => hit.text.includes(p.text))) continue;
       out.push(name + ':' + hit.line + ' [' + hit.words.slice(0, 4).join(' ') + '] ' + hit.text.slice(0, 120).replace(/\s+/g, ' '));
@@ -323,7 +329,7 @@ test('english-only: every declared exception still names a real file and every p
 });
 
 test('english-only: the detector sees Portuguese and lets English, codes and file names pass', () => {
-  for (const pt of ['entregue', 'entregue e publicado', 'fechada', 'feito', 'nada a atualizar', '<palavras do usuário>', '<servidor>',
+  for (const pt of ['processo frio odc', 'entregue', 'entregue e publicado', 'fechada', 'feito', 'nada a atualizar', '<palavras do usuário>', '<servidor>',
     'o Service Studio estava ocupado; nada foi enviado', 'Cancelar a espera não para a obra.', 'job sem \'ops\' nem \'jobs\'',
     'Unexpected X @ Y: corrija ou declare em expectedMessages com why', 'Remova o elemento ou use-o.'])
     assert.ok(portugueseIn(pt), 'Portuguese not seen: ' + pt);

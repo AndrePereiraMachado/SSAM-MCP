@@ -308,7 +308,7 @@ public static class JobPreflight
                                     Pointer(i, "/data" + at));
                             if (edited.Key.Length != 0) continue;
                             var diff = Anvil.Reading.FlowDiff.Compute(null, new Dictionary<string, string>(), edited, null, Anvil.Reading.FlowDiff.AliasPrefix + ".", text,
-                                reserved.Contains, allowQuery);
+                                reserved.Contains, allowQuery, allowScreenJavaScript: ScreenJavaScriptException.Allowed(op, edited) != null);
                             foreach (var problem in diff.Problems) found.Add((at, problem));
                             if (diff.Problems.FirstOrDefault(p => p.Corrected != null) is { } fixedText)
                             {

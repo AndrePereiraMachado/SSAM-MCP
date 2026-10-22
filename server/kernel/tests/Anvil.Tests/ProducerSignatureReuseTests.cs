@@ -42,6 +42,41 @@ public sealed class ProducerSignatureReuseTests
                 previewSignatures: (_, _, _) => new JsonObject { ["ran"] = false, ["reason"] = "no runtime in the test" });
     }
 
+    [Fact]
+    public void OlderOrderHashWarningSurvivesListingCaptureCacheAndDelivery() => WithAuthorityFolder(() =>
+    {
+        var lab = NewLab();
+        lab.Environment.Signature!["SignatureBinary"] = Convert.ToBase64String(
+            ProducerSignatureEncodingTests.Payload(1252, "Description", true, true, false));
+        using (var session = HeadlessSession.ConnectStudio(lab.Environment, "lab.example", null, readOnly: true))
+        {
+            var listed = ProducerSignatureCapture.Capture(session,
+                new SignatureCaptureRequest("ZZHighCodePrimitives", [], Path.Combine(lab.Work, "list.avsig"), ListOnly: true));
+            AssertWarning(listed);
+        }
+        var job = lab.Job("IServerActionSignature:EncodingExport");
+        for (var round = 0; round < 2; round++)
+        {
+            var delivered = lab.Deliver(job);
+            var captured = delivered["capturedProducers"]!["Primitive"]!;
+            AssertWarning(captured);
+            AssertWarning(delivered);
+            AssertWarning(Assert.Single(lab.Cache.EntriesOf("lab.example", "ZZHighCodePrimitives")).Receipt);
+            if (round == 1) Assert.True(captured["reusedFromCache"]!.GetValue<bool>());
+        }
+        Assert.Equal(2, lab.Signatures); // listing and capture; second delivery reuses the cache
+        static void AssertWarning(JsonNode value)
+        {
+            var warnings = value["highWarnings"] as JsonArray;
+            Assert.NotNull(warnings);
+            var warning = Assert.Single(warnings);
+            Assert.Equal("PRODUCER_HASH_UNVERIFIED", (warning!["code"] ?? warning["id"])!.ToString());
+            Assert.Contains("the producer signature uses an older element order; 1 element hashes could not be re-derived and were accepted unverified",
+                (warning["message"] ?? warning["detail"])!.ToString());
+            Assert.Contains("EncodingExport", warning.ToJsonString());
+            Assert.NotEmpty(warning["elements"]!.AsArray());
+        }
+    });
     private static Lab NewLab(string host = "lab.example", string fixture = "ordinal-primitive")
     {
         var work = Path.Combine(Root, ".local", "producer-reuse-tests", Guid.NewGuid().ToString("N"), ".local", "work");

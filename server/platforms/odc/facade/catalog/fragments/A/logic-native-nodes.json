@@ -315,8 +315,8 @@
           }
         },
         "set": {
-          "route": "set <node> <Property> (expression, enum, reference ITipo:Name, DataType); set <node>/arg:<Input> Value; link for connectors",
-          "preconditions": ["a reference property takes ITipo:Name (never an alias or @key) in the compact step"],
+          "route": "set <node> <Property> (expression, enum, reference IType:Name, DataType); set <node>/arg:<Input> Value; link for connectors",
+          "preconditions": ["a reference property takes IType:Name (never an alias or @key) in the compact step"],
           "roles": {
             "message": {
               "odc": {

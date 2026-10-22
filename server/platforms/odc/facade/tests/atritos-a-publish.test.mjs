@@ -101,7 +101,9 @@ test('A2: a last merge that is not clean is refused before anything, with its re
   const uncertain = delivery(box.lab, '03-AddGenres', { mergedAt: '2026-10-06T10:00:00Z', receipt: 'none', job: false });
   const second = await publishWithGrant({ module: 'GameStore', authorize: WORDS }, deps(box, bridge()));
   assert.equal(second.code, 'LAST_DELIVERY_NOT_CLEAN'); assert.equal(second.outcome, 'uncertain');
-  assert.deepEqual(second.continuation, { tool: 'ssam_evidence', arguments: { file: path.join(uncertain.evidence, 'merge-started.json') }, why: second.continuation.why });
+  // 2026-10-21 (merge-reconcile.mjs): reading merge-started.json was a dead end; the next call is the reconciliation.
+  assert.ok(uncertain.evidence);
+  assert.deepEqual(second.continuation, { tool: 'studio_publish', arguments: { module: 'GameStore', reconcile: true }, why: second.continuation.why });
 });
 
 test('A2: a merge already published, or whose publication was already requested, is never published again', async t => {

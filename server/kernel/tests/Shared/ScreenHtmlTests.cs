@@ -11,6 +11,24 @@ namespace Anvil.Tests;
 // depend on the order in which the Model API lists the members of a set; every edit of the text is a difference.
 public sealed class ScreenHtmlTests
 {
+    [Fact]
+    public void NativeLayoutThemeContainsNoInternalWorkstreamLabels()
+    {
+        var css = Anvil.Core.ScreenVisual.WithNativeLayout(".author{color:red}", out var action);
+        Assert.Equal("added", action);
+        Assert.DoesNotMatch(@"\b(?:CX|X)\d+\b", css);
+        Assert.Contains(".author{color:red}", css);
+        const string before = ".before{color:red}\n", after = "\n.after{color:blue}";
+        const string legacy = "/* ssam:native-layout */\n/* version 3, written by the html op (CX17) */\n.old{}\n/* /ssam:native-layout */";
+        var upgraded = Anvil.Core.ScreenVisual.WithNativeLayout(before + legacy + after, out action);
+        Assert.Equal("replaced", action);
+        Assert.Equal(before + Anvil.Core.ScreenVisual.NativeLayoutCss + after, upgraded);
+        Assert.Contains("/* version 4,", upgraded);
+        Assert.DoesNotMatch(@"\b(?:CX|X)\d+\b", upgraded);
+        Assert.Equal(upgraded, Anvil.Core.ScreenVisual.WithNativeLayout(upgraded, out action));
+        Assert.Equal("present", action);
+    }
+
     private sealed class Node(string key, string kind, string name = "", params string[] kinds)
     {
         public string Key = key, Kind = kind, Name = name;

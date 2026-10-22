@@ -37,6 +37,7 @@
   <ItemGroup>
     <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../Shared/ModelReadingTests.cs" Link="ModelReadingTests.cs" />
+    <Compile Include="../Shared/PublicReferenceSurfaceTests.cs" Link="PublicReferenceSurfaceTests.cs" />
     <Compile Include="../../../platforms/odc/studio/bridge/BridgeDataIndexes.cs" Link="BridgeDataIndexes.cs" />
     <Compile Include="../Shared/PatchCertaintyTableTests.cs" Link="PatchCertaintyTableTests.cs" />
     <Compile Include="../Shared/PatchCertaintyCorpusTests.cs" Link="PatchCertaintyCorpusTests.cs" />

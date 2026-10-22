@@ -12,6 +12,47 @@ namespace Anvil.Tests;
 
 public sealed class NativeDependencyReaderTests
 {
+    [Theory]
+    [InlineData("utf8")]
+    [InlineData("windows1252")]
+    [InlineData("tampered")]
+    [InlineData("lossy")]
+    public void AccentedProducerHashesUseVerifiedEncodingCompatibility(string scenario)
+    { StudioAssemblies.Bind(); AccentedProducerHashCase(scenario); }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void AccentedProducerHashCase(string scenario)
+    {
+        var key = ObjectKey.NewKey();
+        var payload = new XElement("ReferenceAction", new XAttribute("OriginalName", "Calendar"),
+            new XAttribute("Description", scenario == "lossy" ? "Calendário 📅" : "Duração útil; ação às 18h."),
+            new XElement("InputParameters", Parameter("Minutes", SystemType(FixedKey("IntegerType")), true)));
+        var wrapper = Wrap(key, payload);
+        if (scenario != "utf8")
+        {
+            var canonical = new System.Text.StringBuilder();
+            Type.GetType("OutSystems.FrameworkExtensions.XmlExtensions, OutSystems.FrameworkExtensions", true)!
+                .GetMethod("AppendElement")!.Invoke(null, [canonical, payload]);
+            var encoding = System.Text.CodePagesEncodingProvider.Instance.GetEncoding(1252)!;
+            wrapper.SetAttributeValue("FullSignatureHash", NativeType("Oml.Signatures.ElementSignature")
+                .GetMethod("SerializeGuid", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!
+                .Invoke(null, [new Guid(MD5.HashData(encoding.GetBytes(canonical.ToString())))]));
+        }
+        if (scenario == "tampered") wrapper.Elements().Single().SetAttributeValue("Description", "Duração alterada");
+        var binary = (byte[])NativeStatic("Oml.Oml", "SerializeSignature", Document([wrapper]));
+        var producer = ObjectKey.NewKey().ToString();
+        if (scenario is "tampered" or "lossy")
+        {
+            Assert.Contains("payload hash differs", Assert.Throws<ArgumentException>(() =>
+                NativeDependencyReader.ResolveServerSignature(producer, "CalendarProducer", binary, ["IServerActionSignature:Calendar"])).Message);
+            return;
+        }
+        var resolution = NativeDependencyReader.ResolveServerSignature(producer, "CalendarProducer", binary, ["IServerActionSignature:Calendar"]);
+        Assert.Equal("Calendar", Assert.Single(resolution.Elements).Name);
+        Assert.True(resolution.HashUnverified == null || resolution.HashUnverified.Count == 0);
+        Assert.Equal("Calendar", Assert.Single(NativeDependencyReader.ListServerSignature(producer, "CalendarProducer", binary)).Name);
+    }
+
     private static readonly string Root = JobRunner.RepoRoot(Path.GetDirectoryName(typeof(NativeDependencyReaderTests).Assembly.Location)!)!;
     private static string Work() { var path = Path.Combine(Root, ".local/native-dependency-reader-tests", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(path); return path; }
 
@@ -379,7 +420,12 @@ public sealed class NativeDependencyReaderTests
             string[] selected = ["IServerActionSignature:Search"];
             if (scenario == "tampered-older-elements-order")
             {
-                Assert.Contains("Native element payload hash differs", Assert.Throws<ArgumentException>(() => NativeDependencyReader.ResolveServerSignature(producer, "Producer", binary, selected)).Message);
+                // Meta de 20/10/2026, item 14: an element hash of an older ElementsOrderVersion payload cannot be re-derived (the
+                // published RichWidgets fails on 7 of 192 elements with no tampering at all), so a mismatch there is recorded in
+                // HashUnverified and the resolution goes on; a payload of the current order keeps refusing it (wrong-element-hash).
+                var tolerated = NativeDependencyReader.ResolveServerSignature(producer, "Producer", binary, selected);
+                Assert.Equal("Search", Assert.Single(tolerated.Elements).Name);
+                Assert.Equal([fixture.ActionKey.ToString()], tolerated.HashUnverified);
                 return;
             }
             Assert.Equal("Search", Assert.Single(NativeDependencyReader.ResolveServerSignature(producer, "Producer", binary, selected).Elements).Name);

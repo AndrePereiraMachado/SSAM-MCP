@@ -549,8 +549,8 @@ export function checkMatrix(options = {}) {
 }
 export function docPointer(result) {
   if (!HEX64.test(result?.markdownSha256 ?? '') || !HEX64.test(result?.sha256 ?? '')) throw new Error('debug_matrix_pointer_result_invalid');
-  return `<!-- ${MARKER}${result.markdownSha256} -->\nMatriz final gerada: [DEBUGGER-MATRIZ-FINAL.md](DEBUGGER-MATRIZ-FINAL.md), sha256 \`${result.markdownSha256}\` ` +
-    `(matriz JSON \`${result.sha256}\`, \`.local/debugger/final-matrix/matrix.json\`). Regenerar com \`ssam debug matrix\`; \`ssam debug matrix --check\` sai com erro em qualquer divergência.`;
+  return `<!-- ${MARKER}${result.markdownSha256} -->\nFinal matrix generated: [DEBUGGER-MATRIZ-FINAL.md](DEBUGGER-MATRIZ-FINAL.md), sha256 \`${result.markdownSha256}\` ` +
+    `(JSON matrix \`${result.sha256}\`, \`.local/debugger/final-matrix/matrix.json\`). Regenerate with \`ssam debug matrix\`; \`ssam debug matrix --check\` exits with an error on any divergence.`;
 }
 
 export const matrixToolSchema = z.object({ op: z.enum(['generate', 'check']).optional() }).strict();

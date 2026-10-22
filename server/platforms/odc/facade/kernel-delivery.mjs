@@ -261,6 +261,27 @@ export async function planMergeOrderKernel({ base, candidate, output }, deps = {
   return plan;
 }
 
+// The SSAM content proof of two models (anvil-odc content-proof: MergeContentProof, the comparison the disposable merge
+// preview runs): the delivery's candidate (expected) against a capture of the open module (actual). merge-reconcile.mjs
+// reconciles an uncertain merge with it. On the worker when it advertises content-proof, else cold. Read only.
+// -> {ok:true, proof} | {ok:false, error}.
+export async function contentProofKernel({ expected, actual }, deps = {}) {
+  const cli = deps.cli ?? kernelCli();
+  if (!fs.existsSync(cli)) return { ok: false, error: 'the ODC kernel CLI is not built (' + cli + ')' };
+  const argv = ['content-proof', '--expected', expected, '--actual', actual];
+  const onWorker = await (deps.runOnWorker ?? runOnWorker)(argv, { ...(deps.worker !== undefined ? { worker: deps.worker } : {}), needs: ['content-proof'] });
+  if (onWorker.used && onWorker.unknown) return { ok: false, error: 'the ODC kernel worker took content-proof and gave no answer (' + (onWorker.error ?? 'no reply') + ')' };
+  let envelope = onWorker.used ? onWorker.envelope : null;
+  if (!onWorker.used) {
+    const response = await (deps.exec ?? exec)('dotnet', [cli, ...argv], { cwd: path.dirname(cli), windowsHide: true, maxBuffer: 64 * 1024 * 1024 })
+      .then(r => ({ ...r, exitCode: 0 })).catch(e => ({ stdout: e.stdout ?? '', stderr: e.stderr ?? e.message, exitCode: e.code ?? 1 }));
+    try { envelope = JSON.parse(response.stdout); } catch { envelope = null; }
+    if (!isObject(envelope)) return { ok: false, error: 'content-proof gave no JSON: ' + (withoutStack(String(response.stderr || response.stdout || '').trim()).split('\n').find(Boolean) ?? 'no output') };
+  }
+  if (envelope?.ok !== true || !isObject(envelope.data)) return { ok: false, error: withoutStack(envelope?.error) ?? 'content-proof refused' };
+  return { ok: true, proof: envelope.data };
+}
+
 // The repair of deferred defaults the second merge did not deliver: each element exists after the first merge, so a merge
 // keeps a default set on it (Anvil.Core.MergeOrder.RepairJob, same shape).
 export const mergeOrderRepairJob = deferred => ({ ops: deferred.map(d => ({ op: 'set', target: '@' + d.objectKey, prop: 'DefaultValue', value: d.value })) });
@@ -849,6 +870,9 @@ export async function deliverKernel(input, deps) {
   const check = deps.check !== undefined ? deps.check : apply === applyKernel ? checkJobKernel : null;
   // The merge order (planMergeOrderKernel): the same rule as check, the kernel the delivery applies with.
   const planOrder = deps.mergeOrder !== undefined ? deps.mergeOrder : apply === applyKernel ? planMergeOrderKernel : null;
+  // The reconciliation of an uncertain merge (merge-reconcile.mjs): the same rule as check, the kernel the delivery applies with.
+  const reconcile = deps.reconcile !== undefined ? deps.reconcile : apply === applyKernel
+    ? async (input, more = {}) => (await import('./merge-reconcile.mjs')).reconcileMerge(input, { studio, prove: contentProofKernel, ...more }) : null;
   // A warm-up never waits, fails or changes the delivery.
   const warm = file => { Promise.resolve().then(() => prefetch(file, 'odc')).catch(() => {}); };
   const { feature, owners, changes, pid, until = 'merge', publish = false, authorize } = input;
@@ -977,6 +1001,31 @@ export async function deliverKernel(input, deps) {
       + 'Some differences from the candidate remain unexplained: read them before any new change.\n' + withoutStack(report.error ?? '');
     report.continuation = { tool: 'ssam_evidence', arguments: { file: path.join(output, 'deliver-result.json'), pointer: '/divergences' },
       why: 'Already integrated; do not repeat the delivery. Read the differences that remained (element, property, local, candidate) before any new change.' };
+  };
+  // 2026-10-21 (merge-reconcile.mjs): a merge that ran (merged:true) but that the bridge could not prove equal is proven by
+  // the SSAM's content proof of a capture of the open module against this candidate; accepted, the delivery is delivered
+  // (equivalence content-proof) and publish:true goes on. Never a second merge. Refused or unavailable, the answer stays
+  // uncertain and already integrated, with the reconciliation's code and differences.
+  const reconciledAfterMerge = async () => {
+    if (typeof reconcile !== 'function' || report.merged !== true || !report.manifest) return false;
+    const evidence = evidenceDirOf(report.manifest);
+    let document = null, started = null;
+    try { document = readJob(report.manifest); started = readJob(path.join(evidence, 'merge-started.json')); } catch { return false; }
+    const begin = Date.now(); stage = 'reconcile'; progress('reconcile');
+    let value;
+    try { value = await reconcile({ merge: { dir: output, manifest: report.manifest, document, evidence, started }, module, pid }); }
+    catch (error) { value = { ok: false, code: 'RECONCILE_FAILED', error: withoutStack(error.message) }; }
+    report.steps.push({ step: 'reconcile', seconds: (Date.now() - begin) / 1000, ok: value?.ok === true });
+    if (value?.ok !== true) {
+      report.reconciliation = { code: value?.code ?? 'RECONCILE_FAILED', error: withoutStack(value?.error) ?? 'no answer', ...(isObject(value?.reconciliation) ? value.reconciliation : {}) };
+      return false;
+    }
+    if (Array.isArray(report.divergences)) report.nativeDivergences = report.divergences;
+    for (const key of ['failed', 'error', 'refusal', 'code', 'outcome', 'gate', 'continuation', 'divergences']) delete report[key];
+    report.merged = true; report.strictlyEqual = false; report.equivalence = 'content-proof';
+    report.reconciliation = value.reconciliation ?? { accepted: true };
+    report.result = RESULT.delivered;
+    return true;
   };
   // Merge order, pass 2 failed after pass 1 merged: the module has every element of the candidate, without the deferred
   // defaults. The answer names the pass, keeps merged:true, and (unless pass 2 itself ran uncertain or the bridge gave its
@@ -1640,6 +1689,7 @@ export async function deliverKernel(input, deps) {
         if (step === 'merge') {
           if (report.outcome === 'uncertain') { report.code ??= 'MERGE_UNCERTAIN'; mergedHonestly(); }
           nameDivergences();
+          if (!order && report.outcome === 'uncertain' && await reconciledAfterMerge()) { if (until === step) report.ok = true; continue; }
           if (order) secondPassFailed();
         }
         if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
@@ -1665,9 +1715,11 @@ export async function deliverKernel(input, deps) {
           report.failed = step; report.outcome = 'uncertain'; report.code = 'MERGE_UNCERTAIN';
           report.error = 'Merge did not confirm merged and strictlyEqual; read receipts and journal before any new attempt.';
           mergedHonestly();
-          if (order) secondPassFailed();
-          if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
-          return report;
+          if (!(!order && report.merged && await reconciledAfterMerge())) {
+            if (order) secondPassFailed();
+            if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
+            return report;
+          }
         }
         report.result = RESULT.delivered;
       }

@@ -1571,6 +1571,41 @@ public static class FlowApplyScenarios
         Assert.Contains(High(edited), w => w!["code"]?.ToString() == ModelSession.ForEachEditedKeptCode);
     }
 
+    public static void ScreenJavaScriptExceptionIsScopedAndAudited(string dir, string fixture, string lane)
+    {
+        const string Page = "<screen name=\"FaClick\"><var name=\"Qty\" type=\"Integer\"/><Block name=\"LayoutTopMenu\"><slot name=\"Title\">Clicks</slot><slot name=\"MainContent\"><span>{{ Qty }}</span></slot></Block></screen>";
+        var created = Run(dir, "js-base", "{\"base\":\"" + fixture + "\"," + NoRole(lane) + ",\"ops\":[{\"op\":\"rename\",\"target\":\"@espace\",\"name\":\"JsExceptionFixture\"}," + Html(Page) + "," + Texts("action FaClick.Save\n  in Amount: Integer\n  assign Qty = Amount\n  end\n") + "]}");
+        Assert.True(created["accepted"]!.GetValue<bool>(), created.ToJsonString());
+        var basePath = Path.Combine(dir, "js-base.oml");
+        const string Text = "action FaClick.JS_Save\n  in Amount: Integer\n  InvokeSave = javascript\n    in Amount: Integer = Amount\n    | $actions.Save($parameters.Amount);\n  end\n";
+        var op = JsonNode.Parse(Texts(Text))!.AsObject();
+        Assert.Contains(Refused(dir, "js-default", new JsonObject { ["ops"] = new JsonArray(op.DeepClone()) }.ToJsonString(), basePath), p => p!["code"]?.ToString() == "FLOW_JAVASCRIPT_NOT_ISOLATED");
+        op["allowScreenJavaScript"] = new JsonObject { ["module"] = "JsExceptionFixture", ["screen"] = "FaClick", ["actions"] = new JsonArray("JS_Save"), ["why"] = "User explicitly requested JavaScript click routing" };
+        var accepted = Run(dir, "js-allowed", new JsonObject { ["ops"] = new JsonArray(op.DeepClone()) }.ToJsonString(), basePath);
+        Assert.True(accepted["accepted"]!.GetValue<bool>(), accepted.ToJsonString());
+        Assert.Contains(accepted["highWarnings"]!.AsArray(), w => w!["code"]?.ToString() == ScreenJavaScriptException.AllowedCode);
+        var saved = File.ReadAllBytes(Path.Combine(dir, "js-allowed.oml"));
+        var read = new ModelHost(Path.Combine(dir, "work")).BuildFlow(saved, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(saved)).ToLowerInvariant(), lane)
+            .Actions.Single(a => a.Name.EndsWith("/FaClick/JS_Save", StringComparison.Ordinal));
+        Assert.True(read.FixedPoint, string.Join("\n", read.Problems));
+        Assert.Contains("$actions.Save($parameters.Amount);", read.Text);
+        var rawOps = JsonNode.Parse("""
+            [{"op":"create","parent":"IMobileScreen:FaClick/Save","type":"IJavaScriptNode","name":"RawScript","as":"js"},
+             {"op":"set","target":"$js","prop":"JavaScript","value":"console.log('explicit exception');"},
+             {"op":"link","from":"$js","to":"IMobileScreen:FaClick/Save/#IAssignNode","connector":"Target"},
+             {"op":"link","from":"IMobileScreen:FaClick/Save/#IStartNode","to":"$js","connector":"Target"}]
+            """)!.AsArray();
+        rawOps[0]!["allowScreenJavaScript"] = op["allowScreenJavaScript"]!.DeepClone();
+        rawOps[0]!["allowScreenJavaScript"]!["actions"] = new JsonArray("Save");
+        var raw = Run(dir, "js-raw", new JsonObject { ["ops"] = rawOps.DeepClone() }.ToJsonString(), basePath);
+        Assert.True(raw["accepted"]!.GetValue<bool>(), raw.ToJsonString());
+        Assert.Contains(raw["highWarnings"]!.AsArray(), w => w!["code"]?.ToString() == ScreenJavaScriptException.AllowedCode);
+        rawOps[0]!["allowScreenJavaScript"]!["screen"] = "WrongScreen";
+        Assert.Contains(Refused(dir, "js-raw-scope", new JsonObject { ["ops"] = rawOps }.ToJsonString(), basePath), p => p!["code"]?.ToString() == "FLOW_JAVASCRIPT_NOT_ISOLATED");
+        op["allowScreenJavaScript"]!["module"] = "OtherModule";
+        Assert.Contains(Refused(dir, "js-wrong-module", new JsonObject { ["ops"] = new JsonArray(op.DeepClone()) }.ToJsonString(), basePath), p => p!["code"]?.ToString() == "FLOW_JAVASCRIPT_NOT_ISOLATED");
+    }
+
     // CX3: pagination, typed SQL inputs and both handler flag forms remain one text throughout apply/save/read.
     public static void PaginationSqlAndExceptionHandlersReadBackExactly(string dir, string fixture, string lane)
     {

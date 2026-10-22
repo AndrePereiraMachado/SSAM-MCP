@@ -38,7 +38,7 @@ public static class VerbSurface
         new("replace", "write", ["from", "to"], ["force"],
             "Repoints every consumer of `from` to `to` (ReplaceReferences); different kinds require `force`."),
         new("reference", "write", ["producer", "elements"], ["as"],
-            "Imports public elements (`Tipo:Nome` list) of a producer module (fixture path, `job:<name>` or a producer bound on the command line). On ODC, imports a public module or AI model connection signature captured from the consumer session."),
+            "Imports public elements (`Type:Name` list) of a producer module (fixture path, `job:<name>` or a producer bound on the command line). On ODC, imports a public module or AI model connection signature captured from the consumer session."),
         new("layout", "write", ["target"], [],
             "Lays out the flow of an action, preparation or process with the shared engine."),
         new("spec", "write", ["data"], [],
@@ -90,7 +90,9 @@ public static class VerbSurface
         // allowSoapWithoutImport {why}: the lab escape of the SOAP rule (CompileCheck), on the create of a SOAP client.
         var unknown = op.Select(p => p.Key).Where(k => k != "op" && !k.StartsWith('_') && !allowed.Contains(k)
             && !(k == QueryInLoopRule.AllowKey && shape.Kind == "write") && !(k == ForEachEscape.AllowKey && ForEachEscape.Takes(kind))
+            && !(k == ScreenJavaScriptException.AllowKey && ScreenJavaScriptException.Takes(kind))
             && !(k == CompileCheck.SoapAllowKey && kind == "create")).ToList();
+        if (ScreenJavaScriptException.Validate(op) is { } invalid) throw new InvalidOperationException(invalid);
         if (missing.Count == 0 && unknown.Count == 0) return;
         var problems = new List<string>();
         if (missing.Count > 0) problems.Add("missing " + string.Join(", ", missing.Select(m => m.Contains('|') ? "one of " + m.Replace("|", ", ") : $"'{m}'")));
@@ -104,14 +106,14 @@ public static class VerbSurface
         ("$alias", "handle registered by `as` in an earlier op of the same job"),
         ("@espace", "the module itself"),
         ("@<ObjectKey>", "exact object key of the same capture; keys are opaque and may contain '/'"),
-        ("Tipo:Nome", "interface name plus object name, e.g. IServerEntity:Booking, IMobileScreen:Home; elements of referenced modules resolve through their *Signature interface"),
+        ("Type:Name", "interface name plus object name, e.g. IServerEntity:Booking, IMobileScreen:Home; elements of referenced modules resolve through their *Signature interface"),
         (":Nome", "object name with the interface omitted"),
         ("$pai/Filho", "child by name, argument by parameter name, placeholder by name, event handler by event name, or a property that returns an object ($btn/OnClick, $scr/OnReady)"),
         ("$pai/#Tipo[n]", "n-th direct child of that interface (default 1)"),
         ("$pai/**Tipo[n]", "n-th descendant of that interface at any depth"),
         ("$no/arg:Nome", "argument by parameter name when a child with the same name exists (JavaScript nodes)"),
         ("$no/param:Nome", "parameter or child by name, disambiguated from an argument"),
-        ("Tipo:@producerKey/elementKey", "element of an imported producer by original key (compiler-bound references)"),
+        ("Type:@producerKey/elementKey", "element of an imported producer by original key (compiler-bound references)"),
         ("IReference:Producer/Flow/Block", "qualified native block import"),
     ];
 
@@ -123,7 +125,8 @@ public static class VerbSurface
             {
                 ["kind"] = v.Kind,
                 ["required"] = new JsonArray(v.Required.Select(k => (JsonNode)k).ToArray()),
-                ["optional"] = new JsonArray(v.Optional.Select(k => (JsonNode)k).ToArray()),
+                ["optional"] = new JsonArray(v.Optional.Concat(ScreenJavaScriptException.Takes(v.Verb)
+                    ? new[] { ScreenJavaScriptException.AllowKey } : Array.Empty<string>()).Select(k => (JsonNode)k).ToArray()),
                 ["effect"] = v.Effect,
             };
         var references = new JsonObject();
@@ -135,6 +138,11 @@ public static class VerbSurface
             ["references"] = references,
             ["job"] = new JsonArray("description", "base", "expectValid", "expectedMessages", "ops"),
             ["expectedMessage"] = new JsonArray("id", "element", "why"),
+            ["screenJavaScriptException"] = new JsonObject {
+                ["key"] = ScreenJavaScriptException.AllowKey,
+                ["fields"] = new JsonArray("module", "screen", "actions", "why"),
+                ["rule"] = "Explicit exception for the named screen actions only; module and owner must match, actions is a nonempty list of names, why has at least 15 characters. Recorded as FLOW_SCREEN_JAVASCRIPT_ALLOWED; native verification still applies."
+            },
             ["rules"] = "A job is one transaction: the target of a set/link must exist before that op (forward references are reported with the op that creates them). "
                 + "Write verbs are recorded by the coverage ledger; read verbs are not. Ops beyond this list are refused with 'unknown op'. "
                 + "Dispatcher: Anvil.Core/Kernel/Verbs.cs (ModelSession.ApplyOne); reference grammar: ModelSession.Resolve.",

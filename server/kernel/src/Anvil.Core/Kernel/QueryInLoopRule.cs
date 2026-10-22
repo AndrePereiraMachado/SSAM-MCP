@@ -53,6 +53,7 @@ public static class QueryInLoopRule
                 ["id"] = w["code"]?.ToString() ?? "", ["severity"] = "high", ["path"] = path,
                 ["detail"] = VerifyHints.OneLine(w["message"]?.ToString(), 400), ["fix"] = w["fix"]?.ToString(),
             };
+            if (w["elements"] is JsonArray elements) warning["elements"] = elements.DeepClone();
             if (w["op"] is JsonValue op) warning["op"] = op.DeepClone();
             if (w["suggestion"] is JsonObject suggestion) warning["suggestion"] = suggestion.DeepClone();
             if (w["why"] is JsonValue why) warning["why"] = why.DeepClone();

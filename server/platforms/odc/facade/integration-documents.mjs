@@ -118,7 +118,7 @@ export async function destructiveProblems(ops, { words = '', grant = false, expo
   else {
     for (const t of targets)
       if (!named(words, nameOf(t.target)))
-        problems.push(problem('INTEGRATION_DELETE_WORDS', `the user's words do not name ${t.target}, which this job deletes`, `words that name ${nameOf(t.target)} (whole word), e.g. "apagar ${t.target}"`, { target: t.target, path: t.path }));
+        problems.push(problem('INTEGRATION_DELETE_WORDS', `the user's words do not name ${t.target}, which this job deletes`, `words that name ${nameOf(t.target)} (whole word), e.g. "delete ${t.target}"`, { target: t.target, path: t.path }));
     for (const b of breaks)
       if (!named(words, consumerOf(b.entry)))
         problems.push(problem('DELETE_BREAKS_WORDS', `the user's words do not name ${consumerOf(b.entry)}, whose use (${b.entry}) this job accepts to break`, `words that also name ${consumerOf(b.entry)}, or delete/rewrite that consumer in the job`, { target: b.entry, path: b.path }));
