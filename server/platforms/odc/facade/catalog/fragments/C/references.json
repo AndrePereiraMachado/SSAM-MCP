@@ -37,7 +37,7 @@
         "public entity",
         "public action"
       ],
-      "summary": "`reference {producer, elements, as}` imports public elements (`Tipo:Nome` list) of a producer module into the open module through IESpace.RefreshDependencies; the producer is a job (`job:<name>`), a fixture, or a module bound on the command line (--producer Name=<oml>). Imported elements are then addressed like local ones: `Tipo:Nome` falls back to the `<Tipo>Signature` interface (IServerAction:X resolves IActionSignature/IServerActionSignature), `Tipo:@producerKey/elementKey` binds by original key, and `IReference:<Producer>/<Flow>/<Block>` names a native block import.",
+      "summary": "`reference {producer, elements, as}` imports public elements (`Type:Name` list) of a producer module into the open module through IESpace.RefreshDependencies; the producer is a job (`job:<name>`), a fixture, or a module bound on the command line (--producer Name=<oml>). Imported elements are then addressed like local ones: `Type:Name` falls back to the `<Type>Signature` interface (IServerAction:X resolves IActionSignature/IServerActionSignature), `Type:@producerKey/elementKey` binds by original key, and `IReference:<Producer>/<Flow>/<Block>` names a native block import.",
       "route": {
         "kind": "job",
         "operation": "{\"op\":\"reference\",\"producer\":\"job:<producer-job>\"|\"<fixture.oml>\",\"elements\":[\"IServerEntity:<E>\",\"IServerAction:<A>\"],\"as\":\"$ref\"}; then use the elements (e.g. set <call> Action IActionSignature:<A>); deliver with o11_deliver (it validates and refuses before any change)"

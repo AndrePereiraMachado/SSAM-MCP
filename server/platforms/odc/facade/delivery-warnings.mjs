@@ -93,7 +93,7 @@ export function warningOf(entry, hints = {}) {
   const high = entry.severity === HIGH;
   const warning = { id, path: shortText(entry.path ?? ''), ...(typeof key === 'string' && key ? { key: shortKey(key) } : {}), detail: oneLine(shortText(entry.detail), high ? 400 : 200),
     fix: entry.fix === undefined ? fixOf(id, hints) : entry.fix,
-    ...(high ? { severity: HIGH, ...Object.fromEntries(['op', 'suggestion', 'why'].filter(k => entry[k] != null).map(k => [k, entry[k]])) } : {}) };
+    ...(high ? { severity: HIGH, ...Object.fromEntries(['op', 'suggestion', 'why', 'elements'].filter(k => entry[k] != null).map(k => [k, entry[k]])) } : {}) };
   if (typeof entry.ownerKey === 'string' && entry.ownerKey) ownerOf.set(warning, entry.ownerKey);
   return warning;
 }
@@ -104,7 +104,7 @@ export function warningOf(entry, hints = {}) {
 export function highWarningsOf(list) {
   return (Array.isArray(list) ? list : []).filter(isObject).map(w => warningOf({
     id: w.code ?? w.id, severity: HIGH, path: w.path ?? [w.flow ?? w.owner, w.loop, w.query].filter(Boolean).join(' / '),
-    detail: w.message ?? w.detail, fix: w.fix ?? null, op: w.op, suggestion: w.suggestion, why: w.why })).filter(Boolean);
+    detail: w.message ?? w.detail, fix: w.fix ?? null, op: w.op, suggestion: w.suggestion, why: w.why, elements: w.elements })).filter(Boolean);
 }
 
 // The non-blocking warnings of a list of verdicts (the apply's K1 verdicts or the live contract's entries).
@@ -117,12 +117,31 @@ export function warningsFromVerdicts(verdicts, { hints } = {}) {
 
 // The warnings of an O11 kernel task: its own list (Delivery.cs result.warnings), else the apply's verdicts (an older
 // kernel that predates the list answers none, as it never judged a warning non-blocking).
+export function producerHashWarningsOf(state) {
+  return Object.entries(state?.capturedProducers ?? {}).flatMap(([binding, entry]) => {
+    if (!isObject(entry)) return [];
+    const recorded = (entry.highWarnings ?? []).filter(w => (w.code ?? w.id) === 'PRODUCER_HASH_UNVERIFIED');
+    if (recorded.length) return highWarningsOf(recorded);
+    const keys = [...new Set(Array.isArray(entry.hashUnverified) ? entry.hashUnverified : [])];
+    if (!keys.length) return [];
+    const elements = [...(entry.elements ?? []), ...(entry.closure ?? [])];
+    return highWarningsOf([{
+      code: 'PRODUCER_HASH_UNVERIFIED', owner: entry.producer ?? binding,
+      message: 'the producer signature uses an older element order; ' + keys.length + ' element hashes could not be re-derived and were accepted unverified',
+      elements: keys.map(key => { const element = elements.find(e => (e.originalKey ?? e.key) === key); return { key, name: element?.name ?? null, path: element?.path ?? null }; }),
+      fix: 'Publish the producer with the current element order and capture its signature again to verify these element hashes.'
+    }]);
+  });
+}
+
 export function taskWarnings(state, { hints } = {}) {
-  // The kernel names the element of its own warnings in key (VerifyHints.Warnings: the verdict's ownerKey).
-  if (Array.isArray(state?.warnings))
-    return state.warnings.map(w => warningOf(isObject(w) && w.ownerKey == null && w.key != null ? { ...w, ownerKey: w.key } : w, hints ?? {})).filter(Boolean);
-  // An apply refused before the task recorded its warnings still names its HIGH warnings first.
-  return [...highWarningsOf(state?.apply?.highWarnings), ...warningsFromVerdicts(state?.apply?.validation?.verdicts, { hints })];
+  const warnings = Array.isArray(state?.warnings)
+    ? state.warnings.map(w => warningOf(isObject(w) && w.ownerKey == null && w.key != null ? { ...w, ownerKey: w.key } : w, hints ?? {})).filter(Boolean)
+    : [...highWarningsOf(state?.apply?.highWarnings), ...warningsFromVerdicts(state?.apply?.validation?.verdicts, { hints })];
+  // Reconstruct older cache receipts too; do not duplicate the warning already recorded by the kernel.
+  for (const warning of producerHashWarningsOf(state))
+    if (!warnings.some(w => w.id === warning.id && w.path === warning.path && JSON.stringify(w.elements) === JSON.stringify(warning.elements))) warnings.push(warning);
+  return warnings;
 }
 
 // Equal warnings come once, the first of them with count (only when more than one): the same id on the same element, named

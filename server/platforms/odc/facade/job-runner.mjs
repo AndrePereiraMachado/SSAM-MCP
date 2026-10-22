@@ -360,7 +360,7 @@ async function runJobOnce(request, deps, carried) {
         if (w.warning) note = w.warning;
       }
       if (!envelope) {
-        via = 'processo frio odc';
+        via = 'cold process odc';
         const r = await applyRunner(argv, { cli: odcCli, cwd: root });
         if (!r.envelope) return { answer: refusal('no-json', 'the CLI printed no JSON', { lane, job: file, via, exitCode: r.exitCode, stdout: tail(r.stdout, 2000), stderr: r.stderr ?? [] }) };
         envelope = r.envelope;

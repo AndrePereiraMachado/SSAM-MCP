@@ -33,6 +33,7 @@ public sealed partial class ModelSession
     // the escape of QUERY_IN_LOOP (allowQueryInLoop).
     private Func<string, bool>? _flowActionTaken;
     private bool _flowAllowQueryInLoop;
+    private JsonObject? _flowScreenJavaScript;
     /// <summary>The action as an earlier read had it, while a text writes it back (the undo of FlowBattery): its JavaScript
     /// nodes come back as they were (FlowDiff.Compute restoredFrom). Never set by an op.</summary>
     internal FlowItem? FlowRestore;
@@ -47,6 +48,17 @@ public sealed partial class ModelSession
     private Action<string, int, string>? _flowDependencySkipped;
 
     private JsonNode FlowOp(JsonObject op)
+    {
+        var previous = _flowScreenJavaScript;
+        _flowScreenJavaScript = op;
+        try { return FlowOpCore(op); }
+        finally { _flowScreenJavaScript = previous; }
+    }
+
+    private string? ScreenScriptWhy(FlowItem action) => ScreenJavaScriptException.Allowed(_flowScreenJavaScript, action,
+        new KernelModelReader().NameOf((IObjectSignature)_es));
+
+    private JsonNode FlowOpCore(JsonObject op)
     {
         var data = op["data"]!.AsObject();
         var unknown = data.Select(p => p.Key).Where(k => k is not ("flow" or "basedOn")).ToList();
@@ -135,7 +147,14 @@ public sealed partial class ModelSession
         try {
             foreach (var i in CreationOrder(plans)) {
                 if (excluded.ContainsKey(i)) continue;
-                try { results[i] = ApplyFlowText(texts[i].Text, texts[i].BasedOn, texts[i].Pointer); }
+                try {
+                    results[i] = ApplyFlowText(texts[i].Text, texts[i].BasedOn, texts[i].Pointer);
+                    if (plans[i].Edited is { } edited && ScreenScriptWhy(edited) is { } why
+                        && edited.Items.Any(n => n.Kind == "JavaScriptNode"))
+                        Report("highWarnings", new JsonObject { ["code"] = ScreenJavaScriptException.AllowedCode,
+                            ["severity"] = "high", ["pointer"] = texts[i].Pointer, ["flow"] = edited.Owner + "." + edited.Name,
+                            ["message"] = "Screen JavaScript explicitly allowed for this action: " + why, ["why"] = why });
+                }
                 catch (KernelRefusalException error) when (error.Problems is { Count: > 0 }) { refusals.Add(error); }
                 catch (Exception) when (refusals.Count > 0) { break; }
             }
@@ -326,7 +345,8 @@ public sealed partial class ModelSession
                 // written on the action now, so the patch sends it with basedOn of now (RebasedOn), and it is not merged again.
                 // The elements of the read the merge writes again (new keys) are the action's own: never judged as new ones.
                 var mergedDiff = FlowDiff.Compute(baseline, read.Keys, edited, read.Text, prefix, mergedText,
-                    _flowActionTaken ?? (name => ScopeNames().Contains(name)), _flowAllowQueryInLoop, FlowRestore, new ModelFlowTypes(this, action), rewritten: merge.Rewritten);
+                    _flowActionTaken ?? (name => ScopeNames().Contains(name)), _flowAllowQueryInLoop, FlowRestore, new ModelFlowTypes(this, action), rewritten: merge.Rewritten,
+                    allowScreenJavaScript: ScreenScriptWhy(edited) != null);
                 // A rule the merged text breaks names its ids: the problem carries that text.
                 var mergedProblems = mergedDiff.Problems.Concat(RenameCaptures(baseline, mergedDiff, read)).ToList();
                 mergedProblems.AddRange(EditedCursors(mergedText, edited, baseline, read, mergedProblems.Any(p => p.Corrected != null)));
@@ -351,7 +371,8 @@ public sealed partial class ModelSession
         // text does not declare (a list of the screen, a screen aggregate, the order of a record) the model says. A new screen,
         // block or data action is created under the owner the header names (resolved above).
         var diff = FlowDiff.Compute(baseline, read?.Keys ?? new Dictionary<string, string>(), edited, read?.Text, prefix, text,
-            _flowActionTaken ?? (name => ScopeNames().Contains(name)), _flowAllowQueryInLoop, FlowRestore, new ModelFlowTypes(this, action, under), owner);
+            _flowActionTaken ?? (name => ScopeNames().Contains(name)), _flowAllowQueryInLoop, FlowRestore, new ModelFlowTypes(this, action, under), owner,
+            allowScreenJavaScript: ScreenScriptWhy(edited) != null);
         problems.AddRange(diff.Problems);
         if (baseline != null && read != null) problems.AddRange(RenameCaptures(baseline, diff, read));
         if (baseline != null && read != null) problems.AddRange(EditedCursors(text, edited, baseline, read, problems.Any(p => p.Corrected != null)));

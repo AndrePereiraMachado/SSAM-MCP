@@ -57,7 +57,7 @@ internal static class Program
 
     private const string Usage = """
 usage: anvil-odc <command> [--flags]
-  headless: apply | check-job | create-blank | create-app | inspect | references | verify-catalog | merge-order | api | external-library
+  headless: apply | check-job | create-blank | create-app | inspect | references | verify-catalog | merge-order | content-proof | api | external-library
   session:  status | snapshot | merge | deliver | refresh | publish
   worker:   serve [--port 4547] | ping | gc
   details in docs/lanes.md and src/Anvil.Core.Odc/Adapters.ODC/README.md
@@ -116,6 +116,7 @@ usage: anvil-odc <command> [--flags]
         "references" => Host(args).References(File.ReadAllBytes(Need(args, "--oml"))),
         "verify-catalog" => VerifyCatalogCmd(args),
         "merge-order" => MergeOrderPlan(args),
+        "content-proof" => ContentProof(args),
         "api" => Need(args, "--op") == "native" ? Native(args) : CommandSurface.Schema(Need(args, "--op")),
         // An External Library from its spec (project, dotnet publish, deterministic zip), its contents and their diff; no Studio.
         "external-library" => Anvil.Core.ExternalLibraries.ExternalLibraryCommand.Run(args),
@@ -223,6 +224,19 @@ usage: anvil-odc <command> [--flags]
             : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(outPath))).ToLowerInvariant();
         Log($"merge-order: {plan["deferred"]!.AsArray().Count} deferred default(s)");
         return plan;
+    }
+
+    /// <summary>`content-proof --expected &lt;candidate.oml&gt; --actual &lt;capture.oml&gt;`: the independent comparison of authored
+    /// content (MergeContentProof, the same one the disposable merge preview runs) between the delivery's candidate and a
+    /// capture of the open module. The facade reconciles an uncertain merge with it (merge-reconcile.mjs): accepted, with
+    /// the sha256 of both inputs, or the differences. Read only.</summary>
+    private static object ContentProof(string[] args)
+    {
+        var expected = Path.GetFullPath(Need(args, "--expected"));
+        var actual = Path.GetFullPath(Need(args, "--actual"));
+        var proof = MergeContentProof.Check(Host(args), expected, actual);
+        Log($"content-proof: {(proof["accepted"]?.GetValue<bool>() == true ? "accepted" : "refused")}, {proof["checked"]} value(s) checked");
+        return proof;
     }
 
     private static object Inspect(string[] args)
@@ -591,7 +605,7 @@ usage: anvil-odc <command> [--flags]
                     ["baseCache"] = BaseModelCache.Stats(),
                     // B2 (C02): what a delivery's apply needs from a worker. A worker without them (an older CLI) would stamp its
                     // own identity, so the facade runs such a delivery cold.
-                    ["capabilities"] = new JsonArray("apply:developer-id", "apply:base-content-sha256", "merge-order") },
+                    ["capabilities"] = new JsonArray("apply:developer-id", "apply:base-content-sha256", "merge-order", "content-proof") },
                 authorize: request => Anvil.Core.Delivery.BridgeAccess.Matches(request["authorization"]?.ToString(), credential),
                 idle: BaseModelCache.Worker);
             Log($"anvil-odc worker: ouvindo em 127.0.0.1:{port} pid {Environment.ProcessId}");

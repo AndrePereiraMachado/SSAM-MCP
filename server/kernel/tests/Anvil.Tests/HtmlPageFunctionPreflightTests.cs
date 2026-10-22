@@ -9,7 +9,7 @@ namespace Anvil.Tests;
 /// <summary>
 /// The html-path findings of the UI-Mockup diagnosis of 2026-10-11 (an\DIAGNOSTICO.md, G5 and G6) closed in the engine:
 /// G5, an unknown function in the bindings of an html page op (job 0314 of the html replay reached the Verify with 18
-/// ExpressionUnknownFunction 'Lower') is refused once by the base check with the patch that renames it in every binding;
+/// ExpressionUnknownFunction 'Lower') is refused once with autoPatch:false, or repaired with a receipt by default;
 /// G6, the Values/Labels of a Dropdown read as List.Current (12 ExpressionUnknownObject + 6 CustomObjectError in the same
 /// job) are refused from the job alone with the patch that reads the element's attributes, and the select hint of the page
 /// form no longer teaches List.Current.
@@ -59,14 +59,94 @@ public sealed class HtmlPageFunctionPreflightTests
         Assert.Equal(18, HtmlExpander.Expressions(data).Count(s => s.Text.Contains("Lower(", StringComparison.Ordinal)));
     }
 
-    /// <summary>G5 through the Studio: one refusal with FUNCTION_UNKNOWN for the page op, the patch renaming Lower in every
-    /// binding (a text that only looks like the call stays), the page's own script not reported, the Verify's repetition of
-    /// the same fault merged into it; and the patched job is accepted.</summary>
+    /// <summary>Explicit refusal and automatic repair are separate page-function contracts.</summary>
     [Fact]
     public void G5_AnUnknownFunctionOfThePageBindingsIsRefusedOnceWithThePatchThatRenamesItInEveryBinding()
+        => CheckPageRefusal("Lower", "ToLower");
+
+    [Fact]
+    public void G5_AnotherCertainFunctionIsRefusedOnceWithEveryBindingInItsPatch()
+        => CheckPageRefusal("Upper", "ToUpper");
+
+    private static void CheckPageRefusal(string function, string replacement)
     {
         if (!PacoteBPolicyTests.StudioAvailable()) return;
-        var dir = Scratch("g5");
+        var dir = Scratch("g5-refusal");
+        var job = PageJob(function);
+        // Certain renames are automatic by default. This contract requests the verified refusal.
+        job["autoPatch"] = false;
+        var (error, _) = Run(dir, "lower", job);
+        var refused = Assert.IsType<JobPreflightException>(Errors.FindCoded(error!));
+        var problems = refused.Problems.OfType<JsonObject>().ToList();
+        var unknown = Assert.Single(problems, p => p["code"]!.GetValue<string>() == "FUNCTION_UNKNOWN");
+        Assert.Equal("base", unknown["phase"]!.GetValue<string>());
+        Assert.Equal(0, unknown["op"]!.GetValue<int>());
+        Assert.Contains("'" + function + "('", unknown["message"]!.GetValue<string>());
+        Assert.Contains(replacement, unknown["fix"]!.GetValue<string>());
+        var patch = unknown["patch"]!.AsArray().OfType<JsonObject>().ToDictionary(p => p["path"]!.GetValue<string>(), p => p["value"]!.GetValue<string>());
+        Assert.Equal(PageRepairs(replacement), patch);
+        // the page's own client function is no unknown function, and the Verify's ExpressionUnknownFunction of the same op is
+        // the same fault: not a second problem
+        Assert.DoesNotContain(problems, p => p["message"]!.GetValue<string>().Contains("'Twice", StringComparison.Ordinal));
+        Assert.DoesNotContain(problems, p => p["code"]!.GetValue<string>() == "ExpressionUnknownFunction" && p["op"] is JsonValue);
+        // the patch is the whole fix: the patched job is accepted by the Studio's Verify
+        foreach (var (path, value) in patch) Replace(job, path, value);
+        var (fixedError, result) = Run(dir, "lower-fixed", job);
+        Assert.True(fixedError == null, fixedError?.ToString());
+        Assert.True(result!["accepted"]!.GetValue<bool>(), result["details"]?.ToJsonString());
+    }
+
+
+    [Theory]
+    [InlineData(null, "Lower", "ToLower")]
+    [InlineData(null, "Upper", "ToUpper")]
+    [InlineData(true, "Lower", "ToLower")]
+    [InlineData(true, "Upper", "ToUpper")]
+    public void G5_CertainPageFunctionsAreRepairedWithACompleteReceipt(bool? autoPatch, string function, string replacement)
+    {
+        if (!PacoteBPolicyTests.StudioAvailable()) return;
+        var dir = Scratch("g5-auto");
+        var job = PageJob(function);
+        if (autoPatch.HasValue) job["autoPatch"] = autoPatch.Value;
+        var sent = job.ToJsonString();
+        var (error, result) = Run(dir, "automatic", job);
+        Assert.True(error == null, error?.ToString());
+        Assert.True(result!["accepted"]!.GetValue<bool>());
+        Assert.Equal(1, result["autoPatch"]!["rounds"]!.GetValue<int>());
+        var repair = Assert.Single(result["patchesApplied"]!.AsArray().OfType<JsonObject>());
+        Assert.Equal("FUNCTION_UNKNOWN", repair["code"]!.ToString());
+        Assert.Equal("BUILTIN_FUNCTION_RENAMED", repair["patchRule"]!.ToString());
+        Assert.Equal(sent, job.ToJsonString());
+        Assert.True(JsonNode.DeepEquals(job, JsonNode.Parse(File.ReadAllText(Path.Combine(dir, "automatic.json")))));
+        var expected = job.DeepClone().AsObject();
+        foreach (var (path, value) in PageRepairs(replacement)) Replace(expected, path, value);
+        var corrected = JsonNode.Parse(File.ReadAllText(result["patchedJob"]!["path"]!.ToString()));
+        Assert.True(JsonNode.DeepEquals(expected, corrected), corrected?.ToJsonString());
+    }
+
+    [Fact]
+    public void G5_AFunctionWithoutACertainRenameStillHasOneRefusalByDefault()
+    {
+        if (!PacoteBPolicyTests.StudioAvailable()) return;
+        var dir = Scratch("g5-unknown");
+        var job = PageJob("NoSuchPageFunctionAtAll");
+        var (error, _) = Run(dir, "unknown", job);
+        var refused = Assert.IsType<JobPreflightException>(Errors.FindCoded(error!));
+        var problem = Assert.Single(refused.Problems.OfType<JsonObject>(), p => p["code"]?.ToString() == "FUNCTION_UNKNOWN");
+        Assert.Null(problem["patch"]);
+        Assert.False(File.Exists(Path.Combine(dir, "unknown.oml")));
+    }
+
+    private static Dictionary<string, string> PageRepairs(string replacement) => new()
+    {
+        ["/ops/0/data/bindings/st/value"] = "If(" + replacement + "(Name) = \"ana\", \"color:red\", \"color:blue\")",
+        ["/ops/0/data/bindings/t/value"] = replacement + "(Name)",
+        ["/ops/0/data/bindings/v/condition"] = replacement + "(Name) <> \"\" or Shown",
+        ["/ops/0/data/bindings/c/value"] = "If(Index(" + replacement + "(Name), \"a\") >= 0, \"on\", \"off\")",
+    };
+
+    private static JsonObject PageJob(string function)
+    {
         var job = new JsonObject
         {
             ["expectValid"] = true,
@@ -85,30 +165,11 @@ public sealed class HtmlPageFunctionPreflightTests
                     """),
             }),
         };
-        var (error, _) = Run(dir, "lower", job);
-        var refused = Assert.IsType<JobPreflightException>(Errors.FindCoded(error!));
-        var problems = refused.Problems.OfType<JsonObject>().ToList();
-        var unknown = Assert.Single(problems, p => p["code"]!.GetValue<string>() == "FUNCTION_UNKNOWN");
-        Assert.Equal("base", unknown["phase"]!.GetValue<string>());
-        Assert.Equal(0, unknown["op"]!.GetValue<int>());
-        Assert.Contains("'Lower('", unknown["message"]!.GetValue<string>());
-        Assert.Contains("ToLower", unknown["fix"]!.GetValue<string>());
-        var patch = unknown["patch"]!.AsArray().OfType<JsonObject>().ToDictionary(p => p["path"]!.GetValue<string>(), p => p["value"]!.GetValue<string>());
-        Assert.Equal(new Dictionary<string, string>
-        {
-            ["/ops/0/data/bindings/t/value"] = "ToLower(Name)",
-            ["/ops/0/data/bindings/v/condition"] = "ToLower(Name) <> \"\" or Shown",
-            ["/ops/0/data/bindings/c/value"] = "If(Index(ToLower(Name), \"a\") >= 0, \"on\", \"off\")",
-        }, patch);
-        // the page's own client function is no unknown function, and the Verify's ExpressionUnknownFunction of the same op is
-        // the same fault: not a second problem
-        Assert.DoesNotContain(problems, p => p["message"]!.GetValue<string>().Contains("'Twice", StringComparison.Ordinal));
-        Assert.DoesNotContain(problems, p => p["code"]!.GetValue<string>() == "ExpressionUnknownFunction" && p["op"] is JsonValue);
-        // the patch is the whole fix: the patched job is accepted by the Studio's Verify
-        foreach (var (path, value) in patch) Replace(job, path, value);
-        var (fixedError, result) = Run(dir, "lower-fixed", job);
-        Assert.True(fixedError == null, fixedError?.ToString());
-        Assert.True(result!["accepted"]!.GetValue<bool>(), result["details"]?.ToJsonString());
+        var page = job["ops"]![0]!["data"]!.AsObject();
+        page["html"] = page["html"]!.ToString() + "<span data-av=\"st\">style</span>";
+        page["bindings"]!["st"] = new JsonObject { ["kind"] = "style", ["value"] = "" };
+        foreach (var (path, value) in PageRepairs(function)) Replace(job, path, value);
+        return job;
     }
 
     // ---- G6: the Values/Labels of a Dropdown -----------------------------------------------------------------------------

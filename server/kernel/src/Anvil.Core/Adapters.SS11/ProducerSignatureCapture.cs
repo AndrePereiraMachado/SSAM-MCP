@@ -86,6 +86,8 @@ public static class ProducerSignatureCapture
             var available=NativeDependencyReader.ListServerSignature(info.Key,info.Name,info.SignatureBinary);
             return new JsonObject { ["producer"]=producer.Name,["key"]=Keys.ToStudio(producer.Key),["kind"]=producer.Kind,
                 ["environment"]=environment,["versionId"]=before.VersionId,["signatureHash"]=info.SignatureHash.ToString(),
+                ["hashUnverified"] = new JsonArray(available.HashUnverified.Select(k => (JsonNode)k).ToArray()),
+                ["highWarnings"] = ProducerHashWarnings.Create(producer.Name, available.HashUnverified, Items(available)),
                 ["readOnly"]=true,["total"]=available.Count,["offset"]=request.Offset,["limit"]=request.Limit,
                 ["nextOffset"]=request.Offset+request.Limit<available.Count ? request.Offset+request.Limit : null,
                 ["elements"]=new JsonArray(available.Skip(request.Offset).Take(request.Limit).Select(e=>(JsonNode)new JsonObject {
@@ -125,6 +127,7 @@ public static class ProducerSignatureCapture
         snapshot.Write(outPath);
         var avsigSha = Sha256(File.ReadAllBytes(outPath));
         log?.Invoke($"signature {producer.Name}: {info.SignatureBinary.Length} bytes hash={info.SignatureHash} version={before.VersionId?.ToString() ?? "-"} guard={before.Guard} avsig sha256={avsigSha}");
+        if (resolution.HashUnverified is { Count: > 0 } notRederived) log?.Invoke($"signature {producer.Name}: {notRederived.Count} element hash(es) of an older elements order not re-derived (recorded, not refused): {string.Join(", ", notRederived)}");
 
         string? xifPath = null, xifSha = null;
         if (xif != null)
@@ -143,6 +146,9 @@ public static class ProducerSignatureCapture
             ["signatureHash"] = info.SignatureHash.ToString(), ["advertisedSignatureHash"] = before.AdvertisedHash,
             ["advertisedMatchesSignature"] = advertisedMatches,
             ["signatureBytes"] = info.SignatureBinary.Length, ["elementSignatures"] = resolution.ElementSignatures,
+            // Element hashes accepted without verification must remain visible through cache reuse and delivery.
+            ["hashUnverified"] = resolution.HashUnverified is { Count: > 0 } unverified ? new JsonArray(unverified.Select(k => (JsonNode)k).ToArray()) : null,
+            ["highWarnings"] = ProducerHashWarnings.Create(producer.Name, resolution.HashUnverified, Items(resolution.Elements.Concat(resolution.Closure))),
             ["elements"] = Items(resolution.Elements), ["closure"] = Items(resolution.Closure),
             ["foreignDependencies"] = new JsonArray(resolution.Foreign.Select(f => (JsonNode)f).ToArray()),
             ["unresolvedDependencies"] = new JsonArray(resolution.Unresolved.Select(f => (JsonNode)f).ToArray()),

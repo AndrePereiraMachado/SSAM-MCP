@@ -163,6 +163,9 @@ function world(t, { libraries, references = [], statusBroken = [] }) {
       if (step.by === 'person') {
         assert.equal(step.tool, undefined, 'the person\'s step is no tool call');
         steps.push('person:' + step.action + '@' + step.pid); publishOf(step.module);
+      } else if (step.tool === 'studio_publish' && step.arguments?.reconcile === true) {
+        // The reconciliation of an unproven merge (merge-reconcile.mjs) publishes nothing: the reading the handler names.
+        codes.push('stop:studio_publish'); break;
       } else if (step.tool === 'studio_publish') {
         steps.push('studio_publish@' + step.arguments.pid);
         assert.equal(step.arguments.authorize, MARKER, 'the publication waits for the person\'s words');
@@ -183,7 +186,8 @@ function world(t, { libraries, references = [], statusBroken = [] }) {
   };
   return { root, lab, state, calls, deps, publishDeps, job, input, follow, libraryMerge, openSha, publishOf };
 }
-const chainOf = r => { const out = []; for (let s = r.continuation; s; s = s.then) out.push(s.by === 'person' ? 'person:' + s.action : s.tool); return out; };
+// 2026-10-21 (merge-reconcile.mjs): studio_publish {reconcile:true} proves and records a merge and never publishes.
+const chainOf = r => { const out = []; for (let s = r.continuation; s; s = s.then) out.push(s.by === 'person' ? 'person:' + s.action : s.tool === 'studio_publish' && s.arguments?.reconcile === true ? 'studio_publish:reconcile' : s.tool); return out; };
 const publishes = r => chainOf(r).includes('studio_publish');
 
 // ---- N1: the open model is the producer's only on the consumer's tenant, and with the published key ------------------

@@ -45,6 +45,7 @@ public sealed class FlowApplyTests
 
     // Screen, block and data actions born from their texts need a Reactive module (the blank service has no screen).
     private const string Reactive = "reactive-ui.oml";
+    [Fact] public void ScreenJavaScriptExceptionIsScopedAndAudited() => RunReactive(FlowApplyScenarios.ScreenJavaScriptExceptionIsScopedAndAudited);
     private static void RunReactive(Action<string, string, string> scenario)
     {
         if (!PacoteBPolicyTests.StudioAvailable()) return;

@@ -1260,6 +1260,8 @@ public static partial class Delivery
             // The HIGH warnings of the data-access rules (QUERY_IN_LOOP legacy/allowed, AGGREGATES_MERGEABLE) come first, and
             // also on their own (highWarnings) so a compacted answer still shows them; they never block (A03).
             var high = QueryInLoopRule.HighWarnings(result["apply"]?["highWarnings"] as JsonArray);
+            foreach (var warning in QueryInLoopRule.HighWarnings(ProducerHashWarnings.OfCaptures(result["capturedProducers"] as JsonObject)))
+                high.Add(warning?.DeepClone());
             for (var n = high.Count - 1; n >= 0; n--) warnings.Insert(0, high[n]!.DeepClone());
             if (high.Count > 0) result["highWarnings"] = high; else result.Remove("highWarnings");
             if (warnings.Count > 0) result["warnings"] = warnings; else result.Remove("warnings");
@@ -1375,6 +1377,7 @@ public static partial class Delivery
             {
                 if (!string.Equals(recorded["producer"]?.ToString(), producerName, StringComparison.Ordinal))
                     throw new InvalidOperationException("Task captured another producer for binding " + name + ": " + recorded["producer"]);
+                ProducerHashWarnings.Record(state);
                 continue;
             }
             if (authority == null) throw new InvalidOperationException("--capture-producer requires the read-only Studio producer authority");
@@ -1399,6 +1402,7 @@ public static partial class Delivery
             captured[name] = CapturedEntry(producerName, destination, sha, environment, acquired.Receipt);
             if (acquired.Reused) captured[name]!["reusedFromCache"] = true;
             captured[name]!["observed"] = acquired.Observed.DeepClone();
+            ProducerHashWarnings.Record(state);
             task.Save("capture-producer:" + name);
             log?.Invoke($"deliver: {(acquired.Reused ? "reused the cached capture of" : "captured")} producer {name} sha256={sha} signatureHash={acquired.Receipt["signatureHash"]} version={acquired.Receipt["versionIdBefore"]} observed={acquired.Observed["by"]}");
         }
@@ -1468,6 +1472,9 @@ public static partial class Delivery
         ["key"] = receipt["key"]?.DeepClone(), ["kind"] = receipt["kind"]?.DeepClone(), ["guard"] = receipt["guard"]?.DeepClone(),
         ["versionId"] = receipt["versionIdBefore"]?.DeepClone(), ["signatureHash"] = receipt["signatureHash"]?.DeepClone(),
         ["advertisedSignatureHash"] = receipt["advertisedSignatureHash"]?.DeepClone(), ["xifSha256"] = receipt["xifSha256"]?.DeepClone(),
+        ["hashUnverified"] = receipt["hashUnverified"]?.DeepClone(),
+        ["elements"] = receipt["elements"]?.DeepClone(), ["closure"] = receipt["closure"]?.DeepClone(),
+        ["highWarnings"] = ProducerHashWarnings.OfReceipt(producer, receipt),
         ["foreignDependencies"] = receipt["foreignDependencies"]?.DeepClone(), ["capturedAtUtc"] = DateTime.UtcNow.ToString("O") };
 
     /// <summary>F5: refused by the server observation of a producer whose published state changed since its capture.</summary>
@@ -1608,6 +1615,7 @@ public static partial class Delivery
                 known.Add(owner);
                 if (receipt["key"]?.ToString() is { Length: > 0 } capturedKey) known.Add(capturedKey);
                 owners.Add(binding); queue.Enqueue(binding);
+                ProducerHashWarnings.Record(task.State);
                 task.Save("capture-producer:" + binding);
                 log?.Invoke($"deliver: {(acquired.Reused ? "reused the cached capture of" : "captured")} {name}, owner of foreign types of {dependentName}, as {binding} sha256={sha} observed={acquired.Observed["by"]}");
             }

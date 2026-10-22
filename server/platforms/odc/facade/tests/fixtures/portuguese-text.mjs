@@ -23,9 +23,9 @@ export const PORTUGUESE_WORDS = new Set((
   + 'conectado ocupado ocupada pronta copia diferenca estado elemento elementos propriedade usos por com ou ao se nos no na em de do da '
   + 'um os as dele dela tenho gerar ambiente cancelar espera obra motivo proprio propria tente remova falhou etapa '
   + 'integrador compila recompilacao desactualizado registo fuga retidos lixo recolher saida sobrescreve captura assinatura '
-  + 'atestada enviar envios conexao conexoes perde lenta equipe '
+  + 'atestada enviar envios conexao conexoes perde lenta equipe processo frio '
   // The words of a credential window (review english-junction F1: 'Guardar a senha' passed the list above).
-  + 'senha senhas guardar salvar credencial credenciais secreto secreta escolha confira informe adicione adicionar responda'
+  + 'gerada regenerar senha senhas guardar salvar credencial credenciais secreto secreta escolha confira informe adicione adicionar responda'
 ).split(/\s+/));
 // Short words that are also English or code ("no", "as", "do", "um", "OS"): they count only within three words of
 // another Portuguese word.
@@ -35,7 +35,11 @@ const strip = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 // Prose words of a text with their position; identifiers are dropped.
 function proseWords(text) {
-  const clean = text.replace(/https?:\/\/\S+/g, ' ').replace(/`[^`\n]*`/g, ' ');
+  const clean = text.replace(/https?:\/\/\S+/g, ' ').replace(/`([^`\n]*)`/g, (_, code) => {
+    // A single code token is an identifier/accepted alias. Multiword generated examples remain prose.
+    // Typed product placeholders are checked explicitly by portugueseIn before this step.
+    return /^\S+$/.test(code) ? ' ' : code;
+  });
   const words = [];
   for (const m of clean.matchAll(/[\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*/gu)) {
     const run = m[0], before = clean[m.index - 1] ?? ' ', after = clean[m.index + run.length] ?? ' ', next = clean[m.index + run.length + 1] ?? ' ';
@@ -50,6 +54,12 @@ function proseWords(text) {
 // null when the text reads as English; otherwise {words, sample} with the Portuguese words found.
 export function portugueseIn(text) {
   if (typeof text !== 'string' || text.length < 2) return null;
+  // Product placeholders are prose even when they resemble typed identifiers.
+  const placeholders = text.match(/\bI?Tipo:(?:Nome|Name|@producerKey\/elementKey)|<Tipo>Signature/g) ?? [];
+  if (placeholders.length) return { words: placeholders, sample: placeholders.join(' ') };
+  // Explicit generated deletion examples are product prose, even when quoted as code.
+  const examples = [...text.matchAll(/(?:e\.g\.\s*["'`]|`)([^`"'\n]+)/g)].map(m => m[1]);
+  if (examples.some(example => /\bapagar\s/i.test(example))) return { words: ['apagar'], sample: examples.join(' ') };
   const words = proseWords(text);
   const found = [];
   words.forEach((w, k) => {

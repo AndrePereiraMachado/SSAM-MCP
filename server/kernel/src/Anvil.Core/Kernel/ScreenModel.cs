@@ -6,7 +6,7 @@ namespace Anvil.Core;
 
 public sealed partial class ModelSession
 {
-    private static object? UIProperty(object owner, string property)
+    internal static object? UIProperty(object owner, string property)
     {
         // O11's V1 ComboBox.SourceEntity getter casts the singleton anonymous field's parent to a
         // named record. Its public AttributeType is the actual selected entity (also used by Verify).

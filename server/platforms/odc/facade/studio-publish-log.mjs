@@ -15,6 +15,7 @@ import { fixContinuation } from '../portal/runtime/operation-log.mjs';
 import { resolveOpenModule } from './studio-module.mjs';
 import { hashedWords, wordsGiven, wordsRequired } from './destructive-operations.mjs';
 import { recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
+import { mergeState, reconcilable, reconcileCall } from './merge-reconcile.mjs';
 
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -94,8 +95,11 @@ const evidenceRead = (file, why) => ({ tool: 'ssam_evidence', arguments: { file 
 const refused = (code, error, continuation, extra = {}) => ({ ok: false, code, executed: false, error, ...extra, continuation });
 
 // {module, pid} -> {ok:true, manifest, module, resolvedFrom} | a refusal. deps: studio (the bridge call), lab (the lab
-// folder), root (where relative evidence paths resolve), catalog() (the asset catalog, for app names).
-export async function resolveDeliveryManifest({ module, pid } = {}, { studio, lab, root, catalog = () => null }) {
+// folder), root (where relative evidence paths resolve), catalog() (the asset catalog, for app names), reconcile (merge-
+// reconcile.mjs reconcileMerge with the kernel's content proof; absent: read only, the refusal names the explicit call).
+// A merge is clean when its receipt is strict or normalized, or when the SSAM proved it (merge-reconcile.mjs): a merge that
+// is not clean and has no known losses is reconciled here first, in the same Studio process, never merged again.
+export async function resolveDeliveryManifest({ module, pid } = {}, { studio, lab, root, catalog = () => null, reconcile = null }) {
   const status = await studio(['status'], pid);
   if (!isObject(status) || status.ok === false || !Array.isArray(status.modules)) return isObject(status) && status.ok === false ? status
     : refused('STUDIO_STATUS_UNAVAILABLE', 'The ODC Studio did not list its open modules; nothing was published.', { tool: 'studio_status', arguments: { view: 'brief', ...(Number.isInteger(pid) ? { pid } : {}) }, why: 'which modules are open in this Studio' });
@@ -111,15 +115,28 @@ export async function resolveDeliveryManifest({ module, pid } = {}, { studio, la
       why: 'deliver and publish in one call, with the user\'s words in authorize (or the standing grant of the app); a manifest from elsewhere is published with studio_publish {manifest}' }, { module: name });
   const last = merges[0];
   const from = { manifest: last.manifest, evidence: last.evidence, mergedAt: last.started.at ?? null };
-  const receipt = readJsonOrNull(path.join(last.evidence, 'receipt.json'));
-  if (!(receipt?.ok === true && receipt.merged === true && receipt.strictlyEqual === true)) {
-    const incomplete = readJsonOrNull(path.join(last.evidence, 'incomplete-receipt.json'));
-    const result = readJsonOrNull(path.join(last.dir, 'deliver-result.json'));
-    const outcome = incomplete ? 'incomplete' : receipt?.ok === true ? 'not-strict' : 'uncertain';
-    const continuation = outcome === 'incomplete' && isObject(result?.continuation) ? result.continuation
-      : evidenceRead(incomplete ? path.join(last.evidence, 'incomplete-receipt.json') : result ? path.join(last.dir, 'deliver-result.json') : path.join(last.evidence, 'merge-started.json'),
-        'the last merge of ' + name + ' did not end clean: read its receipt before anything; never publish or merge again blindly');
-    return refused('LAST_DELIVERY_NOT_CLEAN', 'The last SSAM merge of ' + name + ' (' + path.basename(last.dir) + ') is ' + outcome + ', not a clean merge; nothing was published.', continuation, { module: name, outcome, resolvedFrom: from });
+  const otherStudio = Number.isInteger(last.started.pid) && Number.isInteger(status.pid) && last.started.pid !== status.pid;
+  const state = mergeState(last.evidence);
+  if (!state.clean) {
+    const outcome = state.outcome;
+    const notClean = (continuation, extra = {}) => refused('LAST_DELIVERY_NOT_CLEAN', 'The last SSAM merge of ' + name + ' (' + path.basename(last.dir) + ') is ' + outcome + ', not a clean merge'
+      + (extra.reconciliation ? ' and its content was not proven (' + extra.reconciliation.code + ': ' + extra.reconciliation.error + ')' : '') + '; nothing was published.', continuation, { module: name, outcome, resolvedFrom: from, ...extra });
+    if (outcome === 'incomplete') {
+      const result = readJsonOrNull(path.join(last.dir, 'deliver-result.json'));
+      return notClean(isObject(result?.continuation) ? result.continuation : evidenceRead(path.join(last.evidence, 'incomplete-receipt.json'),
+        'the last merge of ' + name + ' kept known losses: its repair job is the next delivery; never publish or merge again blindly'));
+    }
+    // The merge ran (merge-started.json) but nothing proved it equal to the candidate: the SSAM proves it now, in the
+    // Studio process that merged it, or the refusal names the one explicit call that does (never a dead end).
+    if (otherStudio) return refused('DELIVERY_IN_OTHER_STUDIO', 'The last SSAM merge of ' + name + ' was made in another ODC Studio process (pid ' + last.started.pid + '); the module open in this one (pid ' + status.pid + ') is not what SSAM merged. Nothing was published.',
+      deliverAgain(last, name, pid, 'the same delivery in this Studio captures the module as it is now and publishes after a clean merge;'), { module: name, resolvedFrom: from });
+    if (typeof reconcile !== 'function' || !reconcilable(state)) return notClean(reconcileCall(name, pid));
+    const reconciled = await reconcile({ merge: last, module: name, pid }, { next: why => deliverAgain(last, name, pid, why + ';') });
+    if (reconciled?.ok !== true) {
+      const { continuation, then, reconciliation } = reconciled ?? {};
+      return notClean(continuation ?? reconcileCall(name, pid), { reconciliation: { code: reconciled?.code ?? 'RECONCILE_FAILED', error: reconciled?.error ?? 'no answer', ...(isObject(reconciliation) ? reconciliation : {}) }, ...(then ? { then } : {}) });
+    }
+    from.reconciliation = reconciled.reconciliation ?? { accepted: true };
   }
   const publishReceipt = readJsonOrNull(path.join(last.evidence, 'publish-receipt.json'));
   if (publishReceipt?.ok === true)
@@ -172,16 +189,27 @@ function changedSinceDelivery(value, merge, module, pid) {
 // the standing grant of its app, recorded the same way; the answer says which (authorization) and carries lastPublication
 // (section 3) from the receipt, or from the log of a publication that did not succeed. Without words and without a grant
 // the bridge refuses as before. deps.grants: tests pass a fake; absent, ./standing-grants.mjs if present.
-export async function publishWithGrant({ manifest, module: requested, authorize, wait = true, minutes = 10, pid } = {}, deps) {
-  const { studio, readManifest, grants, publish = publishWithLog, lab, root, catalog } = deps;
-  if ((manifest == null) === (requested == null))
-    return refused('PUBLISH_TARGET', manifest == null ? 'studio_publish needs module (the open module) or manifest' : 'studio_publish takes module or manifest, not both',
-      { tool: 'studio_publish', arguments: { module: requested ?? '<Module>', ...(Number.isInteger(pid) ? { pid } : {}) }, why: 'module finds the manifest of its last clean SSAM merge' });
+export async function publishWithGrant({ manifest, module: requested, authorize, wait = true, minutes = 10, pid, reconcile: reconcileOnly = false } = {}, deps) {
+  const { studio, readManifest, grants, publish = publishWithLog, lab, root, catalog, reconcile = null } = deps;
+  if ((manifest == null) === (requested == null) || (reconcileOnly === true && requested == null))
+    return refused('PUBLISH_TARGET', manifest == null ? 'studio_publish needs module (the open module) or manifest' : reconcileOnly === true ? 'studio_publish {reconcile:true} takes module, not manifest' : 'studio_publish takes module or manifest, not both',
+      { tool: 'studio_publish', arguments: { module: requested ?? '<Module>', ...(reconcileOnly === true ? { reconcile: true } : {}), ...(Number.isInteger(pid) ? { pid } : {}) }, why: 'module finds the manifest of its last clean SSAM merge' });
   let target = null;
   if (requested != null) {
-    target = await resolveDeliveryManifest({ module: requested, pid }, { studio, lab, root, catalog });
+    // reconcile:true without the content proof of this SSAM: the refusal says so, it never marks anything clean.
+    if (reconcileOnly === true && typeof reconcile !== 'function')
+      return refused('RECONCILE_PROOF_UNAVAILABLE', 'This SSAM has no content proof to reconcile a merge; nothing was written.', { tool: 'ssam_doctor', arguments: {}, why: 'the ODC lane of this SSAM must offer anvil-odc content-proof' });
+    target = await resolveDeliveryManifest({ module: requested, pid }, { studio, lab, root, catalog, reconcile });
     if (target.ok !== true) return target;
     manifest = target.manifest;
+    // The explicit reconciliation (merge-reconcile.mjs): captured, proven and recorded; the publication is the next call.
+    if (reconcileOnly === true) {
+      const state = mergeState(target.merge.evidence);
+      return { ok: true, executed: true, publishInvoked: false, module: target.module, reconciled: !!target.resolvedFrom.reconciliation, outcome: state.outcome,
+        resolvedFrom: target.resolvedFrom, receipt: path.join(target.merge.evidence, 'receipt.json'),
+        continuation: { tool: 'studio_publish', arguments: { module: target.module, ...(Number.isInteger(pid) ? { pid } : {}) },
+          why: 'the last merge of ' + target.module + ' is clean (' + state.outcome + '); publishing needs the user\'s words in authorize or the standing grant of the app' } };
+    }
   }
   let recorded = null, module = null, tenant = null;
   try { const m = readManifest(manifest); module = m?.module ?? null; tenant = typeof m?.tenant === 'string' && m.tenant ? m.tenant : null; recorded = typeof m?.publishAuthorization === 'string' && m.publishAuthorization.trim() ? m.publishAuthorization : null; }

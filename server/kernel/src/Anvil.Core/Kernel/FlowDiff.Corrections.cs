@@ -124,6 +124,7 @@ public sealed partial class FlowDiff
         // JavaScript too (the owner's rule: existing JavaScript is preserved, the delivery's version of it wins).
         var fresh = edited.Items.Where(i => i.Role == "node" && i.Kind == "JavaScriptNode" && Fresh(i) && !Restored(i)).ToList();
         if (fresh.Count == 0 || Isolated(edited)) return;
+        if (allowScreenJavaScript && edited.Kind == "ScreenAction" && owner?.Web != true) return;
         var kind = FlowPrinter.Labels.GetValueOrDefault(edited.Kind, edited.Kind);
         foreach (var node in fresh) {
             var id = mapped.FirstOrDefault(m => m.Value == node.Key).Key ?? "";
@@ -399,7 +400,7 @@ public sealed partial class FlowDiff
     {
         var (text, added) = Applied(view, fixes);
         try {
-            var again = Compute(baseline, ids, ModuleFlow.Read(text), baseText, prefix, text, actionTaken, allowQueryInLoop, correct: false, restoredFrom, types, owner, rewritten);
+            var again = Compute(baseline, ids, ModuleFlow.Read(text), baseText, prefix, text, actionTaken, allowQueryInLoop, correct: false, restoredFrom, types, owner, rewritten, allowScreenJavaScript);
             var fixedOnes = fixes.Select(b => b.Fix.Problem).ToHashSet(ReferenceEqualityComparer.Instance);
             var remaining = Problems.Where(p => !fixedOnes.Contains(p)).Select(p => p.Code).ToList();
             foreach (var p in again.Problems) if (!remaining.Remove(p.Code)) return false;

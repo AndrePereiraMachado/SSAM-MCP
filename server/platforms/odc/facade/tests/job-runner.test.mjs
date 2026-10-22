@@ -149,12 +149,12 @@ test('ODC lane: anvil-odc apply with --work last, {ok, data, via, wallMs} saved;
     '--base', path.join(s.root, 'tests', 'fixtures', 'odc', 'base.oml'), '--producer', 'P=' + path.join(s.root, 'p.oml'), '--work', path.join(odcJobs, 'work')]);
   assert.equal(runAnvil.calls[0].options.cli, cli); assert.equal(runAnvil.calls[0].options.cwd, s.root);
   // run_job.py:98-99 and 177-178.
-  assert.deepEqual(readResult(path.join(odcJobs, 'spec-data.result.json')), { ok: true, data: accepted().data, via: 'processo frio odc', wallMs: 10 });
-  assert.deepEqual([r.ok, r.lane, r.via, r.resultFile], [true, 'odc', 'processo frio odc', path.join(odcJobs, 'spec-data.result.json')]);
+  assert.deepEqual(readResult(path.join(odcJobs, 'spec-data.result.json')), { ok: true, data: accepted().data, via: 'cold process odc', wallMs: 10 });
+  assert.deepEqual([r.ok, r.lane, r.via, r.resultFile], [true, 'odc', 'cold process odc', path.join(odcJobs, 'spec-data.result.json')]);
   // An error envelope (no data) answers the error and writes no result (run_job.py:95-97).
   const failing = fakeAnvil({ apply: () => ({ exitCode: 1, envelope: { ok: false, command: 'apply', elapsedMs: 11116, error: KERNEL_ERROR } }) });
   const failed = await runJob({ lane: 'odc', job: s.job, out: 'odc-out/x.oml' }, s.deps({ runAnvil: failing }));
-  assert.deepEqual([failed.ok, failed.via, failed.error, failed.command], [false, 'processo frio odc', KERNEL_ERROR, 'apply']);
+  assert.deepEqual([failed.ok, failed.via, failed.error, failed.command], [false, 'cold process odc', KERNEL_ERROR, 'apply']);
   assert.equal(fs.existsSync(path.join(s.root, 'odc-out', 'x.result.json')), false);
   const silent = await runJob({ lane: 'odc', job: s.job }, s.deps({ runAnvil: fakeAnvil({ apply: () => ({ exitCode: 3, envelope: null }) }) }));
   assert.deepEqual([silent.ok, silent.code, silent.exitCode], [false, 'no-json', 3]);
@@ -223,7 +223,7 @@ test('a worker refusal that ran nothing (another controller key) runs the same j
   buildOdcCli(s.root);
   const odcWorker = worker();
   const odc = await runJob({ lane: 'odc', job: s.job }, s.deps({ env: on, runAnvil, worker: odcWorker }));
-  assert.deepEqual([odc.ok, odc.via, odcWorker.calls.length, runAnvil.calls.length], [true, 'processo frio odc', 1, 2]);
+  assert.deepEqual([odc.ok, odc.via, odcWorker.calls.length, runAnvil.calls.length], [true, 'cold process odc', 1, 2]);
   assert.doesNotMatch(JSON.stringify(odc.error ?? ''), /trusted Hybrid controller/);
   // A refusal the worker did run (executed is not false) stays the answer: it is never repeated cold.
   const ran = { calls: [], run: async argv => { ran.calls.push(argv); return { used: true, envelope: { ok: false, command: 'apply', error: 'op #0 failed' } }; } };
@@ -340,4 +340,13 @@ test('jobTool refuses a bad patch before anything runs and without guidance; a k
   assert.equal(op.discovery.schemaVersion, 'ssam-job-guidance/1');
   // the same error over another job (op 0 is named S): no failedOp
   assert.equal((await jobTool({ job: s.job }, s.deps({ runAnvil: refused, guidance }))).failedOp, undefined);
+});
+
+test('ODC cold answers and saved receipts expose an English via field', async t => {
+  const s = sandbox(t); buildOdcCli(s.root);
+  const result = await runJob({ lane: 'odc', job: s.job }, s.deps({ runAnvil: fakeAnvil({ apply: () => accepted() }) }));
+  assert.equal(result.via, 'cold process odc');
+  assert.equal(readResult(result.resultFile).via, 'cold process odc');
+  const failed = await runJob({ lane: 'odc', job: s.job }, s.deps({ runAnvil: fakeAnvil({ apply: () => ({ exitCode: 1, envelope: { ok: false, command: 'apply', error: KERNEL_ERROR } }) }) }));
+  assert.equal(failed.via, 'cold process odc');
 });

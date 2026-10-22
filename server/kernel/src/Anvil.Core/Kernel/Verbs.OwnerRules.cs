@@ -36,7 +36,7 @@ namespace Anvil.Core;
 /// have it because a List action cannot always express the loop (for example a loop with start or max); record mappings
 /// are supported in both text and JSON, including O11's native conversions,
 /// and the proof jobs written before this rule keep what they prove with it. The text form has no escape (its refusal
-/// carries the List action as the patch); a new JavaScript has none in any form (decision 6).
+/// carries the List action as the patch). ScreenJavaScriptException is a separate scoped, audited exception.
 /// </summary>
 public static class ForEachEscape
 {
@@ -376,7 +376,16 @@ public sealed partial class ModelSession
                     ["message"] = message + "; written by " + claim.ListedBy + ": kept by the owner's decision on the kernel's planners, listed", ["fix"] = fix, ["flow"] = name, ["text"] = problem.Patch });
                 return;
             }
-            var why = ForEachEscape.Allowed(claim.Op < ops.Count ? ops[claim.Op] as JsonObject : null, out var invalid);
+            var claimOp = claim.Op < ops.Count ? ops[claim.Op] as JsonObject : null;
+            if (problem.Code == "FLOW_JAVASCRIPT_NOT_ISOLATED" && owner != null
+                && FlowItemOf(owner, out _) is { } screenAction
+                && ScreenJavaScriptException.Allowed(claimOp, screenAction, reader.NameOf((IObjectSignature)_es)) is { } scriptWhy) {
+                Report("highWarnings", new JsonObject { ["code"] = ScreenJavaScriptException.AllowedCode, ["severity"] = "high",
+                    ["op"] = claim.Op, ["pointer"] = at, ["flow"] = screenAction.Owner + "." + name,
+                    ["message"] = message + "; explicitly allowed: " + scriptWhy, ["why"] = scriptWhy });
+                return;
+            }
+            var why = ForEachEscape.Allowed(claimOp, out var invalid);
             // A loop the op keeps with allowForEach: listed (high), never refused and never silent.
             if (why != null && loop) {
                 Report("highWarnings", new JsonObject { ["code"] = ForEachEscape.AllowedCode, ["severity"] = "high", ["op"] = claim.Op, ["pointer"] = at,

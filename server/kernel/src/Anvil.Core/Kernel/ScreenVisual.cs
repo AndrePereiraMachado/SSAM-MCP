@@ -184,7 +184,7 @@ public static partial class ScreenVisual
     internal const string NativeLayoutBegin = "/* ssam:native-layout */", NativeLayoutEnd = "/* /ssam:native-layout */";
 
     /// <summary>The version of the block's content: a theme with another version gets this one (replaced, never duplicated).</summary>
-    public const string NativeLayoutVersion = "3";
+    public const string NativeLayoutVersion = "4";
 
     /// <summary>The markers the html op writes on the elements it creates (extended properties, attributes at runtime); every
     /// rule of the block needs one, so a screen or block the op did not create keeps its CSS (review 1, A1). Only the engine writes
@@ -208,7 +208,7 @@ public static partial class ScreenVisual
     /// virtualization never lay out (their display is an inline style of the runtime: only !important passes)
     /// (<c>data-ssam-rows</c>).</item>
     /// </list></summary>
-    public static string NativeLayoutCss => NativeLayoutBegin + "\n/* version " + NativeLayoutVersion + ", written by the html op (CX17); replaced whole, never by hand; every rule needs a data-ssam-* marker of the op */\n"
+    public static string NativeLayoutCss => NativeLayoutBegin + "\n/* version " + NativeLayoutVersion + ", written by the html op; replaced whole, never by hand; every rule needs a data-ssam-* marker of the op */\n"
         + "[" + GapMarker + "].ThemeGrid_MarginGutter{margin-left:0}\n"
         + ".layout :is(.main,.content,.main-content):has([" + PageMarker + "]){min-width:0}\n"
         + ":is(" + string.Join(",", TablePartTags) + ")[" + RowsMarker + "]{display:table-row-group;width:auto}\n"

@@ -86,6 +86,7 @@ public sealed partial class FlowDiff
     private readonly List<(string From, string To)> renames = [];
 
     private readonly FlowOwnerRef? owner;
+    private bool allowScreenJavaScript;
 
     private FlowDiff(FlowItem? baseline, IReadOnlyDictionary<string, string> ids, string? baseText, string prefix, string? editedText, Func<string, bool>? actionTaken,
         bool allowQueryInLoop, bool correct, IFlowTypes? types, FlowOwnerRef? owner)
@@ -112,14 +113,14 @@ public sealed partial class FlowDiff
     // owner as the text writes it, as the preflight sees it).
     public static FlowDiff Compute(FlowItem? baseline, IReadOnlyDictionary<string, string> ids, FlowItem edited, string? baseText = null, string prefix = AliasPrefix + ".",
         string? editedText = null, Func<string, bool>? actionTaken = null, bool allowQueryInLoop = false, FlowItem? restoredFrom = null, IFlowTypes? types = null,
-        FlowOwnerRef? owner = null, IReadOnlySet<string>? rewritten = null)
-        => Compute(baseline, ids, edited, baseText, prefix, editedText, actionTaken, allowQueryInLoop, correct: true, restoredFrom, types, owner, rewritten);
+        FlowOwnerRef? owner = null, IReadOnlySet<string>? rewritten = null, bool allowScreenJavaScript = false)
+        => Compute(baseline, ids, edited, baseText, prefix, editedText, actionTaken, allowQueryInLoop, correct: true, restoredFrom, types, owner, rewritten, allowScreenJavaScript);
 
     private static FlowDiff Compute(FlowItem? baseline, IReadOnlyDictionary<string, string> ids, FlowItem edited, string? baseText, string prefix,
         string? editedText, Func<string, bool>? actionTaken, bool allowQueryInLoop, bool correct, FlowItem? restoredFrom = null, IFlowTypes? types = null,
-        FlowOwnerRef? owner = null, IReadOnlySet<string>? rewritten = null)
+        FlowOwnerRef? owner = null, IReadOnlySet<string>? rewritten = null, bool allowScreenJavaScript = false)
     {
-        var diff = new FlowDiff(baseline, ids, baseText, prefix, editedText, actionTaken, allowQueryInLoop, correct, types, owner) { restoredFrom = restoredFrom, rewritten = rewritten };
+        var diff = new FlowDiff(baseline, ids, baseText, prefix, editedText, actionTaken, allowQueryInLoop, correct, types, owner) { restoredFrom = restoredFrom, rewritten = rewritten, allowScreenJavaScript = allowScreenJavaScript };
         diff.Run(edited.Clone());
         return diff;
     }

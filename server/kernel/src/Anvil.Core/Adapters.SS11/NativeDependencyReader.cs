@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Xml.Linq;
 using OutSystems.MetaModel.CompoundKeys;
 using OutSystems.Model.Implementation;
@@ -19,7 +20,14 @@ public sealed record NativeSignatureElement(string Type, string Kind, string Nam
 public sealed record NativeSignatureResolution(string ProducerKey, int ElementSignatures,
     IReadOnlyList<NativeSignatureElement> Elements, IReadOnlyList<NativeSignatureElement> Closure,
     IReadOnlyDictionary<string, string[]> Requires, IReadOnlyList<string> Foreign, IReadOnlyList<string> Unresolved,
-    IReadOnlyList<string>? Absent = null);
+    IReadOnlyList<string>? Absent = null, IReadOnlyList<string>? HashUnverified = null);
+
+/// <summary>Visible producer exports and keys whose element hashes were accepted without verification.</summary>
+public sealed class NativeSignatureListing(IList<NativeSignatureElement> elements, IReadOnlyList<string> hashUnverified)
+    : System.Collections.ObjectModel.ReadOnlyCollection<NativeSignatureElement>(elements)
+{
+    public IReadOnlyList<string> HashUnverified { get; } = hashUnverified;
+}
 
 /// <summary>Reads frozen producer OML bytes without creating a module model. Native OML identity
 /// and the exact file hash must agree with the controller's expected immutable descriptor.
@@ -29,7 +37,7 @@ public static class NativeDependencyReader
 {
     /// <summary>Validated visible producer elements for a Manage Dependencies picker. Unknown
     /// signature tags remain explicit instead of being advertised as importable.</summary>
-    public static IReadOnlyList<NativeSignatureElement> ListServerSignature(string producerKey,string producerName,byte[] binary,Guid? expectedHash=null)
+    public static NativeSignatureListing ListServerSignature(string producerKey,string producerName,byte[] binary,Guid? expectedHash=null)
     {
         var signature=ReadServerSignature(binary);
         if(signature.Name!="Signature" || signature.Element("ElementSignatures")==null)
@@ -40,7 +48,7 @@ public static class NativeDependencyReader
             throw Error("Producer signature payload hash differs: "+producerName);
         var descriptor=new NativeDependencyProducer(producerName,"",Keys.ToStudio(producerKey),producerName,"","",0,"","");
         var index=new Index([new ProducerFile(descriptor,"",signature)]);
-        return index.VisibleElements();
+        return new(index.VisibleElements().ToArray(), index.HashUnverified.ToArray());
     }
     public static NativeDependencyCatalog Read(IReadOnlyList<NativeDependencyRequirement> requirements,
         IReadOnlyList<NativeDependencyProducer> producers, IReadOnlyDictionary<string, string> signaturePaths)
@@ -109,7 +117,7 @@ public static class NativeDependencyReader
         {
             var parts = typed.Split(':', 2);
             var kind = parts.Length == 2 ? NativeReferenceSnapshot.KindOf(parts[0]) : null;
-            if (kind == null || string.IsNullOrWhiteSpace(parts[1])) throw Error("Expected Tipo:Nome with a supported producer element type: " + typed);
+            if (kind == null || string.IsNullOrWhiteSpace(parts[1])) throw Error("Expected Type:Name with a supported producer element type: " + typed);
             var element = index.FindTop(SignatureTag(kind), parts[1], includeHidden: existing);
             if (element == null && existing) { absent.Add(typed); continue; }
             // A25: every requested element the signature does not show, all at once, each with its cause and fix.
@@ -126,7 +134,7 @@ public static class NativeDependencyReader
         if (missing.Count > 0) throw Preflight.ProducerSignatureMissing.Refusal(producerName, missing);
         return new(Keys.ToStudio(producerKey), signature.Element("ElementSignatures")!.Elements().Count(), requested,
             closure.Values.Where(c => requested.All(r => r.OriginalKey != c.OriginalKey)).ToArray(), requires, foreign.ToArray(), unresolved.ToArray(),
-            existing ? absent : null);
+            existing ? absent : null, index.HashUnverified.Count > 0 ? index.HashUnverified.ToArray() : null);
         NativeSignatureElement Describe(Element element, string kind)
             => new(NativeReferenceSnapshot.InterfaceOf(kind), kind, element.Name, element.Key, element.Signature.Hidden,
                 element.Signature.ParentOriginalKey?.ToString(), index.QualifiedName(element));
@@ -162,7 +170,16 @@ public static class NativeDependencyReader
         return XElement.Load(reader);
     }
 
-    private sealed record ProducerFile(NativeDependencyProducer Producer, string Path, XElement Signature);
+    private sealed record ProducerFile(NativeDependencyProducer Producer, string Path, XElement Signature)
+    {
+        // O11 writes ElementsOrderVersion as a dashed GUID. Only a well-formed non-current GUID is an older order.
+        // Its mismatching element hashes remain UNVERIFIED (not integrity proof), with an explicit capture/delivery warning.
+        // Empty, unknown-format and current markers never relax exact hash verification.
+        public bool OlderOrder { get; } = Signature.Attribute("ElementsOrderVersion")?.Value is { } version
+            && version.Length == 36 && Guid.TryParseExact(version, "D", out var order)
+            && order != Guid.Empty && order != ModelConstants.CurrentElementsOrderVersion;
+
+    }
     private static ProducerFile ReadProducer(NativeDependencyProducer expected, string path)
     {
         var bytes = File.ReadAllBytes(path);
@@ -221,6 +238,7 @@ public static class NativeDependencyReader
         private readonly HashSet<string> originalIdentities = new(StringComparer.Ordinal);
         private readonly HashSet<string> recordPending = new(StringComparer.Ordinal);
         private readonly HashSet<Element> validatedHashes = [];
+        public readonly SortedSet<string> HashUnverified = new(StringComparer.Ordinal);
         public Index(ProducerFile[] files) : this(files, validateWholePayload: true) { }
         public Index(ProducerFile[] files, bool validateWholePayload)
         {
@@ -253,13 +271,33 @@ public static class NativeDependencyReader
             var signature = element.Signature;
             if (signature.FullSignatureHash == Guid.Empty)
                 throw Error("Native element payload hash omitted: " + signature.OriginalKey);
-            var computed = new FullElementSignature(signature.OriginalKey, signature.FullSignature, signature.ExternalDependencies,
-                signature.FullSignature, signature.Hidden, signature.ParentOriginalKey);
-            if (computed.FullSignatureHash != signature.FullSignatureHash)
-                throw Error("Native element payload hash differs: " + signature.OriginalKey);
+            if (!MatchesFrameworkSignatureHash(signature.FullSignature, signature.FullSignatureHash))
+            {
+                if (!element.File.OlderOrder) throw Error("Native element payload hash differs: " + signature.OriginalKey);
+                HashUnverified.Add(signature.OriginalKey.ToString());
+            }
             validatedHashes.Add(element);
         }
 
+        // O11's .NET Framework signs native canonical text with the publishing machine's ANSI code page.
+        // Modern .NET uses UTF-8. Try only strict, exact candidates: UTF-8, Windows-1252 and current-culture ANSI.
+        // The reader's ANSI code page is not necessarily the remote server's; add another candidate only with evidence.
+        private static bool MatchesFrameworkSignatureHash(XElement payload, Guid expected)
+        {
+            var canonical = new StringBuilder();
+            OutSystems.FrameworkExtensions.XmlExtensions.AppendElement(canonical, payload);
+            var text = canonical.ToString();
+            foreach (var codePage in new[] { 65001, 1252, System.Globalization.CultureInfo.CurrentCulture.TextInfo.ANSICodePage }.Distinct())
+            {
+                var encoding = codePage == 65001 ? new UTF8Encoding(false, true)
+                    : CodePagesEncodingProvider.Instance.GetEncoding(codePage,
+                        EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+                if (encoding == null) continue;
+                try { if (new Guid(MD5.HashData(encoding.GetBytes(text))) == expected) return true; }
+                catch (EncoderFallbackException) { /* This candidate cannot represent the canonical text exactly. */ }
+            }
+            return false;
+        }
         public NativeDependencyBinding Bind(NativeDependencyRequirement requirement)
         {
             var file = files.SingleOrDefault(p => p.Producer.ProducerName == requirement.ProducerName)

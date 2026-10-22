@@ -1,3 +1,4 @@
+import { taskWarnings, warningFields } from './delivery-warnings.mjs';
 // F5, the family rule of producer signatures, on the facade's side. The rule itself is the kernel's
 // (kernel/src/Anvil.Core/Delivery/ProducerLedger.cs, ProducerCache.cs and Delivery.Acquire); this module reads and writes
 // the same files. The analysis of 2026-10-12 (VisitaCerta) measured 39% of the SSAM write time capturing and attesting
@@ -330,6 +331,7 @@ export function producerSignaturesOf(state) {
     if (!entry || typeof entry !== 'object') continue;
     const file = key(entry.path); if (file) seen.add(file);
     rows.push({ binding, producer: entry.producer ?? binding,
+      ...(Array.isArray(entry.hashUnverified) && entry.hashUnverified.length ? { hashUnverified: [...entry.hashUnverified] } : {}),
       ...(Number.isInteger(entry.versionId) ? { versionId: entry.versionId } : entry.advertisedSignatureHash ? { advertisedSignatureHash: entry.advertisedSignatureHash } : {}),
       signature: entry.reusedFromCache ? 'reused' : 'captured', observed: entry.observed?.by ?? (file && before.get(file)?.by) ?? (entry.reusedFromCache ? 'server' : 'capture'),
       ...(entry.observed?.observedAtUtc ? { observedAtUtc: entry.observed.observedAtUtc } : {}),
@@ -344,7 +346,7 @@ export function producerSignaturesOf(state) {
   }
   if (!rows.length) return {};
   const reused = rows.filter(r => r.signature === 'reused').length, serverless = rows.filter(r => r.observed === 'ledger').length;
-  return { producers: rows.slice(0, 12), ...(rows.length > 12 ? { producersTotal: rows.length } : {}),
+  return { ...warningFields(taskWarnings(state)), producers: rows.slice(0, 12), ...(rows.length > 12 ? { producersTotal: rows.length } : {}),
     producersNote: 'producer signatures: ' + reused + ' of ' + rows.length + ' reused from the cache, ' + serverless
       + ' without a call to the server (the same published version seen a moment ago, no publication since); before writing, the merge checks the version of each producer on the server' };
 }
