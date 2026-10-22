@@ -172,7 +172,10 @@ public static class MergeContentProof
             // Preserve their position and content; a new random key is not a lost binding.
             // Reactive/Mobile IContent is the owned slot wrapper, recreated by MatchTree.
             // Its owner/slot, children order, styles and bindings are still compared below.
-            if ((node is IExpression || kind is "IArgument" or "IAssignment" or "IPlaceholderContentWidget" or "IContent" or "ISQLOutput" or "IEventHandler" or "IWebWidget" or "IMobileWidget" or "IRecordAttributeValue" or "IExtendedProperty" || InAggregate(node))
+            // Metadata belongs to a named slot of its owner. In particular the SOAP importer regenerates
+            // WsdlServiceMetadata keys during merge; name, owner, kind and every payload byte remain content.
+            var namedMetadata = node is IMetadata && !string.IsNullOrEmpty(ModelHost.Prop(node, "Name")?.ToString());
+            if ((node is IExpression || namedMetadata || kind is "IArgument" or "IAssignment" or "IPlaceholderContentWidget" or "IContent" or "ISQLOutput" or "IEventHandler" or "IWebWidget" or "IMobileWidget" or "IRecordAttributeValue" or "IExtendedProperty" || InAggregate(node))
                 && node.Parent is IObjectSignature parent)
             {
                 string? role = null;
@@ -189,6 +192,7 @@ public static class MergeContentProof
                     role = ev.ObjectKey.ToString();
                 else if (kind == "IRecordAttributeValue" && ModelHost.Prop(node, "Attribute") is IObjectSignature attribute)
                     role = "attribute:" + Identity(attribute);
+                else if (namedMetadata) role = "metadata:" + ModelHost.Prop(node, "Name");
                 else if (kind == "IExtendedProperty") role = "property:" + ModelHost.Prop(node, "Property");
                 else if (kind == "IAliasedSource") role = "alias:" + ModelHost.Prop(node, "Name");
                 if (string.IsNullOrEmpty(role)) {

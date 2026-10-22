@@ -217,7 +217,11 @@ a capability `integration.rest-consume`. Códigos da op: `api --op rest-consume`
 - O import é o do próprio Studio, pela bridge, numa cópia destacada do módulo (`integration_import`).
   O WSDL vai inteiro; só os métodos pedidos ficam marcados para importar. Métodos que já existem são pulados.
 - `refresh` reimporta métodos listados. `remove` apaga métodos e as estruturas que nenhum método restante usa.
-- O candidato é conferido antes do merge: cada método uma vez e os tipos exatos do WSDL (`SOAP_CONTRACT_TYPE_MISMATCH`).
+- O candidato é conferido antes do merge: cada método uma vez e as ligações de tipos do WSDL (`SOAP_CONTRACT_TYPE_MISMATCH`).
+  Para `xsd:decimal`, aceita também a representação lexical `Text` produzida pelo importador nativo O11; isso não libera
+  `Text` para inteiros, outros números ou tipos complexos. Tipos complexos continuam vinculados à estrutura correta pela chave.
+  Metadados nomeados, como o WSDL do cliente SOAP, são comparados pelo dono, tipo e nome; uma chave interna regenerada não
+  significa perda de conteúdo. Alterações no payload, no nome, no dono ou a remoção do metadado continuam sendo recusadas.
 - `ssam_job`/`o11_job` sem Studio: `INTEGRATION_IMPORT_NEEDS_STUDIO` (use `o11_deliver`).
 
 ## Documentos (WSDL e OpenAPI)

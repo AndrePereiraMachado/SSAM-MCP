@@ -40,6 +40,28 @@ public class SoapContractTests
         Assert.Null(SoapContract.PrimitiveOf("tns:tOperands"));
     }
 
+    [Theory]
+    [InlineData("http://www.w3.org/2001/XMLSchema:decimal", "Text")]
+    [InlineData("{http://www.w3.org/2001/XMLSchema}decimal", "Text")]
+    [InlineData("xsd:decimal", "Text")]
+    [InlineData("xsd:decimal", "Decimal")]
+    public void NativeDecimalRepresentationsKeepTheSoapContract(string original, string actual)
+    {
+        Assert.Empty(SoapContract.Check([new("NumberToDollars", "input", "dNum", original, actual, null)], []));
+    }
+
+    [Theory]
+    [InlineData("xsd:decimal", "Integer")]
+    [InlineData("xsd:decimal", "Boolean")]
+    [InlineData("xsd:int", "Text")]
+    [InlineData("xsd:double", "Text")]
+    [InlineData("tns:tOperands", "Text")]
+    public void DecimalCompatibilityDoesNotHideOtherTypeLoss(string original, string actual)
+    {
+        Assert.Equal("SOAP_CONTRACT_TYPE_MISMATCH", Assert.Single(SoapContract.Check(
+            [new("Convert", "input", "Value", original, actual, null)], [Operands])).Code);
+    }
+
     /// <summary>The imported client as the Studio's importer leaves it, built with the raw creators; the operand input typed
     /// by <paramref name="operandType"/>.</summary>
     private static string Imported(string operandType) => $$$"""
