@@ -395,7 +395,8 @@ export async function hostedDoctor(laneName, { context, session }, { network = f
       catalog: catalog(name) };
     if (name === 'o11') {
       const record = context.executor.o11Connection();
-      entry.connection = record ? { pid: record.pid, startedUtc: record.startedUtc, studioVersion: record.studioVersion, connectedAt: record.connectedAt } : null;
+      entry.connection = record ? { pid: record.pid, startedUtc: record.startedUtc, studioVersion: record.studioVersion, connectedAt: record.connectedAt,
+        ...(record.warning ? { warning: record.warning } : {}) } : null;
       if (!record && connected && enabled) entry.continuation = { tool: 'ssam_connect', arguments: { lane: 'o11' },
         why: 'Ask the user to open Service Studio normally, then connect it; connecting needs no save, publish or restart.' };
       if (enabled) entry.reservations = hostedReservations(context);
