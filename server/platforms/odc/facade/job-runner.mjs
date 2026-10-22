@@ -34,6 +34,7 @@ import { refusalFields, diagnosisOf, normalizationsOf, patchesAppliedOf, CONTINU
 import { withNormalizationsOf } from './normalizations.mjs';
 import { textFormRefusal, partReader } from './text-routes.mjs';
 import { normalizeCodeOps } from './ssam-code.mjs';
+import { prototypeImportRefusal, prototypeImportRefusalOfFile } from './prototype-disabled.mjs';
 // The prototype op of a headless run (docs/PROTOTIPO-NATIVO.md 1.1, the rehearsal of the delivery): the capture first, the
 // rebuild of 1.4.1, the receipt.
 import { expandJobFile, capturePrototype, buildWithDegradation, buildProblems, journalTo, kernelPrototypeReport, findNativeDom, withoutIdentityPatches, untypedBuildRefusal, readJobDocument,
@@ -235,6 +236,9 @@ async function runJobOnce(request, deps, carried) {
   if (!JOB_LANES.includes(lane)) return refusal('unknown-lane', `Unknown lane ${request.lane}; lanes: ${JOB_LANES.join(', ')}`);
   const root = deps.root ?? anvilRoot; const env = deps.env ?? process.env; const now = deps.now ?? Date.now;
   const o11 = o11LaneOf(deps.o11Lane ?? o11Lane.lane, { root, env, ...(deps.workspace ? { workspace: deps.workspace } : {}) });
+  // The prototype import is turned off (prototype-disabled.mjs): an inline job with the op prototype is refused before anything.
+  { const inline = request.job != null && typeof request.job === 'object' ? prototypeImportRefusal(request.job, { lane }) : null;
+    if (inline) return { ...inline, lane }; }
   const captures = (request.captureProducers ?? []).map(String);
   if (captures.length && lane === 'odc') return refusal('capture-o11-only', 'captureProducers reads O11 producer signatures; it exists only in lane o11.', { lane });
   // Hosted, the ODC jobs and journal are the customer's (<ws>/odc/.local); the CLI stays the server's.
@@ -267,6 +271,8 @@ async function runJobOnce(request, deps, carried) {
   // A job file with op shapes of one meaning (the ssam_code aliases, set props{}, ...) runs as a new inline file in the kernel form.
   { let aliased = null; try { aliased = normalizeCodeOps(JSON.parse(fs.readFileSync(job, 'utf8').replace(/^\uFEFF/, ''))); } catch { /* the kernel reports it */ }
     if (aliased?.changed) { jobNotes = [...jobNotes, ...aliased.normalizations]; const folder = path.join(laneLocal, 'jobs', 'inline'); fs.mkdirSync(folder, { recursive: true }); job = path.join(folder, (deps.uuid ?? randomUUID)() + '.json'); fs.writeFileSync(job, JSON.stringify(aliased.job, null, 2), 'utf8'); } }
+  // The prototype import is turned off: a job file (or a composite part) with the op prototype is refused before the kernel runs.
+  { const disabled = prototypeImportRefusalOfFile(job, { lane }); if (disabled) return { ...disabled, lane, job }; }
   // WIRED (text-routes.mjs): a text form whose way back is not wired is refused here too, before the kernel runs.
   {
     let document = null;

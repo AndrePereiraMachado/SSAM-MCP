@@ -42,7 +42,7 @@ const ORDER = ['ssam-ddl/1', 'ssam-html/1', 'ssam-flow/1'];
 const COVERED = {
   'ssam-ddl/1': id => /^data\.(entity|static|structure|client-entity|client-variable|setting)$/.test(id) || id === 'session-variable',
   'ssam-flow/1': id => /^logic\.(flow|server-action|service-action|client-action|screen-action|data-action|aggregate|sql|exception|variable|expression|native-nodes|edit|preparation)$/.test(id),
-  'ssam-html/1': id => /^ui\./.test(id) && !/^ui\.(traditional-|prototype-import|script-resource|theme-css|email-popover)/.test(id),
+  'ssam-html/1': id => /^ui\./.test(id) && !/^ui\.(traditional-|script-resource|theme-css|email-popover)/.test(id),
 };
 export const coveredBy = (forms, id) => forms.find(f => COVERED[f]?.(String(id))) ?? null;
 

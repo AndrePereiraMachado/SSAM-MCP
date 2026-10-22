@@ -528,8 +528,6 @@ export const PROTECTED_TOOL_CLAUSES = Object.freeze({
       clauses: ["publish:clean merge, same words/grant; failed publish never redelivers"], review: "5c8c21bed349fc02d78853931a8a896e12a49e91be2272aa46201ca64f42188d" },
     { sentence: "Without authorize a standing grant (ssam_grant) of the module for deliver is used.",
       clauses: ["absent: module grant, else nothing runs"], review: "724748e811422d75f387cea78a3d81d26b270b4e277646d54683065149a4350d" },
-    { sentence: "A prototype folder (HTML/CSS/JS/JSX) or its .zip becomes native screens in ONE call: job {ops:[{op:\"prototype\", data:{source:\"<absolute folder or .zip>\"}}]} with publish:true and the owner's words in authorize (they cover the import, the publication and the demo data); never read nor hand-convert the prototype, and add data.mapping only when a refusal asks for it (apply its patch).",
-      clauses: ["prototype: same job, owner's words in authorize; never hand-convert; mapping only when a refusal asks"], review: "c5189a081141d9ece0d846fe964b4004d2f1ecb047f9f00679099f8d212b5b34" },
   ],
   "o11_studio": [
     { sentence: "[o11] The Service Studio of the O11 lane through its bridge, in one call: no script, credential file or sleep loop.",
@@ -618,8 +616,6 @@ export const PROTECTED_TOOL_CLAUSES = Object.freeze({
       clauses: ["Uncertain merge/publication: never retry, read receipt first"], review: "11fb0b0749555cceae92d51112424714a0134db3c7b12ded023f5efb1f8da1bd" },
     { sentence: "Correct it with patch + basedOn (paths by index or by name: actions/<Action>/steps/<as>/...), or with only the changed actions as a partial job + basedOn; never rewrite the whole job.",
       clauses: ["never resend whole job"], review: "266b8fa10c1a7b434dccdcb7ff56a2f90ca41e7e6b8a65b582cf39e06b6be26f" },
-    { sentence: "A prototype folder (HTML/CSS/JS/JSX) or its .zip becomes native screens in ONE call: job {ops:[{op:\"prototype\", data:{source:\"<absolute folder or .zip>\"}}]} with publish:true and the owner's words in authorize (they cover the import, the publication and the demo data); never read nor hand-convert the prototype, and add data.mapping only when a refusal asks for it (apply its patch).",
-      clauses: ["owner's words in authorize, never hand-convert, mapping only when a refusal asks"], review: "e3fc9128eb9efaca00f41b631be105e0790454fb9c80f6a4edb70814bbacca99" },
   ],
   "odc_a2a_connection_delete": [
     { sentence: "[odc] Deletes only an owned no_auth connection identified by its original A2A test receipt and unchanged plan.",
@@ -932,7 +928,7 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/expectedSourceSha256": "afe1728a02e878c120aabc3129ad354231c6b7fb31da28adcdf4a5dc7faa4568"
   },
   "o11_deliver": {
-    "description": "7affdf9fc2dd5ef2dcbc4d9ecd4411a348e3e1c622266e22179a81436035c02a",
+    "description": "6b4a87ebe03bb36625ffd655052f8ed4642056e436c95c7b3b3f7b3e7f579744",
     "/properties/module": "6bffbad00d2fd7668c0a88f18ed5bd96e28f5304011f0623964b5928222101a3",
     "/properties/job": "5cdec7c562108a674b5ec8e91a95a69eac969cc04a969c5b343478b80068fc77",
     "/properties/patch": "dd08cf9b6a65137e730eb0b75befedc6c85140751793736efbb42a45300ca62d",
@@ -1049,7 +1045,7 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/pid": "9405b7e9036be8125c6f9d3dfe0b41b680ea65f2716c98548d51f169ff86724e"
   },
   "studio_deliver": {
-    "description": "50c8677a6682171af8e50e610555ad0ba446e4bd5ec5275e57e2428bc860fd0f",
+    "description": "35a5118749933f7133764580530e1d9ddcd020599b96ee4bdf4da70b7538aed4",
     "/properties/job": "500dd47ec8cee5a4aca37ffd3048f8348b552d8c0dda072175d71cbab94e01f8",
     "/properties/publish": "e848d58ffeaff24601911a8fbdcb402be639d42be33b8f835d8537c4c001ed4b",
     "/properties/authorize": "3450d7c52d8d4921f9e87d28353683d4cc45f7851651a1680a0edf099ec49453",
@@ -1242,9 +1238,9 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
 export const TOOL_LISTING_OVERRUN_BYTES = Object.freeze({
   "o11_service_center_read": 1072,
   "o11_service_center_write": 3543,
-  "o11_deliver": 703, // marco-a6 (X3): +83 B, the autoPatch parameter's rule served whole ("false: offer verified repairs without applying them automatically.")
+  "o11_deliver": 600, // marco-a6 (X3): +83 B, the autoPatch parameter's rule served whole ("false: offer verified repairs without applying them automatically."); fix/prototype-off: -103 B, the prototype import clause out (the op is turned off)
   "o11_extension": 1633,
-  "studio_deliver": 400, // fix/system-reference: +109 B, the producers bindings O11 already has ({Name: capture}), shortened; marco-a6 (X3): +83 B, the autoPatch parameter's rule served whole
+  "studio_deliver": 296, // fix/system-reference: +109 B, the producers bindings O11 already has ({Name: capture}), shortened; marco-a6 (X3): +83 B, the autoPatch parameter's rule served whole; fix/prototype-off: -104 B, the prototype import clause out (the op is turned off)
   "odc_asset_revision": 165,
   "odc_write": 1550,
   "odc_configurations": 197,
@@ -1400,8 +1396,8 @@ export const TOOL_LISTING = Object.freeze({
     }
   },
   "o11_deliver": {
-    "sourceSha256": "092b81d031c48fbae8ca45969c5cc7c776da0f335bb7a429ff39d2af4e5e7077",
-    "description": "ONE module, ALL changes/job, never one action/step per call; validates before mutation; words or module grant required. Refusal:patch + basedOn, never whole job. prototype: same job, owner's words in authorize; never hand-convert; mapping only when a refusal asks. Uncertain:never repeat; follow continuation; resume reconciles same task. module:open (or to open) module or label like GameStore CS; required unless resume/close; basedOn.taskId defaults it to that task's module. checks:names that must exist after merge. publish:clean merge, same words/grant; failed publish never redelivers. expectedEnvironment:bare host Studio must be on. Full text:ssam_reference kind tool.",
+    "sourceSha256": "9d4dccfb9d29a11b419a18db18e9a5d9950f4d862c310e12db5c74f01bd9e4d9",
+    "description": "ONE module, ALL changes/job, never one action/step per call; validates before mutation; words or module grant required. Refusal:patch + basedOn, never whole job. Uncertain:never repeat; follow continuation; resume reconciles same task. module:open (or to open) module or label like GameStore CS; required unless resume/close; basedOn.taskId defaults it to that task's module. checks:names that must exist after merge. publish:clean merge, same words/grant; failed publish never redelivers. expectedEnvironment:bare host Studio must be on. Full text:ssam_reference kind tool.",
     "params": {
       "/properties/module": null,
       "/properties/job": "Absolute path or inline job; basedOn: changed/new elements only (same name replaces); required unless resume/close/patch.",
@@ -1545,8 +1541,8 @@ export const TOOL_LISTING = Object.freeze({
     }
   },
   "studio_deliver": {
-    "sourceSha256": "ba315ceb23dc6d3b86eeea0c52c6a0ed46c026029b4e9c2831621d657743093a",
-    "description": "Deliver EVERY requested change of ONE ODC module in one job: capture, build, validate and merge. Refusal returns all problems and nextBasedOn: patch + basedOn or changed elements only; never resend whole job. publish also publishes after clean merge, authorize or grant required; failed publish never redelivers. until=build/check-base/preview only when the person asks. prototype imports and ddl/logic/html text use this same pipeline (owner's words in authorize, never hand-convert, mapping only when a refusal asks). Uncertain merge/publication: never retry, read receipt first.",
+    "sourceSha256": "ecf279e31c74ad7689e0c4bc151925ff2eb79f7b338996de93b8f9df895cd240",
+    "description": "Deliver EVERY requested change of ONE ODC module in one job: capture, build, validate and merge. Refusal returns all problems and nextBasedOn: patch + basedOn or changed elements only; never resend whole job. publish also publishes after clean merge, authorize or grant required; failed publish never redelivers. until=build/check-base/preview only when the person asks. ddl/logic/html text uses this same pipeline. Uncertain merge/publication: never retry, read receipt first.",
     "params": {
       "/properties/job": "Inline job or absolute/relative JSON path; with basedOn only changed/new elements (same name replaces).",
       "/properties/publish": "Alone: Publish after clean merge; requires until merge.",

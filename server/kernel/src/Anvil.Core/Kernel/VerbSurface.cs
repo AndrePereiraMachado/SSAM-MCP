@@ -50,7 +50,6 @@ public static class VerbSurface
             "Screen archetypes (`api --op screen`) or the typed owners tree (`data.owners`)."),
         new("html", "write", ["parent|data"], ["file", "html"],
             "Visual fragment inside an existing parent (`parent` + `file`|`html`, see `api --op html-visual`) or a whole page manifest (`data`, see `api --op html`)."),
-        new("prototype", "write", ["data"], [], "Prototype folder imported as native screens, a shell block, popups, data and logic (data.capture is written by the facade); see `api --op prototype`."),
         new("entity-actions", "write", [], ["data"],
             "The standard actions of the module's data model, generated from it (Get<E>List, Get<E>ById, Save<E>, Remove<E>, service wrappers), written as logic texts; existing actions are never overwritten; see `api --op entity-actions`."),
         new("rest", "write", ["data"], [],

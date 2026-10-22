@@ -220,7 +220,7 @@ test('L2 the gate confines every path ssam_code reads to the customer\'s workspa
   // The prototype op, a pending generator and patch "verified": refused before anything runs, as in the job tools.
   const before = seen.length;
   const proto = (await gated({ lane: 'o11', action: 'check', module: 'M', ops: [{ op: 'prototype', data: { source: 'ws:inbox/p' } }] }, {})).structuredContent;
-  assert.equal(proto.cause, 'PROTOTYPE_SOURCE_LOCAL', JSON.stringify(proto));
+  assert.equal(proto.cause, 'PROTOTYPE_IMPORT_DISABLED', JSON.stringify(proto));
   const generator = (await gated({ lane: 'odc', action: 'write', module: 'M', ops: [{ op: 'rest-consume', data: { name: 'X', methods: [{ name: 'P', url: 'http://127.0.0.1:9/x' }] } }] }, {})).structuredContent;
   assert.equal(generator.cause, 'GENERATOR_PENDING', JSON.stringify(generator));
   const verified = (await gated({ lane: 'o11', action: 'write', module: 'M', basedOn: { job: 'ws:o11/jobs/check/old/job.json', sha256: 'a'.repeat(64) }, patch: 'verified' }, {})).structuredContent;

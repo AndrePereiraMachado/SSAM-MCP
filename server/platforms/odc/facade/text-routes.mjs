@@ -102,7 +102,7 @@ export function partReader(jobFile, fsModule, pathModule) {
 // ---- lexicon (accent-free, lower case; a phrase is matched on whole words in order)
 const words = list => list.split(/\s*,\s*/).filter(Boolean);
 const UI_CONTAINERS = words('tela, telas, ecra, ecras, pagina, paginas, page, pages, screen, screens, bloco, blocos, block, blocks, webblock, popup, popups, '
-  + 'modal, formulario, formularios, form, forms, dashboard, dashboards, painel');
+  + 'modal, formulario, formularios, form, forms, dashboard, dashboards, painel, prototipo, prototipos, prototype, prototypes, mockup, mockups, maquete');
 const UI_PARTS = words('botao, botoes, button, buttons, link, links, input, inputs, dropdown, dropdowns, combo, combobox, select, checkbox, checkboxes, '
   + 'switch, radio, textarea, label, labels, rotulo, rotulos, icone, icones, icon, icons, imagem, imagens, image, images, container, containers, card, cards, '
   + 'tabela, tabelas, table, tables, grid, lista, listas, list, lists, coluna, colunas, column, columns, css, estilo, estilos, style, styles, stylesheet, '
@@ -142,6 +142,10 @@ const DEFINITION = /\b(tipo|type|default|padrao|descricao|description|nome|name|
 
 const CREATE = new Set(words('criar, crie, cria, criando, crio, criem, fazer, faca, faz, montar, monte, construir, construa, gerar, gere, desenhar, desenhe, '
   + 'implementar, implemente, create, creating, build, make, generate, design, implement, new'));
+// A prototype or a mockup imported or converted is a new screen (its import op is turned off, prototype-disabled.mjs): these
+// verbs create only in a request that names one ("importar dados de um CSV" stays outside the texts).
+const PROTOTYPE_WORDS = new Set(words('prototipo, prototipos, prototype, prototypes, mockup, mockups, maquete'));
+const IMPORT = new Set(words('importar, importe, importa, converter, converta, converte, transformar, transforme, transforma, import, convert, transform, turn'));
 const ADD = new Set(words('adicionar, adicione, adiciona, incluir, inclua, inclui, acrescentar, acrescente, acrescenta, inserir, insira, colocar, coloque, coloca, '
   + 'add, insert, include, put, append'));
 const EDIT = new Set(words('alterar, altere, altera, mudar, mude, muda, corrigir, corrija, corrige, ajustar, ajuste, ajusta, editar, edite, edita, trocar, '
@@ -170,9 +174,10 @@ const PROBLEMS = words('sem css, sem estilo, quebrada, quebrado, desalinhado, de
 const LOCATIVES = new Set(words('na, no, nas, nos, em, da, do, das, dos, dentro, numa, num, ao, entre, between, in, on, to, into, inside, within, of, from, at, onto'));
 const SKIP = new Set(words('o, a, os, as, um, uma, uns, umas, the, an, my, meu, minha, nosso, nossa, este, esta, esse, essa, that, this, existente, existing, atual, current, '
   + 'de, do, da'));
-// Requests outside these texts (each with its own capability or tool): prototypes, Traditional Web, copies, records of data,
-// a move to another module, a repoint.
-const EXCLUDED = [/\b(prototipo|prototipos|prototype|prototypes|mockup|mockups|mock up|pixel perfect)\b/, /\b(tradicional|traditional|table records|web screen)\b/,
+// Requests outside these texts (each with its own capability or tool): Traditional Web, copies, records of data, a move to
+// another module, a repoint. A prototype or a mockup is no longer one of them: its import is turned off
+// (prototype-disabled.mjs), and its screens are written with the html op, the route of ui.screen-html.
+const EXCLUDED = [/\b(tradicional|traditional|table records|web screen)\b/,
   /\b(duplicar|duplique|duplicate|copiar|copie|copia|copy|clonar|clone)\b/, /\b(reapontar|repoint|redirect|redirecionar|substituir|replace)\b/,
   /\b(outro modulo|another module|other module)\b/];
 // Rows of data (records inserted, updated or deleted in a database) are not the model, unless they are the records of a
@@ -279,7 +284,8 @@ export function classifyTextRoute(intent) {
   const named = new Set(all.map(m => m.end));
   const clauseText = c => ' ' + toks.filter((_, i) => clauses[i] === c && !named.has(i)).join(' ') + ' ';
   // A need word stands for "create" only when no other verb comes before its object ("preciso corrigir a tela": corrigir).
-  const rawVerbs = toks.map((t, i) => ({ i, kind: verbKind(t), t })).filter(v => v.kind);
+  const imported = toks.some(t => PROTOTYPE_WORDS.has(t));
+  const rawVerbs = toks.map((t, i) => ({ i, kind: verbKind(t) ?? (imported && IMPORT.has(t) ? 'create' : null), t })).filter(v => v.kind);
   const verbs = rawVerbs.filter((v, n) => v.kind !== 'need' || !rawVerbs.slice(n + 1).some(w => w.kind !== 'need' && w.i <= v.i + 3)).map(v => (v.kind === 'need' ? { ...v, kind: 'create' } : v));
   const firstAfter = (pos, list = all) => list.find(m => m.pos > pos) ?? null;
   const why = [];

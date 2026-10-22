@@ -46,21 +46,14 @@ What the ODC Studio rewrites on merge is refused before the build with the fix: 
 
 While a merge or a publication runs, `studio_status {}` answers at once from that delivery's evidence (`fromEvidence:true`, `busy {command, since}`, stage, `merge-started.json`); the call that started it answers when it ends.
 
-## HTML prototype → native screens
+## HTML prototype or mockup -> native screens
 
-A prototype folder (index.html, app.js, styles.css, mock data, icons, images), or the .zip it came in, becomes native screens in ONE call through the ssam server (it takes the job inline), with no reading and no conversion by the model:
+The prototype import (the job op `prototype`) is turned off: a job with it is refused with `PROTOTYPE_IMPORT_DISABLED` before anything runs. Build each screen with the html op instead, porting the approved HTML and CSS 1:1:
 
-`studio_deliver {feature:"Prototype <Prefix>", module:"<open module>", job:{ops:[{op:"prototype", data:{source:"<prototype folder or its .zip, absolute path>"}}]}, owners:["<Prefix>"], changes:["Prototype <Prefix> imported as native screens"], publish:true, authorize:"<the owner's words>"}`
-
-- `feature`, `owners` and `changes` may be left out: the ssam server fills them from the prototype's prefix (its `<title>` up to the first separator, in PascalCase).
-- Give a .zip as it is (SSAM extracts it safely once; never unzip it with a shell). Do not read `app.js`, `model.js`, `styles.css`, the `.jsx` or the HTML, and never split the views into several calls: SSAM renders the prototype headless and builds one screen per view in a flow of its own, a shell block, native popups, entities with the mock data, aggregates and server actions, with the prototype CSS verbatim in a theme of its own; `main`, `data` and `picture` (not HTML Element tags on ODC) are substituted. A name already taken by an element the import does not own becomes `<Prefix><Name>` (`renamedFrom`), never a refusal.
-- A prototype with several versions (`v1`/`v2`/`v3` `.jsx`, a design canvas): SSAM builds the one the HTML opens and lists the others in `prototype.source.unreferenced`; another version only when the person asks for it (`data.mapping.version:"<file of the folder>"`).
-- Several `.html` pages at the root and no `index.html` (the app and a style guide): the refusal names in its patch the page that runs the app, already captured with it (`verified`); send the `correctedJob` (the capture is reused), or give `data.entry` in the first call. Reference images (`screens/*.png`) are never part of the app.
-- The owner's words in `authorize` cover the import, the publication and the demo data: after a clean publication the mock rows go into the empty regular entities the import created (`studio_data_insert`). `data.seed:false` leaves the data out.
-- A refusal of the prototype (`PROTOTYPE_*`) comes ONCE, before the Studio is touched, with every problem, the ready `patch` over `/ops/<i>/data` and `correctedJob`: send the patch as it is (`patch` + `basedOn`). `data.mapping` only when a refusal asks for it. A build problem on a generated item rebuilds once without it (`prototype.degraded`); a second failure is `VALIDATION_REFUSED` with `ssamDefect:true` and the `mapping.ignore` patch.
-- Screens on real data: `data.bind {producer:"<Module>"}` in the same call; `PROTOTYPE_BINDING_REQUIRED` proposes every source (Data Action), list, text and event (`call` / `navigate`) over the producer's published actions, each built offline before it is offered; apply the whole `patch`, write or `null` the unresolved items. Bound collections get no entity and no seed. (The ODC producer is referenced as its public signature: the kernel's binding is shared; the live ODC proof is pending.)
-- The answer carries the receipt in `prototype` (screens with `url`, popups, blocks, data, events, fidelity per state, Verify warnings, seed, timings). Give the person the screen links.
-- A rehearsal without merge only when the person asks: `until:"preview"` (ODC has no `until:"apply"`).
+- `ssam_code {lane:"odc", action:"grammar", part:"html"}` gives the ssam-html/1 syntax and a from-scratch example.
+- `ssam_code {lane:"odc", action:"write", module:"<open module>", part:"html", text:"<screen Name>...</screen>"}` writes each new screen (several screens: `files` with one `.html` per screen, in the same call).
+- `ssam_map {lane:"odc", target:"<Module>", view:"html", screen:"<Screen>"}` reads an existing screen as ssam-html/1 with its ready edit call.
+- `ssam_discover {lane:"odc", intent:"create a screen <Name> with <what it shows>"}` gives the routes and contracts of the rest.
 
 ## Dialogs
 

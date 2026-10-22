@@ -45,15 +45,15 @@ public sealed class AutoPatchSourceRevisionTests
         Assert.Single(source["patchesApplied"]!.AsArray()); Assert.NotNull(source["normalizations"]); Assert.NotNull(source["patchedJob"]);
     }
 
+    // fix/prototype-off: the case "prototype" (a source build named by a prototype op's data.bind) is gone with the op, which
+    // the kernel now refuses before any source is built (PrototypeImportDisabledTests).
     [Theory]
     [InlineData("producer")]
-    [InlineData("prototype")]
-    public void RootOptOutAlsoReachesReferenceAndPrototypeSourceBuilds(string role)
+    public void RootOptOutAlsoReachesReferenceSourceBuilds(string role)
     {
         var dir = Work(); var producer = DateJob("SourceHelper"); producer["base"] = Blank;
         File.WriteAllText(Path.Combine(dir, "vproducer.json"), producer.ToJsonString());
-        var op = role == "producer" ? new JsonObject { ["op"] = "reference", ["producer"] = "job:vproducer", ["elements"] = new JsonArray() }
-            : new JsonObject { ["op"] = "prototype", ["data"] = new JsonObject { ["source"] = "<screen name='Probe'/>", ["bind"] = new JsonObject { ["producer"] = "job:vproducer" } } };
+        var op = new JsonObject { ["op"] = "reference", ["producer"] = "job:vproducer", ["elements"] = new JsonArray() };
         var job = Path.Combine(dir, "consumer.json"); File.WriteAllText(job, new JsonObject { ["base"] = Blank, ["autoPatch"] = false, ["ops"] = new JsonArray(op) }.ToJsonString());
         var error = Assert.ThrowsAny<Exception>((Action)(() => Run(dir, job, Path.Combine(dir, "candidate.oml"))));
         var envelope = Errors.Envelope("apply", error, 0);

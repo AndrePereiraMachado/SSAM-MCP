@@ -223,6 +223,8 @@ public sealed partial class ModelSession
     public JsonNode? ApplyOne(JsonObject op)
     {
         var kind = op["op"]?.GetValue<string>() ?? throw new InvalidOperationException("missing 'op'");
+        // The prototype import is turned off (PrototypeImport): no session applies the op, whatever path reached it.
+        if (kind == PrototypeImport.Op) throw PrototypeImport.Refusal(_applyOps != null ? _applyIndex : null);
         VerbSurface.Check(op); // the executed contract: verb, required keys and the closed key set (api --op verbs)
         using var timing = NativePerformanceCapture.MeasureVerb(kind);
         var renamed = kind == "rename" ? Resolve(Req(op, "target")) : null;
@@ -248,7 +250,6 @@ public sealed partial class ModelSession
             "agent" => Agent(op),
             "screen" => Screen(op),
             "html" => Html(op),
-            "prototype" => Prototype(op),
             // The standard actions of the data model, generated from the module (Verbs.EntityActions.cs).
             "entity-actions" => EntityActions(op),
             // Integration ops (Verbs.Integration.cs): consumed REST, exposed REST, SOAP (O11).

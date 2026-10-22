@@ -84,8 +84,9 @@ import { o11ProducerModel, unpublishedRefusal, parseElement, requestedElements, 
 // The prototype importer (docs/PROTOTIPO-NATIVO.md, lane surface): the capture before anything, the rebuild of 1.4.1, the
 // receipt and the seed after a clean publication.
 import { expandJobFile, capturePrototype, buildWithDegradation, buildProblems, journalTo, kernelPrototypeReport, findNativeDom,
-  measurePrototypeFidelity, prototypeReceipt, receiptWithSeed, PROTOTYPE_DELIVER_TEXT, withoutIdentityPatches, bindingCorrection, readJobDocument } from './prototype-op.mjs';
+  measurePrototypeFidelity, prototypeReceipt, receiptWithSeed, withoutIdentityPatches, bindingCorrection, readJobDocument } from './prototype-op.mjs';
 import { seedPrototypeData, o11DataWriter } from './prototype-seed.mjs';
+import { prototypeImportRefusal } from './prototype-disabled.mjs';
 import { prototypeAppUrl, prototypeScreenLinks } from './next-steps.mjs';
 // prazos B: a referenced producer open and unmodified in the same Studio is bound by a capture of its tab (no environment call).
 import { openProducerBindings } from './o11-open-producer.mjs';
@@ -1606,6 +1607,9 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
     if (!input.resume && resolved?.path) {
       let document = null;
       try { document = JSON.parse(fs.readFileSync(resolved.path, 'utf8').replace(/^\uFEFF/, '')); } catch { /* the kernel reports an unreadable job */ }
+      // The prototype import is turned off (prototype-disabled.mjs): refused here, before the Studio or the build is touched.
+      const disabled = prototypeImportRefusal(document, { lane: 'o11', module: input.module ?? null, readPart: partReader(resolved.path, fs, path) });
+      if (disabled) return withJob(disabled, resolved);
       const unwired = textFormRefusal(document, undefined, { readPart: partReader(resolved.path, fs, path) });
       if (unwired) return withJob(unwired, resolved);
     }
@@ -1937,7 +1941,7 @@ export function registerO11Cycle(server, deps = {}) {
       + 'publish:true publishes the same module right after a clean merge (the o11_publish flow, same words or grant): "delivered and published"; '
       + 'a failed publication answers result "delivered" with PUBLISH_FAILED|PUBLISH_UNCERTAIN and the o11_publish continuation, never a new delivery. '
       + 'Without publish nothing is published. Without authorize a standing grant (ssam_grant) of the module for deliver is used. Producers named by '
-      + 'reference ops are captured read-only by name. Blocks until the CLI ends; ssam_task reads the task meanwhile. ' + PROTOTYPE_DELIVER_TEXT + ' ' + CODE_JOB_TEXT,
+      + 'reference ops are captured read-only by name. Blocks until the CLI ends; ssam_task reads the task meanwhile. ' + CODE_JOB_TEXT,
     inputSchema: deliverSchema, annotations: mutating,
     // Lane wp: this handler splits its delivery in build and apply (o11-build-phase.mjs; studio-write-lock.mjs PHASES_META).
     _meta: { [PHASES_META]: true },

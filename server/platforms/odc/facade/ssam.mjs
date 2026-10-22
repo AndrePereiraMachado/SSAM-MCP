@@ -56,7 +56,8 @@ import { referenceFolders, answerFolders, fileOrigin, isKeptAnswer } from './ref
 import { registerSsamEvidence } from './ssam-evidence.mjs';
 import { pagedShape, missingCall } from './paged-answer.mjs';
 import { jobTool } from './job-runner.mjs';
-import { prototypeDeliveryDefaults, readJobDocument, PROTOTYPE_DELIVER_TEXT } from './prototype-op.mjs';
+import { readJobDocument } from './prototype-op.mjs';
+import { prototypeImportRefusal } from './prototype-disabled.mjs';
 import { textFormRefusal, partReader } from './text-routes.mjs';
 import { CODE_JOB_TEXT, normalizeCodeOps } from './ssam-code.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
@@ -1508,8 +1509,8 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
       // patch + basedOn {job, sha256} (the nextBasedOn of an answer) instead of the whole job again, paths by index or by
       // name, or job + basedOn: a partial job with only the changed or new elements (job-patch.mjs).
       const inlineJob = tool.name === 'studio_deliver' && schema?.properties?.job;
-      // feature (with owners and changes) may be left out for a job with a prototype op: the proxy fills them from the
-      // prototype's prefix (prototype-op.mjs prototypeDeliveryDefaults); any other job still needs feature (refused here).
+      // feature stays optional in the schema so that a job with the op prototype (turned off, prototype-disabled.mjs) gets its
+      // own refusal, never a schema error; every job still needs feature (refused here).
       const exposed = inlineJob ? { ...schema, required: (schema.required ?? []).filter(r => r !== 'feature'), properties: { ...schema.properties, job: { anyOf: [{ type: 'string' }, { type: 'object' }, { type: 'array' }],
         description: 'Path of the job JSON (absolute or relative to the SSAM-Hybrid-ODC root), or the job itself ({ops:[...]} or an array of ops). '
           + 'With basedOn: a partial job, only the changed or new actions/entities/ops (same name replaces, new name is added).' },
@@ -1517,7 +1518,7 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
       const description = (needsLane ? '[o11 | odc] ' : ownLane ? '' : '[' + laneName + '] ') + (tool.description ?? '')
         + (inlineJob ? ' Every answer with a job names nextBasedOn {job, sha256}; a refusal also job, jobSha256, failedOp and each patch by name (patchByName). '
           + 'Correct it with patch + basedOn (paths by index or by name: actions/<Action>/steps/<as>/...), or with only the changed actions as a partial job + basedOn; never rewrite the whole job. '
-          + PROTOTYPE_DELIVER_TEXT + ' ' + CODE_JOB_TEXT : '');
+          + CODE_JOB_TEXT : '');
       // Discover owns its first-answer, packet and expansion defaults; other budgeted tools use the shared ceiling.
       const budgeted = schema?.properties?.budgetBytes != null;
       server.registerTool(proxyName(tool.name, laneName), {
@@ -1566,6 +1567,10 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
           const document = aliased.job;
           if (aliased.changed && typeof forwarded.job === 'string') forwarded = { ...forwarded, job: writeInlineJob(odcLaneRoot, document) };
           // WIRED (text-routes.mjs): a text form whose way back is not wired is refused before the delivery runs.
+          // The prototype import is turned off (prototype-disabled.mjs): refused before the precheck, the relay and the Studio.
+          const disabled = document ? prototypeImportRefusal(document, { lane: 'odc', module: forwarded.module ?? null,
+            ...(typeof forwarded.job === 'string' ? { readPart: partReader(path.resolve(odcLaneRoot, forwarded.job), fs, path) } : {}) }) : null;
+          if (disabled) return reply(jobNotes.length ? { ...disabled, normalizations: jobNotes } : disabled);
           const unwired = document ? textFormRefusal(document, undefined, typeof forwarded.job === 'string' ? { readPart: partReader(path.resolve(odcLaneRoot, forwarded.job), fs, path) } : {}) : null;
           if (unwired) return reply(unwired);
           // CX16 (ui-precheck.mjs): a job of screens or blocks is judged on the newest snapshot's index. CX16 r3 (M3): alongside
@@ -1574,11 +1579,9 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
           const pre = document ? await precheckModule.startUiPrecheck({ lane: 'odc', module: forwarded.module, job: typeof forwarded.job === 'string' ? path.resolve(odcLaneRoot, forwarded.job) : document, document, mode: 'deliver', input: forwarded }, { runAnvil: o11Runner, odcRoot: odcLaneRoot, ...(deps.precheck ?? {}) }) : null;
           if (pre?.stop) return reply(jobNotes.length ? { ...pre.stop, normalizations: jobNotes } : pre.stop);
           if (pre?.pending) { pending = pre.pending; joinOf = precheckModule.joinPrecheck; }
-          const defaults = document ? prototypeDeliveryDefaults(document, forwarded) : null;
-          if (defaults) forwarded = { ...forwarded, ...defaults };
           if (!(typeof forwarded.feature === 'string' && forwarded.feature.trim())) {
             await settle();
-            return reply(joined({ ok: false, code: 'INPUT_INVALID', error: 'studio_deliver needs feature (with job: also owners and changes); only a job with a prototype op takes them from the prototype.' }));
+            return reply(joined({ ok: false, code: 'INPUT_INVALID', error: 'studio_deliver needs feature (with job: also owners and changes).' }));
           }
         }
         if (inlineJob && forwarded.job != null && typeof forwarded.job !== 'string') forwarded = { ...forwarded, job: writeInlineJob(odcLaneRoot, forwarded.job) };
@@ -2214,17 +2217,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       print(result); if (!result.ok) process.exitCode = 1;
     }
     else if (verb === 'prototype') {
-      // ssam prototype <folder> --lane o11|odc --module <M> [--base <oml>] [--dry]: the rehearsal of the one-call import
-      // (docs/PROTOTIPO-NATIVO.md 9): capture, `anvil apply` headless on the local base, fidelity, and the receipt. Without
-      // --dry it answers the MCP call of the import (the owner's words go there).
-      const { prototypeCli } = await import('./prototype-op.mjs');
-      let result;
-      try { result = await prototypeCli(explicit ? [...args, '--lane', explicit] : args); }
-      finally {
-        // the capture keeps its child processes resident for the next call of a server; a CLI run ends with its answer
-        try { (await import('./prototype/capture.mjs')).closeResidentPools?.(); } catch { /* no capture engine: nothing resident */ }
-      }
-      print(result); if (!result.ok) process.exitCode = 1;
+      // The prototype import is turned off (prototype-disabled.mjs): the former rehearsal verb answers the same refusal as
+      // the job op, with the html op as the way to build screens; nothing is captured or built.
+      const { value: chosen } = option(args, '--lane');
+      const { value: module } = option(args, '--module');
+      const result = prototypeImportRefusal({ ops: [{ op: 'prototype', data: {} }] }, { lane: explicit ?? chosen ?? 'o11', module: module ?? null });
+      print(result); process.exitCode = 1;
     }
     else if (verb === 'app-hook') {
       // Codex/Claude hook of the controlled app profile (UserPromptSubmit/PreToolUse): event JSON on stdin.
@@ -2254,6 +2252,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         if (verb === 'job' && !result.ok) { const { withJobGuidance, jobArgument } = await import('./job-guidance.mjs'); result = await withJobGuidance(chosen.lane, jobArgument(args), result); }
         print({ ...result, laneFrom: chosen.from ?? 'catalog' }); if (!result.ok) process.exitCode = 1;
       }
-    } else fail('Usage: ssam connect [--lane o11|odc] [--pid <pid>] | ssam warm [--lane o11|odc] | ssam ' + verbs.join('|') + ' [--lane ' + laneNames.join('|') + '] <args...> | ssam map [--lane odc|o11] <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key] [--offset N] [--max N] [--budget <bytes>] [--detail] | ssam discover <intent...> [--lane odc|o11] [--app <capture.oml>] [--detail <capability>] [--type <Interface>] [--budget <bytes>] | ssam app <App> [Screen] --lane odc [--environment <origin>] | ssam prototype <folder> --lane o11|odc --module <M> [--base <oml>] [--dry] | ssam mcp | ssam serve [--port 7300] [--host 127.0.0.1] | ssam server-token issue|revoke|list|import | ssam db migrate|status');
+    } else fail('Usage: ssam connect [--lane o11|odc] [--pid <pid>] | ssam warm [--lane o11|odc] | ssam ' + verbs.join('|') + ' [--lane ' + laneNames.join('|') + '] <args...> | ssam map [--lane odc|o11] <capture.oml|Module> [--kind K] [--name N] [--prefix P] [--role R] [--parent @key] [--offset N] [--max N] [--budget <bytes>] [--detail] | ssam discover <intent...> [--lane odc|o11] [--app <capture.oml>] [--detail <capability>] [--type <Interface>] [--budget <bytes>] | ssam app <App> [Screen] --lane odc [--environment <origin>] | ssam mcp | ssam serve [--port 7300] [--host 127.0.0.1] | ssam server-token issue|revoke|list|import | ssam db migrate|status');
   } catch (error) { fail(error.message); }
 }

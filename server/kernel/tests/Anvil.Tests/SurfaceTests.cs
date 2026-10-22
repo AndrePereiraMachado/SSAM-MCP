@@ -131,9 +131,9 @@ public class SurfaceTests
             .Select(m => m.Name.ToLowerInvariant()).ToHashSet();
         handlers.UnionWith(["get", "dump"]); // dispatched with a resolved target instead of the op object
         foreach (var verb in named) Assert.Contains(verb.Replace("-", ""), handlers); // rest-expose -> RestExpose
-        foreach (var expected in new[] { "agent", "create", "set", "link", "move", "reference", "usages", "rename", "duplicate", "delete", "get", "find", "replace", "layout", "spec", "logic", "screen", "html", "dump", "rest", "rest-consume", "rest-expose", "soap", "prototype", "entity-actions" })
+        foreach (var expected in new[] { "agent", "create", "set", "link", "move", "reference", "usages", "rename", "duplicate", "delete", "get", "find", "replace", "layout", "spec", "logic", "screen", "html", "dump", "rest", "rest-consume", "rest-expose", "soap", "entity-actions" })
             Assert.Contains(expected, named);
-        Assert.Equal(25, named.Length);
+        Assert.Equal(24, named.Length);
         Assert.Contains("parent", schema["verbs"]!["create"]!["required"]!.AsArray().Select(k => k!.ToString()));
         Assert.Contains("$pai/#Tipo[n]", schema["references"]!.AsObject().Select(p => p.Key));
         Assert.Contains("verbs", CommandSurface.OperationNames);

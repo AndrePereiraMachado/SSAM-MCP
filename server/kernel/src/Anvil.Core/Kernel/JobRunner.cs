@@ -975,7 +975,10 @@ public static partial class JobRunner
                 // motor2 review: the preflight normalizes a copy. The ops of the apply are read from the job as sent and normalized
                 // again, so the marks of what the kernel inserted (SentJob) are on them and every pointer of the answer, the
                 // base's, the apply's and the Verify's too, is one of the job as sent.
-                var preflight = JobPreflight.Analyze(CollectOps(job.DeepClone(), jobDirectory, null), job, null, jobPath);
+                var preflightOps = CollectOps(job.DeepClone(), jobDirectory, null);
+                // The prototype import is turned off (PrototypeImport): ONE refusal before the base, a producer or the apply.
+                if (PrototypeImport.Refusal(preflightOps, JobPreflight.OpsPointer(job)) is { } disabled) throw disabled;
+                var preflight = JobPreflight.Analyze(preflightOps, job, null, jobPath);
                 var expectedValid = job is JsonObject obj && obj["expectValid"] is JsonValue ev && ev.TryGetValue<bool>(out var valid) ? valid : true;
                 var autoPatch = JobPreflight.AutoPatch.Value != false && !(job is JsonObject flags && flags["autoPatch"] is JsonValue flag && flag.TryGetValue<bool>(out var enabled) && !enabled);
                 using var inheritedPolicy = JobPreflight.UseAutoPatch(autoPatch);

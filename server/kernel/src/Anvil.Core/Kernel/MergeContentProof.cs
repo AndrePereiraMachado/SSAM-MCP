@@ -10,13 +10,46 @@ using ServiceStudio.Model;
 namespace Anvil.Core;
 
 /// <summary>Independent comparison of authored model content after native merge.
-/// Derived records are addressed through their owners; omissions remain explicit in the receipt.</summary>
+/// Derived records are addressed through their owners; omissions remain explicit in the receipt.
+/// <para><b>Identity rule</b> (one rule for every node; <see cref="IdentityRule"/>). The Studio's native merge (MatchTree,
+/// CompareAndMerge) and its importers may give an element whose content they did not change a new local ObjectKey, and a keyed
+/// collection enumerates its items in the order of their key hashes. So no identity uses a local key, and no position is
+/// read from a collection whose order is not content. An element is, in this order:</para>
+/// <list type="number">
+/// <item>an element of a producer reference: the producer's element, its GlobalKey (producer module key * producer object
+/// key); the reference record itself: its producer module (ReferenceKey);</item>
+/// <item>the module: its module key (the module's own identity, which no merge regenerates); an object outside the module
+/// (a platform constant): its own key;</item>
+/// <item>a derived record the native rebuilds from its owner's content (auto-generated index, add-source operation, implicit
+/// data-set parameter, data table, list type, anonymous record structure): its owner and its content;</item>
+/// <item>a named element: its owner's identity + kind + Name; when siblings of that kind share the name, the slot that holds
+/// it (when theirs differ) and the discriminator below are added;</item>
+/// <item>an unnamed element that supplies a value for a target (Parameter, Attribute, Placeholder, Event, Role) or names
+/// one (an extended property's Property): its owner's identity + kind + that target's own identity (or that name);</item>
+/// <item>any other unnamed element: its owner's identity + kind + the slot of the owner that holds it (the property, or
+/// the collection, that the Model API exposes it through), and, when the slot holds more than one element of that kind,
+/// its position among them in an ordered slot (an ordered collection, whose order is compared as content) or, in an
+/// unordered one, the hash of its own content (its values and the content of its children, references by the kind and
+/// name of their targets); twins of one content (two folders of one name in two trees) add what references each one (the
+/// readable path of each referer and its property).</item>
+/// </list>
+/// <para>A local key is never the identity of a node. A reference value is compared through its target's identity, so a
+/// reference retargeted to another element still differs. Every property value, ordered children list, set, binding target,
+/// expression text and reference, and payload is compared under these identities: a lost element, a changed value, a
+/// rename, a reordered ordered list or a retargeted reference refuses and names the element.</para></summary>
 public static class MergeContentProof
 {
+    /// <summary>The identity rule this proof applies, named in its receipt.</summary>
+    public const string IdentityRule = "ssam-merge-identity/2: producer GlobalKey/ReferenceKey; module key; derived records by owner and content; owner+kind+Name; owner+kind+target identity; owner+kind+slot+position (ordered) or content hash, then referers, (unordered); never a local ObjectKey";
+
     private static readonly HashSet<string> OrderedCollections = new(StringComparer.Ordinal) {
         "Widgets", "Rows", "Cells", "Assignments", "InputParameters", "OutputParameters", "Attributes", "Sorts", "Conditions", "IndexAttributes"
     };
     private static readonly HashSet<string> SetCollections = new(StringComparer.Ordinal) { "Roles" };
+    /// <summary>The reference that tells which value an unnamed element supplies (an argument its parameter, a record value
+    /// its attribute, a placeholder content its placeholder, an event handler its event, a role exception its role).</summary>
+    private static readonly string[] DefiningReferences = ["Parameter", "Attribute", "Placeholder", "Event", "Role"];
+
     public static JsonObject Check(ModelHost host, string expectedPath, string actualPath)
     {
         ESpace? expected = null, actual = null;
@@ -36,7 +69,8 @@ public static class MergeContentProof
             };
             proof["coverage"] = new JsonObject {
                 ["complete"] = false,
-                ["boundary"] = "Public Model API content, excluding producer implementation and platform metadata. Regenerated owned records use owner and property/parameter/alias/position; derived lists, records, source operations and implicit parameters use their content. Unsupported values and getter failures are listed below. This is not a compiler or runtime proof.",
+                ["identity"] = IdentityRule,
+                ["boundary"] = "Public Model API content, excluding producer implementation and platform metadata. No element is identified by its local key: producer elements by their GlobalKey, named elements by owner, kind and name, unnamed ones by owner, kind and the target they supply or the slot that holds them (position in an ordered slot, content in an unordered one); derived lists, records, source operations and implicit parameters use their content. Unsupported values and getter failures are listed below. This is not a compiler or runtime proof.",
                 ["expectedOmissions"] = omittedExpected, ["actualOmissions"] = omittedActual,
                 ["byKind"] = new JsonArray(expectedValues.Where(v => v.Key.Property == "$kind").GroupBy(v => v.Value)
                     .OrderBy(g => g.Key, StringComparer.Ordinal).Select(g => (JsonNode)new JsonObject { ["kind"] = g.Key, ["objects"] = g.Count() }).ToArray())
@@ -52,8 +86,12 @@ public static class MergeContentProof
         var identities = new Dictionary<IObjectSignature, string>(ReferenceEqualityComparer.Instance);
         var resolving = new HashSet<IObjectSignature>(ReferenceEqualityComparer.Instance);
         var identityOwners = new Dictionary<string, IObjectSignature>(StringComparer.Ordinal);
-        var moduleKey = ((IObjectSignature)model).ObjectKey?.ToString() ?? "";
+        var slotsOf = new Dictionary<IObjectSignature, Dictionary<IObjectSignature, Slot>>(ReferenceEqualityComparer.Instance);
+        var signatures = new Dictionary<IObjectSignature, string>(ReferenceEqualityComparer.Instance);
+        var root = (IObjectSignature)model;
+        var moduleKey = root.ObjectKey?.ToString() ?? "";
         string Kind(IObjectSignature node) => node.GetInterface()?.Name ?? node.GetType().Name;
+        string? NameOf(IObjectSignature node) => SafeProp(node, "Name") as string is { Length: > 0 } name ? name : null;
         // The readable element of an identity, for the refusal: kind:name segments below the module (an argument by its
         // parameter), e.g. ServerAction:ConsumerAction/ExecuteServerActionNode:Save/Argument:Code.
         string Label(IObjectSignature node)
@@ -85,18 +123,31 @@ public static class MergeContentProof
             if (!inReference) return null;
             var global = ModelHost.Prop(node, "GlobalKey")?.ToString();
             var star = global?.IndexOf('*') ?? -1;
-            // A global key of this module is a local element: its own key stays its identity.
+            // A global key of this module is a local element: the general rule below identifies it.
             if (global == null || star <= 0 || star == global.Length - 1 || string.Equals(global[..star], moduleKey, StringComparison.Ordinal)) return null;
             return "producer:" + global;
         }
-        bool InAggregate(IObjectSignature node) {
-            for (var parent = node.Parent as IObjectSignature; parent != null; parent = parent.Parent as IObjectSignature)
-                if (parent is OutSystems.Model.Logic.Nodes.IAggregateNode || Kind(parent) == "IScreenAggregate") return true;
+        bool InModule(IObjectSignature node)
+        {
+            for (var n = node; n != null; n = ParentOf(n))
+                if (ReferenceEquals(n, root)) return true;
             return false;
         }
-        string OwnedRole(IObjectSignature parent, IObjectSignature node)
+        bool Inside(IObjectSignature node, IObjectSignature ancestor)
         {
-            var direct = new List<string>(); var collections = new List<string>();
+            for (var n = node; n != null; n = ParentOf(n))
+                if (ReferenceEquals(n, ancestor)) return true;
+            return false;
+        }
+        // The slots of an owner: for each child, the property (or the collection) of the owner's Model API that holds it, and
+        // its position among the children of its kind in that slot. Direct properties first, then the ordered and set
+        // collections, then the others (alphabetical within each), so a child listed twice takes its canonical slot.
+        Dictionary<IObjectSignature, Slot> Slots(IObjectSignature parent)
+        {
+            if (slotsOf.TryGetValue(parent, out var known)) return known;
+            var map = new Dictionary<IObjectSignature, Slot>(ReferenceEqualityComparer.Instance);
+            var direct = new List<(string Name, IObjectSignature Child)>();
+            var lists = new List<(string Name, int Rank, bool Ordered, List<IObjectSignature> Items)>();
             foreach (var property in ModelApiMetadata.Properties(parent.GetType()).Where(p => p.CanRead && p.GetIndexParameters().Length == 0)
                 .DistinctBy(p => p.Name).OrderBy(p => p.Name, StringComparer.Ordinal)) {
                 if (ModelReader<IObjectSignature>.IsNoise(property.Name)) continue;
@@ -104,25 +155,99 @@ public static class MergeContentProof
                     && (!typeof(IEnumerable).IsAssignableFrom(property.PropertyType) || property.PropertyType == typeof(string))) continue;
                 object? value;
                 try { value = property.GetValue(parent); } catch { continue; }
-                if (ReferenceEquals(value, node)) direct.Add(property.Name);
-                else if (value is IEnumerable list) {
-                    var items = list.OfType<IObjectSignature>().ToList();
-                    var position = items.FindIndex(item => ReferenceEquals(item, node));
-                    if (position >= 0) collections.Add(property.Name + "[" + position.ToString(CultureInfo.InvariantCulture) + "]");
+                if (value is IObjectSignature child) { if (ReferenceEquals(ParentOf(child), parent)) direct.Add((property.Name, child)); }
+                else if (value is IEnumerable list && value is not string) {
+                    List<IObjectSignature> items;
+                    try { items = list.OfType<IObjectSignature>().Where(i => ReferenceEquals(ParentOf(i), parent)).ToList(); } catch { continue; }
+                    if (items.Count == 0) continue;
+                    var ordered = OrderedCollections.Contains(property.Name) || Sequenced(value);
+                    lists.Add((property.Name, OrderedCollections.Contains(property.Name) || SetCollections.Contains(property.Name) ? 0 : 1, ordered, items));
                 }
             }
-            if (direct.Count > 0) return direct[0];
-            if (collections.Count > 0) return collections[0];
-            var sameKind = parent.Children.OfType<IObjectSignature>().Where(c => Kind(c) == Kind(node)).ToList();
-            if (sameKind.Count == 1) return "only:" + Kind(node);
-            var name = ModelHost.Prop(node, "Name")?.ToString();
-            if (!string.IsNullOrEmpty(name) && sameKind.Count(c => ModelHost.Prop(c, "Name")?.ToString() == name) == 1)
-                return "name:" + name;
-            // Nothing of the owner names this record: its position among the records of its kind addresses it, and the
-            // receipt says so (a reorder reads as a difference there, never as an exception out of the proof).
-            var ordinal = sameKind.FindIndex(c => ReferenceEquals(c, node));
-            omissions?.Add(new JsonObject { ["object"] = Identity(parent) + "/" + Kind(node), ["property"] = "$identity", ["reason"] = "addressed by position " + ordinal.ToString(CultureInfo.InvariantCulture) });
-            return "position:" + ordinal.ToString(CultureInfo.InvariantCulture);
+            foreach (var (name, child) in direct) map.TryAdd(child, new Slot(name, true, 0, 1));
+            foreach (var (name, _, ordered, items) in lists.OrderBy(l => l.Rank)) {
+                var free = items.Where(i => !map.ContainsKey(i)).ToList();
+                foreach (var group in free.GroupBy(Kind)) {
+                    var members = group.ToList();
+                    for (var i = 0; i < members.Count; i++) map.TryAdd(members[i], new Slot(name, ordered, i, members.Count));
+                }
+            }
+            // A child no property exposes: the owner's children, an unordered slot.
+            foreach (var group in parent.Children.OfType<IObjectSignature>().Where(c => !map.ContainsKey(c)).GroupBy(Kind)) {
+                var members = group.ToList();
+                for (var i = 0; i < members.Count; i++) map.TryAdd(members[i], new Slot("children", false, i, members.Count));
+            }
+            slotsOf[parent] = map;
+            return map;
+        }
+        // The content of an element without any identity in it: its kind, its values (a reference by the kind and name of
+        // its target), and the content of its children, sorted. It tells apart unnamed siblings of an unordered slot.
+        string Signature(IObjectSignature node)
+        {
+            if (signatures.TryGetValue(node, out var known)) return known;
+            var parts = new List<string> { Kind(node) };
+            foreach (var property in ModelApiMetadata.Properties(node.GetType())
+                .Where(p => p.GetIndexParameters().Length == 0 && p.CanRead && (p.CanWrite || OrderedCollections.Contains(p.Name) || SetCollections.Contains(p.Name)))
+                .DistinctBy(p => p.Name).OrderBy(p => p.Name, StringComparer.Ordinal)) {
+                if (ModelReader<IObjectSignature>.IsNoise(property.Name)) continue;
+                object? value;
+                try { value = property.GetValue(node); } catch { continue; }
+                var shallow = value switch {
+                    string or byte[] => ContentValue(value, _ => ""),
+                    IExpression expression => "expression:" + expression.Text,
+                    IObjectSignature reference => "reference:" + Kind(reference) + ":" + NameOf(reference),
+                    IEnumerable list when value is not string => "list:" + string.Join(",", list.OfType<IObjectSignature>().Select(r => Kind(r) + ":" + NameOf(r))),
+                    _ => ContentValue(value, _ => "")
+                };
+                if (shallow != null) parts.Add(property.Name + "=" + shallow);
+            }
+            if (node is IExpression own) parts.Add("$expression=" + own.Text);
+            parts.AddRange(node.Children.OfType<IObjectSignature>().Select(Signature).OrderBy(s => s, StringComparer.Ordinal));
+            return signatures[node] = Hash(string.Join("\n", parts));
+        }
+        // What points at an element, without any identity in it: the readable path of each referer and the property, sorted.
+        // It tells apart twins, siblings of one kind whose own content is the same (two folders of one name in two trees of
+        // the module: what each one holds is what references it). Built once, on the first twins.
+        Dictionary<IObjectSignature, List<string>>? incoming = null;
+        string Incoming(IObjectSignature node)
+        {
+            if (incoming == null) {
+                incoming = new Dictionary<IObjectSignature, List<string>>(ReferenceEqualityComparer.Instance);
+                var walk = new Stack<IObjectSignature>(); walk.Push(root);
+                var seen = new HashSet<IObjectSignature>(ReferenceEqualityComparer.Instance);
+                void Add(IObjectSignature target, IObjectSignature referer, string property) {
+                    if (ReferenceEquals(ParentOf(target), referer)) return;
+                    if (!incoming.TryGetValue(target, out var list)) incoming[target] = list = new List<string>();
+                    list.Add(Label(referer) + "." + property);
+                }
+                while (walk.TryPop(out var n)) {
+                    if (!seen.Add(n) || n is ServiceStudio.Model.Interfaces.ITopLevelReferenceElement) continue;
+                    foreach (var property in ModelApiMetadata.Properties(n.GetType())
+                        .Where(p => p.GetIndexParameters().Length == 0 && p.CanRead && (p.CanWrite || SetCollections.Contains(p.Name)))
+                        .DistinctBy(p => p.Name)) {
+                        if (ModelReader<IObjectSignature>.IsNoise(property.Name)) continue;
+                        object? value;
+                        try { value = property.GetValue(n); } catch { continue; }
+                        if (value is IObjectSignature target) Add(target, n, property.Name);
+                        else if (value is IEnumerable list && value is not string)
+                            try { foreach (var item in list.OfType<IObjectSignature>()) Add(item, n, property.Name); } catch { }
+                    }
+                    IEnumerable<IObjectSignature> children;
+                    try { children = n.Children.OfType<IObjectSignature>().ToList(); } catch { continue; }
+                    foreach (var child in children) walk.Push(child);
+                }
+            }
+            return incoming.TryGetValue(node, out var referers) ? string.Join("\n", referers.OrderBy(r => r, StringComparer.Ordinal)) : "";
+        }
+        // Siblings of one kind (and one name) in one slot: the position in an ordered slot (order is content there), else
+        // the hash of the element's content, and for twins of one content also what references each one.
+        string Discriminator(IObjectSignature node, Slot slot, List<IObjectSignature> siblings)
+        {
+            if (siblings.Count <= 1) return "";
+            if (slot.Ordered) return "#" + siblings.FindIndex(s => ReferenceEquals(s, node)).ToString(CultureInfo.InvariantCulture);
+            var signature = Signature(node);
+            if (siblings.Count(s => Signature(s) == signature) == 1) return "~" + signature[..16];
+            return "~" + Hash(signature + "\n" + Incoming(node))[..16];
         }
         string Identity(IObjectSignature node)
         {
@@ -135,28 +260,26 @@ public static class MergeContentProof
         {
             string id;
             var kind = Kind(node);
+            // 1. A producer's element.
             if (ProducerIdentity(node) is { } producerElement) return producerElement;
-            // Role exceptions are read-only derived records (native IsMergeUnit=false).
-            // Merge recreates their keys; preserve the actual role binding, not that key.
-            if (node is RoleException roleException && roleException.Role is IObjectSignature exceptionRole)
-                return Identity((IObjectSignature)node.Parent!) + "/role-exception:" + Identity(exceptionRole);
+            // 2. The module, and what is not in it (a platform constant).
+            if (node is IESpace) return "module:" + (node.ObjectKey?.ToString() ?? "");
+            if (!InModule(node)) return "external:" + (ModelHost.Prop(node, "GlobalKey")?.ToString() ?? node.ObjectKey?.ToString() ?? kind);
+            var parent = ParentOf(node)!;
+            // 3. Derived records, rebuilt by the native from their owner's content.
             if (node is EntityIndex { AutoGenerated: true } generatedIndex)
-                return Identity((IObjectSignature)node.Parent!) + "/generated-index:" + Hash(string.Join("\n", generatedIndex.IndexAttributes.Select(a => Identity(a.Attribute))));
-            if (kind == "CustomProperty" && node.Parent is IObjectSignature propertyOwner)
-                return Identity(propertyOwner) + "/property:" + ModelHost.Prop(node, "Name");
-            if (kind is "IInputParameter" or "IOutputParameter" && node.Parent is IObjectSignature signature && Kind(signature) == "IActionSignature")
-                return Identity(signature) + "/" + kind + ":" + ModelHost.Prop(node, "Name");
+                return Identity(parent) + "/generated-index:" + Hash(string.Join("\n", generatedIndex.IndexAttributes.Select(a => Identity(a.Attribute))));
             // Add-source records are derived for each alias. Two aliases of the same entity may
             // use two equivalent records; the alias itself, including its name, remains measured.
             if (kind == "IAddSourceOperation" && ModelHost.Prop(node, "Source") is IObjectSignature dataSource)
-                return "source:" + Identity((IObjectSignature)node.Parent!) + ":" + Identity(dataSource);
-            if (kind == "DataSetImplicitParameter" && node.Parent is IObjectSignature parameterOwner) {
+                return "source:" + Identity(parent) + ":" + Identity(dataSource);
+            if (kind == "DataSetImplicitParameter") {
                 var value = ModelHost.Prop(node, "Value") as IExpression;
                 var references = (ModelHost.Prop(value!, "ReferedObjects") as IEnumerable)?.OfType<IObjectSignature>()
                     .Select(Identity).OrderBy(k => k, StringComparer.Ordinal) ?? Enumerable.Empty<string>();
-                return Identity(parameterOwner) + "/implicit:" + Hash((value?.Text ?? "") + "\n" + string.Join("\n", references));
+                return Identity(parent) + "/implicit:" + Hash((value?.Text ?? "") + "\n" + string.Join("\n", references));
             }
-            if (kind == "DataTable" && node.Parent is IObjectSignature tableOwner) return Identity(tableOwner);
+            if (kind == "DataTable") return Identity(parent);
             if (node is OutSystems.Model.Types.IListType list)
                 return "list:" + Identity(list.ElementType);
             if (kind == "IAnonymousStructure") {
@@ -164,44 +287,31 @@ public static class MergeContentProof
                 // this derived record; declared structure/SQL output ordering is not normalized here.
                 var attributes = ((IEnumerable)ModelHost.Prop(node, "Attributes")!).OfType<IObjectSignature>()
                     .OrderBy(a => ModelHost.Prop(a, "Name")?.ToString(), StringComparer.Ordinal);
-                return "record:" + Hash(string.Join("\n", attributes.Select(a => ModelHost.Prop(a, "Name") + ":" + Identity((IObjectSignature)ModelHost.Prop(a, "DataType")!))));
+                // A field whose type does not resolve (a broken expression of an invalid model) is "unresolved", never an exception.
+                return "record:" + Hash(string.Join("\n", attributes.Select(a => ModelHost.Prop(a, "Name") + ":" + (ModelHost.Prop(a, "DataType") is IObjectSignature type ? Identity(type) : "unresolved"))));
             }
-            if (node.Parent is IObjectSignature anonymous && Kind(anonymous) == "IAnonymousStructure")
-                return Identity(anonymous) + "/attribute:" + ModelHost.Prop(node, "Name");
-            // Native merge recreates these owned records, while retaining their owners and semantics.
-            // Preserve their position and content; a new random key is not a lost binding.
-            // Reactive/Mobile IContent is the owned slot wrapper, recreated by MatchTree.
-            // Its owner/slot, children order, styles and bindings are still compared below.
-            // Metadata belongs to a named slot of its owner. In particular the SOAP importer regenerates
-            // WsdlServiceMetadata keys during merge; name, owner, kind and every payload byte remain content.
-            var namedMetadata = node is IMetadata && !string.IsNullOrEmpty(ModelHost.Prop(node, "Name")?.ToString());
-            if ((node is IExpression || namedMetadata || kind is "IArgument" or "IAssignment" or "IPlaceholderContentWidget" or "IContent" or "ISQLOutput" or "IEventHandler" or "IWebWidget" or "IMobileWidget" or "IRecordAttributeValue" or "IExtendedProperty" || InAggregate(node))
-                && node.Parent is IObjectSignature parent)
-            {
-                string? role = null;
-                if (node is IExpression) {
-                    var raw = node.ObjectKey.ToString();
-                    var separator = raw.IndexOf(".#", StringComparison.Ordinal);
-                    if (separator >= 0) role = raw[(separator + 2)..];
+            var owner = Identity(parent);
+            var slot = Slots(parent).TryGetValue(node, out var held) ? held : new Slot("children", false, 0, 1);
+            // 4. A named element: owner, kind and name; siblings of one kind and one name are told apart as below.
+            if (NameOf(node) is { } name) {
+                var namesakes = Slots(parent).Where(s => Kind(s.Key) == kind && NameOf(s.Key) == name).ToList();
+                var discriminator = "";
+                if (namesakes.Count > 1) {
+                    // Namesakes in other slots are told apart by the slot; in the same slot, as unnamed siblings are.
+                    var sameSlot = namesakes.Where(s => s.Value.Name == slot.Name).OrderBy(s => s.Value.Position).Select(s => s.Key).ToList();
+                    discriminator = (sameSlot.Count < namesakes.Count ? "@" + slot.Name : "") + Discriminator(node, slot, sameSlot);
                 }
-                else if (kind == "IArgument" && ModelHost.Prop(node, "Parameter") is IObjectSignature parameter)
-                    role = Identity(parameter);
-                else if (kind == "IPlaceholderContentWidget" && ModelHost.Prop(node, "Placeholder") is IObjectSignature placeholder)
-                    role = placeholder.ObjectKey.ToString();
-                else if (kind == "IEventHandler" && ModelHost.Prop(node, "Event") is IObjectSignature ev)
-                    role = ev.ObjectKey.ToString();
-                else if (kind == "IRecordAttributeValue" && ModelHost.Prop(node, "Attribute") is IObjectSignature attribute)
-                    role = "attribute:" + Identity(attribute);
-                else if (namedMetadata) role = "metadata:" + ModelHost.Prop(node, "Name");
-                else if (kind == "IExtendedProperty") role = "property:" + ModelHost.Prop(node, "Property");
-                else if (kind == "IAliasedSource") role = "alias:" + ModelHost.Prop(node, "Name");
-                if (string.IsNullOrEmpty(role)) {
-                    role = OwnedRole(parent, node);
-                }
-                id = Identity(parent) + "/" + kind + "[" + role + "]";
+                id = owner + "/" + kind + ":" + name + discriminator;
             }
-            else id = node.ObjectKey.ToString();
-            if (identityOwners.TryGetValue(id, out var owner) && !ReferenceEquals(owner, node)) {
+            // 5. An unnamed element that supplies a value for a target: owner, kind and the target's own identity.
+            else if (DefiningTarget(node) is { } target) id = owner + "/" + kind + "[" + target + "]";
+            // 6. Any other unnamed element: owner, kind and the slot that holds it.
+            else {
+                var siblings = Slots(parent).Where(s => s.Value.Name == slot.Name && Kind(s.Key) == kind)
+                    .OrderBy(s => s.Value.Position).Select(s => s.Key).ToList();
+                id = owner + "/" + kind + "[" + slot.Name + Discriminator(node, slot, siblings) + "]";
+            }
+            if (identityOwners.TryGetValue(id, out var holder) && !ReferenceEquals(holder, node)) {
                 // Two records with one canonical identity: the later one is numbered, and the receipt says so.
                 var n = 2;
                 while (identityOwners.ContainsKey(id + "#" + n.ToString(CultureInfo.InvariantCulture))) n++;
@@ -211,7 +321,16 @@ public static class MergeContentProof
             identityOwners[id] = node;
             return id;
         }
-        var pending = new Stack<IObjectSignature>(); pending.Push((IObjectSignature)model);
+        string? DefiningTarget(IObjectSignature node)
+        {
+            foreach (var property in DefiningReferences)
+                if (SafeProp(node, property) is IObjectSignature target && !Inside(target, node) && !resolving.Contains(target))
+                    return property + "=" + Identity(target);
+            // An extended property names the property it extends.
+            if (Kind(node) == "IExtendedProperty" && SafeProp(node, "Property") is string extended && extended.Length > 0) return "Property=" + extended;
+            return null;
+        }
+        var pending = new Stack<IObjectSignature>(); pending.Push(root);
         var visited = new HashSet<IObjectSignature>(ReferenceEqualityComparer.Instance);
         while (pending.TryPop(out var node))
         {
@@ -257,7 +376,7 @@ public static class MergeContentProof
                 }
                 if (property.Name == "Conditions" && node is OutSystems.Model.Logic.Nodes.ISwitchNode && value is IEnumerable conditions) {
                     // Switch connectors are recreated by native merge. Their keys are not identity,
-                    // but priority, expression bindings and destination are executable content.
+                    // but priority, expression bindings, destination and the branch label are content.
                     var branches = new JsonArray();
                     foreach (var branch in conditions.OfType<IObjectSignature>()) {
                         var branchExpression = ModelHost.Prop(branch, "Value") as IExpression
@@ -265,7 +384,7 @@ public static class MergeContentProof
                         var target = ModelHost.Prop(branch, "Target") as IObjectSignature;
                         var refs = (ModelHost.Prop(branchExpression, "ReferedObjects") as IEnumerable)?.OfType<IObjectSignature>()
                             .Select(Identity).Distinct().OrderBy(k => k, StringComparer.Ordinal) ?? Enumerable.Empty<string>();
-                        branches.Add(new JsonObject { ["value"] = branchExpression.Text, ["target"] = target == null ? null : Identity(target),
+                        branches.Add(new JsonObject { ["value"] = branchExpression.Text, ["label"] = ModelHost.Prop(branch, "Label")?.ToString(), ["target"] = target == null ? null : Identity(target),
                             ["references"] = new JsonArray(refs.Select(r => (JsonNode?)JsonValue.Create(r)).ToArray()) });
                     }
                     values[(key, "ordered:Conditions")] = branches.ToJsonString();
@@ -287,16 +406,17 @@ public static class MergeContentProof
             }
             // DefaultScreen is persisted by the Model API but a native Traditional merge can drop it.
             // Include null too: losing a requested clear is just as much a content mismatch as losing a set.
+            // These bindings are compared through their target's identity, never the target's local key.
             if (node is IESpace espace)
-                values[(key, "DefaultScreen")] = (espace.DefaultScreen as IObjectSignature)?.ObjectKey?.ToString() ?? "";
+                values[(key, "DefaultScreen")] = espace.DefaultScreen is IObjectSignature screen ? Identity(screen) : "";
             if (node is OutSystems.Model.Logic.Nodes.IRefreshDataNode refresh)
-                values[(key, "DataSource")] = (refresh.DataSource as IObjectSignature)?.ObjectKey?.ToString() ?? "";
+                values[(key, "DataSource")] = refresh.DataSource is IObjectSignature source ? Identity(source) : "";
             if (node is OutSystems.Model.Logic.Nodes.IAjaxRefreshNode ajax)
-                values[(key, "WidgetOrWebBlock")] = (ajax.WidgetOrWebBlock as IObjectSignature)?.ObjectKey?.ToString() ?? "";
+                values[(key, "WidgetOrWebBlock")] = ajax.WidgetOrWebBlock is IObjectSignature refreshed ? Identity(refreshed) : "";
             if (node is OutSystems.Model.UI.Web.Events.ILinkOnClick click) {
                 values[(key, "Method")] = click.Method.ToString();
                 values[(key, "Validation")] = click.Validation.ToString();
-                values[(key, "Destination")] = click.Destination?.ObjectKey?.ToString() ?? "";
+                values[(key, "Destination")] = click.Destination is IObjectSignature destination ? Identity(destination) : "";
             }
             if (ThemeCss.Of(node) is { } sheet)
             {
@@ -307,6 +427,30 @@ public static class MergeContentProof
             foreach (var child in node.Children.OfType<IObjectSignature>().Concat(EntityIndexes.NativeChildren(node))) pending.Push(child);
         }
         return values;
+    }
+
+    /// <summary>A child's place in its owner: the slot (property or collection) that holds it, whether that slot's order is
+    /// content, its position among the children of its kind there, and how many there are.</summary>
+    private readonly record struct Slot(string Name, bool Ordered, int Position, int Count);
+
+    /// <summary>An ordered native collection (a C5 sequence: Studio "SSSequence" lists): its order is content.</summary>
+    private static bool Sequenced(object collection)
+    {
+        for (var type = collection.GetType(); type != null && type != typeof(object); type = type.BaseType)
+            if (type.Name.Contains("Sequence", StringComparison.Ordinal)) return true;
+        return collection.GetType().GetInterfaces().Any(i => i.Name.StartsWith("ISequenced", StringComparison.Ordinal));
+    }
+
+    /// <summary>The owner of a model object; null when the native getter refuses (a platform placeholder type has none).</summary>
+    private static IObjectSignature? ParentOf(IObjectSignature node)
+    {
+        try { return node.Parent as IObjectSignature; } catch { return null; }
+    }
+
+    /// <summary>A property by name on the type or any interface (the Model API implements some explicitly), never throwing.</summary>
+    private static object? SafeProp(object o, string name)
+    {
+        try { return ModelHost.Prop(o, name); } catch { return null; }
     }
 
     private static string? ContentValue(object? value, Func<IObjectSignature, string> identity) => value switch

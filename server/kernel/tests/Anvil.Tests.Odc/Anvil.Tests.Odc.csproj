@@ -38,6 +38,7 @@
     <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../Shared/ModelReadingTests.cs" Link="ModelReadingTests.cs" />
     <Compile Include="../Shared/PublicReferenceSurfaceTests.cs" Link="PublicReferenceSurfaceTests.cs" />
+    <Compile Include="../Shared/MergeIdentitySweep.cs" Link="MergeIdentitySweep.cs" />
     <Compile Include="../../../platforms/odc/studio/bridge/BridgeDataIndexes.cs" Link="BridgeDataIndexes.cs" />
     <Compile Include="../Shared/PatchCertaintyTableTests.cs" Link="PatchCertaintyTableTests.cs" />
     <Compile Include="../Shared/PatchCertaintyCorpusTests.cs" Link="PatchCertaintyCorpusTests.cs" />
@@ -50,6 +51,7 @@
     <Compile Include="../Shared/AutoPatchOptOutTests.cs" Link="AutoPatchOptOutTests.cs" />
     <Compile Include="../Shared/AutoPatchSourceRevisionTests.cs" Link="AutoPatchSourceRevisionTests.cs" />
     <Compile Include="../Shared/DataTableNativeCases.cs" Link="DataTableNativeCases.cs" />
+    <Compile Include="../Shared/PrototypeImportDisabledTests.cs" Link="PrototypeImportDisabledTests.cs" />
     <Compile Include="../Anvil.Tests/TimerScheduleTests.cs" Link="TimerScheduleTests.cs" />
     <Compile Include="../Shared/ModuleIndexTests.cs" Link="ModuleIndexTests.cs" />
     <Compile Include="../Shared/ModuleDigestTests.cs" Link="ModuleDigestTests.cs" />

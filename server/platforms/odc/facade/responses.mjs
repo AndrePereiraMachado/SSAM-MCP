@@ -21,6 +21,7 @@
 import { addNextSteps } from './next-steps.mjs';
 import { isCode, refusalCode } from './refusal-codes.mjs';
 import { RESULT, resultIs, resultValue } from './result-values.mjs';
+import { screenCalls } from './prototype-disabled.mjs';
 
 export const NOT_BUILT_WHY ='component not built: the integrator/user builds it';
 const DIALOG_WHY = 'closes only a window with an owner, by its title; a web dialog (recovery, Manage Dependencies): ask the person to answer it in the Studio and repeat';
@@ -206,13 +207,11 @@ function commandFor(group, head, opts) {
       case 'job': return { spec: { positional: 1 }, build: a => ({ tool: 'ssam_job', arguments: { lane: one(a.flags, 'lane') ?? lane, job: a.positionals[0] ?? '<job.json>' } }) };
       case 'map': return { spec: { positional: 1, bool: new Set(['detail']) }, build: a => ({ tool: 'ssam_map', arguments: { lane: one(a.flags, 'lane') ?? lane,
         target: a.positionals[0] ?? '<capture.oml>', ...argsFrom(a.flags, { skip: ['lane'], rename: { budget: 'budgetBytes', detail: 'includeDetail' } }) } }) };
-      // The CLI rehearsal of the prototype import: the model makes the one MCP call of the import (docs/PROTOTIPO-NATIVO.md 1.1).
+      // The former CLI rehearsal of the prototype import: the import is turned off (prototype-disabled.mjs), so the line
+      // becomes the first call of the supported path for screens, the html op through ssam_code.
       case 'prototype': return { spec: { positional: 1, bool: new Set(['dry']) }, build: a => {
-        const l = one(a.flags, 'lane') ?? lane;
-        const job = { ops: [{ op: 'prototype', data: { source: a.positionals[0] ?? '<prototype folder>' } }] };
-        const module = typeof one(a.flags, 'module') === 'string' ? one(a.flags, 'module') : '<open module>';
-        return l === 'odc' ? { tool: 'studio_deliver', arguments: { module, job, publish: true, authorize: "<the user's own words>" } }
-          : { tool: 'o11_deliver', arguments: { module, job, publish: true, authorize: "<the user's own words>" } };
+        const call = screenCalls(one(a.flags, 'lane') ?? lane, typeof one(a.flags, 'module') === 'string' ? one(a.flags, 'module') : null).grammar;
+        return { tool: call.tool, arguments: call.arguments, why: call.why };
       } };
       default: return null;
     }

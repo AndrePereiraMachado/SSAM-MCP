@@ -88,7 +88,8 @@ test('B2 an oversized immutable original tool definition keeps exact bytes in ev
 
 test('B2 compact text preserves paths, identity, ownership and authorization policy', () => {
  for (const term of ['SQL DDL', 'pseudocode', 'HTML', 'grammar']) assert.ok(TOOL_LISTING.ssam_code.description.includes(term), term);
- for (const name of ['o11_deliver', 'studio_deliver']) assert.ok(TOOL_LISTING[name].description.includes('prototype'), name);
+ // fix/prototype-off: the prototype import is turned off, so no delivery tool offers it any more.
+ for (const name of ['o11_deliver', 'studio_deliver']) assert.ok(!/prototype/i.test(TOOL_LISTING[name].description), name);
  for (const name of ['o11_inspect','studio_inspect']) {
   const text=TOOL_LISTING[name].params['/properties/path'];
   assert.match(text,/Kind:Name/); assert.match(text,/@key/); assert.doesNotMatch(text,/ServiceCenter|HTTP/);

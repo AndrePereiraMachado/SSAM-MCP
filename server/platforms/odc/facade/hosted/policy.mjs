@@ -44,6 +44,7 @@ import { causeOf, studioIdentity, studioRefusal, studioWarningOf } from '../stud
 import { destructiveUnavailable, hostedDestructive, hostedDestructiveFiles } from './destructive.mjs';
 import { withStudioScope } from './studio-scope.mjs';
 import { withoutWordEchoes } from '../destructive-operations.mjs';
+import { PROTOTYPE_DISABLED_FIX, PROTOTYPE_DISABLED_MESSAGE, screenCalls } from '../prototype-disabled.mjs';
 
 // The catalog is hosted/served.mjs's, the one switch the session texts read too (a8 review, M1).
 export { TOOLS_FILE } from './served.mjs';
@@ -234,12 +235,12 @@ export const PROTOTYPE_TOOLS = JOB_TOOLS;
 // follows the job FILES a call reaches (the job, the job of basedOn, every composite part and job:<name> target, read
 // strictly inside the customer's workspace; one it cannot read whole fails closed): confineJobs below.
 export { namesPrototype };
+// Since 2026-10-22 the prototype import is turned off on every lane and surface (prototype-disabled.mjs): the gate answers
+// with the same text and next call as the local refusal PROTOTYPE_IMPORT_DISABLED, so no answer points at a local import.
 export function prototypeUnavailable(name, lane) {
-  return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'PROTOTYPE_SOURCE_LOCAL', policy: 'HOSTED_PROTOTYPE_OP', tool: name, outcome: 'not-sent',
-    error: 'The prototype import (op "prototype") is available only in local use for now: on a hosted server its source folder and the capture '
-      + 'of its JavaScript would run on the server machine. Nothing ran.',
-    continuation: { tool: 'ssam_discover', arguments: { intent: 'port an approved prototype screen 1:1 with the html op and its style in the theme', lane: lane === 'odc' ? 'odc' : 'o11' },
-      why: 'Builds the same screens with the ops this server runs (html op plus its <style>), without the prototype op; or import the prototype with an SSAM installed on the user\'s own machine.' } };
+  const calls = screenCalls(lane === 'odc' ? 'odc' : 'o11');
+  return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'PROTOTYPE_IMPORT_DISABLED', policy: 'HOSTED_PROTOTYPE_OP', tool: name, outcome: 'not-sent',
+    error: PROTOTYPE_DISABLED_MESSAGE + ' ' + PROTOTYPE_DISABLED_FIX, continuation: calls.grammar, nextCalls: [calls.write, calls.read, calls.discover] };
 }
 
 // ---- servidor/fase4-25 (D2 of C:\t\vps-a5\PLANO.md, 3.2-E): the generator ops pending their blind test

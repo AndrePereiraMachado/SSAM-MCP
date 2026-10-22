@@ -43,7 +43,9 @@ export const isDebugTool = tool => typeof tool === 'string' && /^(?:ssam_debug(?
 export const TEXT_RULES = Object.freeze([
   // A text that names a prototype code keeps it (a relayed refusal of the importer that lost its object); a capture engine
   // that is not in the release is an SSAM defect of the bundle.
-  [/\b(PROTOTYPE_(?:SOURCE_INVALID|RENDER_FAILED|AMBIGUOUS|NAME_COLLISION|IR_INVALID))\b/, m => m[1]],
+  [/\b(PROTOTYPE_(?:IMPORT_DISABLED|SOURCE_INVALID|RENDER_FAILED|AMBIGUOUS|NAME_COLLISION|IR_INVALID))\b/, m => m[1]],
+  // The prototype import is turned off (prototype-disabled.mjs; the kernel's PrototypeImport.cs says the same words).
+  [/\bThe prototype import is turned off\b/, 'PROTOTYPE_IMPORT_DISABLED'],
   [/\bprototype[\\/](?:capture|fidelity)\.mjs\b/, 'PROTOTYPE_IR_INVALID'],
   // A text that names a refusal code of the html op or of the css loss guard keeps it (only the refusals: a warning code
   // in a text never makes it a failure).

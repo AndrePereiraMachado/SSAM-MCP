@@ -60,7 +60,6 @@ export const API_OP_LINES = Object.freeze({
   'rest-expose': 'an exposed REST API: service and methods',
   soap: 'a consumed SOAP web service from its WSDL (O11 only)',
   agent: 'an AI agent (ODC): model, messages, inputs and tools',
-  prototype: 'an approved prototype folder imported in one call as native screens, theme, data and logic',
   'entity-actions': 'the standard actions of the data model, generated from the module: list, read, save, delete and service wrappers per entity',
 });
 export const API_OPS = Object.keys(API_OP_LINES);

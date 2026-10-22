@@ -122,7 +122,7 @@ test('control: the same operations as an explicit patch are checked and refused;
   const ops = planted(h);
   for (const name of TOOLS) {
     assert.equal(refused(await h.gate(name)({ ...lane(name), basedOn, patch: [{ op: 'add', path: '/ops/-', value: ops['rest-consume'] }] }), name).cause, 'GENERATOR_PENDING', name);
-    assert.equal(refused(await h.gate(name)({ ...lane(name), basedOn, patch: [{ op: 'add', path: '/ops/-', value: ops.prototype }] }), name).cause, 'PROTOTYPE_SOURCE_LOCAL', name);
+    assert.equal(refused(await h.gate(name)({ ...lane(name), basedOn, patch: [{ op: 'add', path: '/ops/-', value: ops.prototype }] }), name).cause, 'PROTOTYPE_IMPORT_DISABLED', name);
     const outside = refused(await h.gate(name)({ ...lane(name), basedOn, patch: [{ op: 'add', path: '/ops/-', value: ops['reference producer of another customer'] }] }), name);
     assert.deepEqual([outside.code, outside.pointer], ['PATH_OUTSIDE_WORKSPACE', '/basedOn/job (patched) > /ops/1/producer'], name);
   }

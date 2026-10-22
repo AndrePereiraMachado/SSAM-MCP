@@ -258,7 +258,7 @@ test('the prototype op and the composite rule still hold for inline text (D2 fir
   for (const name of TOOLS) {
     for (const job of [JSON.stringify({ jobs: ['ws:inbox/sub.json'] }), JSON.stringify({ jobs: ['job:ws:inbox/sub'] }), JSON.stringify({ jobs: [h.other] }), JSON.stringify({ ops: [PROTOTYPE] })]) {
       const value = refusal(await h.gate(name)({ ...laneArgs(name), job }));
-      assert.deepEqual([value.code, value.cause], ['HOSTED_UNAVAILABLE', 'PROTOTYPE_SOURCE_LOCAL'], name + ' ' + job);
+      assert.deepEqual([value.code, value.cause], ['HOSTED_UNAVAILABLE', 'PROTOTYPE_IMPORT_DISABLED'], name + ' ' + job);
     }
     // a prototype-free composite as text passes, its part rewritten
     assert.notEqual((await h.gate(name)({ ...laneArgs(name), job: JSON.stringify({ jobs: ['ws:inbox/clean.json'] }) })).isError, true, name);

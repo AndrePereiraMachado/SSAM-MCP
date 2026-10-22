@@ -185,6 +185,8 @@ public static class JobPreflight
             if (ops[i] is not JsonObject op) { Error(i, "op", "OP_NOT_OBJECT", "expected an object {\"op\":\"<verb>\", ...}", "write the op as an object; verbs: " + string.Join(", ", VerbSurface.Names)); continue; }
             var kind = op["op"]?.ToString() ?? "";
             var code = (kind.Length == 0 ? "OP" : Regex.Replace(kind, "[^A-Za-z0-9]", "_").ToUpperInvariant()) + "_INVALID";
+            // The prototype import is turned off (PrototypeImport): one problem per op, its data never read.
+            if (kind == PrototypeImport.Op) { problems.Add(PrototypeImport.Problem(i, Pointer(i))); broken.Add(i); continue; }
             // C24: a field of the wrong JSON type (an object where text is expected, an array where an object is) is a
             // JSON_SHAPE problem with its pointer and the shape expected; the op is not compiled (it would only throw the raw cast).
             if (JobDocument.OpShape(op, Pointer(i)) is { Count: > 0 } wrong)
@@ -266,12 +268,6 @@ public static class JobPreflight
                         problem["pointer"] = Pointer(i, "/data" + problem["pointer"]);
                         problems.Add(problem);
                     }
-                    continue;
-                }
-                if (kind == "prototype")
-                {
-                    if (PrototypeSeams.Preflight is { } analyzePrototype)
-                        foreach (var problem in analyzePrototype(op, i)) problems.Add(problem);
                     continue;
                 }
                 // The text form of the logic op (ssam-flow/1, Verbs.Flow.cs): every text read now, without the module; a

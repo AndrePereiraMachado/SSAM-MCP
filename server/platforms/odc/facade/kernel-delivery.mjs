@@ -18,6 +18,8 @@ import { appliedJobIdentity, jobIdentity, nextBasedOnOf } from './job-patch.mjs'
 import { hasPrototypeOps, expandJobFile, capturePrototype, buildWithDegradation, buildProblems, journalTo, kernelPrototypeReport, findNativeDom,
   measurePrototypeFidelity, prototypeReceipt, receiptWithSeed, bindingCorrection, readJobDocument } from './prototype-op.mjs';
 import { seedPrototypeData, odcDataWriter } from './prototype-seed.mjs';
+import { prototypeImportRefusal } from './prototype-disabled.mjs';
+import { partReader } from './text-routes.mjs';
 import { prototypeAppUrl, prototypeScreenLinks } from './next-steps.mjs';
 import { kernelStart } from './quality-meter.mjs';
 import { removedOf } from './ssam-code.mjs';
@@ -889,6 +891,13 @@ export async function deliverKernel(input, deps) {
   if (!fs.statSync(job).isFile()) throw new Error('Job must be a file: ' + job);
   const readJob = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
   let jobDocument = readJob(job);
+  // The prototype import is turned off (prototype-disabled.mjs): ONE refusal before any capture, build or Studio command.
+  const disabled = prototypeImportRefusal(jobDocument, { lane: 'odc', module, readPart: partReader(job, fs, path) });
+  if (disabled) {
+    const { ok: _ok, ...fields } = disabled;
+    return { ok: false, source: 'kernel-job', module, feature, job, until, steps: [], merged: false, publishInvoked: false, ...fields, failed: 'prototype',
+      ...(publish === true ? { publish: { requested: true, outcome: 'skipped' } } : {}) };
+  }
   // fix/a5-lows (B10): with the job's producer names, a binding name with / or \ binds only the ops that write exactly that
   // text (producer-names.mjs separatorKeyProblems): "..\System" never binds the op "(System)". ONE refusal with every problem.
   const given = producerBindings(input.producers, { names: producerTextsOf(jobDocument) });

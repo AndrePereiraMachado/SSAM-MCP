@@ -215,7 +215,10 @@
     "whole page",
     "bindings",
     "manifest",
-    "data-av"
+    "data-av",
+    "prototype",
+    "html para telas",
+    "native screens"
    ],
    "summary": "The page HTML/CSS plus a typed bindings manifest (text, field, list, visible, style, class, date, navigate, call, refresh, page, block) compiled to native widgets, data sources and screen actions; CSS installed in the theme author half.",
    "route": {
@@ -277,75 +280,6 @@
       }
      ],
      "differences": []
-    }
-   }
-  },
-  {
-   "id": "ui.prototype-import",
-   "category": "ui",
-   "title": "Prototype folder imported whole by the op prototype",
-   "keywords": [
-    "prototype",
-    "pixel perfect",
-    "telas nativas",
-    "native screens",
-    "html para telas"
-   ],
-   "summary": "Op prototype: SSAM renders the prototype folder headless and compiles it whole; the receipt tells what was built and measured.",
-   "route": {
-    "kind": "prototype",
-    "operation": "O11 => o11_deliver {\"module\":\"<open module>\",\"job\":{\"ops\":[{\"op\":\"prototype\",\"data\":{\"source\":\"<prototype folder or its .zip, absolute path>\"}}]},\"publish\":true,\"authorize\":\"<the user's own words>\"} ;; ODC => studio_deliver {\"feature\":\"Prototype <Prefix>\",\"module\":\"<open module>\",\"job\":{\"ops\":[{\"op\":\"prototype\",\"data\":{\"source\":\"<prototype folder or its .zip, absolute path>\"}}]},\"owners\":[\"<Prefix>\"],\"changes\":[\"Prototype <Prefix> imported as native screens\"],\"publish\":true,\"authorize\":\"<the user's own words>\"}"
-   },
-   "contract": [],
-   "depends": [],
-   "alternatives": [
-    {
-     "id": "ui.html-page",
-     "when": "a hand-written page with a bindings manifest instead of a prototype folder"
-    },
-    {
-     "id": "ui.html-visual",
-     "when": "only a fragment under an existing parent, the logic staying native"
-    }
-   ],
-   "guidance": "ONE call, the ready one of this lane in route.operation (routes.prototype entries add the rehearsal, the slots and the rules), with the owner's words verbatim in authorize: they cover the import, the publication and the demo data (seed). SSAM renders the prototype headless, finds the views, modals, shared shell, mock data and events itself, and builds one native screen per view in a flow of its own, a shell block, native popups, entities with the mock data, aggregates and server actions, with the prototype CSS verbatim in a theme of its own; the receipt (prototype) gives screens with their links, popups, blocks, resources, data, events, fidelity per explored state, Verify warnings, seed and timings. Do not read the prototype files (app.js, model.js, styles.css) and never convert them by hand or split the views into several calls. data.mapping only when a refusal asks for it: the refusal comes ONCE with every problem, the ready patch over /ops/<i>/data and correctedJob; apply the patch as it is. A rehearsal without merge only when the person asks (O11 until:\"apply\", ODC until:\"preview\"). Return the screen links of prototype.screens[].url to the person.",
-   "example": null,
-   "platforms": {
-    "odc": {
-     "proofs": [],
-     "negative": [],
-     "context": {
-      "kinds": [
-       "MobileScreen"
-      ]
-     },
-     "limits": [
-      {
-       "text": "The ODC call goes through the unified ssam server (studio_deliver takes the job inline there); feature, owners and changes default to the prototype prefix. The rehearsal stops at until:\"preview\" (ODC has no until apply). main, data and picture are substituted (not HTML Element tags on ODC).",
-       "origin": "docs/PROTOTIPO-NATIVO.md 1.1, 3.2, 3.6; platforms/odc/facade/ssam.mjs (studio_deliver proxy)"
-      }
-     ],
-     "differences": [
-      "anonymous access by AnonymousAccess = true; demo data by studio_data_insert"
-     ]
-    },
-    "o11": {
-     "proofs": [],
-     "negative": [],
-     "context": {
-      "kinds": [
-       "MobileScreen"
-      ]
-     },
-     "limits": [
-      {
-       "text": "Reactive and Mobile modules (one native screen per view in a flow of its own; MainFlow, the module theme and the other screens are not touched). Demo data goes into the empty regular entities the import marked, after a clean publication, by the Edit Data of the connected Service Studio.",
-       "origin": "docs/PROTOTIPO-NATIVO.md 1.6, 3.1, 3.4, 3.6"
-      }
-     ],
-     "differences": [
-      "anonymous access by the Anonymous role; demo data by the o11_data path"
-     ]
     }
    }
   }

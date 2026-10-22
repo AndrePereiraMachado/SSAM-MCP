@@ -1015,70 +1015,7 @@ public static class DataTableNativeCases
         return result["properties"]?["StyleSheet"]?.ToString() ?? result["StyleSheet"]?.ToString() ?? "";
     }
 
-    /// <summary>Round 6, the build of <see cref="PrepareMinimalTable"/> (O11 over reactive-ui, ODC over insurance-reactive-r8): the
-    /// table stays HTML elements and a List (TABLE_NOT_NATIVE), the List of its &lt;tbody&gt; reads back with the html op's attributes
-    /// (disable-virtualization and data-ssam-rows="1"), the theme of the import carries the native layout block once, the fixed point
-    /// holds (0 ops), and in the DOM the runtime will publish the body is laid out as the table's row group (RowGroupsLaidOut).</summary>
-    public static void MinimalTableBuilt(ITestOutputHelper output, string candidate, JsonObject result, string table, string platform, string work)
-    {
-        var report = result["results"]!.AsArray().OfType<JsonObject>().Single(r => r["op"]?.ToString() == "prototype")["result"]!["prototype"]!.AsObject();
-        Assert.Empty(report["builder"]!["problems"]!.AsArray());
-        Assert.Contains(report["degraded"]!.AsArray(), d => d!["code"]?.ToString() == "TABLE_NOT_NATIVE" && d["k"]?.ToString() == table
-            && d["message"]!.ToString().Contains("its header row has 2 cells and its template row 3", StringComparison.Ordinal));
-        var screen = report["screens"]!.AsArray().Single(s => s!["view"]?.ToString() == "lista")!["name"]!.ToString();
-        var host = new ModelHost(Path.Combine(work, "read"));
-        var bytes = File.ReadAllBytes(candidate);
-        var text = host.HtmlRead(bytes, "MobileScreen:" + screen, withKeys: false)["documents"]![0]!["html"]!.ToString();
-        output.WriteLine(text);
-        var doc = ScreenHtml.Parse(text);
-        var body = Assert.Single(Elements(doc), n => n.Tag == "tbody");
-        Assert.NotNull(body.Get("list"));
-        Assert.Equal("1", body.Get("data-ssam-rows"));
-        Assert.Contains("True", body.Get("disable-virtualization") ?? "");
-        Assert.Contains(Elements(doc), n => n.Tag == "table" && n.Get("list") == null && Elements(n).Contains(body));
-        var check = host.HtmlCheck(bytes)["documents"]!.AsArray().Single(d => d!["root"]!.ToString() == screen)!;
-        Assert.Equal(0, check["ops"]!.GetValue<int>());
-        Assert.Equal(1, report["nativeLayout"]!["lists"]!["count"]!.GetValue<int>());
-        var theme = ThemeCss(host, candidate, Path.Combine(work, "theme"), report["theme"]!.ToString());
-        Assert.Single(Regex.Matches(theme, Regex.Escape(ScreenVisual.NativeLayoutBegin)));
-        Assert.Contains(ScreenVisual.NativeLayoutCss, theme);
-        var prediction = ScreenVisual.PredictOml(host, candidate, platform, n => n == screen)[screen];
-        Assert.Equal(1, RowGroupsLaidOut(output, prediction.Root, theme));
-    }
-
     // ---- round 7: what the import writes in the theme is said where the job says the theme rules it writes -----------------
-
-    /// <summary>Round 7 (M1 of the review of round 6), the build of <see cref="PrepareCaptionTable"/> (O11 over reactive-ui, ODC over
-    /// insurance-reactive-r8): no TABLE_NOT_NATIVE says the table, yet its body List carries the rows marker and the import's theme
-    /// the native layout block, so the job's receipt says it in normalized, as the html op says the block it writes
-    /// (THEME_NATIVE_LAYOUT: the theme, written, the version, the Lists it lays out and the note), besides the import's report
-    /// (nativeLayout). Every text in English.</summary>
-    public static void CaptionTableSaid(ITestOutputHelper output, string candidate, JsonObject result, string work)
-    {
-        var report = result["results"]!.AsArray().OfType<JsonObject>().Single(r => r["op"]?.ToString() == "prototype")["result"]!["prototype"]!.AsObject();
-        Assert.Empty(report["builder"]!["problems"]!.AsArray());
-        Assert.DoesNotContain(report["degraded"]!.AsArray(), d => d!["code"]?.ToString() == "TABLE_NOT_NATIVE");
-        Assert.Equal(1, report["nativeLayout"]!["lists"]!["count"]!.GetValue<int>());
-        var said = (result["normalized"] as JsonArray ?? []).OfType<JsonObject>().Where(n => n["code"]?.ToString() == ScreenVisual.ThemeNativeLayout).ToList();
-        output.WriteLine("normalized: " + new JsonArray(said.Select(n => (JsonNode)n.DeepClone()).ToArray()).ToJsonString());
-        var entry = Assert.Single(said);
-        Assert.Equal(report["theme"]!.ToString(), entry["theme"]?.ToString());
-        Assert.True(entry["written"]?.GetValue<bool>() == true, entry.ToJsonString());
-        Assert.Equal(ScreenVisual.NativeLayoutVersion, entry["version"]?.ToString());
-        Assert.Equal(1, entry["lists"]?.GetValue<int>());
-        var note = entry["note"]?.ToString() ?? "";
-        Assert.Contains(ScreenVisual.RowsMarker, note);
-        Assert.Matches("^[\\x20-\\x7E]+$", note);
-        var host = new ModelHost(Path.Combine(work, "read"));
-        var screen = report["screens"]!.AsArray().Single(s => s!["view"]?.ToString() == "lista")!["name"]!.ToString();
-        var text = host.HtmlRead(File.ReadAllBytes(candidate), "MobileScreen:" + screen, withKeys: false)["documents"]![0]!["html"]!.ToString();
-        output.WriteLine(text);
-        var body = Assert.Single(Elements(ScreenHtml.Parse(text)), n => n.Tag == "tbody");
-        Assert.Equal("1", body.Get("data-ssam-rows"));
-        Assert.Contains(Elements(ScreenHtml.Parse(text)), n => n.Tag == "caption");
-        var theme = ThemeCss(host, candidate, Path.Combine(work, "theme"), report["theme"]!.ToString());
-        Assert.Single(Regex.Matches(theme, Regex.Escape(ScreenVisual.NativeLayoutBegin)));
-    }
 
     // ---- round 7: every attribute the importer writes is the prototype's value, quoted once (X1 of review 6) ------------------
 
@@ -1185,25 +1122,6 @@ public static class DataTableNativeCases
         foreach (var line in wrong.Take(20)) output.WriteLine("  " + line);
         Assert.True(wrong.Count == 0, string.Join(" | ", wrong.Take(20)));
         return (compared, lists);
-    }
-
-    /// <summary>Round 7, X1 in the Studio (O11 over reactive-ui, ODC over insurance-reactive-r8, the seams of production): the build of
-    /// <see cref="PrepareListAttributes"/> reads back with the &lt;ul list&gt;'s attributes exactly as the prototype wrote them
-    /// (aria-label "Pedidos", role "list", data-kind "cards": a literal, never an expression of a quoted text), and the fixed point
-    /// holds.</summary>
-    public static void ListAttributesBuilt(ITestOutputHelper output, string candidate, JsonObject result, string work)
-    {
-        var report = result["results"]!.AsArray().OfType<JsonObject>().Single(r => r["op"]?.ToString() == "prototype")["result"]!["prototype"]!.AsObject();
-        Assert.Empty(report["builder"]!["problems"]!.AsArray());
-        var screen = report["screens"]!.AsArray().Single(s => s!["view"]?.ToString() == "lista")!["name"]!.ToString();
-        var host = new ModelHost(Path.Combine(work, "read"));
-        var bytes = File.ReadAllBytes(candidate);
-        var text = host.HtmlRead(bytes, "MobileScreen:" + screen, withKeys: false)["documents"]![0]!["html"]!.ToString();
-        output.WriteLine(text);
-        var ul = Assert.Single(Elements(ScreenHtml.Parse(text)), n => n.Tag == "ul" && n.Get("list") != null);
-        foreach (var (name, value) in ListAttributes) Assert.Equal(value, ul.Get(name));
-        var check = host.HtmlCheck(bytes)["documents"]!.AsArray().Single(d => d!["root"]!.ToString() == screen)!;
-        Assert.Equal(0, check["ops"]!.GetValue<int>());
     }
 
     // ---- round 7: the note of the native layout block stays true when the prototype writes markers of the engine (B2 of review 6)

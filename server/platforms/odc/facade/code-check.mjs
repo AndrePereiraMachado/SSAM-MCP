@@ -11,6 +11,7 @@ import { writeCall } from './ssam-code.mjs';
 import { runJob, withJobIdentity } from './job-runner.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
+import { prototypeImportRefusal } from './prototype-disabled.mjs';
 
 const forbidden = ['publish', 'authorize', 'until', 'captureProducers', 'closePrevious', 'resume', 'patch', 'expectedEnvironment'];
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -235,6 +236,9 @@ export async function codeCheck(input = {}, deps = {}) {
     if (!patched.ok) problems.push({ code: 'INPUT_INVALID', at: 'basedOn', reason: patched.code, message: patched.error, ...(patched.candidates ? { candidates: patched.candidates } : {}) });
     else { call.arguments.job = readJson(patched.path); fs.rmSync(patched.path, { force: true }); }
   }
+  // The prototype import is turned off (prototype-disabled.mjs): its one refusal, before any capture or kernel check.
+  { const disabled = call.arguments?.job != null ? prototypeImportRefusal(call.arguments.job, { lane, module }) : null;
+    if (disabled) return { ...disabled, lane, module, action: 'check' }; }
   // CX16 (b): a refused check names the job it checked (job, jobSha256, nextBasedOn: the base of a correction by edits); the
   // static refusal of the precheck (stage "static", stopped before the apply) passes stage, stoppedBefore, static and, at the
   // refusal below, its continuation instead of the whole input again.
@@ -242,8 +246,6 @@ export async function codeCheck(input = {}, deps = {}) {
     ...(r.stage === 'static' ? { stage: r.stage, ...(r.stoppedBefore ? { stoppedBefore: r.stoppedBefore } : {}), ...(r.static ? { static: r.static } : {}) } : {}) });
   const ops = referenceOps(clean, call);
   const { bindings, receipts } = resolveProducers(clean, ops, deps, problems, { module, capture });
-  // Prototype capture is a Studio operation in runJob; a check must never enter that path.
-  for (let i = 0; i < ops.length; i++) if (ops[i]?.op === 'prototype') problems.push({ code: 'INPUT_INVALID', pointer: `/ops/${i}`, message: 'prototype requires a live capture and cannot run in an offline check' });
   // fix/system-reference (d): a check refused only for producers with no capture continues with the capture to take.
   const capturing = problems.filter(p => p.code === 'PRODUCER_NOT_CAPTURED');
   const continuation = !capture && input.base == null ? { tool: 'ssam_map', arguments: { lane, target: module }, why: 'the main agent reads the module once; that capture serves every check' }

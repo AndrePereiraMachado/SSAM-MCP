@@ -889,8 +889,8 @@ export function htmlPages(text, budget) {
 }
 
 // The delivery of an edit of this reading (C2): the html op in its edit form, in the lane's deliver tool. On ODC the
-// studio_deliver of the ssam server needs feature, module, owners and changes with a job (only a prototype job takes them
-// from the prototype): the call carries them, the screen as its owner.
+// studio_deliver of the ssam server needs feature, module, owners and changes with a job: the call carries them, the screen
+// as its owner.
 export function editCall(lane, html, sha256) {
   const op = { op: 'html', data: { screen: html.root, basedOn: { capture: sha256, html: html.htmlSha256 }, edits: [{ set: '<k>', attributes: { '<attribute>': '<value>' } }, { find: '<exact text>', with: '<new text>' }] } };
   return lane === 'o11'

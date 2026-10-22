@@ -209,7 +209,7 @@ test('the ready read and delivery calls of every route and lane pass the live sc
     if (id === 'ui.screen-html-edit') assert.ok(op.data.screen && op.data.basedOn?.capture && op.data.basedOn?.html && Array.isArray(op.data.edit));
     if (id === 'data.ddl') assert.equal(typeof op.data.ddl, 'string');
     if (id === 'logic.flow') assert.ok(Array.isArray(op.data.flow) && op.data.flow[0].text && op.data.flow[0].basedOn);
-    // The ODC delivery of the ssam server needs feature, module, owners and changes with a job (a prototype job aside).
+    // The ODC delivery of the ssam server needs feature, module, owners and changes with a job.
     if (lane === 'odc') for (const key of ['feature', 'module', 'owners', 'changes']) assert.ok(section.call.arguments[key], `${id} ${key}`);
   }
   assert.deepEqual(problems, []);
