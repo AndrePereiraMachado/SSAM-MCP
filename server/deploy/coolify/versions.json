@@ -3,29 +3,29 @@
   "odc": [
     {
       "version": "1.7.29",
-      "tag": "prod-20261022-6684b30-o115593-odc1729",
+      "tag": "prod-20261022-cbba488-o115593-odc1729",
       "image": "docker.io/andrepereiramachado/ssam-server",
-      "sha256": "88acd16e14285130205a4630d2b633f0219a0068c8ce4a7dcf70ff8547214b68"
+      "sha256": "9c5b2942114126bd8d4edbcfdf6e6e690fb6946d7b093fd0401a84d72944d1cd"
     },
     {
       "version": "1.7.28",
-      "tag": "prod-20261022-6684b30-o115592-odc1728",
+      "tag": "prod-20261022-cbba488-o115592-odc1728",
       "image": "docker.io/andrepereiramachado/ssam-server",
-      "sha256": "464d4dcd6a4148bd2fb91be30b0023f5a28b0e2aaf125b6a2fb23f6b581994e7"
+      "sha256": "6855ba0b968ff96bf010357f2aeb6f3b125bdf434cce324b0945af7bda971ea1"
     }
   ],
   "o11": [
     {
       "version": "11.55.93",
-      "tag": "prod-20261022-6684b30-o115593-odc1729",
+      "tag": "prod-20261022-cbba488-o115593-odc1729",
       "image": "docker.io/andrepereiramachado/ssam-server",
-      "sha256": "88acd16e14285130205a4630d2b633f0219a0068c8ce4a7dcf70ff8547214b68"
+      "sha256": "9c5b2942114126bd8d4edbcfdf6e6e690fb6946d7b093fd0401a84d72944d1cd"
     },
     {
       "version": "11.55.92",
-      "tag": "prod-20261022-6684b30-o115592-odc1728",
+      "tag": "prod-20261022-cbba488-o115592-odc1728",
       "image": "docker.io/andrepereiramachado/ssam-server",
-      "sha256": "464d4dcd6a4148bd2fb91be30b0023f5a28b0e2aaf125b6a2fb23f6b581994e7"
+      "sha256": "6855ba0b968ff96bf010357f2aeb6f3b125bdf434cce324b0945af7bda971ea1"
     }
   ]
 }
