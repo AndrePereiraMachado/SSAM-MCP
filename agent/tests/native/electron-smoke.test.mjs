@@ -46,7 +46,7 @@ test('built Electron panel configures and supervises the native core through its
     } else await page.getByLabel('Activation token').fill(credential);
     await page.getByRole('button', { name: 'Activate and connect' }).click();
     await hub.until(() => hub.streams === 1);
-    await page.waitForFunction(async () => (await window.ssam.getState()).agent.view.status === 'connected');
+    await page.getByRole('status').filter({ hasText: /^Connected$/ }).waitFor();
     assert.equal(hub.hellos[0].agent.runtime, 'native-aot');
     assert.equal(await page.getByRole('button', { name: 'Open folder', exact: true }).count(), 0);
     await page.getByRole('button', { name: 'Check connection', exact: true }).click();
@@ -61,7 +61,8 @@ test('built Electron panel configures and supervises the native core through its
     assert.equal(await page.getByText('Agent log', { exact: true }).count(), 0);
     await page.screenshot({ path: path.join(app, '.local/native/electron-connected.png'), fullPage: true });
     await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
-    await page.waitForFunction(async () => (await window.ssam.getState()).agent.view.status === 'stopped');
+    await hub.until(() => hub.deletes === 1);
+    await page.getByRole('status').filter({ hasText: /^Disconnected$/ }).waitFor();
     assert.equal(hub.deletes, 1);
     await page.getByRole('button', { name: 'Check connection', exact: true }).click();
     await page.getByText('Service reachable. This computer is disconnected.', { exact: true }).waitFor();
