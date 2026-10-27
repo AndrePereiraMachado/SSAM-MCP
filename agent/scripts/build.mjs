@@ -124,7 +124,9 @@ async function main() {
       ...(nativeMac ? { mac: { target: [{ target: 'dmg', arch: [process.arch] }, { target: 'zip', arch: [process.arch] }],
         ...(options.notarize ? { signIgnore: ['Contents/Resources/pack/native/ssam-agent$'] } : {}) } } : {}) }));
   }
-  const args = [cli, options.platform === 'win' ? '--win' : '--mac', '--publish', 'never', '--config', config];
+  // Explicit CLI target names bypass merged YAML target arrays. Otherwise the
+  // parent config can add an Intel installer containing an ARM-only core.
+  const args = [cli, ...(nativeMac ? ['--mac', 'dmg', 'zip', '--' + process.arch] : [options.platform === 'win' ? '--win' : '--mac']), '--publish', 'never', '--config', config];
   if (!options.noUpdates) args.push('-c.publish.provider=generic', `-c.publish.url=${options.updateUrl.replace(/\/+$/, '')}`, '-c.publish.channel=latest');
   if (options.notarize) {
     for (const name of ['APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID']) if (!process.env[name]) throw new Error(`--notarize needs ${name} in the environment`);

@@ -130,6 +130,6 @@ jobs:
           name: ssam-agent-mac-arm64-${{ inputs.sign_and_notarize && 'signed' || 'unsigned' }}
           if-no-files-found: error
           path: |
-            agent/dist/*.dmg
-            agent/dist/*.zip
+            agent/dist/*-mac-arm64.dmg
+            agent/dist/*-mac-arm64.zip
             agent/dist/SHA256SUMS
