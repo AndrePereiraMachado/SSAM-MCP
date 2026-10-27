@@ -36,7 +36,10 @@ else void run();
 async function run() {
   app.setAppUserModelId(APP_ID);
   await app.whenReady();
-  if (app.isPackaged) Menu.setApplicationMenu(null);
+  if (app.isPackaged) Menu.setApplicationMenu(process.platform === 'darwin' ? Menu.buildFromTemplate([
+    { label: 'SSAM Agent', submenu: [{ role: 'quit' }] },
+    { role: 'editMenu' }, // Native copy/paste shortcuts are needed for token activation.
+  ]) : null);
   if (process.platform === 'darwin' && app.dock) app.dock.hide();
 
   const userData = app.getPath('userData');

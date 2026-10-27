@@ -37,7 +37,13 @@ test('built Electron panel configures and supervises the native core through its
     assert.equal(await page.getByLabel('Agent folder', { exact: true }).count(), 0);
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     assert.equal(await page.getByLabel('Server address').count(), 0);
-    await page.getByLabel('Activation token').fill(credential);
+    if (process.platform === 'darwin') {
+      await electron.evaluate(({ clipboard }, value) => clipboard.writeText(value), credential);
+      await page.getByLabel('Activation token').focus();
+      await page.keyboard.press('Meta+V');
+      assert.equal(await page.getByLabel('Activation token').inputValue(), credential);
+      await electron.evaluate(({ clipboard }) => clipboard.clear());
+    } else await page.getByLabel('Activation token').fill(credential);
     await page.getByRole('button', { name: 'Activate and connect' }).click();
     await hub.until(() => hub.streams === 1);
     await page.waitForFunction(async () => (await window.ssam.getState()).agent.view.status === 'connected');
