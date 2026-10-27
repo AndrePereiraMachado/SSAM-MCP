@@ -153,7 +153,7 @@ const nonThin = (port, executed = false) =>
 
 const failedReceipt = hook => { try { return readJson(hook + '.receipt.json').ok === false; } catch { return false; } };
 
-export async function connectO11({ root, pid, port, studioVersion = null, describe, attach, probe = probeBridge, request = bridgeRequest,
+export async function connectO11({ root, runtimeRoot = root, pid, port, studioVersion = null, describe, attach, probe = probeBridge, request = bridgeRequest,
   sleep = delay, now = Date.now, pack = null, env = process.env, warning = null }) {
   const folder = path.join(root, 'private', 'runtime-connect');
   fs.mkdirSync(folder, { recursive: true });
@@ -180,18 +180,18 @@ export async function connectO11({ root, pid, port, studioVersion = null, descri
       let hook, receiptFile = null, exchange = null;
       if (releaseHook) {
         // The release hook is attached in place (it writes nothing beside its DLL); its request goes to the exchange folder.
-        verifyReleaseCoverage(root);
+        verifyReleaseCoverage(runtimeRoot);
         exchange = hookExchangeDir(target.pid, target.startedUtc, env);
         receiptFile = path.join(exchange, 'receipt-' + RELEASE_BRIDGE_ID + '.json');
         if (fs.existsSync(receiptFile)) throw fail('The release hook already answered for this Studio (' + receiptFile + '); a load is never repeated. Restart Service Studio to connect again.');
-        hook = hookH1Dll(root);
+        hook = hookH1Dll(runtimeRoot);
       } else {
         const evidence = path.join(folder, id);
         fs.mkdirSync(evidence, { recursive: true });
         hook = path.join(evidence, 'Anvil.RuntimeHook.Agent.dll');
-        fs.copyFileSync(path.join(root, 'bin', 'o11', 'hook', 'Anvil.RuntimeHook.Agent.dll'), hook);
+        fs.copyFileSync(path.join(runtimeRoot, 'bin', 'o11', 'hook', 'Anvil.RuntimeHook.Agent.dll'), hook);
         fs.writeFileSync(hook + '.json', JSON.stringify({ pid: target.pid, startedUtc: target.startedUtc, port,
-          bridgePath: path.join(root, 'bin', 'o11', 'bridge', 'Anvil.Bridge.dll'), authorityDir: path.join(root, 'private', 'authority') }));
+          bridgePath: path.join(runtimeRoot, 'bin', 'o11', 'bridge', 'Anvil.Bridge.dll'), authorityDir: path.join(root, 'private', 'authority') }));
       }
       // Identity and port again after preparing, right before the single attach request.
       const current = await describe(target.pid);
@@ -203,7 +203,7 @@ export async function connectO11({ root, pid, port, studioVersion = null, descri
         fs.mkdirSync(exchange, { recursive: true });
         const requestFile = path.join(exchange, 'request-' + RELEASE_BRIDGE_ID + '.json');
         const staged = requestFile + '.' + process.pid + '.tmp';
-        fs.writeFileSync(staged, JSON.stringify({ pid: target.pid, startedUtc: target.startedUtc, bridgeId: RELEASE_BRIDGE_ID, bridgeDir: releaseBridgeDir(root),
+        fs.writeFileSync(staged, JSON.stringify({ pid: target.pid, startedUtc: target.startedUtc, bridgeId: RELEASE_BRIDGE_ID, bridgeDir: releaseBridgeDir(runtimeRoot),
           port, dataDir: bridgeDataDir(root), authorityDir: path.join(root, 'private', 'authority') }));
         fs.renameSync(staged, requestFile);
       }

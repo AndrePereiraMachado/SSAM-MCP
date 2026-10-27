@@ -1,6 +1,6 @@
 // Where the app keeps things, as pure functions of the platform and the environment (no Electron here, so tests run
 // under plain Node).
-//   - the agent root: the folder the pack is synced to and the agent runs from ("Folders" in docs/AGENTE-CLIENTE.md
+//   - the agent root: the writable data folder ("Folders" in docs/AGENTE-CLIENTE.md
 //     and docs/AGENTE-MAC.md); the default is the one the guides give, %USERPROFILE%\SSAM-Agent or ~/SSAM-Agent;
 //   - the bundled pack: resources/pack in the installed app (electron-builder extraResources), app/pack in a checkout;
 //   - the files of the root the app reads or writes: the same names the agent and its launchers use.
@@ -15,13 +15,13 @@ export function defaultRoot({ platform = process.platform, env = process.env } =
   return path.posix.join(home, ROOT_FOLDER_NAME);
 }
 
-// The files of a root the app touches. agent/ssam-agent.mjs is the agent's entry (the copy the pack put in the root).
-export function rootFiles(root) {
+// Data and program paths are explicit. Legacy standalone callers can still use a single root.
+export function rootFiles(root, runtimeRoot = root) {
   const join = (...parts) => path.join(root, ...parts);
   return Object.freeze({
     root,
-    pack: join('pack.json'),
-    script: join('agent', 'ssam-agent.mjs'),
+    pack: path.join(runtimeRoot, 'pack.json'),
+    script: path.join(runtimeRoot, 'agent', 'ssam-agent.mjs'),
     config: join('private', 'config.json'),
     credential: join('private', 'credential'),
     state: join('private', 'agent.json'),

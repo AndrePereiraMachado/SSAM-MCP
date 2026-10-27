@@ -66,12 +66,30 @@ function odcPositions(words) {
 
 // platform: 'darwin' attaches the ODC bridge without the pack's .NET client (deps.attachOdc speaks the diagnostic IPC,
 // attach-unix.mjs) and names the Studios without an image name; deps.pipeCall replaces the Windows pipe (odc-pipe-unix.mjs).
-export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {}, blobs = null, limits = () => ({}), o11Port = 4516,
+export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = () => null, deps = {}, blobs = null, limits = () => ({}), o11Port = 4516,
   onConnection = () => {}, probe = null, platform = process.platform }) {
   const lanes = Array.isArray(pack.lanes) ? pack.lanes : [];
   const pids = new Map(); // pid -> {image, version}, from the last listing
   const maxFileBytes = () => limits().maxFileBytes ?? 512 * 1024 * 1024;
   const requireLane = lane => { if (!lanes.includes(lane)) throw refuse('LANE_DISABLED', `The agent pack does not carry the ${lane} lane`); };
+  const hasDataRootProtocol = version => /^v\d+$/.test(version ?? '') && Number(version.slice(1)) >= 98;
+  function requireDataRootProtocol(version) {
+    if (path.resolve(root) !== path.resolve(runtimeRoot) && !hasDataRootProtocol(version))
+      throw refuse('BRIDGE_VERSION_MISMATCH', 'An installed runtime requires ODC bridge v98 or newer with the agent data-root protocol.');
+  }
+  async function bindOdcRoot(pid, version, executed = false) {
+    requireDataRootProtocol(version);
+    if (!hasDataRootProtocol(version)) return;
+    const dataRoot = path.join(root, 'odc');
+    let reply;
+    try { reply = JSON.parse(await (deps.pipeCall ?? pipeCall)(pid, version, ['agent-root', JSON.stringify({ root: dataRoot })], { timeoutMs: 10000 })); }
+    catch (error) {
+      if (error instanceof PipeError) throw new AgentError(error.code, error.message, { executed, sent: false });
+      throw new AgentError('ODC_DATA_ROOT_FAILED', 'The ODC bridge did not confirm its data directory; no application command was sent.', { executed });
+    }
+    if (reply?.ok !== true || reply.protocol !== 1 || reply.root !== dataRoot)
+      throw new AgentError('ODC_DATA_ROOT_FAILED', 'The ODC bridge refused or returned another data directory; no application command was sent.', { executed });
+  }
 
   async function listing(image) {
     const processes = [];
@@ -177,6 +195,7 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
     const target = await checkPid('odc', pid);
     const connect = Number.isFinite(Number(connectMs)) ? Math.min(Math.max(Number(connectMs), 1), 120000) : undefined;
     try {
+      await bindOdcRoot(target.pid, version);
       const line = await (deps.pipeCall ?? pipeCall)(target.pid, version, mapped, connect === undefined ? {} : { connectMs: connect });
       return relativizeLine(line);
     } catch (error) {
@@ -189,12 +208,14 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
     requireLane('odc');
     const target = await checkPid('odc', pid);
     const version = pack.odcBridge;
+    requireDataRootProtocol(version);
     if (!/^v\d+$/.test(version ?? '')) throw refuse('BRIDGE_VERSION_MISMATCH', 'The agent pack carries no ODC bridge');
-    const client = path.join(root, 'odc', 'studio', 'bridge', 'client', 'bin', 'Release', 'net10.0', 'ODC3.Bridge.Client.dll');
-    const bridge = path.join(root, 'odc', 'studio', 'bridge', 'bin', 'Release', 'net8.0', 'ODC3.Bridge.' + version + '.dll');
+    const client = path.join(runtimeRoot, 'odc', 'studio', 'bridge', 'client', 'bin', 'Release', 'net10.0', 'ODC3.Bridge.Client.dll');
+    const bridge = path.join(runtimeRoot, 'odc', 'studio', 'bridge', 'bin', 'Release', 'net8.0', 'ODC3.Bridge.' + version + '.dll');
     // macOS: no .NET client, the agent itself speaks the diagnostic IPC (the client is not in the macOS pack).
     for (const file of platform === 'darwin' ? [bridge] : [client, bridge]) if (!fs.existsSync(file)) throw refuse('ATTACH_FAILED', 'The agent pack is missing ' + path.relative(root, file));
     const result = await deps.attachOdc(platform === 'darwin' ? { pid: target.pid, bridge, version } : { pid: target.pid, client, bridge });
+    if (result?.ok === true && result?.attached === true) await bindOdcRoot(target.pid, version, null);
     return { ok: result?.ok === true, attached: result?.attached === true, pid: target.pid, version, note: result?.note ?? result?.error ?? null };
   }
 
@@ -271,7 +292,7 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
           + (inWindow(target.version) ? 'the server serves both versions. ' : 'this Service Studio is newer than the versions the server serves (' + window.join(', ') + '). ') + 'Check the result in Service Studio before publishing.' };
     }
     // pack.json decides the hook (o11Hook "h1": the signed release layout) and the bridge file of the version handshake.
-    const record = await connectO11({ root, pid: target.pid, port: o11Port, studioVersion: target.version, describe: deps.describe,
+    const record = await connectO11({ root, runtimeRoot, pid: target.pid, port: o11Port, studioVersion: target.version, describe: deps.describe,
       attach: deps.attachO11, sleep: deps.sleep, now: deps.now, pack, warning, ...(deps.env ? { env: deps.env } : {}) });
     onConnection(record);
     return record;

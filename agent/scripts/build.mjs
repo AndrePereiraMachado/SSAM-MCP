@@ -15,6 +15,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { extractZip } from './zip.mjs';
 import { verifyPack } from '../src/main/core/pack-sync.mjs';
 import { updateUrlProblem } from '../src/main/core/settings.mjs';
+import { stageNativePack } from './native-pack.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = path.resolve(here, '..');
@@ -29,11 +30,12 @@ function parse(argv) {
     if (name === '--pack-only') { options.packOnly = true; continue; }
     // macOS only: notarize with APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID (electron-builder reads them).
     if (name === '--notarize') { options.notarize = true; continue; }
-    if (!['--platform', '--pack', '--update-url'].includes(name)) throw new Error('unknown option: ' + name);
+    if (!['--platform', '--pack', '--update-url', '--native'].includes(name)) throw new Error('unknown option: ' + name);
     if (i + 1 >= argv.length) throw new Error('missing the value of ' + name);
     const value = argv[++i];
     if (name === '--platform') options.platform = value;
     if (name === '--pack') options.pack = value;
+    if (name === '--native') options.native = value;
     if (name === '--update-url') options.updateUrl = value;
   }
   if (!['win', 'mac'].includes(options.platform)) throw new Error('use --platform win or --platform mac');
@@ -55,29 +57,52 @@ function copyFolder(from, to) {
 
 // pack/ filled from the source and checked; returns the pack.json.
 export async function preparePack(source, platform, packDir = path.join(app, 'pack')) {
-  if (!source) {
-    const check = verifyPack(packDir);
-    if (!check.ok) throw new Error(`no --pack given and pack/ is not a whole pack (${check.detail})`);
-    return check.pack;
+  if (source) {
+    fs.rmSync(packDir, { recursive: true, force: true });
+    fs.mkdirSync(packDir, { recursive: true });
+    const stat = fs.statSync(source);
+    if (stat.isDirectory()) copyFolder(source, packDir);
+    else if (/\.zip$/i.test(source)) extractZip(source, packDir);
+    else if (/\.tar\.gz$/i.test(source)) { const { extractTarGz } = await import(pathToFileURL(path.join(here, 'tar-gz.mjs')).href); extractTarGz(source, packDir); }
+    else throw new Error('the pack must be a .zip, a .tar.gz or a folder: ' + source);
   }
-  fs.rmSync(packDir, { recursive: true, force: true });
-  fs.mkdirSync(packDir, { recursive: true });
-  const stat = fs.statSync(source);
-  if (stat.isDirectory()) copyFolder(source, packDir);
-  else if (/\.zip$/i.test(source)) extractZip(source, packDir);
-  else if (/\.tar\.gz$/i.test(source)) { const { extractTarGz } = await import(pathToFileURL(path.join(here, 'tar-gz.mjs')).href); extractTarGz(source, packDir); }
-  else throw new Error('the pack must be a .zip, a .tar.gz or a folder: ' + source);
   const check = verifyPack(packDir);
   if (!check.ok) throw new Error('the pack is not whole: ' + check.detail);
   const packPlatform = check.pack.platform === 'darwin' ? 'mac' : 'win';
   if (packPlatform !== platform) throw new Error(`the pack is for ${packPlatform}, not ${platform}`);
+  if (check.pack.lanes?.includes('odc') && !/^v(?:9[8-9]|[1-9]\d{2,})$/.test(check.pack.odcBridge ?? ''))
+    throw new Error('the installed runtime requires ODC bridge v98 or newer with the agent data-root protocol');
   if (check.pack.files.some(file => /^agent\/node\//.test(String(file.path)))) throw new Error('the pack carries a Node (agent/node): build it with -NoNode, the app runs the agent on its own Node');
   return check.pack;
 }
 
 async function main() {
   const options = parse(process.argv.slice(2));
-  const pack = await preparePack(options.pack, options.platform);
+  if (options.notarize) {
+    if (options.platform !== 'mac' || process.platform !== 'darwin' || !options.native)
+      throw new Error('Notarized releases require a native executable and a Mac build host.');
+    for (const name of ['CSC_LINK', 'CSC_KEY_PASSWORD', 'APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID'])
+      if (!process.env[name]) throw new Error('Signed release credentials missing: ' + name);
+    // Sign before computing the pack hashes. Signing after staging invalidates
+    // the native file hash checked by the supervisor at every launch.
+    const signature = spawnSync('/usr/bin/codesign', ['--verify', '--strict', options.native], { encoding: 'utf8' });
+    if (signature.status !== 0) throw new Error('Sign the native executable before staging the notarized release.');
+    const details = spawnSync('/usr/bin/codesign', ['--display', '--verbose=4', options.native], { encoding: 'utf8' });
+    const signing = (details.stdout ?? '') + (details.stderr ?? '');
+    if (details.status !== 0 || !signing.includes('Authority=Developer ID Application:')
+      || !signing.split(/\r?\n/).includes('TeamIdentifier=' + process.env.APPLE_TEAM_ID) || !signing.includes('(runtime)'))
+      throw new Error('The native executable needs hardened runtime and Developer ID signing for the configured Apple team.');
+  }
+  let pack = await preparePack(options.pack, options.platform);
+  if (options.native) {
+    const destination = path.join(app, 'pack-native-' + Date.now());
+    pack = stageNativePack(path.join(app, 'pack'), options.native, destination);
+    const target = path.join(app, 'pack');
+    // Both paths are fixed children of this application workspace.
+    fs.rmSync(target, { recursive: true, force: true });
+    fs.renameSync(destination, target);
+  }
+  if (options.platform === 'win' && !pack.nativeCore) throw new Error('Windows app builds require --native <qualified ssam-agent.exe>.');
   console.log(`pack ${pack.id} ready in pack/ (${pack.files.length} files, lanes ${(pack.lanes ?? []).join(',')}, ODC bridge ${pack.odcBridge ?? '-'}, Service Studio ${pack.o11BuiltFor ?? '-'})`);
   if (options.packOnly) return;
   if (options.platform === 'mac' && process.platform !== 'darwin') throw new Error('a macOS build (DMG, ZIP, signing) only runs on a Mac');
@@ -86,9 +111,21 @@ async function main() {
   const vite = spawnSync(process.execPath, [path.join(app, 'node_modules', 'electron-vite', 'bin', 'electron-vite.js'), 'build'], { cwd: app, stdio: 'inherit' });
   if (vite.status !== 0) throw new Error('electron-vite build failed with code ' + vite.status);
   const cli = path.join(app, 'node_modules', 'electron-builder', 'cli.js');
-  const args = [cli, options.platform === 'win' ? '--win' : '--mac', '--publish', 'never', '--config', 'electron-builder.yml'];
-  if (options.noUpdates) args.push('-c.publish=null');
-  else args.push('-c.publish.provider=generic', `-c.publish.url=${options.updateUrl.replace(/\/+$/, '')}`, '-c.publish.channel=latest');
+  let config = 'electron-builder.yml';
+  const nativeMac = options.platform === 'mac' && pack.nativeCore;
+  if (nativeMac && pack.nativeCore.arch !== process.arch) throw new Error('Build the installer on the native core target architecture.');
+  if (options.noUpdates || nativeMac) {
+    // The CLI treats -c.publish=null as the string provider "null". A JSON
+    // configuration preserves a real null and produces an offline test build.
+    config = path.join(app, '.local/build/installer-config.json');
+    fs.mkdirSync(path.dirname(config), { recursive: true });
+    fs.writeFileSync(config, JSON.stringify({ extends: path.join(app, 'electron-builder.yml'), ...(options.noUpdates ? { publish: null } : {}),
+      ...(options.notarize ? { forceCodeSigning: true } : {}),
+      ...(nativeMac ? { mac: { target: [{ target: 'dmg', arch: [process.arch] }, { target: 'zip', arch: [process.arch] }],
+        ...(options.notarize ? { signIgnore: ['Contents/Resources/pack/native/ssam-agent$'] } : {}) } } : {}) }));
+  }
+  const args = [cli, options.platform === 'win' ? '--win' : '--mac', '--publish', 'never', '--config', config];
+  if (!options.noUpdates) args.push('-c.publish.provider=generic', `-c.publish.url=${options.updateUrl.replace(/\/+$/, '')}`, '-c.publish.channel=latest');
   if (options.notarize) {
     for (const name of ['APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID']) if (!process.env[name]) throw new Error(`--notarize needs ${name} in the environment`);
     args.push('-c.mac.notarize=true');

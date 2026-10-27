@@ -78,7 +78,7 @@ export function readPack(root) {
 
 // deps.platform (tests): 'darwin' wires the macOS side (macos.mjs, attach-unix.mjs, odc-pipe-unix.mjs; deps.mac goes to
 // createMacAttach); the default is this system.
-export function createAgent({ root, config = {}, deps = {}, log = () => {}, onState = () => {} }) {
+export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, log = () => {}, onState = () => {} }) {
   const base = path.resolve(root);
   const platform = deps.platform ?? process.platform;
   const mac = platform === 'darwin' ? createMacAttach(deps.mac ?? {}) : null;
@@ -89,13 +89,13 @@ export function createAgent({ root, config = {}, deps = {}, log = () => {}, onSt
     sleep: undefined, partMs: undefined, ...deps };
   const transport = d.fetch || process.env.SSAM_AGENT_HTTP === 'fetch' ? null : createHttp();
   d.fetch ??= transport ? transport.fetch : globalThis.fetch;
-  const run = connector(base);
+  const run = connector(path.resolve(runtimeRoot));
   // macOS: describe and attach of Service Studio through the diagnostic IPC (no Anvil.Connect, no .NET).
   d.describe ??= mac ? mac.describeO11 : pid => run(['describe', pid]);
   d.attachO11 ??= mac ? mac.attachO11 : (pid, startedUtc, hook) => run(['attach', pid, startedUtc, hook]);
 
   const credential = config.credential ?? fs.readFileSync(credentialFile(base), 'utf8').trim();
-  const pack = readPack(base);
+  const pack = readPack(runtimeRoot);
   const ws = createWorkspace(base, { platform });
   const outbox = createOutbox();
   const instance = randomUUID();
@@ -149,7 +149,7 @@ export function createAgent({ root, config = {}, deps = {}, log = () => {}, onSt
   }
 
   // probe: the uploads of the network check (kind net.probe, net-probe.mjs); a kinds.mjs without that kind ignores it.
-  const kinds = createKinds({ root: base, ws, pack, kernel: () => channel.welcome()?.kernel ?? null, deps: d, blobs, limits,
+  const kinds = createKinds({ root: base, runtimeRoot: path.resolve(runtimeRoot), ws, pack, kernel: () => channel.welcome()?.kernel ?? null, deps: d, blobs, limits,
     o11Port: Number.isInteger(config.o11Port) ? config.o11Port : 4516, onConnection: record => { connection = view(record); },
     probe: (id, body, options) => channel.probePut(id, body, options), platform });
 

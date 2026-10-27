@@ -1,19 +1,22 @@
-// The agent, supervised by the app: the pack synced into the root, the agent started as a child process with the
+// The agent, supervised by the app: installedPack uses the bundled runtime in place; legacy callers may sync it.
+// The agent is started as a child process with the
 // same command line ssam-agent.ps1 and ssam-agent.sh use (`ssam-agent.mjs run --root <root> --log-file <log>`, Node
 // with --use-env-proxy and --use-system-ca when the runtime has them), watched through the state file the agent
 // writes, stopped cleanly through private/agent.stop (the server is told) and ended by force after 5 s, restarted
 // after a crash with a growing delay and never after an exit the agent decided for good (codes 2, 3, 4). setup, doctor
-// and status run in this process, from the agent's own module in the root (the same functions its command line calls).
+// and status run in this process, from the selected runtime module (the same functions its command line calls).
 // Everything that touches the system is injectable (fork, importAgent, sleep, now), so tests run it under plain Node
 // against the fake hub of the agent tests.
 //   fork(script, args, {cwd, env, execArgv, stdio}) -> {ready: Promise<pid>, on('exit', code), on('error', error), kill()}
 import fs from 'node:fs';
+import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { Readable, Writable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { rootFiles } from './paths.mjs';
 import { syncPack, verifyPack, readPackJson } from './pack-sync.mjs';
 import { readState, isSetUp, exitPolicy, restartDelayMs, summarize, STALE_MS } from './agent-state.mjs';
+import { spawnNative, nativeCommand } from './native-process.mjs';
 
 export const NODE_FLAGS = Object.freeze(['--use-env-proxy', '--use-system-ca']);
 export const CONNECT_WAIT_MS = 30000;
@@ -26,18 +29,31 @@ const sink = () => { const chunks = []; const stream = new Writable({ write(chun
 // The Node flags of NODE_FLAGS this runtime knows (the child is the same binary as this process).
 export const supportedFlags = (flags = process.allowedNodeEnvironmentFlags) => NODE_FLAGS.filter(flag => flags.has(flag));
 
-export function createSupervisor({ root, packDir, fork, importAgent = defaultImport, execArgv = supportedFlags(), env = process.env, platform = process.platform,
+export function createSupervisor({ root, packDir, installedPack = false, fork, importAgent = defaultImport, execArgv = supportedFlags(), env = process.env, platform = process.platform,
   log = () => {}, onChange = () => {}, sleep = delay, now = Date.now } = {}) {
-  const files = rootFiles(root);
+  const runtimeRoot = installedPack ? packDir : root;
+  if (installedPack) {
+    const data = path.resolve(root); const code = path.resolve(packDir);
+    const overlaps = (a, b) => { const rel = path.relative(a, b); return rel === '' || (!rel.startsWith('..' + path.sep) && rel !== '..' && !path.isAbsolute(rel)); };
+    if (overlaps(data, code) || overlaps(code, data)) throw new Error('The installation and data directories must be separate.');
+  }
+  const files = rootFiles(root, runtimeRoot);
+  const nativeExecutable = () => {
+    const core = readPackJson(runtimeRoot)?.nativeCore;
+    if (!core) return null;
+    const expected = platform === 'win32' ? 'native/ssam-agent.exe' : platform === 'darwin' ? 'native/ssam-agent' : null;
+    if (core.runtime !== 'native-aot' || !expected || core.path !== expected) throw new Error('Unsupported native agent runtime.');
+    return path.join(runtimeRoot, core.path);
+  };
   let child = null; let childPid = null; let lastExit = null; let stopping = false; let crashes = 0;
   let restartTimer = null; let watchTimer = null; let packProblem = null; let lastSync = null;
   let busy = false;
 
   const notify = () => { try { onChange(snapshot()); } catch { /* a listener failed */ } };
 
-  // The agent module of the root, imported once per pack (a new pack is a new module).
+  // Import from the selected runtime, never from an old copy when installedPack is enabled.
   async function agentModule() {
-    const pack = readPackJson(root);
+    const pack = readPackJson(runtimeRoot);
     return importAgent(files.script, pack?.id ?? 'none');
   }
 
@@ -52,7 +68,7 @@ export function createSupervisor({ root, packDir, fork, importAgent = defaultImp
     const external = !child && externalAgent();
     const setUp = isSetUp(files);
     const view = summarize({ setUp, running: Boolean(child), state: child ? (state?.pid === childPid ? state : null) : state, external: Boolean(external), lastExit, packProblem });
-    const pack = readPackJson(root);
+    const pack = readPackJson(runtimeRoot);
     const config = (() => { try { return JSON.parse(fs.readFileSync(files.config, 'utf8')); } catch { return null; } })();
     return { view, root, setUp, server: config?.server ?? null, o11Port: config?.o11Port ?? null, pid: child ? childPid : external ? external.pid : null,
       state: state ?? null, lastExit, pack: pack ? { id: pack.id ?? null, lanes: pack.lanes ?? [], odcBridge: pack.odcBridge ?? null, o11BuiltFor: pack.o11BuiltFor ?? null, platform: pack.platform ?? 'windows' } : null,
@@ -64,9 +80,17 @@ export function createSupervisor({ root, packDir, fork, importAgent = defaultImp
     if (child) throw new Error('The agent is running: stop it before syncing the pack.');
     const check = verifyPack(packDir);
     if (!check.ok) { packProblem = `The pack bundled with this app is damaged (${check.detail}); install the app again.`; notify(); throw new Error(packProblem); }
+    if (installedPack && check.pack.lanes?.includes('odc') && !/^v(?:9[8-9]|[1-9]\d{2,})$/.test(check.pack.odcBridge ?? '')) {
+      packProblem = 'This installed runtime needs ODC bridge v98 or newer with the data-root protocol. Rebuild the agent pack.';
+      notify(); throw new Error(packProblem);
+    }
     packProblem = null;
     fs.mkdirSync(root, { recursive: true });
-    lastSync = syncPack(packDir, root, { platform, log });
+    // Installed packs stay beside the app. Existing legacy copies are left untouched;
+    // only data is reused, and no code is imported from the user's old data root.
+    lastSync = installedPack
+      ? { synced: false, installed: true, pack: check.pack.id, copied: [], removed: [], failed: [] }
+      : syncPack(packDir, root, { platform, log });
     notify();
     return lastSync;
   }
@@ -90,10 +114,11 @@ export function createSupervisor({ root, packDir, fork, importAgent = defaultImp
     if (!isSetUp(files)) throw new Error('The agent is not set up: enter the server address and the credential first.');
     const external = externalAgent();
     if (external) throw new Error(`Another agent already runs in this folder (pid ${external.pid}). Stop it first.`);
-    if (!readPackJson(root) || !fs.existsSync(files.script)) syncPackNow();
+    if (installedPack || !readPackJson(runtimeRoot) || !fs.existsSync(files.script)) syncPackNow();
     stopping = false;
     fs.rmSync(files.stop, { force: true });
-    const started = fork(files.script, ['run', '--root', root, '--log-file', files.log], { cwd: root, env, execArgv, stdio: 'ignore' });
+    const executable = nativeExecutable();
+    const started = (executable ? spawnNative : fork)(executable ?? files.script, ['run', '--root', root, '--runtime-root', runtimeRoot, '--log-file', files.log], { cwd: root, env, execArgv, stdio: 'ignore' });
     child = started;
     let exited = null;
     started.on('error', error => { log('agent-error', { error: error.message }); });
@@ -156,7 +181,17 @@ export function createSupervisor({ root, packDir, fork, importAgent = defaultImp
   // The agent's own setup with the credential handed over as its standard input (never an argument, never a file).
   async function setup({ server, credential, o11Port = null }) {
     if (child) throw new Error('Stop the agent before changing its setup.');
-    if (!readPackJson(root) || !fs.existsSync(files.script)) syncPackNow();
+    if (installedPack || !readPackJson(runtimeRoot) || !fs.existsSync(files.script)) syncPackNow();
+    const executable = nativeExecutable();
+    if (executable) {
+      busy = true; notify();
+      try {
+        const result = await nativeCommand(executable, ['setup', '--root', root, '--runtime-root', runtimeRoot, '--server', server,
+          ...(o11Port === null || o11Port === '' ? [] : ['--o11-port', String(o11Port)])], { cwd: root, env, input: String(credential ?? '').trim() + '\n' });
+        lastExit = null;
+        return { ok: result.code === 0, ...result };
+      } finally { busy = false; notify(); }
+    }
     const agent = await agentModule();
     const stdout = sink(); const stderr = sink();
     const stdin = Object.assign(Readable.from([String(credential ?? '').trim() + '\n']), { isTTY: false });
@@ -170,11 +205,20 @@ export function createSupervisor({ root, packDir, fork, importAgent = defaultImp
   }
 
   async function doctor() {
+    const executable = nativeExecutable();
+    if (executable) {
+      busy = true; notify();
+      try {
+        const result = await nativeCommand(executable, ['doctor', '--root', root, '--runtime-root', runtimeRoot, '--json'], { cwd: root, env });
+        let report = null; try { report = JSON.parse(result.output); } catch { }
+        return { ok: result.code === 0, code: result.code, report, text: result.output || result.error };
+      } finally { busy = false; notify(); }
+    }
     const agent = await agentModule();
     const stdout = sink();
     busy = true; notify();
     let code;
-    try { code = await agent.doctor({ root, stdout, json: true }); }
+    try { code = await agent.doctor({ root, runtimeRoot, stdout, json: true }); }
     finally { busy = false; notify(); }
     let report = null;
     try { report = JSON.parse(stdout.text()); } catch { report = null; }

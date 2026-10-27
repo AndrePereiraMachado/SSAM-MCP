@@ -1,7 +1,7 @@
 {
   "name": "ssam-agent-app",
   "productName": "SSAM Agent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The SSAM agent as a background desktop app: tray icon, the agent supervised in a child process, updates from the owner's update server.",
   "private": true,
   "type": "module",
@@ -13,6 +13,8 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "test": "node --test tests/app/*.test.mjs",
+    "native:build": "node scripts/build-native.mjs",
+    "native:test:managed": "dotnet build native/Ssam.Agent/Ssam.Agent.csproj -c Release && node --test tests/native/*.test.mjs",
     "icons": "node scripts/make-icons.mjs",
     "pack:verify": "node scripts/verify-pack.mjs pack",
     "dist:win": "node scripts/build.mjs --platform win",

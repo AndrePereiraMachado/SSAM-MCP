@@ -1,0 +1,126 @@
+name: Native agent installer (Mac)
+
+on:
+  push:
+    branches: [codex/mac-native-installer]
+  workflow_dispatch:
+    inputs:
+      pack_release:
+        description: Draft release holding the verified Mac bridge pack
+        required: true
+      pack_asset:
+        description: Root-level runtime tar.gz asset (no source or credentials)
+        required: true
+      pack_sha256:
+        description: Approved SHA-256 of the exact runtime archive
+        required: true
+      sign_and_notarize:
+        description: Sign with Developer ID and notarize (false for an unsigned test installer)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  PACK_RELEASE: ${{ inputs.pack_release || 'agent-mac-runtime-20261027-ipramm' }}
+  PACK_ASSET: ${{ inputs.pack_asset || 'mac-release-input-IkWeIb.tar.gz' }}
+  PACK_SHA256: ${{ inputs.pack_sha256 || '554c7b845ae04880398ddb7d28825f0abb93abec047fe3eeacb02370a79cb722' }}
+
+jobs:
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check release prerequisites
+        if: inputs.sign_and_notarize
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          test "$(uname -m)" = arm64
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            test -n "${!name}" || { echo "Missing signing configuration: $name"; exit 1; }
+          done
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: agent/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Download the approved bridge binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          node --input-type=module -e 'if (!/^[A-Za-z0-9._-]+\.tar\.gz$/.test(process.env.PACK_ASSET) || !/^[a-fA-F0-9]{64}$/.test(process.env.PACK_SHA256)) process.exit(1)'
+          mkdir -p "$RUNNER_TEMP/ssam-pack"
+          gh release download "$PACK_RELEASE" --repo "$REPOSITORY" --pattern "$PACK_ASSET" --dir "$RUNNER_TEMP/ssam-pack"
+          node --input-type=module -e 'import fs from "node:fs"; import crypto from "node:crypto"; const p=process.env.RUNNER_TEMP+"/ssam-pack/"+process.env.PACK_ASSET; if(crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex")!==process.env.PACK_SHA256.toLowerCase()) throw Error("Runtime archive hash differs")'
+      - name: Install and test the desktop app
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+      - name: Build and qualify the native ARM64 executable
+        run: node scripts/build-native.mjs osx-arm64
+      - name: Sign, package and notarize
+        if: inputs.sign_and_notarize
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'true'
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          keychain="$RUNNER_TEMP/ssam-signing.keychain-db"
+          certificate="$RUNNER_TEMP/ssam-signing.p12"
+          keychain_password=$(openssl rand -hex 32)
+          echo "::add-mask::$keychain_password"
+          trap 'security delete-keychain "$keychain" >/dev/null 2>&1 || true; rm -f "$certificate"' EXIT
+          node --input-type=module -e 'import fs from "node:fs"; fs.writeFileSync(process.env.RUNNER_TEMP+"/ssam-signing.p12", Buffer.from(process.env.CSC_LINK,"base64"), {mode:0o600})'
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -k "$keychain" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign >/dev/null
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" >/dev/null
+          identity=$(security find-identity -v -p codesigning "$keychain" | sed -n '/Developer ID Application/s/.*\([A-F0-9]\{40\}\).*/\1/p' | head -1)
+          test -n "$identity" || { echo 'Developer ID Application identity missing'; exit 1; }
+          native="native/Ssam.Agent/bin/Release/net10.0/osx-arm64/publish/ssam-agent"
+          codesign --force --timestamp --options runtime --keychain "$keychain" --sign "$identity" "$native"
+          codesign --verify --strict "$native"
+          node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/ssam-pack/$PACK_ASSET" --native "$native" --no-updates --notarize
+      - name: Package the unsigned installer
+        if: ${{ !inputs.sign_and_notarize }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          test "$(uname -m)" = arm64
+          node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/ssam-pack/$PACK_ASSET" --native native/Ssam.Agent/bin/Release/net10.0/osx-arm64/publish/ssam-agent --no-updates
+      - name: Verify the installed app
+        run: |
+          node scripts/verify-native-distribution.mjs 'dist/mac-arm64/SSAM Agent.app'
+          shasum -a 256 dist/*.dmg dist/*.zip > dist/SHA256SUMS
+      - name: Verify Developer ID and Gatekeeper
+        if: inputs.sign_and_notarize
+        run: |
+          codesign --verify --deep --strict 'dist/mac-arm64/SSAM Agent.app'
+          xcrun stapler validate 'dist/mac-arm64/SSAM Agent.app'
+          spctl --assess --type execute --verbose=2 'dist/mac-arm64/SSAM Agent.app'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ssam-agent-mac-arm64-${{ inputs.sign_and_notarize && 'signed' || 'unsigned' }}
+          if-no-files-found: error
+          path: |
+            agent/dist/*.dmg
+            agent/dist/*.zip
+            agent/dist/SHA256SUMS

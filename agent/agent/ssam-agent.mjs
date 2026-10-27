@@ -276,7 +276,7 @@ function runningAgent(root, now = Date.now()) {
   return alive(state.pid) && now - Date.parse(state.at) < 90000 ? state : null;
 }
 
-export async function runAgent({ root, logFile = null, stderr = process.stderr, platform = process.platform }) {
+export async function runAgent({ root, runtimeRoot = root, logFile = null, stderr = process.stderr, platform = process.platform }) {
   const target = path.resolve(root);
   const config = readJson(configFile(target));
   if (!config?.server || !fs.existsSync(credentialFile(target))) { stderr.write(`Error: the agent is not set up; run setup first (${guideOf(platform)}).\n`); return 1; }
@@ -291,7 +291,7 @@ export async function runAgent({ root, logFile = null, stderr = process.stderr, 
   };
   saveState('starting');
   fs.rmSync(stopFile(target), { force: true });
-  const agent = createAgent({ root: target, config: { server: config.server, o11Port: config.o11Port }, log, onState: (state, extra) => saveState(state, extra) });
+  const agent = createAgent({ root: target, runtimeRoot, config: { server: config.server, o11Port: config.o11Port }, log, onState: (state, extra) => saveState(state, extra) });
   log('start', { version: AGENT_VERSION, node: process.version, instance: agent.instance, server: config.server });
   // agent\ssam-agent.ps1 stop asks for a clean stop through private\agent.stop; the state file is refreshed meanwhile.
   let ticks = 0;
@@ -307,10 +307,10 @@ export async function runAgent({ root, logFile = null, stderr = process.stderr, 
   return code;
 }
 
-export function status({ root, stdout = process.stdout }) {
+export function status({ root, runtimeRoot = root, stdout = process.stdout }) {
   const target = path.resolve(root);
   const config = readJson(configFile(target));
-  const pack = readPack(target);
+  const pack = readPack(runtimeRoot);
   const state = readJson(stateFile(target));
   const running = runningAgent(target);
   const connection = readConnection(target);
@@ -337,7 +337,7 @@ const runtimesOf = async () => (await exec('dotnet', ['--list-runtimes'], { wind
 
 // doctor: what this machine needs, without printing any secret. deps (tests): flags, runtimes, studios, fetch, env,
 // platform, mac (the deps of lib/mac-doctor.mjs). json: one JSON object instead of the lines (macOS: with the facts).
-export async function doctor({ root, stdout = process.stdout, deps = {}, json = false }) {
+export async function doctor({ root, runtimeRoot = root, stdout = process.stdout, deps = {}, json = false }) {
   const platform = deps.platform ?? process.platform;
   const target = platform === 'darwin' ? path.posix.resolve(root) : path.resolve(root);
   const env = deps.env ?? process.env;
@@ -353,9 +353,9 @@ export async function doctor({ root, stdout = process.stdout, deps = {}, json = 
     add(foreign.length === 0, 'agent folder content', foreign.length ? `it holds files that are not of an SSAM agent pack (${foreign.join(', ')}); uninstall keeps them, and a new pack goes to a folder of its own`
       : 'only the pack, the agent data and the Node of the installer', false);
   }
-  const integrity = await packIntegrity(target);
+  const integrity = await packIntegrity(runtimeRoot);
   add(integrity.ok, 'pack', integrity.detail);
-  const pack = readPack(target);
+  const pack = readPack(runtimeRoot);
   const config = readJson(configFile(target));
   const badServer = config?.server ? serverProblem(config.server) : `no ${shown(platform, 'private', 'config.json')}: run setup`;
   add(!badServer, 'server', badServer ?? config.server);
@@ -402,7 +402,7 @@ function parse(argv) {
     if (!name.startsWith('--')) throw new Error('unexpected argument: ' + name);
     const key = name.slice(2);
     if (key === 'json' && command === 'doctor') { options.json = true; continue; }
-    if (!['server', 'root', 'credential-file', 'log-file', 'o11-port'].includes(key)) throw new Error('unknown option: ' + name);
+    if (!['server', 'root', 'runtime-root', 'credential-file', 'log-file', 'o11-port'].includes(key)) throw new Error('unknown option: ' + name);
     if (i + 1 >= rest.length) throw new Error('missing value for ' + name);
     options[key] = rest[++i];
   }
@@ -414,10 +414,11 @@ export async function main(argv = process.argv.slice(2)) {
   try { parsed = parse(argv); } catch (error) { process.stderr.write('Error: ' + error.message + '\n'); return 1; }
   const { command, options } = parsed;
   const root = options.root ?? process.env.SSAM_AGENT_ROOT ?? defaultRoot();
+  const runtimeRoot = options['runtime-root'] ?? root;
   if (command === 'setup') return setup({ root, server: options.server, credentialFile: options['credential-file'], o11Port: options['o11-port'] });
-  if (command === 'run') return runAgent({ root, logFile: options['log-file'] ?? null });
-  if (command === 'status') return status({ root });
-  if (command === 'doctor') return doctor({ root, json: options.json === true });
+  if (command === 'run') return runAgent({ root, runtimeRoot, logFile: options['log-file'] ?? null });
+  if (command === 'status') return status({ root, runtimeRoot });
+  if (command === 'doctor') return doctor({ root, runtimeRoot, json: options.json === true });
   process.stderr.write('Usage: ssam-agent.mjs setup --server <url> [--root <folder>] [--credential-file <file>] [--o11-port <port>] | run | status | doctor [--json]\n');
   return 1;
 }

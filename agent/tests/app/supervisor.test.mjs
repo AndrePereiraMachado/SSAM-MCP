@@ -2,7 +2,7 @@
 // setup with the credential over standard input, start until connected (one hello), a second start kept, a clean stop
 // (the hub sees the DELETE), a refused credential ends for good (code 2, no restart), a killed agent is started again,
 // and doctor answers the agent's own JSON.
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -22,6 +22,9 @@ const sha = buffer => createHash('sha256').update(buffer).digest('hex');
 const base = process.platform === 'darwin' ? fs.mkdtempSync(path.join(os.homedir(), '.ssam-app-test-')) : os.tmpdir();
 const fresh = name => fs.mkdtempSync(path.join(base, 'ssam-app-' + name + '-'));
 const remove = dir => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+// Both supervisor cases share the Mac parent; deleting it after the first
+// case prevents the second case from creating its fresh test directories.
+after(() => { if (base !== os.tmpdir()) remove(base); });
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 // No LOCALAPPDATA: the temp root of the test lives there, and the agent's setup refuses such a root for real use.
 const ENV = { ...process.env, ANVIL_WORKER: '0', ANVIL_ODC_NO_WORKER: '1', SSAM_ODC_OFFLINE: '1' };
@@ -35,23 +38,31 @@ function makePack(id = 'pack-app-test') {
   for (const name of ['ssam-agent.mjs', 'ssam-agent.ps1', 'ssam-agent.sh']) put('agent/' + name, fs.readFileSync(path.join(agentDir, name)));
   for (const name of fs.readdirSync(path.join(agentDir, 'lib'))) put('agent/lib/' + name, fs.readFileSync(path.join(agentDir, 'lib', name)));
   put('odc/README.md', Buffer.from('root marker\n'));
-  fs.writeFileSync(path.join(dir, 'pack.json'), JSON.stringify({ id, lanes: ['odc'], odcBridge: 'v97', o11BuiltFor: null, o11Hook: null, o11Bridge: null, files }, null, 2));
+  fs.writeFileSync(path.join(dir, 'pack.json'), JSON.stringify({ id, lanes: ['odc'], odcBridge: 'v98', o11BuiltFor: null, o11Hook: null, o11Bridge: null, files }, null, 2));
   return dir;
 }
 
-test('supervisor: sync, setup, start to connected, second start, clean stop, refused credential, crash restart, doctor', { timeout: 120000 }, async () => {
+for (const installedPack of [false, true]) test(`supervisor (installedPack=${installedPack}): setup, connect, stop, refusal, restart and doctor`, { timeout: 120000 }, async () => {
   if (/\s/.test(os.tmpdir())) { assert.ok(true, 'temp folder with a space: the agent refuses such a root'); return; }
   const pack = makePack();
   const root = path.join(fresh('root'), 'SSAM-Agent');
   const hub = await fakeHub({ credential: CREDENTIAL });
   const changes = [];
   const logs = [];
-  const supervisor = createSupervisor({ root, packDir: pack, fork: forkWithNode(process.execPath), env: ENV, log: (event, fields) => logs.push({ event, ...fields }), onChange: s => changes.push(s.view.status) });
+  const supervisor = createSupervisor({ root, packDir: pack, installedPack, fork: forkWithNode(process.execPath), env: ENV, log: (event, fields) => logs.push({ event, ...fields }), onChange: s => changes.push(s.view.status) });
   try {
     assert.equal(supervisor.snapshot().view.status, 'not-set-up');
     const synced = supervisor.syncPack();
-    assert.equal(synced.synced, true);
-    assert.equal(verifyPack(root).ok, true);
+    assert.equal(synced.synced, !installedPack);
+    assert.equal(verifyPack(installedPack ? pack : root).ok, true);
+    if (installedPack) {
+      assert.deepEqual(fs.readdirSync(root), [], 'no source tree copied to data');
+      // A legacy source tree must neither execute nor be deleted during migration.
+      fs.mkdirSync(path.join(root, 'agent'));
+      fs.writeFileSync(path.join(root, 'agent/ssam-agent.mjs'), 'throw new Error("legacy source executed");');
+      fs.mkdirSync(path.join(root, 'inbox'));
+      fs.writeFileSync(path.join(root, 'inbox/keep.txt'), 'user data');
+    }
     assert.equal(supervisor.snapshot().pack.id, 'pack-app-test');
     assert.equal(supervisor.snapshot().bundledPack, 'pack-app-test');
 
@@ -119,11 +130,24 @@ test('supervisor: sync, setup, start to connected, second start, clean stop, ref
     const checks = Array.isArray(doctor.report.checks) ? doctor.report.checks : doctor.report;
     assert.ok(JSON.stringify(checks).includes('pack-app-test'));
     assert.equal(JSON.stringify(doctor.report).includes(CREDENTIAL), false);
+    if (installedPack) {
+      assert.equal(fs.readFileSync(path.join(root, 'inbox/keep.txt'), 'utf8'), 'user data');
+      assert.match(fs.readFileSync(path.join(root, 'agent/ssam-agent.mjs'), 'utf8'), /legacy source executed/);
+      assert.equal(fs.existsSync(path.join(root, 'agent/lib')), false);
+      assert.equal(fs.existsSync(path.join(root, 'pack.json')), false);
+      assert.equal(verifyPack(pack).ok, true, 'runtime remains unchanged');
+    }
     assert.deepEqual(supportedFlags(new Set(['--use-env-proxy'])), ['--use-env-proxy']);
   } finally {
     await supervisor.shutdown();
     hub.close();
     remove(pack); remove(path.dirname(root));
-    if (base !== os.tmpdir()) remove(base);
+  }
+});
+
+test('installed pack refuses overlapping installation and data directories', () => {
+  const root = path.resolve('overlap');
+  for (const packDir of [root, path.join(root, 'pack'), path.dirname(root)]) {
+    assert.throws(() => createSupervisor({ root, packDir, installedPack: true }), /must be separate/);
   }
 });

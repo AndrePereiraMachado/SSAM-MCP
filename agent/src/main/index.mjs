@@ -1,7 +1,7 @@
 // SSAM Agent, the desktop app: the agent of docs/AGENTE-CLIENTE.md and docs/AGENTE-MAC.md kept running in the
 // background, with an icon in the tray (Windows) or the menu bar (macOS), no window until the person opens the panel,
 // opened with the computer (a login item, minimized to the tray) and updated by itself from the owner's update
-// server. What the agent does and what it never does is unchanged: this app only puts the pack in the agent root,
+// server. The runtime stays in the installation; the selected root contains writable data.
 // starts `ssam-agent.mjs run` as a child process, shows its state and stops it cleanly. One instance per user; a
 // second launch opens the panel of the first. Built by electron-vite to out/main/index.mjs; the preload is
 // out/preload/index.cjs and the React panel out/renderer (the Vite dev server in `npm run dev`).
@@ -66,7 +66,7 @@ async function run() {
   log.write('updates', { url: updateUrl.url, source: updateUrl.source, autoInstall: settings.updateAutoInstall });
 
   function makeSupervisor(target) {
-    return createSupervisor({ root: target, packDir, fork: forkWithUtilityProcess(), env: process.env, log: log.write, onChange: () => push() });
+    return createSupervisor({ root: target, packDir, installedPack: true, fork: forkWithUtilityProcess(), env: process.env, log: log.write, onChange: () => push() });
   }
   supervisor = makeSupervisor(root);
 

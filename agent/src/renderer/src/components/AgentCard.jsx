@@ -36,7 +36,7 @@ export function AgentCard({ agent, app, busy, onChangeSetup }) {
       {doctor && (
         <pre className="report">
           {doctor.report
-            ? [<div key="head">{`${doctor.report.ok ? 'OK' : 'Problems found'}: agent ${doctor.report.agentVersion}, Node ${doctor.report.node}, pack ${doctor.report.pack?.id ?? '?'}`}</div>,
+            ? [<div key="head">{`${doctor.report.ok ? 'OK' : 'Problems found'}: agent ${doctor.report.agentVersion}, ${doctor.report.runtime === 'native-aot' ? 'native core' : 'Node ' + doctor.report.node}, pack ${doctor.report.pack?.id ?? '?'}`}</div>,
               ...(doctor.report.checks ?? []).map((check, i) => <div key={i} className={check.status}>{`[${check.status}] ${check.name}: ${check.detail}`}</div>)]
             : (doctor.text || 'The doctor gave no report.')}
         </pre>
