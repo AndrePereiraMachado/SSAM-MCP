@@ -71,3 +71,24 @@ real às duas instalações do Studio ainda requer teste no Mac do usuário.
 
 O instalador Windows `ssam-agent-app-0.1.1-setup.exe` tem SHA-256
 `d1fe3e4d5d602b88d33c222f6619e588c747aa308172d296df1d148377b9fb04`.
+
+## Candidato 0.1.2: menos exposição na interface
+
+Os dados passam a `%APPDATA%/SSAM-Agent/data` e `~/Library/SSAM-Agent/data`.
+A pasta padrão anterior é movida inteira quando reconhecida, sem processo
+ativo e sem destino existente. Pastas personalizadas, links e conflitos são
+preservados; a decisão fica no log. Não há cópia ou exclusão de credenciais.
+O Mac admite somente esse subdiretório específico da Library, mantendo as
+recusas das demais pastas protegidas. Roaming evita a restrição já existente
+do Studio sobre LocalAppData.
+
+Foram retirados seletor de pasta, atalhos para abrir arquivos, caminhos,
+versões de bridges e PIDs da tela principal e do menu. Logs ficam recolhidos
+em diagnóstico; o menu padrão de desenvolvimento não aparece no pacote.
+Isso reduz exposição casual, sem prometer criptografia ou impedir inspeção
+dos binários pelo proprietário do computador.
+
+O run `40601229512` passou os testes do Mac e abriu o aplicativo empacotado
+com dados sob a nova Library. O mesmo teste do aplicativo empacotado passou
+no Windows com dados sob Roaming; o verificador de integridade passou.
+Windows SHA-256: `b39088fe3270140aabd6dae363e98c27170bc8a37b9e629b70d0b9d2fb0826bc`.
