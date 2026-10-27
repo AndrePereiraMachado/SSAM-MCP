@@ -23,7 +23,8 @@ test('built Electron panel configures and supervises the native core through its
     let electron;
     t.after(async () => { if (electron) await electron.close(); await hub.close(); fs.rmSync(folder, { recursive: true, force: true }); });
     const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
-    electron = await _electron.launch({ executablePath: path.join(app, 'node_modules/electron/dist/electron.exe'), args: [bootstrap], env, timeout: 20000 });
+    const executable = process.platform === 'darwin' ? 'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron' : 'node_modules/electron/dist/electron.exe';
+    electron = await _electron.launch({ executablePath: path.join(app, executable), args: [bootstrap], env, timeout: 20000 });
     const page = await electron.firstWindow();
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.getByLabel('Server address').fill(hub.url);

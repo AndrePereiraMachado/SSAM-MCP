@@ -110,6 +110,12 @@ jobs:
         run: |
           node scripts/verify-native-distribution.mjs 'dist/mac-arm64/SSAM Agent.app'
           shasum -a 256 dist/*.dmg dist/*.zip > dist/SHA256SUMS
+      - name: Exercise the Mac desktop interface and native agent
+        env:
+          PLAYWRIGHT_MODULE: playwright
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.1
+          node --test tests/native/electron-smoke.test.mjs
       - name: Verify Developer ID and Gatekeeper
         if: inputs.sign_and_notarize
         run: |
