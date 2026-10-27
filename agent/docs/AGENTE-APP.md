@@ -4,8 +4,8 @@ The SSAM agent of `AGENTE-CLIENTE.md` (Windows) and `AGENTE-MAC.md` (macOS), del
 the background: an icon in the tray (Windows) or the menu bar (macOS), no window until you open the panel, the agent
 started with the app and kept running, and the app itself updated from the server owner's update server.
 
-What the agent does, what it sends and what it never does are exactly what those guides say. The app only puts the
-agent's files in the agent folder, starts the agent, shows its state and stops it cleanly.
+What the agent does, what it sends and what it never does are exactly what those guides say. The app runs its
+bundled agent from the installation, shows its state and stops it cleanly. The agent folder holds writable data.
 
 ## What you get from the server owner
 
@@ -37,7 +37,7 @@ once only: keep both in a password manager, never in a repository or a chat.
    and drag `SSAM Agent` to Applications, then open it.
 2. The first time, the panel opens by itself ("Not set up"). Enter the server address, paste the agent credential (it
    is not shown and never shown again), keep or change the agent folder, and press **Save and start**.
-3. The app copies the agent pack into the agent folder, saves the credential there in a file only your user can read
+3. The app verifies its installed agent pack and saves the credential in the data folder in a file only your user can read
    (`private\credential`; on macOS `private/credential`, mode 0600 in a folder closed with 0700), starts the agent and
    shows **Connected** when the server accepted it.
 4. **Run doctor** in the panel checks the same things the agent's own `doctor` checks: the folder, the pack, the
@@ -84,8 +84,8 @@ The owner publishes new versions of the app on an update server. The app asks it
 6 hours, downloads a new version in the background and installs it by itself a few seconds later: the agent is
 stopped cleanly, the app restarts and the agent reconnects. No click is needed; the panel shows what is going on, and
 **Restart to update now** installs it at once. A new version of the app carries the agent pack that goes with it:
-on the next start the app puts the new pack in the agent folder, keeping `private\`, `inbox\`, `odc\` and `o11\` as
-they are, the same as extracting a new pack over the folder by hand. Quit ODC Studio and Service Studio before, as the
+on the next start the app runs the new installed pack, keeping `private\`, `inbox\`, `odc\` and `o11\` as
+they are. Old source copies from earlier installations are preserved but are no longer executed. Quit ODC Studio and Service Studio before, as the
 guides say: a Studio keeps the old bridge loaded until it quits.
 
 Without an update server (the panel says "Updates are off"), the owner sends you the new installer; run it over the
@@ -96,7 +96,8 @@ installed app.
 - The app: `%LOCALAPPDATA%\Programs\ssam-agent-app` (Windows) or `/Applications/SSAM Agent.app` (macOS). Its own
   settings and log (`settings.json`, `app.log`): `%APPDATA%\ssam-agent-app` or `~/Library/Application Support/ssam-agent-app`.
 - The agent folder (`SSAM-Agent`): the layout of "Folders" in `AGENTE-CLIENTE.md` and `AGENTE-MAC.md`. Files you
-  deliver to the server go in `inbox\`, as before.
+  deliver to the server go in `inbox\`, as before. The app does not copy its source tree into this folder.
+  ODC bridge v98 or newer binds its snapshots and journal here before it accepts application commands.
 
 ## Corporate proxy and certificates
 

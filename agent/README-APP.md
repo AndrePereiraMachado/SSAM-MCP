@@ -1,5 +1,11 @@
 # A app Electron do agente (para o dono)
 
+O candidato Windows agora usa o núcleo Native AOT em `native/Ssam.Agent`. Gere-o com
+`npm run native:build -- win-x64` e informe `--native <ssam-agent.exe>` ao build Windows.
+O pacote gerado contém apenas o executável, bridges, helpers e metadados; o runtime
+permanece na instalação e os dados permanecem na raiz configurada. Situação, comandos
+e limitações de homologação: [NUCLEO-NATIVO.md](docs/NUCLEO-NATIVO.md).
+
 O agente de `docs/AGENTE-CLIENTE.md` e `docs/AGENTE-MAC.md` entregue como app de desktop em segundo plano: ícone na
 bandeja (Windows) ou na barra de menus (macOS), sem janela até a pessoa abrir o painel, o agente iniciado junto e
 mantido no ar, e a app atualizada a partir de um update server do dono. Guia do cliente: `docs/AGENTE-APP.md` (em
