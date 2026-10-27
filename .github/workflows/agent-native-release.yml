@@ -20,7 +20,9 @@ on:
         default: false
 
 permissions:
-  contents: read
+  # GitHub requires write-level release access to read unpublished drafts.
+  # This workflow downloads the input and never publishes a release.
+  contents: write
 
 env:
   PACK_RELEASE: ${{ inputs.pack_release || 'agent-mac-runtime-20261027-ipramm' }}
