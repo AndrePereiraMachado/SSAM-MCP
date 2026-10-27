@@ -44,25 +44,37 @@ const blend = (under, over) => { const a = over[3] + under[3] * (1 - over[3]); r
 const disc = (cx, cy, radius, colour) => (x, y) => ((x - cx) ** 2 + (y - cy) ** 2 <= radius ** 2 ? colour : null);
 const ring = (cx, cy, outer, inner, colour) => (x, y) => { const d = (x - cx) ** 2 + (y - cy) ** 2; return d <= outer ** 2 && d >= inner ** 2 ? colour : null; };
 const roundedSquare = (inset, radius, colour) => (x, y) => { const lo = inset; const hi = 1 - inset; if (x < lo || x > hi || y < lo || y > hi) return null; const cx = Math.min(Math.max(x, lo + radius), hi - radius); const cy = Math.min(Math.max(y, lo + radius), hi - radius); return (x - cx) ** 2 + (y - cy) ** 2 <= radius ** 2 ? colour : null; };
-// A bold "S" built from two arcs (the mark of the app).
-const sMark = (colour, cx = 0.5, cy = 0.5, scale = 1) => (x, y) => {
-  const u = (x - cx) / scale; const v = (y - cy) / scale;
-  const r = 0.11; const w = 0.055;
-  const top = (u) ** 2 + (v + r) ** 2; const bottom = (u) ** 2 + (v - r) ** 2;
-  const inTop = top <= (r + w) ** 2 && top >= (r - w) ** 2 && !(u > 0 && v > -r && v < 0);
-  const inBottom = bottom <= (r + w) ** 2 && bottom >= (r - w) ** 2 && !(u < 0 && v < r && v > 0);
-  return inTop || inBottom ? colour : null;
+// Continuous rounded S stroke, with generous padding inside the circular badge.
+const curves = [
+  [[.65,.30],[.57,.22],[.35,.23],[.35,.37]],
+  [[.35,.37],[.35,.49],[.65,.48],[.65,.63]],
+  [[.65,.63],[.65,.77],[.43,.79],[.34,.69]],
+];
+const stroke = curves.flatMap(points => Array.from({ length: 41 }, (_, i) => {
+  const t = i / 40, q = 1 - t;
+  return [0, 1].map(axis => q*q*q*points[0][axis] + 3*q*q*t*points[1][axis] + 3*q*t*t*points[2][axis] + t*t*t*points[3][axis]);
+}));
+const sMark = (colour, cx = .5, cy = .5, scale = 1) => (x, y) => {
+  const u = (x-cx)/scale+.5, v = (y-cy)/scale+.5;
+  if (u < .28 || u > .72 || v < .18 || v > .83) return null;
+  for (let i=1; i<stroke.length; i++) {
+    const [ax,ay]=stroke[i-1], [bx,by]=stroke[i];
+    const dx=bx-ax, dy=by-ay;
+    const t=Math.max(0,Math.min(1,((u-ax)*dx+(v-ay)*dy)/(dx*dx+dy*dy || 1)));
+    if ((u-ax-t*dx)**2+(v-ay-t*dy)**2 <= .048**2) return colour;
+  }
+  return null;
 };
 
 const NAVY = [8, 8, 10, 1]; const WHITE = [231, 35, 54, 1];
 const COLOURS = { grey: [154, 163, 178, 1], amber: [224, 161, 6, 1], green: [46, 158, 91, 1], red: [214, 69, 69, 1] };
 
 function appIcon(size) {
-  return encodePng(size, size, render(size, [disc(0.5, 0.5, 0.47, NAVY), sMark(WHITE, 0.5, 0.5, 1.55)], 4));
+  return encodePng(size, size, render(size, [disc(0.5, 0.5, 0.485, NAVY), sMark(WHITE, 0.5, 0.5, 1)], 4));
 }
 function trayIcon(size, colour) {
   // A navy disc with the S, and a status dot in the lower right corner.
-  const shapes = [disc(0.44, 0.44, 0.42, NAVY), sMark(WHITE, 0.44, 0.44, 1.2), disc(0.78, 0.78, 0.2, [255, 255, 255, 1]), disc(0.78, 0.78, 0.15, colour)];
+  const shapes = [disc(0.44, 0.44, 0.42, NAVY), sMark(WHITE, 0.44, 0.44, 1), disc(0.78, 0.78, 0.2, [255, 255, 255, 1]), disc(0.78, 0.78, 0.15, colour)];
   return encodePng(size, size, render(size, shapes, 6));
 }
 
