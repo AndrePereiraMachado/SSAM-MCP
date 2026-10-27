@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, ipcMain, dialog, shell, Notification } from 'electron';
+import { app, ipcMain, dialog, shell, Notification, Menu } from 'electron';
 import { createSupervisor } from './core/supervisor.mjs';
 import { forkWithUtilityProcess } from './electron/runtime.mjs';
 import { createAppLog } from './electron/app-log.mjs';
@@ -17,6 +17,7 @@ import { createPanel } from './electron/window.mjs';
 import { createUpdates, buildUpdateUrl } from './electron/updates.mjs';
 import { loadSettings, saveSettings, resolveUpdateUrl, updateUrlProblem } from './core/settings.mjs';
 import { defaultRoot, bundledPackDir } from './core/paths.mjs';
+import { resolveDataLocation } from './core/data-location.mjs';
 import { verifyPack } from './core/pack-sync.mjs';
 import { INITIAL } from './core/update-model.mjs';
 
@@ -33,6 +34,7 @@ else void run();
 async function run() {
   app.setAppUserModelId(APP_ID);
   await app.whenReady();
+  if (app.isPackaged) Menu.setApplicationMenu(null);
   if (process.platform === 'darwin' && app.dock) app.dock.hide();
 
   const userData = app.getPath('userData');
@@ -47,7 +49,10 @@ async function run() {
   if (!packCheck.ok) log.write('pack-problem', { detail: packCheck.detail });
 
   // The agent root: the setting, else the folder the guides give.
-  let root = settings.root ?? defaultRoot();
+  const location = resolveDataLocation({ configured: settings.root });
+  let root = location.root;
+  if (settings.root !== root) settings = saveSettings(settingsFile, { ...settings, root });
+  if (location.migrated || location.deferred) log.write('data-location', location);
   let supervisor = null;
   let updateState = INITIAL;
   let quitting = false;

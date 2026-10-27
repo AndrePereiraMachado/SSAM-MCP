@@ -46,7 +46,7 @@ export function App() {
             onDone={() => { setSetupOpen(false); refreshLog(); }} onCancel={() => setSetupOpen(false)} />
         )}
         <UpdatesCard update={update} app={app} settings={settings} />
-        <LogCard lines={log} onRefresh={refreshLog} />
+        <details><summary>Support diagnostics</summary><LogCard lines={log} onRefresh={refreshLog} /></details>
       </main>
       <Footer app={app} settings={settings} />
     </>

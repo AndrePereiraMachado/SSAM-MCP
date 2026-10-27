@@ -1,7 +1,7 @@
 // Where the app keeps things, as pure functions of the platform and the environment (no Electron here, so tests run
 // under plain Node).
-//   - the agent root: the writable data folder ("Folders" in docs/AGENTE-CLIENTE.md
-//     and docs/AGENTE-MAC.md); the default is the one the guides give, %USERPROFILE%\SSAM-Agent or ~/SSAM-Agent;
+//   - the desktop agent root: private application data under Library/Roaming;
+//     legacyRoot is used only to migrate the previous home-directory default;
 //   - the bundled pack: resources/pack in the installed app (electron-builder extraResources), app/pack in a checkout;
 //   - the files of the root the app reads or writes: the same names the agent and its launchers use.
 import path from 'node:path';
@@ -9,10 +9,17 @@ import os from 'node:os';
 
 export const ROOT_FOLDER_NAME = 'SSAM-Agent';
 
-export function defaultRoot({ platform = process.platform, env = process.env } = {}) {
+export function legacyRoot({ platform = process.platform, env = process.env } = {}) {
   if (platform === 'win32') return path.win32.join(env.USERPROFILE || os.homedir(), ROOT_FOLDER_NAME);
   const home = env.HOME && env.HOME.startsWith('/') ? env.HOME.replace(/\/+$/, '') : os.homedir();
   return path.posix.join(home, ROOT_FOLDER_NAME);
+}
+
+export function defaultRoot({ platform = process.platform, env = process.env } = {}) {
+  if (platform === 'win32') return path.win32.join(env.APPDATA || path.win32.join(env.USERPROFILE || os.homedir(), 'AppData', 'Roaming'), ROOT_FOLDER_NAME, 'data');
+  const home = env.HOME && env.HOME.startsWith('/') ? env.HOME : os.homedir();
+  // Keep the data path free of spaces for the Studio bridge path protocol.
+  return path.posix.join(home, platform === 'darwin' ? 'Library' : '.local/share', ROOT_FOLDER_NAME, 'data');
 }
 
 // Data and program paths are explicit. Legacy standalone callers can still use a single root.

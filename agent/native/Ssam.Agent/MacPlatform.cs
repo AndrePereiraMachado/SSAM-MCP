@@ -44,7 +44,9 @@ internal static class MacPlatform
         var folders = new[] { "/System", "/Library", "/Applications", "/usr", "/bin", "/sbin", "/etc", "/opt", "/private", "/var", "/tmp", "/cores", "/dev", "/Volumes", "/Network",
             home + "/Library", home + "/Desktop", home + "/Documents", home + "/Downloads" };
         bool WithinFold(string a, string b) => a.Equals(b, StringComparison.OrdinalIgnoreCase) || a.StartsWith(b.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase);
-        if (WithinFold(home, target) || folders.Any(f => WithinFold(target, f))) throw new ArgumentException("The data directory must be outside system, temporary and privacy-protected folders");
+        var managedData = WithinFold(target, home + "/Library/SSAM-Agent/data");
+        if (WithinFold(home, target) || folders.Any(f => WithinFold(target, f) && !(f == home + "/Library" && managedData)))
+            throw new ArgumentException("The data directory must be outside system, temporary and privacy-protected folders");
         var temporary = Environment.GetEnvironmentVariable("TMPDIR");
         if (!string.IsNullOrEmpty(temporary) && WithinFold(target, temporary.TrimEnd('/'))) throw new ArgumentException("The data directory must not be temporary");
     }

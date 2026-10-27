@@ -1,7 +1,7 @@
 {
   "name": "ssam-agent-app",
   "productName": "SSAM Agent",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "The SSAM agent as a background desktop app: tray icon, the agent supervised in a child process, updates from the owner's update server.",
   "private": true,
   "type": "module",

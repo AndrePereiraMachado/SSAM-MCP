@@ -24,7 +24,7 @@ export function menuFor({ view, update, appVersion, settings, busy = false }) {
   ];
   if (running) items.push({ id: 'stop', label: 'Stop agent', enabled: !busy });
   else items.push({ id: 'start', label: view.status === 'not-set-up' ? 'Set up agent...' : 'Start agent', enabled: !busy && view.status !== 'external' });
-  items.push({ id: 'folder', label: 'Open agent folder' }, { id: 'log', label: 'Open agent log' }, { type: 'separator' });
+  items.push({ type: 'separator' });
   if (update.status === 'ready') items.push({ id: 'install-update', label: `Restart to update to ${update.version ?? 'the new version'}` });
   else items.push({ id: 'check-updates', label: update.status === 'off' ? 'Updates are off (no update server)' : update.status === 'checking' || update.status === 'downloading' ? updateText(update, appVersion) : 'Check for updates',
     enabled: !['off', 'checking', 'downloading'].includes(update.status) });

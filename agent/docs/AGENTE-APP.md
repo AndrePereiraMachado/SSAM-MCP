@@ -27,16 +27,14 @@ once only: keep both in a password manager, never in a repository or a chat.
   (`AGENTE-CLIENTE.md`). macOS: nothing of .NET (`AGENTE-MAC.md`).
 - ODC Studio and/or Service Studio in the SAME version as the server's kernel (`ssam_doctor` in your MCP client shows
   both).
-- An agent folder **without spaces**, of its own. The default is `%USERPROFILE%\SSAM-Agent` on Windows and
-  `~/SSAM-Agent` on macOS. On Windows it must be outside `%LOCALAPPDATA%` (the installer puts the APP there; the
-  agent folder is another one); if your user name has a space, use `C:\SSAM-Agent`.
+- The app manages its data location automatically. No folder selection is needed.
 
 ## Install and set up
 
 1. Run the installer. Windows: a per-user install, no administrator, the app starts at the end. macOS: open the DMG
    and drag `SSAM Agent` to Applications, then open it.
 2. The first time, the panel opens by itself ("Not set up"). Enter the server address, paste the agent credential (it
-   is not shown and never shown again), keep or change the agent folder, and press **Save and start**.
+   is not shown and never shown again) and press **Save and start**.
 3. The app verifies its installed agent pack and saves the credential in the data folder in a file only your user can read
    (`private\credential`; on macOS `private/credential`, mode 0600 in a folder closed with 0700), starts the agent and
    shows **Connected** when the server accepted it.
@@ -50,19 +48,16 @@ off; then nothing starts by itself, as with the command-line agent.
 ## The tray
 
 The icon shows the state: grey (stopped), amber (starting or reconnecting), green (connected), red (needs you: not
-set up, or the agent stopped for good). The menu: open the panel, start or stop the agent, open the agent folder and
-log, check for updates (or restart to install one), start at login, quit. On Windows a click on the icon opens the
+set up, or the agent stopped for good). The menu: open the panel, start or stop the agent, check for updates (or restart to install one), start at login, quit. On Windows a click on the icon opens the
 panel; on macOS a click opens the menu.
 
 ## The panel
 
-- **Agent**: the server, the folder, the pack (id, lanes, bridge versions) and the process. Buttons for the folder,
-  the agent log, the doctor and **Change setup** (a new credential after a rotation, another server or folder; the
-  agent is stopped first).
+- **Agent**: the server, diagnostics and **Change setup**. Internal file paths are not displayed.
 - **App updates**: the version, the state of the last check, **Check for updates** and, when one is downloaded,
   **Restart to update**. Under "Update server" you may replace the server the build fixed (https only); empty means the
   built-in one.
-- **Agent log**: the last lines of `private\agent.log` (no secret is ever written there).
+- **Support diagnostics** (collapsed by default): the last lines of `private\agent.log` (no secret is ever written there).
 
 ## When the agent stops
 
@@ -95,7 +90,7 @@ installed app.
 
 - The app: `%LOCALAPPDATA%\Programs\ssam-agent-app` (Windows) or `/Applications/SSAM Agent.app` (macOS). Its own
   settings and log (`settings.json`, `app.log`): `%APPDATA%\ssam-agent-app` or `~/Library/Application Support/ssam-agent-app`.
-- The agent folder (`SSAM-Agent`): the layout of "Folders" in `AGENTE-CLIENTE.md` and `AGENTE-MAC.md`. Files you
+- Managed data (`%APPDATA%/SSAM-Agent/data` on Windows, `~/Library/SSAM-Agent/data` on Mac): the layout of "Folders" in `AGENTE-CLIENTE.md` and `AGENTE-MAC.md`. Files you
   deliver to the server go in `inbox\`, as before. The app does not copy its source tree into this folder.
   ODC bridge v98 or newer binds its snapshots and journal here before it accepts application commands.
 

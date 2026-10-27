@@ -53,4 +53,14 @@ public sealed class UnixPipeTests
 
     [Fact]
     public void AcceptsDedicatedMacDataRoot() => MacPlatform.CheckRoot("/Users/test/SSAM-Agent", "/Users/test");
+
+    [Theory]
+    [InlineData("/Users/test/Library/SSAM-Agent/data")]
+    [InlineData("/Users/test/Library/SSAM-Agent/data/o11")]
+    public void AcceptsManagedMacDataRoot(string root) => MacPlatform.CheckRoot(root, "/Users/test");
+
+    [Theory]
+    [InlineData("/Users/test/Library/SSAM-Agent")]
+    [InlineData("/Users/test/Library/SSAM-Agent/database")]
+    public void RefusesManagedRootSiblings(string root) => Assert.Throws<ArgumentException>(() => MacPlatform.CheckRoot(root, "/Users/test"));
 }

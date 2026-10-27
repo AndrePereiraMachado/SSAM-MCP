@@ -1,0 +1,30 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { resolveDataLocation } from '../../src/main/core/data-location.mjs';
+import { defaultRoot, legacyRoot } from '../../src/main/core/paths.mjs';
+
+test('legacy data migrates intact; occupied destinations, active agents and custom locations are preserved', t => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-location-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const options = { platform: process.platform === 'win32' ? 'win32' : 'darwin', env: { HOME: home, USERPROFILE: home } };
+  const previous = legacyRoot(options), target = defaultRoot(options);
+  fs.mkdirSync(path.join(previous, 'private'), { recursive: true });
+  fs.writeFileSync(path.join(previous, 'private/config.json'), '{"server":"https://example.test"}');
+  fs.writeFileSync(path.join(previous, 'private/credential'), 'preserve-test-secret');
+  fs.writeFileSync(path.join(previous, 'private/agent.pid'), '123');
+  assert.equal(resolveDataLocation({ ...options, configured: previous, isAlive: () => true }).root, previous);
+  const custom = path.join(home, 'custom');
+  assert.equal(resolveDataLocation({ ...options, configured: custom }).root, custom);
+  fs.mkdirSync(target, { recursive: true });
+  fs.writeFileSync(path.join(target, 'sentinel'), 'keep');
+  assert.equal(resolveDataLocation({ ...options, isAlive: () => false }).root, previous);
+  assert.equal(fs.readFileSync(path.join(target, 'sentinel'), 'utf8'), 'keep');
+  fs.rmSync(target, { recursive: true });
+  assert.deepEqual(resolveDataLocation({ ...options, configured: previous, isAlive: () => false }), { root: target, migrated: true });
+  assert.equal(fs.existsSync(previous), false);
+  assert.equal(fs.readFileSync(path.join(target, 'private/credential'), 'utf8'), 'preserve-test-secret');
+  assert.equal(resolveDataLocation({ ...options, configured: previous }).root, target);
+});

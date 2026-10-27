@@ -43,8 +43,8 @@ test('the update server: the environment wins over the setting, which wins over 
 });
 
 test('paths: the default root of each platform and the files of a root', () => {
-  assert.equal(defaultRoot({ platform: 'win32', env: { USERPROFILE: 'C:\\Users\\customer' } }), 'C:\\Users\\customer\\SSAM-Agent');
-  assert.equal(defaultRoot({ platform: 'darwin', env: { HOME: '/Users/customer/' } }), '/Users/customer/SSAM-Agent');
+  assert.equal(defaultRoot({ platform: 'win32', env: { USERPROFILE: 'C:\\Users\\customer' } }), 'C:\\Users\\customer\\AppData\\Roaming\\SSAM-Agent\\data');
+  assert.equal(defaultRoot({ platform: 'darwin', env: { HOME: '/Users/customer/' } }), '/Users/customer/Library/SSAM-Agent/data');
   const files = rootFiles(path.join('C:', 'SSAM-Agent'));
   assert.equal(path.basename(files.credential), 'credential');
   assert.equal(path.basename(path.dirname(files.state)), 'private');
@@ -124,7 +124,7 @@ test('the tray: icon colour, tooltip and menu for each situation', () => {
   const stopped = summarize({ setUp: true, running: false, state: null });
   const menu = menuFor({ view: stopped, update: INITIAL, appVersion: '0.1.0', settings });
   const ids = menu.filter(item => item.id).map(item => item.id);
-  assert.deepEqual(ids, ['status', 'panel', 'start', 'folder', 'log', 'check-updates', 'autostart', 'quit']);
+  assert.deepEqual(ids, ['status', 'panel', 'start', 'check-updates', 'autostart', 'quit']);
   assert.equal(menu.find(item => item.id === 'autostart').checked, true);
   assert.equal(iconFor(stopped), 'grey');
   const connected = summarize({ setUp: true, running: true, state: { state: 'connected', server: 'https://s' } });

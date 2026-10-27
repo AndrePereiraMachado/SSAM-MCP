@@ -138,8 +138,7 @@ oculta da home, porque o setup do agente recusa `/var/folders`).
 - A app: `%LOCALAPPDATA%\Programs\ssam-agent-app` (NSIS por usu√°rio, sem administrador) ou `/Applications/SSAM Agent.app`.
 - Dados da app (`settings.json`: pasta do agente, autostart, update server; `app.log`): `app.getPath('userData')`,
   `%APPDATA%\ssam-agent-app` ou `~/Library/Application Support/ssam-agent-app`.
-- A pasta do agente: a dos guias (`%USERPROFILE%\SSAM-Agent`, `~/SSAM-Agent`), escolhida no painel; as regras do
-  `setup` do agente valem (sem espa√ßo, fora de `%LOCALAPPDATA%`, no Mac fora das pastas guardadas).
+- Dados gerenciados: `%APPDATA%/SSAM-Agent/data` no Windows e `~/Library/SSAM-Agent/data` no Mac. A interface n„o expıe a pasta. A vers„o 0.1.2 migra a pasta padr„o anterior quando reconhecida, inativa e sem conflito no destino; preserva pastas personalizadas.
 
 ## Testes e prova
 
