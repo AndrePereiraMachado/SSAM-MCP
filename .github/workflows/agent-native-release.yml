@@ -113,11 +113,12 @@ jobs:
           node scripts/verify-native-distribution.mjs 'dist/mac-arm64/SSAM Agent.app'
           shasum -a 256 dist/*.dmg dist/*.zip > dist/SHA256SUMS
       - name: Exercise the Mac desktop interface and native agent
-        env:
-          PLAYWRIGHT_MODULE: playwright
         run: |
-          npm install --no-save --package-lock=false playwright@1.62.1
-          node --test tests/native/electron-smoke.test.mjs
+          npm install --prefix "$RUNNER_TEMP/ssam-ui-test" --no-save --package-lock=false playwright@1.62.1
+          # npm may defer dependency install scripts. electron-builder obtains
+          # its own Electron; install the matching test binary explicitly too.
+          node node_modules/electron/install.js
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/ssam-ui-test/node_modules/playwright" node --test tests/native/electron-smoke.test.mjs
       - name: Verify Developer ID and Gatekeeper
         if: inputs.sign_and_notarize
         run: |
