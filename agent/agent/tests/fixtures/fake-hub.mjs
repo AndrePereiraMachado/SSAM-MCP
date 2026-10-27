@@ -40,6 +40,9 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.28', o11: '11.5
     const url = new URL(req.url, 'http://hub');
     const body = await readBody(req);
     hub.requests.push({ method: req.method, path: url.pathname });
+    if (req.method === 'GET' && url.pathname === '/health') {
+      res.writeHead(hub.unhealthy ? 503 : 200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: !hub.unhealthy })); return;
+    }
     if (req.headers.authorization !== 'Bearer ' + credential) { res.writeHead(401).end(); return; }
     const json = (status, value) => res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(value));
     if (req.method === 'POST' && url.pathname === '/agent/v1/messages' && hub.holdPosts > 0) {

@@ -22,13 +22,8 @@ export function menuFor({ view, update, appVersion, settings, busy = false }) {
     { id: 'panel', label: 'Open panel...' },
     { type: 'separator' },
   ];
-  if (running) items.push({ id: 'stop', label: 'Stop agent', enabled: !busy });
-  else items.push({ id: 'start', label: view.status === 'not-set-up' ? 'Set up agent...' : 'Start agent', enabled: !busy && view.status !== 'external' });
-  items.push({ type: 'separator' });
-  if (update.status === 'ready') items.push({ id: 'install-update', label: `Restart to update to ${update.version ?? 'the new version'}` });
-  else items.push({ id: 'check-updates', label: update.status === 'off' ? 'Updates are off (no update server)' : update.status === 'checking' || update.status === 'downloading' ? updateText(update, appVersion) : 'Check for updates',
-    enabled: !['off', 'checking', 'downloading'].includes(update.status) });
-  items.push({ id: 'autostart', label: 'Start when I log in', type: 'checkbox', checked: settings.autostart === true }, { type: 'separator' },
-    { id: 'quit', label: 'Quit SSAM Agent' });
+  if (running) items.push({ id: 'stop', label: 'Disconnect', enabled: !busy });
+  else items.push({ id: 'start', label: view.status === 'not-set-up' ? 'Activate...' : 'Connect', enabled: !busy && view.status !== 'external' });
+  items.push({ type: 'separator' }, { id: 'quit', label: 'Quit SSAM Agent' });
   return items;
 }

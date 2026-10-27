@@ -54,11 +54,11 @@ const sMark = (colour, cx = 0.5, cy = 0.5, scale = 1) => (x, y) => {
   return inTop || inBottom ? colour : null;
 };
 
-const NAVY = [29, 45, 90, 1]; const WHITE = [255, 255, 255, 1];
+const NAVY = [8, 8, 10, 1]; const WHITE = [231, 35, 54, 1];
 const COLOURS = { grey: [154, 163, 178, 1], amber: [224, 161, 6, 1], green: [46, 158, 91, 1], red: [214, 69, 69, 1] };
 
 function appIcon(size) {
-  return encodePng(size, size, render(size, [roundedSquare(0.04, 0.2, NAVY), sMark(WHITE, 0.5, 0.5, 1.55)], 4));
+  return encodePng(size, size, render(size, [disc(0.5, 0.5, 0.47, NAVY), sMark(WHITE, 0.5, 0.5, 1.55)], 4));
 }
 function trayIcon(size, colour) {
   // A navy disc with the S, and a status dot in the lower right corner.

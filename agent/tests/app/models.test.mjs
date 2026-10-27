@@ -124,8 +124,7 @@ test('the tray: icon colour, tooltip and menu for each situation', () => {
   const stopped = summarize({ setUp: true, running: false, state: null });
   const menu = menuFor({ view: stopped, update: INITIAL, appVersion: '0.1.0', settings });
   const ids = menu.filter(item => item.id).map(item => item.id);
-  assert.deepEqual(ids, ['status', 'panel', 'start', 'check-updates', 'autostart', 'quit']);
-  assert.equal(menu.find(item => item.id === 'autostart').checked, true);
+  assert.deepEqual(ids, ['status', 'panel', 'start', 'quit']);
   assert.equal(iconFor(stopped), 'grey');
   const connected = summarize({ setUp: true, running: true, state: { state: 'connected', server: 'https://s' } });
   assert.ok(menuFor({ view: connected, update: INITIAL, appVersion: '0.1.0', settings }).some(item => item.id === 'stop'));
@@ -133,13 +132,9 @@ test('the tray: icon colour, tooltip and menu for each situation', () => {
   assert.equal(iconFor(summarize({ setUp: true, running: true, state: { state: 'reconnecting' } })), 'amber');
   const notSetUp = summarize({ setUp: false, running: false, state: null });
   assert.equal(iconFor(notSetUp), 'red');
-  assert.match(menuFor({ view: notSetUp, update: INITIAL, appVersion: '0.1.0', settings }).find(item => item.id === 'start').label, /Set up/);
+  assert.match(menuFor({ view: notSetUp, update: INITIAL, appVersion: '0.1.0', settings }).find(item => item.id === 'start').label, /Activate/);
   const ready = reduce(INITIAL, { type: 'update-downloaded', version: '0.2.0' });
-  const withUpdate = menuFor({ view: stopped, update: ready, appVersion: '0.1.0', settings });
-  assert.match(withUpdate.find(item => item.id === 'install-update').label, /0\.2\.0/);
   assert.match(tooltipFor(stopped, ready, '0.1.0'), /Update 0\.2\.0 ready/);
-  const off = menuFor({ view: stopped, update: reduce(INITIAL, { type: 'off' }), appVersion: '0.1.0', settings }).find(item => item.id === 'check-updates');
-  assert.equal(off.enabled, false);
   const busy = menuFor({ view: stopped, update: INITIAL, appVersion: '0.1.0', settings, busy: true }).find(item => item.id === 'start');
   assert.equal(busy.enabled, false);
 });

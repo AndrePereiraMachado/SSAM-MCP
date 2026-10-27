@@ -9,7 +9,7 @@ export function createPanel({ rendererUrl = null, rendererFile, preload, iconPat
 
   function open() {
     if (win && !win.isDestroyed()) { win.show(); win.focus(); return win; }
-    win = new BrowserWindow({ width: 600, height: 760, minWidth: 480, minHeight: 520, show: false, title: 'SSAM Agent', autoHideMenuBar: true,
+    win = new BrowserWindow({ width: 420, height: 460, minWidth: 380, minHeight: 420, show: false, title: 'SSAM Agent', autoHideMenuBar: true,
       ...(iconPath ? { icon: iconPath } : {}),
       webPreferences: { preload, contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false } });
     win.setMenuBarVisibility(false);

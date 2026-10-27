@@ -18,6 +18,7 @@ import { createUpdates, buildUpdateUrl } from './electron/updates.mjs';
 import { loadSettings, saveSettings, resolveUpdateUrl, updateUrlProblem } from './core/settings.mjs';
 import { defaultRoot, bundledPackDir } from './core/paths.mjs';
 import { resolveDataLocation } from './core/data-location.mjs';
+import { serviceAddress } from './core/service-address.mjs';
 import { verifyPack } from './core/pack-sync.mjs';
 import { INITIAL } from './core/update-model.mjs';
 
@@ -25,6 +26,7 @@ import { INITIAL } from './core/update-model.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appDir = path.resolve(here, '..', '..');
 const APP_ID = 'com.ssam.agent';
+const service = serviceAddress();
 // --hidden: started by the system at login (the login item passes it): no panel, even when not set up.
 const startedHidden = process.argv.includes('--hidden');
 
@@ -75,10 +77,15 @@ async function run() {
   }
   supervisor = makeSupervisor(root);
 
+  function startAgent() {
+    if (supervisor.snapshot().server !== service) throw new Error('Activate this computer with your SSAM token.');
+    return supervisor.start();
+  }
+
   function fullState() {
     const agent = supervisor.snapshot();
     if (!packCheck.ok) agent.view = { status: 'attention', text: 'App needs attention', detail: `The pack bundled with this app is damaged (${packCheck.detail}); install the app again.`, attention: true };
-    return { app: { version: appVersion, platform: process.platform, packaged: app.isPackaged, electron: process.versions.electron, node: process.version,
+    return { app: { version: appVersion, server: service, platform: process.platform, packaged: app.isPackaged, electron: process.versions.electron, node: process.version,
       updateUrl: updateUrl.url, updateSource: updateUrl.source, logFile: log.file, settingsFile, defaultRoot: defaultRoot(), bundledPack: packCheck.pack?.id ?? null },
       settings, agent, update: updateState, busy };
   }
@@ -107,7 +114,7 @@ async function run() {
     log.write('action', { action });
     switch (action) {
       case 'panel': panel.open(); return;
-      case 'start': if (fullState().agent.view.status === 'not-set-up') { panel.open(); return; } await withBusy(() => supervisor.start()); return;
+      case 'start': if (fullState().agent.view.status === 'not-set-up') { panel.open(); return; } await withBusy(() => startAgent()); return;
       case 'stop': await withBusy(() => supervisor.stop()); return;
       case 'folder': fs.mkdirSync(root, { recursive: true }); await shell.openPath(root); return;
       case 'log': await openFile(supervisor.files.log); return;
@@ -153,17 +160,26 @@ async function run() {
 
   ipcMain.handle('state:get', () => fullState());
   ipcMain.handle('agent:setup', async (_event, payload = {}) => withBusy(async () => {
-    const target = typeof payload.root === 'string' && payload.root.trim() ? payload.root.trim() : root;
-    await changeRoot(target);
-    const result = await supervisor.setup({ server: String(payload.server ?? '').trim(), credential: String(payload.credential ?? ''), o11Port: payload.o11Port ? String(payload.o11Port).trim() : null });
+    const result = await supervisor.setup({ server: service, credential: String(payload.credential ?? ''), o11Port: null });
     if (result.ok) {
       if (typeof payload.autostart === 'boolean') setSettings({ autostart: payload.autostart });
-      const started = await supervisor.start();
+      const started = await startAgent();
       return { ...result, started };
     }
     return result;
   }));
-  ipcMain.handle('agent:start', () => withBusy(() => supervisor.start()));
+  ipcMain.handle('agent:check-connection', async () => {
+    try {
+      const response = await fetch(service + '/health', { redirect: 'error', signal: AbortSignal.timeout(5000) });
+      if (!response.ok || (await response.json()).ok !== true) return { ok: false, message: 'The service is temporarily unavailable. Try again shortly.' };
+      const current = supervisor.snapshot();
+      const connected = current.view.status === 'connected' && current.state?.at && Date.now() - Date.parse(current.state.at) < 90000;
+      return { ok: Boolean(connected), message: connected ? 'Connection OK.' : 'Service reachable. This computer is disconnected.' };
+    } catch {
+      return { ok: false, message: 'Cannot reach SSAM. Check your internet connection and try again.' };
+    }
+  });
+  ipcMain.handle('agent:start', () => withBusy(() => startAgent()));
   ipcMain.handle('agent:stop', () => withBusy(() => supervisor.stop()));
   ipcMain.handle('agent:doctor', () => withBusy(() => supervisor.doctor()));
   ipcMain.handle('agent:log', () => { try { const lines = fs.readFileSync(supervisor.files.log, 'utf8').split(/\r?\n/).filter(Boolean); return lines.slice(-80); } catch { return []; } });
@@ -198,7 +214,7 @@ async function run() {
   // Set up: the agent starts with the app (that is what a background app is for). Not set up: the panel opens,
   // unless the system started the app hidden at login (the tray icon says "Not set up" and a click opens the panel).
   const state = fullState();
-  if (packCheck.ok && state.agent.setUp && state.agent.view.status !== 'external') {
-    supervisor.start().then(result => log.write('autostart', result)).catch(error => log.write('autostart-failed', { error: error.message }));
+  if (packCheck.ok && state.agent.setUp && state.agent.server === service && state.agent.view.status !== 'external') {
+    startAgent().then(result => log.write('autostart', result)).catch(error => log.write('autostart-failed', { error: error.message }));
   } else if (!startedHidden) panel.open();
 }
