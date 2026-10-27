@@ -102,13 +102,14 @@ test('pure: an impossible maximum envelope refuses clearly without echo or loopi
 test('pure: recovery binds the module capture and rejects a range outside the missing section', () => {
   const module = { ok: true, file: 'fixture.oml', sourceSha256: 'a'.repeat(64), digest: { module: { name: 'Fixture', key: 'M' }, sections: [], actions: [] } };
   const input = { ...inputOf('o11'), module, app: 'fixture.oml' };
-  const packet = workPacket(input), recover = packetRecovery(packet.cuts.find(c => c.section === 'text').recover.arguments.expand);
+  // An explicit budget below the default (8 KB) keeps a text cut to recover; the binding holds at any budget.
+  const packet = workPacket(input, { budgetBytes: 8192 }), recover = packetRecovery(packet.cuts.find(c => c.section === 'text').recover.arguments.expand);
   assert.equal(workPacket(input, { recover }).ok, true);
   assert.equal(workPacket({ ...input, module: { ...module, sourceSha256: 'b'.repeat(64) } }, { recover }).code, 'PACKET_SOURCE_CHANGED');
   assert.equal(workPacket(input, { recover: { ...recover, offset: Number.MAX_SAFE_INTEGER } }).code, 'PACKET_RECOVERY_INVALID');
 });
 
-test('R5 through MCP: both lanes default to 8KB and every recovery executes offline without a complete packet', { timeout: 900000 }, async t => {
+test('R5 through MCP: both lanes default to PACKET_DEFAULT_BYTES and every recovery executes offline without a complete packet', { timeout: 900000 }, async t => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'packet-budget-')); t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   // This fixture freezes release identity because these assertions concern payload
   // sizing/recovery while other CX11 work may edit the facade concurrently.

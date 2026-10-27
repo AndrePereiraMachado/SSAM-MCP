@@ -47,6 +47,9 @@ public sealed partial class ModelSession
                 {
                     ["code"] = "THEME_NATIVE_WIDGETS", ["theme"] = TypeResolver.Name(theme),
                     ["note"] = "the theme has no base theme (no OutSystems UI): it carries the CSS of the elements the platform's widgets render (the ripple span of a Button, out of the flow and animated so the runtime removes it)",
+                    // T18: the basedOn of the theme now (a css op later names it) and what the one normalization changed.
+                    ["basedOn"] = ThemeCss.BasedOn(theme),
+                    ["css"] = sheet != null && ThemeCss.Changed(sheet) is { } change ? change.DeepClone() : null,
                 });
             }
             catch (Exception error) { Note("THEME_NATIVE_WIDGETS", $"{TypeResolver.Name(theme)}: the native widgets' CSS could not be written: {Unwrap(error)}"); }

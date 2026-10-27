@@ -76,8 +76,9 @@ public sealed class ModuleFlow
     // argument (its TypeConversion) is part of its Value, Source mapTo { Field: value }. 6: the header of a screen, block or
     // data action names its owner (action Home.Save, FlowOwners); 6 also invalidates the 5 each of those changes wrote alone.
     // 7: an ODC empty mapping (Source mapTo {  }, the conversion the platform makes on its own) is written as its source.
-    public const int Extractor = 7;
-    public static readonly HashSet<string> ActionKinds = new(StringComparer.Ordinal) { "ServerAction", "ServiceAction", "ClientAction", "ScreenAction", "DataAction" };
+    // 9: Traditional Preparation is an owned flow with its native fixed name and identity.
+    public const int Extractor = 9;
+    public static readonly HashSet<string> ActionKinds = new(StringComparer.Ordinal) { "ServerAction", "ServiceAction", "ClientAction", "ScreenAction", "DataAction", "Preparation" };
 
     public string Lane { get; private init; } = "";
     public string SourceSha256 { get; private init; } = "";
@@ -124,6 +125,125 @@ public sealed class ModuleFlow
             NotWritten = new SortedDictionary<string, int>(extractor.NotWritten, StringComparer.Ordinal)
         };
     }
+
+    // ---- the selective reading (S10, 24/10/2026) ---------------------------------------------------------------------------
+    // Some actions of a module, by selectors, without building the others: the same extractor and the same entry as Build
+    // (same text, ids and textSha), named as Build names them. Never a ModuleFlow that could be stored as the module's: its
+    // own schema, partial:true, what was not built counted, and the catalog of every action (key, kind, name; no body).
+    public const string SelectionSchema = "ssam-flow-selection/1";
+    public const string SignaturesSchema = "ssam-action-signatures/1";
+    public const int MaxSelectors = 1000;
+
+    // Every action Build reads (not below a reference), with the name Build gives its entry, in Build's order (name, key).
+    // An action body declares no action and a reference holds none of this module's: the walk descends into neither.
+    public static List<(T Node, string Key, string Kind, string Name)> Catalog<T>(T root, ModelReader<T> reader) where T : class
+    {
+        var found = new List<(T Node, string Key, string Kind, string Name)>();
+        var pending = new Stack<T>(); pending.Push(root);
+        var visited = new HashSet<T>(ReferenceEqualityComparer.Instance);
+        while (pending.TryPop(out var node)) {
+            if (!visited.Add(node)) continue;
+            var kind = reader.KindOf(node);
+            if (kind == "Reference" && !ReferenceEquals(node, root)) continue;
+            if (ActionKinds.Contains(kind) && !ReferenceEquals(node, root)) {
+                var owner = Owner(reader, node, root);
+                // FlowExtractor.Action: a Preparation is named Preparation whatever the model displays.
+                var name = kind == "Preparation" ? "Preparation" : reader.DisplayOf(node);
+                found.Add((node, reader.KeyOf(node), kind, owner.Length > 0 ? owner + "/" + name : name));
+                continue;
+            }
+            foreach (var child in reader.ChildrenOf(node).Reverse()) pending.Push(child);
+        }
+        return found.OrderBy(e => e.Name, StringComparer.Ordinal).ThenBy(e => e.Key, StringComparer.Ordinal).ToList();
+    }
+
+    // Whether a selector may name an action: a superset of the facade's resolution (module-flow.mjs findActions: @key or key,
+    // the full name, Owner.Action, the last segment; exact, then without case), which resolves among the actions built.
+    public static bool MayName(string key, string name, string selector)
+    {
+        var text = selector.Trim();
+        if (key == (text.StartsWith('@') ? text[1..] : text)) return true;
+        if (text.StartsWith('@')) return false;
+        var tails = new List<string> { "/" + text };
+        var dot = text.LastIndexOf('.');
+        if (dot > 0 && !text.StartsWith('(')) tails.Add("/" + text[..dot] + "/" + text[(dot + 1)..]);
+        var full = "/" + name;
+        return tails.Any(tail => full.EndsWith(tail, StringComparison.OrdinalIgnoreCase)
+            || full.ToLowerInvariant().EndsWith(tail.ToLowerInvariant(), StringComparison.Ordinal));
+    }
+
+    private static void CheckSelectors(IReadOnlyList<string> selectors, string field)
+    {
+        if (selectors.Count < 1 || selectors.Count > MaxSelectors || selectors.Any(string.IsNullOrWhiteSpace))
+            throw new ArgumentException(field + " must contain 1 to " + MaxSelectors + " non-empty selectors");
+    }
+
+    public static JsonObject BuildSelected<T>(T root, ModelReader<T> reader, string lane, string adapter, string sourceSha256, long sourceBytes,
+        IReadOnlyList<string> selectors) where T : class
+    {
+        CheckSelectors(selectors, "flowElements");
+        var catalog = Catalog(root, reader);
+        var extractor = new FlowExtractor<T>(reader, root);
+        var entries = new List<FlowEntry>();
+        foreach (var action in catalog.Where(a => selectors.Any(s => MayName(a.Key, a.Name, s)))) {
+            var item = extractor.Action(action.Node, out var problems);
+            // digestBytes compares the text with the digest of the whole module, which is not built here.
+            entries.Add(Entry(item, action.Name, problems, 0));
+        }
+        var selected = new ModuleFlow {
+            Lane = lane, SourceSha256 = sourceSha256.ToLowerInvariant(), SourceBytes = sourceBytes, CreatedAt = DateTimeOffset.UtcNow.ToString("o"),
+            ModuleName = reader.DisplayOf(root), ModuleKey = reader.KeyOf(root), Actions = entries,
+            NotWritten = new SortedDictionary<string, int>(extractor.NotWritten, StringComparer.Ordinal) };
+        var answer = JsonNode.Parse(selected.ToJson(adapter))!.AsObject();
+        answer["schema"] = SelectionSchema;
+        answer["partial"] = true;
+        answer["scope"] = new JsonObject {
+            ["completeModule"] = false, ["availableActions"] = catalog.Count, ["builtActions"] = entries.Count,
+            ["notBuilt"] = new JsonObject { ["actions"] = catalog.Count - entries.Count,
+                ["what"] = "the text, ids, fixed point and digestBytes of every action not requested (digestBytes is 0 here); notWritten counts the built ones only" },
+            ["requested"] = new JsonArray(selectors.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray()) };
+        answer["catalog"] = new JsonArray(catalog.Select(a => (JsonNode)new JsonObject { ["key"] = a.Key, ["kind"] = a.Kind, ["name"] = a.Name }).ToArray());
+        return answer;
+    }
+
+    // The contracts (inputs and outputs) of some actions, no body read: FlowExtractor.Signature. complete only when every
+    // selector names one action and every contract read without a problem.
+    public static JsonObject BuildSignatures<T>(T root, ModelReader<T> reader, string lane, string sourceSha256, long sourceBytes,
+        IReadOnlyList<string> selectors) where T : class
+    {
+        CheckSelectors(selectors, "signatureElements");
+        var catalog = Catalog(root, reader);
+        var extractor = new FlowExtractor<T>(reader, root);
+        var actions = new JsonArray();
+        foreach (var action in catalog.Where(a => selectors.Any(s => MayName(a.Key, a.Name, s)))) {
+            var item = extractor.Signature(action.Node, out var problems);
+            JsonArray Parameters(string role) => new(item.Items.Where(p => p.Role == role).Select(p => (JsonNode)new JsonObject {
+                ["key"] = p.Key, ["name"] = p.Name, ["type"] = p.Prop("DataType"),
+                ["mandatory"] = role == "in" ? p.Prop("IsMandatory") != "False" : null,
+                ["default"] = role == "in" ? p.Prop("DefaultValue") : null }).ToArray());
+            actions.Add(new JsonObject {
+                ["key"] = action.Key, ["kind"] = action.Kind, ["name"] = action.Name, ["owner"] = item.Owner,
+                ["contractSha256"] = problems.Count == 0 ? SignatureSha(item) : null,
+                ["inputs"] = Parameters("in"), ["outputs"] = Parameters("out"),
+                ["problems"] = new JsonArray(problems.Select(p => (JsonNode)JsonValue.Create(p)!).ToArray()) });
+        }
+        var selections = new JsonArray(selectors.Select(s => {
+            var keys = catalog.Where(a => MayName(a.Key, a.Name, s)).Select(a => a.Key).ToArray();
+            return (JsonNode)new JsonObject { ["selector"] = s, ["status"] = keys.Length == 0 ? "missing" : keys.Length == 1 ? "resolved" : "ambiguous",
+                ["keys"] = new JsonArray(keys.Select(k => (JsonNode)JsonValue.Create(k)!).ToArray()) };
+        }).ToArray());
+        return new JsonObject {
+            ["schema"] = SignaturesSchema, ["extractor"] = Extractor, ["lane"] = lane, ["sourceSha256"] = sourceSha256.ToLowerInvariant(), ["sourceBytes"] = sourceBytes,
+            ["module"] = new JsonObject { ["name"] = reader.DisplayOf(root), ["key"] = reader.KeyOf(root) },
+            ["partial"] = true,
+            ["scope"] = new JsonObject { ["completeModule"] = false, ["bodiesRead"] = false, ["availableActions"] = catalog.Count },
+            ["complete"] = selections.All(s => s!["status"]!.ToString() == "resolved") && actions.All(a => a!["problems"]!.AsArray().Count == 0),
+            ["selections"] = selections, ["actions"] = actions };
+    }
+
+    // Only the contract: no body, positions or descriptions of the nodes.
+    internal static string SignatureSha(FlowItem signature) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(signature.Canon()))).ToLowerInvariant();
 
     // Print, parse back, compare: the fixed point of one action. name: where it lives and its name (Flow/Screen/Action).
     public static FlowEntry Entry(FlowItem item, string name, IReadOnlyList<string> found, int digestBytes)

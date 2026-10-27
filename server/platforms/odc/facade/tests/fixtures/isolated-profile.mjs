@@ -35,6 +35,10 @@ export const isolatedProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-test-
 const home = path.join(isolatedProfile, path.basename(startHome) || 'home');
 for (const dir of [home, path.join(home, 'AppData', 'Local'), path.join(home, 'AppData', 'Roaming'), path.join(isolatedProfile, 'authority')])
   fs.mkdirSync(dir, { recursive: true });
+// The bridge key of the start profile (read-only, like the installed tools): the reader of a capture presents it to the
+// local reader process, and without it every read under isolation fails with ENOENT instead of reading the fixture.
+const startKey = localAppDataReadPath('Anvil', 'authority', 'bridge.key');
+if (fs.existsSync(startKey)) fs.copyFileSync(startKey, path.join(isolatedProfile, 'authority', 'bridge.key'));
 // The read-only ODC Studio caches the kernel CLI would read under the original profile (OdcFeatures, OdcModelPlugins).
 export const pinnedReadFolders = Object.freeze(Object.fromEntries([
   ['ANVIL_ODC_FEATURES_DIR', localAppDataReadPath('OutSystems', 'ODC Studio')],

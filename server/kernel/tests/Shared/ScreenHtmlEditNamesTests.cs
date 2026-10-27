@@ -56,10 +56,10 @@ public sealed class ScreenHtmlEditNamesTests
     private sealed class Writer(bool nullSlotNames = false, bool uniqueNames = false) : IScreenHtmlWriter<Node>
     {
         public readonly List<string> Log = [];
-        public Node Create(Node parent, string kind, Node? block)
+        public Node Create(Node parent, string kind, Node? block, string? name = null)
         {
             Log.Add("create " + kind);
-            var node = kind is "ExtendedProperty" or "Event" or "LocalVariable" or "InputParameter" or "Argument" ? N(kind) : W(kind);
+            var node = kind is "ExtendedProperty" or "Event" or "LocalVariable" or "InputParameter" or "Argument" ? N(kind, name ?? "") : W(kind, name ?? "");
             parent.Add(node);
             switch (kind) {
                 case "IfWidget": node.Set("TrueBranch", node.Add(W("IfBranchWidget", "True"))).Set("FalseBranch", node.Add(W("IfBranchWidget", "False"))); break;
@@ -223,7 +223,10 @@ public sealed class ScreenHtmlEditNamesTests
         Assert.False(plan.Refused, Problems(plan.Result) + "\n" + string.Join(", ", writer.Log));
         // The only names written are the ids the edit wrote on its new footer and its new paginator.
         Assert.DoesNotContain(writer.Log, l => l == "rename");
-        Assert.Equal(["ChainPageFooter", "ChainPagination"], plan.Result.Ops.Where(o => o["op"]?.ToString() == "set" && o["property"]?.ToString() == "Name").Select(o => o["value"]!.ToString()).Order(StringComparer.Ordinal));
+        // A new widget is named at its creation (the proto line, 20/10: a block instance refuses a later set Name): the names the
+        // plan writes are those of its creates and its sets.
+        Assert.Equal(["ChainPageFooter", "ChainPagination"], plan.Result.Ops.Where(o => o["op"]?.ToString() == "set" && o["property"]?.ToString() == "Name").Select(o => o["value"]!.ToString())
+            .Concat(plan.Result.Ops.Where(o => o["op"]?.ToString() == "create" && o["name"] != null).Select(o => o["name"]!.ToString())).Order(StringComparer.Ordinal));
         Assert.Contains("<Block k=", after.Html);
         Assert.Contains("id=\"ChainPagination\" @OnNavigate=\"ShowChainPage(NewStartIndex = NewStartIndex)\"", after.Html);
         Assert.DoesNotContain("os-Name", after.Html);
@@ -522,7 +525,10 @@ public sealed class ScreenHtmlEditNamesTests
         var (plan, writer) = Run(target, [applied.Document], new Writer(nullSlotNames));
         Assert.False(plan.Refused, Problems(plan.Result) + "\n" + string.Join(", ", writer.Log));
         Assert.DoesNotContain(writer.Log, l => l == "rename");
-        Assert.Equal(["ChainPageFooter", "ChainPagination"], plan.Result.Ops.Where(o => o["op"]?.ToString() == "set" && o["property"]?.ToString() == "Name").Select(o => o["value"]!.ToString()).Order(StringComparer.Ordinal));
+        // A new widget is named at its creation (the proto line, 20/10: a block instance refuses a later set Name): the names the
+        // plan writes are those of its creates and its sets.
+        Assert.Equal(["ChainPageFooter", "ChainPagination"], plan.Result.Ops.Where(o => o["op"]?.ToString() == "set" && o["property"]?.ToString() == "Name").Select(o => o["value"]!.ToString())
+            .Concat(plan.Result.Ops.Where(o => o["op"]?.ToString() == "create" && o["name"] != null).Select(o => o["name"]!.ToString())).Order(StringComparer.Ordinal));
         if (!nullSlotNames) Assert.Contains(plan.Result.Normalized, n => n["property"]?.ToString() == "Name" && n["note"]!.ToString().Contains("the name of a slot is the Studio's", StringComparison.Ordinal));
     }
 

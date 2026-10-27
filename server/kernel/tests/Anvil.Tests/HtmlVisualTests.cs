@@ -220,7 +220,12 @@ public sealed class HtmlVisualTests
 
     [Theory] [InlineData("button")] [InlineData("a")]
     public void EmptyCaptionExpressionsAreRejected(string tag)
-        => Assert.Contains("needs an OutSystems expression", Assert.Throws<InvalidOperationException>(() => Ops($"<{tag} onclick=\"Chosen\">{{{{ }}}}</{tag}>")).Message);
+    {
+        // T1: the one compile of a text with bindings (BindingText) names the fault, HTML_BINDING_INVALID.
+        var error = Assert.Throws<InvalidOperationException>(() => Ops($"<{tag} onclick=\"Chosen\">{{{{ }}}}</{tag}>"));
+        Assert.Contains("has no expression", error.Message);
+        Assert.Equal("HTML_BINDING_INVALID", Errors.FindCoded(error)!.Code);
+    }
 
     [Fact] public void ALabelTargetsTheInputOfTheSameFragment()
     {

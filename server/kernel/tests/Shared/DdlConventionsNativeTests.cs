@@ -42,6 +42,49 @@ public sealed class DdlConventionsNativeTests(ITestOutputHelper output)
 
     private static string Sha(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
+    // ---- DDL_NATIVE_PLURAL: the plural a new entity's text leaves out is the platform's (lab/batch-speed) ------------------------
+
+    // Portuguese names and English irregular plurals: the job is accepted on the first call (no DDL_NOT_CONVERGED from a plural
+    // the reader derives and the module keeps otherwise), no entity is renamed, and an explicit LabelPlural stays as written.
+    // With SSAM_DDL_BENCH (the path of a ssam-ddl/1 text, the bench's museum-model), that text too, on the blank module.
+    [Fact]
+    public void TheOmittedPluralOfANewEntityIsThePlatformsAndNoEntityIsRenamed()
+    {
+        var (lane, kernel) = Lane();
+        Bind();
+        var work = Path.Combine(kernel, ".local", lane == "odc" ? "lane-odc" : "", "native-plural-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(work);
+        var host = new ModelHost(work);
+        var basePath = Path.Combine(kernel, "tests", "fixtures", lane == "odc" ? Path.Combine("odc", "blank-mobile.oml") : "blank-service.oml");
+        JsonObject Deliver(string name, string ddl)
+        {
+            var job = Path.Combine(work, name + ".json");
+            File.WriteAllText(job, new JsonObject { ["ops"] = new JsonArray(new JsonObject { ["op"] = "spec", ["data"] = new JsonObject { ["ddl"] = ddl } }) }.ToJsonString());
+            var result = JsonSerializer.SerializeToNode(JobRunner.Run(host, basePath, job, Path.Combine(work, name + ".oml")))!.AsObject();
+            Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
+            return result;
+        }
+        var names = new[] { "AdvApontamentoHoras", "AdvAvaliacaoPorAnalises", "MxRights", "MxLabAnalysis", "MxCriteria", "MxStatus" };
+        var text = string.Join("\n", names.Select(n => "create entity " + n + " (Id Long Integer identifier auto required, Titulo Text(50));"))
+            + "\ncreate entity CustomHoras os:LabelPlural=\"Custom Hours\" (Id Long Integer identifier auto required, Titulo Text(50));";
+        Deliver("plural", text);
+        var read = DdlParser.Parse(host.BuildDdl(File.ReadAllBytes(Path.Combine(work, "plural.oml")), "", lane).Text);
+        foreach (var name in names.Append("CustomHoras")) Assert.Contains(read.Elements, e => DdlRules.IsEntityKind(e.Kind) && e.Name == name);
+        Assert.DoesNotContain(read.Elements, e => e.Name is "AdvApontamentoHora" or "MxRight" or "MxLabAnalysi");
+        Assert.Equal("Custom Hours", new DdlParsedContext(read.Elements.Single(e => e.Name == "CustomHoras")).Effective("LabelPlural"));
+        var bench = Environment.GetEnvironmentVariable("SSAM_DDL_BENCH");
+        if (string.IsNullOrEmpty(bench) || !File.Exists(bench)) return;
+        var museum = File.ReadAllText(bench);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var delivered = Deliver("bench", museum);
+        var entities = DdlParser.Parse(museum).Elements.Count(e => DdlRules.IsEntityKind(e.Kind));
+        var benchRead = DdlParser.Parse(host.BuildDdl(File.ReadAllBytes(Path.Combine(work, "bench.oml")), "", lane).Text);
+        foreach (var element in DdlParser.Parse(museum).Elements.Where(e => DdlRules.IsEntityKind(e.Kind)))
+            Assert.Contains(benchRead.Elements, e => e.Kind == element.Kind && e.Name == element.Name);
+        var plurals = (delivered["notes"] as JsonArray ?? []).OfType<JsonObject>().Count(n => n["code"]?.ToString() == "DDL_NATIVE_PLURAL");
+        output.WriteLine($"bench {lane}: {entities} entities accepted on the first call in {clock.ElapsedMilliseconds} ms; DDL_NATIVE_PLURAL {plurals}");
+    }
+
     // ---- the generated cases on the corpus -----------------------------------------------------------------------------------
 
     private sealed record Source(DdlElement Element, string Block, string? Identifier, string? Label, string? Order, bool Auto);

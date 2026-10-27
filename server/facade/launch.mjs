@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
-import { observeCli, observeInlineCli, observeMcp, lineChannel } from './friction-boundary.mjs';
+import { observeCli, observeInlineCli, observeMcp, lineChannel, boundaryMetadata } from './friction-boundary.mjs';
 import { connectionEnvironment } from '../platforms/odc/facade/studio-session.mjs';
 // The identity of what the MCP child loads (C11); a layout without it (a copied launcher) never reloads.
 const identityModule = await import('../platforms/odc/facade/facade-identity.mjs').catch(() => null);
@@ -73,10 +73,11 @@ export function launch(entry, args = process.argv.slice(2)) {
     const forwarded = normalizePaths(args);
     const childEnvironment = environment();
     const target = path.join(root, layout.odc, 'facade', 'ssam.mjs');
-    observeInlineCli({root,entry,args:forwarded});
+    const inline = observeInlineCli({root,entry,args:forwarded});
     try {
       process.chdir(root);
-      Object.assign(process.env, childEnvironment);
+      // F7: this process is the CLI session; its records carry the ids its observer recorded.
+      Object.assign(process.env, childEnvironment, inline?.trace ?? {});
       process.argv = [process.execPath, target, ...forwarded];
       return import(pathToFileURL(target).href).catch(error => {
         process.stderr.write(JSON.stringify({ ok: false, error: error.message }) + '\n');
@@ -112,14 +113,16 @@ export function launch(entry, args = process.argv.slice(2)) {
     const loaded = identity.read();
     let serverInputBlocked=false,clientOutputBlocked=false,relay;
     const requestFlow=()=>{if(serverInputBlocked||clientOutputBlocked)process.stdin.pause();else process.stdin.resume();};
-    const observer = observeMcp({root,entry,args:forwarded,
+    // F7: ONE correlation id for this MCP session: the observer records it and the child (every reload too) stamps it.
+    const meta = boundaryMetadata(root, entry, forwarded);
+    const observer = observeMcp({root,entry,args:forwarded,meta,
       includeFrictionTool: frictionServed() && (entry !== 'ssam' || args[0] !== 'mcp' || !profileModule || profileModule.profileServes(profileModule.parseMcpProfile(args.slice(1)), 'ssam_friction')),
       shapeFrictionResult: frictionAnswerShaper({ entry, args }),
       toServer:chunk=>relay.toServer(chunk),
       toClient:chunk=>{if(!process.stdout.write(chunk)){clientOutputBlocked=true;relay.pauseOutput();requestFlow();}}});
     relay = createMcpRelay({
       spawnChild: extra => spawn(process.execPath, [entryFile, ...forwarded], { cwd: root, windowsHide: true, stdio: ['pipe','pipe','pipe'],
-        env: { ...environment(), SSAM_RELAY_CHILD: '1', ...(loaded.launcherSha256 ? { SSAM_LAUNCHER_SHA256: loaded.launcherSha256 } : {}), ...extra } }),
+        env: { ...environment(), SSAM_RELAY_CHILD: '1', SSAM_CORRELATION_ID: meta.sessionId, ...(loaded.launcherSha256 ? { SSAM_LAUNCHER_SHA256: loaded.launcherSha256 } : {}), ...extra } }),
       identity: () => identity.read(), loaded,
       toObserver: chunk => observer.response.write(chunk),
       onInputBlocked: blocked => { serverInputBlocked = blocked; requestFlow(); },
@@ -134,10 +137,11 @@ export function launch(entry, args = process.argv.slice(2)) {
     process.on('SIGTERM', () => relay.kill('SIGTERM'));
     return;
   }
-  const child = spawn(process.execPath, [entryFile, ...forwarded], {
-    cwd: root, env: environment(), stdio: ['inherit','pipe','pipe'], windowsHide: true,
-  });
+  // F7: the observer begins first, so the child carries the session and the operation it records.
   const observer = observeCli({root,entry,args:forwarded});
+  const child = spawn(process.execPath, [entryFile, ...forwarded], {
+    cwd: root, env: { ...environment(), ...observer.trace }, stdio: ['inherit','pipe','pipe'], windowsHide: true,
+  });
   child.stdout.on('data',observer.stdout);child.stderr.on('data',observer.stderr);
   child.stdout.pipe(process.stdout,{end:false});child.stderr.pipe(process.stderr,{end:false});
   let transportError=false;

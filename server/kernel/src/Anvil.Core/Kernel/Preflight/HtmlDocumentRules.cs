@@ -67,7 +67,7 @@ public static class HtmlDocumentRules
         }
         // Defaults last: they read the document and edit the logic ops too.
         for (var i = 0; i < ops.Count; i++)
-            if (ops[i] is JsonObject op && ScreenDocFacts.Of(op, i) is { } doc) MoveDefaults(ops, doc, prefix, done);
+            if (ops[i] is JsonObject op && ScreenDocFacts.Of(op, i) is { Edit: false } doc) MoveDefaults(ops, doc, prefix, done);
         LogicDefaults(ops, prefix, done);
     }
 
@@ -442,12 +442,14 @@ public static class HtmlDocumentRules
                 UnknownIcons(holder, key, lane, i, at, problems);
             if (ScreenDocFacts.Of(op, i) is not { } doc) continue;
             var html = prefix == null ? null : $"{prefix}/{i}/data/html";
-            foreach (var input in doc.Inputs.Where(d => d.Default is { } dv && MovableDefault(Decode(dv.Value), d.Type)))
+            // An edit is judged against its reading (EditDefaults); nothing of it moves into an OnInitialize.
+            if (doc.Edit) EditDefaults(op, doc, html, problems);
+            foreach (var input in doc.Inputs.Where(d => !doc.Edit && d.Default is { } dv && MovableDefault(Decode(dv.Value), d.Type)))
                 problems.Add(JobPreflight.Problem(i, html, "DEFAULT_NOT_LITERAL", "error",
                     $"html: {Where(doc.Text, input.Default!.Start)}: the default of input {input.Name} of {doc.Name} is '{Decode(input.Default.Value)}', and a default must be a literal (the Studio refuses it: InvalidPropertyValue_DefaultValue)",
                     $"write a literal default (a number, \"text\", True/False, #2026-01-01#, NullIdentifier(), Entities.X.Y), or drop it and assign {input.Name} in {doc.Name}'s OnInitialize when it comes empty", null, "html"));
             // A default that reads data the screen fetches: OnInitialize runs before the fetch, so it is never moved there.
-            foreach (var v in doc.Variables.Where(v => v.Default is { } d && MovableDefault(Decode(d.Value), v.Type)))
+            foreach (var v in doc.Variables.Where(v => !doc.Edit && v.Default is { } d && MovableDefault(Decode(d.Value), v.Type)))
             {
                 var value = Decode(v.Default!.Value);
                 if (FetchedReads(value, doc, ops) is not { Count: > 0 } sources) continue;
@@ -455,7 +457,7 @@ public static class HtmlDocumentRules
                     $"html: {Where(doc.Text, v.Default.Start)}: the default of variable {v.Name} of {doc.Name} is '{value}', a default must be a literal, and it reads {string.Join(", ", sources)}, which {doc.Name} fetches after its OnInitialize: assigned there, it would read nothing yet",
                     $"drop the default and assign {v.Name} = {value} in the On After Fetch of {sources[0]} (an action of {doc.Name} that its OnAfterFetch event names)", null, "html"));
             }
-            if (doc.Variables.Any(v => Movable(v, doc, ops)))
+            if (!doc.Edit && doc.Variables.Any(v => Movable(v, doc, ops)))
             {
                 // What MoveDefaults could not move: an OnInitialize the job does not declare, or no action of the screen in the job.
                 var named = doc.Root.Get("oninitialize")?.Trim();
@@ -485,6 +487,39 @@ public static class HtmlDocumentRules
             }
         }
         return problems;
+    }
+
+    /// <summary>The roots whose runtime takes a default that is not a literal (Traditional Web): DEFAULT_NOT_LITERAL never applies.</summary>
+    public static bool TakesExpressionDefaults(string? rootKind) => rootKind is "WebScreen" or "WebBlock";
+
+    /// <summary>The refusal of a default that is not a literal on the edit of a reading, one rule for the preflight (the
+    /// reading the store keeps) and the edit plan (the reading of the module): an input or a variable whose default is
+    /// new or changed from the reading and no literal. A default the reading had is kept (the runtime accepted it).</summary>
+    public static (string Message, string Fix) EditDefaultRefusal(string kind, string name, string root, string value, string? before)
+        => ($"the default of {kind} {name} of {root} is '{value}'" + (before == null ? " (the reading has none)" : $" (the reading has '{before}')")
+                + ", and a default must be a literal (the Studio refuses it: InvalidPropertyValue_DefaultValue)",
+            $"write a literal default (a number, \"text\", True/False, #2026-01-01#, NullIdentifier(), Entities.X.Y) or keep the reading's, and assign {name} = {value} at the start of {root}'s OnInitialize (a logic op of the same job edits that action)");
+
+    /// <summary>The edit of a reading (the whole document with screen and basedOn): judged when the store keeps the reading
+    /// (else at apply, by the edit plan). A Traditional root (WebScreen, WebBlock) takes expression defaults; a default
+    /// unchanged from the reading (same k, same value) is the module's own.</summary>
+    private static void EditDefaults(JsonObject op, ScreenDocFacts doc, string? html, List<JsonObject> problems)
+    {
+        if (!doc.Declared.Any(d => d.Kind is "input" or "var" && d.Default is { } dv && MovableDefault(Decode(dv.Value), d.Type))) return;
+        if (op["data"]?["basedOn"] is not JsonObject on || on["capture"]?.ToString() is not { Length: > 0 } capture || on["html"]?.ToString() is not { Length: > 0 } read
+            || ModuleIndexStore.Default()?.LoadHtmlKeys(capture, read) is not { } kept || kept["html"] is not JsonValue keptHtml || !keptHtml.TryGetValue<string>(out var readingText)) return;
+        if (TakesExpressionDefaults(kept["rootKind"]?.ToString())) return;
+        var readDefaults = new Dictionary<string, string?>(StringComparer.Ordinal);
+        try { foreach (var (node, _) in Anvil.Reading.ScreenHtmlText.Elements(ScreenHtml.Parse(readingText))) if (node.Get("k") is { } k) readDefaults.TryAdd(k, node.Get("default")); }
+        catch (FormatException) { return; }
+        foreach (var d in doc.Declared.Where(d => d.Kind is "input" or "var"))
+        {
+            if (d.Default is not { } dv || Decode(dv.Value) is var value && !MovableDefault(value, d.Type)) continue;
+            var before = d.Element.Get("k") is { } k && readDefaults.TryGetValue(k, out var had) ? had : null;
+            if (before != null && before.Trim() == value.Trim()) continue;
+            var (message, fix) = EditDefaultRefusal(d.Kind == "var" ? "variable" : "input", d.Name, doc.Name, value.Trim(), before);
+            problems.Add(JobPreflight.Problem(doc.Op, html, "DEFAULT_NOT_LITERAL", "error", $"html: {Where(doc.Text, dv.Start)}: {message}", fix, null, "html"));
+        }
     }
 
     private static void UnknownIcons(JsonObject holder, string key, string lane, int op, string? path, List<JsonObject> problems)

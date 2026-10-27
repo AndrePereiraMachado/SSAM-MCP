@@ -1764,8 +1764,7 @@
                   "HorseMatch.Id",
                   "Descending"
                 ],
-                "start": "StartIndex",
-                "max": "MaxRecords"
+                "max": "StartIndex + MaxRecords"
               },
               {
                 "assign": {
@@ -1792,7 +1791,9 @@
                       "Element": "Item"
                     }
                   }
-                ]
+                ],
+                "start": "StartIndex",
+                "max": "MaxRecords"
               }
             ]
           },

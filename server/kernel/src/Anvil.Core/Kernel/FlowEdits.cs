@@ -302,6 +302,16 @@ public static class FlowEdits
         return string.Concat(Pieces(text).Select(p => p.Literal ? p.Text : word.Replace(p.Text, to.Replace("$", "$$"))));
     }
 
+    // The rewrite of a node's name in an expression (the platform numbered the node): Renamed (RenamedOutsideFields with
+    // outsideFields), never a call. A node is read through its outputs (Node.Out); `Name(` is a call of a function of that
+    // name (a built-in, a function of the module or of a reference), which a rename of the node never touches.
+    public static string RenamedNode(string text, string from, string to, bool outsideFields = false)
+    {
+        if (text.IndexOf(from, StringComparison.OrdinalIgnoreCase) < 0) return text;
+        var word = new Regex(@"(?<![\w.])" + Regex.Escape(from) + @"(?!\w)(?!\s*\()" + (outsideFields ? @"(?!\s*:)" : ""), RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        return string.Concat(Pieces(text).Select(p => p.Literal ? p.Text : word.Replace(p.Text, to.Replace("$", "$$"))));
+    }
+
     // An expression with every `prefix` (a dotted path ending in a dot, outside text literals, after no dot, any case) taken
     // off: Source.Current.A.B -> A.B, the value relative to the item (FlowDiff's mapping patch).
     public static string WithoutPrefix(string text, string prefix)

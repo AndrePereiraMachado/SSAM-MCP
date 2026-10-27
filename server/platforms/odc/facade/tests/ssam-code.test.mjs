@@ -96,6 +96,19 @@ test('write logic: a changed action is sent whole; a gap in its ids is refused u
   assert.match(CODE_DESCRIPTION, /WHOLE as read/); assert.match(CODE_DESCRIPTION, /a line left out is DELETED/); assert.doesNotMatch(CODE_DESCRIPTION, /a removed one is removed/);
 });
 
+test('Traditional Preparation keeps its owner and native key in mixed HTML and flow writes', () => {
+  const preparation = 'preparation MainFlow/Home.Preparation @screenKey.#Preparation\n  assign Message = "Initial" @n1\n  end @n2\n';
+  assert.deepEqual(headerOf(preparation), { kind: 'preparation', owner: 'Home', name: 'Preparation', key: 'screenKey.#Preparation' });
+  assert.deepEqual(missingIdsOf(preparation), []);
+  const created = preparation.replace(' @screenKey.#Preparation', '').replace(/ @n\d+/g, '');
+  const call = writeCall({ lane: 'o11', part: 'html', module: 'M', text: '<screen name="Home"><var name="Message" type="Text"/><div>{{ Message }}</div></screen>',
+    also: [{ part: 'logic', text: created }] });
+  assert.deepEqual(call.arguments.job.ops.map(o => o.op), ['html', 'logic']);
+  assert.deepEqual(call.arguments.job.ops[1].data.flow, [created]);
+  assert.deepEqual(writeCall({ lane: 'o11', part: 'logic', module: 'M', text: preparation, basedOn: 'sha' }).arguments.job.ops,
+    [{ op: 'logic', data: { flow: [{ text: preparation, basedOn: 'sha' }] } }]);
+});
+
 test('write html: a new screen action goes before the change of its screen, after a new screen document; X() becomes X', () => {
   const basedOn = { capture: 'c', html: 'h' };
   const button = ' <div k="w7" class="espelho-acoes">\n  <button k="w8" class="btn" onclick="Atualizar()">Atualizar</button>\n  <button class="btn btn-primary" onclick="Exportar()">Exportar</button>\n </div>';

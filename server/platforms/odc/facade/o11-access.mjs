@@ -10,6 +10,7 @@
 // was sent). This file builds the argv, keeps the words as a sha256 in <lane.local>/journal/o11_access.jsonl and reads
 // the outcome: every delivery delivered -> "entregue"; verifier errors -> the errors; an unconfirmed write -> uncertain,
 // never repeated, with the MCP call that reconciles it. No Python, no shell, no sleep: each call waits for its process.
+import { appendJsonLine, stamped, traceFields } from './correlation.mjs';
 import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,7 +23,8 @@ import { assertSelectedO11 } from './studio-connect.mjs';
 import { readConnection } from './studio-session.mjs';
 import { trackTask, tasksDir } from './ssam-task.mjs';
 import { clean, closeState, contractRefusal, deliveryOutcome, findKernelTask, validationMessages, WORDS_MARKER } from './o11-cycle.mjs';
-import { RESULT } from './result-values.mjs';
+import { RESULT, resultIs } from './result-values.mjs';
+import { exposureOf } from './exposure.mjs';
 
 const ACTIONS = ['plan', 'apply', 'verify', 'users'];
 const ARGUMENTS = ['action', 'manifestPath', 'words', 'operationId'];
@@ -333,11 +335,188 @@ export async function access(input, ctx) {
   return apply(input, ctx);
 }
 
+// ---- T12: the restore journal of a temporary access change (Traditional migration, calls 588-601: the Roles of 21 source
+// screens were widened for a comparison and the restore was tracked by hand). A job of o11_deliver that says
+// "temporary":{"restore":true} may hold only set Roles / set AnonymousAccess ops (the writes whose before-state the kernel
+// captures, Verbs.Access.cs). Once it lands (delivered, or delivered and the publication failed), the kernel's
+// accessChanges/accessRestore become one entry <lane.local>/access/restores[/<user>/<tenant>]/<kernel task>.json, "pending"
+// until every one of its changes is back (change by change, by the final value each later delivery reports) or the user
+// closes it with their words (o11_access close). Its restore call is a job of set ops with ifCurrent: each applies only
+// while the screen still has the value this change wrote, so stacked changes are restored newest first and a restore never
+// overwrites a later edit. ssam_doctor and every later o11_deliver answer list the pending ones, newest first.
+// Hosted (SSAM_EXPOSURE=licensee): the journal is keyed by the caller (SSAM_EXPOSURE_CALLER, as the exposure meter reads
+// it) and the tenant (the delivery's environment); without both, a temporary change is refused rather than shared.
+const RESTORE_SCHEMA = 'ssam-access-restore/2';
+const ACCESS_PROPS = new Set(['Roles', 'AnonymousAccess']);
+const isObject = v => v != null && typeof v === 'object' && !Array.isArray(v);
+const sameValue = (a, b) => JSON.stringify(Array.isArray(a) ? [...a].map(String).sort() : a ?? null) === JSON.stringify(Array.isArray(b) ? [...b].map(String).sort() : b ?? null);
+const sameHost = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+const scopeKey = text => createHash('sha256').update('ssam-access-restore\0' + text).digest('hex').slice(0, 24);
+
+// The scope of the journal: local (one folder per installation) or hosted (caller and tenant).
+export function restoreScope(env = process.env) {
+  let hosted = false;
+  try { hosted = exposureOf(env) === 'licensee'; } catch { hosted = true; }
+  const named = typeof env.SSAM_EXPOSURE_CALLER === 'string' ? env.SSAM_EXPOSURE_CALLER.trim() : '';
+  return { hosted, caller: named && named !== 'local' ? named : null };
+}
+export const restoresDir = (local, scope = { hosted: false }, tenant = null) => scope.hosted
+  ? path.join(local, 'access', 'restores', 'u-' + scopeKey(scope.caller ?? ''), ...(tenant ? ['t-' + scopeKey(String(tenant).trim().toLowerCase())] : []))
+  : path.join(local, 'access', 'restores');
+
+// The temporary field of a job: null when the job has none or it is well formed; else the refusal, before anything is sent.
+export function temporaryRefusal(job, { scope = { hosted: false }, environment = null } = {}) {
+  if (!isObject(job) || job.temporary === undefined) return null;
+  const again = why => ({ tool: 'o11_deliver', arguments: {}, why });
+  const t = job.temporary;
+  // {close:"<id>"}: the user keeps the screens of a pending restore as they are; no ops, the user's words in authorize.
+  if (isObject(t) && Object.keys(t).length === 1 && t.close !== undefined) {
+    if (typeof t.close !== 'string' || !OPERATION_ID.test(t.close))
+      return refusal('TEMPORARY_INVALID', 'temporary.close takes the id of a pending access restore (32 hex characters)', { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'Lists the pending access restores with their ids.' });
+    if (Array.isArray(job.ops) && job.ops.length)
+      return refusal('TEMPORARY_INVALID', 'a close of an access restore sends no ops: it drops the restore and keeps the screens as they are', again('Send "temporary":{"close":"<id>"} with "ops":[] and the user\'s words in authorize.'));
+    return null;
+  }
+  if (!isObject(t) || t.restore !== true || Object.keys(t).some(k => k !== 'restore'))
+    return refusal('TEMPORARY_INVALID', 'temporary takes exactly {"restore":true} (a temporary access change, recorded to be restored) or {"close":"<id>"} (drop a pending restore)',
+      again('Write "temporary":{"restore":true} in the job, or remove temporary for a lasting change.'));
+  if (scope.hosted && (!scope.caller || !environment))
+    return refusal('TEMPORARY_SCOPE_UNAVAILABLE', 'a temporary access change needs its restore journal kept for this user and tenant, and this hosted session names '
+      + (!scope.caller ? 'no user' : 'no tenant (expectedEnvironment)') + '; nothing was sent',
+      again('Pass expectedEnvironment (the tenant host) in the same o11_deliver call; without a user scope the change cannot be temporary here: make it a lasting change the user approves.'));
+  const ops = Array.isArray(job.ops) ? job.ops : [];
+  const other = ops.map((op, i) => ({ op, i })).filter(({ op }) => !(isObject(op) && op.op === 'set' && ACCESS_PROPS.has(op.prop) && typeof op.target === 'string'));
+  if (!ops.length || other.length)
+    return refusal('TEMPORARY_NOT_REVERSIBLE', (ops.length ? 'a temporary job holds only the access writes whose before-state SSAM records (set Roles, set AnonymousAccess on a screen); not: '
+      + other.slice(0, 10).map(({ op, i }) => '/ops/' + i + ' (' + (isObject(op) ? (op.op ?? '?') + (op.prop ? ' ' + op.prop : '') : typeof op) + ')').join(', ')
+      : 'a temporary job needs at least one access write (set Roles or set AnonymousAccess on a screen)'),
+      again('Keep only the set Roles / set AnonymousAccess ops in the temporary job and send every other op in a job of its own.'),
+      { ops: other.slice(0, 10).map(({ i }) => i) });
+  return null;
+}
+
+function readRestore(file) {
+  try { const entry = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, '')); return entry?.schema === RESTORE_SCHEMA && Array.isArray(entry.changes) ? entry : null; } catch { return null; }
+}
+function writeRestore(dir, entry) {
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, entry.id + '.json');
+  // One temporary name per writer: two processes never share a .tmp.
+  const temp = file + '.' + process.pid + '.' + randomUUID().replace(/-/g, '') + '.tmp';
+  fs.writeFileSync(temp, JSON.stringify(entry, null, 1)); fs.renameSync(temp, file);
+  return file;
+}
+const closeCall = ({ module, id, environment }) => ({ tool: 'o11_deliver', arguments: { module, job: { temporary: { close: id }, ops: [] }, authorize: WORDS_MARKER, ...(environment ? { expectedEnvironment: environment } : {}) },
+  why: 'Keeps the screens as they are now and drops this restore; nothing reaches the Studio. Only with the user\'s own words.' });
+const restoreCall = ({ module, ops, environment }) => ({ tool: 'o11_deliver', arguments: { module, job: { ops }, authorize: WORDS_MARKER, ...(environment ? { expectedEnvironment: environment } : {}) },
+  why: 'Puts the screens of this temporary access change back as they were before it (the exact Roles and AnonymousAccess SSAM recorded); each write applies only while the screen still has the value this change wrote. The user\'s words in authorize; confirm with the user first.' });
+
+// The entries of one scope (hosted: every tenant of the caller), newest first.
+function listRestores(local, scope) {
+  const dirs = [];
+  const root = restoresDir(local, scope);
+  if (scope.hosted) { try { for (const d of fs.readdirSync(root)) if (d.startsWith('t-')) dirs.push(path.join(root, d)); } catch { /* none yet */ } }
+  else dirs.push(root);
+  return dirs.flatMap(dir => { try { return fs.readdirSync(dir).filter(n => n.endsWith('.json')).map(n => ({ dir, entry: readRestore(path.join(dir, n)) })); } catch { return []; } })
+    .filter(x => x.entry).sort((a, b) => String(b.entry.createdAt).localeCompare(String(a.entry.createdAt)) || String(b.entry.id).localeCompare(String(a.entry.id)));
+}
+
+// After a temporary job lands: the journal entry from the kernel's apply receipt, keyed by the kernel task of the delivery.
+// The answer carries accessRestore {id, state, screens, restore}; a delivery whose receipt holds no before-state says so
+// (ACCESS_RESTORE_NOT_CAPTURED).
+export function recordAccessRestore(local, { module, environment = null, taskId = null, apply, scope = { hosted: false }, now = () => new Date() }) {
+  const changes = Array.isArray(apply?.accessChanges) ? apply.accessChanges.filter(isObject) : [];
+  const ops = Array.isArray(apply?.accessRestore?.ops) ? apply.accessRestore.ops.filter(isObject) : [];
+  const id = String(taskId ?? '').trim().toLowerCase();
+  if (!changes.length || !ops.length || !OPERATION_ID.test(id))
+    return { code: 'ACCESS_RESTORE_NOT_CAPTURED', state: 'not-captured',
+      error: 'The temporary access change landed, but its receipt holds no before-state to restore from' + (changes.length ? '' : ' (no screen changed who may open it)') + '.',
+      continuation: { tool: 'ssam_map', arguments: { lane: 'o11', target: module, view: 'digest' }, why: 'Every screen of the digest prints its access and roles: compare them with the state before the change.' } };
+  // F7: keyed by the kernel task, the entry carries the session and the call of the temporary change (correlationId,
+  // operationId: the same ids as its facade task, kernel task and friction operation).
+  const entry = stamped({ schema: RESTORE_SCHEMA, id, module, environment, createdAt: now().toISOString(), state: 'pending',
+    changes: changes.map(c => ({ ...c, restored: false })), restore: restoreCall({ module, ops, environment }) });
+  writeRestore(restoresDir(local, scope, environment), entry);
+  return { id, state: 'pending', screens: [...new Set(changes.map(c => c.screen))].length, restore: entry.restore };
+}
+
+// After any delivery that landed in a module: every change of a pending entry of that module and environment whose screen
+// this delivery left at the recorded before-state is restored (change by change, so a restore split over several
+// deliveries settles too); an entry with every change restored is "restored". Returns the ids restored now.
+export function settleAccessRestores(local, { module, environment = null, apply, taskId = null, scope = { hosted: false }, now = () => new Date() }) {
+  const done = Array.isArray(apply?.accessChanges) ? apply.accessChanges.filter(isObject) : [];
+  if (!done.length || !module) return [];
+  const settled = [];
+  for (const { dir, entry } of listRestores(local, scope)) {
+    if (entry.state !== 'pending' || String(entry.module ?? '').toLowerCase() !== String(module).toLowerCase()) continue;
+    if (entry.environment && !sameHost(entry.environment, environment)) continue;
+    let changed = false;
+    const changes = entry.changes.map(c => {
+      const last = done.filter(d => d.key === c.key && d.property === c.property).at(-1);
+      if (!last) return c;
+      const restored = sameValue(last.to, c.from);
+      if (restored !== c.restored) changed = true;
+      return { ...c, restored };
+    });
+    if (!changed) continue;
+    const all = changes.every(c => c.restored);
+    writeRestore(dir, { ...entry, changes, ...(all ? { state: 'restored', restoredAt: now().toISOString(), ...(taskId ? { restoredBy: taskId } : {}), restoredTrace: traceFields() } : {}) });
+    if (all) settled.push(entry.id);
+  }
+  return settled;
+}
+
+// The pending restores of the scope, newest first (the order their restores apply in).
+export function pendingAccessRestores(local, scope = { hosted: false }) {
+  return listRestores(local, scope).map(x => x.entry).filter(e => e.state === 'pending').map(e => ({ id: e.id, module: e.module, ...(e.environment ? { environment: e.environment } : {}),
+    createdAt: e.createdAt, screens: e.changes.filter(c => !c.restored).map(c => c.screen).filter((s, i, all) => all.indexOf(s) === i), restore: e.restore,
+    close: closeCall({ module: e.module, id: e.id, environment: e.environment }) }));
+}
+
+// o11_deliver with "temporary":{"close":"<id>"}: closes that restore with the user's words (null for any other job).
+export function temporaryClose(job, { local, words, scope = { hosted: false }, now = () => new Date() }) {
+  if (!isObject(job?.temporary) || job.temporary.close === undefined || !local) return null;
+  if (!wordsGiven(words)) return refusal('WORDS_REQUIRED', "closing an access restore keeps the screens as they are: it requires the user's own words, verbatim, in authorize",
+    { tool: 'o11_deliver', arguments: { job, authorize: WORDS_MARKER }, why: 'Ask the user whether to keep the screens as they are, and pass their exact words.' });
+  return closeAccessRestore(local, { id: job.temporary.close, wordsSha256: sha256(String(words).trim()), scope, now });
+}
+
+// The close of a pending restore (temporaryClose): the user keeps the screens as they are; the entry is closed, never restored.
+export function closeAccessRestore(local, { id, wordsSha256, scope = { hosted: false }, now = () => new Date() }) {
+  const found = listRestores(local, scope).find(x => x.entry.id === String(id).toLowerCase());
+  if (!found) return refusal('RESTORE_NOT_FOUND', 'No access restore ' + id + ' is recorded for this lane' + (scope.hosted ? ', user and tenant' : ''),
+    { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'Lists the pending access restores with their ids.' });
+  if (found.entry.state !== 'pending') return { ok: true, id: found.entry.id, state: found.entry.state };
+  writeRestore(found.dir, { ...found.entry, state: 'closed', closedAt: now().toISOString(), closedWordsSha256: wordsSha256, closedTrace: traceFields() });
+  return { ok: true, id: found.entry.id, state: 'closed', screens: found.entry.changes.filter(c => !c.restored).map(c => c.screen) };
+}
+
+// The o11_deliver hook (o11-cycle.mjs, after a merged delivery): records a temporary change that landed (delivered, or
+// delivered and the publication failed), settles what this delivery put back, and names every restore still pending.
+export function accessRestoreAfter(value, { local, module, job, kernelState, environment = null, scope = { hosted: false }, now }) {
+  if (!value || typeof value !== 'object' || !local) return value;
+  const apply = kernelState?.apply;
+  const landed = resultIs(value.result, 'delivered', 'deliveredAndPublished');
+  const where = kernelState?.environment ?? environment ?? null;
+  let out = value;
+  try {
+    if (landed) settleAccessRestores(local, { module, environment: where, apply, taskId: kernelState?.taskId ?? null, scope, now });
+    if (landed && isObject(job?.temporary))
+      out = { ...out, accessRestore: recordAccessRestore(local, { module, environment: where, taskId: kernelState?.taskId ?? null, apply, scope, now }) };
+    const pending = pendingAccessRestores(local, scope);
+    if (pending.length) out = { ...out, pendingRestores: pending.map(p => ({ id: p.id, module: p.module, screens: p.screens.length, restore: p.restore, close: p.close })) };
+  } catch {
+    out = { ...out, accessRestore: { code: 'ACCESS_RESTORE_JOURNAL_FAILED', error: 'The restore journal could not be updated; the delivery itself stands.',
+      continuation: { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'Lists the access restores the journal holds.' } } };
+  }
+  return out;
+}
+
 function appendJournal(now) {
   return (local, entry) => {
     const dir = path.join(local, 'journal');
     fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(path.join(dir, 'o11_access.jsonl'), JSON.stringify({ at: now().toISOString(), ...entry }) + '\n');
+    appendJsonLine(path.join(dir, 'o11_access.jsonl'), { at: now().toISOString(), ...entry });
   };
 }
 

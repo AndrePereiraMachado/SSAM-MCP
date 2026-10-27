@@ -18,6 +18,8 @@ public static class PreflightChecks
     {
         var found = new Found([], []);
         Run(found, nameof(PropertyRules), () => PropertyRules.Check(ops, prefix, lane, expansions));
+        // T9: what runs in a Reactive or ODC client by its form (no Verify predicts it, so it runs for every job).
+        foreach (var (rule, check) in ReactiveClientRules.Register(ops, prefix, lane)) Run(found, rule, check);
         if (!verifyRules) return found;
         var job = JobFacts.From(ops);
         Run(found, nameof(NameRules), () => NameRules.Check(ops, prefix, lane, job));
@@ -43,6 +45,11 @@ public static class PreflightChecks
         Run(found, nameof(ActionNameRules), () => ActionNameRules.Check(ops, prefix, model));
         Run(found, nameof(NodeRules), () => NodeRules.Check(ops, prefix, job, model.ModuleType));
         Run(found, nameof(ScopeRenames), () => ScopeRenames.Check(ops, prefix, model.ScreenNames));
+        // T9: what only the module type or the base says runs in the browser (a Traditional module is exempt), and the attributes
+        // nothing of the job or of the module reads.
+        foreach (var (rule, check) in ReactiveClientRules.Register(ops, prefix, lane, model, modulePass: true)) Run(found, rule, check);
+        // R1: the scope phase, once per base reading (its normalizations ran in JobNormalizer.WithBase on the same facts).
+        if (model is ModelBaseFacts) Run(found, nameof(ScopePhase), () => { var scope = ScopePhase.Run(ops, prefix, lane, model); return scope.Problems.Concat(scope.Warnings).ToList(); });
         return found;
     }
 

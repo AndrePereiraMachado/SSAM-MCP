@@ -15,6 +15,21 @@ namespace Anvil.Tests;
 /// </summary>
 public sealed class Motor2PreflightTests
 {
+    [Fact]
+    public void KeyedHtmlEditKeepsNativeDefaultsWithoutInventingAnInitializeAction()
+    {
+        const string html = "<screen name=\"WidgetEventAudit\"><var k=\"w1\" name=\"SelectedDate\" type=\"Date\" default=\"CurrDate()\"/></screen>";
+        var ops = new JsonArray(new JsonObject { ["op"] = "html", ["data"] = new JsonObject {
+            ["screen"] = "WidgetEventAudit", ["basedOn"] = new JsonObject { ["capture"] = new string('a', 64), ["html"] = new string('b', 64) }, ["html"] = html
+        } });
+        var changes = new List<JsonObject>();
+        HtmlDocumentRules.Normalize(ops, "/ops", "o11", changes);
+        Assert.Equal(html, ops[0]!["data"]!["html"]!.ToString());
+        Assert.Empty(changes);
+        Assert.DoesNotContain(HtmlDocumentRules.Check(ops, "/ops", "o11"), p => p["code"]?.ToString() == "DEFAULT_NOT_LITERAL");
+        Assert.Single(ops);
+    }
+
     public Motor2PreflightTests() { try { StudioAssemblies.Bind(); } catch { /* no Studio: the checked-in catalogs answer */ } }
 
     private static (JsonNode Job, JsonObject Result) Analyze(string json)

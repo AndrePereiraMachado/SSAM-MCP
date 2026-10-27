@@ -13,6 +13,7 @@ import { moduleMap, parseMapArguments, digestFile, digestReaderConfig, odcKernel
 import { DIGEST_EXTRACTOR, DIGEST_SECTIONS, DIGEST_PAGE_SCHEMA, FOLD_RECORDS, digestText, indexLine } from '../module-digest.mjs';
 import { paths } from '../lib.mjs';
 import { writeCapture } from './fixtures/module-index.mjs';
+import { STORE_GENERATION } from '../store-generation.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const kernelSource = path.join(here, '..', '..', '..', '..', 'kernel', 'src', 'Anvil.Core', 'Kernel', 'ModuleDigest.cs');
@@ -60,7 +61,7 @@ function digestOf({ lane = 'odc', sourceSha256, size = 'small', overrides = {} }
     sections: DIGEST_SECTIONS.map(id => ({ id, ...sections[id] })), actions, ...overrides };
 }
 function writeDigest(store, lane, sha256, digest = digestOf({ lane, sourceSha256: sha256 })) {
-  const file = path.join(store, 'v1', lane, sha256 + '.kernel.digest.json');
+  const file = path.join(store, STORE_GENERATION, lane, sha256 + '.kernel.digest.e' + DIGEST_EXTRACTOR + '.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, typeof digest === 'string' ? digest : JSON.stringify(digest));
   return file;
@@ -73,7 +74,7 @@ test('the digest constants are the C# ones (extractor, sections) and the store s
   assert.deepEqual([...source.match(/SectionIds = \[([^\]]+)\]/)[1].matchAll(/"(\w+)"/g)].map(m => m[1]), DIGEST_SECTIONS);
   const env = { ...process.env, SSAM_MODULE_INDEX_ROOT: path.join(os.tmpdir(), 'store') };
   for (const lane of ['odc', 'o11'])
-    assert.equal(digestFile(lane, 'A'.repeat(64), env), path.join(env.SSAM_MODULE_INDEX_ROOT, 'v1', lane, 'a'.repeat(64) + '.kernel.digest.json'));
+    assert.equal(digestFile(lane, 'A'.repeat(64), env), path.join(env.SSAM_MODULE_INDEX_ROOT, STORE_GENERATION, lane, 'a'.repeat(64) + '.kernel.digest.e' + DIGEST_EXTRACTOR + '.json'));
   // ODC: the kernel's reader writes it (anvil-odc read-serve), never the builder; O11: the lane reader of the map.
   const odc = digestReaderConfig('odc', { env });
   assert.equal(odc.dll, odcKernelCli()); assert.notEqual(odc.dll, paths.builder); assert.equal(odc.indexRoot, path.resolve(env.SSAM_MODULE_INDEX_ROOT));

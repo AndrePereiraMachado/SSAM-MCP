@@ -352,6 +352,14 @@ export function classifyTextRoute(intent) {
   // re-test of 2026-10-12): its statements go in the same job, before the texts of the actions.
   if (family === 'logic') for (const m of mentions) if (m.family === 'data' && m.kind === 'container' && !afterLocative(toks, m)) also.add('data');
   const alsoIds = [...also].map(f => routeOfFamily(f, 'create')).filter(x => x && x !== id);
+  // R4 (2026-10-24): a later verb that acts on an existing screen named after a locative ("adicionar o atributo Desconto na
+  // entidade Pedido e mostrar na tela PedidoLista") also edits that screen: its ssam-html/1 edit rides in the same job.
+  const leadAt = verbs.find(v => v.kind !== 'other' && firstAfter(v.i))?.i ?? -1;
+  if (family !== 'ui') for (const v of verbs) {
+    if (v.i <= leadAt || !['edit', 'add', 'create'].includes(v.kind)) continue;
+    const m = firstAfter(v.i, mentions);
+    if (m && m.family === 'ui' && m.kind === 'container' && afterLocative(toks, m) && !alsoIds.includes('ui.screen-html-edit')) { alsoIds.push('ui.screen-html-edit'); why.push(v.t, m.term); }
+  }
   return { id, family, verb, object: object?.term ?? null, container: anyContainer?.term ?? null, also: alsoIds, why: [...new Set(why)] };
 }
 
@@ -362,6 +370,13 @@ function deliverCall(lane, op, { feature, owners, changes }) {
     ? { tool: DELIVER.o11, arguments: { module: '<Module>', job: { ops: [op] } } }
     : { tool: DELIVER.odc, arguments: { feature, module: '<Module>', job: { ops: [op] }, owners, changes } };
 }
+// The basedOn placeholders of this section keep their bytes (the C07 sections of the first answer take the room the route
+// leaves at the default budget: pacote-laneE-discover); the work packet, sized by levels, says which value of which read
+// in full (text-packet.mjs FLOW_BASED_ON) and puts the value itself when it read the owner. A capture the answer read
+// replaces CAPTURE_BASED_ON with its sourceSha256 (withCapture).
+const FLOW_READ_BASED_ON = '<textSha of the read>';
+const HTML_READ_BASED_ON = '<htmlSha256 of the read>';
+export const CAPTURE_BASED_ON = '<sourceSha256 of the read>';
 const mapCall = (lane, extra) => ({ tool: 'ssam_map', arguments: { lane, target: '<Module or capture.oml>', ...extra } });
 const COMMON_RULES = [
   'One delivery: a refusal comes ONCE with every problem and the checked patch; apply the patch as it is (patch + basedOn), never the whole job again.',
@@ -387,7 +402,7 @@ const ROUTES = {
     form: 'ssam-html/1', pointer: 'html.document',
     read: lane => mapCall(lane, { view: 'html', screen: '<Screen>' }),
     readWhy: 'the screen as ssam-html/1 with k on every element and basedOn; its continuations.edit is this delivery, ready',
-    op: () => ({ op: 'html', data: { screen: '<Screen>', basedOn: { capture: '<sourceSha256 of the read>', html: '<htmlSha256 of the read>' }, edit: ['<the changed element, whole, with its k>'] } }),
+    op: () => ({ op: 'html', data: { screen: '<Screen>', basedOn: { capture: CAPTURE_BASED_ON, html: HTML_READ_BASED_ON }, edit: ['<the changed element, whole, with its k>'] } }),
     names: { feature: '<Screen> (change)', owners: ['<Screen>'], changes: ['<what changes in the screen>'] },
     slots: { Screen: 'the screen or block read (name, Kind:Name or @key)', edit: 'only the elements that changed, each whole with its k (an If with its <div else>; the <style> alone); a new element has no k; a removed one is left out of its parent; an element with its k under another parent moves there' },
     rules: ['Read once, edit in context: two calls (the read and this delivery); never resend the whole screen to change one element.',
@@ -399,7 +414,7 @@ const ROUTES = {
     form: 'ssam-ddl/1', pointer: 'spec.ddl',
     read: lane => mapCall(lane, { view: 'ddl', element: '<Entity>' }),
     readWhy: 'the data text with an -- @key on every element (without element: every block, in pages); new elements need no read, changes do',
-    op: () => ({ op: 'spec', data: { basedOn: '<sourceSha256 of the read>', ddl: '<only the statements that change, as read, with their -- @key; new ones without a key>' } }),
+    op: () => ({ op: 'spec', data: { basedOn: CAPTURE_BASED_ON, ddl: '<only the statements that change, as read, with their -- @key; new ones without a key>' } }),
     names: { feature: '<Entity>', owners: ['<Entity>'], changes: ['<what changes in the data>'] },
     slots: { ddl: 'create entity / create static entity ... values / type X = {...} / create unique index / site property / client variable / timer, OutSystems types and values (Text(120), Order Identifier, "New"); drop <what> <Name>; -- @key deletes' },
     rules: ['The same @key with another name is a rename (never delete and create); a statement without a key is new; an attribute or record left out of a statement sent whole is deleted.',
@@ -412,7 +427,7 @@ const ROUTES = {
     form: 'ssam-flow/1', pointer: 'logic.flow',
     read: lane => mapCall(lane, { view: 'flow', element: '<Action>' }),
     readWhy: 'the action whole with an @id on every node, parameter and local, fixedPoint and textSha (a list in element reads several actions); a new action needs no read',
-    op: () => ({ op: 'logic', data: { flow: [{ text: '<the edited ssam-flow/1 text, with the @ids of the read>', basedOn: '<textSha of the read>' }] } }),
+    op: () => ({ op: 'logic', data: { flow: [{ text: '<the edited ssam-flow/1 text, with the @ids of the read>', basedOn: FLOW_READ_BASED_ON }] } }),
     names: { feature: '<Action>', owners: ['<Action>'], changes: ['<what changes in the action>'] },
     slots: { text: 'a line with its @id keeps its element; a line without @id is new; a removed line is a removed element; a header without @key creates the action (no basedOn): server action Name, action <Screen>.Name, data action <Screen>.Name', Action: 'the action (@key, Flow/Screen/Action or its name)' },
     rules: ['Send each changed action WHOLE as read, with the change: a line left out is deleted (a gap in the @ids is refused unless removes:true); the kernel then writes only what changed (set, create, link, delete, rename, move) and the action read again must be the text.',
@@ -426,23 +441,36 @@ export const TEXT_ROUTE_IDS = Object.keys(ROUTES);
  * The section for an intent on a lane: {schema, id, title, wired, form, read, call, slots, rules, contract, also, why}, or null.
  * `slice(pointer)` returns the contract node of the lane index (contractSlice), or undefined.
  */
-export function textRouteSection(intent, lane, { slice = () => undefined, cardBytes = 4096 } = {}) {
+export function textRouteSection(intent, lane, { slice = () => undefined, cardBytes = 4096, capture = null } = {}) {
   const route = classifyTextRoute(intent);
   if (!route) return null;
-  return sectionOf(route, lane, { slice, cardBytes });
+  return sectionOf(route, lane, { slice, cardBytes, capture });
 }
-export function sectionOf(route, lane, { slice = () => undefined, cardBytes = 4096, wired = WIRED[route.id] === true } = {}) {
+// capture {file, sourceSha256}: the capture the answer read (discover with app); its file and hash take the place of the
+// placeholders of the read and of every basedOn that is the capture's (ddl, the capture of an html edit). A flow's textSha
+// comes only from its read (the work packet reads it).
+function withCapture(value, capture) {
+  if (!capture?.file || !/^[a-f0-9]{64}$/.test(String(capture.sourceSha256 ?? ''))) return value;
+  const walk = v => Array.isArray(v) ? v.map(walk) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) =>
+    [k, k === 'target' && x === '<Module or capture.oml>' ? capture.file : x === CAPTURE_BASED_ON ? capture.sourceSha256 : walk(x)])) : v;
+  const out = walk(value);
+  if (out?.tool === 'ssam_map' && out.arguments && !out.arguments.expectedSourceSha256) out.arguments = { ...out.arguments, expectedSourceSha256: capture.sourceSha256 };
+  return out;
+}
+export function sectionOf(route, lane, { slice = () => undefined, cardBytes = 4096, wired = WIRED[route.id] === true, capture = null } = {}) {
   const r = ROUTES[route.id];
   const card = contractCard(slice(r.pointer), cardBytes);
+  const read = withCapture(r.read(lane), capture);
+  const call = wired ? withCapture(deliverCall(lane, r.op(), r.names), capture) : null;
   return {
     schema: TEXT_ROUTE_SCHEMA, id: route.id, title: r.title, wired, form: r.form,
-    read: r.read(lane), readWhy: r.readWhy,
-    call: wired ? deliverCall(lane, r.op(), r.names) : null,
+    read, readWhy: r.readWhy,
+    call,
     // The same read and delivery as ONE tool with one word for both (ssam_code, ssam-code.mjs): what a model calls.
     // a7 (review B1, the family of K1): while ssam_code is unavailable on the hosted server (hosted/tools.json), a hosted
     // route names only the read and the delivery call of its lane (read, call), never the code form. a8: served hosted, the
     // code form is there too (hosted/served.mjs).
-    ...(wired && (!hostedContext() || codeServedHosted()) ? { code: { read: route.id === 'ui.screen-html' ? codeGrammar(lane, 'html') : codeCall(r.read(lane)), write: codeCall(deliverCall(lane, r.op(), r.names)) } } : {}),
+    ...(wired && (!hostedContext() || codeServedHosted()) ? { code: { read: route.id === 'ui.screen-html' ? codeGrammar(lane, 'html') : codeCall(read), write: codeCall(call) } } : {}),
     ...(wired ? {} : { note: 'only reading: the way back of this text is not wired in the MCP (the cut rule of the plan: its fixed point did not close at 100%); write with the JSON op of the matches' }),
     slots: r.slots, rules: [...r.rules, ...COMMON_RULES],
     contract: card ? { pointer: r.pointer, card } : { pointer: r.pointer, expand: `ssam_discover {lane:"${lane}", expand:"contract:${r.pointer}"}` },

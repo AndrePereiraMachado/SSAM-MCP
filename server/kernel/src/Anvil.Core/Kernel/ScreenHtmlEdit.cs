@@ -13,6 +13,53 @@ namespace Anvil.Reading;
 // Free of Studio types: the native moves go through IScreenHtmlWriter (ModelSession implements it over the Model API).
 public static class ScreenHtmlEdit
 {
+    // data.css in an edit goes to the root's own style sheet after the page's <style>, the rule of the document form
+    // (docs/SSAM-HTML.md, Fidelity, CSS: every <style> of the document, then data.css, in document order, as written;
+    // ScreenDocument.OwnSheet), through the same verified <style> edit path. The page's <style> is the one the edit writes:
+    // the <style> of a whole document (the one element edits make included), else a <style> edit, else the reading's
+    // (readingHtml), kept as it is and followed by data.css. Nothing the author wrote is dropped.
+    public static List<string> WithCss(IReadOnlyList<string> edits, string css, string? readingHtml = null)
+    {
+        if (css.Contains("</style>", StringComparison.OrdinalIgnoreCase))
+            throw new FormatException("data.css cannot contain a closing style tag");
+        var result = edits.ToList();
+        for (var i = 0; i < result.Count; i++)
+        {
+            var tree = ScreenHtml.Parse(result[i]);
+            var root = tree.Children.FirstOrDefault(n => !n.IsText);
+            if (root?.Tag is "screen" or "block" && OwnStyle(root) is var own)
+            {
+                if (own != null) Append(own, css); else root.Children.Insert(0, Style(css));
+                result[i] = ScreenHtmlText.Write(tree);
+                return result;
+            }
+            if (root?.Tag == "style")
+            {
+                Append(root, css);
+                result[i] = ScreenHtmlText.Write(tree);
+                return result;
+            }
+        }
+        var read = readingHtml == null ? null : ScreenHtml.Parse(readingHtml).Children.FirstOrDefault(n => !n.IsText) is { } top ? OwnStyle(top) : null;
+        var sheet = Style(read == null ? "" : StyleText(read));
+        Append(sheet, css);
+        result.Add(ScreenHtmlText.Write(sheet));
+        return result;
+
+        // The root's own <style> (the first child <style> without scope="theme": the one the edit plan writes as its sheet).
+        static ScreenHtml.Node? OwnStyle(ScreenHtml.Node root) => root.Children.FirstOrDefault(n => !n.IsText && n.Tag == "style" && n.Get("scope") != "theme");
+        static string StyleText(ScreenHtml.Node style) => string.Concat(style.Children.Select(c => c.Text));
+        static ScreenHtml.Node Style(string text) { var node = new ScreenHtml.Node { Tag = "style" }; node.Children.Add(new ScreenHtml.Node { Text = text }); return node; }
+        // ScreenDocument.OwnSheet's join: one part alone is its text; two parts, a line break between them when the first has none.
+        static void Append(ScreenHtml.Node style, string extra)
+        {
+            var text = StyleText(style);
+            var joined = extra.Length == 0 ? text : text.Length == 0 ? extra : text + (text.EndsWith('\n') ? "" : "\n") + extra;
+            style.Children.Clear();
+            style.Children.Add(new ScreenHtml.Node { Text = joined });
+        }
+    }
+
     // An html op is an edit of a reading when it carries the edit list, or the base of a reading with the screen it edits (the
     // whole document as the edit), or a base without a document. Everything else that holds a <screen>/<block> is the document
     // form (B1, ScreenDocument.IsDocumentOp): a new screen, which may carry the base of a reading only to keep what its
@@ -36,6 +83,8 @@ public static class ScreenHtmlEdit
             Add("/screen", Invalid, "html edit: 'screen' is required (the screen or block read: name, Kind:Name or @key)", "\"screen\": \"<the name ssam_map view html read>\"");
         if (data["basedOn"] is not JsonObject basedOn || basedOn["html"] is not JsonValue)
             Add("/basedOn", Invalid, "html edit: 'basedOn' {capture, html} is the reading the edit was written on (ssam_map view html answers it)", "\"basedOn\": {\"capture\": \"<sourceSha256>\", \"html\": \"<htmlSha256>\"}");
+        if (data.ContainsKey("css") && (data["css"] is not JsonValue cssValue || !cssValue.TryGetValue<string>(out _)))
+            Add("/css", Invalid, "html edit: css must be a string", "send CSS text (it follows the page's <style> in its style sheet), or omit css");
         var texts = new List<(string Pointer, string Text)>();
         if (data["edits"] != null) {
             // CX16: element edits of the reading. Their shape here; their addresses too when the store keeps the reading (ms, no
@@ -97,7 +146,10 @@ public static class ScreenHtmlEdit
         ActionsListed = "HTML_ACTIONS_LISTED", DataNew = "HTML_DATA_NEW", KindChanged = "HTML_KIND_CHANGED", BaseChanged = "HTML_BASE_CHANGED",
         NotApplied = "HTML_EDIT_NOT_APPLIED", ForEach = "HTML_FOREACH", DefaultsMissing = "HTML_STUDIO_DEFAULTS", NameFixed = "HTML_NAME_FIXED",
         // Half a column of a native Table: its header cell and its row cell are removed and added together.
-        TableColumn = "HTML_TABLE_COLUMN";
+        TableColumn = "HTML_TABLE_COLUMN",
+        // F2: a property the page does not keep (editor state, derived, no setter, not of the kind) and a value its property does
+        // not take, both refused before anything is written, named with the element, the property, expected and actual.
+        PropertyNotKept = "HTML_PROPERTY_NOT_KEPT", PropertyValue = "HTML_PROPERTY_VALUE";
 
     // <div if k="..."> followed by its <div else>: the two halves of one If, sent together.
     internal static bool IsIfElse(ScreenHtml.Node first, ScreenHtml.Node second) =>
@@ -131,8 +183,9 @@ public static class ScreenHtmlEdit
 public interface IScreenHtmlWriter<T> where T : class
 {
     // A widget, run (TextWidget, Expression), extended property, HTML event or data element of `kind` under `parent`, at the end
-    // of it. A block instance takes its block, with its placeholders empty.
-    T Create(T parent, string kind, T? block);
+    // of it. A block instance takes its block, with its placeholders empty. The name, when the edit gives one, goes with the
+    // creation: the platform names some widgets only then (a Web Block instance: "Widget does not support name changing").
+    T Create(T parent, string kind, T? block, string? name = null);
     void Set(T node, string property, ScreenHtmlValue<T> value);
     // A data element (variable, input): the name, with the expressions that use it rewritten.
     void Rename(T node, string name);
@@ -215,7 +268,7 @@ public static class ScreenHtmlText
             if (Bare(attribute)) sb.Append(attribute.Key); else sb.Append(ScreenHtml.Attribute(attribute.Key, attribute.Value));
         }
         if (node.Tag == "style") { sb.Append('>').Append(string.Concat(node.Children.Select(c => c.Text))).Append("</style>\n"); return; }
-        if (node.Tag == "text") { sb.Append('>').Append(ScreenHtml.Escape(string.Concat(node.Children.Select(c => c.Text)), true)).Append("</text>\n"); return; }
+        if (node.Tag == "text") { sb.Append('>').Append(ScreenHtml.EscapeLiteral(string.Concat(node.Children.Select(c => c.Text)))).Append("</text>\n"); return; }
         // The runs of the text (ScreenHtml.Runs: a line each, the whitespace beside an inline element kept), each written on its
         // own line in the form that reads back as the same run (ScreenHtml.RunForm).
         var runs = ScreenHtml.Runs(node).ToLookup(r => r.Source, ReferenceEqualityComparer.Instance);
@@ -227,7 +280,7 @@ public static class ScreenHtmlText
                 lines.Add(form switch {
                     'p' => ScreenHtml.Escape(value, true),
                     'x' => "{{ " + ScreenHtml.Escape(value, true) + " }}",
-                    _ => "<text>" + ScreenHtml.Escape(value, true) + "</text>",
+                    _ => "<text>" + ScreenHtml.EscapeLiteral(value) + "</text>",
                 });
             }
         }

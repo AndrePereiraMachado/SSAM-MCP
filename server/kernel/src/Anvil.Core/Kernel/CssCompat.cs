@@ -14,7 +14,11 @@ namespace Anvil.Core;
 /// literals (in srgb, srgb-linear or oklab, or any space when one side is transparent), else a literal to write.</item>
 /// <item>A selector that starts with <c>#reactContainer</c> is written <c>:is(#reactContainer, body)</c> (C35 of the atritos 3
 /// package): the Studio canvas renders blocks without the runtime's #reactContainer, and a client's Shell and Login blocks
-/// came out unstyled there. In the browser the rule selects the same elements.</item>
+/// came out unstyled there. The specificity is the same (an id). With a descendant combinator (<c>#reactContainer .x</c>) the
+/// rule selects, in the published page, the elements the app renders, all inside #reactContainer; with <c>&gt;</c>, <c>+</c>,
+/// <c>~</c> or alone it also selects body itself or body's own children, which is another selection. The html compile keeps the
+/// C35 rewrite of every form; the one normalization of a stylesheet write (CssPipeline) rewrites only the descendant form
+/// (<c>descendantOnly</c>).</item>
 /// </list>
 /// </summary>
 public static class CssCompat
@@ -51,7 +55,7 @@ public static class CssCompat
 
     /// <summary>The stylesheet with every selector that starts with #reactContainer written as :is(#reactContainer, body), and
     /// the list of them. A text rewrite: comments, spacing and every other byte stay as written; nothing changes without one.</summary>
-    public static (string Css, IReadOnlyList<SelectorRewrite> Rewrites) CanvasSelectors(string css)
+    public static (string Css, IReadOnlyList<SelectorRewrite> Rewrites) CanvasSelectors(string css, bool descendantOnly = false)
     {
         var head = "#" + CssStylesheet.ReactContainer;
         if (css.IndexOf(head, StringComparison.Ordinal) < 0) return (css, []);
@@ -83,7 +87,7 @@ public static class CssCompat
                 i = close;
                 continue;
             }
-            sb.Append(SelectorList(prelude, css, preludeStart, head, rewrites)).Append('{');
+            sb.Append(SelectorList(prelude, css, preludeStart, head, rewrites, descendantOnly)).Append('{');
             var blockEnd = BlockEnd(css, end + 1);
             sb.Append(css, end + 1, blockEnd - end - 1);
             i = blockEnd;
@@ -91,7 +95,7 @@ public static class CssCompat
         return rewrites.Count == 0 ? (css, []) : (sb.ToString(), rewrites);
     }
 
-    private static string SelectorList(string prelude, string css, int offset, string head, List<SelectorRewrite> rewrites)
+    private static string SelectorList(string prelude, string css, int offset, string head, List<SelectorRewrite> rewrites, bool descendantOnly = false)
     {
         var parts = new List<string>(); var depth = 0; var from = 0; char? quote = null;
         for (var k = 0; k < prelude.Length; k++)
@@ -110,7 +114,8 @@ public static class CssCompat
             var part = parts[p];
             var lead = part.Length - part.TrimStart().Length;
             var selector = part.Trim();
-            if (selector.StartsWith(head, StringComparison.Ordinal) && (selector.Length == head.Length || " \t\r\n>+~.:[".Contains(selector[head.Length])))
+            if (selector.StartsWith(head, StringComparison.Ordinal) && (selector.Length == head.Length || " \t\r\n>+~.:[".Contains(selector[head.Length]))
+                && (!descendantOnly || Descendant(selector[head.Length..])))
             {
                 var written = CssStylesheet.CanvasRoot + selector[head.Length..];
                 var (line, column) = Position(css, position + lead);
@@ -121,6 +126,9 @@ public static class CssCompat
         }
         return string.Join(",", parts);
     }
+
+    // After #reactContainer: whitespace, then a compound (not a combinator): the descendant form.
+    private static bool Descendant(string rest) => rest.Length > 0 && char.IsWhiteSpace(rest[0]) && rest.TrimStart() is { Length: > 0 } next && !">+~".Contains(next[0]);
 
     // ---- @import -------------------------------------------------------------------------------------------------------
 

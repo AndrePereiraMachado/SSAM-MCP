@@ -9,8 +9,15 @@ export const pipeName = (version, pid) => `\\\\.\\pipe\\ODC3-Bridge-${version}-$
 
 // How long a reply may take: the bridge's own wait for `wait <condition> [module] <seconds>` and
 // `publish <manifest> --wait <minutes>`, plus a margin; otherwise the 10 minutes of the .NET client.
+// The bridge's own deadline per command (StartupHook.cs Serve: the timeout switch). Past it the bridge answers by itself
+// (uncertain, with the open dialogs) and keeps serving; a client that gave up first leaves that answer on a closed pipe.
+// So the client always waits past the bridge's deadline: 2026-10-22, the client stopped at 10 min, the bridge answered at
+// 15 min onto a closed pipe and (bridge <= v95) its command server ended with it.
+export const BRIDGE_COMMAND_TIMEOUT_MS = Object.freeze({ merge: 15 * 60 * 1000 });
+const BRIDGE_ANSWER_MARGIN_MS = 60 * 1000;
 export function replyTimeoutMs(args) {
   const base = 10 * 60 * 1000;
+  if (args[0] === 'merge' || args[0] === 'reconcile-merge') return BRIDGE_COMMAND_TIMEOUT_MS.merge + BRIDGE_ANSWER_MARGIN_MS;
   if (args[0] === 'wait') { const s = Number(args.at(-1)); return Number.isFinite(s) ? Math.max(base, s * 1000 + 60000) : base; }
   if (args[0] === 'publish') { const i = args.indexOf('--wait'); const m = Number(args[i + 1]); return i >= 0 && Number.isFinite(m) ? Math.max(base, m * 60000 + 60000) : base; }
   return base;

@@ -1,3 +1,4 @@
+import { appendJsonLine } from './correlation.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -15,8 +16,8 @@ export async function kernelReading(entry,args) {
   try { return await executeReading(entry,args); }
   catch(error) {
     const directory=readingDir(entry);fs.mkdirSync(directory,{recursive:true});
-    fs.appendFileSync(path.join(directory,'operations.jsonl'),JSON.stringify({at:new Date().toISOString(),
-      command:'inspect',outcome:'error',error:error.message})+'\n');
+    appendJsonLine(path.join(directory,'operations.jsonl'), {at:new Date().toISOString(),
+      command:'inspect',outcome:'error',error:error.message});
     throw error;
   }
 }
@@ -50,7 +51,7 @@ async function executeReading(entry,args) {
   const result=presentReading(response,{file,out,budget:values.budget??60000});
   result.timings.totalMs=performance.now()-started;
   const journal=path.join(readingDir(entry),'operations.jsonl');
-  fs.appendFileSync(journal,JSON.stringify({at:new Date().toISOString(),command:'inspect',outcome:'ok',file,sourceSha256:result.sourceSha256,cache:result.cache,timings:result.timings})+'\n');
+  appendJsonLine(journal, {at:new Date().toISOString(),command:'inspect',outcome:'ok',file,sourceSha256:result.sourceSha256,cache:result.cache,timings:result.timings});
   // Preserve the O11 CLI envelope used by callers of ssam inspect.
   return {ok:true,command:'inspect',elapsedMs:result.timings.totalMs,data:result};
 }

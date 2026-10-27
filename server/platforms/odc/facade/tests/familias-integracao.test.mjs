@@ -23,8 +23,8 @@ const tmp = () => fs.mkdtempSync(path.join(isolatedProfile, 'fam-int-'));
 
 test('a problem is never cut for the size of its patch: the patches are left out first', () => {
   const problems = [
-    { op: 0, pointer: '/ops/0/data/html', code: 'A_PATCHED', severity: 'error', message: 'a', fix: 'f', patch: [{ op: 'replace', path: '/ops/0/data/html', value: big(20000) }] },
-    { op: 1, pointer: '/ops/1/data/html', code: 'B_PATCHED', severity: 'error', message: 'b', fix: 'f', patch: [{ op: 'replace', path: '/ops/1/data/html', value: big(20000) }] },
+    { op: 0, pointer: '/ops/0/data/html', code: 'A_PATCHED', severity: 'error', message: 'a', fix: 'f', patch: [{ op: 'replace', path: '/ops/0/data/html', value: big(20000) }], patchCertain: true },
+    { op: 1, pointer: '/ops/1/data/html', code: 'B_PATCHED', severity: 'error', message: 'b', fix: 'f', patch: [{ op: 'replace', path: '/ops/1/data/html', value: big(20000) }], patchCertain: true },
     { op: 2, pointer: '/ops/2', code: 'C_PLAIN', severity: 'error', message: 'c', fix: 'f' },
     { op: 2, pointer: '/ops/2', code: 'D_PLAIN', severity: 'error', message: 'd', fix: 'f' },
     { op: 2, pointer: '/ops/2', code: 'E_PLAIN', severity: 'error', message: 'e', fix: 'f' },
@@ -50,7 +50,7 @@ test('the verified patches go beside the job and patch "verified" applies them w
   const jobText = JSON.stringify({ ops }, null, 2) + '\n';
   const file = path.join(dir, 'job.json'); fs.writeFileSync(file, jobText);
   // 60 verified patch operations: more than a written patch may have (50).
-  const problems = ops.map((_, i) => ({ op: i, pointer: `/ops/${i}/value`, code: 'FAMILY_' + i, severity: 'error', message: 'm' + i, fix: 'f', patch: [{ op: 'replace', path: `/ops/${i}/value`, value: 'new' }] }));
+  const problems = ops.map((_, i) => ({ op: i, pointer: `/ops/${i}/value`, code: 'FAMILY_' + i, severity: 'error', message: 'm' + i, fix: 'f', patch: [{ op: 'replace', path: `/ops/${i}/value`, value: 'new' }], patchCertain: true }));
   const value = withNamedPatches({ ok: false, ...refusalFields(problems, {}, { jobFile: file }), job: file, ...nextBasedOnOf(file, sha(jobText)) }, file);
   assert.equal(value.verifiedPatch.ops, 60);
   assert.equal(value.verifiedPatch.call.patch, 'verified');

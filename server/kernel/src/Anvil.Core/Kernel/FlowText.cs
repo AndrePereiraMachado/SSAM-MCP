@@ -193,7 +193,7 @@ public static class FlowOwners
     private static readonly string[] Flows = ["UIFlow", "MobileFlow", "WebFlow"];
 
     // The kinds of action that belong to an owner (the others belong to the module).
-    public static bool Owned(string kind) => kind is "ScreenAction" or "DataAction";
+    public static bool Owned(string kind) => kind is "ScreenAction" or "DataAction" or "Preparation";
 
     // A written owner: a name, or a path of names (Flow/Name).
     public static bool Valid(string text) => text.Length > 0 && text.Split('/').All(FlowSyntax.IsIdentifier);

@@ -22,8 +22,8 @@
    "screens": 4,
    "blocks": 7,
    "widgets": 161,
-   "represented": 0,
-   "note": "Traditional Web is D2: every Traditional widget reads as os-opaque with its subtree (the plan counted 51 widgets of shared kinds inside them). Only the fixed point applies."
+   "represented": 158,
+   "note": "Since ScreenHtml extractor 12 the Traditional Web widgets have rows of their own under a WebScreen or WebBlock (inputs, password, checkbox and radio inputs, select, records, tables, block instances, containers, links, buttons, expressions), read and edited; only a generic WebWidget (3 here) reads as os-opaque with its subtree. Measured with the reader on traditional-ui.oml: 161 widgets, 158 represented. The edits of every screen and block of the fixture are proven by ScreenHtmlEditJobTests.EverySyntheticEditOfTheTraditionalFixtureReadsBack."
   },
   "ODC apps reais": {
    "modules": 4,

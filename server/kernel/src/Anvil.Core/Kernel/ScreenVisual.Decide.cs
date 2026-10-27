@@ -29,6 +29,8 @@ public static partial class ScreenVisual
         public static readonly PageTheme None = new(null, false, "the module has no theme", []);
         /// <summary>The ObjectKey of the theme (null: none, or a block whose pages show no theme of this module).</summary>
         public string? Key { get; init; }
+        /// <summary>T18: the Theme Editor halves of the chain (the installed base of its token rules).</summary>
+        public IReadOnlyList<string> Base { get; init; } = [];
         /// <summary>A block: each theme of the screens that show it (review 4, N1); empty for a screen.</summary>
         public IReadOnlyList<ShownTheme> Shown { get; init; } = [];
         /// <summary>A block that no screen places yet: decided on the theme of its own flow.</summary>

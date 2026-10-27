@@ -36,6 +36,17 @@ import { discover } from '../discovery.mjs';
 import * as discoveryModule from '../discovery.mjs'; // answerCeiling: at the base the baseline test fails on its rule, not at import
 import { discoverAll, routeTools, loadToolRoutes, toolGroups, TOOLS_FILE, modelMatchesOf, withOperationalTitles, lex } from '../tool-routing.mjs';
 import { snapshotSources, resultsSnapshot } from './fixtures/discovery-results.mjs';
+// Family F4 (the app kind is a hard filter): the baseline answers that change, written by hand with why. A capability proven on
+// no app kind of its lane is never offered (ui.dropdown-search has no O11 proof, ui.html-page no ODC proof), and an intent
+// that names a Traditional screen gets nothing of the Reactive layer. For these the direct matches are the baseline's
+// without the ids named, in the baseline's order; the dependencies and the alternatives refill the room, so they are not
+// compared.
+const F4_REMOVED = {
+  'o11 a-action-input-param': ['ui.dropdown-search'], 'o11 a-aggregate-sort': ['ui.dropdown-search'], 'o11 d-form-dropdown-en': ['ui.dropdown-search'],
+  'o11 d-form-dropdown-search-pt': ['ui.dropdown-search'], 'o11 b-delete-block': ['ui.dropdown-search'],
+  'odc a-data-action-en': ['ui.html-page'], 'odc d-policy-list-composite': ['ui.html-page'], 'odc b-delete-block': ['ui.html-page'], 'odc b-traditional-table': ['ui.html-page'],
+  'o11 a-preparation-traditional': ['ui.screen'], 'o11 b-traditional-table': ['ui.list', 'ui.screen', 'ui.form', 'ui.screen-spec', 'ui.html-visual', 'ui.widget'],
+};
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // The lane indexes read the committed snapshot of stamped job results (fixtures/discovery-results.json), never
@@ -196,8 +207,10 @@ test('discoverAll keeps the model answers of the baseline (matches identical, mo
       // its note (discovery.mjs atEntry, sections) is the one that budget gave: the matches of the baseline.
       raisedProbes++;
       const direct = matches.filter(m => m.endsWith(':match'));
-      const got = expected.every(m => m.endsWith(':match')) ? direct : matches;
-      if (raised.rule !== 'raise-to-minimal' || !isDeepStrictEqual(got, expected)) diffs.push(`${lane} ${budget} ${i.id}: raised (${JSON.stringify(raised)}) ${got.join(',')} != ${expected.join(',')}`);
+      const gone = F4_REMOVED[`${lane} ${i.id}`];
+      const expectedF4 = gone ? expected.filter(m => m.endsWith(':match') && !gone.includes(m.split(':')[0])) : expected;
+      const got = gone || expected.every(m => m.endsWith(':match')) ? direct : matches;
+      if (raised.rule !== 'raise-to-minimal' || !isDeepStrictEqual(got, expectedF4)) diffs.push(`${lane} ${budget} ${i.id}: raised (${JSON.stringify(raised)}) ${got.join(',')} != ${expectedF4.join(',')}`);
     } else {
       // A screen intent whose model part would leave no room for the OutSystems UI counts is budgeted with that floor less
       // (2026-10-05, C07), and says so (size.reserved): its matches are the model answer at the budget minus the floor. At
@@ -209,7 +222,11 @@ test('discoverAll keeps the model answers of the baseline (matches identical, mo
       const reserved = reservedUi + reservedText;
       const want = reserved ? ((await discover({ ...input, budgetBytes: Number(budget) - reserved, outsystemsUi: !reservedUi, textRoutes: false })).matches ?? []).map(m => `${m.id}:${m.via}`) : expected;
       if (reserved) floored++;
-      if (!isDeepStrictEqual(matches, want)) diffs.push(`${lane} ${budget} ${i.id}: ${matches.join(',')} != ${want.join(',')}${reserved ? ` (floor ${reserved})` : ''}`);
+      const removed = F4_REMOVED[`${lane} ${i.id}`] ?? null;
+      const direct = list => list.filter(m => m.endsWith(':match'));
+      const got = removed ? direct(matches) : matches;
+      const wanted = removed ? direct(want).filter(m => !removed.includes(m.split(':')[0])) : want;
+      if (!isDeepStrictEqual(got, wanted)) diffs.push(`${lane} ${budget} ${i.id}: ${got.join(',')} != ${wanted.join(',')}${reserved ? ` (floor ${reserved})` : ''}`);
     }
     if (i.tools === 'none' && budget === '12000') {
       // With a direct model match, operational capabilities are shown with their operationalTitles title (titles only).

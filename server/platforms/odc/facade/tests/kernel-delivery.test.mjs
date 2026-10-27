@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { deliverKernel, interpretKernelResult, requiredFlowLayoutEngine, withBridgeUpgrade, withManifestCode } from '../kernel-delivery.mjs';
+import { stamped } from '../correlation.mjs';
 
 test('named reference producers are acquired without changing the consumer before headless build', async t => {
   const f = fixture(t);
@@ -99,7 +100,9 @@ test('preview delivers no merge and records the completed steps', async t => {
   assert.equal(result.merged, false);
   assert.equal(result.publishInvoked, false);
   assert.deepEqual(f.calls, ['snapshot', 'apply', 'manifest', 'check-base', 'preview']);
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(result.evidence, 'deliver-result.json'))), result);
+  // F7 (89b45b53): the receipt is stamped with the session and call trace; the answer itself is unchanged.
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(result.evidence, 'deliver-result.json'))), stamped(result));
+  assert.equal(result.correlationId, undefined);
   assert.equal(f.entries.length, 1);
 });
 

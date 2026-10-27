@@ -106,6 +106,25 @@ test('bad login fails without server feedback or secret', async () => {
   assert.equal(send.calls.length, 2);
 });
 
+test('successful credential POST may render the authenticated page at Login.aspx', async () => {
+  const landing = '<form action="Login.aspx"><a href="Logout.aspx">Log out</a><h1>Service Center</h1></form>';
+  const send = fakeSend([response(200, LOGIN), response(200, landing), response(200, '<h1>Protected data</h1>')]);
+  const client = new Client(loginVault(send), new Transport(HOST, { send }));
+  await client.login();
+  assert.equal(client.authenticated, true);
+  assert.equal(send.calls.length, 2, 'do not resend credentials when the post already succeeded');
+  await client.get('Error_Logs.aspx');
+  assert.equal(send.calls.length, 3);
+});
+
+test('a logout link does not excuse a password form or login layout after the credential POST', async () => {
+  for (const html of [LOGIN + '<a href="Logout.aspx">Log out</a>', '<div class="sc-layout-login"><a href="Logout.aspx">Log out</a></div>']) {
+    const send = fakeSend([response(200, LOGIN), response(200, html)]);
+    await assert.rejects(new Client(loginVault(send), new Transport(HOST, { send })).login(), e => e.code === 'SC_AUTH_EXPIRED');
+    assert.equal(send.calls.length, 2);
+  }
+});
+
 test('logout marker is required', async () => {
   const send = fakeSend([response(200, LOGIN), response(302, '', { location: 'Home.aspx' }), response(200, '<p>Unexpected identity provider</p>')]);
   await assert.rejects(new Client(loginVault(send), new Transport(HOST, { send })).login(), isProtocol(/confirm/));

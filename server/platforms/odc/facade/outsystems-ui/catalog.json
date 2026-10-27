@@ -14,6 +14,11 @@
    "sha256": "3561fcf8df1e36cef6d9b7baab1057db25d1de2e052bb10ef03d25d62c9fb345"
   },
   {
+   "id": "o11Rich",
+   "path": "kernel/catalog/ui/RichWidgets-unversioned.json",
+   "sha256": "2ff845ab7583ba32f39f837c1b1f6d06da66953c4ef78edf5330a60a4b130b38"
+  },
+  {
    "id": "inventory",
    "path": "kernel/docs/mapa/screen-osui-inventory.json",
    "sha256": "6e97e77a3eaa12c824a779f76befea6aecf05e5aa8761530b411176e5c24fa80"
@@ -50,6 +55,10 @@
   "o11-traditional": {
    "lane": "o11",
    "library": "o11-outsystemsuiweb",
+   "libraries": [
+    "o11-outsystemsuiweb",
+    "o11-richwidgets"
+   ],
    "label": "O11 Traditional Web app"
   }
  },
@@ -69,10 +78,6 @@
   {
    "library": "Layout blocks of Reactive/Mobile/ODC apps (LayoutTopMenu, LayoutSideMenu...)",
    "note": "they live in the app template's own Common flow, not in OutSystemsUI; read them in the module (ssam_map kind MobileBlock)"
-  },
-  {
-   "library": "RichWidgets (Traditional)",
-   "note": "a separate library (kernel/catalog/ui/RichWidgets-unversioned.json), not part of OutSystems UI"
   }
  ],
  "libraries": [
@@ -8023,6 +8028,493 @@
     ],
     "notCertified": []
    },
+   "actions": [
+    {
+     "name": "GetBrowser",
+     "description": "Gets the browser.",
+     "inputs": [],
+     "outputs": [
+      {
+       "Name": "Browser",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": null
+      }
+     ]
+    },
+    {
+     "name": "ToggleModal",
+     "description": "Toggles the opening and closing of a specific modal.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "Toggle a specific modal."
+      },
+      {
+       "Name": "TriggerButtonId",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "Id of the button that triggers the interaction. Use this parameter to ensure the focus stays in the same trigger after closing the element. \n\nThis is important for Acessibility compliance."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "PlayVideo",
+     "description": null,
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": null
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "IsDesktop",
+     "description": null,
+     "inputs": [],
+     "outputs": [
+      {
+       "Name": "IsDesktop",
+       "Type": "Boolean",
+       "Mandatory": false,
+       "Default": null,
+       "Description": null
+      }
+     ]
+    },
+    {
+     "name": "ToggleAnimate",
+     "description": "Toggle the Enter and Leave Animation from Animate pattern.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "Name of the block to be affected."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "GetOS",
+     "description": "Gets the Operating System.",
+     "inputs": [],
+     "outputs": [
+      {
+       "Name": "OS",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": null
+      }
+     ]
+    },
+    {
+     "name": "TogglePassword",
+     "description": "Use this action to show or hide the password on an input widget of type password, a common use case for login screens.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "Name of the input to be affected."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "ToggleSidebar",
+     "description": "Toggles the opening and closing of a specific sidebar.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "Toggle a specific sidebar."
+      },
+      {
+       "Name": "TriggerButtonId",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "Id of the button that triggers the interaction. Use this parameter to ensure the focus stays in the same trigger after closing the element. \n\nThis is important for Acessibility compliance."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "HideElement",
+     "description": "Hide a specific block.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "Name of the block to be affected."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "ToggleElement",
+     "description": "Toggle a specific block.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "Name of the block to be affected."
+      },
+      {
+       "Name": "TriggerButtonId",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "Id of the button that triggers the interaction. Use this parameter to ensure the focus stays in the same trigger, after closing the element. \n\nThis is important for Accessibility compliance."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "Next",
+     "description": "Go to the next item on Carousel. ",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": null
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "TextEllipsis",
+     "description": "Cut off text to input size ending in ...",
+     "inputs": [
+      {
+       "Name": "Text",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": null
+      },
+      {
+       "Name": "NumberOfChars",
+       "Type": "Integer",
+       "Mandatory": true,
+       "Default": null,
+       "Description": null
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "Out",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": null
+      }
+     ]
+    },
+    {
+     "name": "SetAriaHidden",
+     "description": "Use this action to toggle the status of the aria-hidden attribute of an element.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "Name of the block to be affected."
+      },
+      {
+       "Name": "IsHidden",
+       "Type": "Boolean",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "Variable that holds the value of the aria-hidden attribute."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "PauseVideo",
+     "description": null,
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": null
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "SetFocus",
+     "description": "Use this action to set the focus to an element.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "Name of the block to be affected."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "GoTo",
+     "description": "Go to a specific item on Carousel. It's a zero-based action, meaning that the first item index is 0.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": null
+      },
+      {
+       "Name": "Index",
+       "Type": "Integer",
+       "Mandatory": true,
+       "Default": null,
+       "Description": null
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "AddDeviceMetatag",
+     "description": "Adds the respective metatags for android or ios to make width=device-width. Useful for layouts.",
+     "inputs": [],
+     "outputs": []
+    },
+    {
+     "name": "ToggleFlipContent",
+     "description": null,
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": null
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "EncapsulateJS",
+     "description": "Encapsulates content in <script> tag.﻿",
+     "inputs": [
+      {
+       "Name": "Content",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "JavaScript to set inside a <script> tag."
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "Out",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": null
+      }
+     ]
+    },
+    {
+     "name": "IsTablet",
+     "description": "Indicates if the app is currently running on a tablet.",
+     "inputs": [],
+     "outputs": [
+      {
+       "Name": "IsTablet",
+       "Type": "Boolean",
+       "Mandatory": false,
+       "Default": null,
+       "Description": null
+      }
+     ]
+    },
+    {
+     "name": "GetDevice",
+     "description": "Gets the Device.",
+     "inputs": [],
+     "outputs": [
+      {
+       "Name": "Device",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": null
+      }
+     ]
+    },
+    {
+     "name": "ShowElement",
+     "description": "Show a specific block.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "Name of the block to be affected."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "ScrollToElement",
+     "description": "Automatically scroll to a given element on the page.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The target element to scroll to after the page loads."
+      },
+      {
+       "Name": "IsSmooth",
+       "Type": "Boolean",
+       "Mandatory": false,
+       "Default": "True",
+       "Description": "If IsSmooth is true, the navigation to destination will animate. If set to false, it will navigate instantly."
+      },
+      {
+       "Name": "OffSet",
+       "Type": "Integer",
+       "Mandatory": false,
+       "Default": "0",
+       "Description": "Space, in pixels, that you want of margin from the top."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "EnterAnimation",
+     "description": "Set type of enter animation for a specific block.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "Name of the block to be affected."
+      },
+      {
+       "Name": "EnterAnimation",
+       "Type": "EnterAnimation Identifier",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "Animation that will be used as the block enters."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "IsPhone",
+     "description": "Indicates if the app is currently running on a phone.",
+     "inputs": [],
+     "outputs": [
+      {
+       "Name": "IsPhone",
+       "Type": "Boolean",
+       "Mandatory": false,
+       "Default": null,
+       "Description": null
+      }
+     ]
+    },
+    {
+     "name": "Previous",
+     "description": "Go to the previous item on Carousel. ",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": null
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "GetDeviceOrientation",
+     "description": "Gets the Device Orientation.",
+     "inputs": [],
+     "outputs": [
+      {
+       "Name": "Orientation",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": null
+      }
+     ]
+    },
+    {
+     "name": "SetHourFor12hFormat",
+     "description": "Returns Set 12h format time (06:00pm) into a 24h format hour (18)",
+     "inputs": [
+      {
+       "Name": "Time12Format",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": null
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "Hour24Format",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": null
+      }
+     ]
+    },
+    {
+     "name": "ToggleChatActions",
+     "description": "Toggle Actions placeholder from ChatMessage pattern.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "Name of the block to be affected."
+      }
+     ],
+     "outputs": []
+    }
+   ],
    "patterns": [
     {
      "name": "LayoutLogin",
@@ -11658,6 +12150,1620 @@
     "descriptionMissing": [
      "Website_Section",
      "LayoutEmail"
+    ]
+   }
+  },
+  {
+   "id": "o11-richwidgets",
+   "name": "RichWidgets",
+   "producer": "RichWidgets",
+   "key": "sxSgg9oQRkKKlyKvezqjKg",
+   "version": null,
+   "runtime": "Traditional",
+   "source": "kernel/catalog/ui/RichWidgets-unversioned.json",
+   "element": "IWebBlock:<Name>",
+   "instance": "{\"op\":\"create\",\"parent\":\"<placeholder or container>\",\"type\":\"IWebBlockInstanceWidget\",\"name\":\"<Name>1\",\"source\":\"IWebBlock:<Name>\",\"empty\":true}; bind inputs and OnNotify from the actual contract; compose behavior in the same delivery",
+   "reference": "{\"op\":\"reference\",\"producer\":\"RichWidgets\",\"elements\":[\"IWebBlock:<Name>\"]}; bind the published producer; read action contracts for paging, sorting, feedback and popup lifecycle",
+   "note": "Legacy Traditional components. Inspect deprecation/device restrictions; catalog presence is not native or browser proof.",
+   "certified": null,
+   "actions": [
+    {
+     "name": "Tabs_ClientSide_GetJavaScriptToActivateTab",
+     "description": "Returns the JavaScript code to activate a tab. Use it to fill the URL property of an External Site link or in the onclick extended property of buttons.",
+     "inputs": [
+      {
+       "Name": "TabsWidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The Id of the Tabs_ClientSide web block widget"
+      },
+      {
+       "Name": "Tab",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The Id or the title extended property of the tab to activate."
+      },
+      {
+       "Name": "IgnoreErrors",
+       "Type": "Boolean",
+       "Mandatory": false,
+       "Default": "False",
+       "Description": "When set to True, disables the display of error messages."
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "JavaScript",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "The JavaScript code that activates the specified tab."
+      }
+     ]
+    },
+    {
+     "name": "DateTime_PrettyFormat",
+     "description": "Formats a date and time relatively to the current moment.\n<= 1 min\n    16:08 (just now)\n< 24 hours\n    16:07 (1 minute ago), 22:09 (in 6 hours)\n>=24 hours and <= 1 day\n    yesterday, today, tomorrow\n<= 30 days\n    30 Jul (3 weeks ago), 8 Aug (9 days ago), 27 Aug (in 10 days), 16 Sep (in 4 weeks)\n> 30 days\n   30 Apr, 20 Oct\nThe year is different \n    2008/11/30, 2014/03/30\n    In this case:\n       - It overrides the previous formats except the first one.\n        - The date format is as defined in the Service Center.\n",
+     "inputs": [
+      {
+       "Name": "DateTime",
+       "Type": "Date Time",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The date to format."
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "FormattedText",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "Returns the date and time relatively to the current moment.\n<= 1 min\n    16:08 (just now)\n< 24 hours\n    16:07 (1 minute ago), 22:09 (in 6 hours)\n>=24 hours and <= 1 day\n    yesterday, today, tomorrow\n<= 30 days\n    30 Jul (3 weeks ago), 8 Aug (9 days ago), 27 Aug (in 10 days), 16 Sep (in 4 weeks)\n> 30 days\n   30 Apr, 20 Oct\nThe year is different \n    2008/11/30, 2014/03/30\n    In this case:\n       - It overrides the previous formats except the first one.\n        - The date format is as defined in the Service Center.\n"
+      }
+     ]
+    },
+    {
+     "name": "Feedback_Message",
+     "description": "Sets the message to be displayed on the Feedback_Message widget.",
+     "inputs": [
+      {
+       "Name": "MessageText",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The content of the feedback message."
+      },
+      {
+       "Name": "MessageType",
+       "Type": "MessageType Identifier",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The type of the message for the Feedback_Message widget."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "List_SortColumn_SetOrderBy",
+     "description": "Sets the which column the rows in the Table Records widget are going to be sorted.",
+     "inputs": [
+      {
+       "Name": "TableRecordsId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The 'Id' runtime property of the TableRecords widget."
+      },
+      {
+       "Name": "Column",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The name of the column to be sorted."
+      },
+      {
+       "Name": "Direction",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": "\"ASC\"",
+       "Description": "Sets the sort direction: 'ASC' for ascending order or 'DESC' for descending order.\nThe default is 'ASC'."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "IsMobileBrowser",
+     "description": "Returns whether the browser that is currently making the request is a mobile browser. \nThis is done using regular expressions on the browser user agent. \nTo add more mobile browsers change Richwidgets.Site.MobileBrowsersRegExp1 and Richwidgets.Site.MobileBrowsersRegExp2.\n\n",
+     "inputs": [],
+     "outputs": [
+      {
+       "Name": "IsMobileBrowser",
+       "Type": "Boolean",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "Returns True if it is a mobile browser."
+      }
+     ]
+    },
+    {
+     "name": "List_Navigation_GetStartIndex",
+     "description": "Resets the index stored in the Session Variable that is used in the 'List_Navigation_GetStartIndex' action.",
+     "inputs": [
+      {
+       "Name": "ListWidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The 'Id' runtime property of the paginated TableRecords or ListRecords widget."
+      },
+      {
+       "Name": "RememberStartIndex",
+       "Type": "Boolean",
+       "Mandatory": false,
+       "Default": "False",
+       "Description": "If True, a Session Variable is used to store the index of the first row to be shown. \nThe default value is False."
+      },
+      {
+       "Name": "StartIndexOverride",
+       "Type": "Integer",
+       "Mandatory": false,
+       "Default": "-1",
+       "Description": "The index of the first row to be shown.\nThe default is the first row or the one stored in the Session Variable (if enabled)."
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "StartIndex",
+       "Type": "Integer",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "The start index for the TableRecords or ListRecords widget."
+      }
+     ]
+    },
+    {
+     "name": "Widget_Hide",
+     "description": "Hides a widget by setting the CSS property 'display' to 'none'.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The id of the widget to hide."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "Tabs_ClientSide_SetNextActiveTab",
+     "description": "Sets the tab that will be active the next time the page is displayed. It has no effect if used on the Preparation of the page when IsLoadingScreen() is true. In that case, use the InitialActiveTab parameter of the Tabs_ClientSide web block instead.",
+     "inputs": [
+      {
+       "Name": "TabsWidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The Id of the Tabs_ClientSide web block widget."
+      },
+      {
+       "Name": "Tab",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The Id or the title extended property of the tab that will be active the next time the page is displayed."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "Input_FocusFirstInvalid",
+     "description": "Set the focus in the first invalid input.",
+     "inputs": [],
+     "outputs": []
+    },
+    {
+     "name": "List_Move_Down",
+     "description": "Use this action in the 'OnNotify' action of the 'List_Move' widget to know the move direction.\nCompare with the 'NotifyWidgetGetMessage()' built-in action.",
+     "inputs": [],
+     "outputs": [
+      {
+       "Name": "Message",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "Returns 'DOWN'."
+      }
+     ]
+    },
+    {
+     "name": "Popup_Editor_Notify",
+     "description": "Makes a PopupEditor trigger the OnNotify action on the web block.",
+     "inputs": [
+      {
+       "Name": "Argument",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": null
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "Deprecated_RecentItem_Add",
+     "description": "DEPRECATED: Add a new item for the current URL to the recent items list.",
+     "inputs": [
+      {
+       "Name": "Label",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The name that identifies the item."
+      },
+      {
+       "Name": "Tag",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "The type of the item."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "Widget_Show",
+     "description": "Shows a widget by setting the CSS property 'display' to ''. Only works if the widget was hidden by setting that property to 'none'. It won't work for widgets hidden by setting their 'Visible' property to false.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The id of the widget to show."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "Date_PrettyFormat",
+     "description": "Formats a date relatively to today’s date:\n<= 1 day\n    yesterday, today, tomorrow\n<= 14 days\n    8 Aug (9 days ago), 27 Aug (in 10 days)\n<= 30 days\n    30 Jul (3 weeks ago), 16 Sep (in 4 weeks)\n> 30 days\n   30 Apr, 20 Oct\nFor a different year\n    2008/11/30, 2014/03/30\n    In this case:\n       - It overrides the previous formats except the first one.\n        - The date format is as defined in the Service Center.\n",
+     "inputs": [
+      {
+       "Name": "Date",
+       "Type": "Date",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The date to format."
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "FormattedText",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "Returns a date relatively to today’s date:\n<= 1 day\n    yesterday, today, tomorrow\n<= 14 days\n    8 Aug (9 days ago), 27 Aug (in 10 days)\n<= 30 days\n    30 Jul (3 weeks ago), 16 Sep (in 4 weeks)\n> 30 days\n   30 Apr, 20 Oct\nFor a different year\n    2008/11/30, 2014/03/30\n    In this case:\n       - It overrides the previous formats except the first one.\n        - The date format is as defined in the Service Center.\n"
+      }
+     ]
+    },
+    {
+     "name": "GetServerName",
+     "description": null,
+     "inputs": [],
+     "outputs": [
+      {
+       "Name": "ServerName",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": null
+      }
+     ]
+    },
+    {
+     "name": "Popup_Upload_GetFile",
+     "description": "DEPRECATED: Returns the binary file uploaded in the Popup_Upload web screen. \n\nThis action should be run on the OnNotify action of the Popup_Editor widget that links to the Popup_Upload web screen and in the Id parameter it should send the result of NotifyWidgetGetMessage() built-in function.",
+     "inputs": [
+      {
+       "Name": "Id",
+       "Type": "Integer",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The Id of the uploaded file, which is passed by Popup_Upload as the message of the OnNotify"
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "File",
+       "Type": "UploadedFile Record",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "Returns the uploaded file data."
+      }
+     ]
+    },
+    {
+     "name": "List_Navigation_ResetStartIndex",
+     "description": "Clears the session variable used to remember the index of the first row to show in the page.",
+     "inputs": [
+      {
+       "Name": "ListWidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The 'Id' runtime property of the paginated TableRecords or ListRecords widget."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "List_SortColumn_GetOrderBy",
+     "description": "Retrieves the order by string currently in use by a TableRecords widget (if any).",
+     "inputs": [
+      {
+       "Name": "TableRecordsId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The 'Id' runtime property of the TableRecords widget."
+      },
+      {
+       "Name": "DefaultOrder",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "Set with an order by string to be returned if no order by string exists."
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "OrderBy",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "Returns the order by string."
+      }
+     ]
+    },
+    {
+     "name": "Deprecated_RecentItem_Remove",
+     "description": "DEPRECATED: Removes the item for the current URL from the recent items list.",
+     "inputs": [],
+     "outputs": []
+    },
+    {
+     "name": "Menu_GetStyle",
+     "description": "Returns the styles for the menu options.",
+     "inputs": [
+      {
+       "Name": "IsActive",
+       "Type": "Boolean",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "If True, the 'ActiveStyle' value is returned.\nIf False, the 'InactiveStyle' value is returned."
+      },
+      {
+       "Name": "ActiveStyle",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": "\"Menu_TopMenu Menu_TopMenuActive\"",
+       "Description": "Set with the your style for the active menu option.\nThe default value is 'Menu_TopMenu Menu_TopMenuActive'."
+      },
+      {
+       "Name": "InactiveStyle",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": "\"Menu_TopMenu\"",
+       "Description": "Set with the your style for an inactive menu option.\nThe default value is 'Menu_TopMenu'."
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "Style",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "Returns the style for the menu option."
+      }
+     ]
+    },
+    {
+     "name": "Popup_Editor_Close",
+     "description": "Closes a PopupEditor window.",
+     "inputs": [],
+     "outputs": []
+    },
+    {
+     "name": "Popup_Editor_GetMessage",
+     "description": "Returns the notification message sent by the Notify action.",
+     "inputs": [],
+     "outputs": [
+      {
+       "Name": "Message",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": null
+      }
+     ]
+    },
+    {
+     "name": "Widget_Click",
+     "description": "Clicks a button or a link. It does not work for Links with Method Navigate or Submit.",
+     "inputs": [
+      {
+       "Name": "WidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The id of the link or button to click (triggers the onclick event)."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "FormatAddress",
+     "description": "Returns an address with specified elements separated by commas (',').",
+     "inputs": [
+      {
+       "Name": "Address",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The street, number, floor, etc."
+      },
+      {
+       "Name": "PostalCode",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The postal code."
+      },
+      {
+       "Name": "City",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The name of the city."
+      },
+      {
+       "Name": "Country",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The name of the country."
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "CompleteAddress",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "The formatted address: <Address>, <Postal Code>, <City>, <Country>"
+      }
+     ]
+    },
+    {
+     "name": "Input_AutoComplete_GetIdentifier",
+     "description": "Gets the identifier of the currently selected value in the Input widget bound to an Input_AutoComplete widget.",
+     "inputs": [
+      {
+       "Name": "InputWidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The 'Id' runtime property of the Input widget bound to the Input_AutoComplete widget."
+      },
+      {
+       "Name": "PreviousIdentifier",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": "\"\"",
+       "Description": "The identifier of the previously selected value which is returned when no changes occurr."
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "Identifier",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "The identifier of the currently selected value."
+      }
+     ]
+    },
+    {
+     "name": "List_BulkSelectToggleEnabled",
+     "description": "Disables buttons associated with listed rows when no row is selected in the Table Records widget.",
+     "inputs": [
+      {
+       "Name": "TableRecordsWidget",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The 'Id' runtime property of the Table Records widget."
+      },
+      {
+       "Name": "ButtonWidgetList",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The 'Id' runtime properties of all Button widgets separated by commas (',')."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "Tabs_ClientSide_GetJavaScriptToEnableTab",
+     "description": "Returns the JavaScript code to enable a tab. Use it to fill the URL property of an External Site link or in the onclick extended property of buttons.",
+     "inputs": [
+      {
+       "Name": "TabsWidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The Id of the Tabs_ClientSide web block widget"
+      },
+      {
+       "Name": "Tab",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The Id or the title extended property of the tab to enable."
+      },
+      {
+       "Name": "IgnoreErrors",
+       "Type": "Boolean",
+       "Mandatory": false,
+       "Default": "False",
+       "Description": "When set to True, disables the display of error messages."
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "JavaScript",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "The JavaScript code that enables the specified tab."
+      }
+     ]
+    },
+    {
+     "name": "GetApplicationName",
+     "description": "Returns the name of the application for the specified eSpace.",
+     "inputs": [
+      {
+       "Name": "ESpaceId",
+       "Type": "Espace Identifier",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The identifier of the eSpace.\nUse the GetOwnerEspaceIdentifier() built-in function to get the eSpace identifier from an eSpace element."
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "ApplicationName",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "The name of the application."
+      }
+     ]
+    },
+    {
+     "name": "List_Move_Up",
+     "description": "Use this action in the 'OnNotify' action of the 'List_Move' widget to know the move direction.\nCompare with the 'NotifyWidgetGetMessage()' built-in action.",
+     "inputs": [],
+     "outputs": [
+      {
+       "Name": "Message",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "Returns 'UP'."
+      }
+     ]
+    },
+    {
+     "name": "Date_MonthName",
+     "description": "Returns the name of the month in a date.",
+     "inputs": [
+      {
+       "Name": "Date",
+       "Type": "Date",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The date containing the month to get the name."
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "MonthName",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "The name of the month."
+      }
+     ]
+    },
+    {
+     "name": "Input_AutoComplete_ShowList",
+     "description": "Shows the list of options for the drop down list of an Input widget bound to an Input_AutoComplete widget.",
+     "inputs": [
+      {
+       "Name": "InputWidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The 'Id' runtime property of the Input widget bound to the Input_AutoComplete widget."
+      },
+      {
+       "Name": "List",
+       "Type": "Input_AutoComplete_ListEntry Record List",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The list of options filled with 'Input_AutoComplete_ListEntry' records."
+      }
+     ],
+     "outputs": []
+    },
+    {
+     "name": "Tabs_ClientSide_GetJavaScriptToDisableTab",
+     "description": "Returns the JavaScript code to disable a tab. Use it to fill the URL property of an External Site link or in the onclick extended property of buttons.",
+     "inputs": [
+      {
+       "Name": "TabsWidgetId",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The Id of the Tabs_ClientSide web block widget"
+      },
+      {
+       "Name": "Tab",
+       "Type": "Text",
+       "Mandatory": true,
+       "Default": null,
+       "Description": "The Id or the title extended property of the tab to disable."
+      },
+      {
+       "Name": "IgnoreErrors",
+       "Type": "Boolean",
+       "Mandatory": false,
+       "Default": "False",
+       "Description": "When set to True, disables the display of error messages."
+      }
+     ],
+     "outputs": [
+      {
+       "Name": "JavaScript",
+       "Type": "Text",
+       "Mandatory": false,
+       "Default": null,
+       "Description": "The JavaScript code that enables the specified tab."
+      }
+     ]
+    }
+   ],
+   "patterns": [
+    {
+     "name": "Layout_Chicago",
+     "category": "Layouts",
+     "descriptionMissing": true,
+     "placeholders": [
+      {
+       "name": "Header"
+      },
+      {
+       "name": "Menu"
+      },
+      {
+       "name": "Title"
+      },
+      {
+       "name": "Actions"
+      },
+      {
+       "name": "MainContent"
+      },
+      {
+       "name": "Footer"
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Layout_Chicago.md"
+    },
+    {
+     "name": "Layout_London",
+     "category": "Layouts",
+     "descriptionMissing": true,
+     "placeholders": [
+      {
+       "name": "Header"
+      },
+      {
+       "name": "Menu"
+      },
+      {
+       "name": "MainContent"
+      },
+      {
+       "name": "Title"
+      },
+      {
+       "name": "Actions"
+      },
+      {
+       "name": "Footer"
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Layout_London.md"
+    },
+    {
+     "name": "Layout_Email",
+     "category": "LayoutsOther",
+     "descriptionMissing": true,
+     "placeholders": [
+      {
+       "name": "Title"
+      },
+      {
+       "name": "MainContent"
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Layout_Email.md"
+    },
+    {
+     "name": "Layout_Popup",
+     "category": "LayoutsOther",
+     "descriptionMissing": true,
+     "placeholders": [
+      {
+       "name": "MainContent"
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Layout_Popup.md"
+    },
+    {
+     "name": "LayoutSmartphone_Chicago",
+     "category": "LayoutsSmartphone",
+     "line": "Default layout for Chicago Smartphone",
+     "description": "Default layout for Chicago Smartphone",
+     "placeholders": [
+      {
+       "name": "Title"
+      },
+      {
+       "name": "MainContent"
+      },
+      {
+       "name": "Footer"
+      },
+      {
+       "name": "Menu"
+      },
+      {
+       "name": "Header"
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/LayoutSmartphone_Chicago.md"
+    },
+    {
+     "name": "LayoutSmartphone_Detroit",
+     "category": "LayoutsSmartphone",
+     "descriptionMissing": true,
+     "placeholders": [
+      {
+       "name": "MainContent"
+      },
+      {
+       "name": "Footer"
+      },
+      {
+       "name": "Menu"
+      },
+      {
+       "name": "Title"
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/LayoutSmartphone_Detroit.md"
+    },
+    {
+     "name": "LayoutSmartphone_London",
+     "category": "LayoutsSmartphone",
+     "line": "Layout for London Smartphone",
+     "description": "Layout for London Smartphone",
+     "placeholders": [
+      {
+       "name": "Footer"
+      },
+      {
+       "name": "Menu"
+      },
+      {
+       "name": "Header"
+      },
+      {
+       "name": "Title"
+      },
+      {
+       "name": "MainContent"
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/LayoutSmartphone_London.md"
+    },
+    {
+     "name": "ApplicationSwitcher",
+     "category": "RichWidgets",
+     "line": "Shows a dropdown with a list of links to all applications that the currently logged user has access to (i.e.",
+     "description": "Shows a dropdown with a list of links to all applications that the currently logged user has access to (i.e. belong to one of its roles). Not supported in mobile devices.",
+     "inputs": [
+      {
+       "name": "ESpaceId",
+       "type": "Espace Identifier",
+       "mandatory": true,
+       "description": "The 'Id' runtime property of the eSpace of an application. For a generic usage set the argument with the 'GetOwnerEspaceIdentifier()' built-in function."
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/ApplicationSwitcher.md"
+    },
+    {
+     "name": "Container_ExpandCollapse",
+     "category": "RichWidgets",
+     "line": "Expands and collapses the specified container.",
+     "description": "Expands and collapses the specified container.",
+     "inputs": [
+      {
+       "name": "ContainerId",
+       "type": "Text",
+       "mandatory": true,
+       "description": "The id of the container to expand/collapse"
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Container_ExpandCollapse.md"
+    },
+    {
+     "name": "DropDownMenu",
+     "category": "RichWidgets",
+     "line": "When clicked, shows a dropdown menu with all the submenu items.",
+     "description": "When clicked, shows a dropdown menu with all the submenu items.",
+     "inputs": [
+      {
+       "name": "IsActive",
+       "type": "Boolean",
+       "mandatory": true,
+       "description": "If True, the 'Menu_TopMenuActive' class will be appended to the Menu_TopMenu container (to show which menu is selected)"
+      }
+     ],
+     "placeholders": [
+      {
+       "name": "MenuItem"
+      },
+      {
+       "name": "MenuSubItems"
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/DropDownMenu.md"
+    },
+    {
+     "name": "FakeNotifyWidget",
+     "category": "RichWidgets",
+     "line": "Use this widget to call a screen action from JavaScript:",
+     "description": "Use this widget to call a screen action from JavaScript:\n1. Name this widget, edit its JavaScript and add the following call: OsNotifyWidget('<WebBlockWidgetName>.Id', '<message>').\n2. Use the 'NotifyWidgetGetMessage()' built-in function in the flow of the 'FakeOnNotify' screen action to get the <message> value.",
+     "docs": "kernel/docs/ui/RichWidgets/blocks/FakeNotifyWidget.md"
+    },
+    {
+     "name": "Feedback_AjaxWait",
+     "category": "RichWidgets",
+     "line": "Shows a message if Ajax calls take too much time to show.",
+     "description": "Shows a message if Ajax calls take too much time to show.\nThis web block is often present in the footer of all screens.",
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Feedback_AjaxWait.md"
+    },
+    {
+     "name": "Feedback_Message",
+     "category": "RichWidgets",
+     "line": "Displays a feedback box based on the last call to the Feedback_SetMessage() action.",
+     "description": "Displays a feedback box based on the last call to the Feedback_SetMessage() action. \nThis web block is often present in the header of all screens.",
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Feedback_Message.md"
+    },
+    {
+     "name": "Help_Contextual",
+     "category": "RichWidgets",
+     "line": "Displays a ? icon that when hovered show the help message for a part of the screen.",
+     "description": "Displays a ? icon that when hovered show the help message for a part of the screen.",
+     "inputs": [
+      {
+       "name": "HtmlOrHelpText",
+       "type": "Text",
+       "mandatory": true,
+       "description": "The help text to be shown. Rendered as an unescaped expression allowing you to use HTML tags in your text."
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Help_Contextual.md"
+    },
+    {
+     "name": "Help_Screen",
+     "category": "RichWidgets",
+     "line": "Displays a \"Need Help\" label and a ? icon that when hovered show the help message for a screen.",
+     "description": "Displays a \"Need Help\" label and a ? icon that when hovered show the help message for a screen.",
+     "inputs": [
+      {
+       "name": "HtmlOrHelpText",
+       "type": "Text",
+       "mandatory": true,
+       "description": "The help text to be shown. Rendered as an unescaped expression allowing you to use HTML tags in your text."
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Help_Screen.md"
+    },
+    {
+     "name": "Icon",
+     "category": "RichWidgets",
+     "line": "Please refer to http://fontawesome.io/icons/ for complete list of icons",
+     "description": "Please refer to http://fontawesome.io/icons/ for complete list of icons",
+     "inputs": [
+      {
+       "name": "Name",
+       "type": "IconName Identifier",
+       "mandatory": false,
+       "default": "Entities.IconName.flag",
+       "description": "The icon name. Please refer to http://fontawesome.io/icons/ for complete list of icons."
+      },
+      {
+       "name": "Size",
+       "type": "IconSize Identifier",
+       "mandatory": false,
+       "description": "The icon size is relative to the current font-size. Leave empty to keep the icon size equal to the font-size."
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Icon.md"
+    },
+    {
+     "name": "Input_AutoComplete",
+     "category": "RichWidgets",
+     "line": "Shows a list of options in a dropdown that match what the user types on an input widget.",
+     "description": "Shows a list of options in a dropdown that match what the user types on an input widget.\nUse the Input_AutoComplete_ShowList() action on the OnNotify action of this widget to set the list of options to show.\n\nThe ShowList should include the full set of results and not only a subset.",
+     "inputs": [
+      {
+       "name": "InputWidgetId",
+       "type": "Text",
+       "mandatory": true,
+       "description": "The Id of the Input widget where the user will type the text and where the dropdown list of options will be shown."
+      },
+      {
+       "name": "SearchOnlyFromStart",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "True",
+       "description": "If set to True (default), results will be filtered to return matching lablels that \"start with\" the entered text rather than \"contain\" the query string."
+      },
+      {
+       "name": "CacheResults",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "False",
+       "description": "If set to True, the results will be cached and fewer roundtrips will be done to the server. Only do that if your query returns all possible results and not a Top 10 or similar."
+      },
+      {
+       "name": "DelayInMilliseconds",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "200",
+       "description": "The amount of milliseconds to wait for another character before showing the autocomplete list"
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Input_AutoComplete.md"
+    },
+    {
+     "name": "Input_Calendar",
+     "category": "RichWidgets",
+     "line": "Shows a calendar when clicking the selected Input widget.",
+     "description": "Shows a calendar when clicking the selected Input widget. \nUses the open source calendar available at http://www.dynarch.com/projects/calendar/.",
+     "inputs": [
+      {
+       "name": "InputWidgetId",
+       "type": "Text",
+       "mandatory": true,
+       "description": "The 'Id' runtime property of the Input widget where the calendar widget is shown up."
+      },
+      {
+       "name": "MinYear",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "-1",
+       "description": "The calendar will only display the years in the range [MinYear, MaxYear]"
+      },
+      {
+       "name": "MaxYear",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "-1",
+       "description": "The calendar will only display the years in the range [MinYear, MaxYear]"
+      },
+      {
+       "name": "Align",
+       "type": "Text",
+       "mandatory": false,
+       "default": "\"Bl\"",
+       "description": "A 2-characters string used to set the vertical & horizontal alignment of the calendar."
+      },
+      {
+       "name": "SingleClick",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "True",
+       "description": "If true, the date will be selected on the first click. If false, a double-click is required."
+      },
+      {
+       "name": "ShowWeekNumbers",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "False",
+       "description": "If True, the week numbers (1-52) are displayed."
+      },
+      {
+       "name": "UpdateOnCloseOnly",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "False",
+       "description": "If True, the date in the Input widget is updated only when the calendar is closed."
+      },
+      {
+       "name": "ShowOthers",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "False",
+       "description": "If True, displays days adjacent to the currently selected month."
+      },
+      {
+       "name": "FirstDay",
+       "type": "Integer",
+       "mandatory": false,
+       "description": "Sets the first day of the week (0 is Sunday, 1 is Monday, etc.)"
+      },
+      {
+       "name": "ShowTime",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "False",
+       "description": "If True, displays hours and minutes."
+      },
+      {
+       "name": "Show24HourFormat",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "True",
+       "description": "If true, displays a 24-hour clock."
+      },
+      {
+       "name": "ReuseCalendarObject",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "False",
+       "description": "The javascript object is not re-created each time the calendar is opened."
+      },
+      {
+       "name": "InitialDate",
+       "type": "Date Time",
+       "mandatory": false,
+       "description": "If set, the calendar will initially display this date."
+      },
+      {
+       "name": "DateFormat",
+       "type": "Text",
+       "mandatory": false,
+       "default": "\"\"",
+       "description": "Defaults to the date format defined in the server configuration. The defaults are \"%Y-%m-%d\" for Date and \"%Y-%m-%d %H:%M:%S\" for DateTime Supported date formats: %a abbreviated weekday name %A full…"
+      },
+      {
+       "name": "SpecialDays",
+       "type": "Text",
+       "mandatory": false,
+       "default": "\"\"",
+       "description": "String containing the days to be displayed differently. Example: \" 1 : [ 13, 24 ], // January 3 : [ 1, 6, 8, 12, 18 ], // March 9 : [ 21, 11 ], // September 10 : [ 6 ], // October 12 : [ 25, 31 ] //…"
+      },
+      {
+       "name": "OnUpdate",
+       "type": "Text",
+       "mandatory": false,
+       "description": "The function that is called after the date is updated in the Input widget. Receives a reference to the calendar."
+      },
+      {
+       "name": "FlatStyle",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "False",
+       "description": "If true, the calendar will be displayed inline and not as a popup. When set to true, only the following parameters are meaningful: MinYear MaxYear InputField ShowWeekNumbers ShowOthers FirstDay…"
+      },
+      {
+       "name": "ButtonWidgetId",
+       "type": "Text",
+       "mandatory": false,
+       "description": "The Id of a button that will popup the calendar"
+      },
+      {
+       "name": "YearStep",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "2",
+       "description": "The interval of years that will be used for jumping through several years at once (click and hold on the Next/Previous year button). Defaults to 2."
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Input_Calendar.md"
+    },
+    {
+     "name": "Input_SetFocus",
+     "category": "RichWidgets",
+     "line": "Sets the focus on the specified Input or Input Password widget when the screen loads.",
+     "description": "Sets the focus on the specified Input or Input Password widget when the screen loads.",
+     "inputs": [
+      {
+       "name": "InputWidgetId",
+       "type": "Text",
+       "mandatory": true,
+       "description": "The Id of the Input or Input Password widget."
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Input_SetFocus.md"
+    },
+    {
+     "name": "List_BulkSelect",
+     "category": "RichWidgets",
+     "line": "Checkbox to drag into a column header of the Table Records widget to allow bulk selection (select all / select none)…",
+     "description": "Checkbox to drag into a column header of the Table Records widget to allow bulk selection (select all / select none) of the rows. This widget also disables the action buttons associated with the list when no row is selected.",
+     "inputs": [
+      {
+       "name": "TableRecordsWidgetId",
+       "type": "Text",
+       "mandatory": true,
+       "description": "The Id of the TableRecords widget."
+      },
+      {
+       "name": "AssociatedLinkIds",
+       "type": "Text",
+       "mandatory": true,
+       "description": "Ids of the associated link widgets to be enabled when there are selected items. To specify more than one link use a comma-separated list."
+      },
+      {
+       "name": "Enabled",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "True",
+       "description": "If False, the user cannot interact with the widget."
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/List_BulkSelect.md"
+    },
+    {
+     "name": "List_Counter",
+     "category": "RichWidgets",
+     "line": "Shows a counter of a TableRecords widget (e.g. 51 to 100 of 2345 records).",
+     "description": "Shows a counter of a TableRecords widget (e.g. 51 to 100 of 2345 records).",
+     "inputs": [
+      {
+       "name": "StartIndex",
+       "type": "Integer",
+       "mandatory": true,
+       "description": "The Starting Index. Usually it is a TableRecords.StartIndex"
+      },
+      {
+       "name": "TotalRowCount",
+       "type": "Long Integer",
+       "mandatory": true,
+       "description": "The Total Number of Rows"
+      },
+      {
+       "name": "LineCount",
+       "type": "Integer",
+       "mandatory": true,
+       "description": "The number of rows shown on each page."
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/List_Counter.md"
+    },
+    {
+     "name": "List_LateLoad",
+     "category": "RichWidgets",
+     "line": "Runs the OnNotify action on first screen load.",
+     "description": "Runs the OnNotify action on first screen load. \nUseful to call an action to populate TableRecord widgets.",
+     "docs": "kernel/docs/ui/RichWidgets/blocks/List_LateLoad.md"
+    },
+    {
+     "name": "List_Move",
+     "category": "RichWidgets",
+     "line": "Use this widget with TableRecords widgets to have arrows in rows to move them up and down.",
+     "description": "Use this widget with TableRecords widgets to have arrows in rows to move them up and down.\nCreate a screen action and set it on the 'On Notify' property. \nIn the action flow move a row up or down using the following:\n- The 'NotifyWidgetGetMessage()' built-in function and compare it with 'RichWidgets.List_Move_Up()' or 'RichWidgets.List_Move_Down()' actions.\n- The 'CurrentRowNumber' runtime property of the TableRecords to know which row was moved.\n- The 'CurrentRowNumber', the 'StartIndex', and the 'LineCount' runtime properties of the TableRecords to check whether the row was moved outside the currently set of displayed rows.\n\nYou can also use this widget in a ListRecords widget.",
+     "inputs": [
+      {
+       "name": "StartIndex",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "-1",
+       "description": "Set with the 'StartIndex' runtime property for computing the enabled/disabled state of the Up arrow of each row."
+      },
+      {
+       "name": "TableRecordsCurrentRowNumber",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "-1",
+       "description": "Set with the 'CurrentRowNumber' runtime property for computing the enabled/disabled state of the Up and Down arrows of each row."
+      },
+      {
+       "name": "TableRecordsLineCount",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "-1",
+       "description": "Set with the 'LineCount' runtime property for computing the enabled/disabled state of the Down arrow of each row."
+      },
+      {
+       "name": "TotalCounter",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "-1",
+       "description": "Set with the 'Length' runtime property for computing the enabled/disabled state of the Down arrow of each row."
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/List_Move.md"
+    },
+    {
+     "name": "List_Navigation",
+     "category": "RichWidgets",
+     "line": "Use this widget with a TableRecords or ListRecords widget for pagination:",
+     "description": "Use this widget with a TableRecords or ListRecords widget for pagination:\n- Shows Next (page) and Previous (page) links \n- Shows page numbers\nCreate a screen action and set it on the 'On Notify' property. \nIn the action flow repopulate the TableRecords or ListRecords widget using the following:\n1. The 'Refresh Query' tool to refresh the query that is bond to the TableRecords or List Records widget;\n2. The 'Ajax Refresh' tool refresh the TableRecords or ListRecords widget on screen.",
+     "inputs": [
+      {
+       "name": "ListWidgetId",
+       "type": "Text",
+       "mandatory": true,
+       "description": "The 'Id' runtime property of the TableRecords or ListRecords widget."
+      },
+      {
+       "name": "LineCount",
+       "type": "Integer",
+       "mandatory": true,
+       "description": "The 'LineCount' runtime property of the TableRecords or ListRecords widget."
+      },
+      {
+       "name": "TotalRowCount",
+       "type": "Long Integer",
+       "mandatory": true,
+       "description": "The 'Length' runtime property of the TableRecords or ListRecords widget."
+      },
+      {
+       "name": "MaxPageNumbers",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "5",
+       "description": "The maximum number of displayed page numbers (the default is 5). When set to 0 (zero) no page numbers are displayed, only the Next and Previous links."
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/List_Navigation.md"
+    },
+    {
+     "name": "List_SortColumn",
+     "category": "RichWidgets",
+     "line": "Use this widget with a column of a TableRecords widget to sort by that column (ascending and descending).",
+     "description": "Use this widget with a column of a TableRecords widget to sort by that column (ascending and descending).\nCreate a screen action and set it on the 'On Notify' property. \nIn the action flow repopulate the TableRecords widget using the following:\n1. The 'Refresh Query' tool to refresh the query that is bond to the TableRecords or List Records widget;\n2. The 'Ajax Refresh' tool refresh the TableRecords or ListRecords widget on screen.",
+     "inputs": [
+      {
+       "name": "Column",
+       "type": "Text",
+       "mandatory": true,
+       "description": "The name of the column using the following syntax: \"{<TableName>}.[<ColumnName>]\"."
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/List_SortColumn.md"
+    },
+    {
+     "name": "MenuSlider",
+     "category": "RichWidgets",
+     "line": "Toggler that appears on mobile devices (smartphones and tables in portrait) that hides the menu and slides it in when…",
+     "description": "Toggler that appears on mobile devices (smartphones and tables in portrait) that hides the menu and slides it in when clicked.",
+     "docs": "kernel/docs/ui/RichWidgets/blocks/MenuSlider.md"
+    },
+    {
+     "name": "MobileAddToIPhoneHomeBubble",
+     "category": "RichWidgets",
+     "line": "Bubble to ask user to add the application to the Home screen to work as an iPhone native app.",
+     "description": "Bubble to ask user to add the application to the Home screen to work as an iPhone native app.",
+     "inputs": [
+      {
+       "name": "ImageUrl",
+       "type": "Text",
+       "mandatory": false,
+       "description": "The URL of the image to be used as application icon."
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/MobileAddToIPhoneHomeBubble.md"
+    },
+    {
+     "name": "MobileScripts",
+     "category": "RichWidgets",
+     "line": "Set of scripts to add functionality to mobile devices:",
+     "description": "Set of scripts to add functionality to mobile devices:\n- Orientation change CSS landscape/portrait\n- Slide animations. Needs a style named .Main.\n- If the web app added to Home Page, this prevents jumping to safari when following a link\n- Hides the browser address bar in iPhone\n- Disables phone numbers auto detection\n- Adds meta tags (viewport, etc..)",
+     "docs": "kernel/docs/ui/RichWidgets/blocks/MobileScripts.md"
+    },
+    {
+     "name": "Popup_Editor",
+     "category": "RichWidgets",
+     "line": "[DEPRECATED] Opens the specified link on a modal pop-up that can have editable screens.",
+     "description": "[DEPRECATED] Opens the specified link on a modal pop-up that can have editable screens.\nActions PopUpEditor_Close and PopUpEditor_Notify can be used to send information to the parent screen.\nIf WidthPx and HeightPx are not specified the popup will auto-resize to contents. \nRefresh the pop-up whenever the link is refreshed to keep them working accordingly.\nNot supported in mobile devices.",
+     "inputs": [
+      {
+       "name": "LinkOrButtonWidgetId",
+       "type": "Text",
+       "mandatory": true,
+       "description": "The link or button id to open in the pop-up."
+      },
+      {
+       "name": "Title",
+       "type": "Text",
+       "mandatory": false,
+       "default": "\" \"",
+       "description": "Title for the pop-up window."
+      },
+      {
+       "name": "WidthPx",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "-1",
+       "description": "The width of the pop-up window. When not set it will automatically resize to fit contents."
+      },
+      {
+       "name": "HeightPx",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "-1",
+       "description": "The height of the pop-up window. When not set it will automatically resize to fit contents."
+      },
+      {
+       "name": "AutoResize",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "True",
+       "description": "When set to True, the popup will be resized after each Ajax refresh. The default is True."
+      },
+      {
+       "name": "RecenterOnResize",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "False",
+       "description": "When set to True, the popup will be recentered when it is resized after an Ajax refresh. The default is False."
+      },
+      {
+       "name": "HideCloseButton",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "False"
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Popup_Editor.md"
+    },
+    {
+     "name": "Popup_EditorForUpload",
+     "category": "RichWidgets",
+     "line": "Opens the specified link on a modal pop-up that can have editable screens.",
+     "description": "Opens the specified link on a modal pop-up that can have editable screens.\nActions PopUpEditor_Close and PopUpEditor_Notify can be used to send information to the parent screen.\nIf WidthPx and HeightPx are not specified the popup will auto-resize to contents. \nRefresh the pop-up whenever the link is refreshed to keep them working accordingly.\nNot supported in mobile devices.",
+     "inputs": [
+      {
+       "name": "LinkOrButtonWidgetId",
+       "type": "Text",
+       "mandatory": true,
+       "description": "The link or button id to open in the pop-up."
+      },
+      {
+       "name": "Title",
+       "type": "Text",
+       "mandatory": false,
+       "default": "\" \"",
+       "description": "Title for the pop-up window."
+      },
+      {
+       "name": "WidthPx",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "-1",
+       "description": "The width of the pop-up window. When not set it will automatically resize to fit contents."
+      },
+      {
+       "name": "HeightPx",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "-1",
+       "description": "The height of the pop-up window. When not set it will automatically resize to fit contents."
+      },
+      {
+       "name": "AutoResize",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "True",
+       "description": "When set to True, the popup will be resized after each Ajax refresh. The default is True."
+      },
+      {
+       "name": "RecenterOnResize",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "False",
+       "description": "When set to True, the popup will be recentered when it is resized after an Ajax refresh. The default is False."
+      },
+      {
+       "name": "HideCloseButton",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "False"
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Popup_EditorForUpload.md"
+    },
+    {
+     "name": "Popup_EditorVanilla",
+     "category": "RichWidgets",
+     "line": "Opens the specified link on a modal pop-up that can have editable screens.",
+     "description": "Opens the specified link on a modal pop-up that can have editable screens.\nActions PopUpEditor_Close and PopUpEditor_Notify can be used to send information to the parent screen.\nIf WidthPx and HeightPx are not specified the popup will auto-resize to contents. \nRefresh the pop-up whenever the link is refreshed to keep them working accordingly.\nNot supported in mobile devices.",
+     "inputs": [
+      {
+       "name": "LinkOrButtonWidgetId",
+       "type": "Text",
+       "mandatory": true,
+       "description": "The link or button id to open in the pop-up."
+      },
+      {
+       "name": "Title",
+       "type": "Text",
+       "mandatory": false,
+       "default": "\" \"",
+       "description": "Title for the pop-up window."
+      },
+      {
+       "name": "WidthPx",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "-1",
+       "description": "The width of the pop-up window. When not set it will automatically resize to fit contents."
+      },
+      {
+       "name": "HeightPx",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "-1",
+       "description": "The height of the pop-up window. When not set it will automatically resize to fit contents."
+      },
+      {
+       "name": "AutoResize",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "True",
+       "description": "When set to True, the popup will be resized after each Ajax refresh. The default is True."
+      },
+      {
+       "name": "RecenterOnResize",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "False",
+       "description": "When set to True, the popup will be recentered when it is resized after an Ajax refresh. The default is False."
+      },
+      {
+       "name": "HideCloseButton",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "False"
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Popup_EditorVanilla.md"
+    },
+    {
+     "name": "Popup_InfoBalloon",
+     "category": "RichWidgets",
+     "line": "Displays the selected link on a pop-up balloon when hovering the link.",
+     "description": "Displays the selected link on a pop-up balloon when hovering the link. \nUsed for read-only information. \nIf WidthPx and HeightPx are not specified the popup will auto-resize to contents. Not supported in mobile devices.",
+     "inputs": [
+      {
+       "name": "LinkId",
+       "type": "Text",
+       "mandatory": true,
+       "description": "The link id to show in the pop-up."
+      },
+      {
+       "name": "WidthPx",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "-1",
+       "description": "The width of the pop-up window. When not set it will automatically resize to fit contents."
+      },
+      {
+       "name": "HeightPx",
+       "type": "Integer",
+       "mandatory": false,
+       "default": "-1",
+       "description": "The height of the pop-up window. When not set it will automatically resize to fit contents."
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Popup_InfoBalloon.md"
+    },
+    {
+     "name": "RemovePopups",
+     "category": "RichWidgets",
+     "line": "Prevents the page from appearing inside a popup.",
+     "description": "Prevents the page from appearing inside a popup.",
+     "docs": "kernel/docs/ui/RichWidgets/blocks/RemovePopups.md"
+    },
+    {
+     "name": "ResponsiveTableRecords",
+     "category": "RichWidgets",
+     "line": "Makes tables stack cells on top of each other in mobile.",
+     "description": "Makes tables stack cells on top of each other in mobile.\n\nTo use it just add this web block to the screeen and make sure they are inside a container with the style \"Responsive\"",
+     "docs": "kernel/docs/ui/RichWidgets/blocks/ResponsiveTableRecords.md"
+    },
+    {
+     "name": "Tabs_ClientSide",
+     "category": "RichWidgets",
+     "line": "Allows the selective display of content using a tab interface.",
+     "description": "Allows the selective display of content using a tab interface.\nPut this web block inside a container together with other containers, and the ones with the 'Display' property set to true and the 'title' extended property defined will become tabs.\nThe outer container must have the style 'Tabs_Wrapper', and the inner containers must have the style 'Tabs_TabBody'.\nThe value of the 'title' extended property will become the caption of each tab.\nYou can also set the 'enabled' extended property to 'false' to disable some of the tabs.",
+     "inputs": [
+      {
+       "name": "InitialActiveTab",
+       "type": "Text",
+       "mandatory": false,
+       "default": "\"\"",
+       "description": "The Id or the title extended property of the tab that will be activated when the screen is first loaded. If there is more than one tab with the same title, the first one is used."
+      },
+      {
+       "name": "RememberActiveTab",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "False",
+       "description": "When set to True, and the InitialActiveTab parameter is not specified, when the screen is first loaded the tab that will be active will be the one that last tab that was active during the same…"
+      },
+      {
+       "name": "OnLoading",
+       "type": "Text",
+       "mandatory": false,
+       "default": "\"\"",
+       "description": "The JavaScript to be called before the rendering of the tab controller."
+      },
+      {
+       "name": "OnLoaded",
+       "type": "Text",
+       "mandatory": false,
+       "default": "\"\"",
+       "description": "The JavaScript to be called after the rendering of the tab controller."
+      },
+      {
+       "name": "OnTabActivation",
+       "type": "Text",
+       "mandatory": false,
+       "default": "\"\"",
+       "description": "The JavaScript to be called when the active tab changes. Receives a parameter named 'title' with the title of the active tab."
+      },
+      {
+       "name": "IgnoreErrors",
+       "type": "Boolean",
+       "mandatory": false,
+       "default": "False",
+       "description": "When set to True, disables the display of error messages."
+      }
+     ],
+     "docs": "kernel/docs/ui/RichWidgets/blocks/Tabs_ClientSide.md"
+    }
+   ],
+   "categories": [
+    "Layouts",
+    "LayoutsOther",
+    "LayoutsSmartphone",
+    "RichWidgets"
+   ],
+   "counts": {
+    "patterns": 35,
+    "descriptionMissing": [
+     "Layout_Chicago",
+     "Layout_London",
+     "Layout_Email",
+     "Layout_Popup",
+     "LayoutSmartphone_Detroit"
     ]
    }
   }

@@ -346,7 +346,7 @@ public static class PrototypeExpr
 /// </summary>
 public sealed class PrototypeDataModel
 {
-    public sealed record Field(string Name, string Type, int? Length, string? References);
+    public sealed record Field(string Name, string Type, int? Length, string? References, string? Temporal = null, string? TimeZone = null);
     public sealed record Entity(string Collection, string Name, bool Static, IReadOnlyList<Field> Fields, JsonArray Rows, string Key);
     public sealed record OptionsEntity(string Name, string ValueType, bool ByKey, string? KeyType, IReadOnlyList<(JsonNode? Key, string Value, string Label, int Order)> Rows, string Control);
     public sealed record ClientVariable(string Dimension, string Name, string Type, string Default);
@@ -363,7 +363,9 @@ public sealed class PrototypeDataModel
     public string FieldDataType(Entity entity, Field field)
         => field.References is { } target && ByCollection(target) is { } referenced ? referenced.Name + " Identifier" : field.Name == entity.Key ? "Integer" : NativeType(field.Type);
 
-    public static string FieldLiteral(Field field, JsonNode? value) => PrototypeExpr.Literal(value, field.Type == "DateTime" ? "DateTime" : field.Type);
+    public static string FieldLiteral(Field field, JsonNode? value) => field.Temporal != null && value is JsonValue v && v.TryGetValue<string>(out var text)
+        ? TemporalContract.NativeLiteral(text, field.Temporal, field.TimeZone)
+        : PrototypeExpr.Literal(value, field.Type == "DateTime" ? "DateTime" : field.Type);
 
     /// <summary>The record Identifier of a static row: the first text field in PascalCase, else R&lt;id&gt;; unique in the entity.</summary>
     public static string RecordName(Entity entity, JsonObject row, HashSet<string> taken)

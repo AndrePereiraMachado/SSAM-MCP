@@ -22,6 +22,7 @@
 //
 // The facade reads the prototype only to resolve the entry and the prefix (a few hundred bytes); the capture lane reads
 // and renders it, the kernel reads only the bundle. Nothing here talks to a Studio.
+import { appendJsonLine } from './correlation.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -848,7 +849,7 @@ export async function buildWithDegradation({ jobFile, attempt, ok = r => r?.ok =
 export const DEGRADED_CODE = 'PROTOTYPE_DEGRADED';
 export const journalTo = (dir, { lane = 'unknown', record = recordFriction } = {}) => entry => {
   fs.mkdirSync(dir, { recursive: true });
-  fs.appendFileSync(path.join(dir, 'prototype.jsonl'), JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n');
+  appendJsonLine(path.join(dir, 'prototype.jsonl'), { at: new Date().toISOString(), ...entry });
   try { record?.({ operation: 'build', lane, code: DEGRADED_CODE, step: 'build', outcome: 'failure' }); } catch { /* the journal line stands */ }
 };
 let frictionModule;

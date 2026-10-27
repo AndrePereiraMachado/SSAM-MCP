@@ -18,7 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyTextRoute } from '../text-routes.mjs';
-import { packetTextSection, textExamples, coveredBy, TEXT_PACKET_SCHEMA } from '../text-packet.mjs';
+import { packetTextSection, textExamples, coveredBy, TEXT_PACKET_SCHEMA, FLOW_BASED_ON } from '../text-packet.mjs';
 import { workPacket as workPacketAtBudget, PACKET_ORDER, PACKET_BUDGET } from '../work-packet.mjs';
 import { environmentComponents, componentNeeds, asksEnvironment, signatureLine, fitComponents, cacheFile, COMPONENTS_SCHEMA } from '../environment-components.mjs';
 import { pagedShape, missingCall, opaqueColumns } from '../paged-answer.mjs';
@@ -115,8 +115,10 @@ test('packet text, the owner\'s actions: flow and data forms, exceptions before 
   assert.deepEqual(flow.readToChange, { tool: 'ssam_map', arguments: { lane: 'o11', target: 'C:\\captures\\FolhaPonto_CS.oml', view: 'flow', element: '<Action> or a list of them', expectedSourceSha256: 'a'.repeat(64) } });
   for (const construct of ['server action <Name>', 'aggregate FROM', 'if <condition>:', 'foreach <List>:', 'raise <Exception>', 'assign', '<Producer>.<Action>', 'mapTo'])
     assert.ok(flow.grammar.some(g => g.includes(construct)), construct);
-  for (const construct of ['JOIN Inner <A>~<B> ON', 'START <s>', 'in <Param>: <Type>', '[abort] [log]', 'ListAppendAll(List=<Dest>, SourceList=<Source> mapTo'])
+  for (const construct of ['JOIN Inner <A>~<B> ON', 'OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY', 'LOGIC_START_SERVER_IGNORED', 'in <Param>: <Type>', '[abort] [log]', 'ListAppendAll(List=<Dest>, SourceList=<Source> mapTo'])
     assert.ok(flow.grammar.some(g => g.includes(construct)), construct);
+  // T3: an action never pages by START on its aggregate (the runtime ignores it there).
+  assert.ok(!flow.grammar.some(g => g.includes('MAX <n> START <s>')));
   assert.ok(!flow.grammar.some(g => g.includes('JOIN <Other> ON')));
   assert.deepEqual(flow.example.exceptions, ['OrderNotFound']);
   assert.ok(flow.rules.some(r => /QUERY_IN_LOOP/.test(r)) && flow.rules.some(r => /T1\/T2/.test(r)) && flow.rules.some(r => /IUserException/.test(r)));
@@ -124,7 +126,7 @@ test('packet text, the owner\'s actions: flow and data forms, exceptions before 
   const edit = packetTextSection({ lane: 'o11', intent: 'corrigir a action GetColaboradorAtual para devolver o colaborador ativo', found: found(), slice }).value;
   assert.deepEqual(edit.forms, ['ssam-flow/1']); assert.equal(edit.creating, false);
   assert.deepEqual(edit['ssam-flow/1'].read, { tool: 'ssam_map', arguments: { lane: 'o11', target: 'C:\\captures\\FolhaPonto_CS.oml', view: 'flow', element: 'GetColaboradorAtual', expectedSourceSha256: 'a'.repeat(64) } });
-  assert.deepEqual(edit.call.arguments.job.ops, [{ op: 'logic', data: { flow: [{ text: '<the text read, edited, with its @ids>', basedOn: '<textSha of the read>' }] } }]);
+  assert.deepEqual(edit.call.arguments.job.ops, [{ op: 'logic', data: { flow: [{ text: '<the text read, edited, with its @ids>', basedOn: FLOW_BASED_ON }] } }]);
   // ODC: studio_deliver, the setting of the lane, no public server action in the example.
   const odc = packetTextSection({ lane: 'odc', intent: OWNER_ACTIONS, found: null, slice }).value;
   assert.equal(odc.call.tool, 'studio_deliver');
@@ -149,12 +151,14 @@ function packetInput(intent, { module = found(), text = true } = {}) {
 }
 
 test('the packet with a text section: in its declared place, the JSON forms it covers by reference, the budget held, the same bytes', () => {
-  assert.deepEqual(PACKET_ORDER, ['module', 'text', 'environment', 'capabilities', 'example', 'rules', 'next']);
+  assert.deepEqual(PACKET_ORDER, ['module', 'scope', 'text', 'environment', 'capabilities', 'example', 'rules', 'next']);
   for (const budgetBytes of [PACKET_BUDGET, 20000, 12000, 8192]) {
     const p = workPacket(packetInput(OWNER_ACTIONS), { budgetBytes });
     assert.equal(JSON.stringify(p), JSON.stringify(workPacket(packetInput(OWNER_ACTIONS), { budgetBytes })), 'deterministic at ' + budgetBytes);
     assert.ok(bytes(p) <= budgetBytes && p.size.bytes === bytes(p), `${bytes(p)} > ${budgetBytes}`);
-    assert.deepEqual(Object.keys(p).filter(k => PACKET_ORDER.includes(k)), PACKET_ORDER);
+    // Fill or omit (F4): the present sections in the declared order, none null.
+    const keys = Object.keys(p).filter(k => PACKET_ORDER.includes(k));
+    assert.deepEqual(keys, PACKET_ORDER.filter(k => keys.includes(k))); for (const k of keys) assert.notEqual(p[k], null, k);
     if (p.text) assert.deepEqual(p.text.call, packetInput(OWNER_ACTIONS).text.value.call, 'the call is never reduced');
     else assert.ok(p.cuts.some(c => c.section === 'text'), 'a text section left out is named');
   }
@@ -170,7 +174,7 @@ test('the packet with a text section: in its declared place, the JSON forms it c
   assert.deepEqual(p.next.deliver.arguments.job.ops, ['<the ops of text.call, in its order>', '<JSON ops only for what no text form covers>']);
   // Smaller than the same packet without the text route's reductions, by the JSON it no longer carries.
   const without = workPacket(packetInput(OWNER_ACTIONS, { text: false }));
-  assert.equal(without.text, null);
+  assert.ok(!('text' in without), 'no text route: no text section (never null)');
   assert.ok(bytes(p.capabilities) + bytes(p.example) < bytes(without.capabilities) + bytes(without.example), 'the JSON forms leave');
   assert.ok(coveredBy(['ssam-flow/1'], 'logic.aggregate') && !coveredBy(['ssam-flow/1'], 'timer.schedule') && coveredBy(['ssam-ddl/1'], 'data.static') && coveredBy(['ssam-html/1'], 'ui.form'));
 });
@@ -194,7 +198,8 @@ test('the owner\'s two requests on FolhaPonto_CS: the first answer holds the rea
   assert.equal(actions.text.id, 'logic.flow'); assert.deepEqual(actions.text.forms, ['ssam-ddl/1', 'ssam-flow/1']);
   assert.equal(actions.text['ssam-flow/1'].read, null);
   assert.equal(actions.text['ssam-flow/1'].readToChange.arguments.expectedSourceSha256, actions.module.sourceSha256, 'the read is bound to the capture the packet read');
-  assert.ok(actions.module.entities.some(e => e.startsWith('entity Colaborador')), 'the entities the texts reference');
+  // R4: the entities the texts reference are named by the scope (with their keys and attributes), not repeated in module.
+  assert.ok(actions.scope.entities?.Colaborador?.key?.startsWith('@'), 'the entities the texts reference');
   assert.ok(actions.size.bytes <= PACKET_BUDGET);
   assert.equal(actions.example.ops, undefined, 'no JSON job inline');
   assert.equal(JSON.stringify(actions), JSON.stringify(await discoverAll({ lane: 'o11', intent: OWNER_ACTIONS, app: WITH_TABLES, packet: true, budgetBytes: PACKET_BUDGET, sources })), 'the same bytes');
@@ -274,7 +279,7 @@ test('ssam_discover: the packet carries the environment of the need; a direct qu
   assert.ok(wireBytes(direct, { budgetBytes: 40960 }) <= 40960, String(bytes(direct)));
   if (direct.size?.bytes != null) assert.equal(direct.size.bytes, bytes(direct));
   // Without a need: no environment; the ODC lane: none.
-  assert.equal((await discoverAll({ lane: 'o11', intent: 'criar actions de cadastro', packet: true, budgetBytes: PACKET_BUDGET, components })).environment, null);
+  assert.equal((await discoverAll({ lane: 'o11', intent: 'criar actions de cadastro', packet: true, budgetBytes: PACKET_BUDGET, components })).environment, undefined, 'no need: no environment section (never null)');
 });
 
 // ---- 3. the pages of a paged answer

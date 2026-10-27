@@ -16,6 +16,7 @@ import { resolveOpenModule } from './studio-module.mjs';
 import { hashedWords, wordsGiven, wordsRequired } from './destructive-operations.mjs';
 import { recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
 import { mergeState, reconcilable, reconcileCall } from './merge-reconcile.mjs';
+import { securityRefusal, publishSecurityRefusal } from './security-after-merge.mjs';
 
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -121,6 +122,10 @@ export async function resolveDeliveryManifest({ module, pid } = {}, { studio, la
     const outcome = state.outcome;
     const notClean = (continuation, extra = {}) => refused('LAST_DELIVERY_NOT_CLEAN', 'The last SSAM merge of ' + name + ' (' + path.basename(last.dir) + ') is ' + outcome + ', not a clean merge'
       + (extra.reconciliation ? ' and its content was not proven (' + extra.reconciliation.code + ': ' + extra.reconciliation.error + ')' : '') + '; nothing was published.', continuation, { module: name, outcome, resolvedFrom: from, ...extra });
+    // a11-b: a merge that brought a new security warning is never published nor reconciled by SSAM.
+    if (outcome === 'security')
+      return { ...securityRefusal(state.blocking, { module: name }), executed: false, resolvedFrom: { manifest: last.manifest, mergedAt: from.mergedAt },
+        continuation: { tool: 'studio_status', arguments: { view: 'brief', ...(Number.isInteger(pid) ? { pid } : {}) }, why: 'the module stays merged and unpublished; a new delivery whose job fixes the warning comes next' } };
     if (outcome === 'incomplete') {
       const result = readJsonOrNull(path.join(last.dir, 'deliver-result.json'));
       return notClean(isObject(result?.continuation) ? result.continuation : evidenceRead(path.join(last.evidence, 'incomplete-receipt.json'),
@@ -214,7 +219,16 @@ export async function publishWithGrant({ manifest, module: requested, authorize,
   let recorded = null, module = null, tenant = null;
   try { const m = readManifest(manifest); module = m?.module ?? null; tenant = typeof m?.tenant === 'string' && m.tenant ? m.tenant : null; recorded = typeof m?.publishAuthorization === 'string' && m.publishAuthorization.trim() ? m.publishAuthorization : null; }
   catch { /* the bridge reads the manifest itself and refuses what it cannot read */ }
-  let authorization = null;
+  // a11-b: a manifest given directly whose merge brought a new security warning is refused before its words are recorded
+  // (lib.mjs studio refuses its `publish` too, for studio_command publish).
+  if (target == null) {
+    let document = null; try { document = readManifest(manifest); } catch { document = null; }
+    const file = path.resolve(root ?? '.', manifest);
+    const declared = document?.evidenceDir ?? document?.EvidenceDir;
+    const evidence = typeof declared === 'string' && declared ? path.resolve(root ?? path.dirname(file), declared) : path.join(path.dirname(file), 'evidence');
+    const blocked = publishSecurityRefusal(evidence, { module: document?.module ?? null });
+    if (blocked) return blocked;
+  }  let authorization = null;
   // CX15 r6 (M-1): words that are a marker, a <template> or a sha256 of the server are refused, before anything.
   if (typeof authorize === 'string' && authorize.trim() && !wordsGiven(authorize)) return wordsRequired([{ path: 'authorize', value: authorize }], { tool: 'studio_publish' });
   if (typeof authorize === 'string' && authorize.trim()) {
@@ -248,7 +262,12 @@ export async function publishWithGrant({ manifest, module: requested, authorize,
     return { dir: path.basename(path.dirname(file)) === 'delivery' ? path.dirname(path.dirname(file)) : path.dirname(file), document };
   })();
   value = changedSinceDelivery(value, merge, target?.module ?? module ?? requested, pid);
-  const { lastPublicationFrom } = await import('./kernel-delivery.mjs');
+  const { lastPublicationFrom, publishOutcomeOf, staleRevisionNext, publishEvidence } = await import('./kernel-delivery.mjs');
+  // F1: a completed publication whose server revision is the one the delivery started from is never answered as published.
+  if (value.ok === true && wait && isObject(value.published)) {
+    const outcome = publishOutcomeOf(value, publishEvidence(manifest));
+    if (outcome.outcome === 'stale') value = { ...value, ok: false, code: outcome.code, outcome: 'stale', error: outcome.error, continuation: staleRevisionNext(manifest) };
+  }
   const lastPublication = value.ok === true && wait
     ? { at: value.completedAt ? String(value.completedAt) : null, status: 'succeeded', version: value.published?.revision ?? null, author: null, by: 'ssam', source: 'publish-result' }
     : lastPublicationFrom(value.publishLog, { source: 'publish-log', by: 'ssam' });

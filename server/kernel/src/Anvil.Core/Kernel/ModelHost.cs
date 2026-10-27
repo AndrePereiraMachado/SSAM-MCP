@@ -19,6 +19,14 @@ public sealed partial class ModelHost
         StudioAdapter.Runtime.Ensure(workDirectory);
     }
 
+    /// <summary>The flow rules a generator's output must satisfy, over every flow of the module (ModelSession.GeneratedFlowRuleFindings).</summary>
+    public System.Text.Json.Nodes.JsonArray GeneratedFlowRuleFindings(string path)
+    {
+        var module = Load(path);
+        try { return new ModelSession(module).GeneratedFlowRuleFindings(); }
+        finally { Release(module); }
+    }
+
     public System.Text.Json.Nodes.JsonObject CheckModuleSpecification(string path, System.Text.Json.Nodes.JsonObject specification,
         System.Text.Json.Nodes.JsonObject? expectedTypes = null, Anvil.Core.Delivery.FrozenFrameworkDependencies? runtime = null)
     {

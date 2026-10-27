@@ -148,9 +148,12 @@ public sealed class FamilyPreflightTests
             "action FamTela.FamTalvez\n  FamTotal = FamCalcular(A = 1)\n  end\n")));
         Assert.Empty(Normalizations(result, "FLOW_ASSIGN_WRITTEN"));
         Assert.Empty(Normalizations(result, "FLOW_END_AFTER_TERMINATOR"));
-        Assert.Equal(2, Problems(result, "FLOW_SYNTAX").Length);
+        // R5 (parser tolerante, 24/10/2026): `FamCalcular(A = 1)` has one reading, the call node `FamCalcular(A=1)`, normalized
+        // as FLOW_ARGUMENT_SPACING and never as an assignment; the step after navigate is still the one refusal.
+        Assert.Single(Problems(result, "FLOW_SYNTAX"));
+        Assert.Single(Normalizations(result, "FLOW_ARGUMENT_SPACING"));
         Assert.Equal("action FamTela.FamSomar\n  FamTotal = FamCalcular(A=1)\n  end\n", job["ops"]![0]!["data"]!["flow"]![0]!.GetValue<string>());
-        Assert.Equal("action FamTela.FamTalvez\n  FamTotal = FamCalcular(A = 1)\n  end\n", job["ops"]![0]!["data"]!["flow"]![2]!.GetValue<string>());
+        Assert.Equal("action FamTela.FamTalvez\n  FamTotal = FamCalcular(A=1)\n  end\n", job["ops"]![0]!["data"]!["flow"]![2]!.GetValue<string>());
     }
 
     // ---- CSS_FUNCTION_REWRITTEN -----------------------------------------------------------------------------------------

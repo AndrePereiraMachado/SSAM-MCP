@@ -76,6 +76,50 @@ internal sealed class ModelBaseFacts(ModelSession session, ServiceStudio.Model.E
         get { try { return espace.ESpaceType.ToString(); } catch { return null; } }
     }
 
+    private static readonly string[] ClientOwners = ["IClientAction", "IMobileScreen", "IMobileBlock"];
+    private static readonly string[] ServerOwners = ["IServerAction", "IServiceAction", "IDataAction", "IWebScreen", "IWebBlock", "IWebEmail"];
+
+    /// <summary>T9: the first owner up the element's parents that says where it runs (a screen action is its screen's).</summary>
+    public bool? IsClientSide(string target)
+    {
+        try
+        {
+            if (session.Resolve(target) is not IObjectSignature element) return null;
+            for (IObjectSignature? p = element; p != null; p = p.Parent as IObjectSignature)
+            {
+                if (ClientOwners.Any(k => ModelSession.Implements(p, k))) return true;
+                if (ServerOwners.Any(k => ModelSession.Implements(p, k))) return false;
+            }
+            return null;
+        }
+        catch { return null; }
+    }
+
+    private IReadOnlyList<string>? _texts;
+    private static readonly string[] SheetOwners = ["IWebBlock", "IMobileBlock", "IWebScreen", "IMobileScreen", "IWebTheme", "IMobileTheme", "ITheme"];
+
+    /// <summary>T9: the module's style sheets (themes, screens, blocks) and JavaScript (Scripts, JavaScript nodes, screens), read
+    /// once; null when the model cannot be walked.</summary>
+    public IReadOnlyList<string>? StyleSheetsAndScripts
+    {
+        get
+        {
+            if (_texts != null) return _texts;
+            try
+            {
+                var texts = new List<string>();
+                foreach (var o in ((IESpace)(object)espace).GetAllDescendantsOfType<IObjectSignature>())
+                {
+                    var interfaces = o.GetType().GetInterfaces();
+                    if (interfaces.Any(i => SheetOwners.Contains(i.Name)) && ThemeCss.Of(o)?.EffectiveValue is { Length: > 0 } css) texts.Add(css);
+                    if (interfaces.Any(i => i.Name is "IScript" or "IJavaScriptNode" or "IWebScreen" or "IWebBlock") && ModelHost.Prop(o, "JavaScript") is string js && js.Length > 0) texts.Add(js);
+                }
+                return _texts = texts;
+            }
+            catch { return null; }
+        }
+    }
+
     public bool HasName(string name)
     {
         if (_names == null)
@@ -219,6 +263,80 @@ internal sealed class ModelBaseFacts(ModelSession session, ServiceStudio.Model.E
     }
 
     private Dictionary<string, List<IObjectSignature>>? _index;
+    private IndexBaseFacts? _indexed;
+    private Dictionary<string, IObjectSignature?>? _samples;
+
+    private readonly Dictionary<string, ModelSession> _producers = new(StringComparer.OrdinalIgnoreCase);
+
+    public ProducerElementFact? ProducerElement(string producer, string element)
+    {
+        // The loader of the job (JobRunner keeps each producer loaded once; the reference op of the apply reads the same one).
+        if (session.ProducerLoader is not { } loader || !(producer.EndsWith(".oml", StringComparison.OrdinalIgnoreCase) && File.Exists(producer))) return null;
+        try
+        {
+            if (!_producers.TryGetValue(producer, out var read)) _producers[producer] = read = new ModelSession(loader(producer));
+            object found;
+            try { found = read.Resolve(element); }
+            catch (Exception ex) when (ex is KeyNotFoundException or UnresolvedReferenceException or InvalidOperationException)
+            {
+                var colon = element.IndexOf(':');
+                var kind = colon > 0 ? KindNames.Normalize(element[..colon]) : "";
+                IReadOnlyList<string> names = [];
+                try { names = read.NamesOfType(kind.Replace("Signature", "")).ToList(); } catch { }
+                return new ProducerElementFact(false, false, Errors.Text(ex), names);
+            }
+            return new ProducerElementFact(true, UiCatalog.Prop(found, "Public") is not false, null, []);
+        }
+        catch { return null; }
+    }
+
+    public SettableFact? Settable(string type, string prop)
+    {
+        type = KindNames.Normalize(type);
+        _samples ??= new Dictionary<string, IObjectSignature?>(StringComparer.Ordinal);
+        if (!_samples.TryGetValue(type, out var sample))
+        {
+            // An element whose own interface is exactly the type (the concrete class the apply would create for it here).
+            try { sample = session.AllDescendants().FirstOrDefault(d => d.GetInterface()?.Name == type); } catch { sample = null; }
+            _samples[type] = sample;
+        }
+        if (sample == null) return null;
+        try
+        {
+            if (session.CanSet(sample, prop)) return new SettableFact(true, "", [], null);
+            // What the apply writes instead, never refused: a documentation property, an alias, Style where the classes live.
+            if (JobNormalizer.Droppable(prop) || prop == "Style" && session.StyleHasAPlace(sample)) return new SettableFact(true, "", [], null);
+            var meant = PropertyAliases.Meant(sample.GetType().GetInterfaces().Select(t => t.Name), prop);
+            if (meant != null && session.CanSet(sample, meant)) return new SettableFact(true, "", [], meant);
+            return new SettableFact(false, ModelSession.PropertyErrorText(sample, prop), ModelSession.ClosestWritable(sample, prop), null);
+        }
+        catch { return null; }
+    }
+
+
+    /// <summary>R1: the base as the static rules read it (ModuleIndex and digest of this very model, so fresh: an absence is
+    /// evidence), with the job's reference ops. The store's index of these bytes when it has one; else built from the model
+    /// (never stored here). Null when the model cannot be read so.</summary>
+    internal IndexBaseFacts? Indexed(JsonArray ops, string lane)
+    {
+        if (_indexed != null) return _indexed;
+        try
+        {
+            var sha = session.BaseSha256;
+            var store = sha == null ? null : Anvil.Reading.ModuleIndexStore.Default();
+            var adapter = store?.Adapter ?? "kernel";
+            var reader = new KernelModelReader();
+            var module = (sha == null ? null : store?.Load(sha))
+                ?? Anvil.Reading.ModuleIndex.Build((IObjectSignature)espace, reader, espace.Name, lane, adapter, sha ?? new string('0', 64), 0);
+            // The digest only when the store has it: building it renders the whole module (and loads what the Studio loads to
+            // render it, which changes what the Model API facts of later jobs know). The index already holds the references
+            // and the screens; the functions and the module type come from the model (IsFunction, ModuleType).
+            var digest = sha == null ? null : store?.LoadDigest(sha);
+            var basis = new StaticBasis { Lane = lane, Module = module, Digest = digest == null ? null : JsonNode.Parse(digest.ToJson(adapter)) as JsonObject, Fresh = true };
+            return _indexed = new IndexBaseFacts(basis, ops);
+        }
+        catch { return null; }
+    }
 
     private Dictionary<string, List<IObjectSignature>> Index() => _index ??= session.AllDescendants().Where(d => !string.IsNullOrEmpty(TypeResolver.Name(d)))
         .GroupBy(d => TypeResolver.Name(d)!, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);

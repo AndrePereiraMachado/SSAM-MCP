@@ -13,6 +13,7 @@ import { listOperations, readOperation, readPreviewState, summarizeOperation } f
 import { callScope, stopTask, isLiveTask, stopOperation, runsHere, folderKey } from './call-deadline.mjs';
 import { WORDS_MARKER } from './next-steps.mjs';
 import { WORDS as ENGLISH_WORDS_MARKER } from './continuations.mjs';
+import { traceFields, isTraceId, sessionScope, inScope, scopeNote, SESSION_FORMS } from './correlation.mjs';
 
 export const TASK_STATES = ['running', 'ok', 'failed', 'uncertain'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -79,6 +80,17 @@ function updateIndexes(dir, task) {
     const ids = readIndex(file)?.ids ?? [];
     if (!ids.includes(task.id)) atomicJson(file, { ids: [...ids, task.id] });
   }
+  // F7: the operation id of the call that created the record names it in ssam_task {id} (the delivery's id across tools).
+  if (isTraceId(task.operationId) && task.operationId.toLowerCase() !== String(task.id).toLowerCase()) {
+    const file = indexFile(dir, 'operation', task.operationId.toLowerCase());
+    const ids = readIndex(file)?.ids ?? [];
+    if (!ids.includes(task.id)) atomicJson(file, { ids: [...ids, task.id] });
+  }
+}
+// F7: the facade tasks a call created, by the operation id every record of the call carries.
+export function findOperationFacadeTasks(operationId, { dir = tasksDir() } = {}) {
+  if (!isTraceId(operationId)) return [];
+  return (readIndex(indexFile(dir, 'operation', operationId.toLowerCase()))?.ids ?? []).map(id => readTask(id, { dir })).filter(Boolean);
 }
 // Only startup migration enumerates legacy evidence. Every subsequent mutation looks up one key directly.
 export function ensureTaskIndexes(dir) {
@@ -121,9 +133,16 @@ function write(dir, task) {
 
 // A shared task record is updated atomically; nested trackers never discard the call's final answer.
 export function mergeTask(dir, fields) {
-  const existing = readTask(fields.id, { dir }) ?? {};
+  const found = readTask(fields.id, { dir });
+  const existing = found ?? {};
+  // F7: the record carries the trace of the call that CREATED it (the fields' own, else the live call's); a later write by
+  // another call or session (a resume that releases it, a reconciliation) never changes it, and a legacy record stays as it is.
+  const { correlationId, operationId, callerKey, ...rest } = fields;
+  const trace = found ? { correlationId: existing.correlationId, operationId: existing.operationId, callerKey: existing.callerKey }
+    : correlationId ? { correlationId, operationId, callerKey } : traceFields();
+  const stamped = Object.fromEntries(Object.entries(trace).filter(([, v]) => v != null));
   // A merge that writes this process's pid also writes its start (CT-1); one that writes no pid keeps the record's own.
-  const task = scrub({ ...existing, ...fields, ...(fields.pid === process.pid ? { processStartId: PROCESS_START_ID } : {}) });
+  const task = scrub({ ...existing, ...rest, ...stamped, ...(fields.pid === process.pid ? { processStartId: PROCESS_START_ID } : {}) });
   for (const key of ['result', 'callResult']) if (task[key] != null) task[key] = briefResult(task[key]);
   delete task.orphaned;
   write(dir, task);
@@ -174,11 +193,16 @@ export function closeFacadeTask(id, reason, { dir = tasksDir() } = {}) {
   return { ok: true, task: mergeTask(dir, { id: task.id, closedAt: new Date().toISOString(), closeReason: reason.trim() }) };
 }
 
-// Newest first by start time.
-export function listTasks({ dir = tasksDir(), limit = 20, tool } = {}) {
+// Newest first by start time. F7: scope (correlation.mjs sessionScope) keeps the records of one session, or of every session
+// ("all"), of the caller when hosted; without a scope, every record (the internal readers). excluded counts what it left out.
+export function listTasks({ dir = tasksDir(), limit = 20, tool, scope = null, excluded = null } = {}) {
   let names;
   try { names = fs.readdirSync(dir).filter(n => /\.json$/i.test(n) && UUID.test(n.slice(0, -5))); } catch { return []; }
-  const found = names.map(n => readTask(n.slice(0, -5), { dir })).filter(t => t && (!tool || t.tool === tool))
+  const all = names.map(n => readTask(n.slice(0, -5), { dir })).filter(t => t && (!tool || t.tool === tool));
+  const scoped = scope ? all.filter(t => inScope(t, scope)) : all;
+  // Hosted, only the caller's own other sessions are counted: nothing says another caller's records exist.
+  if (excluded) excluded.count = all.filter(t => !scope?.callerKey || t.callerKey === scope.callerKey).length - scoped.length;
+  const found = scoped
     .sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt))).slice(0, limit)
     .map(({ callResult, ...task }) => ({ ...scrub(task), ...(task.result ? { result: briefResult(task.result) } : {}) }));
   if (limit !== 20) return found;
@@ -253,7 +277,10 @@ export async function kernelTaskAnswer(id, { root = anvilRoot, works, findTask, 
     if (!state) continue;
     const closeState = closing(state);
     const next = KERNEL_NEXT[closeState]?.(id);
-    return { ok: true, kernelTask: { id, writeState: state.writeState ?? null, stage: state.stage ?? null, updatedAt: state.updatedAt ?? null, closeState },
+    // F7: the session and call that created the kernel task (task.json trace, written from --correlation-id/--call-id).
+    const trace = state.trace && typeof state.trace === 'object' ? state.trace : {};
+    return { ok: true, kernelTask: { id, writeState: state.writeState ?? null, stage: state.stage ?? null, updatedAt: state.updatedAt ?? null, closeState,
+      ...(isTraceId(trace.correlationId) ? { correlationId: trace.correlationId } : {}), ...(isTraceId(trace.operationId) ? { operationId: trace.operationId } : {}) },
       ...(next ? { continuation: next } : { note: 'the task already ended (' + closeState + '); a reservation it left is released by ssam_doctor {lane:"o11", release}' }) };
   }
   return null;
@@ -280,20 +307,25 @@ export function registerSsamTask(server, deps = {}) {
   const dir = deps.tasksDir ?? tasksDir(deps.root ?? anvilRoot);
   server.registerTool('ssam_task', {
     title: 'State of long facade tasks',
-    description: 'Task evidence: id, tool, summary (never the user\'s words), state running | ok | failed | uncertain, '
-      + 'startedAt/endedAt and a short result. id: the task id, or the kernel taskId of a delivery. Without id: the 20 most recent. '
-      + 'orphaned:true means the server that ran it stopped before it ended. Reading never repeats anything. '
-      + 'close {reason} with id closes that delivery task in the kernel and frees its module: a refused one, or an uncertain one only with '
-      + 'the proof that nothing was applied (the live module equals the base the task captured); never when the live module differs. Destructive operations (deletes, previewed then confirmed): without id, `destructive` lists the 10 most recent with their counts and names; id = the operationId or the previewId of a preview gives item by item what was deleted, uncertain or not started: read it before telling the owner anything after an interruption, CANCELLED or "rejected" (also after SC_LOCAL_FAILURE or any other local failure). '
-      + 'Cancelling the wait does not stop the work. stop:true with a live facade id, or with the operationId/previewId of a destructive execution running in this server, aborts its handler before the next send. A facade UUID without a kernel taskId closes its finished uncertain or orphaned record after explicit reconciliation; a live running handler cannot close. A destructive record is never closed here: close with its operationId refuses and answers the record.',
+    description: 'Task evidence: id, tool, summary (never the user\'s words), state running|ok|failed|uncertain, times, short result, '
+      + 'correlationId (session), operationId (call). id: task id, a call\'s operationId or a delivery\'s kernel taskId. Without id: the 20 latest of this session (session: "all" or a correlationId). '
+      + 'orphaned:true: its server stopped before it ended. Reading never repeats anything. '
+      + 'close {reason} with id closes that delivery task in the kernel, freeing its module: a refused one, or an uncertain one only with '
+      + 'the proof nothing was applied (live module equals the captured base). Destructive operations (confirmed deletes): without id, `destructive` lists the 10 latest with counts and names; id = the operationId or previewId of a preview gives item by item what was deleted, uncertain or not started: read it before telling the owner anything after an interruption, CANCELLED or "rejected" (also SC_LOCAL_FAILURE or any local failure). '
+      + 'Cancelling the wait does not stop the work. stop:true with a live facade id, or the operationId/previewId of a destructive execution running here, aborts its handler before the next send. A facade UUID without kernel taskId closes its finished uncertain/orphaned record after reconciliation; never a live handler. A destructive record is never closed: close answers it.',
     inputSchema: z.object({
       id: z.string().regex(/^[0-9a-fA-F-]{32,36}$/).optional().describe('UUID or delivery taskId (32 hex)'),
       stop: z.literal(true).optional(),
       close: z.object({ reason: z.string().trim().min(1).max(500) }).strict().optional().describe('id: close delivery task'),
+      session: z.string().optional(),
     }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, async ({ id, close, stop } = {}, extra) => {
+  }, async ({ id, close, stop, session } = {}, extra) => {
     try {
+      // F7: the scope of every read (this session by default); hosted, never a record of another caller.
+      const scope = sessionScope(session);
+      if (!scope.ok) return reply({ ok: false, code: scope.code, error: scope.error, continuation: { tool: 'ssam_task', arguments: {}, why: 'Lists the recent tasks of this session.' } });
+      const callerOk = task => !task || !scope.callerKey || task.callerKey === scope.callerKey;
       if (stop) {
         if (!id || close) return reply({ ok: false, code: 'BAD_ARGS', error: 'stop needs a live facade id and cannot combine close.' });
         // Junction (M6 adjustment 4): the operationId or previewId of a destructive execution stops the live CX12 entry
@@ -329,8 +361,16 @@ export function registerSsamTask(server, deps = {}) {
         if (answer?.ok === true) releaseKernelFacadeTasks(kernelId, { dir, reason: close.reason, outcome: 'not-applied' });
         return reply(answer);
       }
-      if (!id) return reply({ ok: true, tasks: listTasks({ dir }), destructive: listOperations({ limit: 10, root: deps.destructiveRoot }) });
-      const task = KERNEL_ID.test(id) ? findKernelFacadeTasks(id, { dir }).at(-1) ?? listTasks({ dir, limit: 500 }).find(t => t.result?.taskId?.toLowerCase() === id.toLowerCase()) : readTask(id, { dir });
+      if (!id) {
+        const excluded = { count: 0 };
+        const tasks = listTasks({ dir, scope, excluded });
+        return reply({ ok: true, ...scopeNote(scope, excluded.count), tasks, destructive: listOperations({ limit: 10, root: deps.destructiveRoot }) });
+      }
+      let task = KERNEL_ID.test(id) ? findKernelFacadeTasks(id, { dir }).at(-1) ?? listTasks({ dir, limit: 500 }).find(t => t.result?.taskId?.toLowerCase() === id.toLowerCase()) : readTask(id, { dir });
+      // F7: the operationId of a call names the facade task(s) it created (the same id in ssam_friction and the kernel task).
+      let byOperation = [];
+      if (!task && isTraceId(id)) { byOperation = findOperationFacadeTasks(id, { dir }).filter(callerOk); task = byOperation.at(-1) ?? null; }
+      if (!callerOk(task)) task = null;
       if (!task && KERNEL_ID.test(id)) {
         const kernel = await kernelTaskAnswer(id.toLowerCase(), { root: deps.root ?? anvilRoot, works: deps.works, findTask: deps.findTask, closeStateOf: deps.closeState });
         if (kernel) return reply(kernel);
@@ -341,6 +381,12 @@ export function registerSsamTask(server, deps = {}) {
       // CX15 r2 (T5): a preview with no execution yet answers its state, never TASK_NOT_FOUND.
       const previewed = task ? null : readPreviewState(id, { root: deps.destructiveRoot });
       if (previewed) return reply({ ok: true, destructiveOperation: previewed });
+      // F7: a session's correlationId as id lists that session's tasks (the caller's own when hosted).
+      if (!task && isTraceId(id)) {
+        const own = sessionScope(id);
+        const tasks = listTasks({ dir, scope: own, limit: 50 });
+        if (tasks.length) return reply({ ok: true, ...scopeNote(own, 0), tasks });
+      }
       if (!task) return reply({ ok: false, code: 'TASK_NOT_FOUND', error: 'No task ' + id,
         continuation: { tool: 'ssam_task', arguments: {}, why: 'Lists the recent tasks and their ids.' } });
       const kernelId = task.result?.taskId;
@@ -350,7 +396,7 @@ export function registerSsamTask(server, deps = {}) {
         : null;
       // M6 adjustment 6: the task of a destructive execution also answers the CX15 record of its operation(s).
       const records = (task.call?.previewIds ?? []).map(previewId => destructiveRecordOf(previewId, deps.destructiveRoot)).filter(Boolean);
-      return reply({ ok: true, task, ...(records.length ? { destructiveOperation: records[0], ...(records.length > 1 ? { destructiveOperations: records } : {}) } : {}), ...(continuation ? { continuation } : {}) });
+      return reply({ ok: true, task, ...(byOperation.length > 1 ? { tasks: byOperation.map(t => ({ id: t.id, tool: t.tool, state: t.state })) } : {}), ...(records.length ? { destructiveOperation: records[0], ...(records.length > 1 ? { destructiveOperations: records } : {}) } : {}), ...(continuation ? { continuation } : {}) });
     } catch (error) { return reply({ ok: false, error: error.message }); }
   });
 }

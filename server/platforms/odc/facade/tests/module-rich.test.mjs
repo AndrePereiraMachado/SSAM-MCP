@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { moduleMap, parseMapArguments, richFile, odcKernelCli, ROLES } from '../module-map.mjs';
 import { RICH_EXTRACTOR, PROPERTY_TYPES, RICH_SCHEMA, SEARCH_SCHEMA, USES_SCHEMA } from '../module-rich.mjs';
 import { writeCapture } from './fixtures/module-index.mjs';
+import { STORE_GENERATION } from '../store-generation.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const kernelSource = path.join(here, '..', '..', '..', '..', 'kernel', 'src', 'Anvil.Core', 'Kernel', 'ModuleRichIndex.cs');
@@ -83,7 +84,7 @@ test('the rich index constants are the C# ones and the file sits beside the inde
   assert.equal(source.match(/public const string PropertyTypes = "(\w+)";/)[1], PROPERTY_TYPES);
   assert.equal(source.match(/public const string Schema = "([^"]+)";/)[1], RICH_SCHEMA);
   const env = { SSAM_MODULE_INDEX_ROOT: path.join(os.tmpdir(), 'store') };
-  for (const lane of ['odc', 'o11']) assert.equal(richFile(lane, 'A'.repeat(64), env), path.join(env.SSAM_MODULE_INDEX_ROOT, 'v1', lane, 'a'.repeat(64) + '.kernel.rich.json'));
+  for (const lane of ['odc', 'o11']) assert.equal(richFile(lane, 'A'.repeat(64), env), path.join(env.SSAM_MODULE_INDEX_ROOT, STORE_GENERATION, lane, 'a'.repeat(64) + '.kernel.rich.json'));
 });
 
 test('search: text in expressions, values, arguments and names, with filters, regex and the passage of each hit', async t => {

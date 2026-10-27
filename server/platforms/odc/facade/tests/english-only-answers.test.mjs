@@ -50,6 +50,7 @@ const VOCABULARY = Object.freeze({
   'platforms/odc/facade/discovery.mjs': 'Portuguese stopwords and synonyms of the user\'s requests (discovery)',
   'platforms/odc/facade/work-packet.mjs': 'Portuguese words of the user\'s requests (work packet topics)',
   'platforms/odc/facade/osui-catalog.mjs': 'Portuguese words of the user\'s requests (OutSystems UI catalog search)',
+  'platforms/odc/facade/request-vocabulary.mjs': 'the word tables of the user\'s requests (app kinds, questions about SSAM records): only tables',
   'platforms/odc/facade/environment-components.mjs': 'Portuguese words of the user\'s requests (installed components)',
   'platforms/odc/facade/ssam-reference.mjs': 'Portuguese stopwords and query words of the user\'s requests',
   'platforms/odc/portal/runtime/portal-capabilities.mjs': 'Portuguese stopwords of the user\'s requests (Portal capability search)',

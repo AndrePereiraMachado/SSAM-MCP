@@ -235,6 +235,16 @@ public sealed partial class ModelSession
             return report;
         }
 
+        /// <summary>The producer module of a referenced element: the name of the Reference it hangs from (null for an element
+        /// of this module).</summary>
+        private static string? ProducerOf(IObjectSignature element)
+        {
+            for (var up = element.Parent as IObjectSignature; up != null; up = up.Parent as IObjectSignature)
+                if (up.GetType().Name.StartsWith("Reference", StringComparison.Ordinal) || up.GetType().GetInterfaces().Any(i => i.Name == "IReference"))
+                    return TypeResolver.Name(up);
+            return null;
+        }
+
         /// <summary>The classes the document uses that no rule defines where this page reads CSS: its own style sheet, the
         /// themes of the module, OutSystems UI. Each with the element that uses it; where else the module writes it (another
         /// screen's or block's own style sheet, which that page alone loads); and the default theme when it is of another
@@ -250,9 +260,29 @@ public sealed partial class ModelSession
             string? themeElsewhere = null;
             try
             {
+                var own = new HashSet<string>(s._es.MobileThemes.Select(t => t.ObjectKey?.ToString() ?? ""), StringComparer.Ordinal);
                 foreach (var theme in s._es.MobileThemes) defined.UnionWith(ScreenDocument.CssClasses(ApiValue(theme, "StyleSheet") as string));
-                if (s._es.DefaultMobileTheme is { } current && !s._es.MobileThemes.Any(t => t.ObjectKey?.ToString() == current.ObjectKey?.ToString()))
-                    themeElsewhere = TypeResolver.Name(current);
+                // Goal list of 2026-10-20, item 12 (report 90a697c3: six screens warned of classes a producer theme
+                // defines): the theme the page shows and every theme of the module are followed through BaseTheme; the first
+                // one of another module (its CSS is not in this capture) is named, and the warning says the classes may be its.
+                var shown = (root.Parent is IObjectSignature flow ? PrototypeBuilder.Prop(flow, "Theme") as IObjectSignature : null) ?? s._es.DefaultMobileTheme as IObjectSignature;
+                foreach (var start in new[] { shown }.Concat(s._es.MobileThemes.OfType<IObjectSignature>()))
+                {
+                    var seen = new HashSet<string>(StringComparer.Ordinal);
+                    for (var at = start; at != null && seen.Add(at.ObjectKey?.ToString() ?? "") && themeElsewhere == null; )
+                    {
+                        if (!own.Contains(at.ObjectKey?.ToString() ?? ""))
+                        {
+                            // The theme of OutSystems UI is the base of every theme and its classes are the allowlist already
+                            // (OutSystemsUiClass): only another producer's theme may hold the rules this capture cannot read.
+                            var producer = ProducerOf(at);
+                            if (producer is not ("OutSystemsUI" or "OutSystemsUIWeb")) themeElsewhere = (producer != null ? producer + "." : "") + TypeResolver.Name(at);
+                            break;
+                        }
+                        at = PrototypeBuilder.Prop(at, "BaseTheme") as IObjectSignature;
+                    }
+                    if (themeElsewhere != null) break;
+                }
             }
             catch (Exception) { /* a module without themes: only its own CSS and OutSystems UI */ }
             var missing = used.Where(u => !defined.Contains(u.Class) && !ScreenDocument.OutSystemsUiClass(u.Class)).ToList();

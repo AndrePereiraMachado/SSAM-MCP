@@ -1,3 +1,4 @@
+import { appendJsonLine } from '../../../correlation.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
@@ -42,7 +43,7 @@ export async function startLiveHost(config){
  const immutable=new Map(registry.assets.filter(x=>x.rootAccessible===true).map(a=>{requireThat(exactRoute(a.route)&&typeof a.contentType==='string','ROOT_RESOURCE_ROUTE');return[a.route,{...a,body:pinned(a)}];}));
  const shell=new Map([['/','shell.html','text/html'],['/shell.js','shell.js','text/javascript'],['/shell.css','shell.css','text/css']].map(([route,file,type])=>[route,{body:fs.readFileSync(path.join(here,file)),contentType:type+'; charset=utf-8'}]));
  const subscribers=new Set();let port;
- const ledger=(event)=>{if(config.ledgerFile)fs.appendFileSync(config.ledgerFile,JSON.stringify({at:new Date().toISOString(),...event})+'\n');};
+ const ledger=(event)=>{if(config.ledgerFile)appendJsonLine(config.ledgerFile, {at:new Date().toISOString(),...event});};
  const manager=new ReleaseState({config,onChange:state=>{if(config.stateFile)atomicJSON(config.stateFile,state);const packet='event: state\ndata: '+JSON.stringify(state)+'\n\n';for(const s of subscribers)s.write(packet);ledger({event:'state',promoted:state.promoted?.buildId,rendered:state.rendered?.kind,error:state.error});}});
  function poll(){
   try{verifyImplementation(config);if(fs.existsSync(config.selectionFile))manager.promote(JSON.parse(fs.readFileSync(config.selectionFile)));}catch(error){manager.fail(error);}

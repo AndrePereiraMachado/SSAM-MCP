@@ -1,0 +1,26 @@
+{
+  "schema": "ssam-packet-scope-intents/1",
+  "note": "R4 (2026-10-24): ten requests of the kinds measured 11..24/10/2026 (fila de fricção e recibos do proto), over the Pedidos module of module.mjs. names: what the expression or call of the change uses and the packet must name without another call; edits: the owner the packet reads and whose basedOn goes in the call.",
+  "intents": [
+    { "id": "action-aggregate", "intent": "criar a server action Pedido_ListarPorCliente que busca os pedidos do Cliente com um aggregate de Pedido e Cliente ordenado por CriadoEm",
+      "names": ["Pedido", "Cliente", "CriadoEm", "ClienteId"], "edits": [] },
+    { "id": "edit-flow", "intent": "corrigir a action Pedido_Create para validar o Total antes de gravar",
+      "names": ["Pedido_Create", "Pedido_Validate", "PedidoInvalido", "PedidoDados"], "edits": [{ "kind": "flow", "name": "Pedido_Create" }] },
+    { "id": "field-to-screen", "intent": "adicionar o atributo Desconto na entidade Pedido e mostrar na tela PedidoLista",
+      "names": ["Pedido", "PedidoLista", "GetPedidos"], "edits": [{ "kind": "html", "name": "PedidoLista" }] },
+    { "id": "new-block", "intent": "criar um block PedidoResumo que mostra o Total e o StatusPedido de um Pedido",
+      "names": ["Pedido", "StatusPedido", "Total"], "edits": [] },
+    { "id": "crud-screen", "intent": "criar a tela PedidoCadastro para cadastrar e editar um Pedido com seus itens PedidoItem",
+      "names": ["Pedido", "PedidoItem", "Pedido_Create"], "edits": [] },
+    { "id": "edit-html", "intent": "alterar a tela PedidoLista: trocar o texto do botão BuscarButton para Pesquisar",
+      "names": ["PedidoLista", "BuscarButton", "SearchText"], "edits": [{ "kind": "html", "name": "PedidoLista" }] },
+    { "id": "site-property", "intent": "criar a site property PrazoEntregaDias do tipo Integer e usar no lugar do MaxItensPorPedido",
+      "names": ["MaxItensPorPedido"], "edits": [] },
+    { "id": "exception", "intent": "criar a exceção PedidoSemItens e lançar na action Pedido_Create quando o Pedido não tiver itens",
+      "names": ["Pedido_Create", "PedidoInvalido", "PedidoItem"], "edits": [{ "kind": "flow", "name": "Pedido_Create" }] },
+    { "id": "timer", "intent": "criar um timer LimparPedidosAbandonados que roda toda noite a action Pedido_LimparAbandonados",
+      "names": ["Pedido_LimparAbandonados"], "edits": [] },
+    { "id": "rest", "intent": "consumir a API REST ViaCep para buscar o endereço pelo Cep na action Cliente_AtualizarEndereco",
+      "names": ["ViaCep", "ConsultarCep", "Cliente_AtualizarEndereco", "ViaCepResposta", "Cliente"], "edits": [] }
+  ]
+}

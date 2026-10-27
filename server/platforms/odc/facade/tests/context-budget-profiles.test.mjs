@@ -107,7 +107,7 @@ test('B3 debug configuration follows root server naming in normal roots and work
 
 // B5 at the real boundary: no CLI/Studio operation, only a fictitious private friction queue.
 test('B5 root friction preserves historical small answers and keeps large answers exactly in evidence',{timeout:120000},async()=>{
- const os=await import('node:os');const{createStore}=await import('../../../../facade/friction-store.mjs');
+ const os=await import('node:os');const{createStore,frictionScope}=await import('../../../../facade/friction-store.mjs');const all=frictionScope('all',{});
  const box=fs.mkdtempSync(path.join(os.tmpdir(),'cx11-friction-budget-'));
  const store=createStore({root,directory:box,warning:code=>assert.fail(code)});
  const fixture=i=>store.begin({interface:'mcp',operation:'deliver',lane:'o11',profile:'operational',taskId:'cx11-friction-fixture',sessionId:'11111111-1111-4111-8111-111111111111'}).finish({ok:false,code:'CX11_'+('A'.repeat(800))+'_'+i});
@@ -124,15 +124,15 @@ test('B5 root friction preserves historical small answers and keeps large answer
    const exact=await client.callTool({name:'ssam_evidence',arguments:{file,select:['/issues/0'],budgetBytes:4096}});
    assert.deepEqual(exact.structuredContent.values['/issues/0'],expected.issues[0]);
   };
-  const before=store.issues({limit:100});assert.ok(Buffer.byteLength(JSON.stringify(before))<4096);
-  const small=await client.callTool({name:'ssam_friction',arguments:{view:'issues',limit:100}});
+  const before=store.issues({limit:100,scope:all});assert.ok(Buffer.byteLength(JSON.stringify(before))<4096);
+  const small=await client.callTool({name:'ssam_friction',arguments:{view:'issues',limit:100,session:'all'}});
   assert.deepEqual(small.structuredContent,before);assert.equal(small.content[0].text,JSON.stringify(before));
   for(let i=1;i<10;i++)fixture(i);
-  const medium=store.issues({limit:100});const mediumBytes=Buffer.byteLength(JSON.stringify(medium));assert.ok(mediumBytes>4096&&mediumBytes<30720);
-  await verifyRecovered(await client.callTool({name:'ssam_friction',arguments:{view:'issues',limit:100}}),medium);
+  const medium=store.issues({limit:100,scope:all});const mediumBytes=Buffer.byteLength(JSON.stringify(medium));assert.ok(mediumBytes>4096&&mediumBytes<30720);
+  await verifyRecovered(await client.callTool({name:'ssam_friction',arguments:{view:'issues',limit:100,session:'all'}}),medium);
   for(let i=10;i<100;i++)fixture(i);
-  const expected=store.issues({limit:100});assert.ok(Buffer.byteLength(JSON.stringify(expected))>30720);
-  await verifyRecovered(await client.callTool({name:'ssam_friction',arguments:{view:'issues',limit:100}}),expected); }finally{await client.close();fs.rmSync(box,{recursive:true,force:true});}
+  const expected=store.issues({limit:100,scope:all});assert.ok(Buffer.byteLength(JSON.stringify(expected))>30720);
+  await verifyRecovered(await client.callTool({name:'ssam_friction',arguments:{view:'issues',limit:100,session:'all'}}),expected); }finally{await client.close();fs.rmSync(box,{recursive:true,force:true});}
 });
 test('B5 asynchronous local boundary formatter preserves RPC errors and catches rejected callbacks',async()=>{
  const{observeMcp}=await import('../../../../facade/friction-boundary.mjs');

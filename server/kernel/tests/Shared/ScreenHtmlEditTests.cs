@@ -16,6 +16,7 @@ public sealed class ScreenHtmlEditTests
         public readonly HashSet<string> Kinds = [.. kinds.Append(kind).SelectMany(k => new[] { k, "I" + k })];
         public Node? Parent;
         public List<Node> Children = [];
+        public List<Node> UsedBy = [];
         public Dictionary<string, object?> Props = [];
         public Node Add(Node child) { child.Parent = this; Children.Add(child); return child; }
         public Node Set(string property, object? value) { Props[property] = value; if (property == "Name" && value is string s) Name = s; return this; }
@@ -23,7 +24,7 @@ public sealed class ScreenHtmlEditTests
     private sealed record Code(string Text);
     private sealed class Reader : ModelReader<Node>
     {
-        protected override IEnumerable<Node> Referrers(Node n) => [];
+        protected override IEnumerable<Node> Referrers(Node n) => n.UsedBy;
         protected override IEnumerable<Node> Children(Node n) => n.Children;
         protected override Node? Parent(Node n) => n.Parent;
         protected override string Key(Node n) => n.Key;
@@ -54,10 +55,11 @@ public sealed class ScreenHtmlEditTests
     private sealed class Writer : IScreenHtmlWriter<Node>
     {
         public readonly List<string> Log = [];
-        public Node Create(Node parent, string kind, Node? block)
+        public Node Create(Node parent, string kind, Node? block, string? name = null)
         {
-            Log.Add("create " + kind);
-            var node = kind is "ExtendedProperty" or "Event" or "LocalVariable" or "InputParameter" or "Argument" ? N(kind) : W(kind);
+            Log.Add("create " + kind + (name != null ? " '" + name + "'" : ""));
+            if (name != null && Refuses?.Invoke(parent, "create " + kind + " " + name) is { } refused) throw new InvalidOperationException(refused);
+            var node = kind is "ExtendedProperty" or "Event" or "LocalVariable" or "InputParameter" or "Argument" ? N(kind, name ?? "") : W(kind, name ?? "");
             parent.Add(node);
             switch (kind) {
                 case "IfWidget": node.Set("TrueBranch", node.Add(W("IfBranchWidget"))).Set("FalseBranch", node.Add(W("IfBranchWidget"))); break;
@@ -72,14 +74,19 @@ public sealed class ScreenHtmlEditTests
                     break;
                 case "MobileBlockInstanceWidget":
                     node.Set("SourceBlock", block);
-                    foreach (var holder in Descendants(block!).Where(d => d.Kind == "PlaceholderWidget")) node.Add(W("PlaceholderContentWidget")).Set("Placeholder", holder);
+                    // The platform names each slot after its placeholder (read-only: see Set).
+                    foreach (var holder in Descendants(block!).Where(d => d.Kind == "PlaceholderWidget")) node.Add(W("PlaceholderContentWidget", holder.Name)).Set("Placeholder", holder);
                     break;
             }
             return node;
         }
+        // The platform's refusal of a write (its own words), when a test asks for one.
+        public Func<Node, string, string?>? Refuses;
         public void Set(Node node, string property, ScreenHtmlValue<Node> value)
         {
             Log.Add("set " + property);
+            if (property == "Name" && node.Kind == "PlaceholderContentWidget") throw new InvalidOperationException("Widget does not support name changing");
+            if (Refuses?.Invoke(node, property) is { } why) throw new InvalidOperationException(why);
             object? written = value.Type switch {
                 'e' => new Code(value.Text), 'b' => value.Text == "True", '?' => null, 'r' => value.Target ?? (object)new Node("~", "Outside", value.Name ?? ""),
                 'l' => value.Targets?.ToList(), _ => value.Text };
@@ -609,6 +616,39 @@ public sealed class ScreenHtmlEditTests
     private static string Line(string html, string k) => html.Split('\n').First(l => l.Contains(" k=\"" + k + "\"", StringComparison.Ordinal)).Trim();
     private static string Codes(ScreenHtmlEditResult result) => string.Join(", ", result.Problems.Select(p => p["code"]!.ToString()));
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void RemovingWrapperPreservesMovedReferencesButRejectsActualReferencedDeletion(bool deleteTarget, bool consumerMoves)
+    {
+        var module = N("ESpace", "Shop");
+        var screen = module.Add(N("MobileFlow", "MainFlow")).Add(N("MobileScreen", "Orders"));
+        var wrapper = screen.Add(W("Container", "Wrapper"));
+        var target = wrapper.Add(W("Container", "Result"));
+        var retained = wrapper.Add(W("Container", "Retained"));
+        var consumer = consumerMoves ? retained : screen.Add(N("ScreenAction", "Refresh")).Add(N("AjaxRefreshNode"));
+        target.UsedBy.Add(consumer);
+        var (_, before) = Read(module);
+        var root = before.Html.Split('\n').First(l => l.StartsWith("<screen"));
+        var targetKey = before.Keys.Single(p => p.Value == target.Key).Key;
+        var retainedKey = before.Keys.Single(p => p.Value == retained.Key).Key;
+        var html = root + "\n" + (deleteTarget ? "" : Line(before.Html, targetKey) + "\n")
+            + Line(before.Html, retainedKey) + "\n</screen>\n";
+        var (result, _, writer) = Apply(module, [html]);
+        Assert.Equal(deleteTarget, result.Refused);
+        if (deleteTarget) {
+            Assert.Contains("HTML_DELETE_IN_USE", Codes(result));
+            Assert.Empty(writer.Log);
+            Assert.Same(wrapper, target.Parent);
+        } else {
+            Assert.Same(screen, target.Parent);
+            Assert.Same(consumer, Assert.Single(target.UsedBy));
+            Assert.DoesNotContain(wrapper, screen.Children);
+            Assert.Contains("move", writer.Log);
+        }
+    }
+
     [Fact]
     public void EverySyntheticEditOfTheScreenAndTheBlockReadsBackAsTheEditedText()
     {
@@ -642,6 +682,38 @@ public sealed class ScreenHtmlEditTests
         Assert.Equal(before.Keys, ScreenHtml.Module(module, new Reader()).Read("Orders").Keys);
     }
 
+    // Meta de 20/10/2026, item 7 (relatos 6bd23d43, 9540e92c): "the platform refused set Name: Widget does not support name
+    // changing" named no element. The refusal now says the element (kind, k) and what to do with a kind that takes no name.
+    [Fact]
+    public void ARefusalOfThePlatformNamesTheElementAndWhatToDo()
+    {
+        var module = Module();
+        var (reading, before) = Read(module);
+        // The first container of the section (k=w9, class "a") gets a Name (the id attribute of ssam-html; a name attribute is
+        // an HTML attribute of the tag); the platform of this test refuses to name that kind.
+        var line = Line(before.Html, "w9");
+        Assert.DoesNotContain("id=", line);
+        var edit = line.Replace("k=\"w9\"", "k=\"w9\" id=\"Total\"") + "\n";
+        var plan = reading.Edit(before, [edit]);
+        Assert.False(plan.Refused, Codes(plan.Result) + " " + string.Join(" | ", plan.Result.Problems.Select(p => p["message"])));
+        var writer = new Writer { Refuses = (node, property) => property == "Name" && node.Kind == "Container" ? "Widget does not support name changing" : null };
+        plan.Apply(writer);
+        Assert.Contains("set Name", writer.Log);
+        var problem = Assert.Single(plan.Result.Problems);
+        Assert.Equal("HTML_EDIT_NOT_APPLIED", problem["code"]!.ToString());
+        Assert.Equal("w9", problem["k"]!.ToString());
+        var message = problem["message"]!.ToString();
+        Assert.Contains("set Name on Container 'Total' k=\"w9\"", message);
+        Assert.Contains("Widget does not support name changing", message);
+        // L3d (24/10): no kind of the fixtures refuses the rename of a widget of the reading; when one does, the fix keeps the name
+        // read, or creates the widget again with the name when nothing outside the page uses it (it never says the kind takes no
+        // name: an Expression, a Text and an Icon take one).
+        var fix = problem["fix"]!.ToString();
+        Assert.Contains("the platform does not rename this widget: keep the name the reading shows: send k=\"w9\" without id", fix);
+        Assert.Contains("create it again with the name (write it without k and with id=\"Total\"", fix);
+        Assert.DoesNotContain("takes no name", fix);
+    }
+
     [Fact]
     public void ANewChildARemovalASwapAndAnEventAreTheirOwnMoves()
     {
@@ -671,6 +743,43 @@ public sealed class ScreenHtmlEditTests
         Assert.False(result.Refused, Codes(result));
         Assert.Contains("<section k=\"w8\" role=\"region\">\n <div k=\"w9\" if=\"Page > 1\">\n  <div k=\"w10\" class=\"a\"/>\n </div>\n <div k=\"w11\" class=\"b\"/>\n</section>\n", after);
         Assert.Equal(["create IfWidget", "move"], writer.Log.Where(l => l is "create IfWidget" or "move"));
+    }
+
+    // Live on 20/10 (SSAM_DumpProbe, item 7 of the meta): a new Web Block instance with an id was created and then named, and
+    // the platform refused "Widget does not support name changing" (21 tasks of the survey). The name goes with the creation.
+    [Fact]
+    public void ANewWidgetIsNamedAtItsCreation()
+    {
+        var module = Module();
+        var (_, before) = Read(module);
+        var section = "<section k=\"w8\" role=\"region\">\n <div k=\"w9\" class=\"a\"/>\n <div k=\"w10\" class=\"b\"/>\n <div id=\"Total\"/>\n</section>\n";
+        var (result, after, writer) = Apply(module, [section]);
+        Assert.False(result.Refused, Codes(result) + " " + string.Join(" | ", result.Problems.Select(p => p["message"])));
+        Assert.Contains("create Container 'Total'", writer.Log);
+        Assert.DoesNotContain("set Name", writer.Log);
+        Assert.Contains("<div k=\"w11\" id=\"Total\"/>", after);
+    }
+
+    // 793ca579 (live, 20/10): a new <Block name="Modal"> of OutSystemsUIWeb resolved the producer's folder Modal (nearest
+    // tier) and the platform refused "IFolderSignature, not IWebBlockSignature". A folder named like the block here: the new
+    // block takes the block.
+    [Theory, InlineData(false), InlineData(true)]
+    public void ANewBlockTakesTheBlockWhenAFolderHasItsName(bool folder)
+    {
+        var module = Module();
+        if (folder) module.Add(N("Folder", "Card"));
+        // A second placeholder the edit will not write: the platform creates its slot, empty (Modal's Title, Icon, Footer).
+        module.Children.First(c => c.Kind == "MobileFlow").Children.First(c => c.Kind == "MobileBlock").Add(W("PlaceholderWidget", "Footer"));
+        var (_, before) = Read(module);
+        Assert.Contains("k=\"w8\"", before.Html);
+        var section = "<section k=\"w8\" role=\"region\">\n <div k=\"w9\" class=\"a\"/>\n <div k=\"w10\" class=\"b\"/>\n <Block name=\"Card\">\n  <slot name=\"Content\"/>\n </Block>\n</section>\n";
+        var (result, after, writer) = Apply(module, [section]);
+        Assert.False(result.Refused, Codes(result) + " " + string.Join(" | ", result.Problems.Select(p => p["message"])));
+        Assert.Contains("create MobileBlockInstanceWidget", writer.Log);
+        Assert.DoesNotContain("set Placeholder", writer.Log);
+        Assert.Contains(result.Normalized, n => n["property"]?.ToString() == "slots" && n["value"]?.ToString() == "Footer");
+        Assert.Contains("<slot name=\"Footer\"/>", after);
+        Assert.Contains(folder ? "<Block k=\"w11\" name=\"MobileBlock:Card\">\n  <slot name=\"Content\"/>" : "<Block k=\"w11\" name=\"Card\">\n  <slot name=\"Content\"/>", after);
     }
 
     [Fact]

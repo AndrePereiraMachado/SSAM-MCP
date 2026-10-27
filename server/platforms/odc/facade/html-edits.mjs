@@ -76,7 +76,7 @@ export function readingEditsShape(edits) {
 
 // ---- 7.4: the texts of a job a text edit may change
 // {path, part, text, name (html), segments (logic: one per action, offsets in text)} for every text of the job's ops.
-const ACTION_HEAD = /^(?:server action|service action|client action|data action|action)[ \t]+\S/;
+const ACTION_HEAD = /^(?:server action|service action|client action|data action|action|preparation)[ \t]+\S/;
 const ROOT_NAME = /^\s*(?:<!--[\s\S]*?-->\s*)*<(?:screen|block)\b[^>]*?\bname\s*=\s*"([^"]+)"/;
 function segmentsOf(text) {
   const ls = text.split('\n');

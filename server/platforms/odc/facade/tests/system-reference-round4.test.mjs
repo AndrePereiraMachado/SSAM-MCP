@@ -113,7 +113,9 @@ async function republishedAndRefreshed(w, extra = {}) {
   return deliverKernel(w.input(extra), w.deps);
 }
 
-for (const kind of ['proto', 'bind', 'plain']) {
+// The prototype import is turned off (2026-10-22, prototype-disabled.mjs): the proto and bind build paths no longer exist,
+// so the M3-R rule is proven on the plain path, and a job with the prototype op is refused before any capture or kernel.
+for (const kind of ['plain']) {
   test('M3-R (' + kind + ', N5): a cached capture older than the module is acquired again in the same call and delivered', async t => {
     const w = world(t, { kind });
     const r = await republishedAndRefreshed(w);
@@ -146,14 +148,12 @@ for (const kind of ['proto', 'bind', 'plain']) {
   });
 }
 
-test('M3-R (bind, a kernel that does not code it): the outdated text alone is REFERENCE_OUTDATED, renewed, delivered', async t => {
-  const w = world(t, { kind: 'bind', coded: false });
-  const r = await republishedAndRefreshed(w);
-  assert.equal(r.ok, true, JSON.stringify({ code: r.code, error: r.error, continuation: r.continuation }));
-  const v = world(t, { kind: 'bind', coded: false });
-  v.state.consumerRef = 6;
-  const behind = await deliverKernel(v.input(), v.deps);
-  assert.equal(behind.code, 'REFERENCE_OUTDATED');
-  assert.equal(behind.continuation.tool, 'studio_refresh_references');
-  assert.ok(Array.isArray(behind.problems) && behind.problems.some(p => p.code === 'REFERENCE_OUTDATED'));
-});
+for (const kind of ['proto', 'bind']) {
+  test('M3-R (' + kind + '): the prototype op is refused PROTOTYPE_IMPORT_DISABLED before any capture or kernel', async t => {
+    const w = world(t, { kind });
+    const r = await deliverKernel(w.input(), w.deps);
+    assert.equal(r.ok, false);
+    assert.equal(r.code, 'PROTOTYPE_IMPORT_DISABLED', JSON.stringify({ code: r.code, error: r.error }));
+    assert.deepEqual(w.calls, [], 'nothing captured, built or run');
+  });
+}

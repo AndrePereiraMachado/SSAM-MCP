@@ -46,6 +46,7 @@ import { o11LaneOf, readAuthorityKey } from './o11-lane.mjs';
 import { laneEnvironment, createAnvilRunner } from './anvil-cli.mjs';
 import { hostedContext, hostedSpawnEnv, onHostedContextClose, usesWorkspace } from './executor.mjs';
 import { kernelStart } from './quality-meter.mjs';
+import { withTraceArgs } from './correlation.mjs';
 
 export const WORKER_PROTOCOL = 'anvil-worker-1';
 const MAX_REPLY_BYTES = 256 * 1024 * 1024;
@@ -63,11 +64,12 @@ export const workerDisabled = (lane, env = process.env) => env.ANVIL_WORKER === 
   || (lane === 'o11' && hostedContext() !== null);
 const odcPort = workspace => portOf(readJson(path.join(workspace, '.ssam-workspace.json'))?.workers?.odc, 4547);
 
-// Where one lane's worker lives and what it must serve. env is the caller's environment, never mutated.
-export function workerTarget(lane, { root = anvilRoot, workspace = workspaceRoot, env = process.env, o11 = o11Lane.lane, pingMs = 3000 } = {}) {
+// Where one lane's worker lives and what it must serve. env is the caller's environment, never mutated. laneEnv: the O11
+// child environment (default laneEnvironment, which reads the connection record; a check passes the lane's own).
+export function workerTarget(lane, { root = anvilRoot, workspace = workspaceRoot, env = process.env, o11 = o11Lane.lane, pingMs = 3000, laneEnv = laneEnvironment } = {}) {
   if (lane === 'o11') {
     const row = o11LaneOf(o11, { root, workspace, env });
-    const childEnv = laneEnvironment({ lane: row.name, root, env });
+    const childEnv = laneEnv({ lane: row.name, root, env });
     const studio = childEnv.ANVIL_STUDIO_DIR || row.studioDir;
     return { lane, port: portOf(env.ANVIL_WORKER_PORT, row.worker), local: row.local, root, cli: row.cli, env: childEnv,
       selectedStudio: childEnv.ANVIL_STUDIO_DIR || null, timeoutMs: 900000, waitMs: 25000, pingMs, disabled: workerDisabled(lane, env),
@@ -361,6 +363,87 @@ export function createWorkerClient(lane, options = {}, deps = {}) {
     run: (argv, { timeoutMs, avoidBusy } = {}) => runOnWorker(argv, timeoutMs ? { ...target, timeoutMs } : target, { ...deps, avoidBusy }) };
 }
 
+// S9 (ssam_code check through the hot module): the worker already up on the lane's port, or nothing. It never starts,
+// stops, recycles or waits for one: a check must not change the machine (ensureWorker stops a worker of another
+// installation or of an older kernel). It serves only when its ping names the selected installation, it is not recycling,
+// it loaded the CLI on disk (staleKernel), and it is idle (avoidBusy: a check never queues behind a delivery's apply, it
+// runs cold beside it, as two checks in parallel do). {used:false, note} from run means nothing ran there.
+export function residentWorkerClient(lane, options = {}, deps = {}) {
+  const target = workerTarget(lane, options);
+  const ensure = async () => {
+    const status = await ping(target, deps.pingMs ?? 1000);
+    if (!status) return { status: null, note: `no ${lane} worker is up on port ${target.port}` };
+    if (status.protocol !== WORKER_PROTOCOL) return { status: null, note: `the service on port ${target.port} is not an ${WORKER_PROTOCOL} worker` };
+    if (!studioMatches(status, target.selectedStudio)) return { status: null, note: `the worker on port ${target.port} serves ${status.studio ?? 'an unknown installation'}, not ${target.selectedStudio}` };
+    if (status.recycling) return { status: null, note: `the worker on port ${target.port} is recycling` };
+    if (staleKernel(target, status)) return { status: null, note: `the worker on port ${target.port} loaded a kernel older than ${path.basename(target.cli)}` };
+    return { status };
+  };
+  return { target, resident: true, ping: () => ping(target), ensure,
+    run: (argv, { timeoutMs } = {}) => runOnWorker(argv.map(String), timeoutMs ? { ...target, timeoutMs } : target, { ...deps, ensure, avoidBusy: true }) };
+}
+
+// S14 (leitura quente): one request of the snapshot reader (reader-client.mjs readSnapshot: flow, flowElements, digest)
+// answered by the lane's write worker over the spare of the same model (WorkerServer hot-read, kernel HotModuleRead): the
+// same reader code, the same files in the same store (indexRoot), without loading the capture again. Only a worker already
+// up, of the selected installation and kernel, that says it reads hot (hotRead), keeps or is preparing a spare and runs no
+// command: it never starts, stops or queues behind one (the worker itself refuses at once, not executed, when it became busy
+// or prepares another model; it waits up to 8 s only for the prefetch of this capture's own model).
+// -> {used:false, note}: nothing ran there, the caller reads cold (also for any answer that is not ok: a read is safe to
+// repeat cold); {used:true, response}: the reader's answer, its cache naming the worker (via:'worker').
+export const HOT_READ = 'hot-read';
+export async function hotModuleRead(lane, { request, indexRoot } = {}, options = {}, deps = {}) {
+  if (workerDisabled(lane, options.env ?? process.env)) return { used: false, note: 'worker disabled (ANVIL_WORKER=0 or ANVIL_ODC_NO_WORKER)' };
+  let client;
+  try { client = (deps.client ?? residentWorkerClient)(lane, options, { pingMs: 500, ...deps }); }
+  catch (error) { return { used: false, note: 'no worker target: ' + error.message }; }
+  const state = await client.ensure();
+  if (!state.status) return { used: false, note: state.note };
+  const status = state.status;
+  if (status.hotRead !== true) return { used: false, note: `the worker on port ${client.target.port} does not read hot (an older kernel)` };
+  if (status.busy || Number(status.queued) > 0) return { used: false, note: `the worker on port ${client.target.port} is not free` };
+  // L3b follow-up: a worker preparing a spare (idleWork, or a capture wanted and not ready yet) is asked too. It waits for that
+  // prefetch when it is of this capture's model (at most its JoinWait, 8 s), and refuses at once, without stopping it, when it
+  // is another model's; the read is then cold.
+  const preparing = status.idleWork === true || (Array.isArray(status.baseCache?.warming) && status.baseCache.warming.length > 0);
+  if (!preparing && !(Number(status.cachedModules ?? status.baseCache?.entries) > 0)) return { used: false, note: `the worker on port ${client.target.port} keeps no spare` };
+  const body = JSON.stringify({ ...request, ...(indexRoot ? { indexRoot: path.resolve(indexRoot) } : {}) });
+  const started = performance.now();
+  const r = await (deps.request ?? workerRequest)({ port: client.target.port, authorization: client.target.key() ?? null, timeoutMs: deps.timeoutMs ?? 120000 }, [HOT_READ, body]);
+  const reply = r.reply;
+  if (!reply || reply.ok !== true) return { used: false, note: reply?.error ?? r.error ?? 'no answer', ...(reply?.code ? { code: reply.code } : {}) };
+  const { queuedMs, hot, ...response } = reply;
+  return { used: true, response: { ...response, cache: { ...response.cache, generation: 'worker:' + status.instanceId, instanceId: status.instanceId, pid: status.pid, via: 'worker' },
+    timings: { ...response.timings, transportMs: performance.now() - started }, hot } };
+}
+
+// L3b (pré-aquecimento, spare pós-merge): asks the lane's worker to prepare the spare of each capture next (WorkerServer
+// `warm`, kernel BaseModelCache.Warm), in this order, at most the worker's cache entries. It only names them: the worker loads
+// them while idle and gives a load up for any request that needs another base, as for every spare. Only a worker already up,
+// of the selected installation and kernel, that says it warms (ping warm:true) and is idle; it never starts, stops or waits
+// for one. captures: [{path (absolute), contentSha256?, supersedes?}]; developerId: the author the ODC worker loads them for.
+// -> {used:false, note} | {used:true, wanted:[{wanted, file, key, modelSha256, ready, ...}], held, port}.
+export const WARM = 'warm';
+export async function warmSpares(lane, { captures = [], developerId = null } = {}, options = {}, deps = {}) {
+  if (workerDisabled(lane, options.env ?? process.env)) return { used: false, note: 'worker disabled (ANVIL_WORKER=0 or ANVIL_ODC_NO_WORKER)' };
+  const list = (Array.isArray(captures) ? captures : []).filter(c => typeof c?.path === 'string' && path.isAbsolute(c.path))
+    .map(c => ({ path: path.resolve(c.path), ...(typeof c.contentSha256 === 'string' ? { contentSha256: c.contentSha256 } : {}), ...(typeof c.supersedes === 'string' ? { supersedes: path.resolve(c.supersedes) } : {}) }));
+  if (!list.length) return { used: false, note: 'no capture to warm' };
+  let client;
+  try { client = (deps.client ?? residentWorkerClient)(lane, options, { pingMs: 500, ...deps }); }
+  catch (error) { return { used: false, note: 'no worker target: ' + error.message }; }
+  const state = await client.ensure();
+  if (!state.status) return { used: false, note: state.note };
+  const status = state.status;
+  if (status.warm !== true) return { used: false, note: `the worker on port ${client.target.port} does not warm (an older kernel)` };
+  if (status.busy || Number(status.queued) > 0) return { used: false, note: `the worker on port ${client.target.port} is busy with ${status.currentCommand ?? 'a command'}` };
+  const body = JSON.stringify({ captures: list, ...(developerId ? { developerId } : {}) });
+  const r = await (deps.request ?? workerRequest)({ port: client.target.port, authorization: client.target.key() ?? null, timeoutMs: deps.timeoutMs ?? 60000 }, [WARM, body]);
+  if (r.reply?.ok !== true) return { used: false, note: String(r.reply?.error ?? r.error ?? 'no answer').slice(0, 200) };
+  const data = r.reply.data ?? {};
+  return { used: true, wanted: Array.isArray(data.wanted) ? data.wanted : [], held: data.held ?? null, port: client.target.port };
+}
+
 // B2 (C02, C25): one ODC CLI command (apply, check-job, create-app) on the lane's resident worker, which keeps the ODC Studio
 // assemblies bound, the JIT warm and the base cache (BaseModelCache). `needs`: capabilities the worker's ping must
 // advertise (apply:developer-id: the request runs under its own author, `--developer-id`; a worker of an older CLI would
@@ -403,6 +486,8 @@ export function createWorkerFirstRunner({ root = anvilRoot, env = process.env, o
   const resolve = () => (hostedContext() ? hostedWorkerClient({ root, env, o11, pool: deps.hostedWorkers }) ?? false
     : client ?? (client = workerDisabled('o11', env) ? false : createWorkerClient('o11', { root, env, o11 }, deps)));
   return async function runAnvil(args, options = {}) {
+    // F7: the same trace arguments for the worker and the cold process (added once).
+    args = withTraceArgs(args);
     const verb = String(args[0] ?? '');
     const usable = resolve();
     // stdin input (app-session) and another assembly (cli) are cold-only, as the worker refuses app-session.

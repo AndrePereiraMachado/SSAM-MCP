@@ -45,13 +45,16 @@ public sealed class PrimeiraCertaCompleteTests
     [Fact]
     public void ALogicOpWithAFailingActionStillVerifiesItsOtherActions()
     {
+        // R1 (2026-10-24): a bare callee nothing has is a problem of the scope phase now (CALL_UNKNOWN, before the apply:
+        // ScopePhaseTests, ScopeStopTests); the failure only the apply decides is a callee of the System module, which the
+        // scope phase does not list.
         if (!PacoteBPolicyTests.StudioAvailable()) return;
         var dir = Dir();
         var (_, error, output) = Run(dir, "isolated", """
         {"base":"blank-service.oml","ops":[
           {"op":"logic","data":{"actions":[
             {"name":"PcGood","outputs":[{"name":"Code","type":"Integer"}],"steps":[{"assign":{"Code":"\"abc\""}}]},
-            {"name":"PcBroken","outputs":[{"name":"N","type":"Integer"}],"steps":[{"call":"PcNoSuchAction","as":"Nope"},{"assign":{"N":"1"}}]},
+            {"name":"PcBroken","outputs":[{"name":"N","type":"Integer"}],"steps":[{"call":"System.PcNoSuchAction","as":"Nope"},{"assign":{"N":"1"}}]},
             {"name":"PcUsesBroken","steps":[{"call":"PcBroken","as":"Again"}]}]}}]}
         """);
         var refused = Assert.IsType<JobPreflightException>(Errors.FindCoded(error!));
@@ -120,13 +123,16 @@ public sealed class PrimeiraCertaCompleteTests
     [Fact]
     public void AnIsolatedActionThatFailsAloneKeepsTheCodeOfItsRefusal()
     {
+        // R1 (2026-10-24): a bare callee nothing has is a problem of the scope phase now (CALL_UNKNOWN, before the apply:
+        // ScopePhaseTests, ScopeStopTests); the failure only the apply decides is a callee of the System module, which the
+        // scope phase does not list.
         if (!PacoteBPolicyTests.StudioAvailable()) return;
         var dir = Dir();
         var (_, error, _) = Run(dir, "lone-logic", """
         {"base":"blank-service.oml","ops":[
           {"op":"logic","data":{"actions":[
             {"name":"PcFine","outputs":[{"name":"N","type":"Integer"}],"steps":[{"assign":{"N":"1"}}]},
-            {"name":"PcBroken","outputs":[{"name":"N","type":"Integer"}],"steps":[{"call":"PcNoSuchAction","as":"Nope"},{"assign":{"N":"1"}}]}]}}]}
+            {"name":"PcBroken","outputs":[{"name":"N","type":"Integer"}],"steps":[{"call":"System.PcNoSuchAction","as":"Nope"},{"assign":{"N":"1"}}]}]}}]}
         """);
         var envelope = Errors.Envelope("apply", error!, 1);
         Assert.Equal("LOGIC_INVALID", envelope["code"]!.GetValue<string>());

@@ -1,5 +1,35 @@
 # SSAM Hybrid: playbook para agentes (LLM) sem contexto
 
+## Official Traditional components from the first delivery
+
+WebResponsive uses OutSystemsUIWeb/RichWidgets; do not offer Reactive/IPopup examples. Keep the official layout/theme
+and its placeholders, without building another menu in MainContent. Read the installed contract before using
+inputs/events; prefer compatible official components to recreated overlays, paging and feedback.
+Popup_Editor when explicitly asked for: a named link with OnClick.Method=Navigate, LinkOrButtonWidgetId=Link.Id, a
+separate screen with LayoutPopup, Notify -> Close on success and OnNotify in the parent to query/assign/Ajax Refresh.
+The block and its link are updated together. Referenced actions use IReference:Producer/IServerActionSignature:Action.
+Check deprecation and devices: Popup_Editor 5404 is legacy without mobile support; for new responsive modals, prefer
+the compatible official Modal. When a browser acceptance is asked for, prove the initial load, the served CSS and the
+behaviour after Ajax, as well as open/close, cancel and validation.
+
+## Traditional interactions: Ajax Submit, Navigate and Submit
+
+Choose by the effect of the interaction. Navigate goes to a screen/URL with explicit parameters. Ajax Submit runs a
+Screen Action and keeps the screen. Submit sends the whole page, which native upload/download needs.
+Tabs and opening/closing modals use Ajax, a state assignment and an Ajax Refresh of a persistent container around the
+If. Filters/paging first fetch the data and assign the lists/values the interface is bound to.
+Ajax does not run the Preparation of the screen again; Ajax Refresh only renders, it does not query the database.
+Use validation=None for navigation, tabs and paging. Mutations keep their authorization and validations on the server.
+
+In a new document: `button/a onclick="Action" method="Ajax|Submit|Navigate" validation="None|Server|ClientAndServer"`.
+In the installed Model API only `ILinkWidget/OnClick` exposes Method/Validation. A button with an explicit policy becomes
+a native link with the Button class; the plain legacy button keeps Submit. Existing screens use edits by @key, keeping
+arguments, text, order, styles and visibility conditions. `IAjaxRefreshNode.WidgetOrWebBlock` points to the refreshed
+container. Example `traditional-ajax-navigation.json` in `tests/jobs`, proven in `tests/Anvil.Tests/TraditionalAjaxTests.cs`
+together with the JSON contract of Ajax Refresh.
+A clean publication does not prove the interaction: check in the authenticated browser Ajax without a navigation of the
+document, the parameters of Navigate and the file transfer with Submit. Record separately what stayed blocked.
+
 Guia de desenvolvimento do kernel. Sessao de app trabalha so pelo MCP `ssam` (regras no `AGENTS.md` da raiz) e nao le
 este arquivo: `ssam_discover` e `ssam_reference` respondem a partir dele.
 
@@ -100,6 +130,12 @@ Entrega O11 (`Delivery.cs`): o preflight puro nao recusa mais antes do Studio; a
 captura (modulo nao abre, bridge falha) a recusa e a do preflight, com `verifyRan:false` e o motivo.
 Provas: `pa4-pc-four-phases.json` e `pa4-pc-isolated-action.json` (`tests/jobs-negative` e `tests/jobs-odc-negative`),
 `tests/Anvil.Tests/PrimeiraCertaTests.cs` e `tests/Anvil.Tests/PrimeiraCertaCompleteTests.cs`.
+Parser tolerante de `ssam-flow/1` (R5, 24/10/2026, `FlowParse.cs` `FlowTolerance`): antes da passada estrutural, linhas inteiras
+com uma unica leitura sao reescritas e listadas em `normalizations`: `FLOW_INDENT_UNIT`, `FLOW_LINE_CONTINUATION`,
+`FLOW_SWITCH_INDENT`, `FLOW_ELSE`, `FLOW_DECLARATION_ORDER`, `FLOW_LABEL_SPACING`, `FLOW_ASSIGN_SPACING`, `FLOW_RESULT_SPACING`,
+`FLOW_ARGUMENT_SPACING`, `FLOW_NAVIGATE_ARGUMENTS`, `FLOW_JUMP_BY_NAME`, `FLOW_UNREACHED_END`, `FLOW_MAPPING_SPACING` (tabela com
+o antes e o depois em `docs/TEXTO-LOGICA.md`, "Parser tolerante"). Uma chamada nomeada e sempre um no, nunca atribuicao do bloco
+`assign` acima; o que nao normaliza continua `FLOW_SYNTAX` com a forma aceita ao lado e, quando certa, o `patch` da linha.
 Normalizacoes (lentidao 12/10/2026, `Preflight/JobNormalizer.cs`): erro de forma com uma unica leitura e reescrito no job em
 memoria antes das checagens (o arquivo nunca muda) e listado em `normalizations` ([{rule, path, from, to, message}], no
 resultado aceito, no `check-job`, no envelope da recusa e no resultado da entrega recusada), nunca recusado:
@@ -202,6 +238,32 @@ Correcao por nome (fachada, `platforms/odc/facade/job-patch.mjs`; o kernel segue
 no caminho (`actions/<Acao>/steps/<as>/...`; identidade = primeiro texto entre name, as, key, id, label; digitos sao indice) e
 `job` parcial + `basedOn` (mesmo nome substitui, nome novo entra; remover so por patch). A fachada gera o job completo, e o
 `patch` numerico do kernel volta tambem como `patchByName`. Testes: `platforms/odc/facade/tests/patch-por-nome.test.mjs`.
+Velocidade (lote 2, 24/10/2026). `check` pelo worker (S9, `code-check.mjs`, `anvil-worker.mjs`): quando o worker da lane esta de pe,
+ocioso e da mesma instalacao, o `apply` do check vai a ele e reaproveita o spare do modulo quente (sha256 do modelo, R3); a resposta
+e a do check frio mais `timings {via:"worker"|"process", kernelMs, hot}`; sem worker o caminho frio nao muda. O `write {draft}` da
+O11 (R2) oferece o candidato do check conjunto como `--prebuilt` quando captura, job e produtores batem; senao refaz o apply e diz
+`draft.prebuilt.candidate {reused:false, reason}`. Leitura quente (S14, verbo `hot-read` do worker): `ssam_map view:flow|digest` le o
+spare do modulo no lugar, sem toma-lo, com a mesma resposta da CLI fria (`via:"worker"`); worker ocupado, com fila ou preparando um
+spare recusa na hora e a fachada le frio. Leitura seletiva (S10, `ModuleFlow.BuildSelected`): `flow` com elemento, `ssam_code read` e
+`ownerReadings` constroem so as actions pedidas, com o mesmo `textSha` da leitura inteira, resposta `partial:true` (nunca gravada como
+fluxo do modulo); `search`/`uses` continuam completos; `BuildSignatures` da as assinaturas sem corpos. Caches por op no apply (S12,
+`Verbs.Flow`): um indice de nomes de action por op `logic` em vez de um por texto, invalidado pelo que cada verbo cria, renomeia ou
+move; `ANVIL_APPLY_CACHES=off` volta ao antigo; candidato identico com e sem cache (`ApplyCacheTests`). Indice de descoberta (S11,
+`discovery-index-store.mjs`): persistido em `platforms/odc/.local/discovery/<lane>/` por identidade das fontes (catalogo, fragmentos,
+exemplos, CLI, kernel, Studio) e pre-aquecido no arranque atras de `SSAM_NO_WARM`; release so da fachada nao sobe nenhum processo.
+Prazos (`call-deadline.mjs`): escritas, publicacoes e leituras longas (`ssam_map`, `o11_inspect`, `studio_inspect`, `o11_environment`)
+esperam 50 s antes do `continueTask`; as demais 25 s. Medidas e limites: `docs/BENCH-FRIO.md` e a secao 8 do plano
+`docs/PLANO-PRIMEIRA-CERTA-E-VELOCIDADE-2026-10-24.md`.
+Velocidade (lote 3, 24/10/2026). Sondagens nativas em lote (L3a): as duas CLIs aceitam `api --op native --types A,B,...` e respondem
+todos os tipos num processo so, cada tipo resolvido entre os assemblies que um processo novo ja teria carregados (saida identica
+a `--type`, byte a byte); a fachada constroi `native-<key>.json` pelo lote e volta ao caminho por tipo com uma CLI antiga ou numa
+falha (`SSAM_DISCOVERY_NATIVE_BATCH=0` forca o antigo). Primeira descoberta depois de uma release do kernel: ~44 s para ~2,2 s.
+Spare apos o merge (L3b): quando a entrega no worker termina `delivered`, o kernel prepara, ocioso e cancelavel, o spare da captura
+entregue (`nextSpare` no resultado) e para de preparar o modelo de antes; o verbo `warm` do worker pede spares sem toma-los; no
+arranque, atras de `SSAM_NO_WARM`, o servidor pede os spares dos modulos abertos no Studio (sem Studio, as 3 capturas conhecidas
+mais recentes) e `ssam_doctor` traz `spares` com quantos estao prontos. Um preparo inicializa o runtime headless antes de carregar;
+uma entrega que chega durante o preparo responde sem esperar e o cancela. Medido num modulo O11 de cliente: leitura `flow` pos-merge 7,5 s para
+0,15 s; 2a entrega pos-merge `loadMs` 677 para 12 ms; 1a leitura apos subir o worker 7,2 s para 0,3 s.
 
 SQL (`SqlPreflight.cs`, chamado pelo `check-job` e pelo apply): todo SQL do job (logic `get` com `sql:true`, `ISQLNode`
 criado no job, `set ... Statement` num no existente) e lido antes do Studio e recusado com `op #N (SQL <onde>, line L)`
@@ -234,7 +296,10 @@ job criou, e recusado com `QUERY_IN_LOOP` (op, ponteiro do passo, `flow`, `loop`
 aggregate com join antes do laco e o `ListFilter` dentro dele quando derivavel), junto com as outras falhas do apply.
 Escape: `"allowQueryInLoop": {"why": "<15+ caracteres>"}` no op (aceito em qualquer verbo de escrita, `VerbSurface`), vira
 `QUERY_IN_LOOP_ALLOWED` no recibo. Laco legado num fluxo tocado: aviso HIGH. `AGGREGATES_MERGEABLE`: aggregates do mesmo
-fluxo/tela, mesma entidade ou ligados por FK, lidos juntos: aviso HIGH com o aggregate unico sugerido. Os avisos HIGH vao
+fluxo/tela, mesma entidade ou ligados por FK, lidos juntos: aviso HIGH (a HIGH warning for a semantic review, with no
+replacement operation; a relation between entities does not prove that authorization, locks, intermediate reads, paging,
+totals or cardinality are equivalent; the warning never allows joining filters with OR or removing filters that use an
+earlier query). Os avisos HIGH vao
 para `highWarnings` do recibo do apply; a entrega O11 (`Delivery.cs`) e a fachada os poem primeiro em `warnings` e em
 `highWarnings`. Limites: fluxos que o job nao tocou nao sao lidos; a origem do no e o op que o criou (ou o primeiro op que
 cita o fluxo). Testes: `tests/Shared/QueryRulesScenarios.cs` (O11 e ODC).
@@ -511,6 +576,25 @@ as alteracoes de produto continuam pelo fluxo deliver, com publicacao pelo human
    satisfeito e `isValid == expectValid` (padrao true). O apply salva para diagnostico mesmo se `accepted=false`; `run_job.py`
    devolve exit 1 e `proof_merge.py` recusa o merge. Exemplos: `undeclared-warning.json` (aceito, aviso nonblocking) e `stale-expected.json`.
    Cada parte de composto mantem seu contrato para rodar isoladamente; o composto avalia so a sua propria lista, sem heranca.
+   Fase scope (R1, 24/10/2026, `Preflight/ScopePhase.cs`): com a base carregada e antes do primeiro op, cada nome que o job usa e
+   resolvido contra o dono (tela ou bloco da base, o que o mesmo job declara antes, o modulo e as referencias, os reference
+   ops): CALL_UNKNOWN (acao chamada, navigate, destino de evento), SCOPE_UNKNOWN_IDENTIFIER (raiz de expressao de set cru),
+   HTML_NAME_UNKNOWN com rule HTML_NAME_RESOLVED (block, handler, destino do documento: as regras S1-S7 do check estatico
+   sobre um indice fresco da base), WIDGET_REQUIRED_PROPERTY (Button/Link sem destino), WIDGET_PROPERTY_VOCABULARY (set que
+   um elemento do mesmo tipo na base nao escreve), ACTION_KIND_NODE (widget de outra familia ou filho que o pai recusa,
+   pelos mapas `docs/mapa/criar-*.json`), REFERENCE_ELEMENT_UNKNOWN/REFERENCE_NOT_PUBLIC (elemento do produtor). Um op raiz
+   recusado (preflight ou scope) nomeia os ops que precisam do que ele declara (SCOPE_BLOCKED_BY_REFUSED_OP, `blockedOps`):
+   eles nao mudam. Cada problema: phase scope, rule, predicts (o codigo que o apply/Verify daria), fix e patch quando certo.
+   Normaliza com nota: OWNER_CHILD_CREATED (filho que o widget nao traz, ex. ITextWidget de um ILinkWidget Traditional),
+   IF_CLASS_MOVED (class de um elemento com if= em Reactive/Mobile vai para um container do que ele mostra).
+   Com problema de scope, nada chega ao apply: a recusa traz preflight + base + scope (verifyRan false) e o recibo aceito traz
+   `timings.scopeMs`. `ANVIL_SCOPE_PHASE=off` e so interruptor do operador. Testes: `ScopePhaseTests` (O11), `ScopePhaseOdcTests`
+   (ODC), `ScopeStopTests`; medicao: `ScopeCorpusTests` (desligado sem ANVIL_SCOPE_CORPUS; corpus real de 24/10: 81,3% dos
+   problemas que nasciam em apply/Verify pegos antes do build, 0 falso positivo em 30 jobs aceitos).
+   Na lane odc (L3c, 24/10/2026, `PreflightRules/OdcScopeRules.cs`): ODC_SERVER_ACTION_PUBLIC, ODC_SESSION_VARIABLE, ODC_LOCALIZED_IMAGE,
+   ODC_TRADITIONAL_WIDGET (patch para o widget equivalente), ODC_DELETE_RULE_FORCED e ODC_SETTING_SIZE no texto de dados (patch); IF_CLASS_MOVED
+   vale tambem no ODC; `navigate RedirectToURL(...)` e destino do System. ACTION_KIND_NODE so na lane o11 (os mapas criar-*.json sao do
+   Service Studio 11). Medicao: `ScopeOdcCorpusTests` (desligado sem ANVIL_SCOPE_CORPUS): 168 recusas reais do lab ODC e 30 aceitas, 0 recusa nova.
    O cliente agora faz auto-arranque do worker (desligue com `ANVIL_WORKER=0`). Pedidos concorrentes aguardam na fila;
    `ping` responde enquanto corre um comando e mostra `busy/currentCommand/runningMs/queued/commands`.
    `queuedMs` mede a espera. A cada 5000 comandos (configuravel por `ANVIL_WORKER_MAX_COMMANDS`) ou heap >2 GB em
@@ -1041,6 +1125,27 @@ negativo de `reference-static-not-public.json`. O erro de `reference` inclui a r
 
 ### 3.2 Traditional (tests/jobs/screen-crud-traditional.json)
 
+New frontend by text: `tests/jobs/traditional-html-frontend.json` uses two `html` ops with `<block>`/`<screen>`
+documents and one `logic` op with `data.flow` (`action Screen.Action`) in the same job. The compiler generates native
+web widgets, variables, CSS and events; the screen actions run on the server. The example has a block, a field, a
+button and a conditional answer. `TraditionalHtmlFrontendTests` checks the reload after a merge and that an existing
+Entry is kept. The document creates an Entry only when the module has none, without writing DefaultScreen.
+Recreation (B1) in Traditional too since 20/10/2026: `ScreenRecreationProof` visits `WebScreen`/`WebBlock`, the compiler
+accepts `k`, `label for`, `os-*` on the root, extended attributes without a prefix, `ScreenAction:Name` destinations,
+`WebBlockSignature:Name` blocks, moves `os-opaque`/`os-<Kind>` by k and returns `keys`; `Verbs.ScreenRecreation` moves the
+Preparation and points the consumers of the root again. Proof: `tests/Anvil.Tests/TraditionalRecreationTests.cs`
+(traditional-ui.oml, 5/5 equal).
+Scope: div/span, text/expressions, input/textarea with bind, button/a with a destination without arguments,
+table/tr/td, Block/slot, div if/else and list. Literal CSS/class. Unsupported markup is refused.
+HTML editing of existing screens, JavaScript/React components and the `screen` generator stay outside this scope;
+for existing screens, use the native verbs with @key. Publication and the browser need their own proof.
+
+Before creating the initial entry of a Traditional module, read the existing `IEntry` elements. Without an initial
+entry, create `OutSystems.Model.UI.Web.IEntry` in the flow, `link` the entry to the screen and `set IsDefault true` on the
+entry. The CRUD recipe does this with `ContactsEntry` -> `ContactsWeb`. Do not change the existing default entry unless
+asked to. The test `TraditionalEntryRecipeTests` checks the target and IsDefault after a save and a native merge; a valid
+Verify and merge prove neither the compilation/publication on the server nor resolve every `ESpace.Dump` error.
+
 `IWebScreen` em `IWebFlow:MainFlow` ja nasce com o layout do tema: os placeholders sao `$scr/#IWebBlockInstanceWidget/Title`,
 `$scr/#IWebBlockInstanceWidget/MainContent`, `.../Actions`, `.../Breadcrumbs`. Dados na `IPreparation` (create no
 `$scr`; Start, `IAggregateNode`, End, `link`, `layout`). Widgets com sufixo Widget: IContainerWidget, IExpressionWidget, IInputWidget
@@ -1203,7 +1308,7 @@ seletor CSS por id (`#x`) continua recusado: use classes. `@import` (em qualquer
 uma vez (`cssImportsHoisted`), nas formas pagina e fragmento.
 Recusa: TODOS os problemas da pagina numa resposta (por elemento, por chave, por statement de CSS; o problema de um elemento nao esconde
 os filhos), cada um com codigo `HTML_*`, fix proprio e `patch` quando a correcao e certa (`HTML_BINDING_ORPHAN` -> `remove` do binding,
-`HTML_CALL_ORDER` -> `move` do op `logic` para antes do html). O preflight (check-job, sem modulo) roda a MESMA passada de widgets com
+a ordem dos ops nao importa: F5, `JobComposition` roda o op `logic` que declara a action antes do html). O preflight (check-job, sem modulo) roda a MESMA passada de widgets com
 escopo vazio e confere `call` contra os ops `logic` do job; o que ele ja recusou nao e aplicado de novo (`RefusedWhole`), e as
 construcoes que a forma antiga recusava saem como avisos com contagem (`CSS_IMPORT_HOISTED`, `HTML_KEY_SHARED`,
 `HTML_SCREEN_ACTION_SAME_JOB`, `HTML_CLICKABLE_ELEMENT`, `HTML_ATTRIBUTE_EXTENDED`, `HTML_VISIBLE_IF`, `HTML_TABLE_STATIC`,
@@ -1258,6 +1363,10 @@ fora do escopo; em Dropdown use o alias da lista); `DisconnectedDestination` (Tr
 `ExpressionUnknownFunction` (a funcao nao existe: leia a linha `Hint UnknownFunction` logo abaixo, que da as parecidas, e
 `docs/functions.md`); `InvalidDataSet_LocalEntitiesInServerAggregate` (aggregate sobre client entity sem `isClientSide`); `UnusedElement` e
 `UnusedUserAction` (warning: ligue ou marque Public); `CustomObjectWarning` Security Warning (tela chamando entity action: wrapper).
+Avisos de seguranca (T12, `SecurityWarnings.cs`) bloqueiam sempre que novos, inclusive o `CustomObjectWarning` cujo titulo e de uma familia de seguranca (`SQL Injection | ...` do ORDER BY com Expand Inline); a recusa traz o fix e o patch de aceite em `expectedMessages` cujo `why` tem de ser as palavras do usuario (placeholder ou reticencias sao recusados). Mudanca TEMPORARIA de acesso numa app de origem (comparar telas protegidas): job com `"temporary":{"restore":true}` e so `set Roles`/`set AnonymousAccess`; o recibo traz `accessChanges` e `accessRestore` (ops com `ifCurrent`), o `ssam_doctor` lista a restauracao pendente (a mais nova primeiro) ate ela voltar, e `"temporary":{"close":"<id>"}` com as palavras do usuario a encerra. O digest mostra `access=` e `roles=` de cada tela (`NO_ROLE_SCREEN`: nenhuma conta abre; nao peca para trocar de conta).
+`ExpressionUnknownObject`, `RequiredPropertyValue_*` e `CHILD_NOT_FOUND` em massa costumam ser cascata de um op raiz: desde a fase
+scope (R1, 24/10/2026) eles chegam antes do build como SCOPE_UNKNOWN_IDENTIFIER, WIDGET_REQUIRED_PROPERTY e OWNER_CHILD_EXISTS, e a
+recusa nomeia o op raiz em SCOPE_BLOCKED_BY_REFUSED_OP: leia-o primeiro.
 O job e uma SEQUENCIA: o alvo de um `set`/`link` (tela de destino, action chamada) tem de existir ANTES desse op. Se nao existir, o erro
 diz `op #4 (set Destination): ... IMobileScreen:Catalog does not exist yet at this point of the job: it is created at op #6 ...` e lista
 todos os outros forward-refs do job (`Also out of order: ...`): mova os creates para antes, ou os sets para depois (exemplo negativo:

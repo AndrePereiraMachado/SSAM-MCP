@@ -17,6 +17,9 @@ const kernel = path.join(repo, 'kernel');
 // The 200 example queries of the review (100 Portuguese, 100 English, both lanes) as bb12d2b3 answered them, before the
 // translation: count and the ids listed.
 const BB12D2B3 = JSON.parse(fs.readFileSync(new URL('./fixtures/example-find-bb12d2b3.json', import.meta.url), 'utf8'));
+// Suite jobs added after bb12d2b3 (integ/proto-traditional: the Traditional html frontend example): a query that finds them
+// is compared without them, so the snapshot keeps meaning what bb12d2b3 answered.
+const ADDED_AFTER_BB12D2B3 = new Set(['jobs/traditional-html-frontend']);
 
 async function reference(t) {
   const out = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'example-find-'));
@@ -31,8 +34,12 @@ test('example find: the 200 queries of the review (pt and en, both lanes) answer
   const wrong = { pt: [], en: [] };
   for (const want of BB12D2B3) {
     const a = await ask({ lane: want.lane, kind: 'example', query: { find: want.find } });
-    const ids = (a.matches ?? []).map(m => m.id);
-    if (a.count !== want.count || JSON.stringify(ids) !== JSON.stringify(want.ids)) wrong[want.lang].push(`${want.lane} '${want.find}': ${want.count} -> ${a.count}`);
+    const all = (a.matches ?? []).map(m => m.id);
+    const ids = all.filter(id => !ADDED_AFTER_BB12D2B3.has(id)), added = all.length - ids.length, count = a.count - added;
+    // An added job listed may push the last id of a full list out: the list is the snapshot's less at most that many.
+    const listed = added === 0 ? JSON.stringify(ids) === JSON.stringify(want.ids)
+      : ids.length >= want.ids.length - added && JSON.stringify(ids) === JSON.stringify(want.ids.slice(0, ids.length));
+    if (count !== want.count || !listed) wrong[want.lang].push(`${want.lane} '${want.find}': ${want.count} -> ${count}`);
     for (const m of a.matches ?? []) {
       const alias = jobSearchAlias(kernel, m.id.slice(0, m.id.lastIndexOf('/')), m.id.slice(m.id.lastIndexOf('/') + 1));
       if (alias?.description && m.description) assert.notEqual(m.description, alias.description, m.id + ': the alias is never served');

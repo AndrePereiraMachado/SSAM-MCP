@@ -10,8 +10,13 @@ import { canonicalKeyOf, sameProducer, studioNameOf } from './producer-names.mjs
 import { writeCall } from './ssam-code.mjs';
 import { runJob, withJobIdentity } from './job-runner.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
+import { residentWorkerClient, workerDisabled } from './anvil-worker.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
 import { prototypeImportRefusal } from './prototype-disabled.mjs';
+import { rememberSlotModel } from './build-pool.mjs';
+
+// S9: what a check built, for the draft's write (code-draft.mjs): a symbol key, so no answer the model reads carries it.
+export const CHECK_CANDIDATE = Symbol.for('ssam.check.candidate');
 
 const forbidden = ['publish', 'authorize', 'until', 'captureProducers', 'closePrevious', 'resume', 'patch', 'expectedEnvironment'];
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -190,6 +195,56 @@ function withOrigin(problem, origins = []) {
   return { ...problem, origin: { at, ...(file ? { file } : {}), ...(action ? { action } : {}) } };
 }
 
+// S9 (check through the hot module): the lane's resident worker runs the check's apply when it is already up, idle, of the
+// check's Studio installation and of the CLI on disk (anvil-worker.mjs residentWorkerClient: it never starts or stops one).
+// The worker keeps the module hot by the model hash of the capture (R3, BaseModelCache): the next check or build of the same
+// model skips load and walk. Without such a worker, with ANVIL_WORKER=0 (ANVIL_ODC_NO_WORKER on odc), or with an injected
+// runner (tests, the bench), the check runs cold as before. deps.worker: a client of that shape, or null for cold.
+function checkWorkerOf(lane, deps, root) {
+  if (deps.worker !== undefined) return deps.worker;
+  const env = deps.env ?? process.env;
+  if (deps.runAnvil || deps.runJob || deps.execFileFn || workerDisabled(lane, env)) return null;
+  try {
+    return residentWorkerClient(lane, { root, env, o11: deps.o11Lane ?? o11Lane.lane, ...(deps.workspace ? { workspace: deps.workspace } : {}),
+      // the lane's own environment, never the connection record (74087239: a check reads no Studio connection)
+      laneEnv: ({ lane: name, root: home, env: base }) => o11LaneOf(name, { root: home, env: base }).env(base) });
+  } catch { return null; }
+}
+// The check's runner with its apply on the worker; any other verb, and an apply the worker did not run, run cold. A request
+// written with no reply is an unknown outcome: never replayed (a timeout, as the cold runner reports one).
+function onWorker(worker, cold, seen) {
+  return async (args, options = {}) => {
+    if (String(args[0]) !== 'apply') return cold(args, options);
+    const started = Date.now();
+    const w = await worker.run(args.map(String), { timeoutMs: options.timeoutMs });
+    const unrun = w.used && !w.unknown && w.envelope?.ok === false && w.envelope?.executed === false;
+    if (!w.used || unrun) { seen.note = unrun ? 'the worker did not run the request (' + String(w.envelope.error ?? 'refused').slice(0, 160) + ')' : w.note; return cold(args, options); }
+    seen.via = 'worker';
+    if (w.unknown) return { ok: false, exitCode: 1, envelope: null, timedOut: true, unknown: true, code: w.code, stderr: [w.error].filter(Boolean), stdout: '', wallMs: Date.now() - started, via: 'worker' };
+    return { ok: w.envelope?.ok === true, exitCode: w.envelope?.ok === true ? 0 : 1, envelope: w.envelope, stderr: w.warning ? [w.warning] : [], wallMs: Date.now() - started, via: 'worker' };
+  };
+}
+// The kernel's own result of the apply (with provenance and sources, what PrebuiltCandidate reads), kept beside the
+// candidate before the job runner writes its answer over <candidate>.result.json.
+const KERNEL_RESULT = '.kernel-result.json';
+function keepingKernelResult(run) {
+  return async (args, options = {}) => {
+    const r = await run(args, options);
+    const out = String(args[0]) === 'apply' ? args[args.indexOf('--out') + 1] : null;
+    if (typeof out === 'string' && /\.oml$/i.test(out)) { try { fs.copyFileSync(out.replace(/\.oml$/i, '.result.json'), out.replace(/\.oml$/i, KERNEL_RESULT)); } catch { /* no result: nothing to keep */ } }
+    return r;
+  };
+}
+// The kernel's time of the check (accepted or refused), from the result the job runner saved beside the candidate: where it
+// ran, the kernel's own timings and the hot module (JobRunner hot {reused, reason, savedMs}).
+function timingsOf(saved, via) {
+  const data = saved?.data && typeof saved.data === 'object' ? saved.data : null;
+  if (!saved || typeof saved !== 'object') return null;
+  const own = Object.fromEntries(Object.entries(data?.timings ?? {}).filter(([, v]) => Number.isFinite(v)));
+  const hot = data?.hot && typeof data.hot === 'object' ? { reused: data.hot.reused === true, reason: data.hot.reason ?? null, savedMs: Number.isFinite(data.hot.savedMs) ? data.hot.savedMs : 0 } : null;
+  return { via, ...(Number.isFinite(saved.elapsedMs) ? { kernelMs: saved.elapsedMs } : {}), ...own, hot: hot ?? { reused: false, reason: via === 'worker' ? 'the kernel gave no hot receipt' : 'cold process', savedMs: 0 } };
+}
+
 export async function codeCheck(input = {}, deps = {}) {
   const lane = input.lane ?? 'o11', module = input.module ?? input.target;
   const problems = [];
@@ -260,9 +315,14 @@ export async function codeCheck(input = {}, deps = {}) {
   const start = nowMs(deps);
   let result;
   const env = { ...(deps.env ?? process.env), ANVIL_WORKER: '0', ANVIL_ODC_NO_WORKER: '1' };
-  const runAnvil = deps.runAnvil ?? createAnvilRunner({ root, env, lane: deps.o11Lane ?? o11Lane.lane,
+  const cold = deps.runAnvil ?? createAnvilRunner({ root, env, lane: deps.o11Lane ?? o11Lane.lane,
     environment: ({ lane, root, env }) => o11LaneOf(lane, { root, env }).env(env),
     ...(deps.execFileFn ? { execFileFn: deps.execFileFn } : {}) });
+  // S9: the job runner keeps env without its worker (the precheck and the guidance run as before); its apply goes to the
+  // resident worker through this runner.
+  const worker = checkWorkerOf(lane, deps, root);
+  const seen = { via: 'process' };
+  const runAnvil = keepingKernelResult(worker ? onWorker(worker, cold, seen) : cold);
   try {
     // With roots, the producers a job runner binds by itself (an ODC job's captures) are the session's too.
     result = await (deps.runJob ?? runJob)({ lane, job, base: capture.path, out: path.join(dir, 'candidate.oml'), work: path.join(dir, 'work'), producers: bindings, quiet: true },
@@ -282,13 +342,24 @@ export async function codeCheck(input = {}, deps = {}) {
     }
     result = withJobIdentity(result);
   } catch (error) { result = { ok: false, error: error.message }; }
-  const common = { lane, module, action: 'check', capture, ...(Object.keys(receipts).length ? { producers: receipts } : {}), wallMs: nowMs(deps) - start };
+  const resultFile = path.join(dir, 'candidate.result.json');
+  const timings = timingsOf(readJson(resultFile), seen.via);
+  const common = { lane, module, action: 'check', capture, ...(Object.keys(receipts).length ? { producers: receipts } : {}), wallMs: nowMs(deps) - start, ...(timings ? { timings } : {}) };
+  // The worker that built it keeps the module's spare (R3): the build pool prefers its slot for that model (slot 0 is the
+  // lane's own worker, build-pool.mjs slotWorkerPort).
+  if (seen.via === 'worker' && lane === 'o11' && capture.model && worker?.target?.port != null) rememberSlotModel(capture.model, { port: worker.target.port });
   // One `normalizations` field, accepted or refused (normalizations.mjs): the facade's list of what writeCall took as meant
   // beside what the job runner reports, which is the kernel's JobNormalizer object {total, byRule, items} or a list.
   const notes = mergeNormalizations(result.normalizations, call.normalizations);
   const normalizations = notes != null && (!Array.isArray(notes) || notes.length) ? { normalizations: notes } : {};
-  if (result.ok) return { ok: true, ...common, valid: true, verifyRan: result.verifyRan ?? true, job: result.job ?? job, jobSha256: result.jobSha256 ?? hash(fs.readFileSync(job)),
-    ...normalizations, next: 'answer only the file path; the main agent delivers ONE ssam_code write {module, files}' };
+  if (result.ok) {
+    const answer = { ok: true, ...common, valid: true, verifyRan: result.verifyRan ?? true, job: result.job ?? job, jobSha256: result.jobSha256 ?? hash(fs.readFileSync(job)),
+      ...normalizations, next: 'answer only the file path; the main agent delivers ONE ssam_code write {module, files}' };
+    const candidate = path.join(dir, 'candidate.oml'), kernelResult = path.join(dir, 'candidate' + KERNEL_RESULT);
+    if (stat(candidate) && stat(kernelResult)) answer[CHECK_CANDIDATE] = { path: candidate, sha256: hash(fs.readFileSync(candidate)), result: kernelResult, job: result.job ?? job,
+      base: capture.path, baseSha256: capture.sha256, baseModelSha256: capture.model ?? null, producers: bindings, via: seen.via };
+    return answer;
+  }
   return { ok: false, code: 'CHECK_REFUSED', refusalCode: result.code, ...common, ...refusalFields(result, job), problems: (result.problems ?? []).map(p => withOrigin(p, call.origins)),
     verifyRan: result.verifyRan ?? false, ...(result.phases ? { phases: result.phases } : {}), ...(result.error ? { error: result.error } : {}), ...normalizations,
     ...(result.discovery ? { discovery: result.discovery } : {}), continuation: result.stage === 'static' && result.continuation ? result.continuation : { tool: 'ssam_code', arguments: { ...input, lane, action: 'check' } } };

@@ -64,6 +64,13 @@ public interface IStudioRuntime
     /// TypeConversion and its AttributeMappings in ServiceStudio.Framework); null where the mapping is part of the
     /// expression text itself (ODC: "Source mapTo { Field: value }" is what the expression parses).</summary>
     IRecordMappings? Mappings => null;
+
+    /// <summary>Before a module loaded from its OML gives elements to another as a dependency (the reference op): the platform
+    /// imports each element through the producer's signature manager, which must know it. ODC Studio 1.7.29 (model 13.1451)
+    /// loads a module whose signature manager knows none of its top-level referenceable elements, and the import then fails
+    /// inside the platform on the element's key; the ODC lane makes them known, as the platform's own load did, only when an
+    /// element it gives is unknown. Nothing on SS11.</summary>
+    void PrepareProducer(ESpace producer, IReadOnlyList<object> elements) { }
 }
 
 /// <summary>

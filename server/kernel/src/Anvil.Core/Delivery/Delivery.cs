@@ -12,13 +12,20 @@ public interface IBridgeClient
     void ReleaseCapture() { }
 }
 
-/// <summary>The merge order (Anvil.Core.MergeOrder) on the task's files. Plan: the defaults the native merge would drop
-/// and, when there are any, the first-pass copy at firstPassPath ({rule, deferred[], firstPass}). Missing: those of the
-/// deferred defaults the delivered snapshot does not carry.</summary>
+/// <summary>Compare the validated candidate with the actual post-merge snapshot before declaring delivery.</summary>
+public interface IMergeContentVerifier
+{
+    JsonObject VerifyContent(string expectedPath, string snapshotPath);
+}
+
+/// <summary>The merge order on the task's files: plan deferred defaults and detect losses after merge.</summary>
 public interface IMergePlanner
 {
     JsonObject Plan(string basePath, string foreignPath, string firstPassPath);
     JsonArray Missing(string snapshotPath, JsonArray deferred);
+    /// <summary>The merge order without the disposable preview merge (rule a of the merge proof: the open module equals the
+    /// delivery's base). A planner without its own answers its full Plan.</summary>
+    JsonObject PlanOrder(string basePath, string foreignPath, string firstPassPath) => Plan(basePath, foreignPath, firstPassPath);
 }
 // BridgeCallException (Anvil.Core) lives in Kernel/BridgeCallException.cs: the kernel reads Executed, the adapters throw it.
 /// <summary>CaptureProducers: binding names whose current server signature the delivery captures (read-only) into its
@@ -34,7 +41,25 @@ public sealed record DeliveryRequest(string Module, string JobPath, string WorkD
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? CaptureProducers = null,
     [property: System.Text.Json.Serialization.JsonIgnore] bool CloseOpenedTab = false,
     [property: System.Text.Json.Serialization.JsonIgnore] bool SkipOpenReferencesCheck = false,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] bool? AutoPatch = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] bool? AutoPatch = null,
+    [property: System.Text.Json.Serialization.JsonIgnore] DeliveryTrace? Trace = null);
+
+/// <summary>F7 (traceability per session): the session (correlationId) and the call (operationId) a delivery runs for, as
+/// the facade's kernel runner passes them (--correlation-id, --call-id). A property of the call, never of the task identity
+/// (not serialized into the request binding), so a resume from another session keeps the task and records that session too.
+/// task.json keeps correlationId and trace (the creating call) and traces (every run: create, resume, close; the last 20).</summary>
+public sealed record DeliveryTrace(string CorrelationId, string? OperationId)
+{
+    private static string? Id(string? value) => Guid.TryParseExact(value ?? "", "D", out var g) ? g.ToString("D") : null;
+    /// <summary>The trace of a command line, or null when it carries no valid correlation id (an id that is not a UUID is
+    /// ignored, never written).</summary>
+    public static DeliveryTrace? FromArgs(IReadOnlyList<string> args)
+    {
+        string? Option(string name) { for (var i = 0; i + 1 < args.Count; i++) if (args[i] == name) return args[i + 1]; return null; }
+        return Id(Option("--correlation-id")) is { } correlation ? new DeliveryTrace(correlation, Id(Option("--call-id"))) : null;
+    }
+    public JsonObject ToJson(string run) => new() { ["correlationId"] = CorrelationId, ["operationId"] = OperationId, ["run"] = run, ["at"] = DateTimeOffset.UtcNow.ToString("O") };
+}
 
 public sealed record DeliveryDependencyContext(DeliveryRequest Request, string Environment, string ModuleKey,
     string TaskDirectory, Anvil.CSharp.CompilationResult? Compilation);
@@ -86,7 +111,7 @@ public static partial class Delivery
         result.Remove("referencesRefreshed"); result.Remove("referencesRefreshFailed");
         // fam-deps: the reference closure belongs to this run; a dialog that blocked the merge (blockedBy, question) stays
         // until the merge settles (RecordMerge).
-        result.Remove("referenceClosure"); result.Remove("referenceSignatureChanges");
+        result.Remove("referenceClosure"); result.Remove("referenceSignatureChanges"); result.Remove("hot");
         // fix-ext-refs: the alignment a rollback answers and the Manage Dependencies after it belong to this run. Review A1: the
         // one before the merge (referencesAdded) stays: its write stays in the module until Ctrl+Z, and the next one keeps it.
         result.Remove("alignment"); result.Remove("referencesAddedAfterRollback");
@@ -444,6 +469,9 @@ public static partial class Delivery
                         : apply(applyBase, request.JobPath, foreignPath)
                     : dependencyRuntime!.Apply(applyBase, request.JobPath, foreignPath, dependencies);
                 result["apply"] = applied;
+                // R3: the inventories the apply recorded (a prebuilt candidate's are its build's) answer the candidate's read.
+                ReferenceInventoryCache.ReadSidecar(applied["referenceInventory"]?["file"]?.ToString());
+                Hot();
                 if (IntegrationReports(applied, importReceipts) is { } integration) result["integration"] = integration;
                 // A03: only errors and security warnings make the apply's policy refuse (MessageExpectations); a refusal
                 // still carries the warnings that block nothing, so the correction sees them in the same answer.
@@ -518,9 +546,42 @@ public static partial class Delivery
                 string? firstPassPath = null;
                 // A plan belongs to its attempt: a repair or a resumed not-sent task plans again on its own capture.
                 result.Remove("mergePlan");
+                result.Remove("mergeContentPreview");
+                result.Remove("mergeProof"); result.Remove("timings");
                 if (mergePlanner != null)
                 {
-                    var plan = mergePlanner.Plan(basePath, foreignPath, Path.Combine(attemptDirectory, "first-pass.oml"));
+                    // The merge proof (finding 1 of the kernel review of 3ab12209): (a) the open module equals this
+                    // delivery's base, so the live merge takes the candidate as is: no disposable preview, the proof after
+                    // the merge is the only one; otherwise the preview runs, and after the merge (b) a live result with the
+                    // preview's model reuses its verdict, (c) any other is proved again.
+                    var decision = OpenModuleAgainstBase();
+                    result["mergeProof"] = decision;
+                    var sameAsBase = decision["rule"]?.ToString() == "a";
+                    var planClock = Stopwatch.StartNew();
+                    var plan = sameAsBase ? mergePlanner.PlanOrder(basePath, foreignPath, Path.Combine(attemptDirectory, "first-pass.oml"))
+                        : mergePlanner.Plan(basePath, foreignPath, Path.Combine(attemptDirectory, "first-pass.oml"));
+                    var timings = Timings();
+                    timings["mergePlanMs"] = planClock.ElapsedMilliseconds;
+                    if (plan["timings"]?["orderMs"] is { } orderMs) timings["mergeOrderMs"] = orderMs.DeepClone();
+                    if (plan["timings"]?["previewMs"] is { } previewMs) timings["previewMs"] = previewMs.DeepClone();
+                    if (plan["contentPreview"]?["timings"] is JsonObject previewTimings)
+                    {
+                        timings["previewMergeMs"] = previewTimings["mergeMs"]?.DeepClone();
+                        timings["previewContentProofMs"] = previewTimings["contentProofMs"]?.DeepClone();
+                    }
+                    decision["previewRan"] = plan["contentPreview"] is JsonObject;
+                    if (!sameAsBase && plan["contentPreview"] is not JsonObject)
+                        decision["reason"] = decision["reason"]?.ToString() + "; no disposable preview ran" + (plan["contentPreviewError"] is { } previewError ? " (" + previewError + ")" : "") + ", so the content is proved after the merge";
+                    if (plan["contentPreview"] is JsonObject preview)
+                    {
+                        result["mergeContentPreview"] = preview.DeepClone();
+                        if (preview["accepted"]?.GetValue<bool>() != true)
+                        {
+                            stage = "merge-content-preview";
+                            result["code"] = "MERGE_CONTENT_PREVIEW_REFUSED";
+                            return Fail("A disposable native merge did not preserve the candidate. Nothing was merged in the Studio or published. Inspect mergeContentPreview.contentProof; fix the candidate or merge implementation before retrying.");
+                        }
+                    }
                     if (plan["deferred"] is JsonArray { Count: > 0 } planned)
                     {
                         // Two native merges need a bridge that runs them: one that ignores first_pass_path merges once and the
@@ -697,7 +758,10 @@ public static partial class Delivery
                 if (baseReferences != null) candidateReferences = ReadReferences(foreignPath, "candidate");
             }
             var proveReferences = consumer && result["writeState"]?.ToString() == "applied" && candidateReferences != null && baseReferences != null;
-            if (assertions.Count > 0 || dependencies != null || frozenCompilation != null || deferred is { Count: > 0 } || proveReferences)
+            var contentVerifier = mergePlanner as IMergeContentVerifier;
+            string? deliveredFile = null;   // L3b: the capture after the merge, the base the worker prepares next once delivered
+            result.Remove("contentProof");
+            if (assertions.Count > 0 || dependencies != null || frozenCompilation != null || deferred is { Count: > 0 } || proveReferences || contentVerifier != null)
             {
                 try
                 {
@@ -705,8 +769,24 @@ public static partial class Delivery
                     var deliveredSnapshot = bridge.Call("snapshot_module", Target(new() { ["path"] = deliveredPath }));
                     if (deliveredSnapshot["key"]?.ToString() != key) throw new InvalidOperationException("Active module changed before content proof; merge kept for review");
                     result["deliveredSnapshot"] = deliveredSnapshot;
+                    deliveredFile = deliveredPath;
                     result["artifacts"]!.AsArray().Add(Artifact(deliveredPath));
                     if (proveReferences) ProveReferences(deliveredPath);
+                    if (contentVerifier != null)
+                    {
+                        // Accepted or not is decided below, once the known losses of the merge order are read: a difference
+                        // the repair job already covers is no content mismatch of its own.
+                        // A proof that cannot run is said and decides nothing: the merge stands as the other checks find it.
+                        // Rule (b) of the merge proof: the preview's verdict on the same model is reused, never proved twice.
+                        if (ReusedPreviewProof(deliveredPath) is { } reusedProof) { result["contentProof"] = reusedProof; Timings().Remove("contentProofMs"); }
+                        else
+                        {
+                            var proofClock = Stopwatch.StartNew();
+                            try { result["contentProof"] = contentVerifier.VerifyContent(foreignPath, deliveredPath); }
+                            catch (Exception proofError) when (proofError is not OutOfMemoryException and not BridgeCallException) { result["contentProofError"] = Errors.Text(proofError); }
+                            finally { Timings()["contentProofMs"] = proofClock.ElapsedMilliseconds; }
+                        }
+                    }
                     // Deferred defaults are checked on the delivered module itself: logic parameters have no data assertion.
                     var lost = deferred is { Count: > 0 } && mergePlanner != null ? mergePlanner.Missing(deliveredPath, deferred) : new JsonArray();
                     var forced = new JsonArray();
@@ -735,8 +815,10 @@ public static partial class Delivery
                         {
                             var differences = proof["differences"] as JsonArray ?? new JsonArray();
                             var named = differences.Select(d => LostDefault(d, assertions)).ToList();
+                            // One entry per element, told by its name (finding 4): the merge may have re-keyed it, so the key the
+                            // data proof read and the one the merge order found may differ for the same element.
                             foreach (var entry in named.OfType<JsonObject>())
-                                if (!lost.OfType<JsonObject>().Any(l => l["objectKey"]?.ToString() == entry["objectKey"]?.ToString())) lost.Add(entry);
+                                if (!lost.OfType<JsonObject>().Any(l => l["element"]?.ToString() == entry["element"]?.ToString())) lost.Add(entry);
                             var forcedRules = differences.Select(d => ForcedDeleteRule(d, assertions)).ToList();
                             foreach (var entry in forcedRules.OfType<JsonObject>()) forced.Add(entry);
                             others = named.Zip(forcedRules).Any(n => n.First == null && n.Second == null) || differences.Count == 0;
@@ -750,9 +832,20 @@ public static partial class Delivery
                     }
                     if (lost.Count > 0 || forced.Count > 0)
                     {
+                        // Finding 4 of the kernel review of 3ab12209: each content-proof difference is matched to a known loss by
+                        // its element's name (the proof names no element by a local key), never by a count: any difference no
+                        // lost default and no forced Delete Rule explains is a content mismatch of its own. "Nothing else
+                        // differs" only when a content proof ran and matched every difference.
+                        var (unmatched, matched) = MatchKnownLosses(result["contentProof"], lost, forced);
+                        others |= unmatched > 0;
                         result["mergeOrder"] = new JsonObject { ["missing"] = lost.DeepClone(), ["rule"] = MergeOrderRule,
                             ["repair"] = RepairJob(lost), ["forcedDeleteRules"] = forced.DeepClone(), ["declare"] = DeclareJob(forced) };
-                        failures.Add((stage, KnownLossesText(lost, forced, others) + (deferred is { Count: > 0 } ? SecondMergeText(result["merge"]) : "")));
+                        failures.Add((stage, KnownLossesText(lost, forced, proven: matched && !others) + (deferred is { Count: > 0 } ? SecondMergeText(result["merge"]) : "")));
+                    }
+                    if (result["contentProof"]?["accepted"]?.GetValue<bool>() == false && (lost.Count == 0 && forced.Count == 0 || others))
+                    {
+                        result["code"] = "MERGE_CONTENT_MISMATCH";
+                        failures.Add((stage, "Merge kept for review: model content differs from the validated candidate; inspect contentProof and its coverage. Nothing was published; do not repeat the merge."));
                     }
                 }
                 catch (Exception ex) when (ex is not BridgeCallException { Stall: not null }) { failures.Add((stage, Errors.Text(ex))); }
@@ -775,6 +868,8 @@ public static partial class Delivery
                     ["sourceAbis"] = frozenCompilation.Compilation.SourceAbis!.DeepClone() };
             }
             result["delivered"] = true; result["everDelivered"] = true; stage = "complete";
+            // L3b (spare pós-merge): in a worker, the delivered capture is the module now; its spare is prepared while idle.
+            if (BaseModelCache.AfterMerge(deliveredFile, basePath) is { } nextSpare) result["nextSpare"] = nextSpare;
             // Review A1: the declared Studio writes say their undo for a merge that applied after them.
             StudioWritesText(result);
             return result;
@@ -793,6 +888,125 @@ public static partial class Delivery
                 if (result["environment"] != null) parameters["environment"] = result["environment"]!.DeepClone();
                 return parameters;
             }
+            // The costs of the merge proof in this run, in milliseconds (the receipt's timings).
+            JsonObject Timings()
+            {
+                if (result["timings"] is JsonObject existing) return existing;
+                var created = new JsonObject();
+                result["timings"] = created;
+                return created;
+            }
+            // Rule (a) of the merge proof, read right before the plan: the model the open tab holds now (list_open_modules
+            // {model_sha256_of}: the SHA-256 of what snapshot_module would write, after the OML header where the Studio keeps
+            // its window state; no file, no registered snapshot) against the model of this delivery's base (the same rule,
+            // PrebuiltCandidate.ModelSha256). Equal: no edit reached the module between the snapshot and now. Anything that is
+            // not that proof (an older bridge, no fingerprint, another tab, a different model) is rule c, with the reason.
+            JsonObject OpenModuleAgainstBase()
+            {
+                var watch = Stopwatch.StartNew();
+                var decision = new JsonObject { ["rule"] = "c" };
+                try
+                {
+                    var baseModel = PrebuiltCandidate.ModelSha256(basePath);
+                    decision["baseModelSha256"] = baseModel;
+                    if (!Offers(bridge, OpenModelFingerprintCapability))
+                    {
+                        decision["reason"] = "the bridge does not offer " + OpenModelFingerprintCapability + ", so the open module could not be compared with the base";
+                        return decision;
+                    }
+                    var listed = bridge.Call("list_open_modules", new JsonObject { ["model_sha256_of"] = key });
+                    var tabEnvironment = result["environment"]?.ToString();
+                    var tabs = (listed["modules"] as JsonArray ?? []).OfType<JsonObject>()
+                        .Where(t => t["key"]?.ToString() == key && t["hasOpenedActiveESpace"]?.GetValue<bool>() == true
+                            && (tabEnvironment == null || t["environment"] == null || string.Equals(t["environment"]!.ToString(), tabEnvironment, StringComparison.OrdinalIgnoreCase)))
+                        .ToList();
+                    var opened = tabs.Count == 1 ? tabs[0]["modelSha256"]?.ToString() : null;
+                    if (string.IsNullOrWhiteSpace(opened))
+                    {
+                        decision["reason"] = tabs.Count != 1 ? tabs.Count + " open tab(s) of this module answered list_open_modules, so the open module could not be compared with the base"
+                            : "the Studio gave no model fingerprint of the open module (a busy UI, a tab opening or in silent mode)";
+                        return decision;
+                    }
+                    decision["localModelSha256"] = opened;
+                    if (tabs[0]["modelSha256Ms"] is { } studioMs) Timings()["studioFingerprintMs"] = studioMs.DeepClone();
+                    if (!string.Equals(opened.Trim(), baseModel, StringComparison.OrdinalIgnoreCase))
+                    {
+                        decision["reason"] = "the open module differs from this delivery's base (an edit reached it after the snapshot), so the disposable preview runs";
+                        return decision;
+                    }
+                    decision["rule"] = "a";
+                    decision["reason"] = "the open module equals this delivery's base (model sha256 " + baseModel[..16] + "): a three-way merge over an unchanged module takes the candidate as is, so no disposable preview runs and the content is proved after the merge";
+                    return decision;
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException and not BridgeCallException { Stall: not null })
+                {
+                    decision["rule"] = "c";
+                    decision["reason"] = "the open module could not be compared with the base: " + Errors.Text(ex);
+                    return decision;
+                }
+                finally { Timings()["openModuleFingerprintMs"] = watch.ElapsedMilliseconds; }
+            }
+            // Rule (b) of the merge proof, after the merge: a disposable preview ran and the delivered module holds the same
+            // model as the preview's result (PrebuiltCandidate.ModelSha256 of both files), so the preview's content proof is
+            // the verdict on the delivered module: it is reused and the proof is not run again. Null otherwise (rule c, with
+            // the reason in mergeProof), and the proof runs.
+            JsonObject? ReusedPreviewProof(string deliveredPath)
+            {
+                if (result["mergeProof"] is not JsonObject decision || decision["previewRan"]?.GetValue<bool>() != true) return null;
+                var watch = Stopwatch.StartNew();
+                // What decided before the merge stays in the reason, followed by what the delivered module showed.
+                string Before() => decision["reason"]?.ToString() is { Length: > 0 } said ? said + "; after the merge, " : "";
+                try
+                {
+                    var previewed = result["mergeContentPreview"] as JsonObject;
+                    var previewProof = previewed?["contentProof"] as JsonObject;
+                    var previewPath = previewed?["path"]?.ToString();
+                    string? why = null;
+                    if (previewed?["accepted"]?.GetValue<bool>() != true || previewProof?["accepted"]?.GetValue<bool>() != true) why = "the preview did not accept the candidate";
+                    else if (string.IsNullOrEmpty(previewPath) || !File.Exists(previewPath) || DeliveryReceipt.Hash(previewPath) != previewed!["sha256"]?.ToString()) why = "the preview's result is gone or changed";
+                    else if (previewProof!["inputs"]?["expected"]?["sha256"]?.ToString() is not { } candidateSha || !string.Equals(candidateSha, DeliveryReceipt.Hash(foreignPath), StringComparison.OrdinalIgnoreCase)) why = "the preview proved another candidate";
+                    if (why == null)
+                    {
+                        var previewModel = PrebuiltCandidate.ModelSha256(previewPath!); var deliveredModel = PrebuiltCandidate.ModelSha256(deliveredPath);
+                        decision["previewModelSha256"] = previewModel; decision["deliveredModelSha256"] = deliveredModel;
+                        if (previewModel == deliveredModel)
+                        {
+                            decision["rule"] = "b"; decision["proofReused"] = true;
+                            decision["reason"] = Before() + "the delivered module holds the model of the disposable preview's result (model sha256 " + deliveredModel[..16] + "): the preview's content proof is its verdict, reused instead of a second proof";
+                            var reused = previewProof.DeepClone().AsObject();
+                            reused["reused"] = new JsonObject { ["from"] = "mergeContentPreview", ["previewModelSha256"] = previewModel, ["deliveredModelSha256"] = deliveredModel, ["delivered"] = Path.GetFullPath(deliveredPath) };
+                            return reused;
+                        }
+                        why = "the delivered module differs from the preview's result";
+                    }
+                    decision["rule"] = "c"; decision["proofReused"] = false;
+                    decision["reason"] = Before() + why + ", so the content is proved again on the delivered module";
+                    return null;
+                }
+                finally { Timings()["previewReuseCheckMs"] = watch.ElapsedMilliseconds; }
+            }
+            // R3: what this run reused of a module the worker knew: the apply's spare (a prebuilt candidate: none applied here)
+            // and the closure's inventories, with the time saved (each part measured where it was paid).
+            void Hot()
+            {
+                var apply = result["apply"]?["hot"] as JsonObject;
+                var closure = result["referenceClosure"] as JsonObject;
+                var reusedApply = apply?["reused"]?.GetValue<bool>() == true;
+                var prebuilt = result["apply"]?["prebuilt"]?["reused"]?.GetValue<bool>() == true;
+                var reusedClosure = HotModule.Number(closure?["reused"]);
+                var reasons = new List<string>();
+                if (prebuilt) reasons.Add("the candidate built outside the Studio lock was reused (no apply here)");
+                else if (apply != null) reasons.Add("apply: " + apply["reason"]);
+                if (closure?["ms"] != null)
+                    reasons.Add(reusedClosure > 0 ? "reference closure: " + reusedClosure + (reusedClosure == 1 ? " inventory" : " inventories") + " of a known model" : "reference closure: every inventory read now");
+                result["hot"] = new JsonObject
+                {
+                    ["reused"] = (reusedApply && !prebuilt) || reusedClosure > 0, ["reason"] = string.Join("; ", reasons),
+                    ["savedMs"] = (prebuilt ? 0 : HotModule.Number(apply?["savedMs"])) + HotModule.Number(closure?["savedMs"]),
+                    ["apply"] = apply?.DeepClone(),
+                    ["referenceClosure"] = closure == null ? null : new JsonObject { ["ms"] = closure["ms"]?.DeepClone(), ["reused"] = reusedClosure, ["savedMs"] = HotModule.Number(closure["savedMs"]) },
+                };
+            }
             // fam-deps: the reference closure receipt of this run (base, candidate, delivered summaries, owners, changes).
             JsonObject Closure()
             {
@@ -803,22 +1017,39 @@ public static partial class Delivery
             }
             // The references of an OML (ReferenceInventory, SS11), or null with the reason when they cannot be read here (no
             // reader in this lane, not an OML, a model that does not load): the checks that need them do not run, as before.
+            // R3 (módulo quente): the Studio's reader loads the whole module; the inventory of a model this process already read
+            // or an apply recorded (its sidecar, ReferenceInventoryCache) is read by model identity instead. Only with the
+            // lane's own reader (an injected one is a test's and always runs).
             IReadOnlyList<ModuleReferenceEntry>? ReadReferences(string path, string what)
             {
                 var reader = referenceInventory ?? (DefaultReferenceInventory is { } read ? p => read(p, attemptDirectory) : null);
                 string? reason = reader == null ? "no reference reader in this lane" : !LooksLikeOml(path) ? "not an OML file" : null;
                 if (reason == null)
                 {
+                    var watch = Stopwatch.StartNew();
                     try
                     {
-                        var references = ReferenceClosure.FromJson(reader!(path));
-                        Closure()[what] = new JsonObject { ["ran"] = true, ["references"] = ReferenceClosure.Summary(references) };
+                        var (json, reused, savedMs) = referenceInventory == null || CacheInjectedReferenceReads.Value
+                            ? ReferenceInventoryCache.ReadThrough(path, reader!, what) : (reader!(path), null, 0);
+                        var references = ReferenceClosure.FromJson(json);
+                        var entry = new JsonObject { ["ran"] = true, ["references"] = ReferenceClosure.Summary(references), ["ms"] = watch.ElapsedMilliseconds };
+                        if (reused != null) { entry["reused"] = reused; entry["savedMs"] = savedMs; }
+                        Closure()[what] = entry;
+                        ClosureTime(watch.ElapsedMilliseconds, reused != null ? savedMs : null);
                         return references;
                     }
-                    catch (Exception ex) when (ex is not OutOfMemoryException) { reason = Errors.Text(ex); }
+                    catch (Exception ex) when (ex is not OutOfMemoryException) { reason = Errors.Text(ex); ClosureTime(watch.ElapsedMilliseconds, null); }
                 }
                 Closure()[what] = new JsonObject { ["ran"] = false, ["reason"] = reason };
                 return null;
+            }
+            // The closure's own time and what its reused inventories saved, and the delivery's `hot` (the apply's with it).
+            void ClosureTime(long ms, long? saved)
+            {
+                var closure = Closure();
+                closure["ms"] = HotModule.Number(closure["ms"]) + ms;
+                if (saved is { } kept) { closure["reused"] = HotModule.Number(closure["reused"]) + 1; closure["savedMs"] = HotModule.Number(closure["savedMs"]) + kept; }
+                Hot();
             }
             // Class E after the merge: the references the delivery changed or named, in the merged module as validated.
             void ProveReferences(string deliveredPath)
@@ -1889,6 +2120,9 @@ public static partial class Delivery
         typeof(Delivery).Assembly.GetType("Anvil.Core.Delivery.ReferenceInventory")?.GetMethod("Read", [typeof(string), typeof(string)]) is { } readReferences
             ? readReferences.CreateDelegate<Func<string, string, JsonArray>>() : null;
 
+    /// <summary>R3: the tests of the closure's cache let an injected reader be cached like the lane's own.</summary>
+    internal static readonly AsyncLocal<bool> CacheInjectedReferenceReads = new();
+
     /// <summary>An OML file starts with "OML" (its textual header); anything else is never loaded as a model here.</summary>
     private static bool LooksLikeOml(string path)
     {
@@ -1953,6 +2187,9 @@ public static partial class Delivery
     private static string MergeOrderRule => MergeOrder.Rule;
     /// <summary>The bridge capability of merge_from_oml with first_pass_path (Anvil.Bridge Dispatch.Capabilities).</summary>
     public const string MergeOrderCapability = "merge_from_oml:first_pass";
+    /// <summary>list_open_modules {model_sha256_of} answers the model fingerprint of the open tab (Anvil.Bridge Reads.OpenModules):
+    /// rule (a) of the merge proof compares it with the delivery's base.</summary>
+    public const string OpenModelFingerprintCapability = "list_open_modules:model_sha256";
     /// <summary>The bridge verb refresh_references (RefreshReferencesHandler): the Studio's own Refresh References.</summary>
     public const string RefreshReferencesCapability = "refresh_references";
     /// <summary>C41: snapshot, merge, publish and the reads of the bridge target module_key in any tab, selected or not.</summary>
@@ -2034,13 +2271,60 @@ public static partial class Delivery
     private static JsonObject RepairJob(JsonArray lost) => MergeOrder.RepairJob(MergeOrder.FromJson(lost));
     private static JsonObject DeclareJob(JsonArray forced) => new() { ["ops"] = new JsonArray(forced.OfType<JsonObject>().Select(f => (JsonNode)new JsonObject {
         ["op"] = "set", ["target"] = "@" + f["objectKey"], ["prop"] = "DeleteRule", ["value"] = "Ignore" }).ToArray()) };
-    private static string KnownLossesText(JsonArray lost, JsonArray forced, bool others)
+    /// <summary>Finding 4: the content-proof differences no known loss explains, and whether a proof ran and every difference
+    /// matched. Each difference is told by its element (the proof's readable path, by name; MergeContentProof never names a
+    /// local key), never by a count:
+    /// <list type="bullet">
+    /// <item>a lost default: the element of a lost entry, and that default gone (the DefaultValue expression absent from the
+    /// delivered module, or api:DefaultValue emptied); a default with another value is no loss;</item>
+    /// <item>a forced Delete Rule: the element of a forced entry and its api:DeleteRule, from the requested rule to Ignore; and
+    /// the index the Studio generates for that one attribute, absent with the rule (an attribute with Delete Rule Ignore has
+    /// no foreign key index), named by the proof's own identity of that index.</item>
+    /// </list></summary>
+    internal static (int Unmatched, bool Matched) MatchKnownLosses(JsonNode? contentProof, JsonArray lost, JsonArray forced)
+    {
+        if (contentProof?["differences"] is not JsonArray differences) return (0, false);
+        var lostElements = lost.OfType<JsonObject>().Select(l => l["element"]?.ToString()).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        var forcedRules = forced.OfType<JsonObject>().Where(f => f["element"] != null).ToLookup(f => f["element"]!.ToString(), StringComparer.Ordinal);
+        static string? Last(JsonNode? value) => value?.ToString() is { } text ? text[(text.LastIndexOf(':') + 1)..] : null;
+        static bool Gone(JsonObject d) => d["missing"]?.GetValue<bool>() == true;
+        bool IsForced(JsonObject d, string? element) => element != null && d["property"]?.ToString() == "api:DeleteRule" && Last(d["actualValue"]) == "Ignore"
+            && forcedRules[element].Any(f => Last(d["expectedValue"]) == f["requested"]?.ToString());
+        // The generated index of each forced attribute, by identity: the attribute's address is its identity, its owner's the entity's.
+        var forcedIndexes = differences.OfType<JsonObject>().Where(d => IsForced(d, MergeOrderElement(d["element"]?.ToString())))
+            .Select(d => d["address"]?.ToString()).OfType<string>().Where(a => a.LastIndexOf('/') > 0)
+            .Select(a => MergeContentProof.GeneratedIndexIdentity(a[..a.LastIndexOf('/')], [a])).ToHashSet(StringComparer.Ordinal);
+        var unmatched = 0;
+        foreach (var difference in differences.OfType<JsonObject>())
+        {
+            var element = MergeOrderElement(difference["element"]?.ToString());
+            var address = difference["address"]?.ToString() ?? "";
+            var lostDefault = element != null && lostElements.Contains(element)
+                && (address.Contains("/IExpression[DefaultValue]", StringComparison.Ordinal) && Gone(difference)
+                    || difference["property"]?.ToString() == "api:DefaultValue" && difference["actualValue"]?.ToString() is null or "null" or "expression:" or "text:");
+            var forcedRule = IsForced(difference, element) || forcedIndexes.Contains(address) && Gone(difference);
+            if (!lostDefault && !forcedRule) unmatched++;
+        }
+        return (unmatched, unmatched == 0);
+    }
+
+    /// <summary>The element of a content-proof difference as the merge order names it (MergeOrder's Element, the data proof's
+    /// LostDefault): the names of its readable path ("Entity:Pet/EntityAttribute:SpeciesId/Expression" is Pet.SpeciesId),
+    /// unnamed segments left out; null without a name.</summary>
+    internal static string? MergeOrderElement(string? label)
+    {
+        if (string.IsNullOrEmpty(label)) return null;
+        var names = label.Split('/').Select(s => s.IndexOf(':') is var at and > 0 && s[..at] != "module" ? s[(at + 1)..] : null).OfType<string>().Where(n => n.Length > 0).ToList();
+        return names.Count == 0 ? null : string.Join(".", names);
+    }
+
+    private static string KnownLossesText(JsonArray lost, JsonArray forced, bool proven)
     {
         var missing = MergeOrder.FromJson(lost);
         var parts = new List<string>();
         if (missing.Count > 0) parts.Add("the native merge did not keep " + missing.Count + " default value(s): " + MergeOrder.Describe(missing));
         if (forced.Count > 0) parts.Add("the Studio set Delete Rule Ignore on " + string.Join(", ", forced.Select(f => f!["element"] + " (requested " + f["requested"] + ")")) + ", the only rule this environment allows there");
-        return "Merge kept for review: " + string.Join("; ", parts) + (others ? "" : "; nothing else differs") + "."
+        return "Merge kept for review: " + string.Join("; ", parts) + (proven ? "; nothing else differs" : "") + "."
             + (missing.Count > 0 ? " Each element exists now, so a merge keeps a default set on it: deliver mergeOrder.repair as a new job " + RepairJob(lost).ToJsonString() + "." : "")
             + (forced.Count > 0 ? " Declare the rule in the job (mergeOrder.declare) so the next candidate equals the module " + DeclareJob(forced).ToJsonString() + "." : "");
     }

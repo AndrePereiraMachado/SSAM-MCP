@@ -6,6 +6,34 @@ namespace Anvil.Core;
 public sealed partial class ModelSession
 {
     private readonly Dictionary<string, JsonObject> dataAssertions = new();
+    // The top-level op whose write each assertion records (its last write): the diagnosis of a job that failed somewhere reads
+    // only the assertions of the ops that applied (DataContract(ofAppliedOps)).
+    private readonly Dictionary<string, int> _assertionOps = new(StringComparer.Ordinal);
+    // What each assertion the current op recorded replaced (EndAnchors gives it back when the op fails).
+    private readonly List<(string Id, JsonObject? Previous, int? PreviousOp)> _assertionJournal = [];
+
+    private void Record(string id, JsonObject assertion)
+    {
+        if (_anchorOp != null)
+            _assertionJournal.Add((id, dataAssertions.TryGetValue(id, out var was) ? was : null, _assertionOps.TryGetValue(id, out var by) ? by : null));
+        dataAssertions[id] = assertion;
+        if (_anchorOp is { } op) _assertionOps[id] = op; else _assertionOps.Remove(id);
+    }
+
+    /// <summary>The assertions an op recorded, given back when it fails: a write it never completed is no expectation, and what
+    /// an earlier op wrote to the same property (a difference of its own) is the expectation again.</summary>
+    private void EndAssertions(bool failed)
+    {
+        if (failed)
+            for (var k = _assertionJournal.Count - 1; k >= 0; k--)
+            {
+                var (id, previous, previousOp) = _assertionJournal[k];
+                if (previous == null) { dataAssertions.Remove(id); _assertionOps.Remove(id); continue; }
+                dataAssertions[id] = previous;
+                if (previousOp is { } op) _assertionOps[id] = op; else _assertionOps.Remove(id);
+            }
+        _assertionJournal.Clear();
+    }
     private static readonly HashSet<string> DataKinds = new() { "IServerEntity", "IStaticEntity", "IClientEntity", "IEntity",
         "IEntityAttribute", "IStructure", "IStructureAttribute", "IRecord", "IRecordAttributeValue", "EntityIndex" };
     private static bool TracksData(object target) => target is IObjectSignature &&
@@ -98,11 +126,12 @@ public sealed partial class ModelSession
         try
         {
             var sig = (IObjectSignature)target;
-            dataAssertions["@" + sig.ObjectKey + ":" + property] = new JsonObject
+            var id = "@" + sig.ObjectKey + ":" + property;
+            Record(id, new JsonObject
             {
                 ["key"] = sig.ObjectKey!.ToString(), ["reference"] = "@" + sig.ObjectKey,
                 ["element"] = ModelHost.PathOf(target), ["property"] = property, ["expected"] = expected?.DeepClone(),
-            };
+            });
         }
         catch { /* vigiar nunca pode derrubar quem e vigiado */ }
     }
@@ -123,8 +152,8 @@ public sealed partial class ModelSession
         var id = reference + ":" + property;
         // Uma escrita posterior substitui a expectativa; o historico do que a plataforma reescreveu entretanto fica.
         var history = dataAssertions.TryGetValue(id, out var previous) ? previous["platformRewrites"]?.DeepClone() : null;
-        dataAssertions[id] = new JsonObject { ["key"] = key, ["reference"] = reference, ["element"] = ModelHost.PathOf(target),
-            ["property"] = property, ["expected"] = expected?.DeepClone(), ["platformRewrites"] = history };
+        Record(id, new JsonObject { ["key"] = key, ["reference"] = reference, ["element"] = ModelHost.PathOf(target),
+            ["property"] = property, ["expected"] = expected?.DeepClone(), ["platformRewrites"] = history });
     }
     private string? DataAssertionReference(IObjectSignature target, string? sourceReference)
     {
@@ -304,11 +333,15 @@ public sealed partial class ModelSession
     private static bool DataProofRewritten(JsonNode? expected, JsonNode? actual)
         => expected is JsonObject x && actual is JsonObject y && x.ContainsKey("key") && y.ContainsKey("key")
            && x["key"]?.ToString() != y["key"]?.ToString() && DataProofSameTarget(x, y);
-    public JsonObject DataContract()
+    /// <summary>The data contract of what the job wrote. <paramref name="ofAppliedOps"/>: only the writes of ops that applied (the
+    /// diagnosis of a job that failed somewhere: a failed op may have recorded a write it never made, which is that failure
+    /// again, not a finding).</summary>
+    public JsonObject DataContract(bool ofAppliedOps = false)
     {
         var assertions = new JsonArray();
-        foreach (var a in dataAssertions.Values)
+        foreach (var (id, a) in dataAssertions)
         {
+            if (ofAppliedOps && _assertionOps.TryGetValue(id, out var op) && _failedOps.Contains(op)) continue;
             if (a["key"]?.ToString() is { } chave && _apagados.Contains(chave)) continue;   // o job apagou-o de proposito
             // ... ou um elemento por onde o endereco passa: o valor de um registo e ancorado na chave do registo E na do
             // atributo, e um atributo (ou registo) que o job apagou leva os valores com ele. Prova cumprida, nao perdida: o

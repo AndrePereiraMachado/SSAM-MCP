@@ -62,6 +62,10 @@ public sealed class ConnectedEnvironment : IDisposable
         // timeout of the Studio's own client, which would only wait as long again); one that still fails is
         // ENVIRONMENT_UNREACHABLE, which a delivery's capture names as ENVIRONMENT_CALL_CUT (EnvironmentCut) with repeated.
         try { response = _bridge.Call("environment_session", Request()); }
+        // The server answered with a failure (an HTTP 500, a SOAP fault): its own code, with the status; never asked again. A
+        // proxy or gateway answer (407, 502, 503, 504) is the path, not the server: the network rule below (EnvironmentNetwork).
+        catch (BridgeCallException answered) when (EnvironmentNetwork.IsServerAnswer(answered.Message))
+        { throw new EnvironmentServerErrorException(operation, Host, answered.Message, EnvironmentNetwork.HttpStatusOf(answered.Message), WriteOperations.Contains(operation)); }
         catch (BridgeCallException first) when (!WriteOperations.Contains(operation) && EnvironmentNetwork.IsUnreachable(first.Message))
         {
             if (!EnvironmentNetwork.MayRepeat(operation, first.Message)) throw new EnvironmentUnreachableException(operation, Host, first.Message, repeated: false);
@@ -69,6 +73,9 @@ public sealed class ConnectedEnvironment : IDisposable
             try { response = _bridge.Call("environment_session", Request()); }
             catch (BridgeCallException second) when (EnvironmentNetwork.IsUnreachable(second.Message))
             { throw new EnvironmentUnreachableException(operation, Host, second.Message, repeated: true); }
+            // The second request reached the environment and it answered with a failure: the server's, as on a first one.
+            catch (BridgeCallException second) when (EnvironmentNetwork.IsServerAnswer(second.Message))
+            { throw new EnvironmentServerErrorException(operation, Host, second.Message, EnvironmentNetwork.HttpStatusOf(second.Message), write: false); }
         }
         return response["value"].Deserialize<T>(Wire)!;
     }

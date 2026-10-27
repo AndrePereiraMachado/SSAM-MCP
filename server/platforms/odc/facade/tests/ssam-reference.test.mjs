@@ -35,6 +35,8 @@ test('ssam_reference maps each kind to the exact O11 CLI argv, in the kernel fol
     ['functions', { find: 'date' }, ['functions', '--find', 'date']],
     ['ui-block', 'Tabs', ['ui-block', '--catalog', path.join(ui, 'OutSystemsUI-2.28.1.json'), '--name', 'Tabs']],
     ['ui-block', { catalog: 'RichWidgets', find: 'popup' }, ['ui-block', '--catalog', path.join(ui, 'RichWidgets-unversioned.json'), '--find', 'popup']],
+    ['ui-block', 'RichWidgets.Popup_Editor', ['ui-block', '--catalog', path.join(ui, 'RichWidgets-unversioned.json'), '--name', 'Popup_Editor']],
+    ['ui-block', { find: 'RichWidgets.Popup' }, ['ui-block', '--catalog', path.join(ui, 'RichWidgets-unversioned.json'), '--find', 'Popup']],
     ['ui-block', { catalog: 'OutSystemsUI-2.9.0', name: 'Card' }, ['ui-block', '--catalog', path.join(ui, 'OutSystemsUI-2.9.0.json'), '--name', 'Card']],
     ['types', { assembly: 'ServiceStudio.Framework', filter: 'MobileWidgets', max: 20 }, ['types', '--assembly', 'ServiceStudio.Framework', '--filter', 'MobileWidgets', '--max', '20']],
     ['where-can', 'IServiceAction', ['where-can', '--name', 'IServiceAction']],
@@ -54,6 +56,13 @@ test('ssam_reference maps each kind to the exact O11 CLI argv, in the kernel fol
   const receipt = path.join(h.root, 'result.json'); fs.writeFileSync(receipt, '{}');
   assert.equal((await h.ask('o11', 'check-delivery', receipt)).ok, true);
   assert.deepEqual(h.run.calls.at(-1).args, ['check-delivery', '--result', receipt]);
+});
+
+test('qualified component rejects a conflicting producer before running a lookup', async t => {
+  const h = await harness(t);
+  const result = await h.ask('o11', 'ui-block', { catalog: 'OutSystemsUI', name: 'RichWidgets.Popup_Editor' });
+  assert.equal(result.code, 'UI_CATALOG_CONFLICT');
+  assert.equal(h.run.calls.length, 0);
 });
 
 test('static answers are cached per (lane, kind, query); check-job and check-delivery always run', async t => {

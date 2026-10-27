@@ -25,6 +25,7 @@
 // second window is published by its key (list_open_modules, merge_from_oml:module_key) instead of MODULE_NOT_ACTIVE.
 // The ssam_grant tool (grant, revoke, list standing grants) is registered here too.
 // No sleep here: the bridge's publish follows the Studio's own server process and answers at its end.
+import { appendJsonLine } from './correlation.mjs';
 import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -35,7 +36,7 @@ import { o11LaneOf } from './o11-lane.mjs';
 import { o11Bridge, bridgeTarget } from './o11-bridge.mjs';
 import { assertSelectedO11 } from './studio-connect.mjs';
 import { trackTask, tasksDir } from './ssam-task.mjs';
-import { o11Studio, ASK_PERSON, publishFixContinuation, readInventory, allDialogs, moduleTab, tabAmbiguous, dependenciesCandidate,
+import { o11Studio, ASK_PERSON, publishFixContinuation, publishCompilerDiagnosis, readInventory, allDialogs, moduleTab, tabAmbiguous, dependenciesCandidate,
   closeDependenciesDialog, refreshAfterDialog, answerDependenciesDialog, dependenciesFields } from './o11-studio.mjs';
 import * as writeLock from './studio-write-lock.mjs';
 import { clean, WORDS_MARKER } from './o11-cycle.mjs';
@@ -129,13 +130,14 @@ export function withPublishLog(refusal, log, name, limit = 40) {
   const rest = log.messages.filter(m => m?.type === 'Warning').slice(0, Math.max(0, limit - errs.length));
   const omitted = (log.omitted ?? 0) + log.messages.length - errs.length - rest.length;
   const first = errs[0];
+  const diagnosis = publishCompilerDiagnosis(log);
   return { ...refusal,
     error: 'The publication of ' + (name ?? 'the module') + ' failed' + (log.failedStage ? ' at ' + log.failedStage : '')
       + (first ? ': ' + clean(first.text, 300) : '') + '; it is not published.',
     failedStage: log.failedStage ?? null, errors: log.errors ?? errs.length, warnings: log.warnings ?? 0,
     messages: [...errs, ...rest].map(shape), ...(omitted > 0 ? { messagesOmitted: omitted } : {}),
     ...(log.serverOperationId != null ? { serverOperationId: log.serverOperationId } : {}),
-    continuation: publishFixContinuation(log, name) };
+    ...(diagnosis ? { diagnosis } : {}), continuation: publishFixContinuation(log, name) };
 }
 
 // C10 (bridge capability publish:blocked_by_dialog): a dialog kept the publication from going on in three reads in a row
@@ -161,6 +163,11 @@ export function publishOutcome({ data, error } = {}, { name } = {}, operationId 
     error: clean('The publication of ' + (name ?? 'the module') + ' has no confirmed end (' + reason + '). Nothing was repeated; check the Studio before any new attempt.', 400),
     continuation: STATUS_AFTER });
   if (!error && data?.published === false && data?.code === 'PUBLISH_BLOCKED_BY_DIALOG') return blockedByDialog(data, name, operationId);
+  if (!error && data?.state === 'CompletedWithFailure') return withPublishLog(refusal('PUBLISH_FAILED',
+    'The Studio reports that publication completed with failure; nothing was repeated.', STATUS_AFTER,
+    { outcome: 'failed', ...(operationId ? { operationId } : {}) }), data.publishLog, name);
+  if (!error && data?.state && !['CompletedWithSuccessNotOpenedInBrowser', 'CompletedWithSuccessOpenedInBrowserOrClosed'].includes(data.state))
+    return uncertain('the Studio state is ' + String(data.state));
   if (!error) return data?.published === true && (!data.module || !name || same(data.module, name)) ? PUBLISHED : uncertain('the bridge answered without confirming it');
   const message = String(error?.message ?? error);
   // The caller stopped waiting (MCP cancellation): the publication may still run in the Studio.
@@ -248,7 +255,7 @@ async function publish(input, ctx, options = {}) {
   if (opened.referencesRefreshed) { dependencies.push({ dependenciesDialog: opened.dependenciesDialog, referencesRefreshed: opened.referencesRefreshed }); referencesRefreshed = opened.referencesRefreshed; }
   else if (input.refreshReferences === true || opened.referencesOutdated === true) {
     const refreshed = await o11Studio({ bridge: () => bridge, assertSelected: async () => {}, lane: ctx.laneName, root: ctx.root, env: ctx.env })({
-      command: 'refresh-references', args: { module: moduleName } }, { signal });
+      command: 'refresh-references', args: { module: moduleName, ...(input.expectedEnvironment ? { environment: input.expectedEnvironment } : {}) } }, { signal });
     if (refreshed?.ok !== true) return { ...refreshed, ok: false, code: refreshed?.code ?? 'REFRESH_FAILED', module: moduleName,
       error: 'The references of ' + moduleName + (opened.referencesOutdated === true ? ' are outdated and their refresh did not complete; nothing was published. ' : ' could not be refreshed; nothing was published. ') + (refreshed?.error ?? ''),
       continuation: refreshed?.continuation ?? STATUS_BEFORE };
@@ -260,10 +267,12 @@ async function publish(input, ctx, options = {}) {
   // The module's tab: the active one, or (2026-10-07, a client session) its tab in any Studio window, addressed by key from here on.
   const readTarget = async () => {
     const selected = await bridge.ok('get_active_module');
-    if (same(selected?.name, moduleName)) return { active: selected };
-    const found = await moduleTab(bridge, moduleName);
+    const selectedNamed = same(selected?.name, moduleName);
+    if (selectedNamed && (!input.expectedEnvironment || same(selected?.environment, input.expectedEnvironment))) return { active: selected };
+    const found = await moduleTab(bridge, moduleName, { environment: input.expectedEnvironment });
     if (found.ambiguous) return { refused: { ...tabAmbiguous(moduleName, found.ambiguous, 'shows the open tabs; close the duplicate in the Studio and call o11_publish again with the user\'s words'),
       error: 'More than one Studio tab is named ' + moduleName + '; nothing was published.' } };
+    if (!found.tab && selectedNamed) return { active: selected }; // preserve the explicit environment-mismatch refusal
     if (!found.tab) return { refused: refusal('MODULE_NOT_ACTIVE', 'The active module is ' + (selected?.name ?? 'none') + ', not ' + moduleName + '; nothing was published.',
       studio('open-module', { name: moduleName }, 'Select the module in the Studio; then call o11_publish with the user\'s words.')) };
     return { active: { name: found.tab.name, key: found.tab.key, environment: found.tab.environment ?? null, pendingDialogs: found.tab.pendingDialogs ?? [], byKey: true },
@@ -454,7 +463,7 @@ function appendJournal(now) {
   return (local, entry) => {
     const dir = path.join(local, 'journal');
     fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(path.join(dir, TOOL + '.jsonl'), JSON.stringify({ at: now().toISOString(), ...entry }) + '\n');
+    appendJsonLine(path.join(dir, TOOL + '.jsonl'), { at: now().toISOString(), ...entry });
   };
 }
 

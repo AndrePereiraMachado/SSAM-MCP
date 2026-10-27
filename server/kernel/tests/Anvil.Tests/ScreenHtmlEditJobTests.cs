@@ -20,12 +20,52 @@ public class ScreenHtmlEditJobTests(ITestOutputHelper output)
     private static string Fixture(string name) => Path.Combine(Root, "tests", "fixtures", name);
 
     [Fact]
+    public void CssAlongsideAKeyedEditSurvivesTheNativeJobAndReadback()
+    {
+        var host = Host("css-with-edit");
+        var source = Fixture("reactive-ui.oml");
+        var (reading, html, sha) = Read(host, source, "Login");
+        var element = Element(ScreenHtml.Parse(html), "w8");
+        Attribute(element, "class", "login-logo audit-css");
+        var job = Job(sha, reading, "Login", [ScreenHtmlText.Write(element)]);
+        const string css = ".audit-css { color: var(--audit-color, #123456); }";
+        job["ops"]![0]!["data"]!["css"] = css;
+        var result = Run(host, source, job, "css-readback");
+        Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
+        var (_, after, _) = Read(host, Path.Combine(host.WorkDirectory, "css-readback.oml"), "Login");
+        Assert.Contains(css, after);
+        Assert.Contains("login-logo audit-css", after);
+        var candidate = Path.Combine(host.WorkDirectory, "css-readback.oml");
+        var lost = MergeContentProof.Check(host, candidate, source);
+        Assert.False(lost["accepted"]!.GetValue<bool>());
+        Assert.Contains(lost["differences"]!.AsArray(), difference => difference!["property"]!.ToString() == "StyleSheet");
+        Assert.True(MergeContentProof.Check(host, candidate, candidate)["accepted"]!.GetValue<bool>());
+    }
+
+    [Fact]
     public void EverySyntheticEditOfTheReactiveAndMobileFixturesReadsBack()
     {
         if (!StudioAvailable()) return;
         var host = Host("fixtures");
         ScreenHtmlEditCorpus.Fixture(Fixture("reactive-ui.oml"), 40, bytes => host.HtmlEditBattery(bytes, seed: 1, perKind: 2), output);
         ScreenHtmlEditCorpus.Fixture(Fixture("mobile-ui.oml"), 30, bytes => host.HtmlEditBattery(bytes, seed: 2, perKind: 2), output);
+    }
+
+    // Review of 3ab12209, finding 7: the battery skipped every WebScreen and WebBlock, so the Traditional edits were proven on
+    // no root of the Traditional fixture (0 roots, 0 edits). Its screens and blocks are in the battery now: each edit reads back.
+    [Fact]
+    public void EverySyntheticEditOfTheTraditionalFixtureReadsBack()
+    {
+        if (!StudioAvailable()) return;
+        var host = Host("traditional-fixture");
+        var report = ScreenHtmlEditCorpus.Fixture(Fixture("traditional-ui.oml"), 1, bytes => host.HtmlEditBattery(bytes, seed: 4, perKind: 2), output);
+        var rows = report["rows"]!.AsArray().Select(r => r!.AsObject()).ToList();
+        var traditional = rows.Where(r => r["rootKind"]!.GetValue<string>() is "WebScreen" or "WebBlock").ToList();
+        output.WriteLine("Traditional roots " + traditional.Select(r => r["root"]!.GetValue<string>()).Distinct().Count() + ", edits " + traditional.Count
+            + ": " + string.Join(", ", traditional.GroupBy(r => r["kind"]!.GetValue<string>()).Select(g => g.Key + " " + g.Count())));
+        Assert.True(traditional.Select(r => r["root"]!.GetValue<string>()).Distinct().Count() > 0, "no Traditional root in the battery");
+        Assert.True(traditional.Count > 0, "no edit of a Traditional root");
+        Assert.All(traditional, r => Assert.Equal("ok", r["outcome"]!.GetValue<string>()));
     }
 
     [Fact]

@@ -33,10 +33,10 @@ public static class StyleSheetRules
     {
         var problems = new List<JsonObject>();
         if (ops == null) return problems;
-        for (var i = 0; i < ops.Count; i++)
+        // T18: a set StyleSheet and the append of a css op land as written, so both take this check (the same verdict).
+        foreach (var (i, pointer, css) in Stylesheets(ops).Where(s => s.Pointer.EndsWith("/value", StringComparison.Ordinal) || s.Pointer.EndsWith("/append", StringComparison.Ordinal)).ToList())
         {
-            if (ops[i] is not JsonObject op || op["op"]?.ToString() != "set" || op["prop"]?.ToString() != "StyleSheet"
-                || op["value"] is not JsonValue value || !value.TryGetValue<string>(out var css)) continue;
+            var label = pointer.EndsWith("/append", StringComparison.Ordinal) ? "css append" : "set StyleSheet";
             CssCompat.Result result;
             IReadOnlyList<CssCompat.Import> hoisted;
             string? mechanical;
@@ -52,7 +52,6 @@ public static class StyleSheetRules
                     + $"({string.Join(", ", result.Selectors.Take(3).Select(s => $"line {s.Line}: {s.From} -> {s.To}"))}{(result.Selectors.Count > 3 ? ", ..." : "")})");
             if (hoisted.Count > 0)
                 notes.Add($"{hoisted.Count} @import after other rules, which the browser ignores ({string.Join(", ", hoisted.Take(3).Select(x => $"line {x.Line}"))}); they belong at the top");
-            var pointer = $"/ops/{i}/value";
             JsonArray? Patch() => mechanical == null || mechanical == css ? null : new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = pointer, ["value"] = mechanical });
             if (result.Expanded == 0 && result.Problems.Count == 0)
             {
@@ -60,8 +59,8 @@ public static class StyleSheetRules
                 problems.Add(new JsonObject
                 {
                     ["op"] = i, ["pointer"] = pointer, ["code"] = Rewritten, ["severity"] = "warning",
-                    ["message"] = $"set StyleSheet: {string.Join("; ", notes)}",
-                    ["fix"] = "write :is(#reactContainer, body) for #reactContainer and the @import statements first (the patch); a theme with Theme Editor CSS gets both at the set (cssRewrites, cssImportsHoisted)",
+                    ["message"] = $"{label}: {string.Join("; ", notes)}",
+                    ["fix"] = "write :is(#reactContainer, body) for #reactContainer and the @import statements first (the patch); at the set the kernel moves an @import after a rule up on any stylesheet, and writes a descendant #reactContainer selector so in a theme with Theme Editor CSS (cssImportsHoisted, cssRewrites)",
                     ["patch"] = Patch(),
                 });
                 continue;
@@ -75,7 +74,7 @@ public static class StyleSheetRules
             problems.Add(new JsonObject
             {
                 ["op"] = i, ["pointer"] = pointer, ["code"] = CssCompat.Code, ["severity"] = "error",
-                ["message"] = $"set StyleSheet carries CSS the OutSystems theme does not render: {string.Join("; ", found)}" + (notes.Count > 0 ? "; also " + string.Join("; ", notes) : ""),
+                ["message"] = $"{label} carries CSS the OutSystems theme does not render: {string.Join("; ", found)}" + (notes.Count > 0 ? "; also " + string.Join("; ", notes) : ""),
                 ["fix"] = string.Join("; ", fixes.Distinct()) + (result.Mechanical != null ? "; the patch writes the rendered stylesheet" : ""),
                 ["patch"] = result.Mechanical == null ? null : Patch(),
             });
@@ -84,8 +83,153 @@ public static class StyleSheetRules
         // fix rewrites the very values that read the custom property (a color-mix of var() becomes a literal).
         var refused = problems.Where(p => p["severity"]?.ToString() == "error").Select(p => p["op"]?.GetValue<int>()).ToHashSet();
         problems.AddRange(Undefined(ops).Where(w => !refused.Contains(w["op"]?.GetValue<int>())));
+        problems.AddRange(CssOpShapes(ops));
+        problems.AddRange(Hygiene(ops));
+        MergePatches(problems, ops);
         return problems;
     }
+
+    /// <summary>T18: one CSS text a job writes, from any path: the op, the pointer of the text, the text, the line of the job
+    /// text where it starts (minus one), what writes it, whether the pointer holds exactly this text (a patch can replace it),
+    /// whether every offender in it is one the job brings (<see cref="Added"/>: the CSS a css op adds) or may already be in the
+    /// element (a whole sheet: judged against it at apply), whether it is CSS of an html op (whose compile refuses #id
+    /// selectors itself), and <see cref="Removed"/>, the text the edit takes away (a find/with: its offenders are not new).</summary>
+    public sealed record CssText(int Op, string Pointer, string Css, int LineOffset, string Path, bool Whole)
+    {
+        public bool Added { get; init; }
+        public bool Html { get; init; }
+        public string? Removed { get; init; }
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex StyleElement = new(@"<style\b[^>]*>(?<css>.*?)</style\s*>",
+        System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    // The rule a replaceRule body is judged in: a class nothing else names, so only the body's own offenders count.
+    private const string BodyRule = ".t18-edited-rule";
+
+    /// <summary>T18: every CSS text of every write path of a job: <c>set StyleSheet</c> on a theme, screen or block, the
+    /// <c>data.css</c> of an html op, each <c>&lt;style&gt;</c> of an html document or fragment, and the CSS a css op adds (an
+    /// <c>append</c>, the declarations of a <c>replaceRule</c>, the <c>with</c> of a <c>find</c>). The selector a replaceRule names
+    /// is already in the sheet and is not judged again.</summary>
+    public static IEnumerable<CssText> Texts(JsonArray ops)
+    {
+        for (var i = 0; i < ops.Count; i++)
+        {
+            if (ops[i] is not JsonObject op) continue;
+            var verb = op["op"]?.ToString();
+            if (verb == "set" && op["prop"]?.ToString() == "StyleSheet" && op["value"] is JsonValue value && value.TryGetValue<string>(out var css))
+                yield return new(i, $"/ops/{i}/value", css, 0, $"set StyleSheet on {op["target"]}", true);
+            else if (verb is "html" or "html-visual")
+            {
+                if (op["data"]?["css"] is JsonValue data && data.TryGetValue<string>(out var text)) yield return new(i, $"/ops/{i}/data/css", text, 0, "html data.css", true) { Html = true };
+                foreach (var (pointer, html) in new[] { ($"/ops/{i}/data/html", op["data"]?["html"]), ($"/ops/{i}/html", op["html"]) })
+                {
+                    if (html is not JsonValue hv || !hv.TryGetValue<string>(out var document) || document.IndexOf("<style", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    foreach (System.Text.RegularExpressions.Match m in StyleElement.Matches(document))
+                        yield return new(i, pointer, m.Groups["css"].Value, CssPipeline.LineAt(document, m.Groups["css"].Index) - 1, "html <style>", false) { Html = true };
+                }
+            }
+            else if (verb == CssEdits.Op && op["edits"] is JsonArray edits)
+                for (var j = 0; j < edits.Count; j++)
+                {
+                    if (edits[j] is not JsonObject edit) continue;
+                    if (edit["append"] is JsonValue a && a.TryGetValue<string>(out var add))
+                        yield return new(i, $"/ops/{i}/edits/{j}/append", add, 0, $"css append on {op["target"]}", true) { Added = true };
+                    else if (edit["replaceRule"] is JsonValue && edit["body"] is JsonValue b && b.TryGetValue<string>(out var body))
+                        yield return new(i, $"/ops/{i}/edits/{j}/body", BodyRule + " {\n" + body.Trim() + "\n}", -1, $"css replaceRule on {op["target"]}", false) { Added = true, Removed = BodyRule + " {}" };
+                    else if (edit["with"] is JsonValue w && w.TryGetValue<string>(out var with))
+                        yield return new(i, $"/ops/{i}/edits/{j}/with", with, 0, $"css find/with on {op["target"]}", false) { Added = true, Removed = edit["find"]?.ToString() ?? "" };
+                }
+        }
+    }
+
+    /// <summary>T18: the hygiene lints (<see cref="CssPipeline.Lint"/>) of every CSS text of the job, the same verdict on every
+    /// path: one problem per op, pointer and code, naming every offender of that place with its line (the &lt;style&gt; blocks of
+    /// one document included), so no finding hides another. What the job certainly brings (the CSS a css op adds) is judged as
+    /// such: an absolute url to an OutSystems environment host there is an error. In a whole sheet the same url may already be in
+    /// the element's CSS: a warning here, refused at apply when the element did not have it. Every other code is a warning. A
+    /// patch only where the pointer holds the whole text.</summary>
+    public static IEnumerable<JsonObject> Hygiene(JsonArray ops)
+    {
+        var groups = new Dictionary<(int Op, string Pointer, string Code), (CssText Text, List<(CssPipeline.Finding Finding, int Line)> Offenders)>();
+        foreach (var text in Texts(ops))
+        {
+            List<CssPipeline.Finding> findings;
+            try
+            {
+                var context = new CssPipeline.Context(text.Path);
+                findings = text.Removed != null ? CssPipeline.Introduced(text.Removed, text.Css, context, idHashes: !text.Html) : CssPipeline.Lint(text.Css, context, idHashes: !text.Html);
+            }
+            catch (Exception) { continue; }
+            foreach (var f in findings)
+            {
+                var key = (text.Op, text.Pointer, f.Code);
+                if (!groups.TryGetValue(key, out var group)) groups[key] = group = (text, []);
+                group.Offenders.Add((f, Math.Max(1, f.Line + text.LineOffset)));
+            }
+        }
+        foreach (var ((op, pointer, code), (text, offenders)) in groups)
+        {
+            var severity = code == CssPipeline.EnvUrl ? (text.Added ? "error" : "warning") : offenders[0].Finding.Severity;
+            var findings = offenders.Select(o => o.Finding with { Line = o.Line }).ToList();
+            var replaced = code == CssPipeline.EnvUrl && text.Whole ? CssPipeline.WithoutHosts(text.Css, findings) : null;
+            var problem = new JsonObject
+            {
+                ["op"] = op, ["pointer"] = pointer, ["code"] = code, ["severity"] = severity, ["line"] = offenders[0].Line,
+                ["message"] = $"{text.Path}: {CssPipeline.Summary(code, findings)}"
+                    + (code == CssPipeline.EnvUrl && !text.Added ? "; refused at apply where the element's CSS did not have it" : ""),
+                ["fix"] = offenders[0].Finding.Fix,
+                ["offenders"] = new JsonArray(offenders.Select(o => (JsonNode)new JsonObject { ["line"] = o.Line, ["subject"] = o.Finding.Subject }).ToArray()),
+                ["patch"] = replaced != null && replaced != text.Css ? new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = pointer, ["value"] = replaced }) : null,
+            };
+            yield return problem;
+        }
+    }
+
+    /// <summary>T18: two patches of this rule that replace the same whole text (the rendered CSS of CSS_FUNCTION_UNSUPPORTED or
+    /// CSS_REWRITTEN, and the urls without their host of CSS_ENV_URL) become one: each problem carries the patch that does both,
+    /// so the agent always gets one usable patch for the place.</summary>
+    private static void MergePatches(List<JsonObject> problems, JsonArray ops)
+    {
+        foreach (var group in problems.Where(p => p["patch"] is JsonArray { Count: 1 } a && a[0]?["op"]?.ToString() == "replace")
+                     .GroupBy(p => p["patch"]![0]!["path"]!.ToString()).Where(g => g.Select(p => p["patch"]![0]!["value"]?.ToString()).Distinct().Count() > 1))
+        {
+            var env = group.FirstOrDefault(p => p["code"]?.ToString() == CssPipeline.EnvUrl);
+            var rendered = group.FirstOrDefault(p => p["code"]?.ToString() != CssPipeline.EnvUrl)?["patch"]![0]!["value"]?.ToString();
+            if (env == null || rendered == null) continue;
+            var urls = CssPipeline.Lint(rendered, new("merge")).Where(f => f.Code == CssPipeline.EnvUrl).ToList();
+            var combined = CssPipeline.WithoutHosts(rendered, urls);
+            foreach (var p in group) p["patch"] = new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = group.Key, ["value"] = combined });
+        }
+    }
+    /// <summary>T18: the shape of every css op, all at once before any build: edits is a non-empty array and each edit has exactly
+    /// one action with the keys it takes (CSS_EDIT_INVALID); basedOn, when given, is a sha256 (CSS_BASED_ON_INVALID). A missing
+    /// basedOn is said at apply, with the current hash.</summary>
+    private static IEnumerable<JsonObject> CssOpShapes(JsonArray ops)
+    {
+        for (var i = 0; i < ops.Count; i++)
+        {
+            if (ops[i] is not JsonObject op || op["op"]?.ToString() != CssEdits.Op) continue;
+            if (op["edits"] is not JsonArray edits || edits.Count == 0)
+            {
+                yield return Problem(i, $"/ops/{i}/edits", CssEdits.Invalid, "css: edits must be a non-empty array",
+                    "write the edits: [{\"append\":\"<css>\"}] | [{\"replaceRule\":\"<selector>\",\"body\":\"<declarations>\"}] | [{\"deleteRule\":\"<selector>\"}] | [{\"find\":\"<text>\",\"with\":\"<text>\"}]");
+                continue;
+            }
+            for (var j = 0; j < edits.Count; j++)
+                if ((edits[j] is JsonObject edit ? CssEdits.Shape(edit) : "not an object") is { } wrong)
+                    yield return Problem(i, $"/ops/{i}/edits/{j}", CssEdits.Invalid, $"css edit #{j}: {wrong}",
+                        "write one of {\"append\":\"<css>\"} | {\"replaceRule\":\"<selector>\",\"body\":\"<declarations>\"} | {\"deleteRule\":\"<selector>\"} | {\"find\":\"<text>\",\"with\":\"<text>\"} (\"in\": the at-rule prelude of a nested rule)");
+            if (op["basedOn"] is { } basedOn && !(basedOn is JsonValue v && v.TryGetValue<string>(out var hash) && System.Text.RegularExpressions.Regex.IsMatch(hash.Trim(), "^[0-9a-fA-F]{64}$")))
+                yield return Problem(i, $"/ops/{i}/basedOn", "CSS_BASED_ON_INVALID", "css: basedOn must be the sha256 (64 hex digits) of the author CSS",
+                    "use the basedOn of the last set StyleSheet or css result on that element, or the one CSS_BASED_ON_MISSING / THEME_CHANGED names");
+        }
+    }
+
+    private static JsonObject Problem(int op, string pointer, string code, string message, string fix) => new()
+    {
+        ["op"] = op, ["pointer"] = pointer, ["code"] = code, ["severity"] = "error", ["message"] = message, ["fix"] = fix,
+    };
 
     /// <summary>Every CSS text a job carries, with its RFC 6901 pointer: <c>set StyleSheet</c> values and the <c>data.css</c> of
     /// html and html-visual ops.</summary>
@@ -99,6 +243,11 @@ public static class StyleSheetRules
                 yield return (i, $"/ops/{i}/value", css);
             else if (verb is "html" or "html-visual" && op["data"]?["css"] is JsonValue data && data.TryGetValue<string>(out var text))
                 yield return (i, $"/ops/{i}/data/css", text);
+            // T18: the CSS a css op appends is a stylesheet text as written (the same normalization as a set StyleSheet).
+            else if (verb == CssEdits.Op && op["edits"] is JsonArray edits)
+                for (var j = 0; j < edits.Count; j++)
+                    if (edits[j]?["append"] is JsonValue add && add.TryGetValue<string>(out var appended))
+                        yield return (i, $"/ops/{i}/edits/{j}/append", appended);
         }
     }
 

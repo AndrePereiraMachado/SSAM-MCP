@@ -38,7 +38,7 @@ public sealed partial class ModelHost
         finally { Release(module); }
     }
 
-    /// <summary>The C2 battery on these bytes: for every Reactive/Mobile screen and block, the synthetic edits of
+    /// <summary>The C2 battery on these bytes: for every screen and block (Reactive, Mobile and Traditional Web), the synthetic edits of
     /// ScreenHtmlEditBattery (class, text, expression, new child, leaf removal, sibling swap, event), each applied by the html
     /// op in its edit form and rolled back: the module must read back the edited text (without the reading's k), the op's own
     /// check must pass (kinds, facts, children, the ObjectKey of everything it kept), and after the rollback the screen must
@@ -53,8 +53,9 @@ public sealed partial class ModelHost
             var rows = new JsonArray();
             var byKind = new Dictionary<string, (int Edits, int Ok)>(StringComparer.Ordinal);
             var serializer = 0; var roots = 0; var rollbacks = 0;
+            // Every screen and block, the Traditional Web ones too (the reading reads and edits them since ScreenHtml extractor 12;
+            // the review of 3ab12209, finding 7: this battery skipped them and the Traditional edits were proven on no root).
             foreach (var (name, kind, key) in reading.Roots) {
-                if (kind is "WebScreen" or "WebBlock") continue;
                 if (onlyRoot != null && !string.Equals(onlyRoot, name, StringComparison.OrdinalIgnoreCase)) continue;
                 var document = reading.Read("@" + key);
                 if (document.Problems.Count > 0) continue;

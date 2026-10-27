@@ -6,12 +6,14 @@ using System.Text.RegularExpressions;
 
 namespace Anvil.Core;
 
-/// <summary>The job was refused before anything was loaded or applied, with every problem at once (I2). Code is always
-/// PREFLIGHT_REFUSED; the CLI envelope (Errors.Envelope) carries Code and Problems next to the error text.</summary>
+/// <summary>The job was refused with every problem at once (I2). Code is PREFLIGHT_REFUSED, except for a multi-phase refusal
+/// whose apply refused with one coded failure (a lone DELETE_HAS_CONSUMERS, CONSUMERS_CHANGED, a refused data text): it keeps
+/// that primary code with every problem the Verify of the candidate and the patch round add (JobRunner Diagnosis and Merge).
+/// The CLI envelope (Errors.Envelope) carries Code and Problems next to the error text.</summary>
 public sealed class JobPreflightException : InvalidOperationException, ICodedError
 {
     public const string PreflightRefused = "PREFLIGHT_REFUSED";
-    public string Code => PreflightRefused;
+    public string Code { get; init; } = PreflightRefused;
     public JsonArray Problems { get; }
     public JsonArray Warnings { get; }
     JsonArray? ICodedError.Problems => Problems;
@@ -137,6 +139,7 @@ public static class JobPreflight
         // job that expects an invalid module asks the Verify for that verdict: nothing of it is rewritten.
         var expectsInvalid = job is JsonObject expecting && expecting["expectValid"] is JsonValue expectation && expectation.TryGetValue<bool>(out var expectedValidity) && !expectedValidity;
         var normalizations = new JsonArray(expectsInvalid ? [] : Preflight.JobNormalizer.Pure(ops, prefix, MessageExpectations.Lane).Select(n => (JsonNode)n).ToArray());
+        problems.AddRange(MigrationUiAdapters.Problems(ops, prefix));
         var expansions = new List<Preflight.Expansion>();
         string? Pointer(int op, string? rest = null) => prefix == null ? null : prefix + "/" + op + (rest ?? "");
         void Error(int? op, string kind, string code, string message, string? fix = null, string? pointer = null, JsonArray? patch = null)
@@ -279,6 +282,16 @@ public static class JobPreflight
                     List<(string Text, string? BasedOn, string Pointer)> texts;
                     try { texts = FlowTextForm.Texts(textForm); }
                     catch (Exception ex) { Refused(ex, i, kind, code, Pointer(i, "/data/flow")); continue; }
+                    // R7: a general form whose type only the module says (a let typed by an attribute of an entity of the base or
+                    // an output of one of its actions, a mapTo { * } into one of its records) is expanded with the base
+                    // (JobNormalizer.WithBase) and read there and by the apply: not a syntax error of the job alone.
+                    if (Preflight.JobNormalizer.NeedsTheModule(texts.Select(x => x.Text).ToList(), ops) is { } needs)
+                    {
+                        warnings.Add(Problem(i, Pointer(i, "/data/flow"), "FLOW_GENERAL_NEEDS_BASE", "warning",
+                            "logic: " + needs + ": the type comes from the module, so the text is expanded and read with the base (before the first op)",
+                            "nothing to do; to have it read here, write the type (`let Name: Type = value`) or the fields of the mapping", null, kind));
+                        continue;
+                    }
                     // The rules that need no read, on every new text, with the certain fixes as the op's patch (FlowTextForm.Patch):
                     // the List action of a T1/T2 foreach, a new JavaScript moved into its own client action, a query hoisted
                     // out of a loop. The names a created client action may not take are the texts' own (the module's are the
@@ -428,6 +441,8 @@ public static class JobPreflight
         var expectsValid = !(job is JsonObject document && document["expectValid"] is JsonValue ev && ev.TryGetValue<bool>(out var valid) && !valid);
         var checks = Preflight.PreflightChecks.Pure(ops, prefix, MessageExpectations.Lane, expansions, verifyRules: expectsValid);
         problems.AddRange(checks.Problems); warnings.AddRange(checks.Warnings);
+        // T16: what the job alone decides of its logic texts against their screens (L1-L3) is said here, in every preflight.
+        if (expectsValid) { var said = problems.ToList(); problems.AddRange(JobOnlyScopes(ops, prefix).Where(p => !said.Any(q => SameFinding(p, q))).ToList()); }
         // A documentation property the type cannot write is dropped (a warning of PropertyRules): listed with the rewrites.
         Preflight.JobNormalizer.Merge(normalizations, checks.Warnings.Select(w => w["_normalization"]));
         RunRules(ops, rules ?? DiscoveredRules, problems, warnings, prefix);
@@ -493,6 +508,8 @@ public static class JobPreflight
         };
         // What the kernel rewrote instead of refusing ({rule, path, from, to, message}), only when it rewrote something.
         if (normalizations.Count > 0) analysis["normalizations"] = normalizations;
+        // R1: the scope phase of the base check names what the ops refused here block.
+        Preflight.ScopePhase.Remember(analysis);
         return analysis;
 
         // A data/sql check names its op and place in its own prefix ("op #i (SQL <where>, line n): ..."): that place stays the kind.
@@ -525,6 +542,35 @@ public static class JobPreflight
         return problem;
     }
 
+    /// <summary>T16 (one refusal with everything knowable up front): the static rules of the logic texts against the screens
+    /// and blocks of the same job (L1-L3 of DocumentNameRules: a data action's output named like a data element of its screen,
+    /// which the Studio renames; a data action that assigns a local of its screen, which it does not see), whose basis is the job
+    /// alone. They ran only beside a module index (the facade's precheck), so a job without one met them a round later (63 and
+    /// 10 of them in the second refusal of a migration). Here with no basis: only the errors of basis "job" of that class.</summary>
+    internal static IEnumerable<JsonObject> JobOnlyScopes(JsonArray ops, string? prefix)
+    {
+        if (!ops.OfType<JsonObject>().Any(o => o["op"]?.ToString() == "logic") || !ops.OfType<JsonObject>().Any(o => o["op"]?.ToString() == "html")) return [];
+        var basis = new Preflight.StaticBasis { Lane = MessageExpectations.Lane };
+        List<JsonObject> found;
+        try { found = Preflight.DocumentNameRules.Check(ops, prefix, MessageExpectations.Lane, new Preflight.IndexBaseFacts(basis, ops), basis, []); }
+        catch { return []; }   // a job the rules cannot read: the preflight says why
+        return found.Where(p => p["basis"]?.ToString() == "job" && p["_kind"]?.ToString() == "logic" && p["severity"]?.ToString() is null or "error")
+            .Select(p => { p["phase"] = "preflight"; return p; }).ToList();
+    }
+
+    // The same finding said twice: the same code on the same op, at the same place or one inside the other (ScopeRenames says
+    // the output of a data action of the JSON form at its name; L1-L3 at the action), about the same name ('X' in both).
+    private static readonly Regex QuotedName = new(@"'([A-Za-z_][\w.]*)'", RegexOptions.Compiled);
+    private static bool SameFinding(JsonObject a, JsonObject b)
+    {
+        if (a["op"]?.ToJsonString() != b["op"]?.ToJsonString() || a["code"]?.ToString() != b["code"]?.ToString()) return false;
+        var p = a["pointer"]?.ToString(); var q = b["pointer"]?.ToString();
+        if (!(p == q || p != null && q != null && (p.StartsWith(q + "/", StringComparison.Ordinal) || q.StartsWith(p + "/", StringComparison.Ordinal)))) return false;
+        if (a["message"]?.ToString() == b["message"]?.ToString()) return true;
+        var names = QuotedName.Matches(a["message"]?.ToString() ?? "").Select(m => m.Groups[1].Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return QuotedName.Matches(b["message"]?.ToString() ?? "").Any(m => names.Contains(m.Groups[1].Value));
+    }
+
     /// <summary>`op #i (kind) [CODE]: message Fix: fix`, the text form of a problem.</summary>
     public static string Text(JsonObject p)
     {
@@ -538,7 +584,7 @@ public static class JobPreflight
     public static JsonObject PublicProblem(JsonObject p)
     {
         var copy = p.DeepClone().AsObject();
-        copy.Remove("_kind"); copy.Remove("_generic"); copy.Remove("_rule"); copy.Remove("jobPatch"); copy.Remove("_normalization"); copy.Remove("_sentPatch"); copy.Remove("_diagnosisPatch");
+        copy.Remove("_kind"); copy.Remove("_generic"); copy.Remove("_rule"); copy.Remove("jobPatch"); copy.Remove("_normalization"); copy.Remove("_sentPatch"); copy.Remove("_diagnosisPatch"); copy.Remove("_renamedForDiagnosis");
         Preflight.PatchCertainty.Publish(copy);
         return copy;
     }
@@ -996,12 +1042,17 @@ public static class JobPreflight
                 // A rule of SSAM that the platform itself would not refuse says so (section 1.6 of docs/INTEGRACOES-GITSSAM.md).
                 if (raw["ssamRule"] is JsonValue ssam && ssam.TryGetValue<bool>(out var isSsamRule) && isSsamRule) problem["ssamRule"] = true;
                 problem["_rule"] = true;
-                // The same place reported by the generic checks and by a rule: the rule is the specific one and stays.
-                if (op != null) { problems.RemoveAll(p => Same(p, problem)); warnings.RemoveAll(p => Same(p, problem)); }
+                // The same place reported by the generic checks and by a rule: the rule is the specific one and stays. T18: only the
+                // same finding (its code, or the generic one-line form) is replaced; two findings of one place (a CSS text with an
+                // import hoisted and a duplicate rule) are both news, and a warning never takes the place of an error.
+                if (op != null) { problems.RemoveAll(p => Replaced(p, problem)); warnings.RemoveAll(p => Replaced(p, problem)); }
                 (severity == "warning" ? warnings : problems).Add(problem);
             }
         }
         static bool Same(JsonObject a, JsonObject b) => a["op"]?.GetValue<int>() == b["op"]?.GetValue<int>() && a["pointer"]?.ToString() == b["pointer"]?.ToString();
+        static bool Replaced(JsonObject old, JsonObject found) => Same(old, found)
+            && (old["code"]?.ToString() == found["code"]?.ToString() || old["_generic"] is JsonValue)
+            && !(old["severity"]?.ToString() == "error" && found["severity"]?.ToString() == "warning");
     }
 
     private static string Canonical(JsonNode? node) => node switch

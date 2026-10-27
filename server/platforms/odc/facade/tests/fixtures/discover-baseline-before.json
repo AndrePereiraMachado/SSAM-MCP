@@ -371,12 +371,9 @@
       "ui.traditional-screen:match"
      ],
      "40960": [
-      "logic.preparation:match",
-      "ui.screen:match",
       "ui.traditional-screen:match",
-      "logic.data-action:alternative",
-      "ui.html-visual:alternative",
-      "ui.screen-spec:alternative"
+      "logic.preparation:match",
+      "logic.data-action:alternative"
      ]
     }
    }
@@ -1467,28 +1464,15 @@
      "12000": [
       "ui.traditional-screen:match",
       "ui.traditional-widget:match",
-      "ui.list:match",
-      "ui.screen:match",
-      "ui.form:match",
-      "ui.screen-spec:match",
-      "ui.html-visual:match",
-      "ui.widget:match"
+      "data.entity:dependency",
+      "logic.server-action:dependency"
      ],
      "40960": [
       "ui.traditional-screen:match",
       "ui.traditional-widget:match",
-      "ui.list:match",
-      "ui.screen:match",
-      "ui.form:match",
-      "ui.screen-spec:match",
-      "ui.html-visual:match",
-      "ui.widget:match",
       "data.entity:dependency",
       "logic.server-action:dependency",
-      "ui.html-page:alternative",
-      "ui.event:alternative",
-      "data.client-entity:alternative",
-      "data.records:alternative"
+      "data.client-entity:alternative"
      ]
     }
    }
@@ -1954,6 +1938,23 @@
     "a-flow-insert-call",
     "a-action-input-param",
     "c-agent"
+   ]
+  },
+  {
+   "at": "2026-10-20",
+   "why": "Traditional html routes (ui.traditional-screen), publication guidance on O11 (deliver.publish) and the diagnostic alternatives changed the model answers of 11 probes (an O11 request of unknown kind keeps its answer: review of 3ab12209, M3)",
+   "probes": [
+    "o11 40960 a-preparation-traditional",
+    "o11 12000 b-traditional-table",
+    "o11 40960 b-traditional-table",
+    "odc 12000 c-publish-after-merge",
+    "odc 40960 c-publish-after-merge",
+    "o11 12000 c-publish-after-merge",
+    "o11 40960 c-publish-after-merge",
+    "odc 12000 c-diagnose",
+    "odc 40960 c-diagnose",
+    "o11 12000 c-diagnose",
+    "o11 40960 c-diagnose"
    ]
   }
  ]

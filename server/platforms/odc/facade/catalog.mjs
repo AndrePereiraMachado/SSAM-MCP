@@ -25,7 +25,7 @@ export const COVERAGE_STATUSES = ['represented', 'excluded', 'gap', 'undetermine
 export const APPLICABILITY = ['applicable', 'conditional', 'not-applicable', 'undetermined'];
 export const CLASSIFICATIONS = { 'concrete-authorable': 'concrete', 'base-interface': 'base', 'referenced-signature': 'signature', undetermined: 'undetermined', 'outside-object-root': 'outside-root' };
 export const CLASSIFICATION_VALUES = ['concrete', 'base', 'signature', 'generated', 'undetermined', 'outside-root'];
-const API_OPS = ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-consume', 'rest-expose', 'soap', 'entity-actions'];
+const API_OPS = ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-consume', 'rest-expose', 'soap', 'entity-actions', 'css'];
 // Fields a fragment capability may carry for the catalog only; they never reach the index or an answer.
 const CATALOG_ONLY = ['requires', 'supersedes', 'generator', 'withoutGenerator'];
 // A fragment entry (capability or unavailable) that offers a generator says so with "generator": "<id of

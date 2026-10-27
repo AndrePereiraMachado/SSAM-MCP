@@ -10,7 +10,7 @@ namespace Anvil.Core;
 
 /// <summary>
 /// The document form of the html op (B1, ScreenDocument): one &lt;screen&gt; or &lt;block&gt; in ssam-html/1 compiled straight
-/// into the model in one pass, with the parent in hand (the direct builder: no op per widget, no name resolved per op).
+/// into the model in declaration/content phases, with the parent in hand (the direct builder: no op per widget).
 /// The text is the one the reading writes (ScreenHtml, C1): every attribute is a property of the table or os-&lt;Property&gt;
 /// with the value as the model keeps it, every reference a name the reading's rules resolve (the document's own elements
 /// first, then the module, the references and the types), every event Destination(Param = expression, ...). A property the
@@ -38,6 +38,39 @@ public sealed partial class ModelSession
         }
         return names;
     }
+    private sealed record PreparedDocument(DocumentCompiler Compiler, Func<JsonObject> Finish, JsonArray Shells,
+        List<JsonObject> Marked, List<string> FlowShells, DocumentOptions Options, string Html, HtmlJob? Job);
+    private Dictionary<JsonObject, PreparedDocument>? _preparedDocuments;
+    private Dictionary<JsonObject, Exception>? _documentDeclarationErrors;
+    private bool _preparingDocuments;
+
+    private void PrepareUiDeclarations()
+    {
+        if (_applyOps == null || _preparedDocuments != null || _espace.ESpaceType.ToString() is "WebResponsive" or "WebResponsiveLibrary") return;
+        _preparedDocuments = new(); _documentDeclarationErrors = new(); _preparingDocuments = true;
+        var current = _applyIndex;
+        try
+        {
+            foreach (var candidate in _applyOps.OfType<JsonObject>().Where(ScreenDocument.IsDocumentOp))
+            {
+                var position = _applyOps.IndexOf(candidate);
+                if (SkipOps?.Contains(position) == true) continue;
+                _applyIndex = position;
+                try { HtmlDocument(candidate); }
+                catch (Exception error) { _documentDeclarationErrors[candidate] = error; }
+            }
+        }
+        finally { _preparingDocuments = false; _applyIndex = current; }
+    }
+
+    private void PrepareUiForLogic(JsonObject op)
+    {
+        if (_preparedDocuments != null) return;
+        var localOps = new JsonArray(op.DeepClone());
+        if (HtmlJob.FlowActions(localOps).Count > 0 || HtmlJob.From(localOps, 0)?.Actions.Any(a => a.Kind is "screen" or "block" or "data") == true)
+            PrepareUiDeclarations();
+    }
+
     /// <summary>What a caller inside the kernel adds to a document compile (the recreation proof, the job's shells).</summary>
     internal sealed class DocumentOptions
     {
@@ -70,6 +103,9 @@ public sealed partial class ModelSession
         public bool CheckExpressions;
         /// <summary>The op's data.css: the end of the root's own style sheet, after the &lt;style&gt; blocks of the document.</summary>
         public string? Css;
+        /// <summary>F5: the compile of a root's signature before the first op (JobComposition.Signature: the root, its inputs
+        /// and events), which the document's own op fills later: no theme, no visual notes.</summary>
+        public bool Declaration;
     }
 
     /// <summary>The names every op of the job declares: the actions of logic ops, the entities, statics and structures of
@@ -197,6 +233,15 @@ public sealed partial class ModelSession
     /// by the logic ops of the same job (born here as shells with their inputs, filled by the logic op in place, H10).</summary>
     private JsonNode HtmlDocument(JsonObject op)
     {
+        if (!_preparingDocuments && _applyOps != null && _espace.ESpaceType.ToString() is not ("WebResponsive" or "WebResponsiveLibrary"))
+        {
+            if (_preparedDocuments == null)
+            {
+                PrepareUiDeclarations();
+            }
+            if (_documentDeclarationErrors!.TryGetValue(op, out var declarationError)) throw declarationError;
+            if (_preparedDocuments.TryGetValue(op, out var prepared)) return FinishDocument(op, prepared);
+        }
         var data = op["data"]!.AsObject();
         var html = data["html"]!.GetValue<string>();
         var options = new DocumentOptions { Css = data["css"] is JsonValue css && css.TryGetValue<string>(out var cssText) ? cssText : null };
@@ -222,12 +267,45 @@ public sealed partial class ModelSession
             foreach (var flowAction in declaredActions.Where(a => a.Flow)) names.Add(flowAction.Name);
             options.JobNames = names;
         }
+        if (_espace.ESpaceType.ToString() is "WebResponsive" or "WebResponsiveLibrary") {
+            try {
+                var traditional = new TraditionalDocumentCompiler(this, html, options).Run();
+                if (shells.Count > 0) traditional["sameJobScreenActions"] = shells;
+                return traditional;
+            } catch {
+                foreach (var declaration in marked) declaration.Remove("replace");
+                foreach (var key in flowShells) _flowShells.Remove(key);
+                throw;
+            }
+        }
         // The apply rebases a coded problem of an html op without parent onto its data (Verbs.Collect.ApplyProblems).
         var compiler = new DocumentCompiler(this, html, "/html", options);
+        Func<JsonObject> finish;
+        try { finish = compiler.Prepare(); }
+        catch
+        {
+            compiler.Discard();
+            foreach (var declaration in marked) declaration.Remove("replace");
+            foreach (var key in flowShells) _flowShells.Remove(key);
+            throw;
+        }
+        var plan = new PreparedDocument(compiler, finish, shells, marked, flowShells, options, html, job);
+        if (_preparingDocuments)
+        {
+            _preparedDocuments![op] = plan;
+            return new JsonObject { ["phase"] = "declarations" };
+        }
+        return FinishDocument(op, plan);
+    }
+
+    private JsonNode FinishDocument(JsonObject op, PreparedDocument plan)
+    {
+        var (compiler, finish, shells, marked, flowShells, options, html, job) = plan;
+        var inJob = _applyOps != null && _applyIndex < _applyOps.Count && ReferenceEquals(_applyOps[_applyIndex], op);
         JsonObject report;
         // A refused document leaves nothing behind: the apply goes on with the other ops and runs the Verify of what did
         // apply, which must not judge half a page (an image whose name was wrong, a block without its block).
-        try { report = compiler.Run(); }
+        try { report = finish(); }
         catch (KernelRefusalException refusal)
         {
             compiler.Discard();
@@ -250,15 +328,21 @@ public sealed partial class ModelSession
             var suggestion = ThemeSuggestion(missing);
             report["classesWithoutRule"] = missing.DeepClone();
             var names = missing["classes"]!.AsArray().Select(c => c!["class"]!.ToString()).ToList();
+            // A theme of another module in the chain the page reads (goal list of 2026-10-20, item 12): its CSS is not in this capture, so
+            // the classes may well have their rules there; the warning says so and is not high.
+            var foreignTheme = missing["themeElsewhere"]?.ToString() is { Length: > 0 } t ? t : null;
             var warning = new JsonObject
             {
-                ["code"] = ScreenDocument.ClassNoRule, ["severity"] = "high", ["op"] = inJob ? JsonValue.Create(_applyIndex) : null, ["owner"] = missing["root"]?.ToString(),
-                ["message"] = $"{missing["root"]} uses {names.Count} class(es) that no rule of its style sheet, the module theme or OutSystems UI defines, so the page shows them without style: "
+                ["code"] = ScreenDocument.ClassNoRule, ["severity"] = foreignTheme != null ? "medium" : "high", ["op"] = inJob ? JsonValue.Create(_applyIndex) : null, ["owner"] = missing["root"]?.ToString(),
+                ["message"] = $"{missing["root"]} uses {names.Count} class(es) that no rule of its style sheet, the module theme or OutSystems UI defines" + (foreignTheme != null ? "" : ", so the page shows them without style") + ": "
                     + string.Join(", ", names.Take(12)) + (names.Count > 12 ? ", ..." : "") + (missing["elsewhere"] is JsonObject elsewhere && elsewhere.Count > 0
                         ? $"; {string.Join("; ", elsewhere.Select(e => $"{e.Value!.AsArray().Count} defined only in the style sheet of {e.Key}"))} (a screen's style sheet is that screen's)" : "")
-                    + (missing["themeElsewhere"]?.ToString() is { Length: > 0 } theme ? $"; the theme {theme} is of another module, whose CSS this check does not read" : ""),
-                ["fix"] = "define them in this document's <style>, or once in the theme with <style scope=\"theme\"> when other pages use them" + (suggestion != null ? "; the suggestion's patch puts the <style> of the document that has them in the theme" : ""),
+                    + (foreignTheme != null ? $"; the page reads the theme {foreignTheme} of another module, whose CSS is not in this capture: these classes may be defined there (this check cannot tell)" : ""),
+                ["fix"] = foreignTheme != null
+                    ? $"when {foreignTheme} defines them nothing is missing (read its style sheet with ssam_map on that module); otherwise define them in this document's <style>, or once in a theme of this module with <style scope=\"theme\">"
+                    : "define them in this document's <style>, or once in the theme with <style scope=\"theme\"> when other pages use them" + (suggestion != null ? "; the suggestion's patch puts the <style> of the document that has them in the theme" : ""),
             };
+            if (foreignTheme != null) { warning["maybeDefinedIn"] = foreignTheme; warning["uncertain"] = true; }
             if (suggestion != null) { warning["suggestion"] = suggestion; report["classesWithoutRule"]!["suggestion"] = suggestion.DeepClone(); }
             Report("highWarnings", warning);
         }
@@ -512,7 +596,9 @@ public sealed partial class ModelSession
         throw new InvalidOperationException($"{Describe(parent)} could not create {type}" + (failures.Count > 0 ? ": " + string.Join(" | ", failures) : ""));
     }
 
-    internal JsonObject CompileDocument(string html, string pointer, DocumentOptions options) => new DocumentCompiler(this, html, pointer, options).Run();
+    // The recreation's entry: the compiler of the module's runtime, as the html op chooses it.
+    internal JsonObject CompileDocument(string html, string pointer, DocumentOptions options) => _espace.ESpaceType.ToString() is "WebResponsive" or "WebResponsiveLibrary"
+        ? new TraditionalDocumentCompiler(this, html, options).Run() : new DocumentCompiler(this, html, pointer, options).Run();
 
     private sealed partial class DocumentCompiler(ModelSession s, string source, string pointer, DocumentOptions options)
     {
@@ -527,6 +613,7 @@ public sealed partial class ModelSession
         private readonly Dictionary<string, string> readKeyToK = new(StringComparer.Ordinal);
         // HTML for= reads the id written in this document, even when the native display name is different.
         private readonly Dictionary<string, List<IObjectSignature>> widgetsById = new(StringComparer.Ordinal);
+        private readonly Dictionary<ScreenHtml.Node, IObjectSignature> declaredPlaceholders = new();
         private readonly List<Action> targets = [];   // TargetWidget: every widget exists first
         private readonly List<Action> events = [];    // event bindings: after the actions exist
         private readonly HashSet<IObjectSignature> unresolved = new(ReferenceEqualityComparer.Instance); // block instances whose block is unknown
@@ -547,14 +634,28 @@ public sealed partial class ModelSession
         /// the theme back when this compile wrote its part of it.</summary>
         public void Discard()
         {
-            if (root is { WasDeleted: false } created)
+            // F5: a root declared before the first op stays as it was declared (the ops that navigate to it keep their
+            // destination): only what this compile added goes.
+            if (shell != null && root is { WasDeleted: false } declared)
+            {
+                foreach (var child in declared.Children.OfType<IObjectSignature>().Where(c => !shell.Contains(c)).ToList())
+                    try { child.Delete(); } catch (Exception) { /* the apply refuses anyway; the candidate is never saved */ }
+            }
+            else if (root is { WasDeleted: false } created)
                 try { created.Delete(); } catch (Exception) { /* the apply refuses anyway; the candidate is never saved */ }
             RestoreTheme();
         }
 
+        // F5: the children of a root declared before the first op (its inputs and events, JobComposition.Signature) when this
+        // compile fills it; null for a root this compile creates.
+        private HashSet<IObjectSignature>? shell;
+        private readonly HashSet<IObjectSignature> reused = new(ReferenceEqualityComparer.Instance);
+
         private KernelRefusalException Refuse() => ScreenDocument.CssRefusal(problems, source, pointer, options.Css);
 
-        public JsonObject Run()
+        public JsonObject Run() => Prepare()();
+
+        public Func<JsonObject> Prepare()
         {
             var total = Stopwatch.StartNew();
             try { document = ScreenHtml.Parse(source); }
@@ -636,7 +737,15 @@ public sealed partial class ModelSession
                     "a document needs them; write it in a flow whose theme the reason does not name, or fix what the reason names");
                 throw Refuse();
             }
-            if (flow.Children.OfType<IObjectSignature>().FirstOrDefault(c => c != options.Exclude && (Is(c, "IMobileScreen") || Is(c, "IMobileBlock") || Is(c, "IWebScreen") || Is(c, "IWebBlock"))
+            // F5: the root a composition declared before the first op (an earlier op navigates to it) is this document's: filled
+            // in place, its inputs and events kept (JobComposition, Verbs.Composition.cs).
+            IObjectSignature? declaredRoot = null;
+            // It stays declared until a compile of the document succeeds: a refused compile keeps it (Discard), and the check of a
+            // corrected document (CheckCompile, CheckedDocumentRefusal) fills it again instead of finding it in the way.
+            if (!options.Declaration && s._declaredRoots.TryGetValue(name, out var declaredFirst) && !declaredFirst.WasDeleted && ReferenceEquals(declaredFirst.Parent, flow)
+                && Is(declaredFirst, "I" + rootKind) && string.Equals(TypeResolver.Name(declaredFirst), name, StringComparison.OrdinalIgnoreCase))
+                declaredRoot = declaredFirst;
+            if (declaredRoot == null && flow.Children.OfType<IObjectSignature>().FirstOrDefault(c => c != options.Exclude && (Is(c, "IMobileScreen") || Is(c, "IMobileBlock") || Is(c, "IWebScreen") || Is(c, "IWebBlock"))
                     && string.Equals(TypeResolver.Name(c), name, StringComparison.OrdinalIgnoreCase)) is { } existing)
             {
                 problems.Add(new(ScreenDocument.RootExists, top.Line, top.Column,
@@ -647,7 +756,12 @@ public sealed partial class ModelSession
             if (s._footprintBegun) s.Keep(flow, deep: false);
 
             var build = Stopwatch.StartNew();
-            root = (IObjectSignature)s.NewChild(flow, "I" + rootKind, name);
+            if (declaredRoot != null)
+            {
+                root = declaredRoot;
+                shell = new HashSet<IObjectSignature>(root.Children.OfType<IObjectSignature>(), ReferenceEqualityComparer.Instance);
+            }
+            else root = (IObjectSignature)s.NewChild(flow, "I" + rootKind, name);
             s.Anchor(root, created: true);
             if (!string.Equals(TypeResolver.Name(root), name, StringComparison.Ordinal))
                 Problem(ScreenDocument.RootExists, top, $"the Studio named the new {top.Tag} '{TypeResolver.Name(root)}' instead of '{name}' (the name is taken in its scope)", "give it another name");
@@ -671,14 +785,44 @@ public sealed partial class ModelSession
             ownSheet = ScreenDocument.OwnSheet(styles, dataCss);
             // The mask rules of the icons, after the document's CSS (each class once).
             if (iconRules.Count > 0) ownSheet = (ownSheet is { Length: > 0 } sheet ? sheet.TrimEnd('\r', '\n') + "\n" : "") + string.Join("\n", iconRules);
+            // T18: the root's own sheet takes the one normalization before it is written, so what is compared after the compile
+            // (PostChecks) is what was written; each rewrite is listed. An absolute url to an OutSystems environment host the
+            // document brings (one the sheet did not have) is a problem of the document; an existing one is not.
+            if (ownSheet is { Length: > 0 } authored)
+            {
+                var outcome = CssPipeline.Normalize(authored, new CssPipeline.Context("own <style>"));
+                if (outcome.Changed)
+                {
+                    ownSheet = outcome.Css;
+                    normalized.Add(new JsonObject { ["code"] = "CSS_NORMALIZED", ["line"] = top.Line, ["element"] = top.Tag, ["property"] = "StyleSheet",
+                        ["cssImportsHoisted"] = outcome.ImportsHoisted.Count > 0 ? new JsonArray(outcome.ImportsHoisted.Select(x => (JsonNode)x.Statement).ToArray()) : null,
+                        ["cssImportsMerged"] = outcome.ImportsMerged > 0 ? outcome.ImportsMerged : null,
+                        ["note"] = "an @import after a rule (which the browser ignores) moved up, keeping the order of the imports; the rest as written" });
+                }
+                if (outcome.ImportsKept != null) normalized.Add(new JsonObject { ["code"] = "CSS_IMPORTS_KEPT", ["line"] = top.Line, ["note"] = outcome.ImportsKept });
+                if (ThemeCss.Introduced(ThemeCss.AuthorOf(root), ownSheet, $"the {top.Tag}'s <style>") is { } refusal)
+                    Problem(CssPipeline.EnvUrl, top, refusal.Message, refusal.Problems?[0]?["fix"]?.ToString());
+            }
             if (ownSheet != null) { Assign(root, rootKind, "StyleSheet", ownSheet, top, "style", false); written.Add("StyleSheet"); }
             var body = top.Children.Where(c => c.Tag != "style").ToList();
             var phase = Stopwatch.GetTimestamp();
             foreach (var child in body.Where(IsData)) Data(root, child);
+            if (top.Tag == "block")
+                foreach (var placeholder in ScreenDocument.Descendants(top).Where(n => n.Tag == "placeholder"))
+                {
+                    var declared = CreateIn(root, "IPlaceholderWidget", placeholder.Get("name"));
+                    ClearBorn(declared);
+                    declaredPlaceholders.Add(placeholder, declared);
+                    s.Anchor(declared, created: true);
+                }
             Spent("phase:data", phase); phase = Stopwatch.GetTimestamp();
             options.BeforeContent?.Invoke(root);
             Spent("phase:actions", phase);
             Changed();
+            return () =>
+            {
+            // All roots and typed signatures in this job now exist. Rebuild the name index before binding bodies.
+            index = ScreenHtml.Module((IObjectSignature)s._espace, r);
             var declared = options.DeclaredBy?.Invoke(root.GetInterface()?.Name ?? "", name) ?? [];
             foreach (var list in new[] { "actions", "data-actions" })
                 foreach (var action in (top.Get(list) ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
@@ -705,10 +849,10 @@ public sealed partial class ModelSession
             if (problems.Count > 0 || options.CheckExpressions || suspectExpressions) ExpressionProblems();
             if (problems.Count > 0) throw Refuse();
             // The theme's part, last: a refused document never touches the theme (Discard puts it back if a later check fails).
-            var theme = options.CheckExpressions ? null : InstallTheme(top);
+            var theme = options.CheckExpressions || options.Declaration ? null : InstallTheme(top);
             if (problems.Count > 0) throw Refuse();
-            NativeVisualDone();   // CX17: the visual notes and the native layout block of the theme (F3/F6)
-            var iconSelectors = iconsConverted && !options.CheckExpressions ? WidenThemeIcons() : null;
+            if (!options.Declaration) NativeVisualDone();   // CX17: the visual notes and the native layout block of the theme (F3/F6)
+            var iconSelectors = iconsConverted && !options.CheckExpressions && !options.Declaration ? WidenThemeIcons() : null;
             var keys = new JsonObject();
             foreach (var (k, o) in byK.OrderBy(k => k.Key, StringComparer.Ordinal)) if (o is IObjectSignature sig) keys[k] = sig.ObjectKey?.ToString();
             var report = new JsonObject
@@ -721,6 +865,8 @@ public sealed partial class ModelSession
             if (copied > 0) report["opaqueCopied"] = copied;
             report["timings"]!["steps"] = new JsonObject(spent.OrderByDescending(p => p.Value.Ticks).Select(p => KeyValuePair.Create(p.Key,
                 (JsonNode?)new JsonObject { ["ms"] = p.Value.Ticks * 1000 / Stopwatch.Frequency, ["calls"] = p.Value.Calls })));
+            // F5: the document filled the root declared for it: no longer a declaration (a check of a document never consumes it).
+            if (shell != null && !options.CheckExpressions) s._declaredRoots.Remove(name);
             if (preserved.Count > 0) report["preserved"] = preserved;
             if (readOnly.Count > 0) report["derived"] = readOnly;
             if (StyleReport(theme) is { } css) report["styleSheet"] = css;
@@ -729,6 +875,7 @@ public sealed partial class ModelSession
             if (iconSelectors != null) report["iconTheme"] = iconSelectors;
             if (normalized.Count > 0) report["normalized"] = normalized.DeepClone();
             return report;
+            };
         }
 
         // ---- the names inside expressions ---------------------------------------------------------------------------------
@@ -982,7 +1129,15 @@ public sealed partial class ModelSession
                     args = new() { ["dataSource"] = entity };
                 }
                 else if (kind == "Filter") args = new() { ["condition"] = node.Get("os-Condition") ?? "" };
-                element = (IObjectSignature)s.NewChild(parent, "I" + kind, name, args);
+                // F5: an input or event of a root declared before the first op is the one the signature declared (what other
+                // pages already bind to); its facts are written again below, as for a new one.
+                if (shell != null && ReferenceEquals(parent, root) && kind is "InputParameter" or "BlockEvent" && name != null
+                    && shell.FirstOrDefault(c => !c.WasDeleted && !reused.Contains(c) && Is(c, "I" + kind) && string.Equals(TypeResolver.Name(c), name, StringComparison.OrdinalIgnoreCase)) is { } declared)
+                {
+                    element = declared;
+                    reused.Add(declared);
+                }
+                else element = (IObjectSignature)s.NewChild(parent, "I" + kind, name, args);
             }
             catch (Exception error) { Problem(ScreenDocument.Invalid, node, $"{kind} '{name}' cannot be created under {ShortType(parent)}: {Unwrap(error)}"); return; }
             elements++;
@@ -1171,7 +1326,25 @@ public sealed partial class ModelSession
             var nameAttribute = ScreenHtmlTables.AttributeOf(kind, "Name", ScreenHtmlModuleMode.Widget, false);
             var name = node.Get(nameAttribute);
             IObjectSignature widget;
-            try { widget = CreateIn(host, "I" + kind, name); }
+            try
+            {
+                if (declaredPlaceholders.TryGetValue(node, out var declared))
+                {
+                    widget = declared;
+                    var parent = Host(host);
+                    if (!ReferenceEquals(widget.Parent, parent))
+                    {
+                        var answer = s.Move(new JsonObject { ["target"] = "@" + widget.ObjectKey, ["into"] = "@" + parent.ObjectKey });
+                        // The platform's move (Reparent) recreates the moved object: what the document writes next (its class, its
+                        // content) goes on the replacement, never on the object the move left behind ("Condition is true" on
+                        // PlaceholderWidget.StyleClasses: the generator's FilterBar, integ/proto-into-product).
+                        if (((ServiceStudio.Model.AbstractObject)declared).TryGetReplacement() is IObjectSignature moved) widget = moved;
+                        else if (answer?["key"]?["after"]?.ToString() is { Length: > 0 } after && s.Resolve("@" + after) is IObjectSignature found) widget = found;
+                    }
+                    else s.Move(new JsonObject { ["target"] = "@" + widget.ObjectKey, ["last"] = true });
+                }
+                else widget = CreateIn(host, "I" + kind, name);
+            }
             catch (Exception error) { Problem(ScreenDocument.Invalid, node, $"<{node.Tag}> ({kind}) cannot be created inside {ShortType(host)}: {Unwrap(error)}"); return; }
             widgets++;
             s.Anchor(widget, created: true);
@@ -1521,6 +1694,9 @@ public sealed partial class ModelSession
                 else value = System.Convert.ChangeType(raw, t, CultureInfo.InvariantCulture);
                 if (pi.CanWrite) pi.SetValue(target, value);
                 else setter!.Invoke(target, [value]);
+                // T18: the own stylesheet of a screen or block (its <style>) settles through the one normalization too (already
+                // normalized by the compile, so this writes nothing more: what PostChecks compares is what is stored).
+                if (property == "StyleSheet" && ThemeCss.Of(target) is { } sheet) ThemeCss.Settle(sheet);
             }
             catch (Exception error) when (error is not OutOfMemoryException)
             {
@@ -1605,9 +1781,15 @@ public sealed partial class ModelSession
             if (form.StartsWith('@'))
             {
                 var id = form[1..];
-                if (readKeyToK.TryGetValue(id, out var k) && byK.TryGetValue(k, out var mine)) return mine;
-                if (index.NodeOf(id) is { } node && !Inside(node, options.Exclude)) return node;
-                try { if (s.Resolve(form) is { } resolved && !Inside(resolved as IObjectSignature, options.Exclude)) return resolved; } catch (KeyNotFoundException) { }
+                if (readKeyToK.TryGetValue(id, out var k) && byK.TryGetValue(k, out var mine) && mine is IObjectSignature own && expected.IsInstanceOfType(own) && FitsReference(own, what)) return own;
+                if (index.NodeOf(id) is { } node && !Inside(node, options.Exclude) && expected.IsInstanceOfType(node) && FitsReference(node, what)) return node;
+                try { if (s.Resolve(form) is IObjectSignature resolved && !Inside(resolved, options.Exclude) && expected.IsInstanceOfType(resolved) && FitsReference(resolved, what)) return resolved; } catch (KeyNotFoundException) { }
+                // A key names one element: when the proto line's kind filter above finds none, the element of the key stands, as
+                // the candidate's reading rule has it (the reading writes a System destination as @<reference key>.#PreviousScreen,
+                // which is no IObjectSignature; ScreenRecreationTests over the real corpus, integ/proto-into-product).
+                if (readKeyToK.TryGetValue(id, out var keyed) && byK.TryGetValue(keyed, out var keyedOwn)) return keyedOwn;
+                if (index.NodeOf(id) is { } anyNode && !Inside(anyNode, options.Exclude)) return anyNode;
+                try { if (s.Resolve(form) is { } anyResolved && !Inside(anyResolved as IObjectSignature, options.Exclude)) return anyResolved; } catch (KeyNotFoundException) { }
                 Problem(ScreenDocument.NameUnknown, at, $"{attribute}=\"{form}\": no element of the module has this key", "name the element (Name, Kind:Name or Owner.Name)");
                 return null;
             }
@@ -1625,8 +1807,13 @@ public sealed partial class ModelSession
             foreach (var tier in tiers)
             {
                 // The reading's rule (the nearest tier answers) among the elements of the kind the property takes.
-                var compatible = tier.Where(expected.IsInstanceOfType).ToList();
+                // One element answers once, whatever tiers or lookups name it (the root of a recreation is both the index's new
+                // root and the root itself: "names 2 elements" with one path, integ/proto-into-product).
+                var compatible = tier.Where(n => expected.IsInstanceOfType(n) && FitsReference(n, what)).Distinct(ReferenceEqualityComparer.Instance).Cast<IObjectSignature>().ToList();
                 if (compatible.Count == 1) return compatible[0];
+                // Two list types of one name and one element are one type (ODC Studio 1.7.29 adds the list types of its system
+                // records beside the module's: ScreenHtmlModule.SameTypes): the one the type text of every op gives (TypeResolver).
+                if (compatible.Count > 1 && OneListType(compatible) is { } list) return list;
                 if (compatible.Count > 1)
                 {
                     Problem(ScreenDocument.NameAmbiguous, at, $"{attribute}=\"{form}\" names {compatible.Count} elements: {string.Join(", ", compatible.Take(6).Select(h => ShortType(h) + " " + ModelHost.PathOf(h)))}",
@@ -1641,8 +1828,18 @@ public sealed partial class ModelSession
             var near = ScreenDocument.Nearest(name, candidates);
             var known = near.Count > 0 ? near : [];
             Problem(ScreenDocument.NameUnknown, at, $"{attribute}=\"{form}\": no {Wanted(expected)} is named '{name}'" + (known.Count > 0 ? "; nearest: " + string.Join(", ", known) : ""),
-                near.Count == 1 ? $"{attribute}=\"{form.Replace(name, near[0])}\"" : null, known, near.Count == 1 ? (attribute, name, near[0]) : null);
+                near.Count == 1 ? $"{attribute}=\"{form.Replace(name, near[0])}\""
+                    : $"name a {Wanted(expected)} the module has, or create '{name}' in this job (its html document or logic op, in any order of the ops)", known, near.Count == 1 ? (attribute, name, near[0]) : null);
             return null;
+        }
+
+        private object? OneListType(List<IObjectSignature> compatible)
+        {
+            if (compatible[0] is not OutSystems.Model.Types.IListType first || TypeResolver.Name(first) is not { Length: > 0 } name) return null;
+            if (!compatible.All(c => c is OutSystems.Model.Types.IListType l && ReferenceEquals(l.ElementType, first.ElementType)
+                    && string.Equals(TypeResolver.Name(l), name, StringComparison.Ordinal))) return null;
+            try { var type = s.LogicDataType(name); return compatible.FirstOrDefault(c => ReferenceEquals(c, type)); }
+            catch (Exception error) when (error is not OutOfMemoryException) { return null; }
         }
 
         private bool Root(string form)
@@ -1670,13 +1867,20 @@ public sealed partial class ModelSession
         private IEnumerable<string> Candidates(Type expected, string what)
         {
             // An event goes to an action or a screen: the nearest name is one of those, never a variable of the same spelling.
-            bool Fits(string role) => what != "destination" || role is "action" or "actionRef" or "screen";
             foreach (var list in OwnTable().Values)
-                foreach (var o in list) if (!o.WasDeleted && expected.IsInstanceOfType(o) && Fits(Role(o))) yield return TypeResolver.Name(o) ?? "";
-            foreach (var (node, _, name, role) in index.NamedNodes(options.Exclude)) if (expected.IsInstanceOfType(node) && Fits(role)) yield return name;
+                foreach (var o in list) if (!o.WasDeleted && expected.IsInstanceOfType(o) && FitsReference(o, what)) yield return TypeResolver.Name(o) ?? "";
+            foreach (var (node, _, name, role) in index.NamedNodes(options.Exclude)) if (expected.IsInstanceOfType(node) && FitsReference(node, what)) yield return name;
             if (typeof(OutSystems.Model.Types.ITypeSignature).IsAssignableFrom(expected))
                 foreach (var basic in BasicTypes) yield return basic;
         }
+
+        // A destination is a screen, a client action, an action of this root, or a destination of the System (RedirectToURL:
+        // the reading writes onclick="RedirectToURL" for the System's, which binds with no reference of the module; the
+        // candidate's recreation corpus on ODC, integ/proto-into-product).
+        private bool FitsReference(IObjectSignature node, string what) => what != "destination" || Role(node) == "screen"
+                || PreflightRules.OdcScopeRules.SystemDestinations.Contains(TypeResolver.Name(node) ?? "")
+                || ModelHost.Kind(node.GetInterface()?.Name ?? "") is "ClientAction" or "ClientActionSignature"
+                || Role(node) == "action" && Inside(node, root);
 
         private static readonly string[] BasicTypes = ["Text", "Integer", "Long Integer", "Decimal", "Boolean", "Date", "Time", "Date Time", "Currency", "Email", "Phone Number", "Binary Data"];
 

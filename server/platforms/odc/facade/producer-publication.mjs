@@ -65,11 +65,11 @@ export function familyOf(type) {
 
 // Round 2 (review C:\t\revisoes\unpublished-lib, A1): the element kinds the ODC published signature holds. OdcPublicSignature.cs
 // reads ReferenceStructure, NewRuntime.ReferenceWebBlock ("block"), ReferenceClientAction, ReferenceAction and
-// ReferenceEntity only; NativeReferenceSnapshot.Select (ODC) maps the mobile block family to "block" and refuses any other
+// ReferenceEntity and ReferenceServiceAPIMethod; NativeReferenceSnapshot.Select (ODC) maps the mobile block family to "block" and refuses any other
 // kind ("Unsupported element kind for this frozen producer signature"). An External Library holds server actions and
 // structures. Publishing a producer never adds another kind to its signature, so an element of another kind is never
 // "not published": the kernel's own refusal answers it.
-export const ODC_PUBLIC_KINDS = Object.freeze(['action', 'entity', 'structure', 'block', 'client-action']);
+export const ODC_PUBLIC_KINDS = Object.freeze(['action', 'entity', 'structure', 'block', 'client-action', 'service-action']);
 export const ODC_EXTERNAL_LIBRARY_KINDS = Object.freeze(['action', 'structure']);
 export const odcKindOf = family => (family ? (family.kind === 'mobile-block' ? 'block' : family.kind) : null);
 export const odcKindsOf = moduleKind => (String(moduleKind ?? '') === 'ExternalLibrary' ? ODC_EXTERNAL_LIBRARY_KINDS : ODC_PUBLIC_KINDS);
@@ -80,7 +80,7 @@ export const odcExportable = (element, moduleKind = null) => { const kind = odcK
 const ODC_DIGEST_KINDS = new Set(FAMILIES.filter(f => ODC_PUBLIC_KINDS.includes(odcKindOf(f))).flatMap(f => f.digest));
 export const odcExportableSurface = item => ODC_DIGEST_KINDS.has(String(item?.kind ?? ''));
 // The words of the refusal of a kind the ODC published signature cannot hold (the kernel's JobRunner says the same).
-export const ODC_SIGNATURE_HOLDS = 'server actions, client actions, structures, entities and blocks (an External Library: server actions and structures)';
+export const ODC_SIGNATURE_HOLDS = 'server actions, client actions, service actions, structures, entities and blocks (an External Library: server actions and structures)';
 
 const lower = value => String(value ?? '').trim().toLowerCase();
 const lastSegment = name => String(name).trim().split(/[\\/]/).pop();
@@ -327,7 +327,7 @@ const fixOf = (lane, item, producer) => item.open === 'public'
           + ' has it in a model not published yet, publish ' + producer + ' first';
 // The fix of one classified element (o11-cycle.mjs gives the O11 kernel's problem of a spelling this fix).
 export const elementFix = fixOf;
-// Round 2 (A1): an element of a kind the ODC published signature cannot hold (a service action, a role, ...). Publishing never
+// Round 2 (A1): an element of a kind the ODC published signature cannot hold (a role, a web block, ...). Publishing never
 // adds it: the job's reference op cannot take it.
 const unsupportedProblem = (producer, item) => ({ op: item.op ?? null, pointer: item.pointer ?? null, code: ELEMENT_MISSING, severity: 'error', phase: 'reference',
   message: 'The kind of ' + item.text + ' cannot be referenced through the published signature of ' + producer + ': an ODC signature holds ' + ODC_SIGNATURE_HOLDS,

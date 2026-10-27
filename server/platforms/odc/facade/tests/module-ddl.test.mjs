@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { moduleMap, parseMapArguments, ddlFile, odcKernelCli } from '../module-map.mjs';
 import { DDL_EXTRACTOR, DDL_SECTIONS, DDL_PAGE_SCHEMA, ddlText, ddlHeader } from '../module-ddl.mjs';
 import { writeCapture } from './fixtures/module-index.mjs';
+import { STORE_GENERATION } from '../store-generation.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const kernelSource = path.join(here, '..', '..', '..', '..', 'kernel', 'src', 'Anvil.Core', 'Kernel', 'DataDdl.cs');
@@ -47,7 +48,7 @@ function ddlOf({ lane = 'odc', sourceSha256, size = 'small', overrides = {} }) {
     module: { name: 'Quotes', key: 'R0' }, elements: blocks.reduce((n, b) => n + b.elements, 0), blocks, ...overrides };
 }
 function writeDdl(store, lane, sha256, ddl = ddlOf({ lane, sourceSha256: sha256 })) {
-  const file = path.join(store, 'v1', lane, sha256 + '.kernel.ddl.json');
+  const file = path.join(store, STORE_GENERATION, lane, sha256 + '.kernel.ddl.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, typeof ddl === 'string' ? ddl : JSON.stringify(ddl));
   return file;
@@ -62,7 +63,7 @@ test('the data text constants are the C# ones (extractor, sections, header) and 
   assert.equal(ddlHeader({ module: { name: 'Q', key: 'K' }, lane: 'o11', sourceSha256: 'ab', elements: 3 }), '-- ssam-ddl/1 module=Q lane=o11 key=@K sourceSha256=ab elements=3\n');
   const env = { ...process.env, SSAM_MODULE_INDEX_ROOT: path.join(os.tmpdir(), 'store') };
   for (const lane of ['odc', 'o11'])
-    assert.equal(ddlFile(lane, 'A'.repeat(64), env), path.join(env.SSAM_MODULE_INDEX_ROOT, 'v1', lane, 'a'.repeat(64) + '.kernel.ddl.json'));
+    assert.equal(ddlFile(lane, 'A'.repeat(64), env), path.join(env.SSAM_MODULE_INDEX_ROOT, STORE_GENERATION, lane, 'a'.repeat(64) + '.kernel.ddl.json'));
 });
 
 test('a data text that fits is one page, the text as written, from the store without any reader', async t => {

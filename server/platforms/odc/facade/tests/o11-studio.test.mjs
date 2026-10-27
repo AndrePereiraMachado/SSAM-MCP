@@ -65,6 +65,27 @@ async function harness(initial = {}, extra = {}) {
 const dialog = (extra = {}) => ({ kind: 'MessageBox', type: 'MessageBoxWindow', title: 'Unsaved changes', source: 'window', contentKind: 'native',
   texts: ['Save the module?', '[Button] OK', '[Button] Cancel'], hint: HINTS._, ...extra });
 
+// Meta de 20/10/2026 (ssam_app_url live): the Service Studio had lost its environment sign-in overnight; status listed nine
+// open modules with environment null and nothing said why. Now status carries the signed-in hosts of sc_session and, with
+// no host and no environment on any module, says the Studio is not signed in and how the person signs in.
+test('status says the Studio is not signed in when no module has an environment and sc_session names no host', async () => {
+  const signedOut = await harness({ modules: [module('Orders', { environment: null }), module('Lib', { environment: null })], environments: [] });
+  try {
+    const value = await signedOut.call('status');
+    assert.equal(value.ok, true);
+    assert.deepEqual(value.signedInHosts, []);
+    assert.equal(value.signedIn, false);
+    assert.match(value.environmentUnknown.why, /not signed in to any environment/);
+    assert.deepEqual(value.environmentUnknown.next.arguments, { command: 'login', args: { host: '<environment host>' } });
+  } finally { await signedOut.close(); }
+  const signedIn = await harness({ modules: [module('Orders')], environments: [HOST], before: (request, state) => { if (request.method === 'sc_session') state.sessions[HOST] = { user: 'dev@example.com' }; } });
+  try {
+    const value = await signedIn.call('status');
+    assert.deepEqual(value.signedInHosts, [HOST]);
+    assert.equal(value.signedIn, undefined); assert.equal(value.environmentUnknown, undefined);
+  } finally { await signedIn.close(); }
+});
+
 test('OutSystems UI dependency is never opened, including implicit snapshot opening', async()=>{
   const h=await harness();
   try {
@@ -115,7 +136,7 @@ test('status joins ping, manifest, open modules, the active module with its dial
     assert.match(value.pendingDialogs[0].hint, /"command":"dismiss-dialog"/);
     assert.deepEqual(value.pendingDialogs[1].next, WAIT_NO_DIALOGS);
     noShell(value);
-    assert.deepEqual(h.fake.methods().sort(), ['bridge_manifest', 'get_active_module', 'list_open_modules', 'ping', 'ui_alive']);
+    assert.deepEqual(h.fake.methods().sort(), ['bridge_manifest', 'get_active_module', 'list_open_modules', 'ping', 'sc_session', 'ui_alive']);
     assert.equal(h.selected.length, 0);
   } finally { await h.close(); }
 });

@@ -29,7 +29,7 @@ public class SurfaceTests
         var message = Node(CommandSurface.VerifyMessages(VerifyCatalog.All, hints, "RequiredConnector_Out", true)).AsArray().Single()!;
         Assert.Equal("Error", message["severity"]!.ToString());
         Assert.False(string.IsNullOrWhiteSpace(message["detail"]!.ToString()));
-        Assert.Contains("Ligar", message["hint"]!.ToString());
+        Assert.Contains("Connect", message["hint"]!.ToString());
     }
 
     [Fact]
@@ -80,8 +80,9 @@ public class SurfaceTests
     {
         var rows = Node(CommandSurface.Recipes(Root, "tickets-all", true, 3)).AsArray();
         var recipe = rows.Single(r => r!["name"]!.ToString() == "tickets-all")!;
-        // 3131 until GetBreaches (tickets-07-read) joined its two sources as the Studio does (one filter became five join ops).
-        Assert.Equal(3135, recipe["opCount"]!.GetValue<int>());
+        // 3131 until GetBreaches (tickets-07-read) joined its two sources as the Studio does (one filter became five join ops);
+        // 3205 since Ticket_Search (tickets-07-read) pages by an SQL with OFFSET instead of START on its aggregate (T3: +70 ops).
+        Assert.Equal(3205, recipe["opCount"]!.GetValue<int>());
         Assert.Equal(recipe["rows"]!.AsArray().Count, recipe["rows"]!.AsArray().Select(r => r!.ToString()).Distinct().Count());
         Assert.True(recipe["truncated"]!.GetValue<bool>());
         Assert.Equal(3, recipe["ops"]!.AsArray().Count);
@@ -131,9 +132,9 @@ public class SurfaceTests
             .Select(m => m.Name.ToLowerInvariant()).ToHashSet();
         handlers.UnionWith(["get", "dump"]); // dispatched with a resolved target instead of the op object
         foreach (var verb in named) Assert.Contains(verb.Replace("-", ""), handlers); // rest-expose -> RestExpose
-        foreach (var expected in new[] { "agent", "create", "set", "link", "move", "reference", "usages", "rename", "duplicate", "delete", "get", "find", "replace", "layout", "spec", "logic", "screen", "html", "dump", "rest", "rest-consume", "rest-expose", "soap", "entity-actions" })
+        foreach (var expected in new[] { "agent", "create", "set", "link", "move", "reference", "usages", "rename", "duplicate", "delete", "get", "find", "replace", "layout", "spec", "logic", "screen", "html", "dump", "rest", "rest-consume", "rest-expose", "soap", "entity-actions", "css" })
             Assert.Contains(expected, named);
-        Assert.Equal(24, named.Length);
+        Assert.Equal(25, named.Length);   // T18: + css (Verbs.Css.cs)
         Assert.Contains("parent", schema["verbs"]!["create"]!["required"]!.AsArray().Select(k => k!.ToString()));
         Assert.Contains("$pai/#Tipo[n]", schema["references"]!.AsObject().Select(p => p.Key));
         Assert.Contains("verbs", CommandSurface.OperationNames);
@@ -195,7 +196,7 @@ public class SurfaceTests
     public void HandlerKeyReadsMatchTheVerbTable()
     {
         var kernel = Path.Combine(Root, "src", "Anvil.Core", "Kernel");
-        var sources = string.Join("\n", new[] { "Verbs.cs", "HtmlDelta.cs", "HtmlVisual.cs", "Reparent.cs", "AgentExpander.cs", "Verbs.Prototype.cs", "Verbs.EntityActions.cs" }.Select(f => File.ReadAllText(Path.Combine(kernel, f))));
+        var sources = string.Join("\n", new[] { "Verbs.cs", "HtmlDelta.cs", "HtmlVisual.cs", "Reparent.cs", "AgentExpander.cs", "Verbs.Prototype.cs", "Verbs.EntityActions.cs", "Verbs.Css.cs" }.Select(f => File.ReadAllText(Path.Combine(kernel, f))));
         // Any method that takes the op object (handlers return JsonNode; the html helpers return string/void).
         var handlerStart = new System.Text.RegularExpressions.Regex(@"\b(?:JsonNode\??|string|void|bool)\s+([A-Z][A-Za-z]*)\(JsonObject op(?:,[^)]*)?\)", System.Text.RegularExpressions.RegexOptions.Compiled);
         var readers = new[] { @"op\[""([A-Za-z_]+)""\]", @"Req\(op,\s*""([A-Za-z_]+)""\)", @"op\.ContainsKey\(""([A-Za-z_]+)""\)", @"op\.TryGetPropertyValue\(""([A-Za-z_]+)""" }

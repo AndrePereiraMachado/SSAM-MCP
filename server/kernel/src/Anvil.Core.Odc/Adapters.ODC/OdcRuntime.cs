@@ -91,6 +91,25 @@ public sealed class OdcRuntime : IStudioRuntime
     public Reference ImportReference(ESpace espace, NativeReferenceSnapshot snapshot, IReadOnlyList<NativeReferenceElement> elements)
         => OdcReferenceImporter.Import(espace, snapshot, elements);
 
+    private const System.Reflection.BindingFlags Instance = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+
+    /// <summary>ODC Studio 1.7.29 loads a module whose signature manager knows none of its top-level referenceable elements
+    /// (1.7.28 knows them after the load): the reference op's import (IESpace.RefreshDependencies) then asks it for the
+    /// signature of an element it gives and fails with a KeyNotFoundException on the element's key. When an element given is
+    /// not known, every top-level referenceable element of the producer is acknowledged, the step the platform's own load
+    /// runs (SignatureManager.AcknowledgeAllTopLevelReferenceableElements); a producer whose elements are known is left as it
+    /// is. A Studio without these members is left as it is too: the platform's own error stays the answer.</summary>
+    public void PrepareProducer(ESpace producer, IReadOnlyList<object> elements)
+    {
+        if (elements.Count == 0) return;
+        var manager = typeof(ESpace).GetField("signatureManager", Instance)?.GetValue(producer);
+        var valid = manager?.GetType().GetField("validSignatures", Instance)?.GetValue(manager);
+        if (valid?.GetType().GetMethod("GetAllWithSignatureInfos", Type.EmptyTypes)?.Invoke(valid, null) is not System.Collections.IDictionary known) return;
+        if (elements.All(e => e is AbstractObject element && known.Contains(element.Key))) return;
+        if (manager!.GetType().GetMethod("AcknowledgeAllTopLevelReferenceableElements", Instance, Type.EmptyTypes) is not { } acknowledge) return;
+        Mutate(producer, "Anvil: the producer's elements known to its signatures", _ => acknowledge.Invoke(manager, null));
+    }
+
     private static readonly Lazy<IReadOnlyList<VerifyDefinition>> Verify = new(() =>
     {
         // ODC declares ServiceStudio.Verify.VerifyMessageId and its generated resources in OutSystems.Model.dll

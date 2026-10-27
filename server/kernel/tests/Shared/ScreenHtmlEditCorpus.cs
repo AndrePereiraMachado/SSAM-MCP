@@ -14,15 +14,17 @@ namespace Anvil.Tests;
 // warning) with the floor of edits of the manifest ("c2"), and over the committed fixtures (always).
 internal static class ScreenHtmlEditCorpus
 {
-    public static void Fixture(string oml, int minimum, Func<byte[], JsonObject> battery, ITestOutputHelper output)
+    public static JsonObject Fixture(string oml, int minimum, Func<byte[], JsonObject> battery, ITestOutputHelper output, int minimumRoots = 1)
     {
         var report = battery(File.ReadAllBytes(oml));
         Report(Path.GetFileName(oml), report, output);
         var failures = Failures(report).ToList();
         Assert.True(failures.Count == 0, failures.Count + " edit(s) of " + Path.GetFileName(oml) + " did not read back:\n" + string.Join("\n", failures.Take(20)));
+        Assert.True(report["roots"]!.GetValue<int>() >= minimumRoots, report["roots"] + " roots < " + minimumRoots);
         Assert.True(report["edits"]!.GetValue<int>() >= minimum, report["edits"] + " edits < " + minimum);
         Assert.Equal(0, report["rollbackDiffers"]!.GetValue<int>());
         Assert.Equal(0, report["serializerDiffers"]!.GetValue<int>());
+        return report;
     }
 
     public static void Check(string manifestFile, string lane, Func<byte[], JsonObject> battery, ITestOutputHelper output)

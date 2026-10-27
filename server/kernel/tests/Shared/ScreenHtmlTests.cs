@@ -256,7 +256,9 @@ public sealed class ScreenHtmlTests
         var contract = ScreenHtml.Contract();
         Assert.Equal("ssam-html/1", contract["schema"]!.ToString());
         var opaque = contract["opaque"]!.AsArray().Select(o => o!.ToString()).ToList();
-        Assert.Contains("MobileWidget", opaque); Assert.Contains("ContainerWidget", opaque);
+        // A Traditional widget has its row (read and edited under a WebScreen or WebBlock); the generic MobileWidget has none.
+        Assert.Contains("MobileWidget", opaque); Assert.DoesNotContain("ContainerWidget", opaque);
+        Assert.Equal("div", contract["elements"]!["ContainerWidget"]!.ToString());
         // The native Table has its row (a data table, ScreenHtmlTables.NativeTable).
         Assert.DoesNotContain("TableRecords", opaque);
         Assert.Equal("table", contract["elements"]!["TableRecords"]!.ToString());
@@ -462,5 +464,49 @@ public sealed class ScreenHtmlTests
         Assert.Empty(doc.Compare(doc.Html));
         var ops = doc.Compare(doc.Html.Replace("class=\"before\"", "class=\"before x\"")).Select(o => o["op"] + " " + o["k"] + " " + (o["fact"] ?? o["kind"])).ToList();
         Assert.Equal(["set w1 p:Style"], ops);
+    }
+
+    // ODC Studio 1.7.29 (model 13.1451) adds to a module it loads the list types of its new system records (Agent*), beside the
+    // ones the module keeps: a module that had a Text List has two list types named Text List, both the list of Text. A list
+    // type is the list of its element, so the two are one type: a reference to either reads as its name, the name decodes back
+    // to the same fact, and naming either one is no difference. Two list types of one name whose elements differ stay two
+    // types: the name is ambiguous and each reads by its key.
+    [Fact]
+    public void TwoListTypesOfOneElementAreOneTypeOfOneNameAndListsOfTwoElementsStayTwo()
+    {
+        string Page(bool reversed)
+        {
+            var (module, screen, _) = Module();
+            var text = new Node("T-Text", "BasicType", "Text");
+            var kept = new Node("L-Kept", "ListType", "Text List").Set("ElementType", text);
+            var made = new Node("L-Made", "ListType", "Text List").Set("ElementType", text);
+            foreach (var list in reversed ? new[] { made, kept } : [kept, made]) module.Add(list);
+            screen.Add(N("LocalVariable", "Tags")).Set("DataType", kept);
+            screen.Add(N("LocalVariable", "Labels")).Set("DataType", made);
+            var doc = ScreenHtml.Module(module, new Reader()).Read("Orders");
+            Assert.Empty(doc.Problems);
+            Assert.Contains("name=\"Tags\" type=\"Text List\"/>", doc.Html);
+            Assert.Contains("name=\"Labels\" type=\"Text List\"/>", doc.Html);
+            Assert.Empty(doc.Compare(doc.Html));
+            // Naming the list by its kind, or either list by its key, is the same type: no difference.
+            Assert.Empty(doc.Compare(doc.Html.Replace("name=\"Tags\" type=\"Text List\"", "name=\"Tags\" type=\"ListType:Text List\"")));
+            Assert.Empty(doc.Compare(doc.Html.Replace("name=\"Tags\" type=\"Text List\"", "name=\"Tags\" type=\"@L-Made\"")));
+            // Another type is still a difference.
+            Assert.Equal(["set p:DataType"], doc.Compare(doc.Html.Replace("name=\"Tags\" type=\"Text List\"", "name=\"Tags\" type=\"Text\""))
+                .Select(o => o["op"] + " " + o["fact"]).ToArray());
+            return doc.Html;
+        }
+        // The order in which the Model API lists the module's children does not change the text.
+        Assert.Equal(Page(reversed: false), Page(reversed: true));
+
+        var (other, otherScreen, _) = Module();
+        var pairs = other.Add(new Node("L-Pairs", "ListType", "Pair List").Set("ElementType", new Node("S-One", "Structure", "Pair")));
+        other.Add(new Node("L-Others", "ListType", "Pair List").Set("ElementType", new Node("S-Two", "Structure", "Pair")));
+        otherScreen.Add(N("LocalVariable", "Rows")).Set("DataType", pairs);
+        var apart = ScreenHtml.Module(other, new Reader()).Read("Orders");
+        Assert.Contains("name=\"Rows\" type=\"@L-Pairs\"/>", apart.Html);
+        Assert.Empty(apart.Compare(apart.Html));
+        Assert.Equal(["set p:DataType"], apart.Compare(apart.Html.Replace("type=\"@L-Pairs\"", "type=\"@L-Others\""))
+            .Select(o => o["op"] + " " + o["fact"]).ToArray());
     }
 }

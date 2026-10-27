@@ -229,8 +229,9 @@ test('the ssam MCP server lists the tools of both lanes', async t => {
     assert.ok(map, 'missing ssam_map');
     assert.deepEqual(map.inputSchema.properties.lane.enum, ['odc', 'o11']);
     assert.equal(map.annotations.readOnlyHint, true);
-    for (const own of ['ssam_map', 'ssam_discover']) assert.doesNotMatch(tools.find(t => t.name === own).description, /^\[odc\]/, own);
-    assert.match(tools.find(t => t.name === 'ssam_app_url').description, /^\[odc\] /);
+    // ssam_app_url serves both lanes through its own `lane` argument since 20/10/2026 (meta item 3): no [odc] prefix.
+    for (const own of ['ssam_map', 'ssam_discover', 'ssam_app_url']) assert.doesNotMatch(tools.find(t => t.name === own).description, /^\[odc\]/, own);
+    assert.deepEqual(tools.find(t => t.name === 'ssam_app_url').inputSchema.properties.lane.enum, ['o11', 'odc']);
     assert.match(sessionText(client), /Read an app once with ssam_map/);
   } finally { await client.close(); await server.close(); }
 });

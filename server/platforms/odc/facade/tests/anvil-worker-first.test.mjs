@@ -12,7 +12,8 @@ test('a CLI command goes to the resident worker when it serves, with the caller 
   const run = createWorkerFirstRunner({ cold, worker, env: {} });
   const result = await run(['deliver', '--module', 'M'], { timeoutMs: 3600000 });
   assert.equal(result.ok, true); assert.equal(result.via, 'worker'); assert.deepEqual(result.envelope.data, { delivered: true });
-  assert.deepEqual(worker.calls[0], { argv: ['deliver', '--module', 'M'], options: { timeoutMs: 3600000 } });
+  // F7: a kernel delivery carries the session (and, inside a call, the operation) it runs for; nothing else of the argv changes.
+  assert.deepEqual(worker.calls[0], { argv: ['deliver', '--module', 'M', '--correlation-id', (await import('../correlation.mjs')).currentTrace().correlationId], options: { timeoutMs: 3600000 } });
   assert.equal(cold.calls.length, 0);
 });
 

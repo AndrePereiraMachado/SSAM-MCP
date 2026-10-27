@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { workspaceRoot } from './workspace.mjs';
+import { STORE_GENERATION } from './store-generation.mjs';
 import { FLOW_READING_SCHEMA, FLOW_EXTRACTOR, textSha } from './module-flow.mjs';
 import { headerOf, canonicalPart } from './ssam-code.mjs';
 import { readingEditsShape, isReadingBase, isJobTextBase } from './html-edits.mjs';
@@ -16,7 +17,7 @@ export function loadFlowReading(lane, sha, { env = process.env } = {}) {
   sha = sha.toLowerCase();
   const root = env.SSAM_MODULE_INDEX_ROOT ? path.resolve(env.SSAM_MODULE_INDEX_ROOT) : path.join(workspaceRoot, '.local', 'module-index');
   try {
-    const dir = path.join(root, 'v1', lane);
+    const dir = path.join(root, STORE_GENERATION, lane);
     const files = fs.readdirSync(dir).filter(n => n.endsWith(`.kernel.flow-${sha}.json`))
       .map(n => { const file = path.join(dir, n); return { file, time: fs.statSync(file).mtimeMs }; }).sort((a, b) => b.time - a.time);
     for (const { file } of files) {
@@ -34,7 +35,7 @@ const indent = s => s.match(/^[ \t]*/)[0].length;
 const ownId = s => {
   if (/^(?:->|\||\/\/\/)/.test(s.trimStart())) return null;
   const token = s.trimEnd().match(/(?:^|\s)(@[^\s]+)$/)?.[1];
-  return token && (/^@[npl]\d+$/.test(token) || /^\s*(?:server action|service action|client action|data action|action)\s/.test(s)) ? token : null;
+  return token && (/^@[npl]\d+$/.test(token) || /^\s*(?:server action|service action|client action|data action|action|preparation)\s/.test(s)) ? token : null;
 };
 const lineText = v => typeof v === 'string' ? v.replace(/\r\n/g, '\n') : Array.isArray(v) && v.every(s => typeof s === 'string') ? v.join('\n').replace(/\r\n/g, '\n') : null;
 

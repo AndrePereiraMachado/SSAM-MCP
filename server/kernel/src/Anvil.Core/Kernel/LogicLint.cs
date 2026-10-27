@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Anvil.Reading;
 
 namespace Anvil.Core;
 
@@ -213,9 +214,52 @@ public static class LogicLint
                 foreach (var text in Texts(value)) yield return (name, text);
     }
 
-    /// <summary>Every OutSystems expression the logic ops of a job write, with its op (the base check reads their calls).</summary>
+    // ---- T9: the JavaScript of client-side code against the runtime that renders the page ----------------------------------
+
+    /// <summary>The device classes the runtime's UI framework keeps on body.</summary>
+    public static readonly IReadOnlyList<string> RuntimeDeviceClasses = ["phone", "tablet", "desktop", "portrait", "landscape"];
+
+    /// <summary>T9: the JavaScript of a node, a script or a page script that runs in client-side code, read once as tokens
+    /// (Preflight.ClientScriptLint): DATETIME_TZ_REINTERPRETED, DOM_MUTATION_OF_RUNTIME and JS_RUNTIME_DUPLICATE, each an error
+    /// only when the script proves it, a warning otherwise. The caller decides that the code runs on the client.</summary>
+    public static IReadOnlyList<Preflight.ClientScriptLint.Finding> ClientScript(string script, Preflight.ScriptContext context)
+        => Preflight.ClientScriptLint.Lint(script, context);
+
+    /// <summary>Every OutSystems expression the logic ops of a job write, with its op (the base check reads their calls): the
+    /// JSON form's, and the expression-typed values of the text form (read from its parse: never SQL, JavaScript or comments).
+    /// A text that does not parse gives none (its FLOW_SYNTAX says why) and hides nothing of another text. A call of an action
+    /// a text of the job declares is no call of an unknown function (the checks only know the JSON form's declarations): it is
+    /// taken out of the expression the checks read.</summary>
     public static IEnumerable<(int Op, string Text)> AllExpressions(JsonArray ops)
     {
+        var parsed = new List<(int Op, FlowItem Action)>();
+        for (var i = 0; i < ops.Count; i++)
+            if (ops[i] is JsonObject textOp && textOp["op"]?.ToString() == "logic" && textOp["data"] is JsonObject textData && textData["flow"] != null)
+            {
+                // A data.flow that is no text of an action (42, [42], {"text":1}) is the preflight's LOGIC_INVALID: it gives no
+                // expression here and never stops the base check (PatchCertaintyUnreadableJobScopeTests, integ/proto-into-product).
+                List<(string Text, string? BasedOn, string Pointer)> texts;
+                try { texts = FlowTextForm.Texts(textData); }
+                catch (Exception error) when (error is KernelRefusalException or InvalidOperationException or FormatException) { continue; }
+                foreach (var text in texts)
+                {
+                    try { parsed.Add((i, ModuleFlow.Read(text.Text))); }
+                    catch (FormatException) { }
+                }
+            }
+        var declared = parsed.Select(p => p.Action.Name).Where(n => n.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var ownCalls = declared.Count == 0 ? null
+            : new Regex(@"(?<![\w.])(?:" + string.Join("|", declared.Select(Regex.Escape)) + @")\s*\(", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        foreach (var (op, action) in parsed)
+        {
+            var items = new Stack<FlowItem>(action.Items);
+            while (items.TryPop(out var item))
+            {
+                foreach (var value in item.Props.Values)
+                    if (value.Type == 'e' && value.Text.Length > 0) yield return (op, ownCalls == null ? value.Text : ownCalls.Replace(value.Text, "("));
+                foreach (var child in item.Items) items.Push(child);
+            }
+        }
         for (var i = 0; i < ops.Count; i++)
         {
             if (ops[i] is not JsonObject op || op["op"]?.ToString() != "logic" || op["data"]?["actions"] is not JsonArray actions) continue;

@@ -1,4 +1,6 @@
 // One output policy for both lanes. The saved document is the input, before any reduction.
+import { clipText } from './text-clip.mjs';
+import { hostedContext } from './executor.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -10,6 +12,8 @@ import { writeAnswerOrigin } from './reference-files.mjs';
 import { ANSWER_BUDGETS, EXPANSION_DEFAULT_BYTES, RECOVERY_PART_BYTES, budgetCeiling, maxAnswerBytes } from './context-budget.mjs';
 export { ANSWER_BUDGETS } from './context-budget.mjs';
 const bytes = value => Buffer.byteLength(JSON.stringify(value) ?? '', 'utf8');
+// T16 rule 8: the one surrogate-safe cut (text-clip.mjs).
+export { clipText };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const warningIdentity = value => JSON.stringify(object(value)
   ? Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'count')) : value,
@@ -185,10 +189,12 @@ export function fitAnswer(tool, args = {}, full, { root, directory, budgets = AN
         if (v === null || (Array.isArray(v) && !v.length) || (object(v) && !Object.keys(v).length) || (k === 'fix' && v === p.message)) { delete p[k]; mark(['problems']); }
       }
       if (p.items) { delete p.items; mark(['problems']); }
-      for (const k of ['message', 'fix']) if (typeof p[k] === 'string' && p[k].length > 300) { p[k] = p[k].slice(0, 299) + '…'; mark(['problems']); }
-      if (value.verifiedPatch && p.patch && bytes(p.patch) > 512) { delete p.patch; p.patchIn = 'verifiedPatch'; mark(['problems']); }
+      for (const k of ['message', 'fix']) if (typeof p[k] === 'string' && p[k].length > 300) { p[k] = clipText(p[k], 300); mark(['problems']); }
+      // T16 (review): only a certain patch is in the verified union (verified-patch.mjs patchUnion); a choice keeps its own.
+      // a12: hosted, never: a patch is sent explicitly there (verified-patch.mjs), so each problem keeps its own.
+      if (!hostedContext() && value.verifiedPatch && p.patch && p.patchCertain === true && bytes(p.patch) > 512) { delete p.patch; p.patchIn = 'verifiedPatch'; mark(['problems']); }
     });
-    if (value.verifiedPatch && value.patch && bytes(value.patch) > 512) { delete value.patch; value.patchIn = 'verifiedPatch'; mark(['patch']); }
+    if (!hostedContext() && value.verifiedPatch && value.patch && bytes(value.patch) > 512) { delete value.patch; value.patchIn = 'verifiedPatch'; mark(['patch']); }
   }
 
   // Review refusal-followups M-A (the owner's rule, one refusal with everything): before anything else leaves the answer, the
@@ -217,7 +223,7 @@ export function fitAnswer(tool, args = {}, full, { root, directory, budgets = AN
     if (call.why === value.continuation.why) remove(call, 'why', ['nextCalls', String(i), 'why']);
   });
   if (kind === 'refusal' && typeof value.error === 'string' && value.error.length > 300) {
-    value.error = value.error.slice(0, 299) + '…'; mark(['error']);
+    value.error = clipText(value.error, 300); mark(['error']);
   }
 
   // Repeated explanation is removed even for answers below their byte budget. A call's
@@ -316,8 +322,24 @@ export function fitAnswer(tool, args = {}, full, { root, directory, budgets = AN
   }
   if (kind === 'read') {
     for (const key of ['note', 'notes', 'timings', 'elapsedMs', 'size', 'store', 'index', 'cache', 'query', 'counts', 'notices', 'hidden']) { if (!tooLarge()) break; remove(value, key, [key]); }
+    // HTML's way back and next page are executable contracts, not optional prose.
+    // Dropping them made callers guess html/edit/edits despite a pinned reading.
+    const htmlRoutes = value.schema === 'ssam-html/1' && object(value.continuations);
+    if (htmlRoutes) {
+      for (const key of ['note', 'keys', 'inspect']) {
+        if (!tooLarge()) break;
+        remove(value.continuations, key, ['continuations', key]);
+      }
+      // Duplicate capture locations are recoverable; the next/edit calls retain
+      // their own exact targets and hashes, and sourceSha256 remains inline.
+      for (const key of ['target', 'file', 'contentSha256', 'snapshotSha256', 'capture']) {
+        if (!tooLarge()) break;
+        remove(value, key, [key]);
+      }
+    }
     for (const key of ['nextCalls', 'continuations', 'next', 'continuation']) {
       if (!tooLarge()) break;
+      if (htmlRoutes && key === 'continuations') continue;
       remove(value, key, [key]);
     }
   }
@@ -345,7 +367,7 @@ export function fitAnswer(tool, args = {}, full, { root, directory, budgets = AN
   if (kind === 'refusal' && tooLarge()) {
     for (const p of value.problems ?? []) {
       if (!tooLarge()) break;
-      if (p.patch) { delete p.patch; p.patchIn = value.verifiedPatch ? 'verifiedPatch' : 'omitted'; mark(['problems']); }
+      if (p.patch) { const certain = p.patchCertain === true; delete p.patch; p.patchIn = value.verifiedPatch && certain ? 'verifiedPatch' : 'omitted'; mark(['problems']); }
     }
   }
   // Review vps-a9, E1: a long text a problem carries to go on (the screen's text now, the edit ready...) that would take the

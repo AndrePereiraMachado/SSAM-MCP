@@ -975,3 +975,40 @@ jobs com JavaScript cru em client actions isoladas e os For Each crus T3 continu
 - **Ambiente:** `Pa3KlFootprintTests` e `VerbSurfaceTests.TheIntegrationOpsArePinnedToTheDispatcher` falham com `FileNotFoundException`
   (OutSystems.Model.V1, antes da primeira linha) quando rodam antes de qualquer teste que ligue o Studio no processo; o segundo passa
   na rodada larga; o primeiro não foi rodado com o Studio ligado aqui (a auditoria do footprint não muda com esta etapa).
+
+## 18. SSAM's generators satisfy SSAM's flow rules (2026-10-23, branch `fix/csharp-foreach`)
+
+The pre-release battery found `CSharpDataEffectsTests` (`ColdQueryProjection`) refused with `FLOW_FOREACH_LIST_ACTION`: the C#
+translator materialized every query result with a For Each that only maps the rows into a list (a value of the row, or a local
+filled field by field and appended), the T2 shape. Since the JSON form of the logic op is judged (section 17, merge `b3a15c61`), a
+planned op carried by a job as JSON with any change (the test adds `allowQueryInLoop`) is no longer recognized as planned and is
+refused; unchanged, it was only listed (`FLOW_OWNER_RULE_PLANNED`). The translator had not changed since 2026-09-18.
+
+- **The translator now writes the List action** (`MethodQueries.MappedRows`): `ListAppendAll(List=<list>, SourceList=<query>.List
+  mapTo { ... })` when the body only reads the current row: a value (`{ Value: List.AvC0 }`), a record field by field in the order
+  of its attributes, the presence wrapper of a nullable value (`HasValue`, `Value`), and a nullable member through its wrapper
+  (`Member.HasValue`, `Member.Value`). A `Value` the loop set only under its presence maps its column whole: the query returns it
+  NULL (the type's default) where the loop kept the previous row's value, which nothing reads. A body with a check that raises,
+  a call, a record of a record or a reference keeps its For Each (the rule allows those, T3). The locals the loop used go with it.
+- **The proof reads the mapping** (`CheckLogicSpecification`): on O11 an argument's or assignment's Value is compared with the
+  record mapping the Studio keeps beside it, as the flow reader writes it (`Source mapTo { ... }`); ODC keeps it in the text.
+- **The audit every generator test can call** (`ModelHost.GeneratedFlowRuleFindings`): every flow of a module judged as new by
+  T1/T2, decision 6 and QUERY_IN_LOOP, with no op, claim or escape. `GeneratedFlowRulesTests` runs the whole C# corpus
+  (`tests/csharp/*.cs.txt`) through the planner and the Apply and asks for no finding (a query in a loop only where the source
+  method writes the loop); a hand-written For Each that only maps is still refused with the List action as its patch, and kept
+  with `allowForEach` it is listed and the audit still finds it. The rule did not change.
+- **Other generators with a For Each** do more than map: the access planner (a user lookup and calls per manifest row, with its
+  explicit `allowQueryInLoop`), the html components (events dispatched per item), the html expander's derived max/sum (a value,
+  not a list) and the recipes (a check that raises). The html components' handler JavaScript stays listed by the owner's decision.
+- **Review follow-up (branch `fix/csharp-foreach-tests`).** The sweep no longer relies on what T2 recognizes: every
+  materialization left as a For Each that only copies rows of a query fails it (`GeneratedFlowCorpus.MappingOnlyLoops`),
+  and the List actions with a mapping are counted where the review found them; with the translator of `8a948152` the
+  sweep fails on 8 sources. A record inside a record now maps through its member too (`Inner.Code`); the computed-value
+  branch of the mapping is gone (the SQL projection already computes every value: the body only copies columns). The
+  corpus is read with its subfolders (one source each, compiled through the reference graph when the public contract
+  refuses a reference boundary), with the reviewer's edge sources (`EdgeMaterialization`, `NullableShapes`); a source
+  that does not translate fails, unless its refusal is pinned with its code (only the exception-search oracle harness,
+  `AVCS205`). Every written source is proven (`CheckModuleSpecification`/`CheckFrozenCSharp`) and planned again with no op.
+  A query inside a loop is the user's only when its step sits inside a loop the source writes; an unreadable flow is a
+  `FLOW_OWNER_RULES_UNREAD` finding without the exception's text; the ODC twin is skipped with its reason without an ODC
+  Studio.

@@ -32,7 +32,42 @@
     "osui web",
     "web block instance",
     "tela web tradicional",
-    "tela tradicional"
+    "tela tradicional",
+    {
+     "form": "ajax",
+     "with": [
+      "traditional",
+      "tradicional"
+     ]
+    },
+    {
+     "form": "ajax submit",
+     "with": [
+      "traditional",
+      "tradicional"
+     ]
+    },
+    {
+     "form": "navigate",
+     "with": [
+      "traditional",
+      "tradicional"
+     ]
+    },
+    {
+     "form": "modal",
+     "with": [
+      "traditional",
+      "tradicional"
+     ]
+    },
+    {
+     "form": "abas",
+     "with": [
+      "traditional",
+      "tradicional"
+     ]
+    }
    ],
    "summary": "In a Traditional Web module (WebResponsive) a screen is `IWebScreen` in `IWebFlow:MainFlow`, born with its layout web block instance (`$scr/#IWebBlockInstanceWidget/Title|MainContent`); its data is fetched in the Preparation (a logic element), not by lifecycle events; widgets are the web widgets (ui.traditional-widget); a button OnClick has a Destination (a screen action or a screen) and a link OnClick also has a Method. Library blocks (OutSystemsUIWeb) are instanced with `create IWebBlockInstanceWidget` + `source: IWebBlock:<Name>` + `empty`. Emails are IWebEmail. Nothing here applies to Reactive/Mobile or to ODC.",
    "route": {
@@ -48,7 +83,7 @@
    ],
    "depends": [],
    "alternatives": [],
-   "guidance": "Choose the context from the module type: a WebResponsive (Traditional) module takes IWebScreen and web widgets; the compact routes `screen` (archetypes) and `html` refuse it, so author with the raw verbs. Traditional screens query in their Preparation (the module-specification `queries` section is refused in the web context).",
+   "guidance": "Choose Navigate for screen/URL destinations; Ajax (Ajax Submit) for same-screen actions, followed by explicit data fetching and Ajax Refresh of persistent containers; Submit for native upload/download. Ajax does not rerun screen Preparation. Use validation=None on tabs, pagination and modal open/close; retain server authorization for mutations. Explicit method/validation on button/a is supported; button with explicit policy becomes a styled native ILinkWidget because only ILinkOnClick exposes Method. Test browser behavior after publishing. A WebResponsive module supports new frontend documents through html data.html: <screen>/<block>, div/span, text/{{ expressions }}, input/textarea bind, button/a onclick destination, table/tr/td, Block/slot, div if/else/list and literal CSS. Declare screen actions as logic data.flow (action Screen.Name) in the same job; they run on the server. Proven example: traditional-html-frontend.json. The document creates IEntry only if none exists and preserves an existing default; never use ESpace.DefaultScreen for Traditional navigation. Existing roots use native @key edits: HTML editing, arbitrary JavaScript/React and screen generators remain outside this route. Queries use Preparation. Verify and merge do not prove server publication or resolve every ESpace.Dump failure.",
    "example": {
     "ops": [
      "create",
@@ -382,7 +417,7 @@
        "origin": "kernel/tests/provenance-o11.json; kernel/tests/jobs-negative (scan 2026-09-23)"
       },
       {
-       "text": "The compact routes refuse Traditional: `screen` archetypes and `html` answer 'only Reactive and Mobile screens are supported'; the module-specification tree accepts IWebScreen/IWebBlock but refuses `queries` in the web context (use the Preparation).",
+       "text": "The html document form creates new Traditional screens/blocks (traditional-html-frontend.json). Existing-root HTML edits, component/React forms and screen archetypes remain unsupported. Queries belong in Preparation. Unsupported document markup is refused explicitly.",
        "origin": "kernel/src/Anvil.Core/Kernel/ScreenExpander.cs:33; HtmlExpander.cs:68; ScreenSpecification.cs:11,53,89"
       },
       {

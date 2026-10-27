@@ -24,6 +24,7 @@ import { ssamPathRoots } from './evidence-roots.mjs';
 //   ssam server-token issue --customer <name> [--days N] | revoke --id <id> | list   local admin of the served tokens
 //   ssam db migrate | status                                                         the Postgres of SSAM_DATABASE_URL (tokens)
 import { DESTRUCTIVE_SUFFIX, callWordsProblems, resultWithoutWordEchoes, taskStepOfCall, wordsRequired, wordsGiven } from './destructive-operations.mjs';
+import { WORDS_MARKER } from './next-steps.mjs';
 import fs from 'node:fs';
 import {workspaceRoot, anvilRoot} from './workspace.mjs';
 import path from 'node:path';
@@ -38,7 +39,7 @@ import { anvilLaneFacts, catalog, command, lane, laneNames, laneOfModule, LANES,
 import { registerO11Operations } from './o11-operations.mjs';
 import { connectAll, probeO11, classifyO11, assertSelectedO11, WINDOWLESS_FIX } from './studio-connect.mjs';
 import { readConnection, staleConnection } from './studio-session.mjs';
-import { authorityDir, userEnvironmentValue, o11LaneOf } from './o11-lane.mjs';
+import { authorityDir, o11LaneOf, userEnvironmentValue } from './o11-lane.mjs';
 import { registerO11AppSession, runHook } from './o11-app-session.mjs';
 import { registerO11Cycle, findKernelTask, closeState } from './o11-cycle.mjs';
 import { configureRelayFacade, relayWork } from './relay-lifecycle.mjs';
@@ -61,7 +62,7 @@ import { prototypeImportRefusal } from './prototype-disabled.mjs';
 import { textFormRefusal, partReader } from './text-routes.mjs';
 import { CODE_JOB_TEXT, normalizeCodeOps } from './ssam-code.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
-import { resolvePatchedJob, jobIdentity, failedOpOf, patchJsonSchema, basedOnJsonSchema, withNamedPatches, appliedJobIdentity } from './job-patch.mjs';
+import { resolvePatchedJob, jobIdentity, failedOpOf, patchJsonSchema, basedOnJsonSchema, withNamedPatches, appliedJobIdentity, proposedPatch, saveRefusalFixes, explicitFixCall } from './job-patch.mjs';
 import { createWorkerFirstRunner, createWorkerClient, workerDisabled } from './anvil-worker.mjs';
 import { shapeToolResult } from './responses.mjs';
 import { keepAnswer, fitResult } from './answer-size.mjs';
@@ -69,11 +70,12 @@ import { MAX_ANSWER_BYTES, maxAnswerBytes, budgetCeiling } from './context-budge
 export { MAX_ANSWER_BYTES, maxAnswerBytes, budgetCeiling } from './context-budget.mjs';
 import { boundedRead, readOptions, readCheckpoint } from './read-budget.mjs';
 import { withStudioWriteLock, busyToolResult, isWrite, isPhased, declaresPhases, PHASES_META, processAlive } from './studio-write-lock.mjs';
-import { registerO11Access } from './o11-access.mjs';
+import { pendingAccessRestores, registerO11Access, restoreScope } from './o11-access.mjs';
 import { registerO11Publish } from './o11-publish.mjs';
 import { registerO11Extension } from './o11-extension.mjs';
 import { readLocalSettings } from './local-settings.mjs';
 import { withCall, noteAnswer } from './quality-meter.mjs';
+import { warmModules, spareStatus } from './warm-modules.mjs';
 import { registerQueryTestTools } from './query-test.mjs';
 import { codeServedHosted } from './hosted/served.mjs';
 
@@ -250,7 +252,7 @@ export function releaseReservation({ reservation, authorize } = {}, { env = proc
 // doctor of its own (src\Anvil.Cli\Program.cs), so the O11 half is built from the lane's own facts
 // (scripts/lanes.py --json) plus the Service Studio processes running from that lane's installation.
 // deps (tests): processes() (lanes.studioProcesses), facts(), probe(port), record() (the connection record), cliBuilt.
-export async function doctorO11({ factsCache = defaultDoctorFacts, reservations: reservationDeps = {}, processes: listProcesses, facts: readFacts, probe: probeBridge, record: readRecord, cliBuilt } = {}) {
+export async function doctorO11({ factsCache = defaultDoctorFacts, reservations: reservationDeps = {}, processes: listProcesses, facts: readFacts, probe: probeBridge, record: readRecord, cliBuilt, restores: readRestores } = {}) {
   const entry = LANES.o11;
   const processFacts = listProcesses ? { value: await listProcesses(), ageMs: 0 } : await factsCache.processes('o11').catch(() => ({ value: [], ageMs: 0 }));
   const processes = processFacts.value;
@@ -268,6 +270,12 @@ export async function doctorO11({ factsCache = defaultDoctorFacts, reservations:
     catalog: catalog('o11'), ok: cli.built && studio.connected && stale?.reason !== 'windowless',
     ...(studio.windowless ? { windowless: studio.windowless } : {}), ...(stale ? { connectionStale: stale } : {}) };
   // Next steps are MCP calls, never a shell command: the CLI build belongs to the integrator, not to the session.
+  // T12: the temporary access changes still waiting for their restore (o11-access.mjs), each with the call that restores it.
+  let restores = [];
+  try { restores = readRestores ? readRestores() : pendingAccessRestores(o11LaneOf(entry.lane, { root: entry.root }).local, restoreScope()); } catch { restores = []; }
+  if (restores.length) Object.assign(report, { pendingRestores: restores, warnings: [{ code: 'PENDING_RESTORE',
+    message: restores.length + ' temporary access change(s) wait for their restore, newest first (restore them in this order, or close one with the user\'s words): '
+      + restores.map(r => r.id + ' (' + r.module + ', ' + r.screens.length + ' screen(s))').join(', ') }] });
   if (!cli.built) report.hint = { why: 'The O11 CLI of this checkout is not built; the integrator builds it. Nothing to run from the session.', path: entry.cli };
   else if (!report.ok) report.continuation = { tool: 'ssam_connect', arguments: { lane: 'o11' },
     why: studio.laneHeldBy ? 'The lane port is held by Service Studio ' + studio.laneHeldBy.pid + ', which has no main window (STUDIO_WINDOWLESS): '
@@ -312,7 +320,7 @@ export const HOSTED_RESTART_NEXT = 'the hosted SSAM server changed its release a
 const releaseWait = tasks => tasks.length ? { tasks,
   next: 'The launcher reloads this server automatically when all detached tasks finish. Continue their existing operations.',
   continuation: tasks[0].continuation } : null;
-export async function doctor(laneName, { lanes: laneDoctors = {}, reservations, identity = null, o11 = {}, activeTasks = [] } = {}) {
+export async function doctor(laneName, { lanes: laneDoctors = {}, reservations, identity = null, o11 = {}, activeTasks = [], spares = spareStatus } = {}) {
   const wanted = laneName ? [lane(laneName).name] : laneNames;
   const lanes = Object.fromEntries(wanted.map(name => [name, null]));
   await Promise.all(wanted.map(async name => { lanes[name] = name === 'odc' ? await (laneDoctors.odc ?? doctorOdc)() : await (laneDoctors.o11 ?? doctorO11)({ reservations, ...o11 }); }));
@@ -323,6 +331,9 @@ export async function doctor(laneName, { lanes: laneDoctors = {}, reservations, 
   const report = { ok, lanes, studiosOpen: Object.fromEntries(Object.entries(lanes).map(([k, v]) => [k, v.studio?.open === true])), ...(local ? { local } : {}) };
   const warnings = Object.entries(lanes).flatMap(([name, l]) => (Array.isArray(l.warnings) ? l.warnings : []).map(w => ({ lane: name, ...w })));
   if (warnings.length) report.warnings = warnings;
+  // L3b: the spares the startup warm-up asked of each lane's worker and how many are ready (one short ping; none asked: absent)
+  const ready = await Promise.resolve().then(() => spares({ lanes: wanted })).catch(() => null);
+  if (ready) report.spares = ready;
   // D5 (atritos 3): the Service Studios without a main window, with the fix (SSAM ignores them; never closes a Studio).
   if (Array.isArray(lanes.o11?.windowless) && lanes.o11.windowless.length) report.windowless = lanes.o11.windowless;
   if (!ok) {
@@ -893,9 +904,11 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
     }
     : (name, raw) => replays.inputsOf(name, runArgs(argsOfTool.get(name), raw ?? {}));
   server.ssamInputsOf = inputsOf;
+  // F7: on a licensee's server every record of a call names its caller (the exposure meter's caller, callerOf below).
   const deadline = createCallDeadline({ root: answersRoot, ...(deps.tasksDir ? { dir: deps.tasksDir } : {}), timeoutMs: deps.callDeadlineMs, hasTool: name => served.has(name), defaultLane: o11 ? 'o11' : 'odc',
     // a7: hosted, the final answer of a detached call is kept in ws:o11/answers with the origin the exposure rule names.
     ...(hosted ? { saveAnswer: (full, root, origin) => keepAnswer(full, answersRoot, origin, { directory: answersDirectory() }) } : {}),
+    caller: exposure === 'owner' ? null : () => callerOf(),
     notify: notification => server.server.notification(notification), inputsOf,
     ...(exposure === 'owner' ? {} : { answerOrigin: (name, args) => keptOrigin(name, runArgs(argsOfTool.get(name), args ?? {})) }) });
   // A cached surface waits through the bootstrap deadline; cold calls use this server's deadline.
@@ -1232,6 +1245,8 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
       }
       // CX15 r7 (M-1, M-3, the family): one rule for every tool of every lane, before any handler runs: a words field that is
       // present and not the owner's words (wordsGiven: a marker, a <template>, a sha256, no words) is ONE WORDS_REQUIRED.
+      // A correction of a refused write is no exception (T16, kept over the proto's R1 inheritance): the words are never
+      // inherited, so a marker in authorize is WORDS_REQUIRED here as for any other call.
       const noWords = callWordsProblems(name, args);
       if (noWords.length) {
         const value = wordsRequired(noWords, { tool: name });
@@ -1486,6 +1501,7 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
   // customer's <ws>/odc, with the patch journal in <ws>/odc/journal.
   const odcLaneRoot = deps.odcRoot ?? (hosted ? workspaceOf('odc') : LANES.odc.root);
   const patchJournal = hosted ? path.join(odcLaneRoot, 'journal') : path.join(odcLaneRoot, '.local', 'journal');
+  const odcFixes = path.join(odcLaneRoot, '.local', 'jobs', 'fixes');
   const listed = {};
   for (const [name, client] of Object.entries(clients)) listed[name] = (await client.listTools()).tools;
   const listedNames = new Set(Object.values(listed).flatMap(tools => tools.map(t => t.name)));
@@ -1514,7 +1530,8 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
       const exposed = inlineJob ? { ...schema, required: (schema.required ?? []).filter(r => r !== 'feature'), properties: { ...schema.properties, job: { anyOf: [{ type: 'string' }, { type: 'object' }, { type: 'array' }],
         description: 'Path of the job JSON (absolute or relative to the SSAM-Hybrid-ODC root), or the job itself ({ops:[...]} or an array of ops). '
           + 'With basedOn: a partial job, only the changed or new actions/entities/ops (same name replaces, new name is added).' },
-        patch: patchJsonSchema, basedOn: basedOnJsonSchema, autoPatch: { type: 'boolean', description: 'false: offer verified repairs without automatically applying them.' } } } : schema;
+        patch: patchJsonSchema, basedOn: basedOnJsonSchema, autoPatch: { type: 'boolean', description: 'false: offer verified repairs without automatically applying them.' },
+        fix: { type: 'string', const: 'apply' } } } : schema; // fix (R1): sent as a refusal's fixCall gives it; no text (the listing budget)
       const description = (needsLane ? '[o11 | odc] ' : ownLane ? '' : '[' + laneName + '] ') + (tool.description ?? '')
         + (inlineJob ? ' Every answer with a job names nextBasedOn {job, sha256}; a refusal also job, jobSha256, failedOp and each patch by name (patchByName). '
           + 'Correct it with patch + basedOn (paths by index or by name: actions/<Action>/steps/<as>/...), or with only the changed actions as a partial job + basedOn; never rewrite the whole job. '
@@ -1539,6 +1556,27 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
         let carried = null; let joinOf = null; let pending = null; let precheckModule = null;
         // CX16 r3: the precheck running alongside the relay, settled where its problems join the answer.
         const settle = async () => { if (!pending) return; const pre = await pending; pending = null; if (pre?.carry) carried = pre; };
+        // R1 (loop-correcao): fix "apply" over basedOn {job, sha256}: the patches the refusal of that job proposed (kept under
+        // <odcRoot>/.local/jobs/fixes, job-patch.mjs proposedPatch), then the call's own patch; one refusal when any does not apply.
+        let fixesApplied = null;
+        if (inlineJob && forwarded.fix != null) {
+          const { fix, ...others } = forwarded;
+          const base = others.basedOn;
+          const keep = Object.fromEntries(['module', 'feature', 'owners', 'changes', 'pid'].filter(k => others[k] != null).map(k => [k, others[k]]));
+          if (fix !== 'apply' || !base || typeof base.job !== 'string' || others.job != null || others.patch === 'verified')
+            return reply({ ok: false, code: others.job != null || others.patch === 'verified' ? 'FIX_ALONE' : 'FIX_NEEDS_BASE', error: 'fix "apply" goes with basedOn {job, sha256} (the nextBasedOn of the refusal whose patches it applies), without job or patch "verified"; nothing was sent.' });
+          const proposed = proposedPatch(odcFixes, { file: path.resolve(odcLaneRoot, base.job), sha256: base.sha256 });
+          if (!proposed.ok) {
+            const { ok: _ok, module: _module, patchByName, ...refused } = proposed;
+            // the delivery shaper keeps problems: each fix that does not apply is one, with why and its patch
+            return reply({ ok: false, ...refused, ...(Array.isArray(proposed.notApplied) ? { problems: proposed.notApplied.map(n => ({ phase: 'fix', code: n.code, pointer: n.pointer, severity: 'error', message: n.error, patch: n.patch })) } : {}),
+              ...(proposed.code === 'BASE_CHANGED' ? {} : { continuation: { tool: tool.name, arguments: { ...keep, basedOn: base,
+              patch: proposed.code === 'FIX_NOT_APPLIED' ? [...patchByName, '<your fix of each one in notApplied>'] : '<your patch: by name, e.g. actions/<Action>/steps/<as>/...>' },
+              why: proposed.code === 'FIX_NOT_APPLIED' ? 'The patches that apply, by name, then your own fix of each problem in notApplied, in one patch.' : 'Correct the job yourself with a patch over the same basedOn.' } }) });
+          }
+          forwarded = { ...others, patch: [...proposed.patch, ...(Array.isArray(others.patch) ? others.patch : [])] };
+          fixesApplied = proposed.applied;
+        }
         if (inlineJob && (forwarded.patch != null || forwarded.basedOn != null)) {
           // The corrected job is a new file under <odcRoot>/.local/jobs/inline; the base never changes. The ODC server
           // is strict: patch/basedOn never travel to it (a partial job travels as the whole job it completes).
@@ -1614,11 +1652,23 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
           if (result?.isError) {
             const failedOp = failedOpOf(value.error ?? value.refusal?.error, file);
             named = withNamedPatches({ ...value, ...jobIdentity(file), ...(failedOp != null ? { failedOp } : {}), ...(partial ? { partial } : {}), ...notes }, file);
+            // R1: the patches it proposes, kept for fix "apply", and the call that applies them.
+            const problems = Array.isArray(named.problems) ? named.problems : named.refusal?.problems;
+            if (named.nextBasedOn && saveRefusalFixes(odcFixes, { job: file, jobSha256: named.jobSha256, problems, module: forwarded.module ?? null })) {
+              const keep = { ...Object.fromEntries(['module', 'feature', 'owners', 'changes', 'pid'].filter(k => forwarded[k] != null).map(k => [k, forwarded[k]])), ...(args.authorize !== undefined ? { authorize: WORDS_MARKER } : {}) };
+              // a12: hosted, the explicit patch (job-patch.mjs explicitFixCall): the gate refuses fix "apply" there.
+              const fixCall = hosted ? explicitFixCall(odcFixes, { tool: tool.name, basedOn: named.nextBasedOn, file, keep })
+                : { tool: tool.name, arguments: { fix: 'apply', basedOn: named.nextBasedOn, ...keep },
+                  why: 'Applies every certain patch of the problems above over this job and delivers it; a marker in authorize takes the user\'s words (never inherited). A choice and a problem without a patch need your own patch with the same basedOn.' };
+              // the delivery answer keeps continuation (responses.mjs compactDelivery): the fix is the next call when none is named
+              if (fixCall) named = { ...named, fixCall, ...(named.continuation ? {} : { continuation: fixCall }) };
+            }
           } else if (value.ok === true) {
-            const corrected = appliedJobIdentity(value.patchedJob, { path: file, sha256: jobIdentity(file).jobSha256 }, { journalDir: path.join(odcLaneRoot, '.local', 'journal'), tool: 'studio_deliver' });
+            const corrected = appliedJobIdentity(value.patchedJob, { path: file, sha256: jobIdentity(file).jobSha256 }, { journalDir: patchJournal, tool: 'studio_deliver' });
             const { nextBasedOn } = jobIdentity(corrected.path);
             if (nextBasedOn || partial || jobNotes.length) named = { ...value, ...(nextBasedOn ? { nextBasedOn } : {}), ...(partial ? { partial } : {}), ...notes };
           }
+          if (fixesApplied) named = { ...(named ?? value), fixesApplied };
           if (named) return { ...result, structuredContent: named, content: [{ type: 'text', text: JSON.stringify(named) }] };
         }
         if (jobNotes.length && value && typeof value === 'object' && !Array.isArray(value)) { const noted = { ...value, ...notes }; return { ...result, structuredContent: noted, content: [{ type: 'text', text: JSON.stringify(noted) }] }; }
@@ -1716,13 +1766,15 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
   };
   // a9 (review marco-a6 M1): the hosted network texts are this line's own bytes in the fixed core of the listing budget (B2,
   // context-budget-listing.test.mjs): kept short, so CX13 and X3 fit under 167747 B (total) and 34178 B (core) here too.
+  // a11: the release sentence is the product's again and the network texts shorter, so the hosted listing the release
+  // rehearsal measures holds its ceilings (hosted-listing-budget.test.mjs).
   server.registerTool('ssam_doctor', { title: 'Both lanes side by side', description:
     'O11 and ODC side by side: root, CLI, catalog, open Studio per lane; ok: the lane asked (or some lane) is usable; warnings: '
-    + 'optional gaps; server: root and release of this server. release frees a foreign or orphan reservation it lists. '
+    + 'optional gaps; server: root and release of this server. release frees a reservation. '
     + 'task.stop requests stop of a live write; cancelling the wait does not stop work. task reads facade evidence; task.close explicitly closes an uncertain facade operation after reconciliation. '
-    + 'Hosted: network:true tests the agent\'s uploads per internet exit (about 5 s).',
+    + 'Hosted: network:true tests agent uploads per internet exit (about 5 s).',
     inputSchema: fromJsonSchema({ type: 'object', properties: { lane: { type: 'string', enum: laneNames },
-      network: { type: 'boolean', description: 'Hosted only: small and 1 MB agent uploads on new connections; a verdict per exit, in plain words.' },
+      network: { type: 'boolean', description: 'Hosted only: small and 1 MB uploads on new connections; a plain verdict per exit.' },
       release: { type: 'object', required: ['reservation'], additionalProperties: false,
         description: 'Alone: frees one foreign or orphan module reservation (its next names this call); lane o11.',
         properties: { reservation: { type: 'string', description: 'reservations.active[].file' },
@@ -1849,9 +1901,10 @@ async function listDoctorProcesses() {
   return Object.fromEntries(['o11','odc'].map((name,i)=>[name,parseStudioProcesses(JSON.stringify(all.filter(p=>String(p.ImageName).toLowerCase()===names[i].toLowerCase())))]));
 }
 const defaultDoctorFacts=createDoctorFacts();
-export async function warmBackground({env=process.env,lanes=['odc','o11'],indexes=warmIndexes,facts=defaultDoctorFacts,worker=name=>createWorkerClient(name),log=text=>process.stderr.write(text+'\n'),friction}={}) {
+export async function warmBackground({env=process.env,lanes=['odc','o11'],indexes=warmIndexes,facts=defaultDoctorFacts,worker=name=>createWorkerClient(name),spares=name=>warmModules(name,{env}),log=text=>process.stderr.write(text+'\n'),friction}={}) {
   if(env.SSAM_NO_WARM==='1')return;
-  const work=[['indexes',()=>indexes({lanes})],['facts',()=>facts.warm()],...lanes.filter(name=>!workerDisabled(name,env)).map(name=>['worker-'+name,()=>worker(name).ensure()])];
+  // L3b: once a lane's worker is up, the spares of the modules open in its Studio (warm-modules.mjs)
+  const work=[['indexes',()=>indexes({lanes})],['facts',()=>facts.warm()],...lanes.filter(name=>!workerDisabled(name,env)).map(name=>['worker-'+name,async()=>{await worker(name).ensure();await spares(name);}])];
   await Promise.all(work.map(async([step,run])=>{
     try{await run();}catch(error){
       log(JSON.stringify({ssam:'warm',ok:false,step,error:String(error?.message??error)}));
@@ -1885,6 +1938,8 @@ export function scheduleWarm({ env = process.env, lanes = ['odc', 'o11'], warm =
   return { delay, lanes, timer };
 }
 
+// F1: the reader of served stylesheets, handed to the O11 cycle by runStdio only (served-proof.mjs).
+import { localServedReader } from './served-proof.mjs';
 // The served mode warms only what belongs to the server, never a customer's data: at start (servidor/fase4) the discover
 // indexes of its lanes and the ODC delivery processes (resident builder and worker; warmServer), and after each hosted
 // delivery or app creation the same processes again (lib.mjs warmSoon). SSAM_NO_WARM=1 turns both off.
@@ -1907,8 +1962,11 @@ export async function runStdio({ env = process.env, profile, warm = warmBackgrou
     let active;
     const bootTools = new Set();
     const bootDeadline = createCallDeadline({ root: anvilRoot, env, hasTool: name => bootTools.has(name), defaultLane: served.o11 === false ? 'odc' : 'o11', notify: notification => active?.server.notification(notification),
+      caller: exposure === 'owner' ? null : () => env.SSAM_EXPOSURE_CALLER || 'local',
       inputsOf: (name, args) => active?.server?.ssamInputsOf?.(name, args) });
-    const result = await createWarmServer({ root: workspaceRoot, identity: serverIdentity(), env: warmEnv, serverInfo: { name: serverProfile(selectedProfile).name, version: '0.2.0' }, args: [...args, 'profile:' + selectedProfile], startAfterConnect: true, build: (server, registerTool) => createSsamServer({ ...served, profile: selectedProfile, deps: { server, registerTool, activeDeadline: () => bootDeadline, exposure: { profile: exposure } } }),
+    const result = await createWarmServer({ root: workspaceRoot, identity: serverIdentity(), env: warmEnv, serverInfo: { name: serverProfile(selectedProfile).name, version: '0.2.0' }, args: [...args, 'profile:' + selectedProfile], startAfterConnect: true, build: (server, registerTool) => createSsamServer({ ...served, profile: selectedProfile, deps: { server, registerTool, activeDeadline: () => bootDeadline, exposure: { profile: exposure },
+        // F1: only this entry, the person's own SSAM on their machine, reads the served stylesheets after a publication.
+        cycle: { servedFetch: localServedReader({ env }) } } }),
       wrap: (name, handler, config) => { bootTools.add(name); return bootDeadline.wrap(name, handler, { ...config, exempt: config?._meta?.canRequestInput === true }); },
       onStale: async () => { const store = await import(pathToFileURL(path.join(workspaceRoot, 'facade', 'friction-store.mjs')).href); await store.recordEvent({ operation: 'mcp-start', code: 'TOOL_LIST_SNAPSHOT_STALE', outcome: 'reconciled' }); } });
     active = result.server;
@@ -2175,9 +2233,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       }
     }
     else if (verb === 'app') {
-      if (explicit && explicit !== 'odc') throw new Error('ssam app currently resolves ODC URLs; use --lane odc.');
+      // Both lanes (goal list of 2026-10-20, item 3): --lane o11|odc names the Studio; without it, the Studio where the app is open.
+      if (explicit && !['o11', 'odc'].includes(explicit)) throw new Error('ssam app resolves O11 and ODC URLs; use --lane o11 or --lane odc.');
       const { appUrl } = await import('./lib.mjs');
-      print(await appUrl(parseAppArguments(args)));
+      print(await appUrl({ ...parseAppArguments(args), ...(explicit ? { lane: explicit } : {}) }));
     }
     else if (verb === 'connect') {
       // ssam connect [--lane o11|odc] [--pid <pid>]: the same one call as MCP ssam_connect (every open Studio without --lane).

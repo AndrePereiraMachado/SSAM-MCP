@@ -24,6 +24,7 @@ public static class OdcPublicSignature
                     "NewRuntime.ReferenceWebBlock" => "block",
                     "ReferenceClientAction" => "client-action",
                     "ReferenceAction" => "action",
+                    "ReferenceServiceAPIMethod" => "service-action",
                     "ReferenceEntity" => "entity",
                     _ => null
                 };

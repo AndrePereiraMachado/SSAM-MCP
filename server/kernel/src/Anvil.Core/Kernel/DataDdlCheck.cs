@@ -330,7 +330,10 @@ public sealed class DdlCheck
                 compared.Add(property);
                 if (handled.Contains(property)) continue;
                 var actual = element.Props.TryGetValue(property, out var written) ? written : DdlRules.Default(context, property);
-                Compare(property, value, actual);
+                // The text's value in the form the model stores it (DdlValues: the type of the model's value decides): an edited
+                // text that writes "When Published", `priority high` or `timeout 05` reads back as the module it made.
+                var type = DdlModel.Raw(reader, node, property)?.GetType();
+                Compare(property, value, DdlValues.Same(reader.KindOf(node), property, value, actual, type) ? value : actual);
             }
             foreach (var property in element.Props.Keys)
                 if (!compared.Contains(property) && !handled.Contains(property)) Compare(property, null, element.Props[property] ?? "none");

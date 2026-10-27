@@ -23,8 +23,8 @@ public static class VerbSurface
     [
         new("create", "write", ["parent", "type"], ["name", "args", "as", "source", "empty"],
             "Creates a child of `type` (Model API interface name, with or without the leading I) under `parent`; `args` fills the Create parameters by name (references for objects, JSON for scalars and enums, base64 text for Byte[] such as an image's `binary`); a type whose only factory is GetOrCreate<X> (ILocale, args.culture) uses it; `as` registers a $alias; `source` binds a block instance to `IMobileBlock:Name`; `empty:true` clears example content."),
-        new("set", "write", ["target", "prop"], ["value", "empty"],
-            "Writes one property of `target`. Boolean/numeric properties take JSON values; expression properties take OutSystems text; reference properties (Destination, Handler, Action, DataSource, SourceBlock, DataType) take a reference or a native type name; a list the Model API edits only by Add.../Remove... (ISemanticSearchNode.SearchAttributes) takes a JSON array of references and becomes exactly that list. Text the object parses itself goes through From<Prop>(text): CronExpression on the ScheduleConfiguration of an ODC workflow Start."),
+        new("set", "write", ["target", "prop"], ["value", "empty", "ifCurrent", "basedOn"],
+            "Writes one property of `target`. Boolean/numeric properties take JSON values; expression properties take OutSystems text; reference properties (Destination, Handler, Action, DataSource, SourceBlock, DataType) take a reference or a native type name; a list the Model API edits only by Add.../Remove... (ISemanticSearchNode.SearchAttributes) takes a JSON array of references and becomes exactly that list. Text the object parses itself goes through From<Prop>(text): CronExpression on the ScheduleConfiguration of an ODC workflow Start. A StyleSheet set may carry basedOn (the sha256 of the author CSS it replaces; THEME_CHANGED when stale)."),
         new("link", "write", ["from", "to"], ["connector", "as"],
             "Connects two flow nodes through `connector` (default Target; If: TrueTarget|FalseTarget; ForEach: CycleTarget; Switch: its own connectors)."),
         new("move", "write", ["target"], ["into", "first", "last", "before", "after", "x", "y"],
@@ -60,6 +60,8 @@ public static class VerbSurface
             "Exposed REST service and its methods (service, methods with action/arguments/results or steps, remove, breaks); see `api --op rest-expose`."),
         new("soap", "write", ["data"], [],
             "SOAP client from a pinned WSDL (O11 only; ODC: SOAP_LANE_UNSUPPORTED): port selection, methods, refresh, remove, breaks; the import runs in the Studio through o11_deliver; see `api --op soap`."),
+        // T18: the keyed css edit op (Verbs.Css.cs, CssEdits.Verb).
+        CssEdits.Verb,
         new("get", "read", ["target"], [],
             "Reads the properties of one object (expression properties appear as `@key.#Prop`; use dump for text)."),
         new("find", "read", [], ["name", "type", "max"],
@@ -135,7 +137,9 @@ public static class VerbSurface
             ["op"] = "verbs",
             ["verbs"] = verbs,
             ["references"] = references,
-            ["job"] = new JsonArray("description", "base", "expectValid", "expectedMessages", "ops"),
+            ["job"] = new JsonArray("description", "base", "expectValid", "expectedMessages", "ops", "temporary"),
+            // T12: a temporary access change of a source app, recorded to be restored (o11_deliver; the facade keeps the journal).
+            ["temporary"] = "{\"restore\":true}: the job holds only set Roles / set AnonymousAccess on existing screens; the receipt's accessRestore ops (each with ifCurrent: it applies only while the screen still has the value this job wrote) put them back, and ssam_doctor lists the restore until it is delivered",
             ["expectedMessage"] = new JsonArray("id", "element", "why"),
             ["screenJavaScriptException"] = new JsonObject {
                 ["key"] = ScreenJavaScriptException.AllowKey,

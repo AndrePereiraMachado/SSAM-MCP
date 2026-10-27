@@ -147,7 +147,9 @@ public sealed partial class ModelSession
                 var theme = Resolve(step.Arguments!["theme"]!.ToString());
                 var property = FindProperty(theme, "StyleSheet") ?? throw new InvalidOperationException("the theme has no StyleSheet");
                 property.SetValue(theme, step.Arguments["styleSheet"]!.ToString());
-                if (ThemeCss.Of(theme) is { } sheet && ThemeCss.IsSplit(sheet)) ThemeCss.Recompute(sheet);
+                // T18: through the one tail of every stylesheet write (split or not), without the canvas rewrite: verbatim. The
+                // prototype import is off (PrototypeImport), so this runs only where a test drives the builder.
+                if (ThemeCss.Of(theme) is { } sheet) ThemeCss.Settle(sheet);
                 ThemeWritten(theme);
                 // M1 of the review of round 6 (round 7 of fix/data-table): the native layout block the plan put in the import's theme
                 // (nativeLayout: F1 of the html op on a List that is a table part) is said in normalized too, where the job says the

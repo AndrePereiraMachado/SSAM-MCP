@@ -8,6 +8,7 @@
 // words must name the app. Only their sha256 reaches
 // <kernel>/.local/lane-odc/journal/studio_create_app.jsonl, reserved before the first tenant write and closed with the
 // outcome. A lost answer after the upload started is `uncertain` and never repeated here: the continuation is a read.
+import { appendJsonLine } from './correlation.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -183,7 +184,7 @@ export function createStudioCreateApp(deps = {}) {
   const journalFile = hosted ? workspacePath('odc', 'journal', 'studio_create_app.jsonl') : path.join(local, 'journal', 'studio_create_app.jsonl');
   const journal = entry => {
     fs.mkdirSync(path.dirname(journalFile), { recursive: true });
-    fs.appendFileSync(journalFile, JSON.stringify({ at: now().toISOString(), tool: 'studio_create_app', ...entry }) + '\n');
+    appendJsonLine(journalFile, { at: now().toISOString(), tool: 'studio_create_app', ...entry });
   };
 
   async function templates(input) {

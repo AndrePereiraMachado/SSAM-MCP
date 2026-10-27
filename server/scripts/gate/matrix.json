@@ -1,0 +1,4377 @@
+{
+ "version": 1,
+ "about": "Fonte da matriz de docs/MATRIZ-NAO-REGRESSAO.md (gerada por scripts/gate/matrix.mjs --write). quick: classes do kernel do nível quick do portão; regra da linha de base 0388bd65: classes citadas com até 30 s nas durações da rodada full, mais JobTests, NegativeJobTests, TextRoundTripDataTests e HtmlComponentTests (O11) e HtmlCrossPlatformLifecycleTests, ScreenVisualOdcTests, OdcAppFactoryTests, ScreenHtmlFamilyOdcTests e ModelReadingTests (ODC). OdcJobTests (22 min) fica só no full.",
+ "features": [
+  {
+   "id": "map-leituras",
+   "title": "Map e leituras (digest, ddl, flow, html, search, uses)",
+   "quick": {
+    "o11": [
+     "ModelReadingTests",
+     "ModuleDigestTests",
+     "ModuleIndexTests",
+     "ModuleRichIndexTests",
+     "TextRoundTripDataTests"
+    ],
+    "odc": [
+     "ModelReadingTests",
+     "ModuleDigestTests",
+     "ModuleIndexTests",
+     "ModuleRichIndexTests",
+     "TextRoundTripDataTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "n/a",
+     "na": "ssam_map/o11_inspect só leem; gerar índice, digest ou rich numa falta de cache faz parte da leitura."
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "ModuleDigestTests",
+      "ModuleIndexTests",
+      "ModuleRichIndexTests",
+      "ModelReadingTests",
+      "TextRoundTripDataTests"
+     ],
+     "facade": [
+      "module-map",
+      "module-digest",
+      "module-ddl",
+      "module-flow",
+      "module-html",
+      "module-rich",
+      "o11-inspect-module",
+      "resident-reading"
+     ],
+     "gap": "As vistas da fachada usam leitor do kernel simulado; nada prova de ponta a ponta a captura o11_inspect {module} do módulo aberto no Studio."
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "n/a",
+     "na": "Vistas só de leitura; edição é o11_deliver."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Só leitura; a vista uses alimenta refactors mas não muda nada."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "Vistas só de leitura."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "kernel": [
+      "ModelReadingTests",
+      "ModuleIndexTests"
+     ],
+     "facade": [
+      "atritos-b-map-lock",
+      "module-map",
+      "module-html",
+      "module-rich",
+      "read-budget"
+     ],
+     "gap": "Índice velho/inválido, trava e recusas só contra bridge falsa e leitor simulado."
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "n/a",
+     "na": "Vistas só de leitura."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "ModuleDigestTests",
+      "ModuleIndexTests",
+      "ModuleRichIndexTests",
+      "ModelReadingTests",
+      "TextRoundTripDataTests"
+     ],
+     "facade": [
+      "reading",
+      "manifest-inspect",
+      "module-digest",
+      "module-ddl",
+      "module-flow",
+      "module-html"
+     ],
+     "gap": "As vistas search/uses quase não têm casos ODC na fachada (module-rich é sobretudo O11). manifest-inspect pula sem a CLI do kernel compilada."
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "n/a",
+     "na": "Vistas só de leitura."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Vistas só de leitura."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "Vistas só de leitura."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "kernel": [
+      "ModelReadingTests"
+     ],
+     "facade": [
+      "atritos-b-map-lock",
+      "module-map",
+      "module-html",
+      "module-digest"
+     ],
+     "gap": "Falta, cache velho e recusas só contra servidor ODC falso e leitor simulado."
+    }
+   ]
+  },
+  {
+   "id": "ambientes",
+   "title": "Visibilidade de ambientes (o11_environment, ssam_doctor, o11_studio, studio_status)",
+   "quick": {
+    "o11": [
+     "ConnectedEnvironmentTests",
+     "DialogPolicyTests",
+     "Pa2F7bReservationTests",
+     "Pa2F8AppFactoryTests",
+     "Pa3K1CacheTests",
+     "ServiceCenterBridgeTests",
+     "VelEntregaEnvironmentNetworkTests"
+    ],
+    "odc": []
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "Pa2F8AppFactoryTests"
+     ],
+     "facade": [
+      "o11-environment",
+      "pa2-f8-environment",
+      "studio-create-app",
+      "pa3-mb-create-app"
+     ],
+     "gap": "create-app/create-module/add-modules contra um ambiente real só têm a prova viva kernel/docs/proofs/2026-09-25-o11-connected-environment.md; a fachada usa CLI falsa."
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "ConnectedEnvironmentTests",
+      "Pa3K1CacheTests"
+     ],
+     "facade": [
+      "o11-environment",
+      "pa3-k1-environment",
+      "o11-studio",
+      "studio-connect",
+      "doctor-warm",
+      "pa2-f7b-doctor"
+     ],
+     "gap": "Inventário e download contra ambiente real só ao vivo (2026-09-25-o11-connected-environment.md)."
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "simulado",
+     "facade": [
+      "o11-environment",
+      "atritos-a-refresh",
+      "pacote-laneD1-studio",
+      "publish-once"
+     ],
+     "gap": "update-app, refresh-refs e set-user-provider sem teste de kernel; só argv e portão contra CLI e bridge falsas."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "o11_environment/o11_studio não renomeiam nem movem apps ou módulos (mover módulo entre aplicações é Service Center)."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "simulado",
+     "kernel": [
+      "ServiceCenterBridgeTests"
+     ],
+     "facade": [
+      "o11-environment",
+      "destructive-sc"
+     ],
+     "gap": "delete-app nunca contra Service Center real."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "VelEntregaEnvironmentNetworkTests",
+      "DialogPolicyTests",
+      "Pa2F7bReservationTests"
+     ],
+     "facade": [
+      "o11-environment",
+      "studio-recovery",
+      "discover-studio",
+      "pacote-laneD1-studio",
+      "pa3-mb-studio",
+      "ui-freeze"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "simulado",
+     "facade": [
+      "studio-create-app",
+      "pa3-mb-create-app"
+     ],
+     "gap": "Criar app ODC (studio_create_app) só contra bridge falsa; ODC Studio vivo é a prova."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "simulado",
+     "facade": [
+      "pacote-laneD2-status",
+      "pacote-laneC-connect",
+      "pa2-f7b-doctor",
+      "doctor-warm",
+      "odc/studio-locate"
+     ],
+     "gap": "studio_status/ssam_connect/ssam_doctor na faixa ODC só contra pipe/bridge falsos; sem teste de kernel nem prova viva."
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "n/a",
+     "na": "Não há escrita de ambiente ODC nesta funcionalidade (configurações são Portal)."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Sem renomear ou mover nas ferramentas de ambiente."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "Apagar asset ODC é odc_asset_delete (Portal ODC)."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "facade": [
+      "pa2-f7b-doctor",
+      "pacote-laneC-connect",
+      "pacote-laneD2-status"
+     ],
+     "gap": "DOCTOR_LANE_UNUSABLE, pipe ocupado e sem Studio só com falsos."
+    }
+   ]
+  },
+  {
+   "id": "entidades",
+   "title": "Entidades",
+   "quick": {
+    "o11": [
+     "DataContractIdentityTests",
+     "DataContractTests",
+     "DatabaseUpgradeRulesTests",
+     "DdlConventionsTests",
+     "DdlMergeTests",
+     "DdlNotConvergedNamingTests",
+     "DdlRefusedDependencyTests",
+     "DdlStatementOrderTests",
+     "DdlTypeBraceNormalizationTests",
+     "EntityActionsExpanderTests",
+     "EntityDataTests",
+     "EntityIndexTests",
+     "ModuleIndexTests",
+     "ModuleRichIndexTests",
+     "NegativeJobTests",
+     "Pa3KlDeleteTests",
+     "SemanticDataTests",
+     "TextRoundTripDataBackTests",
+     "TextRoundTripDataTests"
+    ],
+    "odc": [
+     "DdlConventionsTests",
+     "DdlMergeTests",
+     "DdlStatementOrderTests",
+     "ModuleIndexTests",
+     "ModuleRichIndexTests",
+     "OdcDataContractIdentityTests",
+     "OdcDatabaseUpgradeRulesTests",
+     "TextRoundTripDataTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "DdlConventionsNativeTests",
+      "EntityIndexTests",
+      "DataContractTests",
+      "EntityActionsCorpusTests",
+      "DdlConventionsTests",
+      "EntityActionsExpanderTests"
+     ],
+     "facade": [
+      "entity-actions",
+      "ssam-code",
+      "bench-frio"
+     ],
+     "jobs": [
+      "jobs/spec-data",
+      "jobs/static-entity",
+      "jobs/entity-actions",
+      "jobs/data-contract-identity",
+      "jobs/hire-data-model"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripDataTests",
+      "ModuleIndexTests",
+      "ModuleRichIndexTests",
+      "EntityDataTests"
+     ],
+     "facade": [
+      "module-ddl",
+      "module-digest",
+      "discovery-data"
+     ],
+     "jobs": [
+      "jobs/entity-lifecycle",
+      "jobs/static-entity-lifecycle"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripDataBackNativeTests",
+      "DdlMergeTests",
+      "TextRoundTripDataBackTests",
+      "EntityIndexTests"
+     ],
+     "facade": [
+      "ssam-code"
+     ],
+     "jobs": [
+      "jobs/entity-lifecycle",
+      "jobs/static-entity-lifecycle"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "DataContractIdentityTests",
+      "SemanticDataTests",
+      "DdlStatementOrderTests"
+     ],
+     "facade": [
+      "catalog-a-refactor"
+     ],
+     "jobs": [
+      "jobs/entity-refactor",
+      "jobs/rename-indexed-attribute",
+      "jobs/rename-data-propagation",
+      "jobs/static-record-refactor"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "Pa3KlDeleteTests",
+      "TextRoundTripDataBackTests"
+     ],
+     "jobs": [
+      "jobs/entity-lifecycle",
+      "jobs/delete-data-consumers",
+      "jobs/delete-generated-companions"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "DatabaseUpgradeRulesTests",
+      "DdlNotConvergedNamingTests",
+      "DdlRefusedDependencyTests",
+      "DdlTypeBraceNormalizationTests",
+      "NegativeJobTests"
+     ],
+     "facade": [
+      "ssam-code"
+     ],
+     "jobs": [
+      "jobs-negative/delete-entity-in-use",
+      "jobs-negative/delete-entity-fk-in-use",
+      "jobs-negative/index-name-too-long",
+      "jobs-negative/duplicate-index",
+      "jobs-negative/data-cascade-multiple-paths",
+      "jobs-negative/fk-type-change-with-default"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "DdlConventionsNativeTests",
+      "EntityActionsCorpusTests",
+      "DdlConventionsTests"
+     ],
+     "facade": [
+      "entity-actions",
+      "ssam-code",
+      "bench-frio"
+     ],
+     "jobs": [
+      "jobs-odc/data-entity",
+      "jobs-odc/data-full-model",
+      "jobs-odc/static-entity",
+      "jobs-odc/entity-actions",
+      "jobs-odc/data-contract-identity"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripDataTests",
+      "ModuleIndexTests",
+      "ModuleRichIndexTests"
+     ],
+     "facade": [
+      "module-ddl",
+      "module-digest",
+      "discovery-data"
+     ],
+     "jobs": [
+      "jobs-odc/data-full-model",
+      "jobs-odc/entity-lifecycle",
+      "jobs-odc/static-entity-lifecycle"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripDataBackNativeTests",
+      "DdlMergeTests"
+     ],
+     "facade": [
+      "ssam-code"
+     ],
+     "jobs": [
+      "jobs-odc/entity-lifecycle",
+      "jobs-odc/edit-inherited-data",
+      "jobs-odc/static-entity-lifecycle"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "OdcDataContractIdentityTests",
+      "DdlStatementOrderTests"
+     ],
+     "facade": [
+      "catalog-a-refactor"
+     ],
+     "jobs": [
+      "jobs-odc/entity-refactor",
+      "jobs-odc/rename-data-propagation",
+      "jobs-odc/static-record-refactor"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/delete-entity-whole",
+      "jobs-odc/delete-attribute-no-consumers",
+      "jobs-odc/delete-data-consumers",
+      "jobs-odc/delete-generated-companions"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "OdcDatabaseUpgradeRulesTests",
+      "Pa3KlOdcTests",
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc-negative/delete-entity-in-use",
+      "jobs-odc-negative/delete-fk-attribute-autoindex",
+      "jobs-odc-negative/index-name-too-long",
+      "jobs-odc-negative/duplicate-index",
+      "jobs-odc-negative/delete-static-entity-in-use",
+      "jobs-odc-negative/replace-entity"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "estruturas",
+   "title": "Estruturas",
+   "quick": {
+    "o11": [
+     "CurrentHintTests",
+     "DdlConventionsTests",
+     "DdlMergeTests",
+     "DdlTypeBraceNormalizationTests",
+     "JobTests",
+     "ModuleDigestTests",
+     "NegativeJobTests",
+     "TextRoundTripDataBackTests",
+     "TextRoundTripDataTests"
+    ],
+    "odc": [
+     "DdlConventionsTests",
+     "TextRoundTripDataTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripDataBackTests",
+      "DdlConventionsTests",
+      "JobTests"
+     ],
+     "facade": [
+      "ssam-code"
+     ],
+     "jobs": [
+      "jobs/structure-lifecycle",
+      "jobs/spec-data",
+      "jobs/sql-input-output"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripDataTests",
+      "ModuleDigestTests"
+     ],
+     "facade": [
+      "module-ddl"
+     ],
+     "jobs": [
+      "jobs/structure-lifecycle"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripDataBackTests",
+      "DdlMergeTests"
+     ],
+     "jobs": [
+      "jobs/structure-lifecycle"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "JobTests"
+     ],
+     "facade": [
+      "catalog-a-refactor"
+     ],
+     "jobs": [
+      "jobs/structure-refactor",
+      "jobs/rename-logic-propagation"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripDataBackTests",
+      "JobTests"
+     ],
+     "jobs": [
+      "jobs/structure-refactor",
+      "jobs/delete-generated-companions"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "NegativeJobTests",
+      "CurrentHintTests",
+      "DdlTypeBraceNormalizationTests"
+     ],
+     "jobs": [
+      "jobs-negative/delete-structure-in-use",
+      "jobs-negative/delete-structure-attribute-in-use",
+      "jobs-negative/rename-structure-clash",
+      "jobs-negative/structure-list-scope"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "DdlConventionsTests",
+      "OdcJobTests"
+     ],
+     "facade": [
+      "ssam-code"
+     ],
+     "jobs": [
+      "jobs-odc/structure-lifecycle",
+      "jobs-odc/structure-nested",
+      "jobs-odc/structure-list-type"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripDataTests"
+     ],
+     "facade": [
+      "module-ddl"
+     ],
+     "jobs": [
+      "jobs-odc/structure-lifecycle",
+      "jobs-odc/structure-nested"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripDataBackNativeTests"
+     ],
+     "jobs": [
+      "jobs-odc/structure-lifecycle",
+      "jobs-odc/structure-list-type"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "facade": [
+      "catalog-a-refactor"
+     ],
+     "jobs": [
+      "jobs-odc/structure-refactor"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/structure-refactor",
+      "jobs-odc/delete-generated-companions"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc-negative/delete-structure-in-use",
+      "jobs-odc-negative/delete-structure-attribute-in-use",
+      "jobs-odc-negative/rename-structure-clash",
+      "jobs-odc-negative/move-into-folder-branch"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "settings",
+   "title": "Settings e site properties",
+   "quick": {
+    "o11": [
+     "DdlMergeTests",
+     "JobTests",
+     "ModuleRichIndexTests",
+     "Pa2F2RulesTests",
+     "ServiceCenterSecretRefsTests",
+     "TextRoundTripDataBackTests",
+     "TextRoundTripDataTests"
+    ],
+    "odc": [
+     "Pa2F2OdcTests",
+     "TextRoundTripDataTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripDataBackTests",
+      "JobTests"
+     ],
+     "jobs": [
+      "jobs/security-config-reactive",
+      "jobs/single-job-actions",
+      "jobs/tickets-01-data"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripDataTests",
+      "ModuleRichIndexTests"
+     ],
+     "facade": [
+      "service-center-core",
+      "service-center-studio",
+      "service-center-modern"
+     ],
+     "jobs": [
+      "jobs/security-config-reactive"
+     ],
+     "gap": "Leitura de site property no Service Center real: prova viva docs/proofs/2026-10-18-service-center-private-form.md."
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "simulado",
+     "kernel": [
+      "TextRoundTripDataBackTests",
+      "DdlMergeTests"
+     ],
+     "facade": [
+      "sc-property-ajax",
+      "service-center-modern",
+      "service-center-core"
+     ],
+     "jobs": [
+      "jobs-coverage/o11/cov-data-siteproperty-life"
+     ],
+     "gap": "Nenhuma aplicação nativa muda uma site property existente (DefaultValue): só DDL→ops offline e Service Center com falsos; o job de cobertura só passa pelo preflight."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "offline",
+     "kernel": [
+      "Pa2F2RulesTests"
+     ],
+     "jobs": [
+      "jobs-coverage/o11/cov-data-siteproperty-life",
+      "jobs-coverage-f2/o11/cov-data-siteproperty-mvin"
+     ],
+     "gap": "Renomear, duplicar e mover site property só em jobs de cobertura que o xunit apenas pré-confere; sem aplicação nativa."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "offline",
+     "kernel": [
+      "TextRoundTripDataBackTests",
+      "Pa2F2RulesTests"
+     ],
+     "jobs": [
+      "jobs-coverage/o11/cov-data-siteproperty-del"
+     ],
+     "gap": "Apagar site property só como compilação DDL ('drop site property' vira op delete) e job de cobertura só pré-conferido; sem aplicação nativa nem recusa por uso."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "kernel": [
+      "ServiceCenterSecretRefsTests"
+     ],
+     "facade": [
+      "service-center-modern",
+      "service-center-core",
+      "sc-property-ajax"
+     ],
+     "gap": "Nenhum teste de kernel ou job negativo cobre recusas de site property no modelo (nome repetido, tipo ou default inválido)."
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "facade": [
+      "portal/settings-configuration-approval"
+     ],
+     "jobs": [
+      "jobs-odc/security-settings",
+      "jobs-odc/setting-lifecycle"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripDataTests"
+     ],
+     "facade": [
+      "debug-odc-setting-reset",
+      "portal/configuration-comparison"
+     ],
+     "jobs": [
+      "jobs-odc/setting-lifecycle"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "facade": [
+      "debug-odc-setting-reset",
+      "portal/settings-configuration-approval",
+      "portal/configuration-vault-plan"
+     ],
+     "jobs": [
+      "jobs-odc/setting-lifecycle"
+     ],
+     "gap": "Valor de configuração no Portal (odc_configurations) só com HTTP falso; sem prova viva."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/setting-lifecycle",
+      "jobs-coverage-f2/odc/cov-data-siteproperty-mvin"
+     ],
+     "gap": "Só renomear é aplicado nativo; mover e duplicar só em job de cobertura pré-conferido."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "offline",
+     "kernel": [
+      "Pa2F2OdcTests"
+     ],
+     "jobs": [
+      "jobs-coverage/odc/cov-data-siteproperty-del"
+     ],
+     "gap": "Sem apagar Setting ODC nativo e sem job negativo de uso; só job de cobertura pré-conferido."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "facade": [
+      "debug-odc-setting-reset",
+      "portal/settings-configuration-approval",
+      "portal/configuration-comparison"
+     ],
+     "gap": "Nenhum teste de kernel ou job negativo cobre recusas de Setting no modelo."
+    }
+   ]
+  },
+  {
+   "id": "local-db",
+   "title": "Local DB (client entities)",
+   "quick": {
+    "o11": [
+     "DdlConventionsTests",
+     "JobTests",
+     "Pa2F2RulesTests"
+    ],
+    "odc": [
+     "DdlConventionsTests",
+     "Pa2F2OdcTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "DdlConventionsTests",
+      "JobTests"
+     ],
+     "jobs": [
+      "jobs/local-storage-mobile",
+      "jobs/local-storage-notes-mobile"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "JobTests"
+     ],
+     "facade": [
+      "catalog-a-data-types"
+     ],
+     "jobs": [
+      "jobs/local-storage-notes-mobile"
+     ],
+     "gap": "Nenhum get/dump direto de IClientEntity é afirmado; só a leitura implícita pelos fluxos que a usam e o Verify do JobTests."
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "offline",
+     "kernel": [
+      "Pa2F2RulesTests"
+     ],
+     "jobs": [
+      "jobs-coverage/o11/cov-data-cliententity-life"
+     ],
+     "gap": "Sem edição nativa de client entity existente: os jobs só criam; set/rename só em job de cobertura pré-conferido."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "offline",
+     "kernel": [
+      "Pa2F2RulesTests"
+     ],
+     "jobs": [
+      "jobs-coverage/o11/cov-data-cliententity-life",
+      "jobs-coverage-f2/o11/cov-data-cliententity-mvin"
+     ],
+     "gap": "Renomear, duplicar e mover client entity só em jobs de cobertura pré-conferidos."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "JobTests"
+     ],
+     "jobs": [
+      "jobs/delete-generated-companions"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "vivo",
+     "gap": "Nenhuma prova, nem viva: sem job negativo ou recusa de kernel para client entity (tipo só de servidor, apagar em uso)."
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "DdlConventionsTests",
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/client-storage"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "facade": [
+      "catalog-a-data-types"
+     ],
+     "jobs": [
+      "jobs-odc/client-storage"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "offline",
+     "kernel": [
+      "Pa2F2OdcTests"
+     ],
+     "jobs": [
+      "jobs-coverage/odc/cov-data-cliententity-life"
+     ],
+     "gap": "Sem edição nativa de client entity existente; client-storage só cria."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "offline",
+     "kernel": [
+      "Pa2F2OdcTests"
+     ],
+     "jobs": [
+      "jobs-coverage-f2/odc/cov-data-cliententity-mvin"
+     ],
+     "gap": "Renomear, mover e duplicar client entity só em jobs de cobertura pré-conferidos."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/delete-generated-companions"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "vivo",
+     "gap": "Nenhuma prova, nem viva: sem job negativo ou recusa para client entity (jobs-odc-negative/session-variable-not-in-odc cobre só variáveis de cliente)."
+    }
+   ]
+  },
+  {
+   "id": "actions",
+   "title": "Actions (server, client, screen, service, data)",
+   "quick": {
+    "o11": [
+     "ActionNameCollisionTests",
+     "EntityActionsExpanderTests",
+     "FlowEditTests",
+     "FlowGeneralApplyTests",
+     "FlowMergeTests",
+     "FlowSyntaxCorpusTests",
+     "FlowTextLintTests",
+     "FlowTextNormalizeTests",
+     "FunctionCatalogTests",
+     "LogicReplaceTests",
+     "LogicSpecTests",
+     "ModuleSpecificationTests",
+     "NegativeJobTests",
+     "Pa3KlDeleteTests",
+     "PacoteBLogicTests",
+     "PacoteBReplaceTests",
+     "TextRoundTripTests"
+    ],
+    "odc": [
+     "FlowEditTests",
+     "FlowGeneralApplyOdcTests",
+     "FlowMergeTests",
+     "OdcServiceActionReferenceTests",
+     "Pa2F2OdcTests",
+     "PacoteBOdcTests",
+     "PacoteD2RulesTests",
+     "PacoteEOdcRulesTests",
+     "TextRoundTripCorpusOdcTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "FlowApplyTests",
+      "FlowGeneralApplyTests",
+      "LogicSpecTests",
+      "ModuleSpecificationTests",
+      "EntityActionsExpanderTests"
+     ],
+     "facade": [
+      "ssam-code",
+      "familias-fachada",
+      "entity-actions"
+     ],
+     "jobs": [
+      "jobs/logic-spec-services",
+      "jobs/service-action",
+      "jobs/data-action-reactive",
+      "jobs/single-job-actions",
+      "jobs/client-js-reactive"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripCorpusTests",
+      "FlowApplyTests",
+      "TextRoundTripTests"
+     ],
+     "facade": [
+      "module-flow",
+      "ssam-code"
+     ],
+     "jobs": [
+      "jobs/rename-logic-propagation"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "FlowBatteryCorpusTests",
+      "FlowEditTests",
+      "FlowMergeTests",
+      "FlowTextNormalizeTests"
+     ],
+     "facade": [
+      "ssam-code",
+      "familias-fachada",
+      "job-patch"
+     ],
+     "jobs": [
+      "jobs/service-action-update",
+      "jobs/logic-spec-replace"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "LogicReplaceTests",
+      "PacoteBReplaceTests"
+     ],
+     "facade": [
+      "catalog-a-refactor"
+     ],
+     "jobs": [
+      "jobs/refactor-replace-action",
+      "jobs/rename-logic-propagation",
+      "jobs/refactor-duplicate",
+      "jobs/refactor-move",
+      "jobs/refactor-usages"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "Pa3KlDeleteTests"
+     ],
+     "facade": [
+      "ssam-code"
+     ],
+     "jobs": [
+      "jobs/delete-logic-consumers",
+      "jobs/delete-generated-companions",
+      "jobs-negative/delete-action-in-use"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "PacoteBLogicTests",
+      "FlowSyntaxCorpusTests",
+      "FlowTextLintTests",
+      "ActionNameCollisionTests",
+      "FunctionCatalogTests",
+      "NegativeJobTests"
+     ],
+     "facade": [
+      "familias-fachada",
+      "ssam-code",
+      "correction-chain-server",
+      "job-patch-correction"
+     ],
+     "jobs": [
+      "jobs-negative/logic-duplicate-action",
+      "jobs-negative/logic-unknown-key",
+      "jobs-negative/unknown-function",
+      "jobs-negative/delete-role-exception-in-use",
+      "jobs-negative/dataaction-list-scope"
+     ],
+     "gap": "jobs-negative/logic-unused-input não é rodado por nenhum teste."
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "FlowApplyOdcTests",
+      "FlowGeneralApplyOdcTests",
+      "OdcServiceActionReferenceTests"
+     ],
+     "facade": [
+      "ssam-code",
+      "entity-actions"
+     ],
+     "jobs": [
+      "jobs-odc/logic-action",
+      "jobs-odc/service-action",
+      "jobs-odc/data-action",
+      "jobs-odc/exception-lifecycle",
+      "jobs-odc/security-settings"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripCorpusOdcTests",
+      "FlowApplyOdcTests"
+     ],
+     "facade": [
+      "module-flow",
+      "ssam-code"
+     ],
+     "jobs": [
+      "jobs-odc/action-edit-lifecycle"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "FlowBatteryCorpusOdcTests",
+      "FlowEditTests",
+      "FlowMergeTests"
+     ],
+     "facade": [
+      "ssam-code"
+     ],
+     "jobs": [
+      "jobs-odc/action-edit-lifecycle",
+      "jobs-odc/logic-steps",
+      "jobs-odc/switch-exception-handler"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "facade": [
+      "catalog-a-refactor"
+     ],
+     "jobs": [
+      "jobs-odc/refactor-replace-action",
+      "jobs-odc/rename-logic-propagation",
+      "jobs-odc/refactor-duplicate",
+      "jobs-odc/refactor-move"
+     ],
+     "gap": "Sem contraparte ODC de LogicReplaceTests/PacoteBReplaceTests (replace mantém chaves, troca de assinatura recusa consumidores): só os jobs."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/delete-logic-consumers",
+      "jobs-odc/exception-lifecycle",
+      "jobs-odc/delete-generated-companions",
+      "jobs-odc-negative/delete-logic-in-use"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "PacoteEOdcRulesTests",
+      "PacoteBOdcTests",
+      "Pa2F2OdcTests",
+      "PacoteD2RulesTests",
+      "OdcJobTests"
+     ],
+     "facade": [
+      "catalog-a-exception"
+     ],
+     "jobs": [
+      "jobs-odc-negative/public-server-action-in-app",
+      "jobs-odc-negative/delete-role-exception-in-use",
+      "jobs-odc-negative/pa4-pc-isolated-action",
+      "jobs-odc-negative/delete-logic-in-use"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "timers",
+   "title": "Timers",
+   "quick": {
+    "o11": [
+     "JobTests",
+     "ModuleDigestTests",
+     "Pa2F2RulesTests",
+     "TextRoundTripDataBackTests",
+     "TextRoundTripDataTests",
+     "TimerScheduleTests"
+    ],
+    "odc": [
+     "TextRoundTripDataTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "TimerScheduleTests",
+      "JobTests"
+     ],
+     "jobs": [
+      "jobs/pacote-laneE-timer-schedule",
+      "jobs/tickets-06-sla"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "TimerScheduleTests",
+      "TextRoundTripDataTests",
+      "ModuleDigestTests"
+     ],
+     "facade": [
+      "service-center-modern",
+      "service-center-timer-live"
+     ],
+     "jobs": [
+      "jobs/pacote-laneE-timer-schedule"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "TimerScheduleTests",
+      "TextRoundTripDataBackTests"
+     ],
+     "facade": [
+      "pacote-laneF-timers",
+      "service-center-modern",
+      "service-center-timer-live"
+     ],
+     "jobs": [
+      "jobs/pacote-laneE-timer-schedule"
+     ],
+     "gap": "Agenda e ativação no Service Center real: prova viva docs/proofs/2026-10-14-service-center-auth-timers.md."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "offline",
+     "kernel": [
+      "Pa2F2RulesTests"
+     ],
+     "jobs": [
+      "jobs-coverage/o11/cov-processes-timer-life"
+     ],
+     "gap": "Renomear e duplicar timer O11 só em job de cobertura pré-conferido; sem aplicação nativa."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "offline",
+     "kernel": [
+      "Pa2F2RulesTests"
+     ],
+     "jobs": [
+      "jobs-coverage/o11/cov-processes-timer-del"
+     ],
+     "gap": "Sem apagar timer O11 nativo; só job de cobertura pré-conferido."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "TimerScheduleTests"
+     ],
+     "facade": [
+      "service-center-timer-observation",
+      "service-center-timer-live",
+      "service-center-core",
+      "debug-o11-timer-wake",
+      "pacote-laneF-timers"
+     ],
+     "gap": "Run Now e observação da execução só com transporte falso; prova viva 2026-10-14-service-center-auth-timers.md."
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/timer-action",
+      "jobs-odc/timer-time-of-day"
+     ],
+     "gap": "TimerScheduleTests só compila em Anvil.Tests: o ramo ODC (CronSchedule) nunca roda."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "TextRoundTripDataTests"
+     ],
+     "facade": [
+      "portal/timer-deployment-state",
+      "portal/timer-run-state"
+     ],
+     "jobs": [
+      "jobs-odc/timer-action",
+      "jobs-odc/timer-lifecycle"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "facade": [
+      "portal/timer-activation",
+      "portal/timer-configuration-approval"
+     ],
+     "jobs": [
+      "jobs-odc/timer-lifecycle",
+      "jobs-odc/timer-time-of-day"
+     ],
+     "gap": "Ativação e agenda no Portal só com HTTP falso; sem prova viva de timer ODC."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/timer-lifecycle",
+      "jobs-odc/timer-time-of-day"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/timer-lifecycle"
+     ],
+     "gap": "Sem job negativo ODC de apagar timer em uso."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "facade": [
+      "portal/portal-timer",
+      "portal/timer-pending-state",
+      "portal/timer-run-state",
+      "portal/timer-configuration-approval"
+     ],
+     "jobs": [
+      "jobs-odc-negative/timeofday-interval-atoron"
+     ],
+     "gap": "Wake/execução de timer ODC só com HTTP falso."
+    }
+   ]
+  },
+  {
+   "id": "rest-consumo",
+   "title": "REST: consumo",
+   "quick": {
+    "o11": [
+     "DeleteBreaksTests",
+     "IntegrationImportArgsTests",
+     "JobTests",
+     "NegativeJobTests",
+     "Pa2F2RulesTests",
+     "RestConsumeTests",
+     "RestSpecTests"
+    ],
+    "odc": [
+     "RestConsumeOdcTests",
+     "RestOpenApiImportTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "RestConsumeTests",
+      "RestSpecTests",
+      "IntegrationImportArgsTests",
+      "JobTests"
+     ],
+     "facade": [
+      "rest-consume-sampling",
+      "rest-consume-discover",
+      "integration-documents"
+     ],
+     "jobs": [
+      "jobs/rest-consume-get",
+      "jobs/rest-consume-post",
+      "jobs/rest-spec-consume",
+      "jobs/rest-consume-generate",
+      "jobs/rest-consume-auth"
+     ],
+     "gap": "Import OpenAPI no O11 só ao vivo (jobs-live/o11-rest-openapi-import: o importador precisa do workspace do Studio); IntegrationImportArgsTests só valida argumentos."
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "RestConsumeTests",
+      "RestSpecTests",
+      "JobTests"
+     ],
+     "jobs": [
+      "jobs/rest-consume-call",
+      "jobs/rest-query-nested"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "RestSpecTests",
+      "RestConsumeTests",
+      "JobTests"
+     ],
+     "jobs": [
+      "jobs/rest-spec-edit-delete"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "offline",
+     "kernel": [
+      "Pa2F2RulesTests"
+     ],
+     "jobs": [
+      "jobs-coverage/o11/cov-rest-restclient-life"
+     ],
+     "gap": "Nenhum rename aplicado de cliente ou método REST consumido em tests/jobs (o ODC tem rest-consume-lifecycle); o job de cobertura só é pré-conferido."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "DeleteBreaksTests",
+      "JobTests",
+      "NegativeJobTests"
+     ],
+     "facade": [
+      "o11-cycle-integration-delete"
+     ],
+     "jobs": [
+      "jobs/rest-spec-edit-delete",
+      "jobs-negative/rest-delete-consumers",
+      "jobs/delete-generated-companions",
+      "jobs/delete-platform-consumers"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "RestConsumeTests",
+      "NegativeJobTests"
+     ],
+     "facade": [
+      "sc-integration-payload",
+      "rest-consume-sampling"
+     ],
+     "jobs": [
+      "jobs-negative/rest-spec-invalid-path"
+     ],
+     "gap": "Request/response do log de integração em runtime só simulado; prova viva docs/proofs/2026-10-14-o11-integration-payload.md."
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "RestConsumeOdcTests",
+      "RestOpenApiImportTests",
+      "OdcJobTests"
+     ],
+     "facade": [
+      "rest-consume-sampling",
+      "rest-consume-discover",
+      "integration-documents"
+     ],
+     "jobs": [
+      "jobs-odc/rest-consume",
+      "jobs-odc/rest-consume-post",
+      "jobs-odc/rest-consume-auth",
+      "jobs-odc/rest-spec-consume",
+      "jobs-odc/rest-openapi-import"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "RestConsumeOdcTests",
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/rest-consume-lifecycle"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "RestConsumeOdcTests",
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/rest-consume-lifecycle"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/rest-consume-lifecycle"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "RestConsumeOdcTests",
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/delete-generated-companions",
+      "jobs-odc/delete-platform-consumers"
+     ],
+     "gap": "Nenhum job ODC remove método REST com consumidores (o O11 tem rest-delete-consumers); jobs-odc-negative não tem caso REST."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "RestOpenApiImportTests",
+      "RestConsumeOdcTests"
+     ],
+     "facade": [
+      "debug-wave3-integration"
+     ],
+     "gap": "Nenhum teste cobre logs ou traces de chamadas REST consumidas no Portal ODC."
+    }
+   ]
+  },
+  {
+   "id": "rest-exposicao",
+   "title": "REST: exposição",
+   "quick": {
+    "o11": [
+     "JobTests",
+     "Pa2F2RulesTests",
+     "RestExposeSpecTests"
+    ],
+    "odc": []
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "RestExposeSpecTests",
+      "JobTests"
+     ],
+     "jobs": [
+      "jobs/rest-expose",
+      "jobs/rest-spec-expose"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "RestExposeSpecTests",
+      "JobTests"
+     ],
+     "jobs": [
+      "jobs/rest-spec-expose"
+     ],
+     "gap": "A única releitura é o get dentro dos jobs de criação."
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "simulado",
+     "facade": [
+      "o11-cycle-integration-delete"
+     ],
+     "gap": "Nenhum job headless edita método exposto existente no O11 (o ODC tem rest-expose-lifecycle); só o portão de palavras de troca de path."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "JobTests"
+     ],
+     "jobs": [
+      "jobs/rename-logic-propagation"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "simulado",
+     "kernel": [
+      "Pa2F2RulesTests"
+     ],
+     "facade": [
+      "o11-cycle-integration-delete"
+     ],
+     "jobs": [
+      "jobs-coverage/o11/cov-restservice-restserviceaction-del"
+     ],
+     "gap": "Nenhum apagar aplicado de IRestService/IRestServiceAction em tests/jobs; o job de cobertura só é pré-conferido."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "facade": [
+      "debug-native-endpoint",
+      "debug-o11-native-endpoint-run"
+     ],
+     "gap": "Chamada real ao endpoint publicado só ao vivo."
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/rest-expose",
+      "jobs-odc/rest-spec-expose"
+     ],
+     "gap": "Sem classe de kernel ODC equivalente a RestExposeSpecTests; só os jobs."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/rest-expose-lifecycle"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/rest-expose-lifecycle"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/rest-expose-lifecycle"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/delete-platform-consumers",
+      "jobs-coverage/odc/cov-restservice-restserviceaction-del"
+     ],
+     "gap": "O job aplicado apaga só o callback OnRequest; apagar método ou serviço só em job de cobertura pré-conferido."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "facade": [
+      "debug-odc-native-endpoint-run",
+      "debug-native-endpoint",
+      "debug-wave3-integration"
+     ],
+     "gap": "Chamada real ao endpoint publicado só ao vivo."
+    }
+   ]
+  },
+  {
+   "id": "soap",
+   "title": "SOAP",
+   "quick": {
+    "o11": [
+     "DeleteBreaksTests",
+     "DeliveryIntegrationImportTests",
+     "IntegrationImportArgsTests",
+     "JobTests",
+     "NegativeJobTests",
+     "Pa2F2RulesTests",
+     "SoapContractTests",
+     "SoapPlanTests"
+    ],
+    "odc": [
+     "RestOpenApiImportTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "SoapPlanTests",
+      "SoapContractTests",
+      "DeliveryIntegrationImportTests",
+      "IntegrationImportArgsTests"
+     ],
+     "facade": [
+      "integration-documents",
+      "discovery-integrations",
+      "kernel-delivery"
+     ],
+     "jobs": [
+      "jobs-negative/soap-method-not-found"
+     ],
+     "gap": "Import real de WSDL pelo importador do Studio só ao vivo: jobs-live/soap-import-calculator."
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "SoapContractTests",
+      "Pa2F2RulesTests"
+     ],
+     "jobs": [
+      "jobs-coverage/o11/cov-soap-soapstructure-life"
+     ],
+     "gap": "Sem releitura dedicada de cliente SOAP importado; os jobs cov-soap-*-life só são pré-conferidos."
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "SoapContractTests",
+      "IntegrationImportArgsTests"
+     ],
+     "gap": "Acrescentar método a cliente já importado pelo importador só ao vivo (repetir jobs-live/soap-import-calculator)."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "offline",
+     "kernel": [
+      "Pa2F2RulesTests"
+     ],
+     "jobs": [
+      "jobs-coverage/o11/cov-soap-soapstructure-life",
+      "jobs-coverage-f2/o11/cov-soap-soapstructure-mvin"
+     ],
+     "gap": "Nenhum rename ou move aplicado de cliente, método ou estrutura SOAP; jobs de cobertura só pré-conferidos."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "DeleteBreaksTests",
+      "JobTests"
+     ],
+     "facade": [
+      "o11-cycle-integration-delete"
+     ],
+     "jobs": [
+      "jobs/delete-generated-companions"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "SoapContractTests",
+      "SoapPlanTests",
+      "NegativeJobTests"
+     ],
+     "facade": [
+      "sc-integration-payload"
+     ],
+     "jobs": [
+      "jobs-negative/soap-method-not-found"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "offline",
+     "kernel": [
+      "RestOpenApiImportTests"
+     ],
+     "facade": [
+      "discovery-integrations"
+     ],
+     "gap": "Consumo SOAP é lacuna declarada no ODC (SOAP_LANE_UNSUPPORTED); só a recusa é provada (RestOpenApiImportTests.SoapIsNotAnOdcOperation)."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "n/a",
+     "na": "Sem op soap na faixa ODC (SOAP_LANE_UNSUPPORTED)."
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "n/a",
+     "na": "Sem op soap na faixa ODC (SOAP_LANE_UNSUPPORTED)."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Sem op soap na faixa ODC (SOAP_LANE_UNSUPPORTED)."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/delete-generated-companions"
+     ],
+     "gap": "Só os companheiros gerados de um ISOAPClient de laboratório criado por verbos; nenhum cliente importado real."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "vivo",
+     "gap": "Sem teste automatizado. Depurar consumidor que chama SOAP só ao vivo: docs/DEBUGGER-HEADLESS-FALTA.md ('SOAP ODC com inspeção viva', 09/10)."
+    }
+   ]
+  },
+  {
+   "id": "external-db",
+   "title": "External DB",
+   "quick": {
+    "o11": [
+     "ServiceCenterBridgeTests"
+    ],
+    "odc": []
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "simulado",
+     "facade": [
+      "service-center-studio",
+      "service-center-modern",
+      "sc-db-approval"
+     ],
+     "gap": "Só a criação da conexão de BD no Service Center. Entidades externas pelo Integration Studio não são autoradas (XifSpec não tem entidades); investigação viva: kernel/docs/proofs/2026-09-05-integration-studio-investigacao.json."
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "simulado",
+     "kernel": [
+      "ServiceCenterBridgeTests"
+     ],
+     "facade": [
+      "service-center-studio"
+     ],
+     "gap": "Conexão contra um banco externo real nunca é testada."
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "simulado",
+     "facade": [
+      "service-center-studio"
+     ],
+     "gap": "Só com Service Center falso."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Service Center não renomeia conexão e o SSAM não autora entidades externas do Integration Studio."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "simulado",
+     "facade": [
+      "service-center-studio",
+      "service-center-modern",
+      "sc-db-cleanup",
+      "destructive-sc"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "facade": [
+      "service-center-modern",
+      "service-center-studio",
+      "sc-db-cleanup"
+     ],
+     "gap": "Teste de conexão contra banco real só ao vivo."
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "simulado",
+     "facade": [
+      "odc-access",
+      "portal/access",
+      "portal/db-connection-approval",
+      "portal/db-entities"
+     ],
+     "gap": "Entidades do Data Fabric sem prova nenhuma; nenhuma prova de kernel ou do ODC Studio de app consumindo entidades externas."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "simulado",
+     "facade": [
+      "portal/portal-read",
+      "portal/connection-detail",
+      "portal/connection-v2-routes",
+      "portal/db-entities"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "simulado",
+     "facade": [
+      "portal/connection-header-plan",
+      "portal/access",
+      "portal/db-entities",
+      "odc-access"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "simulado",
+     "facade": [
+      "portal/db-entity-contract",
+      "portal/db-entities"
+     ],
+     "gap": "Só renomear entidade e atributo na importação (contratos próprios)."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "simulado",
+     "facade": [
+      "destructive-odc",
+      "portal/access",
+      "portal/db-entities",
+      "portal/connection-delete-observation"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "facade": [
+      "portal/connection-detail",
+      "portal/access"
+     ],
+     "gap": "Teste de conexão contra banco real só ao vivo."
+    }
+   ]
+  },
+  {
+   "id": "xif",
+   "title": "Extensões XIF .NET (o11_extension)",
+   "quick": {
+    "o11": [
+     "ExtensionReferenceDeliveryTests",
+     "Pa3K1XifTests",
+     "ServiceCenterBridgeTests",
+     "XifCompilerTests",
+     "XifContractDiffTests",
+     "XifEngineProbeTests",
+     "XifInstalledEngineTests",
+     "XifPackageTests",
+     "XifSourceMergeTests",
+     "XifSpecTests"
+    ],
+    "odc": []
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "XifSpecTests",
+      "XifCompilerTests",
+      "XifInstalledEngineTests",
+      "Pa3K1XifTests"
+     ],
+     "facade": [
+      "o11-extension",
+      "pa3-k1-extension",
+      "service-center-studio"
+     ],
+     "gap": "XifInstalledEngineTests e Pa3K1XifTests.TheCatalogRouteSpecBuildsOnTheInstalledEngine voltam cedo sem Integration Studio (aí o nível efetivo é offline+simulado). Publicar a extensão compilada no ambiente: prova viva docs/proofs/2026-10-14-xif-references-from.md."
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "simulado",
+     "kernel": [
+      "XifPackageTests",
+      "ServiceCenterBridgeTests"
+     ],
+     "facade": [
+      "o11-extension"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "simulado",
+     "kernel": [
+      "XifSourceMergeTests",
+      "XifContractDiffTests"
+     ],
+     "facade": [
+      "o11-extension"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "simulado",
+     "kernel": [
+      "XifContractDiffTests",
+      "ExtensionReferenceDeliveryTests"
+     ],
+     "facade": [
+      "o11-extension"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "simulado",
+     "facade": [
+      "o11-extension",
+      "service-center-delete",
+      "destructive-sc"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "kernel": [
+      "XifEngineProbeTests",
+      "XifCompilerTests",
+      "XifPackageTests"
+     ],
+     "facade": [
+      "o11-extension"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "n/a",
+     "na": "XIF é só O11; no ODC é a biblioteca externa .NET."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "n/a",
+     "na": "XIF é só O11."
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "n/a",
+     "na": "XIF é só O11."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "XIF é só O11."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "XIF é só O11."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "n/a",
+     "na": "XIF é só O11."
+    }
+   ]
+  },
+  {
+   "id": "odc-lib-dotnet",
+   "title": "Bibliotecas externas .NET (odc_external_library)",
+   "quick": {
+    "o11": [],
+    "odc": [
+     "OdcExternalLibraryTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "n/a",
+     "na": "Só ODC; no O11 é a extensão XIF."
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "n/a",
+     "na": "Só ODC."
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "n/a",
+     "na": "Só ODC."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Só ODC."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "Só ODC."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "n/a",
+     "na": "Só ODC."
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "simulado",
+     "kernel": [
+      "OdcExternalLibraryTests"
+     ],
+     "facade": [
+      "odc-external-library",
+      "portal/external-library-approval",
+      "portal/external-library",
+      "external-library-selection"
+     ],
+     "gap": "O lado do kernel é offline (dotnet falso, sem SDK nem NuGet); nenhuma prova automatizada roda um dotnet publish real nem o upload ao Portal."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "simulado",
+     "facade": [
+      "odc-external-library",
+      "portal/external-library"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "simulado",
+     "kernel": [
+      "OdcExternalLibraryTests"
+     ],
+     "facade": [
+      "odc-external-library",
+      "portal/external-library-approval",
+      "portal/library-release-approval"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "simulado",
+     "kernel": [
+      "OdcExternalLibraryTests"
+     ],
+     "facade": [
+      "odc-external-library"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "simulado",
+     "facade": [
+      "destructive-odc",
+      "destructive-r3-odc-cleanup-approvals",
+      "odc-external-library"
+     ],
+     "gap": "Só descartar um job de geração aberto; apagar asset de External Library publicado sem prova dedicada."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "kernel": [
+      "OdcExternalLibraryTests"
+     ],
+     "facade": [
+      "odc-external-library"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "service-center",
+   "title": "Service Center (o11_service_center_*)",
+   "quick": {
+    "o11": [
+     "Pa2F8ScTests",
+     "PacoteFScTests",
+     "ServiceCenterBridgeTests",
+     "ServiceCenterPrivateHttpTests",
+     "ServiceCenterSecretRefsTests"
+    ],
+    "odc": []
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "simulado",
+     "kernel": [
+      "ServiceCenterBridgeTests"
+     ],
+     "facade": [
+      "service-center-studio",
+      "service-center-modern"
+     ],
+     "outside": [
+      "kernel/tests/test_service_center*.py (python, sem runner)"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "simulado",
+     "kernel": [
+      "ServiceCenterBridgeTests",
+      "ServiceCenterPrivateHttpTests"
+     ],
+     "facade": [
+      "service-center-core",
+      "service-center-modern",
+      "service-center-studio",
+      "service-center-download",
+      "service-center-async",
+      "sc-read-queue"
+     ],
+     "gap": "Layouts reais do Service Center: prova viva docs/proofs/2026-10-18-service-center-private-form.md; sc-live-layouts confere capturas."
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "simulado",
+     "kernel": [
+      "ServiceCenterSecretRefsTests"
+     ],
+     "facade": [
+      "sc-property-ajax",
+      "service-center-modern",
+      "pacote-laneF-timers",
+      "service-center-timer-live",
+      "service-center-studio"
+     ],
+     "gap": "Prova viva: docs/proofs/2026-10-14-service-center-auth-timers.md e docs/proofs/2026-10-18-service-center-private-form.md."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "simulado",
+     "facade": [
+      "service-center-studio"
+     ],
+     "gap": "Só mover/acrescentar módulo entre soluções e aplicações."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "simulado",
+     "kernel": [
+      "ServiceCenterBridgeTests"
+     ],
+     "facade": [
+      "service-center-delete",
+      "destructive-sc",
+      "destructive-r3-sc-cancel",
+      "destructive-r3-sc-interrupted",
+      "destructive-r3-sc-nobackup",
+      "destructive-r3-sc-window"
+     ],
+     "outside": [
+      "kernel/tests/test_service_center_deletes.py (python, sem runner)"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "kernel": [
+      "Pa2F8ScTests",
+      "PacoteFScTests"
+     ],
+     "facade": [
+      "sc-integration-payload",
+      "service-center-performance-events",
+      "service-center-timer-observation",
+      "service-center-receipt-resolution",
+      "pacote-laneF-sc-session",
+      "sc-sso"
+     ],
+     "gap": "Autenticação SSO e payload de integração reais: provas vivas docs/proofs/2026-10-14-o11-integration-payload.md e 2026-10-14-service-center-auth-timers.md."
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "n/a",
+     "na": "Service Center é só O11; no ODC é o Portal."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "n/a",
+     "na": "Service Center é só O11."
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "n/a",
+     "na": "Service Center é só O11."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Service Center é só O11."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "Service Center é só O11."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "n/a",
+     "na": "Service Center é só O11."
+    }
+   ]
+  },
+  {
+   "id": "portal-odc",
+   "title": "Portal ODC (odc_portal_*, odc_*)",
+   "quick": {
+    "o11": [],
+    "odc": []
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "n/a",
+     "na": "O Portal ODC não existe no O11 (o equivalente é o Service Center)."
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "n/a",
+     "na": "O Portal ODC não existe no O11."
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "n/a",
+     "na": "O Portal ODC não existe no O11."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "O Portal ODC não existe no O11."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "O Portal ODC não existe no O11."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "n/a",
+     "na": "O Portal ODC não existe no O11."
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "simulado",
+     "facade": [
+      "portal/asset-upload",
+      "portal/mcp-import",
+      "portal/access",
+      "portal/asset-creation-approval",
+      "portal/group-approval",
+      "portal/api-client-fixture",
+      "portal/a2a-connection-plan",
+      "odc-access"
+     ],
+     "gap": "Toda criação roda contra fetch ou bridge falsos, ou como lógica pura de aprovação; nenhuma criação automatizada contra tenant real."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "simulado",
+     "facade": [
+      "portal/portal-read",
+      "portal/mcp",
+      "portal/studio-portal",
+      "portal/user-role-union",
+      "portal/portal-capabilities",
+      "portal/api-client-inventory",
+      "portal/cognito-login",
+      "portal/oauth-cookie-lifecycle"
+     ],
+     "gap": "Login (Cognito/OutSystems ID) e leituras contra o Portal real: provas vivas docs/proofs/2026-10-14-odc-community-auth.md e 2026-10-14-odc-credential-prompt.md."
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "simulado",
+     "facade": [
+      "debug-odc-setting-reset",
+      "destructive-r3-odc-removal",
+      "portal/application-role-assignment-approval",
+      "portal/timer-activation",
+      "portal/timer-configuration-approval",
+      "portal/settings-configuration-approval"
+     ],
+     "gap": "Ativação de timer, settings e papéis são lógica de aprovação offline; só o reset de odc_configurations e o PATCH de odc_write passam pela camada MCP, com falsos."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "simulado",
+     "facade": [
+      "portal/access",
+      "portal/organization-rename",
+      "portal/stage-rename",
+      "portal/portfolio-rename"
+     ],
+     "gap": "Só renomear organização, stage e portfólio."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "simulado",
+     "facade": [
+      "destructive-odc",
+      "destructive-r3-odc-cleanup",
+      "portal/owned-consumer-deletion-approval",
+      "portal/dataset-delete-approval",
+      "portal/a2a-cleanup-metadata",
+      "portal/connection-delete-observation"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "facade": [
+      "portal/log-screen-contract",
+      "portal/trace-screen-contract",
+      "portal/portal-log-native-pagination",
+      "portal/pa3-fa-portal",
+      "portal/screenservice-errors",
+      "portal/timer-run-state"
+     ],
+     "gap": "Consulta viva de log e erro só em docs/proofs/2026-10-22-odc-runtime-log-query.md."
+    }
+   ]
+  },
+  {
+   "id": "css-temas",
+   "title": "CSS e temas",
+   "quick": {
+    "o11": [
+     "CssScopeTests",
+     "DemoLatamVisualTests",
+     "JobTests",
+     "NamedThemePartTests",
+     "Pa2F3CssTests",
+     "Pa3KhCssTests",
+     "PrototypeCssTests",
+     "ScreenVisualCheckTests",
+     "SharedStyleSafetyTests",
+     "SharedStyleTests",
+     "StyleSheetLossTests"
+    ],
+    "odc": [
+     "HtmlCrossPlatformLifecycleTests",
+     "OdcAppFactoryTests",
+     "Pa3KhOdcTests",
+     "ScreenVisualOdcTests",
+     "ThemeCssTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "HtmlDeltaTests",
+      "NamedThemePartTests",
+      "SharedStyleTests",
+      "PrototypeCssTests",
+      "JobTests"
+     ],
+     "facade": [
+      "css-shared-visual"
+     ],
+     "jobs": [
+      "jobs/cat-b-theme-resource",
+      "jobs/html-dashboard-reactive"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "HtmlCrossPlatformLifecycleTests",
+      "ScreenHtmlEditJobTests",
+      "JobTests"
+     ],
+     "jobs": [
+      "jobs/cat-b-theme-resource"
+     ],
+     "gap": "Sem teste da fachada para ler a StyleSheet do tema; só os get dos jobs e a releitura HTML."
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "HtmlDeltaTests",
+      "NamedThemePartTests",
+      "ScreenHtmlEditJobTests",
+      "JobTests",
+      "TraditionalStyleTouchTests"
+     ],
+     "facade": [
+      "pacote-laneD1-deliver"
+     ],
+     "jobs": [
+      "jobs/html-dashboard-update"
+     ],
+     "gap": "CSS publicado só ao vivo: docs/proofs/2026-10-19-live-probes.md."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "SharedStyleTests",
+      "SharedStyleSafetyTests",
+      "CssScopeTests",
+      "JobTests"
+     ],
+     "jobs": [
+      "jobs/cat-b-theme-resource"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "JobTests",
+      "StyleSheetLossTests",
+      "SharedStyleSafetyTests"
+     ],
+     "jobs": [
+      "jobs/cat-b-theme-resource",
+      "jobs-coverage/o11/cov-ui-web-webtheme-del",
+      "jobs-coverage/o11/cov-ui-mobile-mobiletheme-del"
+     ],
+     "gap": "Só o Script do tema é apagado nativo; apagar Theme ou StyleSheet só em jobs de cobertura pré-conferidos."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "ScreenVisualCheckTests",
+      "ScreenVisualFamilyTests",
+      "StyleSheetLossTests",
+      "Pa2F3CssTests",
+      "Pa3KhCssTests",
+      "DemoLatamVisualTests"
+     ],
+     "facade": [
+      "screen-visual-demolatam",
+      "css-shared-visual"
+     ],
+     "gap": "Investigação viva de CSS e ESpace.Dump: docs/proofs/2026-10-19-dump-css.md."
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "ThemeCssTests",
+      "OdcAppFactoryTests",
+      "Pa3KhOdcTests",
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/theme-script-resource",
+      "jobs-odc/cat-b-link-style"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "ThemeCssTests",
+      "HtmlCrossPlatformLifecycleTests",
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/theme-css-halves",
+      "jobs-odc/theme-css-reload"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "ThemeCssTests",
+      "Pa3KhOdcTests",
+      "HtmlCrossPlatformLifecycleTests",
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/theme-css-halves",
+      "jobs-odc/theme-css-reload"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests",
+      "Pa3KhOdcTests"
+     ],
+     "jobs": [
+      "jobs-odc/resource-script-lifecycle"
+     ],
+     "gap": "Só renomear/substituir Script e Resource; sem refactor de estilo compartilhado ou tema no ODC (SharedStyleTests é só O11)."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/resource-script-lifecycle",
+      "jobs-coverage/odc/cov-ui-mobile-mobiletheme-del"
+     ],
+     "gap": "Só apagar Script é aplicado; apagar tema só em job de cobertura pré-conferido."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "ScreenVisualOdcTests",
+      "Pa3KhOdcTests",
+      "ThemeCssTests"
+     ],
+     "jobs": [
+      "jobs-odc/theme-css-reload"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "blocks",
+   "title": "Blocks",
+   "quick": {
+    "o11": [
+     "BlockAcceptanceFamilyTests",
+     "HtmlComponentTests",
+     "JobTests",
+     "MergeFidelityTests",
+     "NativeUiMoveProbeTests",
+     "NegativeJobTests",
+     "Pa3KhHtmlTests",
+     "Pa3KlEventTests",
+     "ScreenHtmlTests",
+     "UiNativeImportsTests"
+    ],
+    "odc": [
+     "OdcPlaceholderContentProofTests",
+     "Pa3KhOdcTests",
+     "ScreenHtmlCoverageOdcTests",
+     "ScreenHtmlFamilyOdcTests",
+     "ScreenHtmlTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "HtmlComponentTests",
+      "UiNativeImportsTests",
+      "Pa3KhHtmlTests",
+      "JobTests"
+     ],
+     "facade": [
+      "catalog-b-ui"
+     ],
+     "jobs": [
+      "jobs/block-events-reactive",
+      "jobs/cat-b-block-placeholder",
+      "jobs/html-visual-block",
+      "jobs/cat-b-screen-lifecycle"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "ScreenHtmlCoverageTests",
+      "ScreenHtmlTests"
+     ],
+     "facade": [
+      "module-html",
+      "module-map"
+     ],
+     "gap": "ScreenHtmlCoverageTests pula sem as capturas do corpus (tests/contracts/screen-html/corpus.json)."
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "JobTests",
+      "ScreenHtmlEditJobTests",
+      "TraditionalStyleTouchTests"
+     ],
+     "facade": [
+      "pacote-laneD1-deliver"
+     ],
+     "jobs": [
+      "jobs/block-events-update",
+      "jobs/block-events-mandatory-reactive",
+      "jobs/block-events-types-reactive",
+      "jobs/block-events-nested-reactive"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "JobTests",
+      "NativeUiMoveProbeTests",
+      "UiNativeImportsTests"
+     ],
+     "jobs": [
+      "jobs/cat-b-block-rename"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "JobTests",
+      "NegativeJobTests"
+     ],
+     "jobs": [
+      "jobs/block-events-delete-reactive",
+      "jobs-negative/delete-block-in-use",
+      "jobs-negative/delete-block-event-in-use",
+      "jobs-coverage/o11/cov-ui-block-del"
+     ],
+     "gap": "Nenhum job O11 aplicado apaga um bloco inteiro; só a recusa por uso; cov-ui-block-del só pré-conferido."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "MergeFidelityTests",
+      "Pa3KlEventTests",
+      "NegativeJobTests",
+      "BlockAcceptanceFamilyTests"
+     ],
+     "jobs": [
+      "jobs/hidden-reference-block",
+      "jobs-negative/delete-block-in-use"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests",
+      "Pa3KhOdcTests"
+     ],
+     "jobs": [
+      "jobs-odc/block-events",
+      "jobs-odc/block-reuse",
+      "jobs-odc/html-visual-block"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "ScreenHtmlCoverageOdcTests",
+      "ScreenHtmlTests"
+     ],
+     "facade": [
+      "module-html"
+     ],
+     "gap": "ScreenHtmlCoverageOdcTests pula sem as capturas do corpus."
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests",
+      "ScreenHtmlFamilyOdcTests"
+     ],
+     "jobs": [
+      "jobs-odc/screen-block-edit",
+      "jobs-odc/block-events-mandatory",
+      "jobs-odc/block-events-types",
+      "jobs-odc/block-events-two-instances"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests",
+      "OdcPlaceholderContentProofTests"
+     ],
+     "jobs": [
+      "jobs-odc/block-event-lifecycle"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/delete-block",
+      "jobs-odc/cat-b-block-event-delete",
+      "jobs-odc-negative/delete-block-event-in-use"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "OdcPlaceholderContentProofTests",
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc-negative/delete-block-event-in-use"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "telas-reactive",
+   "title": "Telas Reactive",
+   "quick": {
+    "o11": [
+     "DemoLatamVisualTests",
+     "JobTests",
+     "NegativeJobTests",
+     "ScreenDocumentTests",
+     "ScreenGeneratorTests",
+     "ScreenHtmlTests",
+     "ScreenSpecTests",
+     "ScreenVisualCheckTests"
+    ],
+    "odc": [
+     "HtmlCrossPlatformLifecycleTests",
+     "ScreenGeneratorOdcTests",
+     "ScreenHtmlCoverageOdcTests",
+     "ScreenHtmlFamilyOdcTests",
+     "ScreenHtmlTests",
+     "ScreenVisualOdcTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "ScreenGeneratorTests",
+      "HtmlCrossPlatformLifecycleTests",
+      "ScreenDocumentTests",
+      "ScreenSpecTests",
+      "JobTests"
+     ],
+     "facade": [
+      "gen-screen-card",
+      "familias-fachada"
+     ],
+     "jobs": [
+      "jobs/screen-reactive",
+      "jobs/screen-generate-reactive",
+      "jobs/screen-spec-form-reactive",
+      "jobs/html-dashboard-reactive"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "ScreenHtmlCoverageTests",
+      "ScreenHtmlTests",
+      "HtmlCrossPlatformLifecycleTests"
+     ],
+     "facade": [
+      "module-html"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "ScreenHtmlEditJobTests",
+      "HtmlElementEditJobTests",
+      "HtmlDeltaTests",
+      "ScreenHtmlFamilyTests"
+     ],
+     "facade": [
+      "ssam-code-html-edits",
+      "html-edits",
+      "patch-por-nome"
+     ],
+     "jobs": [
+      "jobs/html-dashboard-update"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "ScreenRecreationTests",
+      "JobTests"
+     ],
+     "jobs": [
+      "jobs/refactor-contact-reactive",
+      "jobs/cat-b-screen-replace-delete",
+      "jobs/duplicate-into-parent-reactive"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "JobTests",
+      "NegativeJobTests"
+     ],
+     "jobs": [
+      "jobs/cat-b-screen-replace-delete",
+      "jobs/delete-default-screen",
+      "jobs-negative/delete-widget-in-use"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "ScreenVisualCheckTests",
+      "ScreenVisualFamilyTests",
+      "DemoLatamVisualTests",
+      "NegativeJobTests"
+     ],
+     "facade": [
+      "ui-precheck",
+      "screen-visual-demolatam"
+     ],
+     "jobs": [
+      "jobs-negative/html-control-inside-link",
+      "jobs-negative/screen-unknown-kind",
+      "jobs-negative/destination-before-screen"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "ScreenGeneratorOdcTests",
+      "HtmlCrossPlatformLifecycleTests",
+      "OdcJobTests"
+     ],
+     "facade": [
+      "gen-screen-card"
+     ],
+     "jobs": [
+      "jobs-odc/screen-basic",
+      "jobs-odc/screen-form",
+      "jobs-odc/screen-list",
+      "jobs-odc/screen-generate"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "ScreenHtmlCoverageOdcTests",
+      "ScreenHtmlTests"
+     ],
+     "facade": [
+      "reading",
+      "module-html"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "HtmlElementEditOdcTests",
+      "ScreenHtmlEditBatteryOdcTests",
+      "ScreenHtmlFamilyOdcTests",
+      "OdcJobTests"
+     ],
+     "facade": [
+      "ssam-code-html-edits"
+     ],
+     "jobs": [
+      "jobs-odc/screen-block-edit"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "ScreenRecreationOdcTests",
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/cat-b-screen-replace-delete",
+      "jobs-odc/duplicate-into-parent"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/delete-screen",
+      "jobs-odc/cat-b-screen-replace-delete",
+      "jobs-odc-negative/delete-screen-in-use"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "ScreenVisualOdcTests",
+      "OdcJobTests"
+     ],
+     "facade": [
+      "ui-precheck"
+     ],
+     "jobs": [
+      "jobs-odc-negative/localized-image-reactive",
+      "jobs-odc-negative/create-button-group-item-outside-group"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "telas-mobile",
+   "title": "Telas Mobile",
+   "quick": {
+    "o11": [
+     "JobTests",
+     "MergeFidelityTests",
+     "Pa2F2RulesTests",
+     "ScreenFormValidationTests"
+    ],
+    "odc": [
+     "HtmlCrossPlatformLifecycleTests",
+     "OdcAppFactoryTests",
+     "OdcBlankModuleTests",
+     "Pa2F2OdcTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "HtmlCrossPlatformLifecycleTests",
+      "JobTests"
+     ],
+     "facade": [
+      "discover-osui"
+     ],
+     "jobs": [
+      "jobs/screen-spec-cards-mobile",
+      "jobs/osui-patterns-mobile",
+      "jobs/local-storage-mobile"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "HtmlCrossPlatformLifecycleTests",
+      "ScreenHtmlEditJobTests",
+      "ScreenHtmlFamilyTests"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "ScreenHtmlEditJobTests",
+      "ScreenHtmlFamilyTests",
+      "HtmlCrossPlatformLifecycleTests",
+      "ScreenFormValidationTests"
+     ],
+     "gap": "Nenhum job canônico edita tela Mobile existente; só a bateria sintética de edição sobre mobile-ui.oml."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "ScreenHtmlEditJobTests",
+      "Pa2F2RulesTests"
+     ],
+     "jobs": [
+      "jobs-coverage-f2/o11/cov-ui-mobile-screenaction-mvin"
+     ],
+     "gap": "Só mover e envolver dentro da bateria de edição; sem renomear, substituir ou duplicar tela Mobile; o job de cobertura só é pré-conferido."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "offline",
+     "kernel": [
+      "Pa2F2RulesTests"
+     ],
+     "jobs": [
+      "jobs-coverage/o11/cov-ui-mobile-mobilescreen-del",
+      "jobs-coverage/o11/cov-ui-mobile-mobileblock-del"
+     ],
+     "gap": "Nenhum apagar aplicado de tela Mobile; os jobs cov-*-del só são pré-conferidos."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "MergeFidelityTests",
+      "ScreenFormValidationTests",
+      "Pa2F2RulesTests"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "OdcBlankModuleTests",
+      "OdcAppFactoryTests",
+      "HtmlCrossPlatformLifecycleTests",
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/mobile-sync-events"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "HtmlCrossPlatformLifecycleTests"
+     ],
+     "gap": "Leitura provada só na fixture blank-mobile; não há corpus Mobile ODC."
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "HtmlCrossPlatformLifecycleTests"
+     ],
+     "gap": "Nenhum job de jobs-odc edita tela de app Mobile."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "offline",
+     "kernel": [
+      "Pa2F2OdcTests"
+     ],
+     "jobs": [
+      "jobs-coverage-f2/odc/cov-ui-mobile-screenaction-mvin"
+     ],
+     "gap": "Nenhum refactor aplicado em app Mobile; o job de cobertura só é pré-conferido."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "jobs": [
+      "jobs-odc/mobile-sync-events",
+      "jobs-coverage/odc/cov-ui-mobile-mobilescreen-del"
+     ],
+     "gap": "Só o evento OnSyncComplete é apagado; apagar tela Mobile só pré-conferido."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "OdcJobTests",
+      "OdcBlankModuleTests",
+      "Pa2F2OdcTests"
+     ],
+     "jobs": [
+      "jobs-odc-negative/session-variable-mobile"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "telas-traditional",
+   "title": "Telas Traditional",
+   "quick": {
+    "o11": [
+     "JobTests",
+     "Pa2F2RulesTests",
+     "ScreenHtmlEditTests",
+     "TraditionalAjaxTests",
+     "TraditionalControlsParityTests",
+     "TraditionalEntryRecipeTests",
+     "TraditionalHtmlControlsTests",
+     "TraditionalHtmlFrontendTests",
+     "TraditionalHtmlRecordsTests",
+     "TraditionalHtmlRoundTripTests",
+     "TraditionalInputChangeTests",
+     "TraditionalLayoutDocumentTests",
+     "TraditionalPreparationFlowTests",
+     "TraditionalPreparationScopeTests",
+     "TraditionalRecreationTests"
+    ],
+    "odc": []
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "TraditionalHtmlFrontendTests",
+      "TraditionalEntryRecipeTests",
+      "HtmlCrossPlatformLifecycleTests",
+      "JobTests"
+     ],
+     "facade": [
+      "traditional-compose",
+      "traditional-tasks",
+      "traditional-text"
+     ],
+     "jobs": [
+      "jobs/screen-crud-traditional",
+      "jobs/traditional-html-frontend",
+      "jobs/cat-b-traditional-gallery"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "TraditionalHtmlRoundTripTests",
+      "TraditionalHtmlRecordsTests",
+      "TraditionalRecreationTests",
+      "HtmlCrossPlatformLifecycleTests"
+     ],
+     "facade": [
+      "traditional-discovery"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "TraditionalHtmlControlsTests",
+      "TraditionalControlsParityTests",
+      "TraditionalInputChangeTests",
+      "TraditionalPreparationFlowTests",
+      "TraditionalAjaxTests"
+     ],
+     "facade": [
+      "traditional-tasks"
+     ],
+     "jobs": [
+      "jobs/traditional-ajax-navigation"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "nativo",
+     "kernel": [
+      "TraditionalRecreationTests",
+      "TraditionalLayoutDocumentTests",
+      "JobTests"
+     ],
+     "jobs": [
+      "jobs/duplicate-into-parent-traditional"
+     ],
+     "gap": "Sem renomear ou substituir tela ou web block Traditional."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "offline",
+     "kernel": [
+      "ScreenHtmlEditTests",
+      "Pa2F2RulesTests"
+     ],
+     "jobs": [
+      "jobs-coverage/o11/cov-ui-web-webscreen-del",
+      "jobs-coverage/o11/cov-ui-web-webblock-del"
+     ],
+     "gap": "Nenhum apagar aplicado de Web screen ou web block; jobs de cobertura só pré-conferidos e ScreenHtmlEditTests usa modelo falso; remoção do Entry só ao vivo (docs/proofs/2026-10-19-live-probes.md)."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "TraditionalAjaxTests",
+      "TraditionalPreparationScopeTests",
+      "TraditionalHtmlFrontendTests"
+     ],
+     "facade": [
+      "debug-o11-traditional",
+      "debug-o11-traditional-run",
+      "debug-o11-traditional-interactive"
+     ],
+     "gap": "Ajax e correções de runtime vivas em docs/proofs/2026-10-19-traditional-ajax.md."
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "n/a",
+     "na": "Traditional Web é só O11 (catalog-b-ui e traditional-text afirmam a recusa no ODC)."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "n/a",
+     "na": "Traditional Web é só O11."
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "n/a",
+     "na": "Traditional Web é só O11."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Traditional Web é só O11."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "Traditional Web é só O11."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "n/a",
+     "na": "Traditional Web é só O11."
+    }
+   ]
+  },
+  {
+   "id": "debug",
+   "title": "Debug (ssam_debug*)",
+   "quick": {
+    "o11": [
+     "JobTests"
+    ],
+    "odc": []
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "n/a",
+     "na": "O depurador só observa e roda o app publicado; nunca muda o modelo."
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "simulado",
+     "facade": [
+      "debug",
+      "debug-o11-run",
+      "debug-o11-native-run",
+      "debug-o11-bpt-run",
+      "debug-o11-timer-wake",
+      "debug-server-private-inspection"
+     ],
+     "jobs": [
+      "jobs/debugger-client-variable-all-types",
+      "jobs/debugger-session-variable-all-types",
+      "jobs/debugger-client-variable-compound-type",
+      "jobs-negative/debugger-client-variable-object-type",
+      "jobs/process-bpt"
+     ],
+     "kernel": [
+      "JobTests"
+     ],
+     "gap": "O nível nativo só vem de kernel/debug/tests-o11 (carrega as DLLs do Service Studio), fora de qualquer runner; debug-o11-native-worker-golden pula sem SSAM_DEBUG_EVIDENCE_ROOT; as provas vivas citadas em docs/DEBUGGER-HEADLESS.md ficam em .local (fora do Git).",
+     "outside": [
+      "kernel/debug/tests-o11 (BreakpointOwnerTests, NativeInspectionTests, NativeVariableTests, TraceTests, BackgroundThreadEndTests)"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "n/a",
+     "na": "Breakpoints e sessão são estado de runtime, não edição do app."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Não muda o modelo."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "Não muda o modelo; limpeza de sessão e trava é ciclo de vida."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "facade": [
+      "debug-start-diagnostic",
+      "debug-app-user-diagnostic",
+      "debug-o11-inspection-deadline",
+      "debug-o11-login-reconcile",
+      "debug-o11-republish-reconcile",
+      "debug-final-matrix"
+     ],
+     "gap": "Diagnóstico nativo de sessão e transporte fora de qualquer runner; debug-final-matrix pula o caso de evidência sem evidência local.",
+     "outside": [
+      "kernel/debug/tests-o11 (SessionDiagnosticTests, TransportPreflightTests, DebugRequestOwnershipIntegrationTests)"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "n/a",
+     "na": "Só observa e roda o app publicado."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "simulado",
+     "kernel": [
+      "OdcJobTests"
+     ],
+     "facade": [
+      "debug-odc-native-run",
+      "debug-odc-native-live",
+      "debug-odc-native-mount-run",
+      "debug-odc-native-wake-run",
+      "debug-odc-workflow-run",
+      "debug-odc-bpt-absence"
+     ],
+     "jobs": [
+      "jobs-odc/debugger-client-variable-all-types",
+      "jobs-odc/debugger-client-variable-compound-type",
+      "jobs-odc-negative/debugger-client-variable-object-type"
+     ],
+     "gap": "Runner nativo ODC fora de qualquer runner; debug-odc-native-golden pula sem SSAM_DEBUG_EVIDENCE_ROOT; ciclo de papéis recusado e testes pulados porque facade/sc-portal-access.mjs não existe (debug-role-cycle-pending).",
+     "outside": [
+      "kernel/debug/tests-odc (mesmas fontes, DefineConstants ODC)"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "n/a",
+     "na": "Não muda o modelo."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Não muda o modelo."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "Não muda o modelo."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "facade": [
+      "debug-odc-native-failure-diagnostic",
+      "debug-start-diagnostic",
+      "debug-odc-reconcile",
+      "debug-odc-exception-body",
+      "debug-role-cycle-pending",
+      "portal/active-credential-retention"
+     ],
+     "gap": "Sem prova viva ODC do depurador versionada.",
+     "outside": [
+      "kernel/debug/tests-odc (SessionDiagnosticTests, TransportPreflightTests)"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "preview",
+   "title": "Preview (ssam_preview, studio_preview)",
+   "quick": {
+    "o11": [
+     "DeliveryMergeOrderTests"
+    ],
+    "odc": [
+     "OdcMergeOrderTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "n/a",
+     "na": "ssam_preview (visual) e studio_preview (merge) só leem."
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "simulado",
+     "kernel": [
+      "MergeCoverageTests"
+     ],
+     "facade": [
+      "preview",
+      "preview-compare",
+      "preview-engine",
+      "preview-discover",
+      "migration-acceptance",
+      "merge-order-deferred"
+     ],
+     "gap": "ssam_preview nunca roda contra navegador ou host real nos testes (preview.test usa worker com provedor HTTP de fixture); evidência viva só em docs/PREVIEW-LOCAL.md e docs/proofs/2026-10-23-migration-p0-fixes.md (M06). MergeCoverageTests prova o studio_preview (merge), nativo."
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "n/a",
+     "na": "Só leitura."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Só leitura."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "Só leitura."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "kernel": [
+      "DeliveryMergeOrderTests"
+     ],
+     "facade": [
+      "preview",
+      "preview-capture",
+      "preview-pipeline",
+      "preview-engine",
+      "merge-order-deferred"
+     ],
+     "gap": "Falhas de partida, parada e recibo incerto só contra fixtures ou hosts falsos; sem teste de falha em navegador real."
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "n/a",
+     "na": "Só leitura."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "simulado",
+     "kernel": [
+      "OdcMergeOrderTests"
+     ],
+     "facade": [
+      "preview",
+      "preview-engine",
+      "preview-capture",
+      "preview-discover",
+      "preview-compare",
+      "migration-acceptance"
+     ],
+     "gap": "Watcher, build de release e render ODC nunca rodam de verdade nos testes; PREVIEW-LOCAL.md limita o escopo ao perfil Quotes."
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "n/a",
+     "na": "Só leitura."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Só leitura."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "Só leitura."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "facade": [
+      "preview-engine",
+      "preview-capture",
+      "preview-pipeline",
+      "preview"
+     ],
+     "gap": "Só falsos ou fixtures; sem teste ODC de kernel ou de runtime real."
+    }
+   ]
+  },
+  {
+   "id": "query-test",
+   "title": "Teste de query (ssam_query_test)",
+   "quick": {
+    "o11": [],
+    "odc": []
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "n/a",
+     "na": "Teste de SELECT/Aggregate só leitura; efeitos recusados (QUERY_TEST_EFFECTS_UNSUPPORTED)."
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "simulado",
+     "facade": [
+      "query-test",
+      "tool-routes"
+     ],
+     "gap": "Nenhuma execução automatizada contra modelo ou servidor real; prova viva docs/proofs/2026-10-07-native-query-test.md.",
+     "outside": [
+      "kernel/query-test/tests (QueryTest.Tests, offline; só pelo dotnet test manual de docs/TESTE-NATIVO-QUERY.md)"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "n/a",
+     "na": "Só leitura; efeitos recusados."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Só leitura."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "Só leitura; DELETE recusado."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "facade": [
+      "query-test"
+     ],
+     "gap": "Erro nativo, timeout e cancelamento só com transportes falsos; prova viva 2026-10-07-native-query-test.md.",
+     "outside": [
+      "kernel/query-test/tests (PreparationFailure..., TimeoutAndCancel..., CorruptReceipt...)"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "n/a",
+     "na": "Só leitura."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "simulado",
+     "facade": [
+      "query-test"
+     ],
+     "gap": "ODC só no caso 'ODC binds process once' da fachada e na descoberta; sem teste de kernel ODC; prova viva 2026-10-07-native-query-test.md.",
+     "outside": [
+      "kernel/query-test/tests (compartilhado, offline)"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "n/a",
+     "na": "Só leitura."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Só leitura."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "Só leitura."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "facade": [
+      "query-test"
+     ],
+     "gap": "Resultado incerto e reconciliação com o pid ODC só com falsos."
+    }
+   ]
+  },
+  {
+   "id": "prototipo",
+   "title": "Protótipo (prototype)",
+   "quick": {
+    "o11": [
+     "PrototypeBindTests",
+     "PrototypeBuilderTests",
+     "PrototypeCssTests",
+     "PrototypeExpanderTests",
+     "PrototypeFieldNamesTests",
+     "PrototypeRenderTests",
+     "PrototypeVisitaCertaTests"
+    ],
+    "odc": [
+     "PrototypeExpanderOdcTests"
+    ]
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "PrototypeBuilderTests",
+      "PrototypeRenderTests",
+      "PrototypeExpanderTests",
+      "PrototypeCssTests",
+      "PrototypeFieldNamesTests",
+      "PrototypeVisitaCertaTests"
+     ],
+     "facade": [
+      "prototype-op",
+      "prototype-render-fixtures",
+      "prototype-render-farmavirtual",
+      "prototype-archive",
+      "prototype-seed",
+      "discovery-prototype"
+     ],
+     "gap": "Sem job canônico de protótipo; a captura da fachada usa jsdom num processo filho, não navegador; discovery-prototype pula as checagens de CLI sem a CLI compilada."
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "n/a",
+     "na": "Não há op de leitura própria: releitura e fidelidade (PrototypeRenderTests, prototype-fidelity-measure) são checagens dentro de criar."
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "nativo",
+     "kernel": [
+      "PrototypeBuilderTests",
+      "PrototypeExpanderTests",
+      "PrototypeBindTests"
+     ],
+     "facade": [
+      "prototype-bind",
+      "prototype-guards",
+      "prototype-op"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "A op prototype importa e reimporta uma captura; não tem refactor (renomear homônimos faz parte da reimportação)."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "A reimportação nunca apaga; elemento sumido só é listado (PrototypeExpanderTests)."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "kernel": [
+      "PrototypeExpanderTests"
+     ],
+     "facade": [
+      "prototype-guards",
+      "prototype-op",
+      "prototype-source-shapes",
+      "prototype-visitacerta"
+     ],
+     "gap": "Mapear o Verify à captura e a reconstrução única só com falsos (docs/proofs/2026-10-19-critical-pending.md também usa transportes simulados)."
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "nativo",
+     "kernel": [
+      "PrototypeExpanderOdcTests"
+     ],
+     "facade": [
+      "prototype-op",
+      "prototype-seed",
+      "discovery-prototype"
+     ],
+     "gap": "PrototypeExpanderOdcTests volta sem afirmar nada sem ODC Studio; sem job ODC de protótipo."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "n/a",
+     "na": "Não há op de leitura própria."
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "vivo",
+     "gap": "Nenhuma prova automatizada de reimportação ou bind no ODC (PrototypeBindTests e prototype-bind são só O11; PrototypeExpanderOdcTests não reimporta) e nenhuma prova viva."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Sem op de refactor."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "A reimportação nunca apaga."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "facade": [
+      "prototype-op",
+      "prototype-guards"
+     ],
+     "gap": "Só recusa e recibo do studio_deliver, com falsos; sem teste de kernel ODC do mapeamento do Verify."
+    }
+   ]
+  },
+  {
+   "id": "publicacao",
+   "title": "Publicação",
+   "quick": {
+    "o11": [
+     "PublicationBatchTests",
+     "PublishConfirmationTests",
+     "PublishLogTests",
+     "PublishOmlProtocolTests"
+    ],
+    "odc": []
+   },
+   "cells": [
+    {
+     "platform": "o11",
+     "op": "criar",
+     "level": "simulado",
+     "kernel": [
+      "PublishConfirmationTests",
+      "PublishOmlProtocolTests",
+      "PublicationBatchTests"
+     ],
+     "facade": [
+      "o11-publish",
+      "publish-once",
+      "call-publish-summary",
+      "producer-publication"
+     ],
+     "gap": "Nenhum 1-Click Publish real automatizado: os testes do kernel são estado/protocolo e a fachada usa bridge falsa."
+    },
+    {
+     "platform": "o11",
+     "op": "ler",
+     "level": "nativo",
+     "kernel": [
+      "PublishLogTests"
+     ],
+     "facade": [
+      "o11-publish",
+      "atritos-a-refresh"
+     ]
+    },
+    {
+     "platform": "o11",
+     "op": "editar",
+     "level": "simulado",
+     "facade": [
+      "publish-once",
+      "atritos-a-refresh",
+      "pacote-laneD1-studio"
+     ],
+     "gap": "Refresh e republicação em cascata dos consumidores só contra bridges falsas."
+    },
+    {
+     "platform": "o11",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Publicar não renomeia nem move."
+    },
+    {
+     "platform": "o11",
+     "op": "apagar",
+     "level": "n/a",
+     "na": "o11_publish não despublica; remoção é delete-app (ambientes)."
+    },
+    {
+     "platform": "o11",
+     "op": "troubleshoot",
+     "level": "nativo",
+     "kernel": [
+      "PublishLogTests",
+      "PublishOmlProtocolTests"
+     ],
+     "facade": [
+      "o11-publish",
+      "publish-integrity",
+      "debug-o11-republish-reconcile",
+      "pacote-laneD1-studio"
+     ]
+    },
+    {
+     "platform": "odc",
+     "op": "criar",
+     "level": "simulado",
+     "facade": [
+      "atritos-a-publish",
+      "pacote-laneD2-delivery",
+      "pacote-laneD2-status",
+      "portal/access",
+      "portal/asset-deployment-approval",
+      "portal/operation-receipt"
+     ],
+     "gap": "Nenhuma prova de kernel ou nativa do Publish de studio_publish/odc_deploy: só bridge e fetch falsos."
+    },
+    {
+     "platform": "odc",
+     "op": "ler",
+     "level": "simulado",
+     "facade": [
+      "studio-publish-log",
+      "portal/operation-log",
+      "portal/operation-receipt",
+      "portal/access"
+     ],
+     "gap": "O formato do log de publicação foi copiado da bridge v35, sem conferência viva."
+    },
+    {
+     "platform": "odc",
+     "op": "editar",
+     "level": "offline",
+     "facade": [
+      "portal/settings-configuration-approval",
+      "portal/timer-configuration-approval"
+     ],
+     "gap": "ApplyConfigs do odc_deploy só como lógica pura de aprovação; nenhum teste dirige a ferramenta."
+    },
+    {
+     "platform": "odc",
+     "op": "refatorar",
+     "level": "n/a",
+     "na": "Deploy não renomeia nem move."
+    },
+    {
+     "platform": "odc",
+     "op": "apagar",
+     "level": "simulado",
+     "facade": [
+      "destructive-odc",
+      "portal/access",
+      "portal/asset-deployment-approval"
+     ],
+     "gap": "Undeploy só contra HTTP do Portal falso."
+    },
+    {
+     "platform": "odc",
+     "op": "troubleshoot",
+     "level": "simulado",
+     "facade": [
+      "studio-publish-log",
+      "pacote-laneD2-delivery",
+      "atritos-a-publish",
+      "debug-odc-reconcile",
+      "portal/access",
+      "portal/operation-log"
+     ],
+     "gap": "PUBLISH_FAILED e FinishedWithError só com falsos."
+    }
+   ]
+  }
+ ]
+}

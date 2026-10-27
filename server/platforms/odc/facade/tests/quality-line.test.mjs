@@ -88,7 +88,7 @@ test('codes and rules: only the registries pass; an UPPER_SNAKE word of the cust
 // <OP>_REFUSED of the integration ops, <STAGE>_FAILED and the gates of the shaper, PUBLISH_<GATE>) and the codes of
 // ssam_query_test are in the registry, so a refusal keeps them apart instead of folding them into CODE_UNLISTED.
 test('composed codes and the query-test codes are listed: a refusal keeps SET_INVALID and REST_REFUSED apart', () => {
-  for (const code of ['SET_INVALID', 'CREATE_INVALID', 'SPEC_INVALID', 'SCREEN_INVALID', 'REST_INVALID', 'PROTOTYPE_INVALID', 'AGENT_INVALID', 'DELETE_INVALID',
+  for (const code of ['SET_INVALID', 'CREATE_INVALID', 'SPEC_INVALID', 'SCREEN_INVALID', 'REST_INVALID', 'REST_EXPOSE_INVALID', 'AGENT_INVALID', 'DELETE_INVALID',
     'HTML_VISUAL_INVALID', 'OP_INVALID', 'REST_REFUSED', 'REST_EXPOSE_REFUSED', 'SOAP_REFUSED', 'KERNEL_FAILED', 'RUNNER_FAILED', 'PUBLISH_WAIT_FAILED',
     'UPLOAD_REQUEST_FAILED', 'CREATE_REVISION_FAILED', 'PUBLISH_VAULT_UNAVAILABLE', 'PUBLISH_SECRET_NOT_FOUND', 'PUBLISH_AUTHORSHIP', 'QUERY_TEST_DATABASE_ERROR',
     'QUERY_TEST_LOGIN_REQUIRED', 'QUERY_TEST_SOURCE_CHANGED', 'QUERY_TEST_NOT_QUERY', 'QUERY_TEST_MODULE_MISMATCH', 'QUERY_TEST_NATIVE_ERROR', 'QUERY_TEST_PENDING'])
@@ -142,5 +142,5 @@ test('fitLine: a line above the cap loses detail in the fixed order and keeps it
 // D9: this lane's copy of the contract is the shared one, byte for byte (CRLF read as LF), so writer and reader never disagree.
 test('parity: platforms/odc/facade/quality-line.mjs is the shared ssam-quality/1 contract', () => {
   const text = fs.readFileSync(fileURLToPath(new URL('../quality-line.mjs', import.meta.url)), 'utf8').replace(/\r\n/g, '\n');
-  assert.equal(createHash('sha256').update(text, 'utf8').digest('hex'), '2fa3eae56f02321865ad9ca19afa75b6b00b6398cf3619c91a0e716dc1704c55'); // servidor/fase4-26 a7: OPS gains tool (CX11); phase 2: REFERENCE_DAY_LIMIT, REFERENCE_NOT_SERVED; phase 3: ANSWER_ORIGIN_UNKNOWN and the server root variables; a8: DELIVERY_STILL_RUNNING; AGENT_FOLDER_UNKNOWN, PLAN_NOT_DELIVERED (ssam_code served hosted); phase 6: both merges, the agent pack's server side included, and SSAM_HOSTED_SSAM_CODE; a9: marco-a6 (CX13, X3, html edit names, data table), round 5 (TABLE_CELL_SPAN) (registry --write)
+  assert.equal(createHash('sha256').update(text, 'utf8').digest('hex'), '1c213bf86752a891cdf2fb65071fa8804a994e508e68bcd56f295350904128e0'); // servidor/fase4-26 a7: OPS gains tool (CX11); phase 2: REFERENCE_DAY_LIMIT, REFERENCE_NOT_SERVED; phase 3: ANSWER_ORIGIN_UNKNOWN and the server root variables; a8: DELIVERY_STILL_RUNNING; AGENT_FOLDER_UNKNOWN, PLAN_NOT_DELIVERED (ssam_code served hosted); phase 6: both merges, the agent pack's server side included, and SSAM_HOSTED_SSAM_CODE; a9: marco-a6 (CX13, X3, html edit names, data table), round 5 (TABLE_CELL_SPAN); a11: the proto-into-product merge and the friction views timeline, reports and delivery-kpi; MERGE_SECURITY_WARNING (registry --write); server box: the routing codes of the Studio-version router
 });

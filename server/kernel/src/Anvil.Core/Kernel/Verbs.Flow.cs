@@ -47,12 +47,33 @@ public sealed partial class ModelSession
     private Blocked? _flowBlocked;
     private Action<string, int, string>? _flowDependencySkipped;
 
+    // A logic-text op changes actions, not named entities, structures or module variables: their name indexes are shared by
+    // the passes of one op (ModelFlowTypes), never across ops (a spec or reference op between two logic ops adds or renames
+    // them). Attributes and types are still read live; the names of actions change during the op and keep their own lookup.
+    private bool _flowRecordBatch;
+    private Dictionary<string, List<IObjectSignature>>? _flowRecordNames;
+    private Dictionary<string, List<IObjectSignature>>? _flowModuleVariables;
+    // The headers of the texts of the op: the inputs of a module action another text of the same op creates (InputTypeOf).
+    private List<FlowItem>? _flowDeclaredSignatures;
+
     private JsonNode FlowOp(JsonObject op)
     {
         var previous = _flowScreenJavaScript;
+        var previousBatch = _flowRecordBatch; var previousRecords = _flowRecordNames; var previousVariables = _flowModuleVariables;
+        var previousSignatures = _flowDeclaredSignatures; var previousTypes = _logicTypes;
+        var (previousWatch, previousFacts) = (_flowWriteWatch, _flowWriteFacts);
         _flowScreenJavaScript = op;
+        // S12: the names every verb of the op touches, from before its planning index is built (FlowOpCore writes with it).
+        (_flowWriteWatch, _flowWriteFacts) = (ApplyCachesOn ? BeginNameWatch() : null, null);
+        _flowRecordBatch = true; _flowRecordNames = null; _flowModuleVariables = null; _flowDeclaredSignatures = null;
+        _logicTypes = new(StringComparer.OrdinalIgnoreCase);
         try { return FlowOpCore(op); }
-        finally { _flowScreenJavaScript = previous; }
+        finally {
+            _flowScreenJavaScript = previous;
+            _flowRecordBatch = previousBatch; _flowRecordNames = previousRecords; _flowModuleVariables = previousVariables;
+            _flowDeclaredSignatures = previousSignatures; _logicTypes = previousTypes;
+            EndNameWatch(_flowWriteWatch); (_flowWriteWatch, _flowWriteFacts) = (previousWatch, previousFacts);
+        }
     }
 
     private string? ScreenScriptWhy(FlowItem action) => ScreenJavaScriptException.Allowed(_flowScreenJavaScript, action,
@@ -62,11 +83,18 @@ public sealed partial class ModelSession
     {
         var data = op["data"]!.AsObject();
         var unknown = data.Select(p => p.Key).Where(k => k is not ("flow" or "basedOn")).ToList();
+        // T16 rule 3 (one problem, once): each unknown key at its own place in the op's data, in the preflight's words (JobPreflight,
+        // FLOW_SYNTAX), so the refusal that has both says it once; the pointer was the data itself, read as /data/data.
         if (unknown.Count > 0)
             throw new KernelRefusalException("FLOW_SYNTAX", "logic: the text form takes data.flow (one text, or a list of texts or {text, basedOn}) and data.basedOn; not " + string.Join(", ", unknown),
-                new JsonArray(JobPreflight.PublicProblem(JobPreflight.Problem(null, "/data", "FLOW_SYNTAX", "error", "unknown keys " + string.Join(", ", unknown) + " beside data.flow",
-                    "keep only flow (and basedOn)"))));
+                new JsonArray(unknown.Select(key => (JsonNode)JobPreflight.PublicProblem(JobPreflight.Problem(null, "/" + key, "FLOW_SYNTAX", "error",
+                    "logic: data." + key + " is not a key of the text form (flow, basedOn)", "keep data.flow (and data.basedOn)"))).ToArray()));
         var texts = FlowTextForm.Texts(data);
+        _flowDeclaredSignatures = [];
+        foreach (var (source, _, _) in texts) {
+            try { _flowDeclaredSignatures.Add(ModuleFlow.Read(source)); }
+            catch (FormatException) { /* the planner reports the malformed text with its pointer */ }
+        }
         var excluded = new Dictionary<int, (string Name, int Op)>();
         if (_flowBlocked != null) {
             // Mark the headers first, then scan again: a caller may precede the skipped action it calls.
@@ -97,6 +125,11 @@ public sealed partial class ModelSession
         // a client action named after a screen action of the same screen was renamed by the Studio, NAME_COLLISION).
         HashSet<string>? inModule = null;
         _flowActionTaken = name => reserved.Contains(name) || (inModule ??= ScopeNames()).Contains(name);
+        // Planning is read-only: one index of the module's action names serves every text (ModuleAction), instead of one
+        // index of the whole module per new action. The apply writes, so it reads them again.
+        var planningFacts = _flowPlanningFacts = new Preflight.ModelBaseFacts(this, _espace);
+        var planning = NativePerformanceCapture.Measure("flow.op.plan");
+        try {
         for (var index = 0; index < texts.Count; index++) {
             var (text, basedOn, pointer) = texts[index];
             if (excluded.ContainsKey(index)) { plans.Add(new(null, null, null, null, null, [])); continue; }
@@ -116,7 +149,7 @@ public sealed partial class ModelSession
                 problems.Add((pointer, new("FLOW_ACTION_NAME_TAKEN", "two texts of this op create an action named " + createdName + " (" + created[createdScope] + " and " + pointer + ")",
                     null, "give each new action its own name, or send one text")));
         }
-        _flowActionTaken = null;
+        } finally { _flowPlanningFacts = null; _flowActionTaken = null; planning.Dispose(); }
         if (problems.Count > 0) {
             // The patch of the op: every text with the certain fixes of its problems, the new action texts they need after them
             // (one patch for the whole op, the same on each problem it fixes: applying it twice writes the same job).
@@ -144,11 +177,20 @@ public sealed partial class ModelSession
         // A text the read back refuses (a mapping the platform keeps in another form, FLOW_NOT_EXACT) does not stop the others:
         // every text is written and read back, and the op refuses once with the problems of each (nothing of it is kept).
         var refusals = new List<KernelRefusalException>();
+        using var writing = NativePerformanceCapture.Measure("flow.op.write");
+        // Planning wrote nothing: its index, with the names the renames above touched (the watch began before it), serves the
+        // writes too.
+        if (_flowWriteWatch != null) _flowWriteFacts = planningFacts;
         try {
             foreach (var i in CreationOrder(plans)) {
                 if (excluded.ContainsKey(i)) continue;
                 try {
                     results[i] = ApplyFlowText(texts[i].Text, texts[i].BasedOn, texts[i].Pointer);
+                    // The name caches of the op may hold a same-named action of another owner: the action this text
+                    // created or renamed is seen by the next text before any refresh (a one-result lookup is never retried).
+                    using (NativePerformanceCapture.Measure("flow.op.refreshIndexes"))
+                        if (results[i]?["key"]?.ToString() is { } written && Resolve("@" + written) is IObjectSignature changed)
+                            RefreshFlowActionIndexes(changed);
                     if (plans[i].Edited is { } edited && ScreenScriptWhy(edited) is { } why
                         && edited.Items.Any(n => n.Kind == "JavaScriptNode"))
                         Report("highWarnings", new JsonObject { ["code"] = ScreenJavaScriptException.AllowedCode,
@@ -241,25 +283,27 @@ public sealed partial class ModelSession
                 problems.Add(found.Count == 0
                     ? new("FLOW_OWNER_UNKNOWN", "the header names the owner " + edited.Owner + ", and the module has no screen, block or email of that name"
                         + (NameSuggestions.Closest(edited.Owner[(edited.Owner.LastIndexOf('/') + 1)..], FlowOwners.Names(reader, root), 3) is { Count: > 0 } near ? " (nearest: " + string.Join(", ", near) + ")" : ""),
-                        null, "name an owner of the module; a screen this job creates comes first (its html op before this logic op)")
+                        null, "name an owner of the module, or the screen or block of an html document of this job (in any order of the ops)")
                     : new("FLOW_OWNER_AMBIGUOUS", "the owner " + edited.Owner + " names " + found.Count + " elements: " + string.Join(", ", found.Take(4).Select(o => FlowOwners.PathOf(reader, root, o))),
                         null, "write the owner's path: " + FlowPrinter.Labels[edited.Kind] + " " + FlowOwners.PathOf(reader, root, found[0]) + "." + edited.Name));
                 return new(edited, null, null, null, null, problems);
             }
             var parent = found[0];
             under = parent;
-            // A Reactive or Mobile screen or block: its screen actions are client actions, and it holds data actions. A
-            // Traditional owner's actions are edited by their text but not born from one (decision 7 of the plan: Traditional
-            // Web comes after the Reactive texts are proven, as the html op refuses it).
+            // Traditional screens and blocks own server screen actions, never Reactive data actions.
             var mobile = Implements(parent, "IMobileScreen") || Implements(parent, "IMobileBlock");
-            if (!mobile) {
-                problems.Add(new("FLOW_OWNER_KIND", "a new " + FlowPrinter.Labels[edited.Kind] + " is born from its text under a Reactive or Mobile screen or block; " + edited.Owner
-                    + " is a " + reader.KindOf(parent) + " (Traditional Web is not written by text)", null,
-                    "name a Reactive or Mobile screen or block, or create the Traditional action with the logic op (kind screen, owner)"));
+            // Mobile screens also expose the shared web interface in O11. Prefer their
+            // specific interface or a Reactive action is created with the Traditional type.
+            var web = !mobile && (Implements(parent, "IWebScreen") || Implements(parent, "IWebBlock"));
+            var preparationOwner = web || !mobile && Implements(parent, "IWebEmail");
+            if (edited.Kind == "Preparation" ? !preparationOwner : !mobile && !(web && edited.Kind == "ScreenAction")) {
+                problems.Add(new("FLOW_OWNER_KIND", "a new " + FlowPrinter.Labels[edited.Kind] + " cannot be created under " + edited.Owner
+                    + " (" + reader.KindOf(parent) + ")", null,
+                    "Preparation needs a Traditional screen, block or email; data actions need a Reactive or Mobile owner"));
                 return new(edited, null, null, null, null, problems);
             }
             var taken = parent.Children.OfType<IObjectSignature>().FirstOrDefault(c => ModuleFlow.ActionKinds.Contains(reader.KindOf(c))
-                && string.Equals(reader.NameOf(c), edited.Name, StringComparison.OrdinalIgnoreCase));
+                && string.Equals(reader.KindOf(c) == "Preparation" ? "Preparation" : reader.NameOf(c), edited.Name, StringComparison.OrdinalIgnoreCase));
             if (taken != null && !(_flowShells.Contains(taken.ObjectKey!.ToString()!) && reader.KindOf(taken) == edited.Kind)) {
                 problems.Add(NameTaken(reader, taken, edited.Owner + " has"));
                 return new(edited, null, null, null, null, problems);
@@ -276,7 +320,7 @@ public sealed partial class ModelSession
                     if (baseline.Items.FirstOrDefault(p => p.Role == parameter.Role && string.Equals(p.Name, parameter.Name, StringComparison.OrdinalIgnoreCase)) is { } same
                         && idOf.TryGetValue(same.Key, out var id) && kept.Add(id)) parameter.Key = id;
                 edited.Key = baseline.Key;
-            } else owner = new("@" + parent.ObjectKey, Web: false);
+            } else owner = new("@" + parent.ObjectKey, Web: web);
         } else if (edited.Key.Length > 0) {
             try { action = Resolve("@" + edited.Key) as IObjectSignature; } catch (KeyNotFoundException) { }
             if (action == null || !ModuleFlow.ActionKinds.Contains(reader.KindOf(action))) {
@@ -284,7 +328,9 @@ public sealed partial class ModelSession
                     "read the action (ssam_map view flow) and edit that text; a new action is written without @key"));
                 return new(edited, null, null, null, null, problems);
             }
-            baseline = new FlowExtractor<IObjectSignature>(reader, (IObjectSignature)_es).Action(action, out var found);
+            List<string> found;
+            using (NativePerformanceCapture.Measure("flow.plan.extract"))
+                baseline = new FlowExtractor<IObjectSignature>(reader, (IObjectSignature)_es).Action(action, out found);
             // An action the op renamed through a free name reads as its text read it (FlowOp).
             if (_flowNameAsRead.TryGetValue(baseline.Key, out var asRead)) baseline.Name = asRead;
             read = ModuleFlow.Print(baseline);
@@ -370,9 +416,11 @@ public sealed partial class ModelSession
         // With the text: the problems whose fix is certain carry the corrected text, checked against the same read; what the
         // text does not declare (a list of the screen, a screen aggregate, the order of a record) the model says. A new screen,
         // block or data action is created under the owner the header names (resolved above).
-        var diff = FlowDiff.Compute(baseline, read?.Keys ?? new Dictionary<string, string>(), edited, read?.Text, prefix, text,
-            _flowActionTaken ?? (name => ScopeNames().Contains(name)), _flowAllowQueryInLoop, FlowRestore, new ModelFlowTypes(this, action, under), owner,
-            allowScreenJavaScript: ScreenScriptWhy(edited) != null);
+        FlowDiff diff;
+        using (NativePerformanceCapture.Measure("flow.plan.diff"))
+            diff = FlowDiff.Compute(baseline, read?.Keys ?? new Dictionary<string, string>(), edited, read?.Text, prefix, text,
+                _flowActionTaken ?? (name => ScopeNames().Contains(name)), _flowAllowQueryInLoop, FlowRestore, new ModelFlowTypes(this, action, under), owner,
+                allowScreenJavaScript: ScreenScriptWhy(edited) != null);
         problems.AddRange(diff.Problems);
         if (baseline != null && read != null) problems.AddRange(RenameCaptures(baseline, diff, read));
         if (baseline != null && read != null) problems.AddRange(EditedCursors(text, edited, baseline, read, problems.Any(p => p.Corrected != null)));
@@ -485,6 +533,7 @@ public sealed partial class ModelSession
     // aggregate) and every source alias: no mapping's source has an attribute outside it.
     private HashSet<string> AttributeNames()
     {
+        using var timing = NativePerformanceCapture.Measure("lookup.attributeNames");
         var reader = new KernelModelReader();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var element in reader.Walk((IObjectSignature)_es))
@@ -544,6 +593,7 @@ public sealed partial class ModelSession
         {
             name = name.Trim();
             if (name.EndsWith(" List", StringComparison.Ordinal)) name = name[..^5].Trim();
+            using var timing = NativePerformanceCapture.Measure("lookup.members.record");
             return name.Length == 0 ? null : reader.Walk((IObjectSignature)_es).FirstOrDefault(e => !e.WasDeleted && (Implements(e, "IStructureSignature") || Implements(e, "IEntitySignature"))
                 && string.Equals(reader.DisplayOf(e), name, StringComparison.Ordinal));
         }
@@ -565,8 +615,44 @@ public sealed partial class ModelSession
     private IObjectSignature? ModuleAction(string name, string kind)
     {
         if (name.Length == 0) return null;
-        return new Anvil.Core.Preflight.ModelBaseFacts(this, _espace).ActionElement(name, kind);
+        if (_flowPlanningFacts != null)
+            using (NativePerformanceCapture.Measure("lookup.moduleAction.planning")) return _flowPlanningFacts.ActionElement(name, kind);
+        if (_flowWriteWatch != null) {
+            // A name an earlier text of the op created, renamed or moved (or a verb whose names cannot be told): read again.
+            if (_flowWriteFacts == null || !_flowWriteWatch.Clean(name))
+                using (NativePerformanceCapture.Measure("lookup.moduleAction.index")) { _flowWriteFacts = new Preflight.ModelBaseFacts(this, _espace); _flowWriteWatch.Reset(); }
+            using (NativePerformanceCapture.Measure("lookup.moduleAction.written")) return _flowWriteFacts.ActionElement(name, kind);
+        }
+        using (NativePerformanceCapture.Measure("lookup.moduleAction.fresh")) return new Preflight.ModelBaseFacts(this, _espace).ActionElement(name, kind);
     }
+
+    // F5: the element of the scope of an action's node that holds a name, as a refusal says it (a variable, input, aggregate,
+    // data action or screen action of its screen or block, a widget of that screen or block, a screen of its flow, an
+    // element of the module), or null. The text form (ApplyFlowText) and the JSON form (RebindNativeCallNames) ask it alike.
+    private string? ScopeHolder(IObjectSignature action, string name)
+    {
+        var reader = new KernelModelReader();
+        for (var owner = action.Parent as IObjectSignature; owner != null; owner = owner.Parent as IObjectSignature)
+        {
+            foreach (var child in reader.ChildrenOf(owner))
+                if (!ReferenceEquals(child, action) && !child.WasDeleted && string.Equals(reader.NameOf(child), name, StringComparison.OrdinalIgnoreCase))
+                    return "the " + reader.KindOf(child) + " " + reader.NameOf(child) + " of " + (ReferenceEquals(owner, _es) ? "the module" : reader.NameOf(owner));
+            // A widget is named in the tree of its screen or block, not among its children, and its name is in the same scope
+            // (the platform numbers a node named like it: Checkbox1 -> Checkbox2).
+            if (reader.KindOf(owner) is "MobileScreen" or "WebScreen" or "MobileBlock" or "WebBlock")
+                foreach (var widget in reader.Walk(owner))
+                    if (!widget.WasDeleted && Implements(widget, "IWidget") && string.Equals(reader.NameOf(widget), name, StringComparison.OrdinalIgnoreCase))
+                        return "the " + reader.KindOf(widget) + " " + reader.NameOf(widget) + " of " + reader.NameOf(owner);
+            if (ReferenceEquals(owner, _es)) break;
+        }
+        return null;
+    }
+
+    // While the texts of a logic op are planned (read-only): one index of the module's action names for all of them.
+    private Preflight.ModelBaseFacts? _flowPlanningFacts;
+    // While they are written (S12): the same index, read again for a name a verb touched since it was built (NameWatch).
+    private Preflight.ModelBaseFacts? _flowWriteFacts;
+    private NameWatch? _flowWriteWatch;
 
     /// <summary>The names a new client action may not take (ScopeNames): the creation battery's patches take theirs from it.</summary>
     internal HashSet<string> ActionScopeNames() => ScopeNames();
@@ -575,6 +661,7 @@ public sealed partial class ModelSession
     // and a block's included), screen, block and flow, any case.
     private HashSet<string> ScopeNames()
     {
+        using var timing = NativePerformanceCapture.Measure("lookup.scopeNames");
         var reader = new KernelModelReader();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var element in reader.Walk((IObjectSignature)_es)) {
@@ -615,19 +702,53 @@ public sealed partial class ModelSession
             return byName.GetValueOrDefault(name) ?? [];
         }
 
+        private static bool Record(IObjectSignature element, KernelModelReader reader)
+            => reader.KindOf(element) is var kind && (kind.EndsWith("Entity", StringComparison.Ordinal) || kind.EndsWith("Structure", StringComparison.Ordinal));
+
+        // The entities and structures of that name: in a logic-text op from the op's index (FlowOp), else from the module.
+        private List<IObjectSignature> Records(string name)
+        {
+            if (!session._flowRecordBatch) return Named(name).Where(e => Record(e, reader)).ToList();
+            session._flowRecordNames ??= Index("flow.types.recordIndex", e => Record(e, reader));
+            return session._flowRecordNames.GetValueOrDefault(name) ?? [];
+        }
+
+        // The module variables of that name, the same way (a logic text never declares one).
+        private List<IObjectSignature> ModuleVariables(string name)
+        {
+            if (!session._flowRecordBatch) return Named(name).Where(e => DdlRules.VariableKinds.Contains(reader.KindOf(e))).ToList();
+            session._flowModuleVariables ??= Index("flow.types.variableIndex", e => DdlRules.VariableKinds.Contains(reader.KindOf(e)));
+            return session._flowModuleVariables.GetValueOrDefault(name) ?? [];
+        }
+
+        private Dictionary<string, List<IObjectSignature>> Index(string phase, Func<IObjectSignature, bool> kept)
+        {
+            using var timing = NativePerformanceCapture.Measure(phase);
+            var index = new Dictionary<string, List<IObjectSignature>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var element in reader.Walk((IObjectSignature)session._es)) {
+                if (element.WasDeleted || !kept(element)) continue;
+                var display = reader.NameOf(element);
+                if (display.Length == 0) continue;
+                (index.TryGetValue(display, out var list) ? list : index[display] = []).Add(element);
+            }
+            return index;
+        }
+
         public string? TypeOf(string name)
         {
+            using var timing = NativePerformanceCapture.Measure("lookup.types.variable");
             foreach (var owner in Owners())
                 foreach (var child in reader.ChildrenOf(owner))
                     if (reader.KindOf(child) is "LocalVariable" or "InputParameter" && string.Equals(reader.NameOf(child), name, StringComparison.OrdinalIgnoreCase))
                         return Type(child);
-            var module = Named(name).Where(e => DdlRules.VariableKinds.Contains(reader.KindOf(e))).ToList();
+            var module = ModuleVariables(name);
             return module.Count == 1 ? Type(module[0]) : null;
             static string? Type(IObjectSignature variable) => ModelHost.Prop(variable, "DataType") is { } type ? UiCatalog.TypeName(type) : null;
         }
 
         public IReadOnlyList<(string Alias, string Record)>? SourcesOf(string aggregate)
         {
+            using var timing = NativePerformanceCapture.Measure("lookup.types.sources");
             foreach (var owner in Owners())
                 foreach (var child in reader.ChildrenOf(owner))
                     if (reader.KindOf(child).Contains("Aggregate", StringComparison.Ordinal) && string.Equals(reader.NameOf(child), aggregate, StringComparison.OrdinalIgnoreCase))
@@ -638,14 +759,16 @@ public sealed partial class ModelSession
 
         public IReadOnlyList<string>? AttributesOf(string record)
         {
-            var records = Named(record).Where(e => reader.KindOf(e) is var kind && (kind.EndsWith("Entity", StringComparison.Ordinal) || kind.EndsWith("Structure", StringComparison.Ordinal))).ToList();
+            using var timing = NativePerformanceCapture.Measure("lookup.types.attributes");
+            var records = Records(record);
             if (records.Count != 1) return null;
             return reader.ChildrenOf(records[0]).Where(c => reader.KindOf(c).EndsWith("Attribute", StringComparison.Ordinal)).Select(c => reader.NameOf(c)).ToList();
         }
 
         public string? AttributeTypeOf(string record, string attribute)
         {
-            var records = Named(record).Where(e => reader.KindOf(e) is var kind && (kind.EndsWith("Entity", StringComparison.Ordinal) || kind.EndsWith("Structure", StringComparison.Ordinal))).ToList();
+            using var timing = NativePerformanceCapture.Measure("lookup.types.attributeType");
+            var records = Records(record);
             if (records.Count != 1) return null;
             var found = reader.ChildrenOf(records[0]).Where(c => reader.KindOf(c).EndsWith("Attribute", StringComparison.Ordinal) && string.Equals(reader.NameOf(c), attribute, StringComparison.OrdinalIgnoreCase)).ToList();
             return found.Count == 1 && ModelHost.Prop(found[0], "DataType") is { } type ? UiCatalog.TypeName(type) : null;
@@ -656,7 +779,8 @@ public sealed partial class ModelSession
         // another mandatory attribute holds what its default says, which is not certain here.
         public IReadOnlyList<(string Attribute, string? Value)>? MandatoryOf(string record)
         {
-            var records = Named(record).Where(e => reader.KindOf(e) is var kind && (kind.EndsWith("Entity", StringComparison.Ordinal) || kind.EndsWith("Structure", StringComparison.Ordinal))).ToList();
+            using var timing = NativePerformanceCapture.Measure("lookup.types.mandatory");
+            var records = Records(record);
             if (records.Count != 1) return null;
             var identifier = ModelHost.Prop(records[0], "IdentifierAttribute");
             return reader.ChildrenOf(records[0]).Where(c => reader.KindOf(c).EndsWith("Attribute", StringComparison.Ordinal) && (ReferenceEquals(c, identifier) || ModelHost.Prop(c, "IsMandatory") is true))
@@ -667,8 +791,19 @@ public sealed partial class ModelSession
         // of that name for that kind of call).
         public string? InputTypeOf(string callee, string? callKind, string parameter)
         {
-            IObjectSignature called;
-            try { called = session.Callee(callee, action, callKind); } catch (Exception error) when (error is KernelRefusalException or KeyNotFoundException or InvalidOperationException) { return null; }
+            using var timing = NativePerformanceCapture.Measure("lookup.types.inputType");
+            IObjectSignature? called = null;
+            try { called = session.Callee(callee, action, callKind); } catch (Exception error) when (error is KernelRefusalException or KeyNotFoundException or InvalidOperationException) { }
+            // The planning comes before anything is created: a module action another text of this op declares gives its own
+            // inputs (the action of that key when the callee exists). Never a screen, block or producer action by its bare name.
+            if (called == null && session._flowDeclaredSignatures?.Any(f => f.Owner.Length > 0 && string.Equals(f.Name, callee, StringComparison.OrdinalIgnoreCase)) == true) return null;
+            var declared = session._flowDeclaredSignatures?.Where(f => called != null ? f.Key == called.ObjectKey?.ToString()
+                : f.Owner.Length == 0 && string.Equals(f.Name, callee, StringComparison.OrdinalIgnoreCase)).ToArray() ?? [];
+            if (declared.Length == 1) {
+                var inputs = declared[0].Items.Where(i => i.Role == "in" && string.Equals(i.Name, parameter, StringComparison.OrdinalIgnoreCase)).ToArray();
+                return inputs.Length == 1 ? inputs[0].Prop("DataType") : null;
+            }
+            if (called == null) return null;
             var input = reader.ChildrenOf(called).FirstOrDefault(c => reader.KindOf(c).EndsWith("InputParameter", StringComparison.Ordinal) && string.Equals(reader.NameOf(c), parameter, StringComparison.OrdinalIgnoreCase));
             return input != null && ModelHost.Prop(input, "DataType") is { } type ? UiCatalog.TypeName(type) : null;
         }
@@ -676,7 +811,8 @@ public sealed partial class ModelSession
         // The identifier attribute of the one entity of that name.
         public string? IdentifierOf(string record)
         {
-            var records = Named(record).Where(e => reader.KindOf(e).EndsWith("Entity", StringComparison.Ordinal)).ToList();
+            using var timing = NativePerformanceCapture.Measure("lookup.types.identifier");
+            var records = Records(record).Where(e => reader.KindOf(e).EndsWith("Entity", StringComparison.Ordinal)).ToList();
             if (records.Count != 1 || ModelHost.Prop(records[0], "IdentifierAttribute") is not IObjectSignature identifier) return null;
             return reader.NameOf(identifier) is { Length: > 0 } name ? name : null;
         }
@@ -723,7 +859,8 @@ public sealed partial class ModelSession
         var ms = new JsonObject();
         void Phase(string name) { ms[name] = Math.Round(clock.Elapsed.TotalMilliseconds, 1); clock.Restart(); }
         var prefix = FlowDiff.AliasPrefix + ++_flowTexts + ".";
-        var plan = PlanFlowText(text, basedOn, prefix);
+        FlowPlan plan;
+        using (NativePerformanceCapture.Measure("flow.write.plan")) plan = PlanFlowText(text, basedOn, prefix);
         if (plan.Problems.Count > 0) throw Refusal([.. plan.Problems.Select(p => (pointer, p))]);
         var reader = new KernelModelReader();
         var (action, baseline, read, diff) = (plan.Action, plan.Baseline, plan.Read, plan.Diff!);
@@ -732,10 +869,13 @@ public sealed partial class ModelSession
         _verbatim = true;
         var applied = new Dictionary<string, int>(StringComparer.Ordinal);
         // The elements of the action by key, so a reference to one of them never walks the module (Resolve's miss does).
+        var writingOps = NativePerformanceCapture.Measure("flow.write.ops");
         _flowObjects = action == null ? new(StringComparer.Ordinal) : reader.Walk(action).Where(o => o.ObjectKey != null).ToDictionary(o => o.ObjectKey!.ToString()!, StringComparer.Ordinal);
         _flowObjectsOf = action;
         string actionKey;
         Dictionary<string, string> keyOf;
+        var platformNames = new List<(string Key, string Asked, string Given)>();
+        var nameTaken = new List<FlowExactness.NodeName>();
         var defaults = new JsonArray();
         var platform = new List<JsonObject>();
         var mappingRefused = new List<JsonObject>();
@@ -743,6 +883,7 @@ public sealed partial class ModelSession
         var template = 0;
         FlowItem after;
         string? difference;
+        FlowItem expected;
         try {
         try {
             var ops = diff.Ops;
@@ -765,7 +906,7 @@ public sealed partial class ModelSession
                 }
                 JsonObject? ready;
                 // A name the text writes that resolves to nothing (or to several) is refused at its text (the pointer).
-                try { ready = Materialize(ops[i], action); }
+                try { using (NativePerformanceCapture.Measure("flow.write.materialize")) ready = Materialize(ops[i], action); }
                 catch (KernelRefusalException error) when (error.Code is "FLOW_NAME_UNKNOWN" or "FLOW_NAME_AMBIGUOUS" or "FLOW_AGGREGATE_MASTER_SOURCE") { throw AtText(error, pointer); }
                 if (ready == null) continue;
                 try { ApplyOne(ready); }
@@ -777,10 +918,15 @@ public sealed partial class ModelSession
                 if (baseline == null && ready["as"]?.ToString() == prefix + "action" && Resolve(prefix + "action") is IObjectSignature fresh) {
                     // The new action owns the ops that follow (the kind of flow decides the calls).
                     action = fresh;
+                    _flowObjectsOf = fresh;
                     var born = fresh.Children.OfType<IObjectSignature>().Where(c => c is IFlowNode
                         || Implements(c, "IInputParameter") || Implements(c, "IOutputParameter") || Implements(c, "ILocalVariable")).ToList();
                     foreach (var element in born) {
-                        ApplyOne(new JsonObject { ["op"] = "delete", ["target"] = "@" + element.ObjectKey, ["force"] = true });
+                        // The Studio's template children are born after the module's key index: resolved in this action,
+                        // not by a walk of the module.
+                        var remove = new JsonObject { ["op"] = "delete", ["target"] = "@" + element.ObjectKey, ["force"] = true };
+                        Pin(remove, "target");
+                        ApplyOne(remove);
                         template++;
                     }
                 }
@@ -788,24 +934,39 @@ public sealed partial class ModelSession
         } finally { _verbatim = was; }
         action ??= (IObjectSignature)Resolve(prefix + "action");
         FlushPendingMappings(pointer, diff.Expected, new ModelFlowTypes(this, action));
+        writingOps.Dispose();
+        using var readingBack = NativePerformanceCapture.Measure("flow.write.readBack");
         Phase("ops");
         actionKey = action.ObjectKey!.ToString()!;
         // The keys the creates gave, by alias.
         keyOf = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (alias, value) in _handles)
             if (alias.StartsWith(prefix, StringComparison.Ordinal) && value is IObjectSignature { ObjectKey: not null } created) keyOf[alias] = created.ObjectKey.ToString()!;
-        var expected = diff.Expected.Clone();
+        expected = diff.Expected.Clone();
         Rekey(expected, keyOf);
         // Read it again: it must be the text. A value the platform changed on the way is written again (settle).
         var types = new ModelFlowTypes(this, action);
+        // F5 (FlowExactness): the action is compared with the text by structure and meaning, never by the spelling of a node's
+        // name. A node the platform named otherwise (its name is taken in the node's scope) keeps the platform's name once the
+        // text's was written again, with every expression of the action that reads it; a name kept in another case is the same.
         for (var round = 0; ; round++) {
             after = new FlowExtractor<IObjectSignature>(reader, (IObjectSignature)_es).Action(action, out _);
             AcceptDefaults(expected, after, keyOf.Values.ToHashSet(StringComparer.Ordinal), defaults);
             DefaultCalls(expected, after);
             MappingOrder(expected, after);
             PlatformMappings(expected, after, pointer, platform, mappingRefused, types);
+            if (round > 0)
+                foreach (var renamed in FlowExactness.AdoptNodeNames(expected, after, asked => ScopeHolder(action, asked))) {
+                    // An element of the node's scope holds the text's name: the text's name says two things, refused below.
+                    if (renamed.Holder != null) { if (!nameTaken.Any(n => n.Key == renamed.Key)) nameTaken.Add(renamed); continue; }
+                    platformNames.Add((renamed.Key, renamed.Asked, renamed.Given));
+                    platform.Add(Preflight.JobNormalizer.Entry("FLOW_NODE_RENAMED", pointer, renamed.Asked, renamed.Given,
+                        $"the node {renamed.Asked} is named {renamed.Given} by the platform (no element of its scope has the name {renamed.Asked}): the expressions of {after.Name} that read {renamed.Asked} read {renamed.Given}"));
+                }
+            foreach (var (element, from, to) in FlowExactness.AdoptNameCase(expected, after))
+                platform.Add(Preflight.JobNormalizer.Entry("FLOW_NAME_CASE", pointer, from, to, $"{element}: the platform keeps the names as the module has them (OutSystems names have no case)"));
             difference = Difference(expected.Canon(), after.Canon());
-            if (difference == null || round == 2) break;
+            if (difference == null || round == 3) break;
             var fixes = Settle(expected, after);
             if (fixes.Count == 0) break;
             _verbatim = true;
@@ -825,21 +986,55 @@ public sealed partial class ModelSession
         if (difference == null && mappingRefused.Count == 0 && platform.Count > 0) Normalized(platform);
         // A mapping the platform keeps in a form that says something else is refused with its reason (never taken silently),
         // together with whatever else does not read back.
+        var textId = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (id, mappedTo) in diff.Mapped) textId.TryAdd(keyOf.GetValueOrDefault(mappedTo, mappedTo), id);
+        // F5: a node whose name an element of its scope holds: the platform names it otherwise, and the text's name says two things
+        // (the node, and that element). Refused naming both, with the one next step: rename the node.
+        if (nameTaken.Count > 0) {
+            var problems = new JsonArray();
+            foreach (var taken in nameTaken) {
+                var id = textId.GetValueOrDefault(taken.Key);
+                var problem = JobPreflight.Problem(null, pointer, "FLOW_NODE_NAME_TAKEN", "error",
+                    $"{(id != null ? "@" + id + " " : "")}the node {taken.Asked} of {after.Name}: {taken.Holder} has the name {taken.Asked} in its scope, so the platform names the node {taken.Given}, and the text's {taken.Asked} says both",
+                    $"give the node a name nothing in its scope has (for example {taken.Given} = ...) and write that name where the text means the node's value; keep {taken.Asked} where it means {taken.Holder} (nothing was kept)");
+                problem["id"] = id; problem["node"] = taken.Asked; problem["given"] = taken.Given; problem["holder"] = taken.Holder;
+                problems.Add(JobPreflight.PublicProblem(problem));
+            }
+            foreach (var d in FlowExactness.Differences(expected, after, key => textId.GetValueOrDefault(key))
+                         .Where(d => !(d.Property == "Name" && nameTaken.Any(n => n.Asked == d.Expected && n.Given == d.Actual))))
+                problems.Add(JobPreflight.PublicProblem(JobPreflight.Problem(null, pointer, "FLOW_NOT_EXACT", "error", "after the ops " + d.Message,
+                    "nothing was kept; write the element as the platform keeps it when it means the same")));
+            throw new KernelRefusalException("FLOW_NODE_NAME_TAKEN", "logic: the action " + after.Name + ": " + string.Join(" | ", problems.Select(p => p!["message"]?.ToString())), problems);
+        }
         if (mappingRefused.Count > 0 || difference != null) {
             var problems = new JsonArray(mappingRefused.Select(p => (JsonNode)p).ToArray());
-            if (difference != null)
-                problems.Add(JobPreflight.PublicProblem(JobPreflight.Problem(null, pointer, "FLOW_NOT_EXACT", "error",
-                    "after the ops the action reads differently from the text (" + difference + ")",
-                    "nothing was kept; report it with the text (the engine could not write this construction exactly)")));
+            if (difference != null) {
+                // F5: one problem per element that differs, with its id in the text, the property, the text's value and the action's.
+                var differences = FlowExactness.Differences(expected, after, key => textId.GetValueOrDefault(key));
+                foreach (var d in differences) {
+                    var problem = JobPreflight.Problem(null, pointer, "FLOW_NOT_EXACT", "error", "after the ops " + d.Message,
+                        d.Actual == null ? $"leave {d.Property} out of the text: the platform keeps none on {d.Element} (nothing was kept)"
+                        : d.Expected == null ? $"write {d.Property} as the platform keeps it on {d.Element}: `{d.Actual}` (nothing was kept)"
+                        : $"write {d.Property} of {d.Element} as the platform keeps it, `{d.Actual}`, when it means the same; otherwise report the construction with the text (nothing was kept)");
+                    problem["id"] = d.Id; problem["element"] = d.Element; problem["property"] = d.Property; problem["expected"] = d.Expected; problem["actual"] = d.Actual;
+                    problems.Add(JobPreflight.PublicProblem(problem));
+                }
+                if (differences.Count == 0)
+                    problems.Add(JobPreflight.PublicProblem(JobPreflight.Problem(null, pointer, "FLOW_NOT_EXACT", "error",
+                        "after the ops the action reads differently from the text (" + difference + ")",
+                        "nothing was kept; report it with the text (the engine could not write this construction exactly)")));
+            }
             throw mappingRefused.Count > 0
                 ? new KernelRefusalException("FLOW_MAPPING_TYPES", "logic: the action " + after.Name + ": " + mappingRefused.Count + " mapping(s) the platform keeps in a form that says something else: "
                     + string.Join(" | ", mappingRefused.Select(p => p["message"]?.ToString())) + (difference != null ? "; and it does not read back as the text: " + difference : ""), problems)
                 : new KernelRefusalException("FLOW_NOT_EXACT", "logic: the action " + after.Name + " does not read back as the text: " + difference, problems);
         }
-        var now = ModuleFlow.Print(after);
+        using var answering = NativePerformanceCapture.Measure("flow.write.answer");
+        FlowDocument now;
+        using (NativePerformanceCapture.Measure("flow.write.print")) now = ModuleFlow.Print(after);
         // The text the action reads as now is the read of a next edit (its textSha, the basedOn): kept, so that edit is merged
         // if the action changes again before it arrives.
-        KeepFlowReading(after, now);
+        using (NativePerformanceCapture.Measure("flow.write.keepReading")) KeepFlowReading(after, now);
         var idOf = now.Keys.ToDictionary(p => p.Value, p => p.Key, StringComparer.Ordinal);
         string Id(string key) => idOf.GetValueOrDefault(key, key);
         // A shell of an html document of this job is filled once: a later text of the same name is a name taken.
@@ -868,6 +1063,7 @@ public sealed partial class ModelSession
             ["deleted"] = diff.Deleted.Count == 0 ? null : new JsonArray(diff.Deleted.Select(k => (JsonNode)("@" + (read?.Keys.FirstOrDefault(p => p.Value == k).Key ?? k))).ToArray()),
             ["renamed"] = diff.Renamed.Count == 0 ? null : new JsonArray(diff.Renamed.Select(r => (JsonNode)new JsonObject { ["from"] = r.From, ["to"] = r.To }).ToArray()),
             ["nodeNames"] = diff.NodeNames.Count == 0 ? null : new JsonArray(diff.NodeNames.Select(n => (JsonNode)new JsonObject { ["id"] = n.Id, ["asked"] = n.Asked, ["given"] = n.Given }).ToArray()),
+            ["platformNames"] = platformNames.Count == 0 ? null : new JsonArray(platformNames.Select(n => (JsonNode)new JsonObject { ["node"] = "@" + n.Key, ["asked"] = n.Asked, ["given"] = n.Given }).ToArray()),
             ["sorts"] = diff.SortNormalizations.Count == 0 ? null : new JsonArray(diff.SortNormalizations.Select(n => (JsonNode)new JsonObject { ["id"] = n.Id, ["from"] = n.From, ["to"] = n.To, ["why"] = n.Why }).ToArray()),
             ["joins"] = diff.JoinNormalizations.Count == 0 ? null : new JsonArray(diff.JoinNormalizations.Select(n => (JsonNode)new JsonObject { ["id"] = n.Id, ["from"] = n.From, ["to"] = n.To, ["why"] = n.Why }).ToArray()),
             ["defaults"] = defaults.Count == 0 ? null : defaults, ["settled"] = settled > 0 ? settled : null, ["templateNodesRemoved"] = template > 0 ? template : null,
@@ -921,6 +1117,17 @@ public sealed partial class ModelSession
     private IObjectSignature? _flowObjectsOf;
     private readonly List<string> _flowPins = [];
 
+    // The exact element the materialization resolved, pinned for the ops of this text instead of searched again by key in
+    // the whole model (a CRUD signature materialized after the key index). The finally of the text removes every pin.
+    private string PinResolvedFlowReference(IObjectSignature element)
+    {
+        if (element.ObjectKey is not { } key || element.WasDeleted)
+            throw new KernelRefusalException("FLOW_NAME_UNKNOWN", "logic: a resolved reference is absent or deleted");
+        var reference = "@" + key;
+        if (!_handles.ContainsKey(reference)) { _handles[reference] = element; _flowPins.Add(reference); }
+        return reference;
+    }
+
     // "@key" or "@key/arg:Name" of an element of the action, resolved from the action's own elements (walked again once
     // when a key is new) and pinned as a handle of that exact reference for the ops of this text.
     private void Pin(JsonObject op, string field)
@@ -971,12 +1178,12 @@ public sealed partial class ModelSession
                 var arg = refProperty[5..];
                 var text = ready["args"]![arg]!.ToString();
                 var element = Display(text, ready["type"]?.ToString() == "ISQLOutput" ? "EntityOrStructure" : "Source", null, action);
-                ready["args"]![arg] = "@" + element.ObjectKey;
+                ready["args"]![arg] = PinResolvedFlowReference(element);
             } else {
                 var target = Resolve(ready["target"]!.ToString());
                 var text = ready["value"]!.ToString();
-                if (refProperty == "Action") ready["value"] = "@" + Callee(text, action, ready["_call"]?.ToString()).ObjectKey;
-                else if (refProperty != "DataType") ready["value"] = "@" + Display(text, refProperty, target, action).ObjectKey;
+                if (refProperty == "Action") ready["value"] = PinResolvedFlowReference(Callee(text, action, ready["_call"]?.ToString()));
+                else if (refProperty != "DataType") ready["value"] = PinResolvedFlowReference(Display(text, refProperty, target, action));
             }
         }
         if (ready["_source"]?.ToString() is { } aggregateRef) {
@@ -1020,8 +1227,10 @@ public sealed partial class ModelSession
     // kind the flow picks. shared: more than one action has the name.
     private IObjectSignature Callee(string text, IObjectSignature? action, string? call, out bool shared, bool again = false)
     {
+        using var timing = NativePerformanceCapture.Measure(again ? "lookup.callee.again" : "lookup.callee");
         var reader = new KernelModelReader();
         if (_flowCallees == null) {
+            using var indexing = NativePerformanceCapture.Measure("lookup.callee.index");
             _flowCallees = new(StringComparer.Ordinal);
             var extractor = new FlowExtractor<IObjectSignature>(reader, (IObjectSignature)_es);
             foreach (var element in reader.Walk((IObjectSignature)_es))
@@ -1029,13 +1238,21 @@ public sealed partial class ModelSession
                     (_flowCallees.TryGetValue(extractor.Callee(element), out var list) ? list : _flowCallees[extractor.Callee(element)] = []).Add(element);
         }
         var found = _flowCallees.GetValueOrDefault(text)?.Where(e => !e.WasDeleted).ToList() ?? [];
+        // A screen or block action belongs to one owner: a same-named one of another screen or block is never the callee, even
+        // when it is the only one gathered or the one the module calls most. The caller's own comes first (read live).
+        bool IsUiAction(IObjectSignature e) => Implements(e, LogicOrder.MobileScreenAction) || Implements(e, LogicOrder.WebScreenAction);
+        var uiOwner = action != null && IsUiAction(action) ? action.Parent as IObjectSignature : null;
+        var local = uiOwner?.Children.OfType<IObjectSignature>().Where(e => !e.WasDeleted && IsUiAction(e)
+            && string.Equals(reader.NameOf(e), text, StringComparison.Ordinal)).ToList() ?? [];
+        found = found.Where(e => !IsUiAction(e) || ReferenceEquals(e.Parent, uiOwner)).ToList();
+        if (local.Count > 0 && call != "Server") found = local;
         // An action created after the names were gathered (an earlier text or op of the job): gathered again once.
         if (found.Count == 0 && !again) { _flowCallees = null; _flowCalls = null; return Callee(text, action, call, out shared, true); }
         shared = found.Count > 1;
         if (found.Count == 0)
-            throw new KernelRefusalException("FLOW_NAME_UNKNOWN", $"logic: no action is named {text} in this module or its references",
+            throw new KernelRefusalException("FLOW_NAME_UNKNOWN", $"logic: no callable action is named {text} in this scope or its module references; a screen or block action must belong to the caller's owner",
                 new JsonArray(JobPreflight.PublicProblem(JobPreflight.Problem(null, null, "FLOW_NAME_UNKNOWN", "error", $"no action {text}",
-                    "name an action of the module, or of a producer it references (Producer.Action, (System).Action)"))));
+                    "define the action on the caller's screen or block, or name an action of the module or of a producer it references (Producer.Action, (System).Action)"))));
         bool IsClient(IObjectSignature e) => Implements(e, "IClientAction") || Implements(e, "IClientActionSignature") || Implements(e, LogicOrder.MobileScreenAction);
         var flowClient = action != null && ClientFlow(action);
         // The kind of call: the text's (Call=), else the flow's: a client flow calls the client action of a name both kinds
@@ -1064,10 +1281,26 @@ public sealed partial class ModelSession
 
     private Dictionary<(IObjectSignature, bool), int>? _flowCalls;
 
+    // The name caches of Display and Callee after a text wrote this action: it is taken out of every name and put under the
+    // one it has now (the changed root, not a walk of the module per action of the op).
+    private void RefreshFlowActionIndexes(IObjectSignature action)
+    {
+        var reader = new KernelModelReader();
+        void Refresh(Dictionary<string, List<IObjectSignature>>? index, string name)
+        {
+            if (index == null) return;
+            foreach (var list in index.Values) list.RemoveAll(e => ReferenceEquals(e, action));
+            if (name.Length > 0) (index.TryGetValue(name, out var items) ? items : index[name] = []).Add(action);
+        }
+        Refresh(_flowDisplay, reader.DisplayOf(action));
+        if (_flowCallees != null) Refresh(_flowCallees, new FlowExtractor<IObjectSignature>(reader, (IObjectSignature)_es).Callee(action));
+    }
+
     // How many client (or server) execute nodes of the module call this action.
     private int CallsOf(IObjectSignature callee, bool client)
     {
         if (_flowCalls == null) {
+            using var indexing = NativePerformanceCapture.Measure("lookup.calls.index");
             _flowCalls = new();
             var reader = new KernelModelReader();
             foreach (var node in reader.Walk((IObjectSignature)_es)) {
@@ -1084,8 +1317,44 @@ public sealed partial class ModelSession
     // property takes; the closest to the action when several do.
     private IObjectSignature Display(string text, string property, object? target, IObjectSignature? action, bool again = false)
     {
+        using var timing = NativePerformanceCapture.Measure(again ? "lookup.display.again" : "lookup.display");
         var reader = new KernelModelReader();
+        // Ajax Refresh names a widget owned by this Traditional screen/block, never a same-named
+        // output parameter or a widget in another screen. Resolve live: earlier ops can add widgets.
+        if (property == "WidgetOrWebBlock" && target != null && Implements(target, "IAjaxRefreshNode") && action != null)
+        {
+            for (var scope = action.Parent as IObjectSignature; scope != null; scope = scope.Parent as IObjectSignature)
+            {
+                if (reader.KindOf(scope) is not ("WebScreen" or "WebBlock")) continue;
+                var widgets = reader.Walk(scope).Where(e => !e.WasDeleted && Implements(e, "IWidget")
+                    && reader.DisplayOf(e) == text).ToList();
+                if (widgets.Count == 1) return widgets[0];
+                throw new KernelRefusalException(widgets.Count == 0 ? "FLOW_NAME_UNKNOWN" : "FLOW_NAME_AMBIGUOUS",
+                    $"logic: WidgetOrWebBlock {text}: expected one widget in {reader.DisplayOf(scope)}, found {widgets.Count}");
+            }
+        }
+        // Refresh Data is local to a screen/block. A module-wide name cache can still contain only the first
+        // Carregar/GetData when later screens were created in the same job. Binding that source passes the text
+        // round trip (the name is identical), but the native merge drops the illegal cross-screen reference.
+        if (property == "DataSource" && target is OutSystems.Model.Logic.Nodes.IRefreshDataNode && action != null)
+        {
+            var sourceType = FindProperty(target, property)?.PropertyType;
+            for (var scope = action.Parent as IObjectSignature; scope != null; scope = scope.Parent as IObjectSignature)
+            {
+                if (reader.KindOf(scope) is not ("MobileScreen" or "WebScreen" or "MobileBlock" or "WebBlock")) continue;
+                var children = scope.Children.OfType<IObjectSignature>().ToList();
+                // Traditional aggregates live inside this screen's Preparation, not beside it.
+                var candidates = children.Concat(children.Where(e => reader.KindOf(e) == "Preparation")
+                    .SelectMany(e => e.Children.OfType<IObjectSignature>()));
+                var sources = candidates.Where(e => !e.WasDeleted
+                    && reader.DisplayOf(e) == text && sourceType?.IsInstanceOfType(e) == true).ToList();
+                if (sources.Count == 1) return sources[0];
+                throw new KernelRefusalException(sources.Count == 0 ? "FLOW_NAME_UNKNOWN" : "FLOW_NAME_AMBIGUOUS",
+                    $"logic: DataSource {text}: expected one source in {reader.DisplayOf(scope)}, found {sources.Count}; a refresh cannot use another screen's source");
+            }
+        }
         if (_flowDisplay == null) {
+            using var indexing = NativePerformanceCapture.Measure("lookup.display.index");
             _flowDisplay = new(StringComparer.Ordinal);
             foreach (var element in reader.Walk((IObjectSignature)_es)) {
                 var name = reader.DisplayOf(element);
@@ -1094,7 +1363,12 @@ public sealed partial class ModelSession
             }
         }
         var type = target == null ? null : FindProperty(target, property)?.PropertyType;
-        bool Fits(IObjectSignature e) => type != null ? type.IsInstanceOfType(e)
+        // A lifecycle event's Destination is an action of the owner, not a navigation's: the native property type alone also
+        // admits an entity attribute or a block event of the same name.
+        var lifecycleDestination = property == "Destination" && target is IObjectSignature eventObject && reader.KindOf(eventObject) == "UILifeCycleEvent";
+        bool Fits(IObjectSignature e) => lifecycleDestination
+            ? (type == null || type.IsInstanceOfType(e)) && (Implements(e, LogicOrder.MobileScreenAction) || Implements(e, LogicOrder.WebScreenAction))
+            : type != null ? type.IsInstanceOfType(e)
             : property == "EntityOrStructure" ? Implements(e, "IEntitySignature") || Implements(e, "IStructureSignature") || Implements(e, "IRecordSignature") || Implements(e, "IServerEntity") || Implements(e, "IStructure")
             : Implements(e, "IEntitySignature") || Implements(e, "IServerEntity") || Implements(e, "IStaticEntity") || Implements(e, "IClientEntity");
         var found = (_flowDisplay.GetValueOrDefault(text) ?? []).Where(e => !e.WasDeleted && Fits(e)).ToList();
@@ -1105,9 +1379,13 @@ public sealed partial class ModelSession
         // the operation tree of an aggregate (a source named after its entity): a reference names a screen, an action, an
         // entity, an exception, a data source.
         if (found.Count > 0 && found.Where(e => !Inner(e)).ToList() is { Count: > 0 } outer && outer.Count < found.Count) found = outer;
+        // The output of an SQL is an entity or a structure: a static entity's record of the same name is never it (T3: the page
+        // of an entity named like a record of a static entity).
+        if (property == "EntityOrStructure" && found.Count > 1 && found.Where(e => !Implements(e, "IRecordSignature") && !Implements(e, "IRecord")).ToList() is { Count: > 0 } typed
+            && typed.Count < found.Count) found = typed;
         // A navigation goes to a screen or an external site: an action of the same name (a screen action Login beside the
         // screen Login, the System action Login) is not its destination while one of those is there.
-        if (property == "Destination" && found.Count > 1 && found.Where(e => !reader.KindOf(e).EndsWith("Action", StringComparison.Ordinal) && !reader.KindOf(e).EndsWith("ActionSignature", StringComparison.Ordinal)).ToList() is { Count: > 0 } places
+        if (property == "Destination" && !lifecycleDestination && found.Count > 1 && found.Where(e => !reader.KindOf(e).EndsWith("Action", StringComparison.Ordinal) && !reader.KindOf(e).EndsWith("ActionSignature", StringComparison.Ordinal)).ToList() is { Count: > 0 } places
             && places.Count < found.Count) found = places;
         if (found.Count > 1) found = Closest(found, action);
         if (found.Count == 1) return found[0];
@@ -1409,6 +1687,17 @@ public sealed partial class ModelSession
             foreach (var name in args.Keys.Union(gotArgs.Keys))
                 if (args.GetValueOrDefault(name, "") != gotArgs.GetValueOrDefault(name, ""))
                     fixes.Add(new JsonObject { ["op"] = "set", ["target"] = target + "/arg:" + name, ["prop"] = "Value", ["value"] = args.GetValueOrDefault(name, "") });
+            // F5: the expressions of the assignments and cases (paired by position; the read's parts carry their keys) that read
+            // differently, written again (a node name the platform gave, FlowExactness.AdoptNodeNames, rewrites them).
+            foreach (var role in new[] { "assignment", "case" }) {
+                var mine = want.Items.Where(i => i.Role == role).ToList();
+                var theirs = got.Items.Where(i => i.Role == role).ToList();
+                if (mine.Count != theirs.Count) continue;
+                for (var k = 0; k < mine.Count; k++)
+                    foreach (var (name, value) in mine[k].Props)
+                        if (value.Type == 'e' && theirs[k].Key.Length > 0 && theirs[k].Props.TryGetValue(name, out var has) && has.Text != value.Text)
+                            fixes.Add(new JsonObject { ["op"] = "set", ["target"] = "@" + theirs[k].Key, ["prop"] = name, ["value"] = value.Text });
+            }
         }
         Values(expected, after, "@" + after.Key);
         foreach (var item in expected.Items.Where(i => FlowItem.Keyed(i.Role) && !i.Opaque))

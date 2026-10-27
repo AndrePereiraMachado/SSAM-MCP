@@ -32,7 +32,26 @@ public static class DdlConventions
         public List<DdlProblem> Problems { get; } = [];
     }
 
-    public static Result Apply(DdlDocument edit, DdlDocument? current)
+    // `types` gives the native type the set verb converts a property of an element to (the session's: by its key, by its kind for a new one): a flag of the text is
+    // read as the set verb reads it for that type (DdlValues.Flag), and one a rule fills is written in that type's form. Null
+    // in the static checks: the text's own words.
+    public static Result Apply(DdlDocument edit, DdlDocument? current, Func<DdlElement, string, Type?>? types = null)
+    {
+        var previous = DdlConventions.types;
+        DdlConventions.types = types;
+        try { return Run(edit, current); }
+        finally { DdlConventions.types = previous; }
+    }
+
+    [ThreadStatic] private static Func<DdlElement, string, Type?>? types;
+
+    private static Type? TypeOf(DdlElement element, string property) => types?.Invoke(element, property);
+
+    // Whether the element sets the flag `property`, read by its native type.
+    private static bool Set(DdlElement? element, string property) =>
+        element != null && DdlValues.IsSet(element.Props.GetValueOrDefault(property), TypeOf(element, property));
+
+    private static Result Run(DdlDocument edit, DdlDocument? current)
     {
         var result = new Result();
         var byKey = new Dictionary<string, DdlElement>(StringComparer.Ordinal);
@@ -62,14 +81,14 @@ public static class DdlConventions
         var before = attribute.Key.Length > 0 && was != null ? was.Children.FirstOrDefault(c => c.Kind == "EntityAttribute" && c.Key == attribute.Key) : null;
         // A kept attribute without the module (the static checks) is left as written: the apply judges it.
         var judged = attribute.Key.Length == 0 || before != null;
-        if (judged && attribute.Props.GetValueOrDefault("IsMandatory") != "True"
-            && (before == null || before.Props.GetValueOrDefault("IsMandatory") == "True")) {
-            attribute.Props["IsMandatory"] = "True";
+        if (judged && !Set(attribute, "IsMandatory") && (before == null || Set(before, "IsMandatory"))) {
+            var written = attribute.Props.GetValueOrDefault("IsMandatory");
+            attribute.Props["IsMandatory"] = DdlValues.FlagText(true, TypeOf(attribute, "IsMandatory"), "True");
             result.Notes.Add(new("DDL_IDENTIFIER_REQUIRED", $"line {attribute.Line}: {entity.Name}.{attribute.Name} is the identifier of {entity.Name}, a primary key: "
-                + (before == null ? "required, as the platform makes every identifier" : "kept required, as the module has it") + " (the text left out 'required')"));
+                + (before == null ? "required, as the platform makes every identifier" : "kept required, as the module has it")
+                + (written == null ? " (the text left out 'required')" : $" (the text wrote IsMandatory={written}, not True)")));
         }
-        if (entity.Kind == "StaticEntity" && judged && attribute.Props.GetValueOrDefault("IsAutoNumber") is "Yes" or "True"
-            && before?.Props.GetValueOrDefault("IsAutoNumber") is not ("Yes" or "True")) {
+        if (entity.Kind == "StaticEntity" && judged && Set(attribute, "IsAutoNumber") && !Set(before, "IsAutoNumber")) {
             attribute.Props.Remove("IsAutoNumber");
             result.Notes.Add(new("DDL_STATIC_ID_NOT_AUTO", $"line {attribute.Line}: {entity.Name}.{attribute.Name} is a static entity's identifier, never AutoNumber "
                 + "(the spec's rule; the ODC Studio refuses 'StaticEntity Auto Number'): 'auto' left out, each record has its own value"));
@@ -181,11 +200,11 @@ public static class DdlConventions
         DdlElement? Named(string? name) => name != null && named.TryGetValue(name, out var a) ? a : null;
         var context = new DdlParsedContext(entity);
         var roles = new Dictionary<DdlElement, string>(ReferenceEqualityComparer.Instance);
-        if (Named(entity.Props.GetValueOrDefault("Identifier")) is { } id && Integer(id) && id.Props.GetValueOrDefault("IsAutoNumber") is not ("Yes" or "True")) roles[id] = "identifier";
+        if (Named(entity.Props.GetValueOrDefault("Identifier")) is { } id && Integer(id) && !Set(id, "IsAutoNumber")) roles[id] = "identifier";
         if (Named(context.Value("LabelAttribute")) is { } label && Text(label)) roles.TryAdd(label, "label");
         if (Named(context.Value("OrderByAttribute")) is { } order && Integer(order)) roles.TryAdd(order, "order");
         // An AutoNumber identifier (O11) numbers its records itself: they have no value of it.
-        var watched = attributes.Where(a => roles.ContainsKey(a) || a.Props.GetValueOrDefault("IsMandatory") == "True" && a.Props.GetValueOrDefault("IsAutoNumber") is not ("Yes" or "True")).ToList();
+        var watched = attributes.Where(a => roles.ContainsKey(a) || Set(a, "IsMandatory") && !Set(a, "IsAutoNumber")).ToList();
         if (watched.Count == 0) return;
         // The module's records of a kept entity, by key, with their values by the edit's attribute names (a renamed attribute
         // keeps its key).
@@ -286,7 +305,7 @@ public static class DdlConventions
                     "attributes of " + entity.Name + ": " + string.Join(", ", attributes)));
                 continue;
             }
-            var unique = index.Props.GetValueOrDefault("Unique") == "True";
+            var unique = Set(index, "Unique");
             // The records the uniqueness is judged on: the statement's list, or the module's when the statement has none.
             var records = (entity.HasValues ? entity.Children : was?.Children ?? []).Where(IsRecord).ToList();
             var judged = unique && (entity.HasValues || was != null);

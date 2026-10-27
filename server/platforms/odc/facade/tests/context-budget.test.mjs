@@ -30,7 +30,8 @@ test('B5a: no obsolete answer ceilings remain in production facade modules', () 
 test('B5b: one source owns every answer family budget and its headroom', () => {
   assert.equal(budget.ANSWER_CEILING_BYTES, 30720);
   assert.equal(budget.MAX_ANSWER_BYTES, budget.ANSWER_CEILING_BYTES);
-  assert.equal(budget.PACKET_DEFAULT_BYTES, 8192);
+  // R4 (24/10/2026): at 8 KB the packet was mostly cuts and next; 24 KB holds scope, text and the owner's reading.
+  assert.equal(budget.PACKET_DEFAULT_BYTES, 24576);
   assert.equal(budget.ANSWER_BUDGETS.packet, budget.PACKET_DEFAULT_BYTES);
   assert.equal(budget.PACKET_MAX_BYTES, budget.budgetCeiling());
   assert.equal(budget.EXPANSION_DEFAULT_BYTES, budget.budgetCeiling());

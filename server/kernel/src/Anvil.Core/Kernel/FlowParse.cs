@@ -107,17 +107,36 @@ internal sealed class FlowParser
     // its line. A recovery that cannot tell (the second pass finds nothing, or another first error) gives the first alone.
     private static FormatException Every(string text, FormatException first)
     {
+        List<string> found;
         try {
             var parser = new FlowParser(text, Mode.Collect);
             parser.Run();
             // One error of where a line stands a line (its first): a line the recovery meets twice (its block ends, then it is no
             // step) is one problem; an error of what the line says stays beside it.
             var seen = new HashSet<int>();
-            var found = parser.errors.Distinct(StringComparer.Ordinal)
+            found = parser.errors.Distinct(StringComparer.Ordinal)
                 .Where(e => !Placement.IsMatch(e) || FlowTextNormalizer.LineOf(e) is not { } n || seen.Add(n)).ToList();
-            if (found.Count == 0 || found[0] != first.Message) return new FlowSyntaxException([first.Message]);
-            return new FlowSyntaxException(found);
-        } catch (Exception) { return new FlowSyntaxException([first.Message]); }
+            if (found.Count == 0 || found[0] != first.Message) found = [first.Message];
+        } catch (Exception) { found = [first.Message]; }
+        return new FlowSyntaxException(Accepted(text, found));
+    }
+
+    // Each refused line with the line the grammar accepts beside it: the tolerated shape of that line (the text did not read
+    // whole with it, so it is no normalization), or the shape to write when no edit is certain (FlowTolerance).
+    private static List<string> Accepted(string text, List<string> errors)
+    {
+        try {
+            var (edits, hints) = FlowTolerance.Of(text);
+            // A form of the general language that refuses (R7) says what to write beside its line.
+            if (FlowGeneral.Uses(text) || text.Contains(" = sql -> ", StringComparison.Ordinal))
+                foreach (var problem in FlowGeneral.Expand(edits.Count == 0 ? text : FlowTextEdit.Apply(text, edits)).Problems)
+                    if (FlowTextNormalizer.LineOf(problem) is { } at) hints[at] = System.Text.RegularExpressions.Regex.Replace(problem, @"^line [0-9]+: ", "");
+            var lines = edits.GroupBy(e => e.Line).ToDictionary(g => g.Key, g => g.Last());
+            return errors.Select(e => FlowTextNormalizer.LineOf(e) is not { } n ? e
+                : lines.TryGetValue(n, out var edit) ? e + (edit.To.Trim().Length == 0 ? "; accepted form: no line (" + Reason(edit) + ")" : "; accepted form: `" + edit.To + "` (" + Reason(edit) + ")")
+                : hints.TryGetValue(n, out var hint) ? e + "; " + hint : e).ToList();
+        } catch (Exception) { return errors; }
+        static string Reason(FlowTextEdit edit) => System.Text.RegularExpressions.Regex.Replace(edit.Message, @"^line [0-9]+: ", "");
     }
 
     /// <summary>The edits that make a text the grammar reads where it has one reading (the lenient pass): applied by
@@ -128,9 +147,12 @@ internal sealed class FlowParser
     public static (List<FlowTextEdit> Edits, List<FlowTextAmbiguity> Ambiguities) Lenient(string text)
     {
         try {
-            var parser = new FlowParser(text, Mode.Lenient);
+            // The tolerated shapes first (FlowTolerance: whole lines, none added or removed), then the structure of the text
+            // they give: the numbers of every edit are the lines of the text as given.
+            var (tolerated, _) = FlowTolerance.Of(text);
+            var parser = new FlowParser(tolerated.Count == 0 ? text : FlowTextEdit.Apply(text, tolerated), Mode.Lenient);
             parser.Run();
-            return (parser.edits, parser.ambiguities);
+            return ([.. tolerated, .. parser.edits], parser.ambiguities);
         } catch (Exception) { return ([], []); }
     }
 
@@ -1120,9 +1142,11 @@ internal static class FlowAggregateShape
         + @")|(" + Entity + @")(?:\s+(?:AS\s+)?(" + Name + @"))?)$", Options);
     private static readonly System.Text.RegularExpressions.Regex Pair = new(@"^(\S+)\s+(" + Entity + @")~(" + Entity + @")\s+ON\s+", Options);
     private static readonly System.Text.RegularExpressions.Regex On = new(@"\s+ON\s+", Options);
+    private static readonly System.Text.RegularExpressions.Regex ColumnName = new(@"^(" + Name + @")\s*=\s*(?!=)", Options);
     private static readonly string[] SqlJoins = [" LEFT OUTER JOIN ", " RIGHT OUTER JOIN ", " FULL OUTER JOIN ",
         " INNER JOIN ", " LEFT JOIN ", " RIGHT JOIN ", " FULL JOIN "];
-    private static readonly string[] Boundaries = [.. SqlJoins, .. FlowPrinter.AggregateKeywords];
+    // ORDER BY is the SQL spelling of SORT (its keys and directions as written: FLOW_SORT_DIRECTION reads DESC/ASC).
+    private static readonly string[] Boundaries = [.. SqlJoins, " ORDER BY ", .. FlowPrinter.AggregateKeywords];
     private sealed record From(string Alias, string Entity)
     {
         public string Text => Alias == Entity ? Entity : Alias + "=" + Entity;
@@ -1190,10 +1214,13 @@ internal static class FlowAggregateShape
                     sources.Add(right);
                 }
             } else {
-                var clause = token.Trim();
+                var clause = token == " ORDER BY " ? "SORT" : token.Trim();
                 if (!clauses.TryGetValue(clause, out var values)) clauses[clause] = values = [];
                 if (values.Count > 0 && clause is "MAX" or "START")
                     return (null, "ambiguous repeated " + clause + ": " + values[0] + " or " + value + "; keep exactly one");
+                // A column's name is written `Name=value` (no space around its `=`) in GROUP BY, AGG and CALC.
+                if (clause is "GROUP BY" or "AGG" or "CALC")
+                    value = string.Join(", ", Split(value, ",").Select(item => ColumnName.Replace(item, "$1=")));
                 values.Add(value);
             }
             at = end;
@@ -1280,5 +1307,709 @@ internal static class FlowAggregateShape
             for (var n = start; n <= i; n++) masked[n] = 'x';
         }
         return new string(masked);
+    }
+}
+
+// ---- tolerance: the shapes a model writes for a line the grammar has one reading of (R1, 24/10/2026) ---------------------
+//
+// The lenient pass (FlowParser.Lenient) runs this first, on the raw lines, then reads the result: every edit here replaces one
+// whole line by another (a line may become empty, none is added or removed), so the line numbers of the structural edits the
+// parser writes after it are the numbers of the text as given. Each rewrite is a FlowTextEdit with its rule, which the
+// normalizer lists (normalizations) when the edited text reads whole, or offers as the certain patch of a text that still has
+// another error (FlowTextNormalizer.Corrected). Nothing here changes what a line says:
+//   FLOW_INDENT_UNIT      indentation of 1 (or 4) spaces a level, consistent in the action, is 2; a body written at depth 0
+//                         under its header is one level in; a single step at depth 0 between steps of depth 1 is at depth 1;
+//   FLOW_LINE_CONTINUATION an aggregate written over several lines (the next starting with JOIN, WHERE, ORDER, GROUP, ON, AND,
+//                         OR...) is one line; a SQL statement under its node without `| ` is its code;
+//   FLOW_SWITCH_INDENT    the cases of a switch written at its own depth are one level in;
+//   FLOW_ELSE             `else:` (or `otherwise:`) at the depth of its `if`: the false branch is written below the if, and
+//                         the true branch ends with the jump to where the if/else goes on (the step after it, `next` in a loop,
+//                         `end` at the end of the flow); a continuation that cannot be named stays refused, with the shape;
+//   FLOW_DECLARATION_ORDER an in/out/local written among the steps goes with the declarations (the steps keep their order);
+//   FLOW_LABEL_SPACING    a label after one space (or three) is the label (a #date# literal never has a space after its #);
+//   FLOW_ASSIGN_SPACING   `assign X=v` (and `X=v` in an assign block) is `assign X = v`: only the first `=` outside texts and
+//                         brackets, after a name, is the assignment's; the value is kept as written;
+//   FLOW_RESULT_SPACING   `Result=Action(...)` is `Result = Action(...)`;
+//   FLOW_ARGUMENT_SPACING the arguments of a call, navigate, trigger, node or event: `P=v, Q` (a comma and one space, no
+//                         space around the `=` of a name), no space before the parenthesis; values are kept as written;
+//   FLOW_NAVIGATE_ARGUMENTS `navigate Screen` (trigger, raise, an event's handler) without arguments is `navigate Screen()`;
+//   FLOW_JUMP_BY_NAME     `-> Name` names the one node of that name: `-> @id` (the node is given an id when it has none);
+//   FLOW_UNREACHED_END    an `end` right after a navigate or raise of the same branch (which end it) is no step;
+//   FLOW_MAPPING_SPACING  the value `Source mapTo {A: x,B: y}` of an assignment or an argument is `Source mapTo { A: x, B: y }`.
+internal static class FlowTolerance
+{
+    public const string IndentUnit = "FLOW_INDENT_UNIT";
+    public const string LineContinuation = "FLOW_LINE_CONTINUATION";
+    public const string SwitchIndent = "FLOW_SWITCH_INDENT";
+    public const string Else = "FLOW_ELSE";
+    public const string DeclarationOrder = "FLOW_DECLARATION_ORDER";
+    public const string AssignSpacing = "FLOW_ASSIGN_SPACING";
+    public const string ResultSpacing = "FLOW_RESULT_SPACING";
+    public const string ArgumentSpacing = "FLOW_ARGUMENT_SPACING";
+    public const string NavigateArguments = "FLOW_NAVIGATE_ARGUMENTS";
+    public const string JumpByName = "FLOW_JUMP_BY_NAME";
+    public const string UnreachedEnd = "FLOW_UNREACHED_END";
+    public const string MappingSpacing = "FLOW_MAPPING_SPACING";
+
+    /// <summary>The whole-line edits of the tolerated shapes of a text (none for a text in the grammar's shapes), and the
+    /// shape to write beside a line no edit can make certain (by line, 1-based).</summary>
+    public static (List<FlowTextEdit> Edits, Dictionary<int, string> Hints) Of(string text)
+    {
+        var pass = new Pass(text);
+        try { pass.Run(); } catch (Exception) { return ([], pass.Hints); }
+        return (pass.Edits, pass.Hints);
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex LValue = new(
+        @"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*|\[[^\]\[]+\])*$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    private static readonly System.Text.RegularExpressions.Regex Named = new(
+        @"^([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)\s*(\S.*)$", System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Singleline);
+    private static readonly System.Text.RegularExpressions.Regex CallHead = new(
+        @"^(?:\(System\)\.)?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    private static readonly System.Text.RegularExpressions.Regex NodeWord = new(
+        @"^(?:aggregate\s+from\b|sql(?:\s|$)|javascript\b|JSONSerialize\(|JSONDeserialize\(|node\s|opaque\s)",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    private static readonly System.Text.RegularExpressions.Regex Continuation = new(
+        @"^(?:JOIN|INNER|LEFT|RIGHT|FULL|WHERE|ORDER|GROUP|ON|AND|OR|SORT|MAX|START|AGG|CALC)\b|^\|\s*(?:Inner|Left|Full|Right)\s",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    private static readonly System.Text.RegularExpressions.Regex SqlWord = new(
+        @"^(?:SELECT|FROM|JOIN|INNER|LEFT|RIGHT|FULL|CROSS|WHERE|ORDER|GROUP|HAVING|ON|AND|OR|UNION|LIMIT|OFFSET|SET|UPDATE|INSERT|DELETE|VALUES|WITH|INTO)\b",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    private static readonly string[] Keywords = ["if ", "switch:", "foreach ", "assign", "end", "raise ", "navigate ", "refresh ", "message ",
+        "trigger ", "next", "-> ", "else", "otherwise:", "case ", "on ", "unreached:", "//", "@{", "|", "in ", "out ", "local "];
+
+    private sealed class Pass
+    {
+        private readonly string[] cur;
+        public readonly List<FlowTextEdit> Edits = [];
+        public readonly Dictionary<int, string> Hints = [];
+        private readonly HashSet<string> ids = new(StringComparer.Ordinal);
+        private int header = -1;
+        private int joins;
+
+        public Pass(string text)
+        {
+            cur = text.Replace("\r\n", "\n").Split('\n');
+            foreach (var line in cur) {
+                var content = line.TrimStart(' ');
+                if (FlowSyntax.SplitKey(content, out _, out var id)) ids.Add(id);
+                if (content.StartsWith("-> @", StringComparison.Ordinal)) ids.Add(content[4..]);
+                if (content.StartsWith("//-> @", StringComparison.Ordinal) && content.IndexOf(' ', 6) is > 6 and var space) ids.Add(content[6..space]);
+            }
+        }
+
+        public void Run()
+        {
+            for (var i = 0; i < cur.Length && header < 0; i++) {
+                if (Blank(i) || Content(i).StartsWith("///", StringComparison.Ordinal)) continue;
+                // What the general language writes above the actions (R7: a contract and its lines, a binding, a context).
+                if (Spaces(i) == 0 && System.Text.RegularExpressions.Regex.IsMatch(cur[i], @"^(?:contract [A-Za-z_]\w*:$|binding |context )")) {
+                    while (i + 1 < cur.Length && (Blank(i + 1) || Spaces(i + 1) > 0)) i++;
+                    continue;
+                }
+                header = Spaces(i) == 0 ? i : int.MaxValue;
+            }
+            if (header is < 0 or int.MaxValue) return;
+            Indentation();
+            Continuations();
+            Switches();
+            Declarations();
+            Elses();
+            for (var i = header + 1; i < cur.Length; i++) Line(i);
+            Jumps();
+            for (var i = header + 1; i < cur.Length; i++) if (!Blank(i) && Shape(i, Head(Content(i))) is { } hint) Hints.TryAdd(i + 1, hint);
+        }
+
+        // The shape to write for a line of another language a model writes, which has no certain edit.
+        private string? Shape(int i, string head)
+        {
+            var depth = Depth(i);
+            int? previous = null;
+            for (var j = i - 1; j > header && previous == null; j--) if (!Blank(j)) previous = j;
+            if (previous is { } p && Depth(p) == depth - 1 && Head(Content(p)) is var above && above.StartsWith("assign ", StringComparison.Ordinal) && above.Trim() != "assign")
+                return "an assign of several assignments is `assign` alone on its line, with one assignment a line one level in";
+            if (previous is { } q && Depth(q) > depth) {
+                for (var j = q; j > header; j--)
+                    if (!Blank(j) && Depth(j) <= depth) {
+                        if (Depth(j) == depth && Head(Content(j)).StartsWith("switch:", StringComparison.Ordinal))
+                            return "nothing follows a switch in its chain: each case ends (end, raise, navigate) or jumps (-> @id); write this step in the first case that reaches it";
+                        break;
+                    }
+            }
+            if (head.StartsWith("navigate ", StringComparison.Ordinal) && System.Text.RegularExpressions.Regex.Match(head, @"^navigate [A-Za-z_]\w*/([A-Za-z_]\w*)\(") is { Success: true } flow)
+                return "a navigate names the screen alone (navigate " + flow.Groups[1].Value + "(...)); its flow is not written";
+            if (head.StartsWith("while ", StringComparison.Ordinal) || head.StartsWith("for ", StringComparison.Ordinal))
+                return "a loop is foreach List: with its body one level in and ending in next (or an if whose branch jumps back to it with -> @id)";
+            if (head.StartsWith("else if ", StringComparison.Ordinal) || head.StartsWith("elif ", StringComparison.Ordinal) || head.StartsWith("elseif ", StringComparison.Ordinal))
+                return "else if is no line: write the false branch below the if, at its depth, starting with the next if";
+            if (System.Text.RegularExpressions.Regex.Match(head, @"^(?:[A-Za-z_]\w*\s*=\s*)?I[A-Za-z]+:([A-Za-z_][\w.]*)\(") is { Success: true } typed)
+                return "a call names the action alone (" + typed.Groups[1].Value + "(...)); the kind of call, when two actions share the name, goes on its @{Call=Client|Server} line";
+            return null;
+        }
+
+        // ---- lines ------------------------------------------------------------------------------------------------------
+
+        private bool Blank(int i) => cur[i].Trim(' ').Length == 0;
+        private int Spaces(int i) { var s = 0; while (s < cur[i].Length && cur[i][s] == ' ') s++; return s; }
+        private int Depth(int i) => Spaces(i) / 2;
+        private string Content(int i) => cur[i][Spaces(i)..];
+        private string Indent(int depth) => new(' ', depth * 2);
+        private IEnumerable<int> Body() { for (var i = header + 1; i < cur.Length; i++) if (!Blank(i)) yield return i; }
+        private int? NextLine(int from) { for (var i = from; i < cur.Length; i++) if (!Blank(i)) return i; return null; }
+
+        // The content of a line without its id and its label (the grammar's tail).
+        private static string Head(string content)
+        {
+            var head = FlowSyntax.SplitKey(content, out var withoutKey, out _) ? withoutKey : content;
+            var label = head.IndexOf("  # ", StringComparison.Ordinal);
+            return label >= 0 && LabelAt(head) == label + 2 ? head[..label] : head;
+        }
+
+        private static bool Code(string content) => content == "|" || content.StartsWith("| ", StringComparison.Ordinal);
+        private static bool Description(string content) => content == "///" || content.StartsWith("/// ", StringComparison.Ordinal);
+        private static bool Parameter(string content) => content.StartsWith("in ", StringComparison.Ordinal) || content.StartsWith("out ", StringComparison.Ordinal)
+            || content.StartsWith("local ", StringComparison.Ordinal);
+        // A line that starts with a word of the grammar (a word alone, like `assign`, `end` or `next`, is the whole word).
+        private static bool Keyword(string content) => Keywords.Any(k => k[^1] is ' ' or ':' || k is "//" or "@{" or "|"
+            ? content.StartsWith(k, StringComparison.Ordinal) || content == k.TrimEnd()
+            : content == k || content.StartsWith(k + " ", StringComparison.Ordinal) || content.StartsWith(k + ":", StringComparison.Ordinal));
+        private static bool BareAssign(string content) => Head(content) == "assign";
+        private static bool ElseLine(string content) => Head(content).TrimEnd() is "else:" or "else" or "otherwise:";
+        private static bool IfLine(string content) => content.StartsWith("if ", StringComparison.Ordinal);
+
+        private void Set(int i, string line, string rule, string message)
+        {
+            if (cur[i] == line) return;
+            Edits.Add(new FlowTextEdit(rule, i + 1, false, cur[i], line, "line " + (i + 1) + ": " + message));
+            cur[i] = line;
+        }
+
+        private string NewId()
+        {
+            string id;
+            do id = "j" + ++joins; while (ids.Contains(id));
+            ids.Add(id);
+            return id;
+        }
+
+        // The id of a node line, given one (appended) when it has none.
+        private string IdOf(int i, string rule)
+        {
+            if (FlowSyntax.SplitKey(Content(i), out _, out var id)) return id;
+            id = NewId();
+            Set(i, cur[i] + " @" + id, rule, "the step a jump goes to is named @" + id);
+            return id;
+        }
+
+        // ---- FLOW_INDENT_UNIT ---------------------------------------------------------------------------------------------
+
+        private void Indentation()
+        {
+            var body = Body().ToList();
+            if (body.Count == 0) return;
+            var spaces = body.Select(Spaces).ToList();
+            bool Valid(IReadOnlyList<int> depths)
+            {
+                if (depths[0] != 1) return false;
+                for (var k = 1; k < depths.Count; k++) if (depths[k] < 1 || depths[k] > depths[k - 1] + 1) return false;
+                return true;
+            }
+            if (spaces.All(s => s % 2 == 0) && Valid(spaces.Select(s => s / 2).ToList())) return;
+            List<int>? wanted = null;
+            string? why = null;
+            if (Valid(spaces)) { wanted = spaces.Select(s => s * 2).ToList(); why = "the action is indented one space a level: two spaces a level"; }
+            else if (spaces.All(s => s % 4 == 0) && Valid(spaces.Select(s => s / 4).ToList())) { wanted = spaces.Select(s => s / 2).ToList(); why = "the action is indented four spaces a level: two spaces a level"; }
+            else if (spaces[0] is 1 or 3 && spaces.All(s => (s + 2 - spaces[0]) % 2 == 0 && s + 2 - spaces[0] > 0) && Valid(spaces.Select(s => (s + 2 - spaces[0]) / 2).ToList())) {
+                // Two spaces a level, every line one space short (or over): depth 1 at one space, depth 2 at three...
+                var shift = 2 - spaces[0];
+                wanted = spaces.Select(s => s + shift).ToList(); why = "every line of the action is one space " + (shift > 0 ? "short of" : "over") + " its depth: two spaces a level";
+            }
+            else if (spaces[0] == 0) {
+                // The body under its header at depth 0: one level in, in the unit the rest of it has.
+                foreach (var unit in new[] { 2, 1, 4 })
+                    if (spaces.All(s => s % unit == 0) && Valid(spaces.Select(s => s / unit + 1).ToList())) {
+                        wanted = spaces.Select(s => (s / unit + 1) * 2).ToList(); why = "the body of the action is one level under its header"; break;
+                    }
+            } else if (spaces.All(s => s % 2 == 0)) {
+                // One step at depth 0 between steps of depth 1 (no block under it): a step of the main flow. After a deeper
+                // line it could be a step of that branch too: not certain.
+                var depths = spaces.Select(s => s / 2).ToList();
+                for (var k = 1; k < depths.Count; k++)
+                    if (depths[k] == 0 && depths[k - 1] == 1 && (k + 1 == depths.Count || depths[k + 1] == 1) && !Content(body[k]).TrimEnd().EndsWith(':')
+                        && !BareAssign(Content(body[k])) && !Description(Content(body[k])))
+                        depths[k] = 1;
+                if (Valid(depths)) { wanted = depths.Select(d => d * 2).ToList(); why = "a step of the main flow is at depth 1, under the header"; }
+            }
+            if (wanted == null) return;
+            for (var k = 0; k < body.Count; k++)
+                if (wanted[k] != spaces[k]) Set(body[k], new string(' ', wanted[k]) + Content(body[k]), IndentUnit, why!);
+        }
+
+        // ---- FLOW_LINE_CONTINUATION ---------------------------------------------------------------------------------------
+
+        private void Continuations()
+        {
+            for (var i = header + 1; i < cur.Length; i++) {
+                if (Blank(i)) continue;
+                var content = Content(i);
+                var named = Named.Match(content);
+                var value = named.Success ? named.Groups[2].Value : "";
+                var depth = Depth(i);
+                if (value.StartsWith("aggregate ", StringComparison.OrdinalIgnoreCase)) {
+                    var parts = new List<int>();
+                    for (var j = i + 1; j < cur.Length; j++) {
+                        if (Blank(j)) continue;
+                        if (Depth(j) <= depth || !Continuation.IsMatch(Content(j))) break;
+                        parts.Add(j);
+                    }
+                    if (parts.Count == 0) continue;
+                    var (head, tail) = Split(content);
+                    var joined = cur[i][..Spaces(i)] + head.TrimEnd() + " " + string.Join(" ", parts.Select(j => Content(j).Trim())) + tail;
+                    Set(i, joined, LineContinuation, "an aggregate is one line: the " + parts.Count + " line(s) under it continue it");
+                    foreach (var j in parts) Set(j, "", LineContinuation, "continues the aggregate of line " + (i + 1));
+                } else if (value == "sql" || value.StartsWith("sql ", StringComparison.Ordinal)) {
+                    // A SQL statement under its node without `| `: its code (in/out/@{ stay what they are).
+                    for (var j = i + 1; j < cur.Length; j++) {
+                        if (Blank(j)) continue;
+                        if (Depth(j) <= depth) break;
+                        var line = Content(j);
+                        if (Code(line) || Parameter(line) || line.StartsWith("@{", StringComparison.Ordinal) || Description(line)) continue;
+                        if (Depth(j) == depth + 1 && !SqlWord.IsMatch(line)) break;
+                        var extra = Spaces(j) - (depth + 1) * 2;
+                        Set(j, Indent(depth + 1) + "| " + new string(' ', Math.Max(0, extra)) + line, LineContinuation, "a line of the SQL statement is code: `| `");
+                    }
+                }
+            }
+        }
+
+        // ---- FLOW_SWITCH_INDENT -------------------------------------------------------------------------------------------
+
+        private void Switches()
+        {
+            for (var i = header + 1; i < cur.Length; i++) {
+                if (Blank(i) || !Head(Content(i)).StartsWith("switch:", StringComparison.Ordinal)) continue;
+                var depth = Depth(i);
+                if (NextLine(i + 1) is not { } first || Depth(first) != depth || !Content(first).StartsWith("case ", StringComparison.Ordinal)) continue;
+                var block = new List<int>();
+                for (var j = first; j < cur.Length; j++) {
+                    if (Blank(j)) continue;
+                    var d = Depth(j);
+                    if (d < depth) break;
+                    if (d == depth && !(Content(j).StartsWith("case ", StringComparison.Ordinal) || Head(Content(j)).TrimEnd() == "otherwise:")) break;
+                    block.Add(j);
+                }
+                foreach (var j in block) Set(j, "  " + cur[j], SwitchIndent, "the cases of the switch of line " + (i + 1) + " are one level under it");
+            }
+        }
+
+        // ---- FLOW_ELSE ----------------------------------------------------------------------------------------------------
+
+        private void Elses()
+        {
+            var failed = new HashSet<int>();
+            while (true) {
+                int? at = null;
+                for (var i = header + 1; i < cur.Length && at == null; i++)
+                    if (!Blank(i) && !failed.Contains(i) && ElseLine(Content(i)) && OwnIf(i) != null) at = i;
+                if (at is not { } line) return;
+                if (!Lower(line)) failed.Add(line);
+            }
+        }
+
+        // The if an `else:` of its depth belongs to: the step above it at that depth (the lines between are its true branch).
+        private int? OwnIf(int line)
+        {
+            var depth = Depth(line);
+            for (var i = line - 1; i > header; i--) {
+                if (Blank(i)) continue;
+                if (Depth(i) > depth) continue;
+                return Depth(i) == depth && IfLine(Content(i)) ? i : null;
+            }
+            return null;
+        }
+
+        // The end of an `else:`'s body: the first line after it at its depth or shallower.
+        private int BodyEnd(int line)
+        {
+            var depth = Depth(line);
+            var end = line + 1;
+            for (var j = line + 1; j < cur.Length; j++) {
+                if (Blank(j)) continue;
+                if (Depth(j) <= depth) return j;
+                end = j + 1;
+            }
+            return end;
+        }
+
+        private bool Lower(int line)
+        {
+            var depth = Depth(line);
+            var own = OwnIf(line)!.Value;
+            var truth = Enumerable.Range(own + 1, line - own - 1).Where(j => !Blank(j)).ToList();
+            var last = truth.LastOrDefault(j => Depth(j) == depth + 1, -1);
+            var body = Enumerable.Range(line + 1, BodyEnd(line) - line - 1).Where(j => !Blank(j)).ToList();
+            var shape = "write the false branch below the if, at its depth, and end the true branch with the jump to the step after the if/else (-> @id), `next` in a loop or `end`";
+            if (last < 0 || body.Count == 0) { Hints[line + 1] = shape; return false; }
+            var lastHead = Head(Content(last));
+            if (lastHead.StartsWith("switch:", StringComparison.Ordinal)) { Hints[line + 1] = shape; return false; }
+            var ends = Terminator(lastHead);
+            string? jump = null;
+            if (!ends) {
+                jump = After(BodyEnd(line), depth, own);
+                if (jump == null) { Hints[line + 1] = shape + "; the step after this if/else is not certain here"; return false; }
+            }
+            Set(line, ends ? "" : Indent(depth + 1) + jump, Else, ends
+                ? "the true branch of the if of line " + (own + 1) + " ends; its false branch is written below it (`else:` is no line of the grammar)"
+                : "the true branch of the if of line " + (own + 1) + " goes on after the if/else (" + jump + "); its false branch is written below it");
+            foreach (var j in body)
+                Set(j, cur[j][2..], Else, "the false branch of the if of line " + (own + 1) + " is at the depth of the if");
+            return true;
+        }
+
+        // A return of the general language (FlowGeneral, R7) ends its branch too.
+        private static bool Terminator(string head) => head == "next" || head.StartsWith("-> ", StringComparison.Ordinal) || head == "end" || head.StartsWith("end ", StringComparison.Ordinal)
+            || head == "return" || head.StartsWith("return ", StringComparison.Ordinal)
+            || head.StartsWith("raise ", StringComparison.Ordinal) || head.StartsWith("navigate ", StringComparison.Ordinal)
+            || head.EndsWith(" end", StringComparison.Ordinal) && (head.Contains(" = opaque ", StringComparison.Ordinal) || head.StartsWith("opaque ", StringComparison.Ordinal)
+                || head.Contains(" = node ", StringComparison.Ordinal) || head.StartsWith("node ", StringComparison.Ordinal));
+
+        // Where the chain at this depth goes on after the line `from` (the end of a construct whose first line is `start`):
+        // the next step of the chain, else what follows the block that holds it. Null when that is not certain.
+        private string? After(int from, int depth, int start)
+        {
+            if (NextLine(from) is { } next && Depth(next) == depth) return Target(next);
+            if (depth == 1) return "end";
+            // The head of the block: the line above the construct one level up, with every line between it deeper.
+            int? head = null;
+            for (var i = start - 1; i > header; i--) {
+                if (Blank(i)) continue;
+                if (Depth(i) >= depth) continue;
+                head = Depth(i) == depth - 1 ? i : null;
+                break;
+            }
+            if (head is not { } h) return null;
+            var content = Content(h);
+            if (content.StartsWith("foreach ", StringComparison.Ordinal)) return "next";
+            if (content.StartsWith("on exception ", StringComparison.Ordinal)) return "end";
+            if (IfLine(content) && NextLine(from) is { } after && Depth(after) == depth - 1 && ElseLine(Content(after)) && OwnIf(after) == h)
+                return After(BodyEnd(after), depth - 1, h);
+            if (ElseLine(content) && OwnIf(h) is { } outer) return After(BodyEnd(h), depth - 1, outer);
+            return null;
+        }
+
+        // The jump to a line that follows a construct: `next` and a jump are copied, the end of the main flow is `end`, a step
+        // is named by its id (given one when it has none). Null for a line no jump can name (a case, another else).
+        private string? Target(int line)
+        {
+            var content = Content(line);
+            var head = Head(content);
+            if (head == "next") return "next";
+            if (content.StartsWith("-> ", StringComparison.Ordinal)) return content;
+            if (content.StartsWith("on exception ", StringComparison.Ordinal) || content == "unreached:") return "end";
+            if (ElseLine(content) || content.StartsWith("case ", StringComparison.Ordinal) || Code(content) || content.StartsWith("@{", StringComparison.Ordinal)
+                || Parameter(content)) return null;
+            if (Description(content)) {
+                for (var j = line + 1; j < cur.Length; j++)
+                    if (!Blank(j) && !Description(Content(j))) return Depth(j) == Depth(line) ? Target(j) : null;
+                return null;
+            }
+            return "-> @" + IdOf(line, Else);
+        }
+
+        // ---- FLOW_DECLARATION_ORDER ---------------------------------------------------------------------------------------
+
+        private void Declarations()
+        {
+            for (var round = 0; round < 64; round++) {
+                // The first line of the flow at depth 1 (the lines describing it with it).
+                int? flow = null;
+                for (var i = header + 1; i < cur.Length && flow == null; i++) {
+                    if (Blank(i) || Depth(i) != 1) continue;
+                    var content = Content(i);
+                    // A `use` of a contract (the general language, R7) brings declarations: it is no step.
+                    if (Description(content) || content.StartsWith("@{", StringComparison.Ordinal) || Parameter(content) || content.StartsWith("use ", StringComparison.Ordinal)
+                        || content.StartsWith("on ", StringComparison.Ordinal) && !content.StartsWith("on exception ", StringComparison.Ordinal)) continue;
+                    flow = i;
+                }
+                if (flow is not { } first) return;
+                var start = first;
+                while (start - 1 > header && (Blank(start - 1) || Depth(start - 1) == 1 && Description(Content(start - 1)))) start--;
+                while (start < first && Blank(start)) start++;
+                int? moved = null;
+                for (var i = first + 1; i < cur.Length && moved == null; i++)
+                    if (!Blank(i) && Depth(i) == 1 && Parameter(Content(i))) moved = i;
+                if (moved is not { } declaration) return;
+                var from = declaration;
+                while (from - 1 > first && Depth(from - 1) == 1 && !Blank(from - 1) && Description(Content(from - 1))) from--;
+                var to = declaration;
+                while (to + 1 < cur.Length && !Blank(to + 1) && Depth(to + 1) > 1) to++;
+                var block = Enumerable.Range(from, to - from + 1).Select(j => cur[j]).ToList();
+                var rest = Enumerable.Range(start, from - start).Select(j => cur[j]).ToList();
+                var order = block.Concat(rest).ToList();
+                var text = Head(Content(declaration));
+                for (var k = 0; k < order.Count; k++)
+                    Set(start + k, order[k], DeclarationOrder, k < block.Count
+                        ? "the declaration `" + text + "` (line " + (declaration + 1) + ") goes with the declarations, before the flow"
+                        : "follows the declaration `" + text + "` moved before the flow");
+            }
+        }
+
+        // ---- one line -----------------------------------------------------------------------------------------------------
+
+        private void Line(int i)
+        {
+            if (Blank(i)) return;
+            var content = Content(i);
+            if (Code(content) || Description(content) || content.StartsWith("//", StringComparison.Ordinal) || content.StartsWith("@{", StringComparison.Ordinal)) return;
+            var indent = cur[i][..Spaces(i)];
+            // A label after one space or three: two (a #date# literal never has a space after its #).
+            if (!InAssignBlock(i) && !content.StartsWith("case ", StringComparison.Ordinal) && !Parameter(content) && LabelAt(content) is { } label && label > 0) {
+                var run = label;
+                while (run > 0 && content[run - 1] == ' ') run--;
+                var written = content[run..label];
+                if (written != "  " && run > 0) {
+                    content = content[..run] + "  " + content[label..];
+                    Set(i, indent + content, FlowTextEdit.LabelSpacing, "the label is written after two spaces (`  " + content[(run + 2)..].TrimEnd() + "`)");
+                }
+            }
+            var (head, tail) = Split(content);
+            string? canonical = null;
+            string rule = "", message = "";
+            if (InAssignBlock(i)) {
+                if (Assignment(content) is { } fixedLine && fixedLine != content) { Set(i, indent + fixedLine, AssignSpacing, "an assignment is `Variable = value`: " + fixedLine); content = fixedLine; }
+                if (Mapped(content) is { } mapped) Set(i, indent + mapped, MappingSpacing, "a mapping is `Source mapTo { Field: value, ... }`: " + mapped);
+                return;
+            }
+            if (head.StartsWith("assign ", StringComparison.Ordinal) && head.Trim() != "assign" && Assignment(head[7..].TrimStart()) is { } assignment) {
+                canonical = "assign " + assignment; rule = AssignSpacing; message = "an assignment is `assign Variable = value`: " + canonical;
+            } else if (head.StartsWith("navigate ", StringComparison.Ordinal) || head.StartsWith("trigger ", StringComparison.Ordinal)) {
+                var word = head[..(head.IndexOf(' ') + 1)];
+                if (Call(head[word.Length..], out _, out var empty) is { } written) {
+                    canonical = word + written; rule = empty ? NavigateArguments : ArgumentSpacing;
+                    message = empty ? "a " + word.Trim() + " without arguments is written with `()`: " + canonical : "the arguments are `P=v, Q`: " + canonical;
+                }
+            } else if (head.StartsWith("raise ", StringComparison.Ordinal) && !head.Contains('(') && CallHead.Match(head[6..]) is { Success: true } exception
+                && exception.Length == head.Length - 6) {
+                canonical = head + "()"; rule = NavigateArguments; message = "a raise without a message is written with `()`: " + canonical;
+            } else if (head.StartsWith("on ", StringComparison.Ordinal) && !head.StartsWith("on exception ", StringComparison.Ordinal) && Depth(i) == 1
+                && head.IndexOf(" -> ", StringComparison.Ordinal) is > 3 and var arrow && Call(head[(arrow + 4)..], out _, out var none) is { } events) {
+                canonical = head[..(arrow + 4)] + events; rule = none ? NavigateArguments : ArgumentSpacing;
+                message = none ? "an event's handler without arguments is written with `()`: " + canonical : "the arguments are `P=v, Q`: " + canonical;
+            } else if (!Keyword(head)) {
+                // A node line: `Name = rest` with one space around the `=`, then the arguments of a call.
+                var rest = head;
+                var prefix = "";
+                if (Named.Match(head) is { Success: true } named && !named.Groups[2].Value.StartsWith('=')) {
+                    prefix = named.Groups[1].Value + " = "; rest = named.Groups[2].Value;
+                    if (prefix + rest != head) {
+                        Set(i, indent + prefix + rest + tail, ResultSpacing, "a node's name is `Name = ...`: " + prefix + rest);
+                        head = prefix + rest;
+                    }
+                } else if (Assignment(head) is { } slipped && !slipped.Equals(head, StringComparison.Ordinal) && !Keyword(head)) {
+                    // `X.Y=v` where a step is: the spacing of an assignment (the parser decides whether it is one of a block).
+                    canonical = slipped; rule = AssignSpacing; message = "an assignment is `Variable = value`: " + canonical;
+                }
+                if (canonical == null && !NodeWord.IsMatch(rest) && CallHead.IsMatch(rest) && Call(rest, out _, out _, needs: true) is { } written && written != rest) {
+                    canonical = prefix + written; rule = ArgumentSpacing; message = "the arguments are `P=v, Q`: " + canonical;
+                }
+            }
+            if (canonical != null && canonical != head) { Set(i, indent + canonical + tail, rule, message); head = canonical; }
+            if (Mapped(head) is { } spaced) Set(i, indent + spaced + tail, MappingSpacing, "a mapping is `Source mapTo { Field: value, ... }`: " + spaced);
+        }
+
+        // The line with its mapping values in the grammar's spelling (the value of `X = v`, or of a call's arguments), or null.
+        private static string? Mapped(string head)
+        {
+            if (!head.Contains(" mapTo {", StringComparison.Ordinal)) return null;
+            string? Canonical(string value) => FlowMapping.Split(value) is { } m && FlowMapping.Compose(m.Source, m.Fields) is { } c && c != value ? c : null;
+            var at = head.IndexOf(" = ", StringComparison.Ordinal);
+            if (at > 0 && Canonical(head[(at + 3)..]) is { } whole) return head[..(at + 3)] + whole;
+            var start = at > 0 ? at + 3 : 0;
+            var open = start + (CallHead.Match(head[start..]) is { Success: true } callee ? callee.Length : 0);
+            if (open >= head.Length || head[open] != '(' || !head.EndsWith(')')) return null;
+            var arguments = head[(open + 1)..^1];
+            var parts = new List<string>();
+            var changed = false;
+            for (var i = 0; i < arguments.Length;) {
+                var end = FlowSyntax.Scan(arguments, i, [","]);
+                if (end < 0) return null;
+                var part = arguments[i..end];
+                var equals = part.IndexOf('=');
+                if (equals > 0 && Canonical(part[(equals + 1)..].Trim()) is { } value) { part = part[..(equals + 1)] + value; changed = true; }
+                parts.Add(part);
+                i = end + 1;
+            }
+            return changed ? head[..(open + 1)] + string.Join(",", parts) + ")" : null;
+        }
+
+        // The line of an assign block (under a bare `assign`, one level in).
+        private bool InAssignBlock(int i)
+        {
+            var depth = Depth(i);
+            for (var j = i - 1; j > header; j--) {
+                if (Blank(j)) continue;
+                if (Depth(j) >= depth) continue;
+                return Depth(j) == depth - 1 && BareAssign(Content(j));
+            }
+            return false;
+        }
+
+        // ---- FLOW_JUMP_BY_NAME and FLOW_UNREACHED_END ---------------------------------------------------------------------
+
+        private void Jumps()
+        {
+            var referenced = new HashSet<string>(StringComparer.Ordinal);
+            for (var i = header + 1; i < cur.Length; i++) {
+                var content = Blank(i) ? "" : Content(i);
+                if (content.StartsWith("-> @", StringComparison.Ordinal)) referenced.Add(content[4..]);
+                if (content.StartsWith("//-> @", StringComparison.Ordinal) && content.IndexOf(' ', 6) is > 6 and var space) referenced.Add(content[6..space]);
+            }
+            for (var i = header + 1; i < cur.Length; i++) {
+                if (Blank(i)) continue;
+                var content = Content(i);
+                if (content.StartsWith("-> ", StringComparison.Ordinal) && !content.StartsWith("-> @", StringComparison.Ordinal) && content != "-> (no connector)"
+                    && FlowSyntax.IsIdentifier(content[3..].Trim())) {
+                    var name = content[3..].Trim();
+                    var nodes = Enumerable.Range(header + 1, cur.Length - header - 1).Where(j => !Blank(j) && NodeName(j) is { } n && string.Equals(n, name, StringComparison.Ordinal)).ToList();
+                    if (nodes.Count != 1) { Hints[i + 1] = "a jump names the id of the step it goes to: -> @id" + (nodes.Count > 1 ? " (" + nodes.Count + " steps are named " + name + ")" : ""); continue; }
+                    var id = IdOf(nodes[0], JumpByName);
+                    Set(i, cur[i][..Spaces(i)] + "-> @" + id, JumpByName, "the jump to " + name + " is written with its id: -> @" + id);
+                    referenced.Add(id);
+                }
+            }
+            for (var i = header + 1; i < cur.Length; i++) {
+                if (Blank(i) || Head(Content(i)) != "end") continue;
+                if (FlowSyntax.SplitKey(Content(i), out _, out var id) && referenced.Contains(id)) continue;
+                int? previous = null;
+                for (var j = i - 1; j > header && previous == null; j--) if (!Blank(j)) previous = j;
+                if (previous is not { } p || Depth(p) != Depth(i)) continue;
+                var head = Head(Content(p));
+                if (head.StartsWith("navigate ", StringComparison.Ordinal) || head.StartsWith("raise ", StringComparison.Ordinal))
+                    Set(i, "", UnreachedEnd, "a " + head[..head.IndexOf(' ')] + " ends its branch: the end after it is no step");
+            }
+        }
+
+        // The name of the node a line writes: `Name = ...`, or the action a call names (the last part of its name).
+        private string? NodeName(int i)
+        {
+            var content = Content(i);
+            if (Code(content) || Description(content) || content.StartsWith("//", StringComparison.Ordinal) || content.StartsWith("@{", StringComparison.Ordinal)
+                || Parameter(content) || InAssignBlock(i)) return null;
+            var head = Head(content);
+            if (Keyword(head)) return null;
+            if (Named.Match(head) is { Success: true } named) return named.Groups[1].Value;
+            if (CallHead.Match(head) is { Success: true } call && call.Length < head.Length && head[call.Length] == '(') return call.Value[(call.Value.LastIndexOf('.') + 1)..];
+            return null;
+        }
+    }
+
+    // ---- the shapes of one line ---------------------------------------------------------------------------------------------
+
+    // Where the label of a line starts (its #), outside "texts", `escaped expressions` and #date# literals: a # with a space
+    // before and after it. Null when the line has none.
+    internal static int? LabelAt(string content)
+    {
+        for (var i = 0; i < content.Length; i++) {
+            var c = content[i];
+            if (c == '"') { i++; while (i < content.Length && !(content[i] == '"' && !(i + 1 < content.Length && content[i + 1] == '"'))) i += content[i] == '"' ? 2 : 1; continue; }
+            if (c == '`') { var j = i; try { FlowSyntax.ReadEscaped(content, ref j); i = j - 1; } catch (FormatException) { return null; } continue; }
+            if (c != '#') continue;
+            if (i > 0 && content[i - 1] == ' ' && (i + 1 == content.Length || content[i + 1] == ' ')) return i;
+            var end = content.IndexOf('#', i + 1);
+            if (end < 0) return null;
+            i = end;
+        }
+        return null;
+    }
+
+    // The content of a node line split into its head and its tail (the label and the id, as written).
+    private static (string Head, string Tail) Split(string content)
+    {
+        var withoutKey = FlowSyntax.SplitKey(content, out var head, out _) ? head : content;
+        var tail = content[withoutKey.Length..];
+        var label = withoutKey.IndexOf("  # ", StringComparison.Ordinal);
+        if (label >= 0 && LabelAt(withoutKey) == label + 2) { tail = withoutKey[label..] + tail; withoutKey = withoutKey[..label]; }
+        return (withoutKey, tail);
+    }
+
+    // `Variable = value` from `Variable=value` (any spaces around the first `=` outside texts and brackets, after a name, that
+    // is no part of <=, >= or <>); null when the text has no such shape.
+    internal static string? Assignment(string text)
+    {
+        var depth = 0;
+        for (var i = 0; i < text.Length; i++) {
+            var c = text[i];
+            if (c == '"') { i++; while (i < text.Length && !(text[i] == '"' && !(i + 1 < text.Length && text[i + 1] == '"'))) i += text[i] == '"' ? 2 : 1; continue; }
+            if (c == '`') return null;
+            if (c is '(' or '[' or '{') { depth++; continue; }
+            if (c is ')' or ']' or '}') { depth--; continue; }
+            if (c != '=' || depth != 0) continue;
+            if (i > 0 && text[i - 1] is '<' or '>' or '!' or '=' || i + 1 < text.Length && text[i + 1] == '=') return null;
+            var variable = text[..i].TrimEnd();
+            var value = text[(i + 1)..].TrimStart();
+            if (value.Length == 0 || !LValue.IsMatch(variable)) return null;
+            return variable + " = " + value;
+        }
+        return null;
+    }
+
+    // A call `Callee(arguments)` with its arguments in the grammar's spelling: `P=v` for a named one (no space around its `=`),
+    // a name alone for a positional one, ", " between them, no space before the parenthesis; the text after the closing
+    // parenthesis is kept. Without parentheses (`Screen` alone): `Screen()` (empty). Null when the text is no such call (an
+    // argument that is an expression, a parenthesis left open), or, with needs, when it has no parenthesis.
+    private static string? Call(string text, out string callee, out bool empty, bool needs = false)
+    {
+        empty = false;
+        var head = CallHead.Match(text);
+        callee = head.Value;
+        if (!head.Success) return null;
+        var i = head.Length;
+        while (i < text.Length && text[i] == ' ') i++;
+        if (i >= text.Length) { if (needs) return null; empty = true; return callee + "()"; }
+        if (text[i] != '(') return null;
+        var arguments = Arguments(text, i, out var close);
+        if (arguments == null) return null;
+        return callee + arguments + text[(close + 1)..];
+    }
+
+    private static string? Arguments(string text, int open, out int close)
+    {
+        close = -1;
+        var parts = new List<string>();
+        var i = open + 1;
+        void Spaces() { while (i < text.Length && text[i] == ' ') i++; }
+        Spaces();
+        if (i < text.Length && text[i] == ')') { close = i; return "()"; }
+        while (true) {
+            Spaces();
+            var start = i;
+            while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_')) i++;
+            var name = text[start..i];
+            if (name.Length == 0) return null;
+            var mark = i;
+            Spaces();
+            if (i < text.Length && text[i] == '=' && !(i + 1 < text.Length && text[i + 1] == '=')) {
+                i++;
+                Spaces();
+                string value;
+                if (i < text.Length && text[i] == '`') {
+                    var j = i;
+                    try { FlowSyntax.ReadEscaped(text, ref j); } catch (FormatException) { return null; }
+                    value = text[i..j]; i = j;
+                } else {
+                    var end = FlowSyntax.Scan(text, i, FlowPrinter.CallValue);
+                    if (end < 0 || end >= text.Length) return null;
+                    value = text[i..end].TrimEnd(); i = end;
+                }
+                if (value.Length == 0) return null;
+                parts.Add(name + "=" + value);
+            } else { i = mark; parts.Add(name); }
+            Spaces();
+            if (i >= text.Length) return null;
+            if (text[i] == ')') { close = i; break; }
+            if (text[i] != ',') return null;
+            i++;
+        }
+        return "(" + string.Join(", ", parts) + ")";
     }
 }

@@ -24,6 +24,8 @@ import { resolvePatchedJob, jobIdentity, withNamedPatches } from './job-patch.mj
 import { TYPED_NULLS } from './builtin-functions.mjs';
 import { grammarCard } from './ssam-code.mjs';
 import { generatorApproval, generatorShown, jobOffered } from './generators.mjs';
+import { traditionalTaskPlan, traditionalResolutionRequest, bindTraditionalBlock, implementTraditionalTask } from './traditional-tasks.mjs';
+import { composeTraditionalTask, compositionContract } from './traditional-compose.mjs';
 
 // The base a job names ({"base": "..."}), or null: a job without one is checked alone (the CLI's default fixture is not
 // the module the job was written for).
@@ -216,8 +218,15 @@ export function referenceArguments(lane, kind, query, { root, work }) {
       return q.name !== undefined ? { argv: [verb, '--name', q.name] } : { argv: [verb, '--find', q.find] };
     }
     case 'ui-block': {
-      const shaped = isText ? { name: query } : q;
+      const shaped = isText ? { name: query } : { ...q };
       if (!isText) { const refused = only('catalog', 'name', 'find') ?? oneOf('name', 'find') ?? bad('catalog', 'name', 'find'); if (refused) return refused; }
+      const field = shaped.name !== undefined ? 'name' : 'find';
+      const qualified = /^(RichWidgets|OutSystemsUIWeb|OutSystemsUI|OutSystemsChartsWeb|OutSystemsCharts|OutSystemsMaps)[.\\/](.+)$/i.exec(shaped[field] ?? '');
+      if (qualified) {
+        if (shaped.catalog && shaped.catalog.toLowerCase() !== qualified[1].toLowerCase())
+          return refusal('UI_CATALOG_CONFLICT', 'Qualified component and catalog name different libraries', again(lane, kind, { catalog: qualified[1], [field]: qualified[2] }, 'use the library explicitly named by the component'));
+        shaped.catalog = qualified[1]; shaped[field] = qualified[2];
+      }
       const catalog = resolveUiCatalog(root, shaped.catalog ?? 'OutSystemsUI');
       if (!catalog) {
         const available = [...new Set(uiCatalogs(root).map(f => path.basename(f, '.json')))];
@@ -801,6 +810,33 @@ export function registerSsamReference(server, deps = {}) {
     if (lane === 'odc' && !ODC_KINDS.includes(kind))
       return refusal('KIND_NOT_IN_LANE', `the ODC CLI (anvil-odc) has no ${kind}; it answers ${ODC_KINDS.join(', ')}`,
         again('o11', kind, query, 'the O11 lane answers it from the same kernel, for Service Studio 11; confirm it applies to ODC'));
+    if (kind === 'recipe' && query && typeof query === 'object' && Object.hasOwn(query, 'traditionalTask')) {
+      if (lane !== 'o11') return refusal('TRADITIONAL_NOT_IN_LANE', 'traditionalTask plans the Traditional Web runtime of O11 only; ODC has no Traditional apps',
+        again('o11', kind, query, 'the O11 lane answers the same query'));
+      if (Object.keys(query).some(k => !['traditionalTask','resolution','bind','implement','compose'].includes(k)) || ['bind','implement','compose'].filter(k=>query[k]!==undefined).length>1 || typeof query.traditionalTask !== 'string' || query.traditionalTask.length > 10000)
+        return refusal('QUERY_SHAPE', 'query takes {traditionalTask: <intent>, resolution?: [{pattern,evidence}], bind?: {library, component, parent, name, alias, inputs}} or one of implement/compose',
+          again(lane, kind, { traditionalTask: typeof query.traditionalTask === 'string' ? query.traditionalTask.slice(0, 10000) : '<the UI request>' }, 'the same request with the plan shape'));
+      if (query.compose) {
+        try { return {ok:true,lane,kind,job:composeTraditionalTask(query.compose),verified:false,note:'Complete data/event composition compiled. Native delivery and browser acceptance remain required.'}; }
+        catch(e) { return {ok:false,code:'TASK_COMPOSITION_INVALID',error:e.message}; }
+      }
+      let plan;
+      try { plan = traditionalTaskPlan(query.traditionalTask, query.resolution); }
+      catch(e) { return {ok:false,code:'TASK_RESOLUTION_INVALID',error:e.message}; }
+      if (!plan) return {ok:true,lane,kind,...sized(lane,{...traditionalResolutionRequest(query.traditionalTask),composition:compositionContract})};
+      plan.composition = compositionContract;
+      if (query.implement) {
+        try { return {ok:true,lane,kind,job:implementTraditionalTask(plan,query.implement),verified:false,note:'Concrete behavior job compiled from supplied bindings. Validate against the module and installed producers through o11_deliver; nothing has been merged or published.'}; }
+        catch(e) { return {ok:false,code:'TASK_BINDING_INVALID',error:e.message}; }
+      }
+      if (!query.bind) return {ok:true,lane,kind,...sized(lane,plan)};
+      const b = query.bind;
+      if (typeof b !== 'object' || Array.isArray(b) || Object.keys(b).some(k=>!['library','component','parent','name','alias','inputs'].includes(k))) return {ok:false,code:'QUERY_SHAPE',error:'Invalid bind object'};
+      const component = plan.components.find(c=>c.kind==='block' && c.library===b.library && c.name===b.component);
+      if (!component) return {ok:false,code:'COMPONENT_NOT_SELECTED',error:'Bind a public block selected by this task.'};
+      try { return {ok:true,lane,kind,job:{ops:bindTraditionalBlock(component,b)},remaining:plan.tasks,verified:false,note:'Component ops only. Add the task action flows and placeholders in the same delivery; native validation and browser behavior are not yet proven.'}; }
+      catch (e) { return {ok:false,code:'COMPONENT_BINDING_INVALID',error:e.message}; }
+    }
     // Answered from the suite files, without the CLI (both lanes for example, ODC for recipe).
     if (FILE_KINDS.includes(kind)) return exampleAnswer(root, lane, query, sized);
     if (kind === 'rules') return rulesAnswer(lane, query, deps.guideText ? { read: deps.guideText } : {});
@@ -903,7 +939,7 @@ export function registerSsamReference(server, deps = {}) {
     description: 'tool query <tool>: the exact original tool description and input schema; rules query session: every session rule. Read-only lookups answered by the lane\'s own CLI; prefer them to reading kernel source code or docs. query is text or an object per kind: api "IForEachNode" | {name, catalog?} | '
       + '{op, name?} (a grammar such as logic, or a job verb such as create: its line; name: that key of it, else the ops that have it) | {op:"native", type}; functions "Name" | "Name1 Name2 ..." (up to 40 names in ONE call: each signature, and the closest names of a name that does not exist) | {name}|{names:[...]}|{find}; ui-block "Block" | {catalog?, name}|{catalog?, find} (catalog: '
       + 'library name such as OutSystemsUI, default OutSystemsUI); types {assembly, filter, max?}; where-can "IInterface"; recipe "text" | '
-      + '{find, ops?, max?} (ops without max: 20); verify-message "Id" | {name}|{find}; check-job: absolute path or the job object itself (stored under '
+      + '{find, ops?, max?} (ops without max: 20), or {traditionalTask: "original UI request in any language", resolution?: [{pattern,evidence}], bind?: {library,component,parent,name,alias,inputs}, implement?: object} for O11 task plans, native component ops or behavior jobs; use semantic resolution when keyword hints do not match the request; the plan gives implementation contracts. verify-message "Id" | {name}|{find}; check-job: absolute path or the job object itself (stored under '
       + '<lane>/jobs/inline), or {basedOn, patch?, job?} (a patch by index or by name, or a partial job, over an earlier job: answers name nextBasedOn); '
       + 'a job that names its base is checked over it, every phase at once as a delivery refuses (problems[] with phase, '
       + 'pointer, fix, patch, patchByName; verifyRan), one without base is read alone (verifyRan:false); check-delivery: {taskId} of an o11_deliver answer, or the absolute path of its result.json; an unknown query field answers the closest valid form; example "<id>" | {id}|{find}: a whole proven '

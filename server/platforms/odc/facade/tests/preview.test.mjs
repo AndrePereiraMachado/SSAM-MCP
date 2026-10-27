@@ -37,6 +37,8 @@ async function stopped(manager){const s=await until(manager,x=>['stopped','faile
 test('managed worker opens once, exposes visible URL, reports static refresh and exits',async t=>{
  const f=fixture(t),m=f.manager;
  assert.equal((await m({action:'list',lane:'odc'})).profiles.length,0);
+ // Meta 20/10 item 18: an empty list names who prepares a profile and the route that exists meanwhile (the browser).
+ const empty=await m({action:'list',lane:'odc',app:'Morada'});assert.equal(empty.prepare.by,'integrator');assert.equal(empty.prepare.meanwhile.tool,'ssam_app_url');assert.deepEqual(empty.prepare.meanwhile.arguments,{app:'Morada',screen:'<screen>',lane:'odc'});assert.deepEqual(empty.prepare.target,{lane:'odc',app:'Morada'});
  assert.equal((await m({action:'open',app:'Other'})).code,'PREVIEW_PROFILE_NOT_PREPARED');
  assert.equal((await m({action:'open',screen:'Other'})).code,'PREVIEW_SCREEN_NOT_PREPARED');
  const opened=await open(m,{screen:'Home'});assert.equal(opened.status,'running',JSON.stringify(opened));

@@ -74,16 +74,16 @@ public sealed class HtmlPageCollectAllTests(ITestOutputHelper output)
         // a structural fault the former preflight (CSS, bindings, shape) never saw: it appeared only after the build
         var structural = Page("""<div data-av="t"><b>x</b></div>""", """{"t":{"kind":"text","value":"1"}}""", source: false);
         Assert.Contains("must not contain child elements", Assert.Throws<InvalidOperationException>(() => HtmlExpander.Preflight(structural)).Message);
-        // call names a client action a later logic op declares: one problem, with the move of that op as the patch
+        // call names a client action a later logic op declares: F5, the order of the ops does not matter (the kernel runs that
+        // logic op first, JobComposition): resolved without a module in either order; a screen action of another screen is refused
         var job = new JsonObject { ["ops"] = new JsonArray(
             new JsonObject { ["op"] = "html", ["data"] = Page("""<button data-av="go">Ir</button>""", """{"go":{"kind":"call","action":"Ir"}}""", source: false) },
             JsonNode.Parse("""{"op":"logic","data":{"actions":[{"name":"Ir","kind":"client","steps":[]}]}}"""),
             JsonNode.Parse("""{"op":"logic","data":{"actions":[{"name":"Outra","kind":"screen","owner":"IMobileScreen:Outra","steps":[]}]}}""")) };
         var result = JobPreflight.Analyze(job["ops"]!.AsArray(), job);
-        var order = result["problems"]!.AsArray().OfType<JsonObject>().Single(p => p["code"]!.ToString() == "HTML_CALL_ORDER");
-        Assert.Equal("/ops/0/data/bindings/go", order["pointer"]!.ToString());
-        Assert.Equal("""[{"op":"move","from":"/ops/1","path":"/ops/0"}]""", order["patch"]!.ToJsonString());
-        // the same call with the logic op first is resolved without a module; a screen action of another screen is refused
+        Assert.DoesNotContain(result["problems"]!.AsArray(), p => p!["code"]!.ToString().StartsWith("HTML_", StringComparison.Ordinal));
+        var plan = JobComposition.Compose(job["ops"]!.AsArray(), [0, 1, 2], _ => false);
+        Assert.Equal([1, 0, 2], plan.Order);
         var fixedJob = new JsonObject { ["ops"] = new JsonArray(job["ops"]![1]!.DeepClone(), job["ops"]![0]!.DeepClone()) };
         Assert.DoesNotContain(JobPreflight.Analyze(fixedJob["ops"]!.AsArray(), fixedJob)["problems"]!.AsArray(), p => p!["code"]!.ToString().StartsWith("HTML_", StringComparison.Ordinal));
         var other = Page("""<button data-av="go">Ir</button>""", """{"go":{"kind":"call","action":"Outra"}}""", source: false);

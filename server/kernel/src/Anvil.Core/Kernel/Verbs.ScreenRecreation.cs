@@ -52,7 +52,7 @@ public sealed partial class ModelSession
             BeforeContent = root =>
             {
                 // The actions of the original, by the platform's move (their consumers follow them).
-                foreach (var action in old.Children.OfType<IObjectSignature>().Where(c => Implements(c, "IScreenAction") || Implements(c, "IDataAction")).ToList())
+                foreach (var action in old.Children.OfType<IObjectSignature>().Where(c => Implements(c, "IScreenAction") || Implements(c, "IDataAction") || Implements(c, "IPreparation")).ToList())
                 {
                     foreach (var node in new[] { action }.Concat(action.GetAllDescendantsOfType<IObjectSignature>()))
                         foreach (var property in AllProperties(node).Where(p => p.CanWrite && p.GetIndexParameters().Length == 0 && !p.PropertyType.IsValueType && p.PropertyType != typeof(string)).DistinctBy(p => p.Name))
@@ -102,6 +102,15 @@ public sealed partial class ModelSession
                 repointed++;
             }
         }
+        // The consumers of the root itself (destinations of other screens and flows, the entry of a Traditional module):
+        // a reading prints no k on its root, so they are repointed by the root, not by a key.
+        if (old is ServiceStudio.Model.AbstractObject oldRoot && newRoot is ServiceStudio.Model.AbstractObject replacementRoot && oldRoot.HasReferers)
+            foreach (var referer in oldRoot.Referers.ToList())
+            {
+                if (referer == null || ReferenceEquals(referer, oldRoot) || IsInside((IObjectSignature)referer, old)) continue;
+                referer.ReplaceReferences(oldRoot, replacementRoot);
+                repointed++;
+            }
         old.Delete();
         _byKey = null;
         report["recreated"] = true;

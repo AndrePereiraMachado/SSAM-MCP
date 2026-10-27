@@ -8,6 +8,7 @@
 // __doPostBack with __EVENTTARGET/__EVENTARGUMENT added here; OsAjax replies are read only through their refreshed
 // "__OSVSTATE" and the HTML they carry. Pages whose layout is only ASSUMED refuse any other layout with LAYOUT_UNKNOWN
 // and the page-layout read that captures them live.
+import { appendJsonLine } from '../correlation.mjs';
 import { wordsGiven } from '../destructive-operations.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -163,10 +164,16 @@ export function connectionTestOutcome(page) {
     feedback:good.length && !bad.length ? 'success' : 'error (server text withheld: it can echo the login)' };
 }
 
-export function checked(page) {
+export function checked(page, { afterLogin = false } = {}) {
   // An expired session answers with the login page at the asked URL: its form posts to Login.aspx.
   const loginForm = page.doc.all('form').some(f => /^_?login(?:sso)?\.aspx$/i.test(urlsplit(f.attr('action', '') || '').path.split('/').pop()));
-  if (urlsplit(page.url).path.toLowerCase().endsWith('/login.aspx') || loginForm) throw new ProtocolError('Service Center login required or session expired', 'SC_AUTH_EXPIRED');
+  // Some O11 versions render the authenticated landing page at Login.aspx after
+  // the credential POST. Only that response may use positive logout evidence;
+  // ordinary protected reads keep the strict expiry check.
+  const authenticatedLanding = afterLogin && !page.doc.login()
+    && !page.doc.all('div').some(n => classes(n).includes('sc-layout-login'))
+    && page.doc.all('a', 'input', 'button').some(n => /logout/i.test(n.attr('href', '') + ' ' + n.attr('onclick', '')) || /log out/i.test(n.text));
+  if (!authenticatedLanding && (urlsplit(page.url).path.toLowerCase().endsWith('/login.aspx') || loginForm)) throw new ProtocolError('Service Center login required or session expired', 'SC_AUTH_EXPIRED');
   if (['permission denied', 'access denied'].includes(fold(heading(page))))
     throw new ProtocolError('Service Center denied access to this resource; no identity or permissions were changed.', 'SC_PERMISSION_DENIED');
   // Feedback may echo a password/property value. Never return raw server feedback.
@@ -581,7 +588,7 @@ export class Client {
     if (click.ancestor('form') !== form) throw new ProtocolError('Login controls do not belong to the same form');
     if (!scope.all('input', 'button').includes(click)) throw new ProtocolError('Submit outside login container');
     const response = await this.http.vaultLogin(page, click, users[0].attr('name'), passwords[0].attr('name'), this.vault);
-    checked(response);
+    checked(response, { afterLogin: true });
     if (response.doc.login()) throw new ProtocolError('Service Center did not accept the vault login; no automatic retry');
     if (!response.doc.all('a', 'input', 'button').some(a => lower((a.attr('href', '') ?? '') + a.text).includes('logout') || lower(a.text).includes('log out')))
       throw new ProtocolError('Could not confirm an authenticated Service Center session');
@@ -2615,7 +2622,7 @@ export class Journal {
       resolutions: [...(Array.isArray(receipt.resolutions) ? receipt.resolutions : []), entry], updatedAt: entry.at });
     if (state === 'confirmed') receipt.verification = 'Desired state observed; this does not prove which writer established it';
     this.rewrite(receipt);
-    fs.appendFileSync(path.join(this.root, 'resolutions.jsonl'), JSON.stringify({ operationId: receipt.operationId, identity: receipt.identity, ...entry }) + '\n');
+    appendJsonLine(path.join(this.root, 'resolutions.jsonl'), { operationId: receipt.operationId, identity: receipt.identity, ...entry });
     const lock = this.lockFile(receipt.lock ?? Journal.targetOf(receipt.identity));
     if (fs.existsSync(lock) && fs.readFileSync(lock, 'utf8').trim() === receipt.operationId) fs.unlinkSync(lock);
     return receipt;

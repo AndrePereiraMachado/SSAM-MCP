@@ -7,16 +7,18 @@ export async function main(args,{root,store=createStore({root})}={}) {
   const [verb='help',...rest]=args;
   if(verb==='help')return {ok:true,commands:[
     'ssam friction issues [--task-id <id>] [--offset N] [--limit N]',
+    'ssam friction reports [--task-id <id>] [--offset N] [--limit N]',
     'ssam friction task --task-id <id>',
     'ssam friction ingest --receipt <deliver-result.json> [--task-id <id>] [--lane odc|o11] [--operation <known-operation>]',
     'ssam friction state --issue <id> --status investigating|corrected|verified [--revision <revision>] [--proof <proof.json>]',
-    'ssam friction report --kind gap|defect|slow --tool <tool> --intent <text> --attempted <text> [--workaround <text>] [--cost <text>] [--summary <text>] [--task-id <id>]'],
+    'ssam friction report --kind gap|defect|slow --tool <tool> --intent <text> --attempted <text> [--workaround <text>] [--cost <text>] [--summary <text>] [--task-id <id>]',
+    'ssam friction delivery-kpi [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--lane o11|odc] [--root <SSAM root, read only>]'],
     correlation:'Set SSAM_TASK_ID for CLI/MCP, or MCP params._meta["ssam/taskId"]. Without it no task association is invented.',
     states:'corrected requires a local proof file with checksPassed:true and versionSha256; verified also requires a later successful matching operationId in that version.',
     scope:'Local queue only. Does not notify external systems or modify Studio/releases.',
     isolation:'SSAM_FRICTION_DIR=<folder> keeps the records of a test run or bench out of the shared <root>/.local/friction queue.'};
-  const allowed={issues:['task-id','offset','limit'],task:['task-id','offset','limit'],ingest:['receipt','task-id','lane','operation'],state:['issue','status','revision','proof'],
-    report:['kind','tool','intent','attempted','workaround','cost','summary','task-id']}[verb];
+  const allowed={issues:['task-id','offset','limit'],reports:['task-id','offset','limit'],task:['task-id','offset','limit'],ingest:['receipt','task-id','lane','operation'],state:['issue','status','revision','proof'],
+    report:['kind','tool','intent','attempted','workaround','cost','summary','task-id'],'delivery-kpi':['since','until','lane','root']}[verb];
   if(!allowed)throw Error('Unknown friction command');
   const options={};
   for(let i=0;i<rest.length;i+=2){
@@ -24,8 +26,14 @@ export async function main(args,{root,store=createStore({root})}={}) {
     if(!rest[i]?.startsWith('--')||!allowed.includes(name)||rest[i+1]===undefined||rest[i+1].startsWith('--')||Object.hasOwn(options,name))throw Error('Invalid option');
     options[name]=rest[i+1];
   }
+  if(verb==='delivery-kpi'){
+    const range={...(options.since?{since:options.since}:{}),...(options.until?{until:options.until}:{}),...(options.lane?{lane:options.lane}:{})};
+    // --root: another SSAM root (its .local/friction and kernel/.local/work/deliver), read without a store: nothing is written there.
+    if(options.root){const other=path.resolve(options.root),{kpiView}=await import('./friction-kpi.mjs');return kpiView({queueDirectory:path.join(other,'.local','friction'),receiptsDirectory:path.join(other,'kernel','.local','work','deliver'),...range});}
+    return readQueue(store,{view:'delivery-kpi',...range});
+  }
   if(verb==='report'){const {'task-id':taskId,...fields}=options;return readQueue(store,{view:'report',...fields,...(taskId!==undefined?{taskId}:{})});}
-  if(verb==='issues'||verb==='task')return readQueue(store,{view:verb,taskId:options['task-id'],
+  if(verb==='issues'||verb==='task'||verb==='reports')return readQueue(store,{view:verb,taskId:options['task-id'],
     ...(options.offset!==undefined?{offset:Number(options.offset)}:{}),...(options.limit!==undefined?{limit:Number(options.limit)}:{})});
   if(verb==='state'){
     let proof;

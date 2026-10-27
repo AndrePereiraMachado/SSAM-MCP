@@ -16,6 +16,7 @@ import { normalize } from './catalog.mjs';
 import { ANSWER_BUDGETS } from './answer-size.mjs';
 import { namedGenerators, describeGenerator } from './generators.mjs';
 import { expandCatalogTexts, carriesGeneratedText } from './destructive-catalog-texts.mjs';
+import { RECORD_CLASSES, STATUS_WORDS, QUESTION_WORDS, NAME_LEADS } from './request-vocabulary.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const TOOLS_FILE = path.join(here, 'catalog', 'tools.json');
@@ -926,6 +927,66 @@ export function withOperationalTitles(answer, compiled = loadToolRoutes()) {
 // A call without intent, expand, detail or type: the exact shape of a call and the continuation that keeps its app, never
 // the catalog (catalog:true asks for it). Under 1 KB.
 const hasExpansion = input => ['expand', 'detail', 'type'].some(k => typeof input[k] === 'string' && input[k].trim() !== '');
+// ---- a question about SSAM's own records (family F4, 2026-10-22: "operation history" got forms, dropdowns and module
+// delivery). Lexical and conservative: the request names a record of SSAM's work (a delivery, task, job, receipt, journal,
+// friction, failure, operation, history, publish, build of SSAM: request-vocabulary.mjs RECORD_CLASSES) and every other
+// word is a question or read word, an article, a preposition, a time word or the name after "module"/"task"; no routed
+// tool writes (a command: "close the refused delivery task"). Any other word (an app noun: orders, customer, PDF, REST,
+// API, list of an app, screen) makes it a build request: "list the orders by status", "show the order history", "get the
+// task list from the REST API" are built, not asked. When in doubt, it is a build request. Its answer is the read tools that
+// answer it, never authoring recipes: the routed readers, else the readers of its class.
+const vocabulary = text => new Set(text.split(' '));
+const RECORD_OF = new Map(Object.entries(RECORD_CLASSES).flatMap(([cls, list]) => [...vocabulary(list)].map(w => [w, cls])));
+const QUESTION_ALLOWED = new Set([...vocabulary(QUESTION_WORDS), ...vocabulary(STATUS_WORDS)]);
+const NAMES_AFTER = vocabulary(NAME_LEADS);
+const QUESTION_ORDER = ['friction', 'receipt', 'task', 'history', 'status'];
+export const QUESTION_TOOLS = {
+  history: [['ssam_task', 'read'], ['ssam_friction', 'issues'], ['ssam_evidence', null]],
+  status: [['ssam_task', 'read'], ['ssam_friction', 'task'], ['ssam_evidence', null]],
+  receipt: [['ssam_evidence', null], ['odc_receipt', 'read'], ['ssam_task', 'read']],
+  friction: [['ssam_friction', 'issues'], ['ssam_friction', 'task']],
+  task: [['ssam_task', 'read'], ['ssam_friction', 'task']],
+};
+export function questionOf(intent, compiled = loadToolRoutes(), routed = null) {
+  if ((routed?.steps ?? []).some(x => x.effect && x.effect !== 'read')) return null;
+  // The words folded for the tables; a token with a digit, an underscore or a dash is an id; `why` names the record classes.
+  const written = String(intent ?? '').split(/[^\p{L}\p{N}_.-]+/u).flatMap(t => t.split('.')).filter(Boolean);
+  const classes = []; const why = [];
+  for (const [i, raw] of written.entries()) {
+    const w = normalize(raw).replace(/[^a-z0-9_-]/g, '');
+    if (!w) continue;
+    const cls = RECORD_OF.get(w) ?? RECORD_OF.get(w.replace(/s$/, ''));
+    if (cls) { classes.push(cls); why.push(raw); continue; }
+    if (QUESTION_ALLOWED.has(w) || /[0-9_-]/.test(w)) continue;
+    if (/^[A-Z]/.test(raw) && i > 0 && NAMES_AFTER.has(normalize(written[i - 1]))) continue;
+    return null;
+  }
+  // A record noun is required; "ssam" alone or a status word alone is not a record.
+  const named = classes.filter((c, k) => c !== 'status' || normalize(why[k]) !== 'ssam');
+  if (!named.length) return null;
+  return { class: QUESTION_ORDER.find(k => classes.includes(k)), why: QUESTION_ORDER.filter(k => classes.includes(k)).map(k => 'SSAM ' + k + ' record') };
+}
+// The readers of a question on a lane: the routed tools that read first (the router's own reading of the words), then the
+// readers of its class, at most MAX_TOOLS; a writer is never offered for a question.
+export function questionTools(question, routed, lane, compiled = loadToolRoutes()) {
+  const reads = (routed.tools ?? []).filter((t, i) => (routed.steps?.[i]?.effect ?? 'read') === 'read' && !t.gap);
+  if (reads.length) return reads.slice(0, MAX_TOOLS);
+  const out = [];
+  for (const [tool, verb] of QUESTION_TOOLS[question.class] ?? []) {
+    if (out.length >= MAX_TOOLS) break;
+    if (out.some(t => t.tool === tool && (t.verb ?? null) === verb)) continue;
+    const r = compiled.routes.find(x => x.tool === tool && (x.verb ?? null) === verb && (x.lane === 'both' || x.lane === lane));
+    if (!r) continue;
+    const forLane = (r.lane === 'both' ? r.byLane?.[lane] : null) ?? {};
+    const args = clone(forLane.args ?? r.args ?? {});
+    if (typeof args.lane === 'string' && args.lane.startsWith('<')) args.lane = lane;
+    const next = forLane.next ?? r.next ?? null;
+    out.push({ tool, ...(verb ? { verb } : {}), lane: r.lane, args, when: forLane.when ?? r.when, ...(next ? { next } : {}), why: question.why });
+  }
+  return out.slice(0, MAX_TOOLS);
+}
+const QUESTION_RULE = 'a question about SSAM records, not a build request: answered by the read tools below, without authoring recipes (capabilities, examples, text routes)';
+
 export function intentRequired(lane, input = {}) {
   const app = typeof input.app === 'string' && input.app.trim() ? input.app.trim().slice(0, 260) : null;
   return { ok: false, code: 'INTENT_REQUIRED', lane, error: 'intent is required: what to do, in words (Portuguese or English); nothing was read',
@@ -1004,6 +1065,16 @@ async function discoverAllCore(input = {}, { discover = null, file = TOOLS_FILE 
       next: 'call ssam_discover with an intent for the exact call (tool, verb and arguments) or the contracts of a model change' };
   }
   const routed = compiled ? routeTools({ intent, lane }, compiled) : { tools: [] };
+  // A question that is not about building: the read tools that answer it, no model part (family F4).
+  const question = compiled && input.packet !== true && !hasExpansion(input) ? questionOf(intent, compiled, routed) : null;
+  if (question) {
+    const tools = questionTools(question, routed, lane, compiled);
+    if (tools.length) {
+      const base = { ok: true, schemaVersion: 'ssam-discovery/4', lane, intent, question: { class: question.class, why: question.why, rule: QUESTION_RULE },
+        size: { bytes: 0, budgetBytes: input.budgetBytes ?? ANSWER_BUDGETS.discoverFirst, status: 'within', truncated: [] } };
+      return attachTools(base, { ...routed, tools, steps: tools.map(() => ({ effect: 'read' })), mixed: false, keepModel: false, modelStep: false, hasModel: false }, { budgetBytes: input.budgetBytes ?? ANSWER_BUDGETS.discoverFirst, lane });
+    }
+  }
   // packet:true (W1): discover()'s work packet as it is, sized by itself; the tools the words route to ride in its next
   // section by name only (no fitting around it, so the same input keeps the same bytes).
   if (input.packet === true) return run({ ...input, operations: routed.tools.length ? levelItems(routed.tools, 'names') : null });
@@ -1016,7 +1087,10 @@ async function discoverAllCore(input = {}, { discover = null, file = TOOLS_FILE 
   }
   if (!compiled) return toolsError ? { ...answer, toolsError } : answer;
   if (answer.ok === false) return answer;
-  routed.hasModel = modelMatchesOf(answer, compiled).length > 0;
+  // Whether the request is a model change never depends on the app kind (F4 review): a direct match the kind left out
+  // (kind.excluded, kind.unproven) still makes it one, so the tools offered beside it do not change with the kind.
+  const { UNPROVEN } = await import('./discovery.mjs');
+  routed.hasModel = modelMatchesOf(answer, compiled).length > 0 || !!(answer.kind?.excluded?.length || answer[UNPROVEN]?.length);
   const { outsystemsUiRequest, stripOutsystemsUi, fitOutsystemsUi, stripC07, fitC07, sectionsFloor, silentlyLost, withAdjustment, stripTextRoute, fitTextRoute, TEXT_ROUTE_SECTION } = await import('./discovery.mjs');
   const budgetRaise = a => a.inputAdjusted?.find(x => x.path === '/budgetBytes');
   if (routed.hasModel) answer = withOperationalTitles(answer, compiled);
@@ -1031,7 +1105,7 @@ async function discoverAllCore(input = {}, { discover = null, file = TOOLS_FILE 
     // The words of a step are classified at a budget that keeps every match's score (a reduced answer drops them); this
     // call only classifies, the answer's model part stays the one above (the parts asked by expand/detail/type stay
     // there too: the classification never builds them).
-    await applyModelRule(routed, text => run({ ...input, intent: text, budgetBytes: CLASSIFY_BUDGET, ceilingBytes: null, expand: null, detail: null, type: null }), compiled, intent);
+    await applyModelRule(routed, text => run({ ...input, intent: text, budgetBytes: CLASSIFY_BUDGET, ceilingBytes: null, expand: null, detail: null, type: null, kindFilter: false }), compiled, intent);
     if (!routed.tools.length) return answer;
   }
   routed.mixed = routed.modelRest && routed.hasModel;
@@ -1050,7 +1124,7 @@ async function discoverAllCore(input = {}, { discover = null, file = TOOLS_FILE 
     B = Math.max(raised.to, Math.min(ceilingBytes ?? Infinity, raised.to + bytes(levelItems(routed.tools, 'full')) + bytes(toolHint(answer, routed, lane)) + 64));
     answer = { ...answer, inputAdjusted: answer.inputAdjusted.map(a => (a === raised ? { ...a, to: B } : a)), ...(answer.size?.budgetAdjusted ? { size: { ...answer.size, budgetAdjusted: { ...answer.size.budgetAdjusted, to: B } } } : {}) };
   }
-  const osui = routed.hasModel ? await outsystemsUiRequest({ lane, intent, matches: answer.matches, context: answer.context ?? null, app: input.app ?? null, map: input.map ?? null }) : null;
+  const osui = routed.hasModel ? await outsystemsUiRequest({ lane, intent, matches: answer.matches, context: answer.context ?? null, app: input.app ?? null, map: input.map ?? null, kinds: answer.kind ? { kinds: answer.kind.for, from: answer.kind.from } : null }) : null;
   // The text route of the model step (B2 of the plan "Texto do SSAM", text-routes.mjs) comes back after the tools too, before the
   // OutSystems UI section and the C07 sections: the operation's tool, then the ready call of the text step.
   let extras = null; let textRoute = null;

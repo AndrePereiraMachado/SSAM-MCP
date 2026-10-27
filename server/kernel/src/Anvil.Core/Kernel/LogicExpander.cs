@@ -81,7 +81,7 @@ public static class LogicExpander
             + "data.basedOn: the textSha of the read, needed with a header @key (changed since: merged three ways). A line keeps the element of its @id; a line without @id is new; "
             + "a removed line is a removed element; a parameter or local renamed with its id is renamed (its expressions rewritten). A header without @key "
             + "creates the action: server, service or client action Name; action Owner.Name (screen or block action) and data action Owner.Name name their "
-            + "screen or block (a screen an html op of the same job creates: put the logic op after it). Only what changed is written (set, create, link, delete, rename, move); the action is read again "
+            + "screen or block (also one an html document of the same job creates, in any order of the ops). Only what changed is written (set, create, link, delete, rename, move); the action is read again "
             + "and must be the text (FLOW_NOT_EXACT otherwise). Refused at once: FLOW_KEY_FOREIGN, FLOW_KEY_ROLE, FLOW_KEY_TWICE, FLOW_JUMP_UNKNOWN, FLOW_SELF_LOOP, "
             + "FLOW_BRANCHES_MEET, FLOW_OPAQUE_TOUCHED, FLOW_FOREACH_LIST_ACTION (T1/T2, with the List action as patch), FLOW_NODE_NAME_TAKEN, FLOW_BASE_CHANGED, "
             + "FLOW_ACTION_NAME_TAKEN (a text without @key named after an action the module has: its current text is the patch); one refusal carries "
@@ -1410,6 +1410,14 @@ public sealed partial class ModelSession
             throw new InvalidOperationException("logic: call target is not a native action: " + candidate.Reference);
         if (Implements(resolved, "IDataAction") || Implements(resolved, "IPreparation"))
             throw new InvalidOperationException("logic: 'call' cannot invoke a data action or preparation: " + candidate.Reference);
+        // O11 role actions exclude screen/client contexts in the native scope. Verify
+        // can accept a manually linked node which merge later coerces to Action=null.
+        // Resolve the actual signature (not a Check*/Grant* name heuristic).
+        if (LogicOrder.IsClient(caller) && Implements(resolved, "IRoleAction"))
+            throw new KernelRefusalException("ROLE_ACTION_REQUIRES_SERVER",
+                "Native role action '" + candidate.Reference + "' cannot be called directly from a client flow. "
+                + "Declare a server action in the same job, perform the role operation there, and call that server action. "
+                + "For the current user's permission, use GetUserId() on the server; keep authorization on every business write.");
         string kind;
         if (mobileScreen) kind = LogicOrder.MobileScreenAction;
         else if (webScreen) kind = LogicOrder.WebScreenAction;

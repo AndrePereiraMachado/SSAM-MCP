@@ -1,0 +1,24 @@
+{
+ "description": "ODC (L3c, scope phase): a raw create of a Traditional Web widget (IExpressionWidget) in a Reactive app. The ODC Model API has the interface (OutSystems.Model.UI.Web.Widgets) but no class in a Reactive or Mobile module: the apply answered \"Couldn't find any concrete class\" (lab 110, a Reactive app). The scope phase refuses it before the first op with the patch to IExpression. Runs in OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectError": [
+  "[ODC_TRADITIONAL_WIDGET]",
+  "IExpressionWidget is a Traditional Web widget",
+  "write IExpression"
+ ],
+ "ops": [
+  {
+   "op": "create",
+   "parent": "IMobileScreen:RecoverPasswordRequest",
+   "type": "IExpressionWidget",
+   "name": "WfCovLabel",
+   "as": "$label"
+  },
+  {
+   "op": "set",
+   "target": "$label",
+   "prop": "Value",
+   "value": "\"x\""
+  }
+ ]
+}

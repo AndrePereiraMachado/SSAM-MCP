@@ -100,6 +100,22 @@ public class HtmlElementEditsTests
             With((6, 8, ["   <a k=\"w22\" onclick=\"OnTogglePasswordVisibility\">", "    <i k=\"w24\" icon=\"eye-slash\" class=\"icon\"/>", "   </a>"])));
     }
 
+    // The live refusal 3ce977a2 (20/10): wrapping a keyed container in a new If by replacing it with the If around it was
+    // HTML_KEY_TWICE, since the root of with inherited the k of the target and the target inside it wrote it again. A root
+    // without k that holds the target is new: the element moves under it with its k (the merge creates the If and moves it).
+    [Fact]
+    public void ReplaceWithTheTargetInsideANewRootWrapsIt()
+    {
+        var r = Apply("""{"replace":"w17","with":"<div if='UserEmail <> \"\"'><input k=\"w17\" id=\"Input_Username\" bind=\"UserEmail\" maxlength=\"250\" required=\"True\" class=\"form-control\"/></div>"}""");
+        Accepted(r, With((5, 1, ["   <div if='UserEmail <> \"\"'>", "    <input k=\"w17\" id=\"Input_Username\" bind=\"UserEmail\" maxlength=\"250\" required=\"True\" class=\"form-control\"/>", "   </div>"])));
+        Assert.Equal(["w17"], r.Touched);
+        // With its else, and the target changed under the new If.
+        Accepted(Apply("""{"replace":"w17","with":"<div if=\"ShowEmail\"><input k=\"w17\" id=\"Input_Username\" bind=\"UserEmail\" class=\"form-control\"/></div><div else><span>hidden</span></div>"}"""),
+            With((5, 1, ["   <div if=\"ShowEmail\">", "    <input k=\"w17\" id=\"Input_Username\" bind=\"UserEmail\" class=\"form-control\"/>", "   </div>", "   <div else>", "    <span>hidden</span>", "   </div>"])));
+        // A root with another k of the reading is still that element twice.
+        Assert.Equal([ScreenHtmlEdit.KeyTwice], Codes(Apply("""{"replace":"w17","with":"<div k=\"w7\"><input k=\"w17\"/></div>"}""")));
+    }
+
     [Fact]
     public void AnIfIsReplacedAndDeletedWithItsElse()
     {

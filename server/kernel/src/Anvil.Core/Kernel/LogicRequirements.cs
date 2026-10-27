@@ -208,7 +208,16 @@ public sealed partial class ModelSession
             if (!JsonNode.DeepEquals(expected, actual)) { var difference = item.DeepClone().AsObject(); difference["actual"] = actual?.DeepClone(); differences.Add(difference); }
         }
         void Expression(string path, string property, string expected, IObjectSignature node)
-            => Equal(path, property, J(ExpressionTokens(expected)), J(ExpressionTokens((P(node, property) as IExpression)?.Text ?? "")));
+            => Equal(path, property, J(ExpressionTokens(expected)), J(ExpressionTokens(ValueText(node, property))));
+        // The Value of an assignment or argument with the record mapping O11 keeps beside it (IRecordMappings), read as the flow
+        // reader writes it ("Source mapTo { Field: value, ... }"): the mapping is part of the value a declaration writes (ODC
+        // keeps it in the expression's own text). The automatic conversion the Studio derives is no mapping and is not read.
+        static string ValueText(IObjectSignature node, string property)
+        {
+            var text = (P(node, property) as IExpression)?.Text ?? "";
+            if (property != "Value" || StudioAdapter.Runtime.Mappings is not { } mappings || !mappings.Owns(node)) return text;
+            return mappings.Read(node) is { Authored: true, Fields.Count: > 0 } mapping ? Anvil.Reading.FlowMapping.Compose(text, mapping.Fields) ?? text : text;
+        }
         void DataType(string path, string name, object? actual)
         {
             if (types[path] == null)

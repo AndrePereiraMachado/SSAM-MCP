@@ -17,6 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { wrapHostedTool } from '../hosted/policy.mjs';
+import { PATCH_MAX_OPS } from '../job-patch.mjs';
 import { fakeAgentLink, hostedDirs, cleanupHostedDirs } from './fixtures/fake-agent-link.mjs';
 
 test.after(cleanupHostedDirs);
@@ -59,16 +60,21 @@ const plant = (h, file, op) => {
   write(base + '.verified-patch.json', { schema: 'ssam-verified-patch/1', job: base, jobSha256: sha(base), patch: [{ op: 'add', path: '/ops/-', value: op }] });
   return base;
 };
-const verifiedRefusal = (value, name, label, pointer = '/patch') => {
+// carried (a12): the patch the continuation sends explicitly, read from this customer's own files; null: none there.
+const verifiedRefusal = (value, name, label, pointer = '/patch', carried = null) => {
   assert.equal(value.code, 'HOSTED_UNAVAILABLE', label);
   assert.equal(value.cause, 'VERIFIED_PATCH_LOCAL', label);
   assert.equal(value.policy, 'HOSTED_VERIFIED_PATCH', label);
   assert.equal(value.pointer, pointer, label);
   assert.equal(value.outcome, 'not-sent', label);
   assert.equal(value.continuation?.tool, name, label);
-  assert.equal(value.continuation?.arguments?.patch, undefined, label + ': the continuation drops patch "verified"');
+  const args = pointer.startsWith('/query/') ? value.continuation?.arguments?.query : value.continuation?.arguments;
+  if (carried) { assert.deepEqual(args?.patch, carried, label + ': the continuation sends the kept patch explicitly'); assert.equal(value.continuation.add, undefined, label); return; }
+  assert.equal(args?.patch, undefined, label + ': the continuation drops patch "verified"');
   assert.match(JSON.stringify(value.continuation?.add ?? {}), /JSON Patch operations themselves/, label);
 };
+// The gate's own check of each planted op once it is sent explicitly.
+const plantedCause = { 'rest-consume': 'GENERATOR_PENDING', prototype: 'PROTOTYPE_IMPORT_DISABLED', 'reference producer of another customer': 'PATH_OUTSIDE_WORKSPACE' };
 
 test('patch "verified" over basedOn {job} is refused at the gate in the four job tools, whatever the planted patch carries', async () => {
   const h = harness();
@@ -76,8 +82,11 @@ test('patch "verified" over basedOn {job} is refused at the gate in the four job
     const base = plant(h, h.ws('o11', 'jobs', 'base.json'), op);
     for (const name of TOOLS) {
       const value = refused(await h.gate(name)({ ...lane(name), basedOn: { job: 'ws:o11/jobs/base.json', sha256: sha(base) }, patch: 'verified' }), name + ' ' + label);
-      verifiedRefusal(value, name, name + ' ' + label);
+      // a12: the customer's own verified patch, sent explicitly by the continuation, is then checked like any patch.
+      verifiedRefusal(value, name, name + ' ' + label, '/patch', [{ op: 'add', path: '/ops/-', value: op }]);
       assert.deepEqual(value.continuation.arguments.basedOn, { job: 'ws:o11/jobs/base.json', sha256: sha(base) }, name);
+      const followed = refused(await h.gate(name)(value.continuation.arguments), name + ' ' + label + ' followed');
+      assert.equal(followed.cause ?? followed.code, plantedCause[label], name + ' ' + label + ' followed: ' + JSON.stringify(followed).slice(0, 300));
     }
   }
   assert.deepEqual(h.calls, [], 'the handler never ran');
@@ -108,8 +117,7 @@ test('patch "verified" over basedOn {taskId} is refused in the four job tools; c
     write(h.ws('o11', 'work', 'deliver', taskId, 'task.json'), { request: { JobPath: base }, sources: [{ path: base, sha256: sha(base) }] });
     for (const name of TOOLS) verifiedRefusal(refused(await h.gate(name)({ ...lane(name), basedOn: { taskId }, patch: 'verified' }), name + ' ' + label), name, name + ' taskId ' + label);
     const value = refused(await h.gate('ssam_reference')({ lane: 'o11', kind: 'check-job', query: { basedOn: { job: 'ws:o11/jobs/task-job.json', sha256: sha(base) }, patch: 'verified' } }), 'check-job ' + label);
-    verifiedRefusal(value, 'ssam_reference', 'check-job ' + label, '/query/patch');
-    assert.equal(value.continuation.arguments.query.patch, undefined);
+    verifiedRefusal(value, 'ssam_reference', 'check-job ' + label, '/query/patch', [{ op: 'add', path: '/ops/-', value: op }]);
     assert.equal(value.continuation.arguments.kind, 'check-job');
   }
   assert.deepEqual(h.calls, [], 'the handler never ran');
@@ -139,9 +147,10 @@ test('fail closed: a patch or partial job the gate cannot build is refused with 
   const h = harness();
   const base = write(h.ws('o11', 'jobs', 'base.json'), BASE);
   const basedOn = { job: 'ws:o11/jobs/base.json', sha256: sha(base) };
-  const tooMany = Array.from({ length: 51 }, () => ({ op: 'add', path: '/ops/-', value: { op: 'find', name: 'x' } }));
+  // One more than the product's bound (job-patch.mjs PATCH_MAX_OPS: 500 since the proto line, 50 before).
+  const tooMany = Array.from({ length: PATCH_MAX_OPS + 1 }, () => ({ op: 'add', path: '/ops/-', value: { op: 'find', name: 'x' } }));
   const cases = [
-    ['more than 50 operations', { patch: tooMany }, 'PATCH_INVALID', '/patch'],
+    ['more than PATCH_MAX_OPS operations', { patch: tooMany }, 'PATCH_INVALID', '/patch'],
     ['an empty patch', { patch: [] }, 'PATCH_INVALID', '/patch'],
     ['a patch that is not an array', { patch: { op: 'add', path: '/ops/-', value: { op: 'find', name: 'x' } } }, 'PATCH_INVALID', '/patch'],
     ['a patch string other than verified', { patch: 'all' }, 'PATCH_INVALID', '/patch'],
@@ -158,6 +167,68 @@ test('fail closed: a patch or partial job the gate cannot build is refused with 
     // basedOn {taskId} the gate cannot read: no task state in the customer's work folder
     const value = refused(await h.gate(name)({ ...lane(name), basedOn: { taskId: 'd'.repeat(32) }, patch: [{ op: 'replace', path: '/ops/0/op', value: 'logic' }] }), name + ' taskId');
     assert.deepEqual([value.code, value.pointer], ['JOB_PATHS_UNCHECKED', '/basedOn/taskId'], name);
+  }
+  assert.deepEqual(h.calls, [], 'the handler never ran');
+});
+
+// servidor/fase4-27 a11: fix "apply" (o11_deliver, studio_deliver, ssam_code) makes the handler apply the patches a refusal
+// of the job of basedOn kept on the server (job-patch.mjs proposedPatch), files the gate never reads: before this rule it
+// reached the handler unchecked. The same family rule as patch "verified" (job-paths.mjs UNREAD_PATCH_FORMS), the same
+// refusal, at /fix; the explicit patch is still checked, and a legitimate one still reaches the handler.
+const FIX_TOOLS = ['o11_deliver', 'studio_deliver', 'ssam_code'];
+const fixLane = name => (name === 'ssam_code' ? { lane: 'o11', action: 'write', module: 'M' } : lane(name));
+for (const name of FIX_TOOLS) test('fix "apply" over basedOn is refused at the gate in ' + name + ', as patch "verified" is', async () => {
+  const h = harness();
+  const base = write(h.ws('o11', 'jobs', 'base.json'), BASE);
+  const basedOn = { job: 'ws:o11/jobs/base.json', sha256: sha(base) };
+  {
+    for (const extra of [{ fix: 'apply' }, { fix: ' APPLY ' }, { fix: 'apply', patch: [{ op: 'replace', path: '/ops/0/data/flow/0', value: 'server action B @b1' }] },
+      { fix: 'apply', authorize: '<the user\'s words>' }]) {
+      const label = name + ' ' + JSON.stringify(extra);
+      const value = refused(await h.gate(name)({ ...fixLane(name), basedOn, ...extra }), label);
+      assert.equal(value.code, 'HOSTED_UNAVAILABLE', label);
+      assert.equal(value.cause, 'VERIFIED_PATCH_LOCAL', label);
+      assert.equal(value.policy, 'HOSTED_VERIFIED_PATCH', label);
+      assert.equal(value.pointer, '/fix', label);
+      assert.equal(value.outcome, 'not-sent', label);
+      assert.match(value.error, /^fix "apply" is available only in local use for now: .* Nothing ran\.$/, label);
+      assert.equal(value.continuation?.tool, name, label);
+      assert.equal(value.continuation.arguments.fix, undefined, label + ': the continuation drops fix "apply"');
+      assert.equal(value.continuation.arguments.patch, undefined, label + ': the explicit patch carries the call\'s own operations');
+      assert.deepEqual(value.continuation.arguments.basedOn, basedOn, label);
+      if (extra.authorize) assert.equal(value.continuation.arguments.authorize, extra.authorize, label);
+      assert.match(value.continuation.add?.patch ?? '', /^the JSON Patch operations themselves: .*then your own/, label);
+    }
+  }
+  // through the agent inbox too: refused before the agent brings anything
+  const inbox = write(h.link.agentFile('agent:inbox/x.json'), BASE);
+  refused(await h.gate(name)({ ...fixLane(name), basedOn: { job: 'agent:inbox/x.json', sha256: sha(inbox) }, fix: 'apply' }), name + ' inbox');
+  assert.deepEqual(h.pulls, [], 'nothing brought from the agent');
+  assert.deepEqual(h.calls, [], 'the handler never ran');
+});
+
+test('control for fix "apply": the explicit patch with operations passes the gate in o11_deliver, studio_deliver and ssam_code', async () => {
+  const h = harness();
+  const base = write(h.ws('o11', 'jobs', 'base.json'), BASE);
+  const basedOn = { job: 'ws:o11/jobs/base.json', sha256: sha(base) };
+  for (const name of FIX_TOOLS) {
+    assert.equal(refused(await h.gate(name)({ ...fixLane(name), basedOn, patch: [{ op: 'add', path: '/ops/-', value: planted(h).prototype }] }), name).cause, 'PROTOTYPE_IMPORT_DISABLED', name + ': the explicit patch is checked');
+    const result = await h.gate(name)({ ...fixLane(name), basedOn, patch: [{ op: 'replace', path: '/ops/0/data/flow/0', value: 'server action B @b1' }] });
+    assert.equal(result.structuredContent?.ok, true, name + ': ' + JSON.stringify(result).slice(0, 400));
+  }
+  assert.deepEqual(h.calls.map(c => c.name), FIX_TOOLS, 'each explicit patch reached its handler');
+  assert.ok(h.calls.every(c => c.args.fix === undefined && c.args.patch[0].value === 'server action B @b1'));
+});
+
+// a12 (review of 386c5bf6, Low): any fix sent is refused on hosted, not only the string "apply": the gate never leans on
+// the schema's const.
+test('a fix that is not the string "apply" (true, 1, {}, null, "other") is refused at the gate in o11_deliver, studio_deliver and ssam_code', async () => {
+  const h = harness();
+  const base = write(h.ws('o11', 'jobs', 'base.json'), BASE);
+  const basedOn = { job: 'ws:o11/jobs/base.json', sha256: sha(base) };
+  for (const name of FIX_TOOLS) for (const fix of [true, 1, {}, null, 'other', []]) {
+    const value = refused(await h.gate(name)({ ...fixLane(name), basedOn, fix }), name + ' ' + JSON.stringify(fix));
+    assert.deepEqual([value.cause, value.pointer], ['VERIFIED_PATCH_LOCAL', '/fix'], name + ' ' + JSON.stringify(fix));
   }
   assert.deepEqual(h.calls, [], 'the handler never ran');
 });

@@ -1,6 +1,6 @@
 // A refused job corrected by a small patch instead of the whole job again (measured: resending the job costs ~48 s a
 // correction, a patch ~5-8 s, and no Read+Edit of the file). The subset of JSON Patch (RFC 6902) a job needs: add,
-// remove, replace, test; at most 50 operations; paths only inside the job's ops (/ops/<i>/... of {ops:[...]},
+// remove, replace, test; at most 500 operations; paths only inside the job's ops (/ops/<i>/... of {ops:[...]},
 // /<i>/... of an array job) and the expectedMessages of an {ops} job (/expectedMessages/-), never base, expectValid or a
 // composite job's parts. The base is either a job file a
 // refusal named ({job, sha256}) or the job of an O11 kernel delivery task ({taskId}: request.JobPath of
@@ -35,6 +35,7 @@
 // reference, a spec before the first logic/screen/html op. Nothing is removed: removal is a patch remove. A patch given
 // with it applies after the merge. The whole job generated is the new file, and its sha256 the next basedOn.
 // namedPatch: the numeric patch of a refusal written by name, checked by resolving it back (patchByName).
+import { appendJsonLine } from './correlation.mjs';
 import fs from 'node:fs';
 import { isProducerName } from './producer-names.mjs';
 import path from 'node:path';
@@ -43,7 +44,9 @@ import { normalizeCodeOps } from './ssam-code.mjs';
 import { readVerifiedPatch, verifiedPatchFile } from './verified-patch.mjs';
 export { verifiedPatchFile };
 
-export const PATCH_MAX_OPS = 50;
+// 500 since 20/10/2026 (goal list of 2026-10-20, item 4, report d9398179: a refusal with 61 fixes could not be answered in one call at 50,
+// against the rule "correct everything in one call"); the bound only keeps a runaway call out.
+export const PATCH_MAX_OPS = 500;
 export const PATCH_OPS = Object.freeze(['add', 'remove', 'replace', 'test']);
 export const IDENTITY_KEYS = Object.freeze(['name', 'as', 'key', 'id', 'label']);
 const SHA256 = /^[a-fA-F0-9]{64}$/;
@@ -82,7 +85,7 @@ export const patchJsonSchema = Object.freeze({
     items: { type: 'object', additionalProperties: false, required: ['op', 'path'],
       properties: { op: { type: 'string', enum: [...PATCH_OPS] }, path: { type: 'string', minLength: 1 }, value: {} } } },
   { type: 'string', enum: ['verified'] }],
-  description: 'JSON Patch (RFC 6902: add, remove, replace, test; at most 50) over the job of basedOn, paths /ops/<i>/... '
+  description: 'JSON Patch (RFC 6902: add, remove, replace, test; at most 500) over the job of basedOn, paths /ops/<i>/... '
     + '(or /<i>/... of an array job) and /expectedMessages/- (a declaration {id, element, why} a refusal asked for). '
     + 'A path may name elements instead of counting them: actions/<Action>/steps/<as>/assign/<Var> (a list of the ops\' data '
     + 'first, then names: name, as, key, id or label; digits stay an index); a refusal gives each patch by name too (patchByName). '
@@ -146,15 +149,32 @@ function shortcut(ops, holders, tokens, prefix, op, value, at, label) {
     at, [...new Set(holders.flatMap(i => namesOf(ops[i].data[list])))]);
 }
 
-// The tokens of a path with every name replaced by its index (the shortcut expanded). A part of the path that does not
-// exist is left as written: applyOne then says what is missing, as for a numeric path.
-function resolveTokens(job, tokens, op, value, at, label) {
+// R1 (plano 24/10): a path rooted the other way is read as the one it can only mean, and said (notes): /<i>/... of an
+// {ops} job is /ops/<i>/...; /ops/<i>/... of an array job is /<i>/...; a first segment that names one op of an {ops} job
+// (name, as, key, id or label) is that op. Without notes (namedPatch's check) nothing is re-rooted.
+function rooted(job, tokens, at, notes) {
   const ops = opsOf(job);
-  let out = tokens;
-  if (ops && tokens.length && isName(tokens[0]) && (Array.isArray(job) || !['ops', 'expectedMessages'].includes(tokens[0]))) {
-    const holders = ops.map((o, i) => (isObject(o) && isObject(o.data) && Array.isArray(o.data[tokens[0]]) ? i : -1)).filter(i => i >= 0);
-    if (holders.length) out = shortcut(ops, holders, tokens, Array.isArray(job) ? [] : ['ops'], op, value, at, label);
-    else if (!Array.isArray(job)) return tokens; // not a list of the ops' data: area() refuses it as before
+  if (!notes || !ops || !tokens.length) return tokens;
+  const said = (to, why) => { notes.push({ rule: 'patch-path', at: '/patch/' + at, note: toPointer(tokens) + ' is ' + toPointer(to) + ': ' + why }); return to; };
+  if (!Array.isArray(job) && INDEX.test(tokens[0]) && Number(tokens[0]) < ops.length) return said(['ops', ...tokens], 'the ops of an {ops} job are /ops/<i>');
+  if (Array.isArray(job) && tokens[0] === 'ops' && tokens.length > 1 && !ops.some(o => isObject(o) && identityOf(o) === 'ops')) return said(tokens.slice(1), 'an array job is its ops: /<i>');
+  if (!Array.isArray(job) && isName(tokens[0]) && !['ops', 'expectedMessages'].includes(tokens[0])
+    && !ops.some(o => isObject(o) && isObject(o.data) && Array.isArray(o.data[tokens[0]]))) {
+    const hits = hitsOf(ops, tokens[0]);
+    if (hits.length === 1) return said(['ops', String(hits[0]), ...tokens.slice(1)], 'the op named ' + tokens[0]);
+  }
+  return tokens;
+}
+// The tokens of a path with every name replaced by its index (the shortcut expanded). A part of the path that does not
+// exist is left as written: applyOne then says what is missing, as for a numeric path. notes (R1): the readings taken as
+// meant (rooted, and a list of an op's data written without its data segment: /ops/<i>/actions/... is /ops/<i>/data/actions/...).
+function resolveTokens(job, tokens, op, value, at, label, notes = null) {
+  const ops = opsOf(job);
+  let out = rooted(job, tokens, at, notes);
+  if (ops && tokens.length && isName(out[0]) && (Array.isArray(job) || !['ops', 'expectedMessages'].includes(out[0]))) {
+    const holders = ops.map((o, i) => (isObject(o) && isObject(o.data) && Array.isArray(o.data[out[0]]) ? i : -1)).filter(i => i >= 0);
+    if (holders.length) out = shortcut(ops, holders, out, Array.isArray(job) ? [] : ['ops'], op, value, at, label);
+    else if (!Array.isArray(job)) return out; // not a list of the ops' data: area() refuses it as before
   }
   const resolved = [];
   let node = job;
@@ -166,6 +186,10 @@ function resolveTokens(job, tokens, op, value, at, label) {
       if (last && op === 'add' && !hits.length && identityOf(value) === token) { resolved.push('-'); return resolved; }
       if (last && op === 'add' && hits.length === 1) throw existingByName(label, token, at);
       token = String(nameIn(node, token, resolved, at, label));
+    }
+    if (notes && ops?.includes(node) && token !== 'data' && !Object.hasOwn(node, token) && isObject(node.data) && Object.hasOwn(node.data, token) && !(last && op === 'add')) {
+      notes.push({ rule: 'patch-path', at: '/patch/' + at, note: token + ' of op ' + toPointer(resolved.slice(0, -1)) + ' is in its data: ' + toPointer([...resolved, 'data', token]) });
+      resolved.push('data'); node = node.data;
     }
     resolved.push(token);
     if (last) break;
@@ -200,7 +224,7 @@ function jsonEqual(a, b) {
 
 // One operation on the (cloned) job. Every location but the last token must exist (RFC 6902 4.1). The numeric path it
 // resolved to (names replaced by indices) goes to `resolved` when given.
-function applyOne(job, operation, at, resolved) {
+function applyOne(job, operation, at, resolved, notes = null) {
   if (!operation || typeof operation !== 'object' || Array.isArray(operation)) throw new PatchError('PATCH_INVALID', `patch[${at}] is not an object {op, path, value?}`, at);
   const extra = Object.keys(operation).filter(k => !OP_KEYS.has(k));
   const { op, path: where } = operation;
@@ -208,7 +232,7 @@ function applyOne(job, operation, at, resolved) {
   if (extra.length) throw new PatchError('PATCH_INVALID', `${label}: unknown key(s) ${extra.join(', ')} (op, path, value)`, at);
   if (!PATCH_OPS.includes(op)) throw new PatchError('PATCH_INVALID', `${label}: op is one of ${PATCH_OPS.join(', ')} (move/copy: remove + add)`, at);
   if (op !== 'remove' && !Object.hasOwn(operation, 'value')) throw new PatchError('PATCH_INVALID', `${label}: ${op} needs value`, at);
-  const tokens = resolveTokens(job, pointer(where, at, label), op, operation.value, at, label);
+  const tokens = resolveTokens(job, pointer(where, at, label), op, operation.value, at, label, notes);
   area(tokens, job, at, label);
   resolved?.push({ op, path: toPointer(tokens), ...(Object.hasOwn(operation, 'value') ? { value: operation.value } : {}) });
   const missing = upTo => new PatchError('PATCH_INVALID', `${label}: no value at ${'/' + tokens.slice(0, upTo).map(t => t.replace(/~/g, '~0').replace(/\//g, '~1')).join('/')}`, at);
@@ -246,13 +270,13 @@ export function patchJob(job, patch, { max = PATCH_MAX_OPS } = {}) {
   if (patch.length > max) throw new PatchError('PATCH_INVALID', `patch has ${patch.length} operations; at most ${PATCH_MAX_OPS} (send only the changed elements as a partial job with basedOn instead)`);
   if (!opsOf(job)) throw new PatchError('PATCH_PATH_FORBIDDEN', 'only a job with ops ({ops:[...]} or an array of ops) is patched; a composite {jobs} job is patched in its part file');
   const copy = structuredClone(job);
-  const resolved = [];
-  patch.forEach((operation, at) => applyOne(copy, operation, at, resolved));
+  const resolved = [], notes = [];
+  patch.forEach((operation, at) => applyOne(copy, operation, at, resolved, notes));
   const ops = opsOf(copy);
   if (!ops.length) throw new PatchError('PATCH_INVALID', 'the patched job has no ops left');
   const bad = ops.findIndex(o => !o || typeof o !== 'object' || Array.isArray(o));
   if (bad >= 0) throw new PatchError('PATCH_INVALID', `the patched job's op #${bad} is not an object`);
-  return { job: copy, resolved, named: resolved.some((r, i) => r.path !== toPointer(pointer(patch[i].path, i, ''))) };
+  return { job: copy, resolved, named: resolved.some((r, i) => r.path !== toPointer(pointer(patch[i].path, i, ''))), notes };
 }
 export const applyJobPatch = (job, patch) => patchJob(job, patch).job;
 
@@ -701,9 +725,15 @@ export function resolvePatchedJob({ job, patch, basedOn } = {}, { root = null, i
       if (!partial.ok) return partial;
       ({ job: result, summary } = mergePartialJob(parsed, partial.value));
     }
-    if (patch != null) { patched = patchJob(result, patch, verified ? { max: Infinity } : {}); result = patched.job; }
+    if (patch != null) {
+      try { patched = patchJob(result, patch, verified ? { max: Infinity } : {}); }
+      // R1: a patch refused never comes back dry: the same patch mended where one reading is certain, by name, ready to send.
+      catch (error) { if (error instanceof PatchError && Array.isArray(patch)) return fail(error.code, error.message, { ...patchErrorFields(error), ...mendedFields(result, patch) }); throw error; }
+      result = patched.job;
+    }
   } catch (error) { if (error instanceof PatchError) return fail(error.code, error.message, patchErrorFields(error)); throw error; }
   const shaped = normalizeCodeOps(result);
+  if (patched?.notes?.length) shaped.normalizations = [...patched.notes, ...(shaped.normalizations ?? [])];
   const text = JSON.stringify(pinReferences(shaped.job, path.dirname(base.file), inlineDir), null, 2) + '\n';
   const file = writeInline(inlineDir, text, uuid);
   const done = { ok: true, path: file, sha256: sha256(text), basedOn: { job: base.file, sha256: base.sha256, ...(base.taskId ? { taskId: base.taskId } : {}) },
@@ -711,9 +741,9 @@ export function resolvePatchedJob({ job, patch, basedOn } = {}, { root = null, i
   if (journalDir) {
     try {
       fs.mkdirSync(journalDir, { recursive: true });
-      fs.appendFileSync(path.join(journalDir, 'job-patch.jsonl'), JSON.stringify({ at: now().toISOString(), event: summary ? 'partial' : 'patch', ...(tool ? { tool } : {}),
+      appendJsonLine(path.join(journalDir, 'job-patch.jsonl'), { at: now().toISOString(), event: summary ? 'partial' : 'patch', ...(tool ? { tool } : {}),
         job: file, jobSha256: done.sha256, basedOn: done.basedOn, ...(patch != null ? { patchOps: patch.length } : {}),
-        ...(patched?.named ? { resolved: patched.resolved.map(r => r.path) } : {}), ...(summary ? { partial: done.partial } : {}) }) + '\n');
+        ...(patched?.named ? { resolved: patched.resolved.map(r => r.path) } : {}), ...(summary ? { partial: done.partial } : {}) });
     } catch { /* the patched file stands; the line is provenance only */ }
   }
   return done;
@@ -753,8 +783,8 @@ export function appliedJobIdentity(patchedJob, original, { journalDir, tool, now
       try { recorded = fs.readFileSync(journalFile, 'utf8').split('\n').some(line => {
         try { const entry = JSON.parse(line); return entry.event === 'auto-patch' && entry.jobSha256 === identity.jobSha256 && entry.basedOn?.sha256 === basedOn.sha256 && entry.job === identity.job; } catch { return false; }
       }); } catch { /* first line */ }
-      if (!recorded) fs.appendFileSync(journalFile, JSON.stringify({ at: now().toISOString(), event: 'auto-patch',
-        ...(tool ? { tool } : {}), job: identity.job, jobSha256: identity.jobSha256, basedOn }) + '\n');
+      if (!recorded) appendJsonLine(journalFile, { at: now().toISOString(), event: 'auto-patch',
+        ...(tool ? { tool } : {}), job: identity.job, jobSha256: identity.jobSha256, basedOn });
     } catch { /* provenance does not change the accepted candidate */ }
   }
   return { ...original, path: identity.job, sha256: identity.jobSha256, ...(basedOn ? { basedOn } : {}) };
@@ -776,4 +806,203 @@ export function failedOpOf(error, jobFile) {
   const named = (m[3] ?? '').trim();
   const own = typeof op.name === 'string' ? op.name : typeof op.prop === 'string' ? op.prop : '';
   return named && named !== own ? null : index;
+}
+
+// ---- R1 (plano 24/10): the correction loop without a JSON path to write
+// mendPatch(job, patch): the patch with each operation that does not apply mended where one reading is certain (only
+// op, path and value kept; a verb of another name: set/update -> replace, insert/append/create -> add, delete -> remove;
+// add of what exists -> replace; replace of a key that is not there -> add; a name that differs only in case -> the
+// name there), each checked by applying it over the job as the earlier operations left it.
+// -> {patch, repaired: [{at, was, now, why}], ready, at?} (ready: the whole patch applies), or null (not a patch of a job).
+const VERB_OF = { set: 'replace', update: 'replace', modify: 'replace', change: 'replace', insert: 'add', append: 'add', create: 'add', push: 'add', delete: 'remove', del: 'remove', drop: 'remove' };
+function mendsOf(operation, error) {
+  if (!isObject(operation)) return [];
+  const verb = typeof operation.op === 'string' ? (PATCH_OPS.includes(operation.op) ? operation.op : VERB_OF[operation.op.toLowerCase()] ?? null) : null;
+  if (!verb || typeof operation.path !== 'string') return [];
+  const base = { op: verb, path: operation.path, ...(verb !== 'remove' && Object.hasOwn(operation, 'value') ? { value: operation.value } : {}) };
+  const out = [];
+  const add = (op, why) => { if (!out.some(o => jsonEqual(o.op, op))) out.push({ op, why }); };
+  if (verb !== operation.op) add(base, operation.op + ' is ' + verb);
+  else if (Object.keys(operation).some(k => !OP_KEYS.has(k))) add(base, 'only op, path and value');
+  if (verb === 'add' && Object.hasOwn(base, 'value')) add({ ...base, op: 'replace' }, 'add of what exists is replace');
+  if (verb === 'replace') add({ ...base, op: 'add' }, 'replace of a key that is not there is add');
+  // A name that differs only in case from one candidate the refusal named.
+  const candidates = Array.isArray(error?.candidates) ? error.candidates.filter(c => typeof c === 'string' && !c.startsWith('/')) : [];
+  if (candidates.length) {
+    const tokens = base.path.replace(/^\//, '').split('/');
+    let renamed = false;
+    const fixed = tokens.map(t => { const hit = candidates.filter(c => c !== t && c.toLowerCase() === t.toLowerCase()); if (hit.length === 1) { renamed = true; return hit[0]; } return t; });
+    if (renamed) {
+      const path = (base.path.startsWith('/') ? '/' : '') + fixed.join('/');
+      for (const o of [base, ...out.map(x => x.op)]) add({ ...o, path }, 'the name as it is in the job');
+    }
+  }
+  return out;
+}
+export function mendPatch(job, patch) {
+  if (!Array.isArray(patch) || !patch.length || !opsOf(job)) return null;
+  let copy = structuredClone(job);
+  const out = [], repaired = [];
+  for (let at = 0; at < patch.length; at++) {
+    const operation = patch[at];
+    let trial = structuredClone(copy);
+    try { applyOne(trial, operation, at, null, []); copy = trial; out.push(operation); continue; }
+    catch (error) {
+      if (!(error instanceof PatchError)) throw error;
+      // A mend may show the next thing to mend (extra keys first, then the case of a name): at most three steps.
+      let mended = null;
+      let queue = mendsOf(operation, error).map(c => ({ ...c, depth: 1 }));
+      const tried = new Set();
+      while (queue.length && !mended) {
+        const candidate = queue.shift();
+        const key = JSON.stringify(candidate.op);
+        if (tried.has(key)) continue;
+        tried.add(key);
+        trial = structuredClone(copy);
+        try { applyOne(trial, candidate.op, at, null, []); mended = candidate; }
+        catch (again) {
+          if (!(again instanceof PatchError)) throw again;
+          if (candidate.depth < 3) queue.push(...mendsOf(candidate.op, again).map(c => ({ ...c, why: candidate.why + '; ' + c.why, depth: candidate.depth + 1 })));
+        }
+      }
+      if (!mended) return { patch: [...out, ...patch.slice(at)], repaired, ready: false, at };
+      copy = trial; out.push(mended.op); repaired.push({ at, was: operation, now: mended.op, why: mended.why });
+    }
+  }
+  return { patch: out, repaired, ready: true };
+}
+// The fields of a refused patch: patchByName (the mended patch written by name where unique, else as mended), ready (the
+// whole patch applies over that job) and repaired; {} when nothing can be said.
+export function mendedFields(job, patch) {
+  let mended;
+  try { mended = mendPatch(job, patch); } catch { return {}; }
+  if (!mended) return {};
+  let named = null;
+  try { named = namedPatch(job, mended.patch); } catch { named = null; }
+  return { patchByName: named ?? mended.patch, ready: mended.ready, ...(mended.repaired.length ? { repaired: mended.repaired } : {}) };
+}
+
+// applyFixes(job, fixes): the patches a refusal proposed ([{code, pointer?, pointers?, patch}]), applied in order over the
+// job, each whole or not at all; an operation another fix already applied is not applied twice, and a fix that writes a
+// different value where an earlier one wrote is not applied (it would undo it). -> {patch: the operations applied, in
+// order, applied: [{code, pointer, ops}], notApplied: [{code, pointer, patch, error}]}.
+export function applyFixes(job, fixes) {
+  let copy = structuredClone(job);
+  const patch = [], applied = [], notApplied = [], seen = new Set(), written = new Map();
+  for (const fix of Array.isArray(fixes) ? fixes : []) {
+    const ops = Array.isArray(fix?.patch) ? fix.patch : [];
+    const where = { code: fix?.code ?? null, pointer: fix?.pointer ?? (Array.isArray(fix?.pointers) ? fix.pointers[0] ?? null : null) };
+    if (!ops.length) continue;
+    const fresh = ops.filter(op => !seen.has(JSON.stringify(op)));
+    const clash = fresh.find(op => isObject(op) && ['add', 'replace'].includes(op.op) && written.has(op.path) && written.get(op.path) !== JSON.stringify(op.value ?? null));
+    if (clash) { notApplied.push({ ...where, patch: ops, error: 'another fix of this refusal writes a different value at ' + clash.path + ' (applying both would undo it)' }); continue; }
+    const trial = structuredClone(copy);
+    try { fresh.forEach((op, i) => applyOne(trial, op, patch.length + i)); }
+    catch (error) { if (!(error instanceof PatchError)) throw error; notApplied.push({ ...where, patch: ops, error: error.message }); continue; }
+    copy = trial;
+    for (const op of fresh) { seen.add(JSON.stringify(op)); patch.push(op); if (isObject(op) && ['add', 'replace'].includes(op.op)) written.set(op.path, JSON.stringify(op.value ?? null)); }
+    applied.push({ ...where, ops: ops.length });
+  }
+  return { patch, applied, notApplied };
+}
+
+// changeOnly(base, changed): a job with only what changed from base to changed (the ops of changed that base has not; of
+// an op whose named data lists changed, only the changed or new elements of those lists, the rest of its data kept), as a
+// new job over a module where base is already delivered. null when changed removes anything (a removal is a delete op,
+// never computable here) or nothing changed.
+export function changeOnly(base, changed) {
+  const before = opsOf(base), after = opsOf(changed);
+  if (!before || !after || after.length < before.length) return null;
+  const used = new Set();
+  const differing = [];
+  for (let i = 0; i < after.length; i++) {
+    const same = before.findIndex((b, j) => !used.has(j) && jsonEqual(b, after[i]));
+    if (same >= 0) used.add(same); else differing.push(i);
+  }
+  const unmatched = before.map((_, j) => j).filter(j => !used.has(j));
+  if (unmatched.length > differing.length) return null;
+  const removesFrom = (was, op, lists) => lists.some(k => Array.isArray(was.data?.[k]) && was.data[k].some(e => !(Array.isArray(op.data?.[k]) ? op.data[k] : []).some(x => sameElement(x, e))));
+  const ops = [];
+  for (const i of differing) {
+    const op = after[i];
+    // the op of base it changed: the one at the same place with the same verb, left unmatched
+    const was = unmatched.includes(i) && isObject(before[i]) && before[i].op === op?.op ? before[i] : null;
+    if (!was) { ops.push(structuredClone(op)); continue; }
+    let lists;
+    try { lists = namedLists(op, i); } catch { lists = []; }
+    try { lists = [...new Set([...lists, ...namedLists(was, i)])]; } catch { /* unnamed elements: compared whole */ }
+    if (removesFrom(was, op, lists)) return null;
+    const whole = !lists.length || !isObject(was.data) || !isObject(op.data) || Object.keys(op).some(k => k !== 'data' && !jsonEqual(op[k], was[k]))
+      || Object.keys(op.data).some(k => !lists.includes(k) && !jsonEqual(op.data[k], was.data[k]));
+    if (whole) { ops.push(structuredClone(op)); continue; }
+    const data = {};
+    for (const [k, v] of Object.entries(op.data)) {
+      if (!lists.includes(k)) { data[k] = structuredClone(v); continue; }
+      const old = Array.isArray(was.data[k]) ? was.data[k] : [];
+      const kept = (Array.isArray(v) ? v : []).filter(e => !old.some(x => sameElement(x, e) && jsonEqual(x, e)));
+      if (kept.length) data[k] = structuredClone(kept);
+    }
+    if (lists.some(k => Array.isArray(data[k]))) ops.push({ ...structuredClone(op), data });
+  }
+  const added = !Array.isArray(changed) && Array.isArray(changed.expectedMessages)
+    ? changed.expectedMessages.filter(m => !(Array.isArray(base?.expectedMessages) ? base.expectedMessages : []).some(x => jsonEqual(x, m))) : [];
+  if (!ops.length && !added.length) return null;
+  if (Array.isArray(changed)) return ops;
+  return { ...(changed.base !== undefined ? { base: changed.base } : {}), ops, ...(added.length ? { expectedMessages: added } : {}) };
+}
+
+// ---- R1: the patches a refusal proposed, kept by the job they patch (<dir>/<sha256>.json), for fix:"apply" on both lanes:
+// each problem's patch, and the verified patches left out of the answer for size (verified-patch.mjs) as one more fix.
+export const FIXES_SCHEMA = 'ssam-fixes/1';
+const fixesFile = (dir, hash) => path.join(dir, String(hash).toLowerCase() + '.json');
+export function saveRefusalFixes(dir, { job, jobSha256, problems, module = null }) {
+  try {
+    if (!dir || !SHA256.test(String(jobSha256 ?? ''))) return false;
+    // T16: only a certain patch (patchCertain true: no choice of the author's) is applied for the author; a choice
+    // (CREATE_USES_EXISTING, DELETE_RECONNECTS, a nearest name) stays on its problem, as for the verified patch.
+    const fixes = (Array.isArray(problems) ? problems : []).filter(p => isObject(p) && Array.isArray(p.patch) && p.patch.length && p.patchCertain === true)
+      .map(p => ({ code: p.code ?? null, ...(p.pointer != null ? { pointer: p.pointer } : {}), ...(Array.isArray(p.pointers) ? { pointers: p.pointers } : {}), patch: p.patch }));
+    const verified = typeof job === 'string' ? readVerifiedPatch(job, jobSha256) : null;
+    if (verified?.ok) {
+      const given = new Set(fixes.flatMap(f => f.patch.map(op => JSON.stringify(op))));
+      const rest = verified.patch.filter(op => !given.has(JSON.stringify(op)));
+      if (rest.length) fixes.push({ code: 'verified', patch: rest });
+    }
+    if (!fixes.length) return false;
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(fixesFile(dir, jobSha256), JSON.stringify({ schema: FIXES_SCHEMA, job, jobSha256: String(jobSha256).toLowerCase(), module, fixes }));
+    return true;
+  } catch { return false; /* fix:"apply" then says there is nothing to apply */ }
+}
+export function readRefusalFixes(dir, hash) {
+  try { const saved = JSON.parse(fs.readFileSync(fixesFile(dir, hash), 'utf8')); return saved?.schema === FIXES_SCHEMA && Array.isArray(saved.fixes) ? saved : null; } catch { return null; }
+}
+// The patch fix:"apply" sends over the job file of basedOn (its bytes checked against sha256): every patch its refusal
+// proposed that applies, in order. -> {ok:true, patch, applied, module} or {ok:false, code (FIX_NONE, BASE_CHANGED,
+// BASE_NOT_FOUND, FIX_NOT_APPLIED), error, module?, notApplied?, fixesApplicable?, patchByName? (the ones that apply)}.
+export function proposedPatch(dir, { file, sha256: hash }) {
+  const saved = SHA256.test(String(hash ?? '')) ? readRefusalFixes(dir, hash) : null;
+  const module = saved?.module ?? null;
+  if (!saved?.fixes?.length) return fail('FIX_NONE', 'No refusal of this job proposed patches; nothing was sent.', { module });
+  let document;
+  try {
+    const bytes = fs.readFileSync(file);
+    if (sha256(bytes) !== String(hash).toLowerCase()) return fail('BASE_CHANGED', 'The base job changed after that refusal (sha256 differs); nothing was patched.', { job: file, module });
+    document = JSON.parse(bytes.toString('utf8').replace(/^\uFEFF/, ''));
+  } catch { return fail('BASE_NOT_FOUND', 'No job file at ' + file + '; nothing was patched.', { module }); }
+  const { patch, applied, notApplied } = applyFixes(document, saved.fixes);
+  if (notApplied.length) return fail('FIX_NOT_APPLIED', notApplied.length + ' of the ' + (applied.length + notApplied.length) + ' patches this refusal proposed do not apply over its job; nothing was sent.',
+    { module, notApplied, fixesApplicable: applied, patchByName: patch.length ? namedPatch(document, patch) ?? patch : [] });
+  return { ok: true, patch, applied, module, patchByName: namedPatch(document, patch) ?? patch };
+}
+// servidor/fase4-27 a12: on a hosted server the next call after a refusal is the explicit patch, never fix "apply" nor patch
+// "verified": the gate refuses both (it cannot read the server files they apply, hosted/policy.mjs verifiedPatchUnavailable).
+// The patches of the refusal of the job of basedOn (proposedPatch), by name, as the patch of the same call; the gate then
+// checks them like any patch (confineJobs). -> {tool, arguments, why} or null (none applies over that job).
+export function explicitFixCall(dir, { tool, basedOn, file = basedOn?.job, keep = {} }) {
+  if (!isObject(basedOn) || typeof file !== 'string') return null;
+  const proposed = proposedPatch(dir, { file, sha256: basedOn.sha256 });
+  if (!proposed.ok || !proposed.patch.length) return null;
+  return { tool, arguments: { ...keep, basedOn, patch: proposed.patchByName },
+    why: 'Every certain patch of the problems above, by name, as the patch over this job: the server checks it and delivers. A choice and a problem without a patch need your own operations in the same patch.' };
 }

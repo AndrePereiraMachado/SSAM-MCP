@@ -31,6 +31,14 @@ texto, a tabela de ids e o ponto fixo de cada action. Na falta, a fachada pede `
 da faixa (o mesmo do digest). CLI fria: `anvil flow --oml <captura> [--action <nome|@chave>] [--out <txt>]` e
 `anvil-odc flow ...`.
 
+
+Leitura seletiva (S10, 24/10/2026). Quando a leitura pede actions por elemento (`ssam_map view:"flow"` com `element`, `ssam_code read`
+de uma action, `ownerReadings` do pacote), o kernel constrói só essas actions (`ModuleFlow.BuildSelected`), com o mesmo extrator da
+leitura inteira: texto, ids e `textSha` são idênticos aos da leitura completa, e a leitura de cada action servida fica gravada para o
+merge de três vias. A resposta declara `partial:true` e o catálogo de todas as actions (chave, tipo, nome, sem corpo); nunca é gravada
+como fluxo do módulo. Elemento ambíguo ou ausente e a lista sem elemento caem na leitura inteira. `search` e `uses` continuam
+completos. Com o modelo carregado, 2 actions custam cerca de 5% do tempo anterior (O11) e 13% (ODC); a frio a carga do modelo domina,
+e a leitura pelo worker quente (`hot-read`) é o que a tira do caminho.
 ## Forma
 
 ```
@@ -79,7 +87,8 @@ server action AlterarStatusPedido public @MrB+ndLCeEidaZwSA+2WWg
 - **Construções.** `X = Acao(P=v, Q)` (argumento sem `=` passa a variável do mesmo nome; o nome do nó só aparece quando
   difere do da action; action de outro módulo com o produtor, como no digest: `(System).ListAppend`);
   `assign X = v` ou `assign` + uma atribuição por linha; `X = aggregate FROM … JOIN … WHERE (…) AND (…) GROUP BY … AGG
-  N=Sum(…) CALC N=… SORT a desc … MAX m START s`; `X = sql -> Saida max m` + `in P: Tipo inline = valor @p` + `| sql`;
+  N=Sum(…) CALC N=… SORT a desc … MAX m` (o parser também lê `START s`, que só a leitura de um módulo antigo traz: numa
+  action é recusado, LOGIC_START_SERVER_IGNORED); `X = sql -> Saida max m` + `in P: Tipo inline = valor @p` + `| sql`;
   `X = javascript` + `in`/`out` + `| código`; `X = JSONSerialize(d)`, `X = JSONDeserialize(s) as Tipo`;
   `message Tipo: expr`, `navigate Tela(args)`, `refresh Fonte max m start s`, `trigger Evento(args)`, `raise Exc(msg)`;
   `// comentário @id` (`//-> @alvo` quando ligado a um nó; linhas seguintes em `| `); nó sem forma própria:
@@ -105,10 +114,16 @@ server action AlterarStatusPedido public @MrB+ndLCeEidaZwSA+2WWg
 
 ### Paginação, JOIN, SQL e exceções na autoria
 
-Estas construções cabem no mesmo texto `ssam-flow/1`; não exigem trocar a action para JSON:
+Estas construções cabem no mesmo texto `ssam-flow/1`; não exigem trocar a action para JSON. Uma action pagina pelo SQL
+(OFFSET/FETCH, o total por COUNT(*) OVER() da mesma consulta): o Studio só mostra Start Index num aggregate de tela sobre
+entidades do servidor, e o runtime o ignora num aggregate de action (T3, LOGIC_START_SERVER_IGNORED):
 
 ```text
-  Pagina = aggregate FROM Cliente, Visita JOIN Inner Visita~Cliente ON Visita.ClienteId = Cliente.Id WHERE (Visita.ClienteId = ClienteId) SORT Visita.CriadaEm desc MAX PageSize START StartIndex
+  Pagina = sql -> Visita, Cliente max If(PageSize <= 0, 50, PageSize)
+    in Cliente: Cliente Identifier = ClienteId
+    in Skip: Integer = Max(0, StartIndex)
+    in Take: Integer = If(PageSize <= 0, 50, PageSize)
+    | SELECT {Visita}.*, {Cliente}.* FROM {Visita} INNER JOIN {Cliente} ON {Cliente}.[Id] = {Visita}.[ClienteId] WHERE {Visita}.[ClienteId] = @Cliente ORDER BY {Visita}.[CriadaEm] DESC, {Visita}.[Id] OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY
   Total = sql -> ResumoVisitas max 1
     in Cliente: Cliente Identifier = ClienteId
     | SELECT COUNT(*), SUM({Visita}.[Valor]) FROM {Visita} WHERE {Visita}.[ClienteId] = @Cliente
@@ -501,6 +516,14 @@ sozinha sai (o problema fica com a correção escrita); as que passam vão junta
   `FilterGetPais.FilteredList`. O resto continua com a recusa do candidato, agora com o ponteiro do texto. O escape
   `allowQueryInLoop` na op vale aqui também.
 
+Exceção explícita para JavaScript em actions de tela: a op `logic` pode declarar
+`"allowScreenJavaScript":{"module":"OfficePet","screen":"Admin","actions":["JS_Save"],"why":"Exceção autorizada para encaminhar cliques via JS"}`.
+O módulo, o owner escrito no cabeçalho e cada action devem coincidir; não há wildcard.
+A justificativa tem ao menos 15 caracteres. A exceção também se aplica a `create`, `duplicate` e `move`,
+avaliada no owner final. Fica registrada em `highWarnings` como `FLOW_SCREEN_JAVASCRIPT_ALLOWED`.
+Sem essa declaração, o isolamento continua obrigatório. A exceção não permite JavaScript em server actions
+nem dispensa os tipos e referências aceitos pelo verificador nativo.
+
 ### Rodada do patch (revisão de 12/10/2026)
 
 Recusa por uma regra do dono (T1/T2, decisão 6, T3, e as regras da página na op `html`) escondia o que o resto do job ainda
@@ -606,6 +629,90 @@ com o kernel de `5a606386`, sem este branch. As correções da revisão (12/10/2
 (as baterias rodam na junção 24-1): as suítes filtradas, as sondas da revisão nas duas faixas e a repetição da sessão
 (job 1 recusado uma vez com os 18 erros do modelo; o job corrigido e os jobs 6, 7 e 8 aceitos).
 
+
+#### Parser tolerante (R5, 24/10/2026)
+
+O parser do kernel (`FlowParse.cs`, `FlowTolerance`) aceita as formas abaixo antes da passada estrutural, trocando só
+linhas inteiras. Quando o texto inteiro passa a ler, cada forma vira uma entrada em `normalizations`; quando o texto ainda
+tem outro erro, a edição certa vira o `patch` do op. O que não normaliza continua `FLOW_SYNTAX`, com a forma aceita ao lado
+(`; accepted form: \`linha\``). Ponto fixo garantido: texto normalizado → nós → texto reproduz o canônico, e a releitura
+não dispara `FLOW_NOT_EXACT` por diferença só de separador. Medido nos recibos de 11 a 24/10 (1.069 ocorrências de
+`FLOW_SYNTAX`): 852 passam a ser aceitas, 93 ganham patch da linha, 81 recusam com a forma ao lado, 37 continuam recusa seca.
+
+| Regra | O texto tinha | Fica |
+|---|---|---|
+| `FLOW_INDENT_UNIT` | 1 ou 4 espaços por nível, consistente na action; corpo na coluna 0 sob o cabeçalho; um passo isolado na coluna 0 entre passos de profundidade 1 | 2 espaços por nível |
+| `FLOW_LINE_CONTINUATION` | aggregate em várias linhas (seguintes começam com JOIN, INNER, LEFT, RIGHT, FULL, WHERE, ORDER, GROUP, ON, AND, OR, SORT, MAX, START, AGG, CALC, `\| Inner/Left/...`); linhas de SQL (SELECT, FROM, WHERE...) sob o nó `sql` sem `\| ` | uma linha (depois `FLOW_AGGREGATE_SQL_SHAPE`); código `\| ` |
+| `FLOW_AGGREGATE_SQL_SHAPE` (ampliada) | `ORDER BY x DESC` no aggregate | `SORT x desc` |
+| `FLOW_SWITCH_INDENT` | `case`/`otherwise:` na profundidade do `switch:` | um nível dentro |
+| `FLOW_ELSE` | `else:` ou `otherwise:` na profundidade do `if` | o falso abaixo do if; o verdadeiro termina com `-> @id` do passo seguinte (id `@jN` dado quando falta), `next` em laço, `end` no fim do fluxo/handler; verdadeiro já terminado: a linha some. Continuação incerta (fim de um case de switch, if sem else por fora): recusa com a forma ao lado |
+| `FLOW_DECLARATION_ORDER` | `in/out/local` (profundidade 1) entre os passos | junto das declarações, antes do fluxo; os passos mantêm a ordem; a `///` acima vai junto |
+| `FLOW_LABEL_SPACING` (ampliada) | rótulo depois de 1 ou 3+ espaços em qualquer linha de passo (`assign X = v # r`, `X = Call() # r`) | dois espaços; `#data#` nunca |
+| `FLOW_ASSIGN_SPACING` | `assign X=v`, `X=v` no bloco `assign`, `X.Y=v` onde cabe um passo | `X = v` (só o primeiro `=` fora de texto/colchete, depois de um nome; `If(1=1,"a=b",...)` intocado) |
+| `FLOW_RESULT_SPACING` | `Result=Action(...)` | `Result = Action(...)` |
+| `FLOW_ARGUMENT_SPACING` | `Call(A,B=1)`, `Call(A = 1)`, `Call (A=1)`, idem em `navigate`, `trigger`, handler de evento | `Call(A, B=1)`: `, ` entre argumentos, sem espaço em volta do `=` do nome, sem espaço antes do `(`; valores intocados |
+| `FLOW_NAVIGATE_ARGUMENTS` | `navigate Tela`, `trigger Ev`, `raise Exc`, `on E -> H` sem `()` | com `()` |
+| `FLOW_JUMP_BY_NAME` | `-> NomeDoNó` | `-> @id` do único nó com esse nome (id `@jN` quando falta); dois ou nenhum: recusa com a forma ao lado |
+| `FLOW_UNREACHED_END` | `end` logo depois de `navigate`/`raise` do mesmo ramo | linha some |
+| `FLOW_MAPPING_SPACING` | `L mapTo {A: x,B: y}` em valor de atribuição ou argumento (só quando o texto passa pela passada leniente) | `L mapTo { A: x, B: y }` |
+
+Uma chamada nomeada é sempre um nó, nunca uma atribuição do bloco `assign` acima: `Created = CreateRec (Source = P)` vira o
+nó `Created = CreateRec(Source=P)` (`FLOW_ARGUMENT_SPACING`), e um passo depois de `navigate`/`raise` continua recusado.
+Testes: `Shared/FlowTextNormalizeTests`, `JobNormalizerTests`, `FamilyPreflightTests`; corpus: `FlowSyntaxCorpusTests` (só com
+`SSAM_FLOW_SYNTAX_CORPUS`).
+
+#### Linguagem geral (R7, 24/10/2026)
+
+Linhas mais curtas que o modelo escreve no lugar das que a gramática soletra, cada uma com uma leitura só. Não é outra
+gramática nem outra entrada: `FlowGeneral.cs` as expande em linhas da própria gramática (edições do texto como veio: linha
+trocada, esvaziada ou inserida), dentro de `FlowTextNormalizer.Normalize`, depois do `FlowTolerance` (R5) e antes da passada
+estrutural. Cada edição entra em `normalizations` com a regra; a action relida é o texto expandido, e reenviado não escreve
+nada (ponto fixo). A forma que tem duas leituras recusa uma vez, ao lado da linha (`FLOW_SYNTAX ...; FLOW_GENERAL_LET: ...`),
+dizendo o que escrever; as outras formas do texto vêm no `patch` (`FlowTextNormalizer.Corrected`).
+
+| Regra | O texto escreve | Fica |
+|---|---|---|
+| `FLOW_GENERAL_LET` | `let Total = Price * Qty` (`let X: Tipo = v` quando o tipo não é certo) | `local Total: Decimal` nas declarações e `assign Total = Price * Qty` no lugar (cada let é o seu `assign`, como o lab escreve). Tipo certo: literal, nome declarado, `Entities.E.V`, membro de lista (`.Current`, `.Length`, `.Empty`), linha de aggregate (`G.List.Current.E`, `G.List.Empty`), operadores, `If` de ramos iguais e funções de tipo fixo (`Trim`, `Length`, `CurrDateTime`, `GetUserId`...); atributo de registro e saída de chamada só com o esquema. Senão recusa: "write `let X: <Type> = v`" |
+| `FLOW_GENERAL_REQUIRE` | `require c else raise E("m")` (ou `else E("m")`, `else return [Out = v, ...]`, `else end`, `else -> @id`) | `if not (c):` com o else um nível dentro; os passos seguintes são o ramo falso |
+| `FLOW_GENERAL_RETURN` | `return`, `return Out = v, ...` | `end`; com valores, `assign` das saídas e `end` (alvo que não é saída recusa) |
+| `FLOW_GENERAL_JOIN` | num texto com `let`, `require`, `return`, `load/insert/update/delete` ou `use`: ramo de if sem terminador; passos depois de um `switch` | a leitura estruturada: o ramo segue para o passo depois do bloco (a leitura "through" de `FlowParser.Lenient`, uma por vez); os passos depois do switch vão no primeiro caso aberto e os outros saltam para eles. Num texto sem essas formas o if/else sem terminador continua recusado com as duas leituras (R5) |
+| `FLOW_GENERAL_COPY` | `assign X = { ...S, F: v }` (também em `let`) | dois `assign`, como a gravação de registros do lab: `X = S` e depois um com `X.F = v`; no bloco `assign`, as linhas do próprio bloco; valor que lê `X` recusa |
+| `FLOW_GENERAL_PROJECTION` | `X = S mapTo { *, F: v }` | todo atributo do tipo de `X` que o item de `S` tem pelo nome (relativo ao item), `F` como escrito; os que faltam ficam de fora e as regras de mapeamento de sempre julgam (o `Id` obrigatório recusa). Precisa do esquema; tipo nele mesmo recusa |
+| `FLOW_GENERAL_CONTEXT` | `context N: T` no topo do texto | `in N: T` em toda action da op que lê `N` ou chama uma que precisa dele, e o argumento `N` nessas chamadas; mesmo nome com outro tipo recusa |
+| `FLOW_GENERAL_SQL_BIND` | `@P` no código de um nó `sql` sem `in P`; `bind P[: T] = v` sob o nó; `binding P: T = v` no topo | `in P: T = P`, `P` a entrada, saída ou local desse nome (escalar); `bind` vira `in P: T = v` (tipo certo do valor quando não escrito); `binding` serve todo nó da op que lê `@P` sem variável desse nome (os dois: recusa) |
+| `FLOW_GENERAL_RECORD` | `load R: E by Id [locked]`, `insert R: E {F=v, ...}`, `update R {F=v, ...}`, `delete R` | as entity actions, com os nomes que o lab dá (livres na action): `LoadR = GetE[ForUpdate](Id=Id)` e `assign R = LoadR.Record.E`; `assign R = EmptyR`, um `assign` dos campos, `CreateR = CreateE(Source=R)` e `assign R.Id = CreateR.Id`; `assign BeforeR = R`, os campos lendo `BeforeR` (o registro antes do update, em qualquer ordem) e `SaveR = UpdateE(Source=R)`; `DeleteR = DeleteE(Id=R.Id)`. Update e delete só com o registro travado (load locked ou insert) no ramo; campo que não é atributo (com o esquema) recusa |
+| `FLOW_GENERAL_CONTRACT` | `contract Nome:` no topo, com linhas `in/out/local/let/load/require/use` um nível dentro; `use Nome` na action | as linhas do contrato no lugar do `use` (cada `use` dentro dele resolvido), as declarações da action antes dos passos na ordem escrita; contrato desconhecido, cíclico ou que declara um nome que a action já tem recusa |
+
+O que já roda no caminho do job (`JobNormalizer.Pure`, texto a texto): `let` com tipo certo pelo texto, `require`, `return`,
+junções, cópia, bind de SQL, registros e contratos/bindings escritos no mesmo texto que a action que os usa. O que precisa do
+módulo ou da op inteira tem a API pronta e não está ligado: `context`, contrato ou binding usado por actions de outros textos
+da op (a fachada divide o texto e deixa o topo só no primeiro; `FlowTextNormalizer.NormalizeAll(texts, schema)` junta a op), e
+`let` tipado por atributo ou saída e `mapTo { * }` (`IFlowSchema`, adaptadores `FlowSchema.Of(IBaseFacts)` e
+`FlowSchema.Of(IFlowTypes)`). Ligar é chamar `NormalizeAll` em `JobNormalizer.FlowTexts` e passar `FlowSchema.Of(model)` em
+`JobNormalizer.WithBase`. `fold` ficou de fora: nenhum dos três corpora (nem fixture do lab) o usa, então não há equivalência a
+provar nem ganho a medir.
+
+Medição (método em `FlowGeneralCorpusTests`, só com `SSAM_FLOW_GENERAL_CORPUS`): os corpora relief-cold, marina-cold e
+touring-live-100 (Vz) do laboratório, expandidos pelo compilador do lab em `ssam-flow/1` (a linha de base, com o `mapTo { * }`
+do lab escrito pelo esquema do DDL). Parte 1: cada action da linha de base reescrita nas formas de 1 a 7, uma candidata por vez,
+que só fica quando a expansão dá a mesma action canônica (o texto da impressora sobre a action lida, locais como conjunto); as
+300 expandem para a mesma action. Parte 2 (`SSAM_FLOW_GENERAL_SOURCES`): o próprio texto do lab (contratos, registros, binds)
+passa por `NormalizeAll` com o esquema do DDL; a action conta quando dá a mesma action canônica, senão conta a reescrita da
+parte 1. Bytes (UTF-8, LF, sem linhas em branco):
+
+| Corpus | Linha de base | Parte 1 (formas 1–7) | Parte 2 (+ registros, contratos, bind) | Actions do texto do lab |
+|---|---:|---:|---:|---:|
+| relief-cold (100) | 113.313 | 102.560 (−9,5%) | 81.862 (−27,8%) | 100 |
+| marina-cold (100) | 115.130 | 104.793 (−9,0%) | 68.864 (−40,2%) | 98 |
+| touring-live-100 (100) | 129.153 | 117.879 (−8,7%) | 82.213 (−36,3%) | 75 |
+
+Fora da parte 2 (27 actions, contadas pela parte 1): 12 cujo SQL o compilador do lab reescreve (`@@ROWCOUNT`, política de
+dialeto, não forma da linguagem), 5 com `assign A = x, B = y`, 8 com `foreach row in Lista` e 1 projeção sobre a saída de
+`ListFilter` (sem o tipo no texto). O lab mediu 10% a 41%; aqui 27,8% a 40,2% com equivalência provada action a action.
+
+Testes: `Shared/FlowTextNormalizeTests` (`FlowGeneralTextTests`: cada forma, recusas, patch, ponto fixo), cenas nativas
+`FlowApplyScenarios.GeneralFormsApplyAndReadBackAsTheExpandedText`, `RecordsContractsAndBindsApplyAndReadBackAsTheExpandedText`
+e `ContextProjectionAndTypedLetsApplyThroughTheOp` (`FlowGeneralApplyTests`, `FlowGeneralApplyOdcTests`).
 ### Merge de 3 vias (`FlowMerge.cs`)
 
 O texto que chega sobre uma leitura antiga não é mais recusado só porque a action mudou: ele é juntado com o que mudou,

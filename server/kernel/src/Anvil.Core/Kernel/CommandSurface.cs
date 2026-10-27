@@ -13,7 +13,7 @@ public static class CommandSurface
         System.Text.Encoding.UTF8.GetBytes(System.Text.Encoding.UTF8.GetString(bytes).Replace("\r\n", "\n")))).ToLowerInvariant();
 
     /// <summary>The ops `api --op` projects: the compact languages plus the raw verb table (VerbSurface).</summary>
-    public static readonly IReadOnlyList<string> OperationNames = ["logic", "spec", "screen", "html", "html-visual", "verbs", "rest", "rest-consume", "rest-expose", "soap", "agent", "entity-actions"];
+    public static readonly IReadOnlyList<string> OperationNames = ["logic", "spec", "screen", "html", "html-visual", "verbs", "rest", "rest-consume", "rest-expose", "soap", "agent", "entity-actions", "css"];
 
     public static JsonObject Schema(string op) => op switch
     {
@@ -28,6 +28,8 @@ public static class CommandSurface
         "entity-actions" => EntityActionsExpander.Schema(),
         // Os verbos crus (create, set, link, ...) e a gramatica de referencias, presos ao dispatcher por VerbSurfaceTests.
         "verbs" => VerbSurface.Schema(),
+        // T18: the keyed css edit op (Verbs.Css.cs).
+        "css" => CssEdits.Schema(),
         _ => VerbLine(op) ?? throw new ArgumentException(UnknownOp(op))
     };
 

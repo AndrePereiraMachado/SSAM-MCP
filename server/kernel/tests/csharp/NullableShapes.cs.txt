@@ -1,0 +1,18 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Anvil.Authoring;
+
+namespace NullableShapes;
+
+[Entity]
+public sealed record Thing(Id<Thing> Id, int Rank, bool Flag, int? Optional, string? Note);
+
+public sealed record Pick(int? Value, string? Note);
+
+public static class NullableShapeQueries
+{
+    [ServerAction] public static List<int?> Conditional(IDataSession data) => data.Query<Thing>().OrderBy(x => x.Id).Select(x => x.Flag ? (int?)x.Rank : null).ToList();
+    [ServerAction] public static List<Pick> Picks(IDataSession data) => data.Query<Thing>().OrderBy(x => x.Id).Select(x => new Pick(x.Flag ? (int?)x.Rank : null, x.Flag ? x.Note : null)).ToList();
+    [ServerAction] public static List<int> Coalesced(IDataSession data) => data.Query<Thing>().OrderBy(x => x.Id).Select(x => x.Optional ?? -1).ToList();
+}

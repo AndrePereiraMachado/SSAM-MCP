@@ -1,7 +1,7 @@
 // The module digest (ssam-digest/1) in pages under the MCP answer ceiling: ssam_map {view:"digest", page} and
 // ssam map --digest [--page n] (module-map.mjs resolves the target and the store and calls digestAnswer). The digest is
 // written by the lane's kernel reader (C# ModuleDigest, request {"digest":"ensure"}) beside the module index:
-//   <SSAM_MODULE_INDEX_ROOT | <workspace>\.local\module-index>\v1\<lane>\<sha256>.kernel.digest.json
+//   <SSAM_MODULE_INDEX_ROOT | <workspace>\.local\module-index>\v1\<lane>\<sha256>.kernel.digest.e<DIGEST_EXTRACTOR>.json
 // and read here without .NET: served only when schema, extractor, lane, adapter and the sha256 of the bytes read now match.
 // Paging (deterministic: the same digest and budget always give the same pages, whatever the call that asks):
 // - the whole digest fits one page: one page, the digest as written;
@@ -14,7 +14,8 @@ import fs from 'node:fs';
 
 export const DIGEST_SCHEMA = 'ssam-digest/1';
 // ModuleDigest.Extractor and SectionIds (C#): a stored digest of another version is a miss.
-export const DIGEST_EXTRACTOR = 3;
+// 4 (T12): every screen prints its access and its roles (roles="" when none), with NO_ROLE_SCREEN on an O11 screen without a role.
+export const DIGEST_EXTRACTOR = 4;
 export const DIGEST_SECTIONS = ['module', 'entities', 'structures', 'variables', 'roles', 'exceptions', 'actions', 'timers', 'integrations', 'ui', 'coverage'];
 // Both lanes write the digest with the kernel's own reader (anvil read-serve, anvil-odc read-serve).
 export const DIGEST_ADAPTER = 'kernel';

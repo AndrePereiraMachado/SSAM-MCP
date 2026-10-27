@@ -314,10 +314,13 @@ for (const lane of ['o11', 'odc']) {
       t.diagnostic(JSON.stringify({ lane, module: file, wallMs: result.wallMs, ok: result.ok, problems: result.problems }));
       assert.equal(result.ok, false, file); assert.equal(result.code, 'CHECK_REFUSED', JSON.stringify(result));
       for (const [at, expected] of [['files/0', ddl], ['files/1', flow]]) assert.ok(result.problems.some(p => p.origin?.at === at && p.origin.file === expected), file + ': ' + JSON.stringify(result));
+      // The scope phase (proto R1, integ/proto-into-product fec07d8f/ae867f10) names an unknown call as CALL_UNKNOWN before
+      // the apply and the op it refuses is never built; the apply's FLOW_NAME_UNKNOWN is the same problem when no scope ran.
+      // In a restricted runtime the apply's refusal of the action itself is then not reached (owner decision, see the report).
       const restrictedRuntime = { 'blank-agent-definition.oml': 'AgentDefinition', 'blank-workflow.oml': 'BusinessProcess' }[path.basename(file)];
-      assert.ok(result.problems.some(p => p.origin?.file === flow && (restrictedRuntime
-        ? p.code === 'APPLY_FAILED' && p.message.includes(`Server Action can't be created in ${restrictedRuntime} runtime kind`)
-        : p.code === 'FLOW_NAME_UNKNOWN' && /ActionNotDeclared/.test(p.message))), JSON.stringify(result));
+      const unknownCall = p => (p.code === 'CALL_UNKNOWN' || p.code === 'FLOW_NAME_UNKNOWN') && /ActionNotDeclared/.test(p.message);
+      assert.ok(result.problems.some(p => p.origin?.file === flow && (unknownCall(p) || restrictedRuntime
+        && p.code === 'APPLY_FAILED' && p.message.includes(`Server Action can't be created in ${restrictedRuntime} runtime kind`))), JSON.stringify(result));
       });
     }
   });

@@ -150,7 +150,56 @@ public class DeliveryMergeOrderTests
         public JsonArray Missing(string snapshotPath, JsonArray deferred) => throw new InvalidOperationException("stale plan: Missing asked for " + deferred.Count + " deferred default(s)");
     }
 
-    private static (JsonObject Result, HeadlessBridge Bridge, ModelHost Host) Deliver(Action<HeadlessBridge>? configure = null)
+    [Fact]
+    public void PredictedContentLossNeverReachesTheLiveMerge()
+    {
+        var (result, bridge, _) = Deliver(planner: new RejectPreview());
+        Assert.False(result["delivered"]!.GetValue<bool>());
+        Assert.Equal("MERGE_CONTENT_PREVIEW_REFUSED", result["code"]!.ToString());
+        Assert.Equal("not-sent", result["writeState"]!.ToString());
+        Assert.Empty(bridge.Merges);
+        Assert.False(result["mergeContentPreview"]!["accepted"]!.GetValue<bool>());
+    }
+
+    private sealed class RejectPreview : IMergePlanner
+    {
+        public JsonObject Plan(string baseline, string candidate, string firstPass) => new() {
+            ["deferred"] = new JsonArray(), ["contentPreview"] = new JsonObject {
+                ["accepted"] = false, ["contentProof"] = new JsonObject { ["accepted"] = false }
+            }
+        };
+        public JsonArray Missing(string snapshot, JsonArray deferred) => throw new InvalidOperationException("No live merge may run");
+    }
+
+    [Fact]
+    public void ContentLossAfterMergeIsNotDeliveredAndResumeNeverMergesAgain()
+    {
+        var (result, bridge, _) = Deliver(planner: new RejectContent());
+        Assert.False(result["delivered"]!.GetValue<bool>());
+        Assert.Equal("MERGE_CONTENT_MISMATCH", result["code"]!.ToString());
+        Assert.Equal("applied", result["writeState"]!.ToString());
+        Assert.False(result["contentProof"]!["accepted"]!.GetValue<bool>());
+        Assert.Single(bridge.Merges);
+        var resumed = Resume(bridge, result, new RejectContent());
+        Assert.False(resumed["delivered"]!.GetValue<bool>());
+        Assert.Single(bridge.Merges);
+    }
+
+    private sealed class RejectContent : IMergePlanner, IMergeContentVerifier
+    {
+        private readonly MergePlanner planner = new(directory => new ModelHost(Path.Combine(directory, "proof-test")));
+        public JsonObject Plan(string baseline, string candidate, string firstPass) => planner.Plan(baseline, candidate, firstPass);
+        public JsonArray Missing(string snapshot, JsonArray deferred) => planner.Missing(snapshot, deferred);
+        public JsonObject VerifyContent(string expected, string snapshot)
+        {
+            Assert.True(File.Exists(expected));
+            Assert.True(File.Exists(snapshot));
+            Assert.NotEqual(expected, snapshot);
+            return new() { ["accepted"] = false, ["differences"] = new JsonArray(new JsonObject { ["property"] = "DataSource" }) };
+        }
+    }
+
+    private static (JsonObject Result, HeadlessBridge Bridge, ModelHost Host) Deliver(Action<HeadlessBridge>? configure = null, IMergePlanner? planner = null)
     {
         StudioAssemblies.Bind();
         var root = JobRunner.RepoRoot(Path.GetDirectoryName(typeof(DeliveryMergeOrderTests).Assembly.Location)!)!;
@@ -160,7 +209,7 @@ public class DeliveryMergeOrderTests
         var live = Path.Combine(work, "live.oml"); File.Copy(Path.Combine(root, "tests", "fixtures", "blank-service.oml"), live);
         var bridge = new HeadlessBridge(host, live, work, job);
         configure?.Invoke(bridge);
-        return (Run(bridge, new("Headless_CS", job, work, Array.Empty<string>())), bridge, host);
+        return (Run(bridge, new("Headless_CS", job, work, Array.Empty<string>()), planner), bridge, host);
     }
 
     private static JsonObject Resume(HeadlessBridge bridge, JsonObject result, IMergePlanner? planner = null)

@@ -23,12 +23,35 @@ public sealed class KernelModelReader : ModelReader<IObjectSignature>
         node is ServiceStudio.Model.AbstractObject model ? model.Referers.OfType<IObjectSignature>()
             : throw new InvalidOperationException("Native referrers unavailable for " + Kind(node));
     protected override IEnumerable<(string Name, Func<object?> Read)> Properties(IObjectSignature node) =>
-        Readable(node.GetType()).Select(p => (p.Name, (Func<object?>)(() => p.GetValue(node))));
+        Readable(node.GetType()).Where(p => SupportedProperty(node, p.Name))
+            .Select(p => (p.Name, (Func<object?>)(() => ReadProperty(node, p))))
+            .Concat(TraditionalWidgetMetadata.Combo(node.GetType())
+                ? new[] { ("SpecialOptions", (Func<object?>)(() => TraditionalWidgetMetadata.SpecialOptions(node))) } : []);
+    // Some Traditional widgets (the custom Form, legacy controls) implement a Visible whose getter always throws
+    // (InvalidOperationException): their public contract has no visibility. That property is not read for that
+    // concrete type, so one such widget does not make its whole screen unreadable. Decided once per type.
+    private static readonly ConcurrentDictionary<Type, bool> VisibleUnreadable = new();
+    private static bool SupportedProperty(IObjectSignature node, string name)
+    {
+        if (name != "Visible") return true;
+        var contract = node.GetInterface()?.FullName ?? "";
+        if (!contract.StartsWith("OutSystems.Model.UI.Web.", StringComparison.Ordinal) && !contract.StartsWith("ServiceStudio.Plugin.Widgets.", StringComparison.Ordinal)) return true;
+        return !VisibleUnreadable.GetOrAdd(node.GetType(), type =>
+        {
+            if (Readable(type).FirstOrDefault(p => p.Name == "Visible") is not { } property) return false;
+            try { property.GetValue(node); return false; }
+            catch (Exception error) { return error.GetBaseException() is InvalidOperationException; }
+        });
+    }
+    private static object? ReadProperty(IObjectSignature node, System.Reflection.PropertyInfo property) =>
+        property.Name == "SourceEntity" && node.GetInterface()?.Name == "IComboBoxWidget"
+            ? ModelSession.UIProperty(node, property.Name) : property.GetValue(node);
     // One entry per name, so the property Properties lists under a name is fixed per concrete type.
     private static readonly ConcurrentDictionary<(Type Type, string Name), System.Reflection.PropertyInfo?> NamedProperties = new();
     protected override Func<object?>? FindProperty(IObjectSignature node, string name) =>
+        name == "SpecialOptions" && TraditionalWidgetMetadata.Combo(node.GetType()) ? () => TraditionalWidgetMetadata.SpecialOptions(node) :
         NamedProperties.GetOrAdd((node.GetType(), name), key => Readable(key.Type).FirstOrDefault(p => p.Name == key.Name)) is { } property
-            ? () => property.GetValue(node) : null;
+            && SupportedProperty(node, name) ? () => ReadProperty(node, property) : null;
     protected override char? NullFactType(IObjectSignature node, string name)
     {
         var type = NamedProperties.GetOrAdd((node.GetType(), name), key => Readable(key.Type).FirstOrDefault(p => p.Name == key.Name))?.PropertyType;
@@ -105,6 +128,30 @@ public sealed class KernelModelReader : ModelReader<IObjectSignature>
             ? entity.EntityIndices.OfType<IObjectSignature>().ToList() : null;
     protected override bool Writable(IObjectSignature node, string property) =>
         NamedProperties.GetOrAdd((node.GetType(), property), key => Readable(key.Type).FirstOrDefault(p => p.Name == key.Name)) is { CanWrite: true };
+    protected override char? DeclaredFactType(IObjectSignature node, string name)
+    {
+        var type = NamedProperties.GetOrAdd((node.GetType(), name), key => Readable(key.Type).FirstOrDefault(p => p.Name == key.Name))?.PropertyType;
+        if (type == null) return null;
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        if (type == typeof(string)) return 't';
+        if (type == typeof(bool)) return 'b';
+        if (type == typeof(byte[])) return '-';
+        if (typeof(IExpression).IsAssignableFrom(type)) return 'e';
+        if (typeof(IObjectSignature).IsAssignableFrom(type)) return 'r';
+        if (type.IsEnum || type.IsPrimitive || type == typeof(decimal)) return 'v';
+        if (type.IsGenericType && typeof(System.Collections.IEnumerable).IsAssignableFrom(type) && type.GetGenericArguments() is [var item]
+            && typeof(IObjectSignature).IsAssignableFrom(item) && !typeof(IExpression).IsAssignableFrom(item)) return 'l';
+        return null;
+    }
+    // Every property of the Model API interfaces of the node's type (ModelApiMetadata.Properties).
+    protected internal override bool ListsEveryProperty => true;
+    protected override IReadOnlyList<string>? Members(IObjectSignature node, string property)
+    {
+        var type = NamedProperties.GetOrAdd((node.GetType(), property), key => Readable(key.Type).FirstOrDefault(p => p.Name == key.Name))?.PropertyType;
+        if (type == null) return null;
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        return type.IsEnum ? Enum.GetNames(type) : null;
+    }
     private static IEnumerable<System.Reflection.PropertyInfo> Readable(Type type) =>
         ModelApiMetadata.Properties(type).Where(p => p.GetIndexParameters().Length == 0)
             .GroupBy(p => p.Name).Select(g => g.OrderByDescending(p => p.CanWrite).First());

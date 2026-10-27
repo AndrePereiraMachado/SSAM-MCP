@@ -44,13 +44,13 @@ public sealed class StaticBasis
         return ModuleIndex.Parse(bytes, lane, adapter, sha);
     }
 
-    /// <summary>The digest beside an index file (<c>&lt;sha&gt;.kernel.digest.json</c>, the kernel's reader writes it in both
+    /// <summary>The digest beside an index file (<c>&lt;sha&gt;.kernel.digest.e&lt;extractor&gt;.json</c>, the kernel's reader writes it in both
     /// lanes), or null.</summary>
     public static JsonObject? DigestBeside(string indexFile)
     {
         var folder = Path.GetDirectoryName(Path.GetFullPath(indexFile))!;
         var sha = Path.GetFileName(indexFile).Split('.')[0];
-        foreach (var candidate in new[] { sha + ".kernel.digest.json", sha + ".builder.digest.json" }) {
+        foreach (var candidate in new[] { sha + ".kernel" + ModuleIndexStore.DigestSuffix, sha + ".builder" + ModuleIndexStore.DigestSuffix }) {
             var path = Path.Combine(folder, candidate);
             try { if (File.Exists(path)) return JsonNode.Parse(File.ReadAllBytes(path)) as JsonObject; } catch (JsonException) { } catch (IOException) { }
         }
@@ -97,11 +97,14 @@ public sealed class IndexBaseFacts : IBaseFacts
         }
         if (basis.Digest is { } digest) {
             foreach (var (producer, kind, name) in DigestReferences(digest)) { Add(name, kind); topLevel.Add(producer); }
+            // Meta de 20/10/2026, item 12 (live on SSAM_DumpProbe): without the module index, the module's own screens and
+            // blocks are those of the digest's ui section (a navigate destination of an untouched element was refused as unknown).
+            foreach (var (kind, name) in DigestUi(digest)) Add(name, kind);
             foreach (var action in (digest["actions"] as JsonArray ?? []).OfType<JsonObject>())
                 if (action["function"]?.GetValue<bool>() == true && action["name"]?.ToString() is { Length: > 0 } f) functions.Add(f);
         }
         foreach (var op in ops.OfType<JsonObject>().Where(o => o["op"]?.ToString() == "reference")) {
-            var producer = op["producer"]?.ToString() ?? "";
+            var producer = ScopeJob.ProducerName(op["producer"]?.ToString() ?? "");
             if (producer.Length > 0) topLevel.Add(producer);
             var set = Imported.TryGetValue(producer, out var known) ? known : (Imported[producer] = new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             foreach (var element in (op["elements"] as JsonArray ?? []).Select(e => e?.ToString() ?? "")) {
@@ -133,6 +136,14 @@ public sealed class IndexBaseFacts : IBaseFacts
 
     /// <summary>The references a digest lists in its module section: (producer, kind, name), from the lines
     /// `reference P @key (...)` and `  Kind: a, b, c`.</summary>
+    /// <summary>The screens, blocks and emails of the module as the digest's ui section lists them (kind and name).</summary>
+    public static IEnumerable<(string Kind, string Name)> DigestUi(JsonObject digest)
+    {
+        foreach (var section in (digest["sections"] as JsonArray ?? []).OfType<JsonObject>().Where(s => s["id"]?.ToString() == "ui"))
+            foreach (var block in (section["blocks"] as JsonArray ?? []).OfType<JsonObject>())
+                if (block["kind"]?.ToString() is { Length: > 0 } kind && block["name"]?.ToString() is { Length: > 0 } name) yield return (kind, name);
+    }
+
     public static IEnumerable<(string Producer, string Kind, string Name)> DigestReferences(JsonObject digest)
     {
         foreach (var section in (digest["sections"] as JsonArray ?? []).OfType<JsonObject>().Where(s => s["id"]?.ToString() == "module"))
@@ -148,6 +159,9 @@ public sealed class IndexBaseFacts : IBaseFacts
                 }
             }
     }
+
+    /// <summary>What these facts read (the scope phase hands it to the document rules).</summary>
+    internal StaticBasis Basis => basis;
 
     public bool Fresh => basis.Fresh && basis.Module != null;
     public bool HasIndex => basis.Module != null;

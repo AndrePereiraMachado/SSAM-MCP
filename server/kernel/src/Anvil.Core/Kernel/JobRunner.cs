@@ -87,14 +87,29 @@ public static partial class JobRunner
             catch { foreach (var p in producers.Values) ModelHost.Release(p); throw; }
         }
         // In the resident worker only: a spare instance of exactly this base, taken once and released below like a fresh load.
-        var spare = BaseModelCache.Shared?.Take(basePath, baseBytes, reusable: !builtBase);
+        var spare = BaseModelCache.Current?.Take(basePath, baseBytes, reusable: !builtBase);
         var espace = spare?.Model ?? host.Load(baseBytes);
+        // What one read of this model costs (a load): the spare's prefetch, else this load. The delivery's reference closure
+        // reports it as what an inventory kept from this apply saved it.
+        var readCostMs = spare?.Model != null ? HotModule.Number(spare.Receipt["prefetch"]?["loadMs"]) : sw.ElapsedMilliseconds;
         // The Studio's defaults of the screen reading, before any op runs: measured outside the job's command (once per Studio
         // identity and context: the module and the theme of each of its UI flows, and of a new flow; in a copy of the base bytes)
         // when this Studio was never measured here for such a context. A flow the job gives a theme of its own is measured when
         // its first page is written.
         StudioDefaults.Remember(espace, baseBytes);
-        StudioDefaults.Prepare(espace);
+        // Batch lab (2026-10-19): a job of data and flow text only creates and reads no widget (a screen action graph is logic
+        // too: its owner exists already), so the Studio's widget defaults are not prepared for it; any other job prepares
+        // them as before, and a later widget read still measures its context lazily (StudioDefaults.For).
+        var widgetDefaultsStarted = sw.ElapsedMilliseconds;
+        if (!WithoutWidgets(ops))
+        {
+            using var defaultsTiming = NativePerformanceCapture.Measure("defaults.prepare");
+            StudioDefaults.Prepare(espace);
+        }
+        var widgetDefaultsMs = sw.ElapsedMilliseconds - widgetDefaultsStarted;
+        // R3: the producer references of the base as loaded (O11, where the delivery's reference closure reads them).
+        var baseModelSha256 = BaseModelCache.ModelSha256(baseBytes);
+        var baseReferences = ReferenceInventoryCache.Available ? ReferenceInventoryCache.TryOf(espace, log) : null;
         var loadMs = sw.ElapsedMilliseconds;
         // A job keeps the reads its answers name (the basedOn of a next text or data edit, the edit a refusal hands back) in the store.
         var session = new ModelSession(espace) { BaseSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(baseBytes)).ToLowerInvariant(), KeepReadings = true };
@@ -148,19 +163,38 @@ public static partial class JobRunner
             // as the patch writes it for this round's apply and Verify (never saved: the job is refused for it), so the round
             // proves the patch and judges the rest of the op; then the pointers of the base phase speak of the job as sent.
             Preflight.NodeRules.ApplyForDiagnosis(ops, baseCheck.Problems, opsPointer, log);
+            // T16 rule 1: a create the base already has runs, this round only, under the Studio's free name (the other way out),
+            // so its dependents are judged; what they find is conditional on that choice (JobRunner.CreateCollisions).
+            RenameForDiagnosis(ops, baseCheck.Problems, log);
             Preflight.SentJob.TranslateAll(baseCheck.Problems, ops, opsPointer);
             var baseCheckMs = sw.ElapsedMilliseconds - phase;
+            // R1: the scope phase (memoized on these facts: the base check's WithModule ran it); nothing reaches the apply while
+            // it has a problem, and the refusal lists the preflight's, the base check's and the scope's problems once.
+            var scope = expectedValid ? Preflight.ScopePhase.Run(ops, opsPointer, MessageExpectations.Lane, baseFacts, preflight) : null;
+            var scopeMs = scope?.Ms;
+            if (scope != null) baseCheck.Problems.AddRange(scope.Problems.Where(p => !baseCheck.Problems.Contains(p)));
+            // T16 over R1 (integ/proto-into-product): one refusal carries the problems of every phase, never a chain. The scope
+            // phase does not stop the job before its first op: the ops it refuses, and the ops they block, are never built
+            // (no cascade of what can only fail), and every other op runs, so what the apply and the Verify find there joins the
+            // same refusal (the candidate's A2 rule; PatchCertaintyUnreadableJobScopeTests).
+            var scopeSkips = scope != null && Preflight.ScopePhase.Stops(baseCheck.Problems) ? Preflight.ScopePhase.SkippedOps(baseCheck.Problems) : null;
             phase = sw.ElapsedMilliseconds;
             // A02 item 6: every failing op is recorded (its dependents skipped). primeira-certa A2: kept, not thrown, so the
             // Verify of what did apply joins the refusal; an op the preflight refused whole is never run.
             session.OpsPointer = opsPointer;
             session.KeepFailures = true;
-            session.SkipOps = RefusedWholeButDocuments(preflight, ops);
+            session.SkipOps = RefusedWholeButDocuments(preflight, ops) is { } refusedWhole && scopeSkips != null ? refusedWhole.Union(scopeSkips).ToHashSet()
+                : RefusedWholeButDocuments(preflight, ops) ?? scopeSkips;
             session.KnownProblems = (preflight?["problems"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().Concat(baseCheck.Problems).ToList();
+            // F1: the CSS elements as the base has them, for the stylesheet touch after the ops (StyleSheetTouch.cs).
+            var styleSheetTouch = StyleSheetTouch.Capture(espace, ops);
             var results = session.Apply(ops, log);
             // What only the database upgrade (publish) would refuse, read on the effective model before anything is saved.
             // Not on a model the Studio could not check at the end of the apply (a failed op left it half-built).
             var upgrade = session.EndOfApplyFailure == null ? session.DatabaseUpgradeRefusals(ops, MessageExpectations.Lane) : [];
+            // T1: no literal the job wrote shows a binding, no Expression shows markup (LITERAL_BINDING_REMNANT, HTML_IN_EXPRESSION),
+            // whatever op wrote it; each problem joins the one refusal with every other phase's, the Verify's included.
+            if (session.EndOfApplyFailure == null && expectedValid) baseCheck.Problems.AddRange(session.LiteralBindingRemnants(opsPointer));
             // primeira-certa A1/A2: a problem of any phase is refused once, with the problems of every phase, the Verify's
             // included; nothing is saved.
             if (preflight?["valid"]?.GetValue<bool>() == false || baseCheck.Problems.Count > 0 || session.Kept != null || upgrade.Count > 0)
@@ -176,6 +210,9 @@ public static partial class JobRunner
                 if (session.EndOfApplyFailure == null) ClassifyUnusedLiterals(probe, MessageDelta.Compute(before, ModelHost.Messages(espace)).New);
                 return probe;
             }
+            // F1: every block or screen whose stylesheet changed and none of whose widgets did gets one widget change that
+            // renders the same, on the candidate, after every op resolved; never a refusal of its own.
+            var styleSheets = session.EndOfApplyFailure == null ? styleSheetTouch.Apply(session, espace, log) : new JsonArray();
             var sessionApplyMs = sw.ElapsedMilliseconds - phase;
             phase = sw.ElapsedMilliseconds;
             var dataContract = session.DataContract();
@@ -183,6 +220,7 @@ public static partial class JobRunner
             var applyMs = sw.ElapsedMilliseconds - t1;
             phase = sw.ElapsedMilliseconds;
             var after = ModelHost.Messages(espace);
+            if (styleSheetTouch.RevertOnNewErrors(before, after, session, espace, log)) after = ModelHost.Messages(espace);
             var verifyAfterMs = sw.ElapsedMilliseconds - phase;
             phase = sw.ElapsedMilliseconds;
             var snap = ModelHost.Describe(espace, 0, after);
@@ -196,7 +234,7 @@ public static partial class JobRunner
             // C08: the screens the job declared open to anonymous users, and those of the footprint the base already opened.
             var judged = footprint.Footprint with { AnonymousIntent = session.AnonymousIntentOf(footprint.Footprint) };
             footprintMs += sw.ElapsedMilliseconds - phase;
-            var policy = MessageExpectations.Evaluate(delta.New, expected, delta.Preexisting, judged);
+            var policy = MessageExpectations.Evaluate(delta.New, expected, delta.Preexisting, judged, delta.Fixed);
             var accepted = snap.IsValid == expectedValid && policy.Accepted && dataContract["accepted"]!.GetValue<bool>();
             // The verdict of every new message (K1), the expectations used (K2) and those no message used (K3, informative).
             var validation = new { @new = delta.New, @fixed = delta.Fixed, preexisting = delta.Preexisting,
@@ -216,7 +254,7 @@ public static partial class JobRunner
             {
                 try
                 {
-                    var mapped = session.VerifyProblems(policy.Unexpected, ops, opsPointer, MessageExpectations.Lane, VerifyHints.TryRead())
+                    var mapped = session.VerifyProblems(policy.Unexpected, ops, opsPointer, MessageExpectations.Lane, VerifyHints.TryRead(), expectationsListed: expected.Count > 0)
                         .Where(p => p["severity"]?.ToString() != "warning").ToList();
                     Preflight.SentJob.TranslateAll(mapped, ops, opsPointer);
                     verifyProblems = new JsonArray(mapped.Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray());
@@ -280,6 +318,20 @@ public static partial class JobRunner
             // K6: the builder checks the kernel-result.json next to a candidate against these bytes (I10).
             var outSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
             var saveMs = sw.ElapsedMilliseconds - phase;
+            // R3: the references of the candidate as saved, with the base's, in the sidecar the delivery's closure reads.
+            phase = sw.ElapsedMilliseconds;
+            JsonObject? referenceInventory = null;
+            if (baseReferences is { } baseInventory && ReferenceInventoryCache.TryOf(espace, log) is { } candidateInventory)
+                try
+                {
+                    var candidateModelSha256 = BaseModelCache.ModelSha256(bytes);
+                    if (ReferenceInventoryCache.WriteSidecar(outPath, (baseModelSha256, baseInventory.References, readCostMs),
+                        (candidateModelSha256, candidateInventory.References, readCostMs)) is { } sidecar)
+                        referenceInventory = new JsonObject { ["file"] = sidecar, ["baseModelSha256"] = baseModelSha256, ["candidateModelSha256"] = candidateModelSha256,
+                            ["references"] = candidateInventory.References.Count };
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { log?.Invoke("  reference inventory not written: " + ex.Message); }
+            var referencesMs = sw.ElapsedMilliseconds - phase + (baseReferences?.Ms ?? 0);
             var handles = session.Handles;
             phase = sw.ElapsedMilliseconds;
             // largar o modulo AQUI para o relatorio do que foi libertado (undo, aggregator, close, locks) entrar no resultado
@@ -309,7 +361,10 @@ public static partial class JobRunner
                 }
                 File.WriteAllBytes(outPath, bytes);
             }
-            var timings = new { loadMs, baseAcquireMs = spare?.AcquireMs, verifyBeforeMs, normalizeMs, baseCheckMs, footprintMs, applyMs, sessionApplyMs, dataContractMs, verifyAfterMs, describeMs, detailsMs, saveMs, releaseMs, refactorProofMs = sw.ElapsedMilliseconds - phase, totalMs = sw.ElapsedMilliseconds };
+            var timings = new { loadMs, baseAcquireMs = spare?.AcquireMs, verifyBeforeMs, normalizeMs, baseCheckMs, scopeMs, footprintMs, applyMs, sessionApplyMs, dataContractMs, verifyAfterMs, describeMs, detailsMs, saveMs, releaseMs, refactorProofMs = sw.ElapsedMilliseconds - phase, styleSheetTouchMs = styleSheetTouch.ElapsedMs, totalMs = sw.ElapsedMilliseconds };
+            // R3 and the batch lab: the widget defaults (skipped for a job of data and flow text) and the reference inventories of
+            // the base and the candidate (ReferenceInventoryCache), on a line of their own beside the shared timings line.
+            var hotTimings = new { widgetDefaultsMs, referencesMs };
             // Flows whose layout the engine refused keep their geometry; name them in the receipt.
             var layoutRefused = session.AutomaticLayouts.Where(l => l.Refused != null)
                 .Select(l => new { action = l.Action, source = "automatic", reason = l.Refused! })
@@ -326,7 +381,7 @@ public static partial class JobRunner
             var entityActions = new System.Text.Json.Nodes.JsonArray(results.OfType<JsonObject>()
                 .Where(r => r["op"]?.ToString() == EntityActionsExpander.Op && r["result"]?["entityActions"] is JsonObject)
                 .Select(r => { var copy = r["result"]!["entityActions"]!.DeepClone().AsObject(); if (r["result"]?["noChange"] is { } same) copy["noChange"] = same.DeepClone(); return (JsonNode)copy; }).ToArray());
-            var answer = new { outPath, outSha256, ops = ops.Count, loadMs, applyMs, objects = snap.Objects, isValid = snap.IsValid, messages = snap.Validation.Total, details, validation, accepted, expectedValid, policyMessages, handles, results, footprint = footprint.Json, hoistedReferences = hoisted.Length > 0 ? hoisted : null, flowLayoutEngine = FlowLayout.EngineRevision, automaticLayouts = session.AutomaticLayouts, layoutRefused, released, baseCache = spare?.Receipt, timings, preflight, dataContract, refactorProof, coverage = session.CoverageLedger() };
+            var answer = new { outPath, outSha256, ops = ops.Count, loadMs, applyMs, objects = snap.Objects, isValid = snap.IsValid, messages = snap.Validation.Total, details, validation, accepted, expectedValid, policyMessages, handles, results, footprint = footprint.Json, hoistedReferences = hoisted.Length > 0 ? hoisted : null, flowLayoutEngine = FlowLayout.EngineRevision, automaticLayouts = session.AutomaticLayouts, layoutRefused, released, baseCache = spare?.Receipt, hot = HotModule.Receipt(spare?.Receipt, BaseModelCache.Current != null, builtBase), referenceInventory, timings, hotTimings, preflight, dataContract, refactorProof, coverage = session.CoverageLedger(), styleSheets = styleSheets.Count > 0 ? styleSheets : null, styleSheetsTheme = styleSheets.Count > 0 ? StyleSheetTouch.ThemeName(espace) : null };
             // What the kernel applied that the author did not write (atritos 3, section 5.1): notes, iconConversions,
             // expressionRewrites, nameTruncations, indexNoOps, anonymousExposure, ... each only when it has entries.
             var receipt = session.ReceiptFields(policy, footprint.Footprint);
@@ -356,6 +411,13 @@ public static partial class JobRunner
             if (released == null) ModelHost.Release(espace);
         }
     }
+
+    /// <summary>A job of data and flow text alone (spec ddl, logic flow, a user exception): nothing of it creates or reads a
+    /// widget. Raw or unknown forms are not (their widgets' defaults are prepared as before).</summary>
+    internal static bool WithoutWidgets(JsonArray ops) => ops.Count > 0 && ops.All(op => op is JsonObject o && (
+        o["op"]?.ToString() == "spec" && o["data"] is JsonObject data && data["ddl"] is JsonValue && data.All(p => p.Key is "ddl" or "basedOn")
+        || o["op"]?.ToString() == "logic" && o["data"] is JsonObject logic && logic["flow"] != null && logic.All(p => p.Key is "flow" or "basedOn" or "allowQueryInLoop")
+        || o["op"]?.ToString() == "create" && o["type"]?.ToString() == "IUserException"));
 
     private static readonly Regex LegacyPrefix = new(@"^op #(\d+)(?: \(([^)]*)\))?:\s*", RegexOptions.Compiled);
     private static readonly Regex FunctionCall = new(@"(?<![\w.])([A-Za-z_][A-Za-z0-9_]*)\s*\(", RegexOptions.Compiled);
@@ -493,6 +555,8 @@ public static partial class JobRunner
             problems.Add(problem);
             lines.Add(JobPreflight.Text(problem));
         }
+        // T16 rule 1: a create whose name an element of the same type already has under the same parent (JobRunner.CreateCollisions).
+        foreach (var problem in CreateCollisions(session, ops, opsPointer)) { problems.Add(problem); lines.Add(JobPreflight.Text(problem)); }
         // Functions the logic expressions call: the same rule as the Verify's ExpressionUnknownFunction, before any op. A job
         // that expects an invalid module (expectValid false) asks the Verify for that verdict: it is not refused here.
         // G5 (2026-10-11): the expressions an html page op writes from its bindings, sources and variables are read too (job
@@ -606,7 +670,7 @@ public static partial class JobRunner
     /// <summary>The start of the native importer's refusal of a reference at another signature (OdcReferenceImporter).</summary>
     public const string OutdatedReference = "Reference version differs from the captured signature";
     /// <summary>fix/unpublished-library round 2 (A1): NativeReferenceSnapshot.Select's refusals of a KIND the signature cannot
-    /// hold (an ODC published signature: server actions, client actions, structures, entities and blocks; an extension's:
+    /// hold (an ODC published signature: server actions, client actions, service actions, structures, entities and blocks; an extension's:
     /// server actions and entities). MissingElement names their element too, but publishing the producer never adds that kind.</summary>
     private const string UnsupportedOdcKind = "Unsupported element kind for this frozen producer signature";
     private const string UnsupportedExtensionKind = "Native extension references require a server action or entity signature";
@@ -641,7 +705,7 @@ public static partial class JobRunner
         var extensionKind = named != null && message.Contains(UnsupportedExtensionKind, StringComparison.Ordinal);
         var unsupportedKind = extensionKind || (named != null && message.Contains(UnsupportedOdcKind, StringComparison.Ordinal));
         var holds = extensionKind ? "an extension signature holds server actions and entities"
-            : "an ODC published signature holds server actions, client actions, structures, entities and blocks (an External Library: server actions and structures)";
+            : "an ODC published signature holds server actions, client actions, service actions, structures, entities and blocks (an External Library: server actions and structures)";
         var problem = JobPreflight.Problem(op < 0 ? null : op, pointer, named != null ? "REFERENCE_ELEMENT_MISSING" : outdated ? "REFERENCE_OUTDATED" : "REFERENCE_IMPORT_FAILED", "error", message,
             unsupportedKind ? $"the kind of {named} cannot be referenced through the signature of producer {producer}: {holds}; publishing {producer} does not change this: reference an element of one of those kinds, or add this reference in the Studio (Manage Dependencies)"
             : named != null ? $"the published signature of producer {producer} has no {named}: if {producer} has it in a model not published yet (added or made Public after its last publication), publish {producer} first ({publish}), then deliver the same job again; if it was published after this capture, capture it again ({capture}); else write the kind and name of an element {producer} publishes ({lists})"

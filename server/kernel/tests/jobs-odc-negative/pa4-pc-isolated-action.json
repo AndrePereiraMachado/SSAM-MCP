@@ -14,7 +14,7 @@
    {"name": "PcGood", "kind": "server", "description": "Synthetic action that applies; its Verify error comes in the refusal.",
     "outputs": [{"name": "Code", "type": "Integer"}], "steps": [{"assign": {"Code": "\"abc\""}}]},
    {"name": "PcBroken", "kind": "server", "description": "Synthetic action that fails at apply.",
-    "outputs": [{"name": "N", "type": "Integer"}], "steps": [{"call": "PcNoSuchAction", "as": "Nope"}, {"assign": {"N": "1"}}]},
+    "outputs": [{"name": "N", "type": "Integer"}], "steps": [{"call": "System.PcNoSuchAction", "as": "Nope"}, {"assign": {"N": "1"}}]},
    {"name": "PcUsesBroken", "kind": "server", "description": "Synthetic action left out with the failed one.",
     "steps": [{"call": "PcBroken", "as": "Again"}]},
    {"name": "PcCalc", "kind": "server", "description": "Synthetic callee.",

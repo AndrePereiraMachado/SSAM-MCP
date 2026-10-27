@@ -5,11 +5,12 @@
 import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { fitAnswer, answerEnvelope, ANSWER_BUDGETS } from '../answer-size.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { moduleMap, parseMapArguments, htmlPages, HTML_SCHEMA, VIEWS } from '../module-map.mjs';
+import { moduleMap, mapRefusal, parseMapArguments, htmlPages, HTML_SCHEMA, VIEWS } from '../module-map.mjs';
 import { writeCapture } from './fixtures/module-index.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -46,6 +47,22 @@ test('the schema is the kernel\'s and html is a view of ssam_map', () => {
   const source = fs.readFileSync(kernelSource, 'utf8');
   assert.equal(source.match(/public const string Schema = "([^"]+)";/)[1], HTML_SCHEMA);
   assert.ok(VIEWS.includes('html'));
+});
+
+test('transport keeps pinned HTML edit and pagination routes for both lanes', async t => {
+  for (const lane of ['o11', 'odc']) {
+    const c = setup(t); const r = reader(screenText(120));
+    const args = { lane, target:c.file, view:'html', screen:'Orders', budgetBytes:6000 };
+    const full = await moduleMap(args, {env:c.env, read:r.read});
+    full.note += ' repeated guidance'.repeat(200);
+    const answer = fitAnswer('ssam_map', args, full, {root:path.dirname(c.file)});
+    assert.deepEqual(answer.continuations.edit, full.continuations.edit);
+    assert.deepEqual(answer.continuations.next, full.continuations.next);
+    assert.equal(answer.html, full.html);
+    assert.deepEqual(answer.basedOn, full.basedOn);
+    assert.ok(bytes(answerEnvelope(answer)) <= ANSWER_BUDGETS.read);
+    assert.ok(answer.omitted, 'optional metadata has an evidence continuation');
+  }
 });
 
 test('without screen: the screens and blocks of the capture, with the continuation that reads one', async t => {
@@ -120,6 +137,28 @@ test('an unknown screen answers the kernel\'s refusal with the screens that exis
   const answer = await moduleMap({ lane: 'odc', target: c.file, view: 'html', screen: 'Ordres' }, { env: c.env, read: r.read });
   assert.equal(answer.ok, false);
   assert.match(answer.error, /No screen or block named 'Ordres'\. MobileScreen:Orders @S1/);
+  // Goal list of 2026-10-20, item 2: its own code, the candidates the kernel lists and the call that lists every screen (never the
+  // generic SSAM_MAP_FAILED of refusal-codes.mjs toolCode).
+  assert.equal(answer.code, 'ELEMENT_NOT_FOUND');
+  assert.equal(answer.screen, 'Ordres');
+  assert.deepEqual(answer.candidates, [{ kind: 'MobileScreen', name: 'Orders', key: '@S1' }, { kind: 'MobileBlock', name: 'Card', key: '@B1' }]);
+  assert.deepEqual(answer.continuation.arguments, { lane: 'odc', target: c.file, view: 'html' });
+});
+
+test('the other errors the map knows carry their own code; an unknown one carries none', async t => {
+  const c = setup(t); const r = reader();
+  const ask = input => moduleMap({ lane: 'odc', target: c.file, ...input }, { env: c.env, read: r.read });
+  assert.equal((await ask({ view: 'map', screen: 'Orders' })).code, 'INPUT_INVALID');
+  assert.equal((await ask({ view: 'html', screen: 'Orders', page: 99 })).code, 'PAGE_NOT_FOUND');
+  assert.equal((await ask({ view: 'html', screen: 'Orders', expectedSourceSha256: 'f'.repeat(64) })).code, 'CAPTURE_CHANGED');
+  const ambiguous = mapRefusal(new Error("Ambiguous screen or block 'Card'. MobileBlock:Card @B1; WebBlock:Card @B2"), { lane: 'odc', target: c.file, view: 'html' });
+  assert.equal(ambiguous.code, 'AMBIGUOUS_ELEMENT');
+  assert.equal(ambiguous.continuation.arguments.screen, '<Kind:Name or @key of one candidate>');
+  assert.equal(mapRefusal(new Error('The odc reader answered without ssam-html/1: its binaries predate it; rebuild the reader'), { lane: 'odc', view: 'html' }).code, 'READER_UNAVAILABLE');
+  assert.deepEqual(mapRefusal(new Error('something else'), { lane: 'odc', view: 'html' }), { error: 'something else' });
+  assert.equal(mapRefusal(new Error(''), { lane: 'odc' }).error, 'Error', 'an empty message never answers an empty error');
+  const carried = mapRefusal(Object.assign(new Error('refused'), { refusal: { code: 'MODULE_NOT_OPEN', openModules: [] } }), { lane: 'odc' });
+  assert.deepEqual(carried, { code: 'MODULE_NOT_OPEN', openModules: [], error: 'refused' });
 });
 
 test('arguments of other views are refused with their own words, and the CLI names the view', async t => {

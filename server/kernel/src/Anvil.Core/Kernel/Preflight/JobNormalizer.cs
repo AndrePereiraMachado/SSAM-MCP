@@ -52,6 +52,7 @@ public static class JobNormalizer
     public static List<JsonObject> Pure(JsonArray ops, string? prefix, string lane)
     {
         var done = new List<JsonObject>();
+        done.AddRange(MigrationUiAdapters.Normalize(ops, prefix));
         Motor2(ops, prefix, lane, null, done);
         try
         {
@@ -60,7 +61,7 @@ public static class JobNormalizer
         }
         catch { /* a normalization never refuses: the checks judge what stays */ }
         // VisitaCerta (tx-visitacerta): the certain edits of the ssam-flow/1 texts of the logic ops (FlowTextNormalizer).
-        try { FlowTexts(ops, prefix, done); }
+        try { FlowTexts(ops, prefix, done, JobSchema(ops)); }
         catch { /* a normalization never refuses: the checks judge what stays */ }
         // motor2 review: each path is one of the job as sent (a step the kernel inserted shifts nothing the author wrote).
         SentJob.TranslateEntries(done, ops, prefix);
@@ -72,7 +73,10 @@ public static class JobNormalizer
     // Every text of the text form of a logic op (data.flow: one text, a list of texts or of {text, basedOn}) with its certain
     // edits, each listed with the line it changed (from: the line before, to: what it reads now; an inserted line has from
     // "before line N").
-    private static void FlowTexts(JsonArray ops, string? prefix, List<JsonObject> done)
+    // R7: every text of one op normalized together (FlowTextNormalizer.NormalizeAll), so a `context` at the top of one reaches
+    // every action of the op; the general forms typed by what the schema knows (the records the job declares, and with the
+    // base the module's records and callees: WithBase).
+    private static void FlowTexts(JsonArray ops, string? prefix, List<JsonObject> done, Anvil.Reading.IFlowSchema? schema = null)
     {
         for (var i = 0; i < ops.Count; i++)
         {
@@ -81,27 +85,37 @@ public static class JobNormalizer
             switch (data["flow"])
             {
                 case JsonValue single when single.TryGetValue<string>(out var text):
-                    if (One(text, at, done) is { } written) data["flow"] = written;
+                    if (Written(text, Anvil.Reading.FlowTextNormalizer.Normalize(text, schema), at, done) is { } written) data["flow"] = written;
                     break;
                 case JsonArray list:
+                    // The texts of the list and where each is written back (a text, or the text of a {text, basedOn}).
+                    var slots = new List<(int Index, JsonObject? Entry, string Text)>();
                     for (var j = 0; j < list.Count; j++)
                     {
-                        if (list[j] is JsonValue item && item.TryGetValue<string>(out var itemText))
-                        {
-                            if (One(itemText, at == null ? null : at + "/" + j, done) is { } itemWritten) list[j] = itemWritten;
-                        }
-                        else if (list[j] is JsonObject entry && entry["text"] is JsonValue inner && inner.TryGetValue<string>(out var entryText))
-                        {
-                            if (One(entryText, at == null ? null : at + "/" + j + "/text", done) is { } entryWritten) entry["text"] = entryWritten;
-                        }
+                        if (list[j] is JsonValue item && item.TryGetValue<string>(out var itemText)) slots.Add((j, null, itemText));
+                        else if (list[j] is JsonObject entry && entry["text"] is JsonValue inner && inner.TryGetValue<string>(out var entryText)) slots.Add((j, entry, entryText));
+                    }
+                    // NormalizeAll only for an op with a context (it reads the texts together); each text on its own otherwise,
+                    // and for a text the op-wide pass leaves unchanged (it reads the text it expanded without the structured
+                    // reading of its joins, so a let/return text came back as written: integration of 24/10).
+                    var sources = slots.Select(x => x.Text).ToList();
+                    var normalized = sources.Any(t => t.Replace("\r\n", "\n").Split('\n').Any(l => l.StartsWith("context ", StringComparison.Ordinal)))
+                        ? Anvil.Reading.FlowTextNormalizer.NormalizeAll(sources, schema) : sources.Select(t => Anvil.Reading.FlowTextNormalizer.Normalize(t, schema)).ToList();
+                    for (var k = 0; k < normalized.Count; k++)
+                        if (normalized[k].Edits.Count == 0 && Anvil.Reading.FlowTextNormalizer.Normalize(sources[k], schema) is { Edits.Count: > 0 } alone) normalized[k] = alone;
+                    for (var k = 0; k < slots.Count; k++)
+                    {
+                        var (j, entry, original) = slots[k];
+                        var path = at == null ? null : at + "/" + j + (entry != null ? "/text" : "");
+                        if (Written(original, normalized[k], path, done) is not { } rewritten) continue;
+                        if (entry != null) entry["text"] = rewritten; else list[j] = rewritten;
                     }
                     break;
             }
         }
 
-        static string? One(string text, string? path, List<JsonObject> done)
+        static string? Written(string text, Anvil.Reading.FlowTextNormalizer.Normalized normalized, string? path, List<JsonObject> done)
         {
-            var normalized = Anvil.Reading.FlowTextNormalizer.Normalize(text);
             if (normalized.Edits.Count == 0 || normalized.Text == text) return null;
             foreach (var edit in normalized.Edits)
             {
@@ -113,10 +127,36 @@ public static class JobNormalizer
         }
     }
 
+    /// <summary>R7: the first problem of the general forms of these texts when every problem is a type only the module can say
+    /// (a let whose type is not certain from the text, a projection whose record or items are not known), with the records of
+    /// the job as schema; null when they expand, use no general form, or have another problem (the syntax check says it).</summary>
+    internal static string? NeedsTheModule(IReadOnlyList<string> texts, JsonArray ops)
+    {
+        if (!texts.Any(Anvil.Reading.FlowGeneral.Uses)) return null;
+        List<string> problems;
+        try { problems = Anvil.Reading.FlowGeneral.ExpandAll(texts, JobSchema(ops)).Problems; } catch { return null; }
+        return problems.Count > 0 && problems.All(p => p.Contains(" is not certain", StringComparison.Ordinal) || p.Contains(" not known here", StringComparison.Ordinal))
+            ? problems[0] : null;
+    }
+
+    /// <summary>R7: the records the job declares (its specs: entities, structures, static entities, with their attributes in
+    /// order), the schema a general form reads before the base is loaded; null when the job declares none.</summary>
+    internal static Anvil.Reading.IFlowSchema? JobSchema(JsonArray ops)
+    {
+        JobFacts job;
+        try { job = JobFacts.From(ops); } catch { return null; }
+        if (job.Records.Count == 0) return null;
+        return Anvil.Reading.FlowSchema.Of(job.Records.ToDictionary(r => r.Key,
+            r => (IReadOnlyList<(string Name, string Type)>)r.Value.Select(a => (a.Key, a.Value)).ToList(), StringComparer.OrdinalIgnoreCase));
+    }
+
     /// <summary>The same again with the base (attributes of module records, callees of the module) plus the null functions.</summary>
     public static List<JsonObject> WithBase(JsonArray ops, string? prefix, string lane, IBaseFacts model)
     {
         var done = new List<JsonObject>();
+        // R7: the general forms only the module types (a let by an attribute of an entity of the base, by an output of one of
+        // its actions; mapTo { * } into one of its records), with the records of the job first.
+        try { FlowTexts(ops, prefix, done, Anvil.Reading.FlowSchema.Combine(JobSchema(ops), Anvil.Reading.FlowSchema.Of(model))); } catch { }
         Motor2(ops, prefix, lane, model, done);
         try
         {
@@ -124,6 +164,8 @@ public static class JobNormalizer
             Expressions(ops, prefix, lane, model, done);
         }
         catch { /* a normalization never refuses: the checks judge what stays */ }
+        // R1: what the scope phase settles with one reading (a child a widget is not born with, written before its first use).
+        try { done.AddRange(ScopePhase.Normalize(ops, prefix, lane, model)); } catch { }
         SentJob.TranslateEntries(done, ops, prefix);
         return done;
     }

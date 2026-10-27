@@ -490,7 +490,8 @@ internal sealed class PrototypePlanner
             // N1: the singular of the collection in PascalCase (imoveis -> Imovel); the prefix only when the base holds the name
             var name = Name("entity", PrototypeNames.EntityStem(collection), "entity");
             var fields = PrototypeCapture.Objects(c["fields"]).Select(f => new PrototypeDataModel.Field(f["name"]!.ToString(), f["type"]!.ToString(),
-                f["length"]?.GetValue<int>(), PrototypeCapture.Objects(c["references"]).FirstOrDefault(r => r["field"]?.ToString() == f["name"]!.ToString())?["collection"]?.ToString())).ToList();
+                f["length"]?.GetValue<int>(), PrototypeCapture.Objects(c["references"]).FirstOrDefault(r => r["field"]?.ToString() == f["name"]!.ToString())?["collection"]?.ToString(),
+                f["temporal"]?.GetValue<string>(), f["timeZone"]?.GetValue<string>())).ToList();
             _data.Entities.Add(new(collection, name, !regular.Contains(collection), fields, c["rows"] as JsonArray ?? [], c["key"]?.ToString() ?? "Id"));
             _entityRef[collection] = Ref("entity", name, "$p.ent." + Safe(collection));
             _plan.EntityCollections[name] = collection;

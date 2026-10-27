@@ -2207,8 +2207,13 @@
    }
   },
   {
-   "op": "logic", "allowForEach": { "why": "proof job written before the owner's rules judged the JSON form of the logic op (T1/T2, 2026-10-12); kept as the regression it already proves" },
-   "allowQueryInLoop": {"why": "proof job written before the 2026-10-09 data-access rule (QUERY_IN_LOOP); kept as the regression it already proves"},
+   "op": "logic",
+   "allowForEach": {
+    "why": "proof job written before the owner's rules judged the JSON form of the logic op (T1/T2, 2026-10-12); kept as the regression it already proves"
+   },
+   "allowQueryInLoop": {
+    "why": "proof job written before the 2026-10-09 data-access rule (QUERY_IN_LOOP); kept as the regression it already proves"
+   },
    "data": {
     "actions": [
      {
@@ -20570,12 +20575,11 @@
         "get": "JobOpening",
         "as": "Rows",
         "where": "JobOpening.OrganizationId = OrganizationId and (True)",
-        "max": "PageSize",
+        "max": "StartIndex + PageSize",
         "sort": [
          "JobOpening.Id",
          "Ascending"
-        ],
-        "start": "StartIndex"
+        ]
        },
        {
         "foreach": "Rows.List",
@@ -20594,7 +20598,8 @@
            "Element": "Row"
           }
          }
-        ]
+        ],
+        "start": "StartIndex"
        }
       ]
      },
@@ -20656,12 +20661,11 @@
         "get": "Candidate",
         "as": "Rows",
         "where": "Candidate.OrganizationId = OrganizationId and (True)",
-        "max": "PageSize",
+        "max": "StartIndex + PageSize",
         "sort": [
          "Candidate.Id",
          "Ascending"
-        ],
-        "start": "StartIndex"
+        ]
        },
        {
         "foreach": "Rows.List",
@@ -20680,7 +20684,8 @@
            "Element": "Row"
           }
          }
-        ]
+        ],
+        "start": "StartIndex"
        }
       ]
      },
@@ -21090,12 +21095,11 @@
         "get": "RecruitmentTask",
         "as": "Rows",
         "where": "RecruitmentTask.OrganizationId = OrganizationId and RecruitmentTask.AssignedToMemberId = CurrentMember.List.Current.OrganizationMember.Id and (RecruitmentTask.StatusId = Entities.TaskStatus.Open or RecruitmentTask.StatusId = Entities.TaskStatus.InProgress)",
-        "max": "PageSize",
+        "max": "StartIndex + PageSize",
         "sort": [
          "RecruitmentTask.Id",
          "Ascending"
-        ],
-        "start": "StartIndex"
+        ]
        },
        {
         "foreach": "Rows.List",
@@ -21114,7 +21118,8 @@
            "Element": "Row"
           }
          }
-        ]
+        ],
+        "start": "StartIndex"
        }
       ]
      },
@@ -21476,12 +21481,11 @@
         "get": "TalentPoolCandidate",
         "as": "Members",
         "where": "TalentPoolCandidate.TalentPoolId = TalentPoolId",
-        "max": "PageSize",
+        "max": "StartIndex + PageSize",
         "sort": [
          "TalentPoolCandidate.Id",
          "Ascending"
-        ],
-        "start": "StartIndex"
+        ]
        },
        {
         "foreach": "Members.List",
@@ -21515,7 +21519,8 @@
            "Element": "C"
           }
          }
-        ]
+        ],
+        "start": "StartIndex"
        }
       ]
      },

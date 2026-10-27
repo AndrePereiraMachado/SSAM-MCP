@@ -36,7 +36,17 @@ public static class ScreenHtml
     // <thead> and its Row the one template <tr> of its <tbody> (StyleHeader and StyleRow their class), one <th> and one <td> per
     // column (HeaderCell, RowCell); 8 wrote it as an os-opaque with its cells inside (the owner's VpBookings bug of 2026-10-18:
     // a document could not write the native Table, so its data tables were a loose header and a List).
-    public const int Extractor = 9;
+    // 12: the Traditional Web widgets have rows of their own under a WebScreen or WebBlock (inputs, password, checkbox and
+    // radio inputs, select, records, tables, block instances), read and edited (the proto line's 10 and 11); a Traditional
+    // widget under a Reactive or Mobile root still reads as os-opaque.
+    // 13: HasInputs of a Traditional Web block is not a fact (the Studio derives it from the block's content): removing the last
+    // input of a block read back as another text (the html-edit battery over the Traditional fixture, review of 3ab12209, 7).
+    // 14: the Traditional ComboBox list source, projected fields, events and complete special-option values (the proto line's
+    // 12), over 13: no stored reading of either line is reused.
+    // 15 (T1, its 10): a literal that holds a brace of a binding ({{ or }}) is written in <text> with every brace as its
+    // character reference (&#123; &#125;), so a literal never prints as a binding; before, <text>{{ "Search" }}</text> read as
+    // an expression.
+    public const int Extractor = 15;
 
     public static ScreenHtmlModule<T> Module<T>(T module, ModelReader<T> reader) where T : class => new(module, reader);
 
@@ -51,23 +61,32 @@ public static class ScreenHtml
         // A data table (ScreenHtmlTables.NativeTable): the kind of a <table>, <th> and <td> by the shape of the table, never by the tag
         // alone (an HTML table without a list, or of a reading with a k on its parts, is HTML Elements).
         ["TableRecords"] = "table", ["HeaderCell"] = "th", ["RowCell"] = "td",
+        // The Traditional Web widgets (ScreenHtmlTables.TraditionalOnly): their rows only under a WebScreen or WebBlock, where the
+        // tag decides the kind (ScreenHtmlModule KindOf); under any other root they read as os-opaque.
+        ["WebBlockInstanceWidget"] = "Block", ["ContainerWidget"] = "div", ["LinkWidget"] = "a",
+        ["ButtonWidget"] = "button", ["ExpressionWidget"] = "expr", ["InputWidget"] = "input",
+        ["InputPasswordWidget"] = "password-input", ["CheckBoxWidget"] = "checkbox-input", ["ComboBoxWidget"] = "select", ["RadioButtonWidget"] = "radio-input",
+        ["ImageWidget"] = "img", ["ListRecordsWidget"] = "list-records", ["TableRecordsWidget"] = "table-records",
+        ["TableWidget"] = "table", ["RowWidget"] = "tr", ["CellWidget"] = "td",
+        ["UploadWidget"] = "upload", ["InputFilenameWidget"] = "upload", ["EditRecordWidget"] = "edit-record", ["ShowRecordWidget"] = "show-record",
     };
     // The kinds of WidgetTags a tag alone never decides (ScreenHtmlTables.KindOf): the shape of the table does.
     internal static readonly HashSet<string> ShapeKinds = new(StringComparer.Ordinal) { "TableRecords", "HeaderCell", "RowCell" };
-    // Kinds without a row: written as os-opaque, untouchable (the plan's 1.3: the generic MobileWidget; the Traditional Web
-    // widgets wait for D2). A MobileWidget keeps its children's widgets written inside it (OpaqueWithChildren); a Traditional
-    // widget is opaque with its whole subtree.
-    internal static readonly HashSet<string> OpaqueKinds = new(StringComparer.Ordinal) {
-        "MobileWidget", "WebBlockInstanceWidget", "WebWidget", "ContainerWidget", "LinkWidget",
-        "ButtonWidget", "CheckBoxWidget", "ExpressionWidget", "InputWidget", "InputPasswordWidget", "ComboBoxWidget", "RadioButtonWidget",
-        "TextWidgetWeb", "ImageWidget", "ListRecordsWidget", "EditRecordWidget", "ShowRecordWidget", "UploadWidget", "IfWidgetWeb" };
+    // Tags the Traditional rows spend (table, records, record widgets): under a Traditional root an HTML Element with one
+    // of them carries the html marker, as ReservedTags do everywhere.
+    internal static readonly HashSet<string> TraditionalTags = new(StringComparer.Ordinal) {
+        "table", "tr", "td", "table-records", "list-records", "edit-record", "show-record" };
+    // Kinds without a row: written as os-opaque, untouchable (the plan's 1.3: the generic MobileWidget and the generic WebWidget).
+    // A MobileWidget keeps its children's widgets written inside it (OpaqueWithChildren); a WebWidget is opaque with its whole
+    // subtree.
+    internal static readonly HashSet<string> OpaqueKinds = new(StringComparer.Ordinal) { "MobileWidget", "WebWidget" };
     internal static readonly HashSet<string> OpaqueWithChildren = new(StringComparer.Ordinal) { "MobileWidget" };
     // Element names the language spends on its own rows: an HTML Element (AdvancedHtml) whose Tag is one of them carries the
     // html marker; a List with one of the void tags is <list tag>.
     internal static readonly HashSet<string> ReservedTags = new(StringComparer.Ordinal) {
         "div", "form", "a", "button", "input", "textarea", "select", "radio-group", "switch", "button-group", "button-group-item", "label",
         "img", "i", "popup", "Block", "block", "placeholder", "upload", "list-item", "expr", "text", "slot", "screen", "var", "aggregate",
-        "data-action", "action", "event", "style", "html-element", "list", "content", "os-opaque", "radio" };
+        "data-action", "action", "event", "style", "html-element", "list", "content", "os-opaque", "radio", "radio-input", "password-input", "checkbox-input" };
     internal static readonly HashSet<string> VoidTags = new(StringComparer.Ordinal) {
         "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr" };
     // ---- what is not a fact of the page ----------------------------------------------------------------------------------
@@ -84,6 +103,9 @@ public static class ScreenHtml
         "AttributesInPreview", "IsIterated", "IconPath", "ReadOnlyIcon",
         // Lists and pointers that repeat the structure: every widget of a screen, the content pseudo-element of an O11 widget.
         "Widgets", "Content",
+        // Whether a Traditional Web block holds an input: the Studio derives it from the block's content (it changes when the last
+        // input is removed).
+        "HasInputs",
         // The theme a screen or block shows: its flow's or its module's (the theme is set there, not on the screen).
         "ThemeBeingUsed" };
     // The defaults: a property at its default is not written, and an absent one reads as its default. They are the installed
@@ -130,7 +152,7 @@ public static class ScreenHtml
                 ["@<Event>"] = "a block event handler: Handler(Param = expression, ...)",
                 [":<Input>"] = "an argument of a block instance",
                 ["<attribute>"] = "an extended property: a plain string literal bare, else {{ expression }}; ext:<name> when the name is taken; literal text with bindings (\"Total {{ N }}\") is their concatenation",
-                ["runs"] = "one text or {{ expression }} per line; a line with text and bindings (\"Today · {{ X }}\", \"{{ N }} days\") is one Expression, their concatenation (\"Today · \" + X), read back as {{ \"Today · \" + X }}; the whitespace beside an inline element on the same line is part of the run (\"by <b>lowest</b> to\" keeps \"by \" and \" to\"); <text>exact</text> keeps spaces, line breaks and literal braces",
+                ["runs"] = "one text or {{ expression }} per line; a line with text and bindings (\"Today · {{ X }}\", \"{{ N }} days\") is one Expression, their concatenation (\"Today · \" + X), read back as {{ \"Today · \" + X }}; the whitespace beside an inline element on the same line is part of the run (\"by <b>lowest</b> to\" keeps \"by \" and \" to\"); <text>exact</text> keeps spaces, line breaks and a lone literal brace pair (read as &#123;&#123;); a literal never holds a binding {{ ... }} (LITERAL_BINDING_REMNANT): braces the page must show are split in an expression ({{ \"{\" + \"{\" }})",
                 ["popup"] = "an element inside a Popup is at what the Studio gives it there (the Transition of an event inside a Popup is the Popup's, Fade): written only when it is another",
                 ["if"] = "<div if=\"Condition\" k> True branch </div><div else> False branch </div> (else only when not empty)",
                 ["slot"] = "<slot name=\"Placeholder\"> the content of a placeholder of a block instance",
@@ -179,6 +201,15 @@ public static class ScreenHtml
         return sb.ToString();
     }
 
+    /// <summary>T1: a literal as &lt;text&gt; writes it: escaped as any text, and, when it holds a brace of a binding ({{ or }}),
+    /// every brace as its character reference (&amp;#123; &amp;#125;), so a literal never prints as a binding; the parser decodes it
+    /// back, so the reading read and written again is the same text.</summary>
+    internal static string EscapeLiteral(string text)
+    {
+        var escaped = Escape(text, true);
+        return HoldsBraces(text) ? escaped.Replace("{", "&#123;", StringComparison.Ordinal).Replace("}", "&#125;", StringComparison.Ordinal) : escaped;
+    }
+
     // A text run is written bare when one line holds it exactly and no brace pair of a binding is in it (a bare line with {{ or
     // }} is a binding: Run reads "Hoje · {{ X }}" as one expression).
     internal static bool PlainRun(string text) =>
@@ -201,6 +232,14 @@ public static class ScreenHtml
     /// quote doubled. A malformed value (a {{ that never closes) stays the literal it was: the document form refuses it
     /// (BindingFault).</summary>
     internal static string Unsugar(string value) => Bound(value, out _) is { } expression ? expression : Literal(value);
+
+    /// <summary>T1 (BindingText): <see cref="Unsugar"/> with each binding's expression first rewritten by <paramref name="scoped"/>
+    /// (the fragment form's list row: Row.X is List.Current.X); the fault of a malformed value instead of its literal.</summary>
+    internal static string? Unsugar(string value, Func<string, string>? scoped, out string? fault)
+    {
+        if (!value.Contains("{{", StringComparison.Ordinal) && !value.Contains("}}", StringComparison.Ordinal)) { fault = null; return Literal(value); }
+        return Bound(value, out fault, scoped);
+    }
 
     /// <summary>A run of text, one line of the document: the expression it stands for (expression true) or the text itself.
     /// The reading's "{{ x }}" is x exactly as written (spaces inside kept); a line with literal text and bindings ("Hoje · {{
@@ -441,17 +480,18 @@ public static class ScreenHtml
     }
 
     // The expression of a text with bindings (the reading's whole "{{ x }}" first, exactly), null without one or when malformed.
-    private static string? Bound(string text, out string? fault)
+    private static string? Bound(string text, out string? fault, Func<string, string>? scoped = null)
     {
         fault = null;
         var whole = text.Length >= 6 && text.StartsWith("{{ ", StringComparison.Ordinal) && text.EndsWith(" }}", StringComparison.Ordinal);
         if (!text.Contains("{{", StringComparison.Ordinal) && !text.Contains("}}", StringComparison.Ordinal)) return null;
         var parts = Bindings(text, out fault);
+        scoped ??= e => e;
         // The reading writes an Expression as "{{ " + value + " }}" whatever its value holds: that form is always that value.
-        if (whole && (parts == null || parts.Count == 1)) { fault = null; return text[3..^3]; }
+        if (whole && (parts == null || parts.Count == 1)) { fault = null; return scoped(text[3..^3]); }
         if (parts == null) return null;
-        if (parts.Count == 1 && parts[0].Expression) return parts[0].Text.Trim();
-        var joined = string.Join(" + ", parts.Select(p => p.Expression ? (Atom(p.Text.Trim()) ? p.Text.Trim() : "(" + p.Text.Trim() + ")") : Literal(p.Text)));
+        if (parts.Count == 1 && parts[0].Expression) return scoped(parts[0].Text.Trim());
+        var joined = string.Join(" + ", parts.Select(p => p.Expression ? (Atom(scoped(p.Text.Trim())) ? scoped(p.Text.Trim()) : "(" + scoped(p.Text.Trim()) + ")") : Literal(p.Text)));
         // Two bindings first ("{{ 1 }}{{ 2 }} itens"): 1 + 2 would add two numbers ("3 itens"); the empty text first makes every
         // + a join, so the page shows what the line says ("12 itens"). The reading writes it back as that expression.
         return parts.Count > 1 && parts[0].Expression && parts[1].Expression ? "\"\" + " + joined : joined;
@@ -511,7 +551,7 @@ public static class ScreenHtml
 
     // An expression that needs no parentheses beside a +: a name, a member, a call, a literal (nothing at its top level but
     // name characters, dots and the groups of its calls).
-    private static bool Atom(string expression)
+    internal static bool Atom(string expression)
     {
         if (expression.Length == 0) return false;
         var depth = 0; var inString = false;

@@ -582,8 +582,8 @@ export const PROTECTED_TOOL_CLAUSES = Object.freeze({
       clauses: ["Execution delete {host, confirmationToken, words}: words name extension and every consumer"], review: "1f3249bebab757e447e6cac1ea060050dcd5fdd4b15d739cf578a86971c5c17f" },
   ],
   "ssam_reference": [
-    { sentence: "query is text or an object per kind: api \"IForEachNode\" | {name, catalog?} | {op, name?} (a grammar such as logic, or a job verb such as create: its line; name: that key of it, else the ops that have it) | {op:\"native\", type}; functions \"Name\" | \"Name1 Name2 ...\" (up to 40 names in ONE call: each signature, and the closest names of a name that does not exist) | {name}|{names:[...]}|{find}; ui-block \"Block\" | {catalog?, name}|{catalog?, find} (catalog: library name such as OutSystemsUI, default OutSystemsUI); types {assembly, filter, max?}; where-can \"IInterface\"; recipe \"text\" | {find, ops?, max?} (ops without max: 20); verify-message \"Id\" | {name}|{find}; check-job: absolute path or the job object itself (stored under <lane>/jobs/inline), or {basedOn, patch?, job?} (a patch by index or by name, or a partial job, over an earlier job: answers name nextBasedOn); a job that names its base is checked over it, every phase at once as a delivery refuses (problems[] with phase, pointer, fix, patch, patchByName; verifyRan), one without base is read alone (verifyRan:false); check-delivery: {taskId} of an o11_deliver answer, or the absolute path of its result.json; an unknown query field answers the closest valid form; example \"<id>\" | {id}|{find}: a whole proven example by id (a job of the lane suite, e.g. \"timer-action\", or an html source, e.g. \"html/visual/block-event.html\"); rules \"all\" | \"<section number, words of a heading or of the text>\" | \"standards\" | {doc?: \"team\"|\"standards\", section?}: the team rules to read before generating or changing modules (how to work, standards, platform lessons; standards: the 35 OutSystems standards rules), the same text on both lanes.",
-      clauses: ["rules query session returns all session rules (or a section number/heading words)"], review: "2e99c81b2b1b99ac35756fdded9b8caef6c4267fde5054c9f65297b70dcaae28" },
+    { sentence: "verify-message \"Id\" | {name}|{find}; check-job: absolute path or the job object itself (stored under <lane>/jobs/inline), or {basedOn, patch?, job?} (a patch by index or by name, or a partial job, over an earlier job: answers name nextBasedOn); a job that names its base is checked over it, every phase at once as a delivery refuses (problems[] with phase, pointer, fix, patch, patchByName; verifyRan), one without base is read alone (verifyRan:false); check-delivery: {taskId} of an o11_deliver answer, or the absolute path of its result.json; an unknown query field answers the closest valid form; example \"<id>\" | {id}|{find}: a whole proven example by id (a job of the lane suite, e.g. \"timer-action\", or an html source, e.g. \"html/visual/block-event.html\"); rules \"all\" | \"<section number, words of a heading or of the text>\" | \"standards\" | {doc?: \"team\"|\"standards\", section?}: the team rules to read before generating or changing modules (how to work, standards, platform lessons; standards: the 35 OutSystems standards rules), the same text on both lanes.",
+      clauses: ["rules query session returns all session rules (or a section number/heading words)"], review: "e117b5c204b5d9614465ccd7adc01c7898c49e9e5ed49a9b5f1691c1c68f2a19" },
   ],
   "ssam_evidence": [
     { sentence: "Secrets (password, token, secret, authorization, cookie, authorize words) come back as [redacted].",
@@ -931,7 +931,7 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "description": "6b4a87ebe03bb36625ffd655052f8ed4642056e436c95c7b3b3f7b3e7f579744",
     "/properties/module": "6bffbad00d2fd7668c0a88f18ed5bd96e28f5304011f0623964b5928222101a3",
     "/properties/job": "5cdec7c562108a674b5ec8e91a95a69eac969cc04a969c5b343478b80068fc77",
-    "/properties/patch": "dd08cf9b6a65137e730eb0b75befedc6c85140751793736efbb42a45300ca62d",
+    "/properties/patch": "712cc2860ddb686e132e1088f4dba092da5bcaf21947b7cbe20a45c61d1863e0",
     "/properties/basedOn": "ea91e3f1d06a30e285bf6e01eb8b8abe51b498b6dac3d4792e9ec57fce69bc35",
     "/properties/checks": "33f5cff149da9949faab9df61c086bf77a32e65edac0791aaced79b3debc7d80",
     "/properties/until": "d4dd558f74f983d052db2a3b775d8a4abe8694a82e571f2cb67973de2f5eba26",
@@ -941,7 +941,8 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/resume": "5c84e7e61d254bad8eb4f748d1013eeb7f8e838f32c3ca840f3056ef6e448783",
     "/properties/closePrevious": "b51b6e3594e66ca9ed078ca74ed7e99a5ad39f9866dd0bc9b24981f6c585b9d1",
     "/properties/publish": "7ecadc10376380f5d7402affb416ac9a2d1044c09b362e2b5e963d72e4b5a0b5",
-    "/properties/authorize": "419e914cb0df22e537ae87f61a4f2dd5d93d41c39b4561209d70cbd093507ecf"
+    "/properties/authorize": "419e914cb0df22e537ae87f61a4f2dd5d93d41c39b4561209d70cbd093507ecf",
+    "/properties/close": "aa7d61fa95eb78beff2243fde623da5aa1a0f8583e9d17fbbf8d3395ec3e2075"
   },
   "o11_studio": {
     "description": "8c3b845fe030195c0731023282df474a48a801f6eea8b279c4b63e21eaff1bb3"
@@ -992,7 +993,7 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/confirmHost": "bb17132a97c7512735d5a05b4de1de8bb6ec7a38f5294e88f27d05075157a4d7"
   },
   "ssam_reference": {
-    "description": "da9df0e71672ca3b0b94851e3acce7862461a5f11c3573d23daf01d0061c4fe0"
+    "description": "6a2a9977d1f38258e8a86f54ec2ddc6250cde934ba92a65b3c1e45a2e53d8ee5"
   },
   "ssam_evidence": {
     "description": "84fffae0f33f13e73d50d99d657c9a5d572403b469087df795a6f4e30fc99e6f",
@@ -1001,11 +1002,11 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/budgetBytes": "50963ffed52dd8d5e8773220817e5648bb56725d0cc87e2d8b6745b66a25e642"
   },
   "ssam_discover": {
-    "description": "efe2252d044a1c65089c27d7ada0a2caec3d10f85a2a3eaf7a84e5a1f79c297c",
-    "/properties/budgetBytes": "3c955cd340c665eb7f0dd30de6ade01062c53f30e8a094767baddd29440ceb74"
+    "description": "a15784930698af510d83bd52356dcc2a330ed5f4a68a20cc4c94959a7b0ad4c2",
+    "/properties/budgetBytes": "35fea872bf69c68a2b0c10fe1517217860c18f84534837b3692b2d72f7cc0304"
   },
   "ssam_map": {
-    "description": "6bcba48bd4ea02d03b7eb609225c061599a0df3b7f3ab87a3b8bb1aedc59d868",
+    "description": "b72f35a1b03c1f7451b4c8086e65330ebd48173c3166133699f5ca905da57f43",
     "/properties/target": "1b1f6e7f8d4bdb11dd1b43b18034db4788fd5bec7df6fe416ae288d71bfac8f8",
     "/properties/view": "95c1f978c9426e510351028d15f3cb57f907e738ba848d0cb7ea135acf8b30c1",
     "/properties/screen": "3ffb7722507cee7f8c274ee14d74744d1afc2cd9f53907ddc4d00e8420b2c7b8",
@@ -1050,7 +1051,7 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/publish": "e848d58ffeaff24601911a8fbdcb402be639d42be33b8f835d8537c4c001ed4b",
     "/properties/authorize": "3450d7c52d8d4921f9e87d28353683d4cc45f7851651a1680a0edf099ec49453",
     "/properties/pid": "9405b7e9036be8125c6f9d3dfe0b41b680ea65f2716c98548d51f169ff86724e",
-    "/properties/patch": "745202e10df72881be20398abab988feeca2f41cc7907b5e3bb31880690d43de",
+    "/properties/patch": "a0c0e5a92a37ad1eb612c40a6d73f308ebed444bcc384672369b83374026232b",
     "/properties/basedOn": "10df00f865c60264ad7b23b5eb45c683a5c8e0495f4a4a56b78bd1adb246f188",
     "/properties/producers": "948b9be060a9f844b7d4e0f0aca912a15bfa8c1cc10e64fe35c9f748aed904cf"
   },
@@ -1206,12 +1207,13 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/pid": "d7ef0c080dc240ec7d02fb74608defa5efd78e66757cffaf5a0eb9a0d0cdf670",
     "/properties/budgetBytes": "dc605a8de0c78822268a0ec5a17e52e0900ec68eb46e50fa62eb15db6d7801f4",
     "/properties/expectedSourceSha256": "3926de10b7e5240bb3b10673de5e92d46db35aab07969d1c9710fc232ecdbdc0",
-    "/properties/keys": "5a7c21d80c62092eeca142e32a42a35f7348eb2f953d10b346d17c55d90726ce"
+    "/properties/keys": "5a7c21d80c62092eeca142e32a42a35f7348eb2f953d10b346d17c55d90726ce",
+    "/properties/draft": "9f478f75080e976130037d287c205cf9e9f6d408fb3b973261ac6444b13f8f97"
   },
   "o11_job": {
     "description": "93c563e147077b5549d33c218d8e39aee1a44bb0cb82c8a27bec575bac6cca3a",
     "/properties/job": "1c2ab3f1fe44fa965b09dfb8d70bc015a2495908e49c42c7087d27e419f14929",
-    "/properties/patch": "745202e10df72881be20398abab988feeca2f41cc7907b5e3bb31880690d43de",
+    "/properties/patch": "a0c0e5a92a37ad1eb612c40a6d73f308ebed444bcc384672369b83374026232b",
     "/properties/basedOn": "10df00f865c60264ad7b23b5eb45c683a5c8e0495f4a4a56b78bd1adb246f188",
     "/properties/producers": "29b2eda0e111d0ba2a2056c4d3a13035c56a11eb814a70b94779976c6a464cc6",
     "/properties/captureProducers": "222c30ce35b82f2cc60a76ff992f6ada3acc972ea545d42879b69fb6eb166092"
@@ -1219,7 +1221,7 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
   "ssam_job": {
     "description": "6e0e3e10c31f1e60417b4346f4a1ad95e1b181878ad21de1546a96ce462dd557",
     "/properties/job": "1c2ab3f1fe44fa965b09dfb8d70bc015a2495908e49c42c7087d27e419f14929",
-    "/properties/patch": "745202e10df72881be20398abab988feeca2f41cc7907b5e3bb31880690d43de",
+    "/properties/patch": "a0c0e5a92a37ad1eb612c40a6d73f308ebed444bcc384672369b83374026232b",
     "/properties/basedOn": "10df00f865c60264ad7b23b5eb45c683a5c8e0495f4a4a56b78bd1adb246f188",
     "/properties/producers": "29b2eda0e111d0ba2a2056c4d3a13035c56a11eb814a70b94779976c6a464cc6",
     "/properties/captureProducers": "222c30ce35b82f2cc60a76ff992f6ada3acc972ea545d42879b69fb6eb166092"
@@ -1238,15 +1240,15 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
 export const TOOL_LISTING_OVERRUN_BYTES = Object.freeze({
   "o11_service_center_read": 1072,
   "o11_service_center_write": 3543,
-  "o11_deliver": 600, // marco-a6 (X3): +83 B, the autoPatch parameter's rule served whole ("false: offer verified repairs without applying them automatically."); fix/prototype-off: -103 B, the prototype import clause out (the op is turned off)
+  "o11_deliver": 572, // integ/proto-into-product: -25 B, the proto line's fix parameter listed without a text (a refusal's fixCall gives it) and its close text shortened; marco-a6 (X3): +83 B, the autoPatch parameter's rule served whole ("false: offer verified repairs without applying them automatically."); fix/prototype-off: -103 B, the prototype import clause out (the op is turned off); integ/proto-traditional: -3 B, "max 500" patches in place of "at most 50"
   "o11_extension": 1633,
-  "studio_deliver": 296, // fix/system-reference: +109 B, the producers bindings O11 already has ({Name: capture}), shortened; marco-a6 (X3): +83 B, the autoPatch parameter's rule served whole; fix/prototype-off: -104 B, the prototype import clause out (the op is turned off)
+  "studio_deliver": 293, // fix/system-reference: +109 B, the producers bindings O11 already has ({Name: capture}), shortened; marco-a6 (X3): +83 B, the autoPatch parameter's rule served whole; fix/prototype-off: -104 B, the prototype import clause out (the op is turned off); integ/proto-traditional: -3 B, "max 500" patches in place of "at most 50"
   "odc_asset_revision": 165,
   "odc_write": 1550,
   "odc_configurations": 197,
   "odc_external_db_connection": 1242,
   "odc_external_library": 1233,
-  "ssam_code": 811,
+  "ssam_code": 898, // integ/proto-into-product: +87 B, the proto line's incremental write (actions draft and part, the draft parameter) and its fix parameter without a text
   "o11_data": 1272, // CX13 review 7 (R7-6: missing rows insert, update too unless insertMissing:false); review 6: file-load clauses in, the batch op's repeated texts out, load options listed with their cheapest schema (was 1850)
   "o11_environment": 822,
   "odc_a2a_connection_delete": 820,
@@ -1396,12 +1398,12 @@ export const TOOL_LISTING = Object.freeze({
     }
   },
   "o11_deliver": {
-    "sourceSha256": "9d4dccfb9d29a11b419a18db18e9a5d9950f4d862c310e12db5c74f01bd9e4d9",
+    "sourceSha256": "d8046c5ead8054cd705649050d6ecfa54d36819551deb1917b7e9c3d9772a549",
     "description": "ONE module, ALL changes/job, never one action/step per call; validates before mutation; words or module grant required. Refusal:patch + basedOn, never whole job. Uncertain:never repeat; follow continuation; resume reconciles same task. module:open (or to open) module or label like GameStore CS; required unless resume/close; basedOn.taskId defaults it to that task's module. checks:names that must exist after merge. publish:clean merge, same words/grant; failed publish never redelivers. expectedEnvironment:bare host Studio must be on. Full text:ssam_reference kind tool.",
     "params": {
       "/properties/module": null,
       "/properties/job": "Absolute path or inline job; basedOn: changed/new elements only (same name replaces); required unless resume/close/patch.",
-      "/properties/patch": "Instead of job: JSON Patch (add/remove/replace/test, at most 50) or verified (the refusal's patches) over basedOn; named/index paths; stores new job.",
+      "/properties/patch": "Instead of job: JSON Patch (add/remove/replace/test, max 500) or verified (the refusal's patches) over basedOn; named/index paths; stores new job.",
       "/properties/basedOn": "Prior nextBasedOn {job,sha256}, or refused {taskId}.",
       "/properties/checks": null,
       "/properties/until": "apply: fresh validation without merge, only when person asks.",
@@ -1411,7 +1413,8 @@ export const TOOL_LISTING = Object.freeze({
       "/properties/resume": "Prior taskId; retains module/job/checks/producers.",
       "/properties/closePrevious": "Close refused taskId before new delivery; never an uncertain task.",
       "/properties/publish": null,
-      "/properties/authorize": "Verbatim user words, sha256 only; absent: module grant, else nothing runs."
+      "/properties/authorize": "Verbatim user words, sha256 only; absent: module grant, else nothing runs.",
+      "/properties/close": "Alone: close {taskId,reason} of a refused task."
     }
   },
   "o11_studio": {
@@ -1471,7 +1474,7 @@ export const TOOL_LISTING = Object.freeze({
     }
   },
   "ssam_reference": {
-    "sourceSha256": "7b6882389a34df195aaa7c2a7e27a4064ecec377dc012b9945d1cf1bdde146a6",
+    "sourceSha256": "5972fe80c151d3f4b43a25bf27fba9f9e2167570defe2028d39b05153f6e054f",
     "description": "Read exact SSAM references: api, functions, ui-block, types, where-can, recipe, check-job, check-delivery, verify-message, example, rules, tool. rules query session returns all session rules (or a section number/heading words); tool query <tool> returns its complete original description/schema. Use lane and the discovered contract; unsupported lane kinds name the available route.",
     "params": {}
   },
@@ -1486,13 +1489,13 @@ export const TOOL_LISTING = Object.freeze({
   },
   "ssam_discover": {
     "sourceSha256": "3a8b71d61f19902c959128c39aa16aed9f1825f38a1697d3126f6469adeed7c7",
-    "description": "Start EVERY SSAM request here, model change or not. `tools` gives the exact MCP tool, its verb and arguments; matches gives model capabilities, contracts and proven examples. app adds module context; packet:true is the work packet for an agent (text forms, rules, ready next call): default 8192 bytes, maximum 28672; MCP clamps higher budgets. expand/detail recover named parts; catalog groups tools. Read-only; work from the answer without rereading source/docs.",
+    "description": "Start EVERY SSAM request here, model change or not. `tools` gives the exact MCP tool, its verb and arguments; matches gives model capabilities, contracts and proven examples. app adds module context; packet:true is the work packet for an agent (text forms, rules, ready next call): default 24576 bytes, maximum 28672; MCP clamps higher budgets. expand/detail recover named parts; catalog groups tools. Read-only; work from the answer without rereading source/docs.",
     "params": {
-      "/properties/budgetBytes": "UTF-8 bytes: first answer 5120; packet default 8192, maximum 28672; MCP clamps higher requests; size.truncated carries the exact call."
+      "/properties/budgetBytes": "UTF-8 bytes: first answer 5120; packet default 24576, maximum 28672; MCP clamps higher requests; size.truncated carries the exact call."
     }
   },
   "ssam_map": {
-    "sourceSha256": "929be972cf1a80ec6efb283aaf3dfa813b20eacbad2597f5adf688ec9185ae5a",
+    "sourceSha256": "0978d6ad93c6cdcdf6fc376f12e0a424e172c41375606c49927ef31fd3399d7d",
     "description": "Read capture/open module; search/uses also module lists. map @keys/kinds/children; digest/ddl pages:1 overview+contents; flow=logic action(s); html screen/block name/Kind:Name/@key or list, k->ObjectKey always keysFile, keys adds inline. search case-insensitive text/JS regex/property; uses references. Detail adds expressions/references/anonymous types. Follow hashed continuations. name(exact)/prefix:case-insensitive; kind:I-less e.g. MobileScreen, list or *; parent:direct children; pid:auto if exactly one. ssam_code writes these forms (flow text: a line left out is deleted). Full text:ssam_reference kind tool.",
     "params": {
       "/properties/target": "Capture/module; search/uses also module lists.",
@@ -1541,14 +1544,14 @@ export const TOOL_LISTING = Object.freeze({
     }
   },
   "studio_deliver": {
-    "sourceSha256": "ecf279e31c74ad7689e0c4bc151925ff2eb79f7b338996de93b8f9df895cd240",
+    "sourceSha256": "38bee43a9c9316deaee3759180cb2f284a7dfa70ba8467b7b70931499e4e8616",
     "description": "Deliver EVERY requested change of ONE ODC module in one job: capture, build, validate and merge. Refusal returns all problems and nextBasedOn: patch + basedOn or changed elements only; never resend whole job. publish also publishes after clean merge, authorize or grant required; failed publish never redelivers. until=build/check-base/preview only when the person asks. ddl/logic/html text uses this same pipeline. Uncertain merge/publication: never retry, read receipt first.",
     "params": {
       "/properties/job": "Inline job or absolute/relative JSON path; with basedOn only changed/new elements (same name replaces).",
       "/properties/publish": "Alone: Publish after clean merge; requires until merge.",
       "/properties/authorize": "Alone: user words verbatim naming the app; else standing grant, else refused before build.",
       "/properties/pid": "Studio process ID; inferred when exactly one.",
-      "/properties/patch": "Instead of job: JSON Patch (add/remove/replace/test, at most 50) or verified (the refusal's patches) over basedOn; named/index paths; stores new job.",
+      "/properties/patch": "Instead of job: JSON Patch (add/remove/replace/test, max 500) or verified (the refusal's patches) over basedOn; named/index paths; stores new job.",
       "/properties/basedOn": "Prior job {job,sha256} from nextBasedOn (partial job: only changed/new elements), or O11 delivery {taskId}.",
       "/properties/producers": "Captures {Name: absolute .avsig/.oml path or \"published\"}; else captured from the session."
     }
@@ -1697,7 +1700,7 @@ export const TOOL_LISTING = Object.freeze({
     }
   },
   "ssam_code": {
-    "sourceSha256": "dcd44995fd7458edc9bc756cd4b0edb3b80a9206ea8ddde793b3cb4e2fc5ae28",
+    "sourceSha256": "478e66cde4eb4c91b2ca70f90c8a37df2bae4ebe40be4d296977dc442adf83e1",
     "description": "SQL DDL ssam-ddl/1, not CREATE TABLE;pseudocode ssam-flow/1;HTML ssam-html/1. grammar:syntax/example;read:module/OML,element,page;expectedSourceSha256 drift refuses. write:DDL delta/full logic/HTML k;also;ops:raw {op:create,...} first or alone job. One-meaning call shapes are normalized, never refused. Order:data,new UI,actions,UI edits;plan only:items/element,shared absolute ddl/json,workers batches;check only:latest capture,base absolute OML,stubs absolute flow/html signatures. O11:o11_deliver;checks must exist;captureProducers read-only;expectedEnvironment:bare host Studio must be on;closePrevious:o11 refused taskId to close first. ODC feature/changes default from the code; owners default: names it creates or changes;tenant:ODC tenant host;keys:k->ObjectKey. publish:clean merge+words/grant;authorize:verbatim user words;patch:JSON Patch/verified. Refusal: patch + basedOn, never whole text. html edits:[{set|replace|delete|after|before|into|move:k,...},{find,with}] with element+basedOn {capture,html} change only those elements; refused/checked job: basedOn {job,sha256}, element, edits [{find,with}]. Full text:ssam_reference kind tool.",
     "params": {
       "/properties/lane": null,
@@ -1739,26 +1742,27 @@ export const TOOL_LISTING = Object.freeze({
       "/properties/pid": null,
       "/properties/budgetBytes": null,
       "/properties/expectedSourceSha256": null,
-      "/properties/keys": null
+      "/properties/keys": null,
+      "/properties/draft": "draft {module}; part {draft,part,text} checks; write {draft} delivers."
     }
   },
   "o11_job": {
-    "sourceSha256": "e3059999daf4a386a7a8010ce1b17f82fa541c66e6bd4d82b20cd0a8f6b1a0f7",
+    "sourceSha256": "9bb993fc03f17807f4431b5df1eb3735bb1338d1d9f3c820aa7a7171f20d8a21",
     "description": "Prove an O11 job on a fixture only when requested. Validates all phases and returns all problems once and nextBasedOn. A failed run also returns `discovery`. Correct with patch + basedOn or changed elements only; never resend whole job. Does not deliver to Studio.",
     "params": {
       "/properties/job": "Inline job or absolute/relative JSON path; with basedOn only changed/new elements.",
-      "/properties/patch": "Instead of job: JSON Patch (add/remove/replace/test, at most 50) or verified (the refusal's patches) over basedOn; named/index paths; stores new job.",
+      "/properties/patch": "Instead of job: JSON Patch (add/remove/replace/test, max 500) or verified (the refusal's patches) over basedOn; named/index paths; stores new job.",
       "/properties/basedOn": "Prior job {job,sha256} from nextBasedOn (partial job: only changed/new elements), or O11 delivery {taskId}.",
       "/properties/producers": "Producer bindings {Name: absolute frozen .oml/.avsig path}.",
       "/properties/captureProducers": "Read-only producer captures: Name or Name=Producer."
     }
   },
   "ssam_job": {
-    "sourceSha256": "fa87c632c0aff8e41be6eaa096ee675c8404973c15a3bd99494c36818e9b81da",
+    "sourceSha256": "e5e21810523e589272efc719ab539e56350dd1da652a9ff1f967a53200ea2ccb",
     "description": "Prove an O11/ODC job on a fixture only when requested. Validates all phases and returns all problems once and nextBasedOn. A failed run also returns `discovery`. Correct with patch + basedOn or changed elements only; never resend whole job. Does not deliver to Studio.",
     "params": {
       "/properties/job": "Inline job or absolute/relative JSON path; with basedOn only changed/new elements.",
-      "/properties/patch": "Instead of job: JSON Patch (add/remove/replace/test, at most 50) or verified (the refusal's patches) over basedOn; named/index paths; stores new job.",
+      "/properties/patch": "Instead of job: JSON Patch (add/remove/replace/test, max 500) or verified (the refusal's patches) over basedOn; named/index paths; stores new job.",
       "/properties/basedOn": "Prior job {job,sha256} from nextBasedOn (partial job: only changed/new elements), or O11 delivery {taskId}.",
       "/properties/lane": "o11 (default) or odc.",
       "/properties/producers": "Producer bindings {Name: absolute frozen .oml/.avsig path}.",

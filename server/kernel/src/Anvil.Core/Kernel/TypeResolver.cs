@@ -38,11 +38,11 @@ public static class TypeResolver
         {
             // A list the module already has under exactly this name: a list of an anonymous record ("Order Record List", the
             // output of an aggregate, whose element is the record {Order}), which no name below builds.
-            var named = es.ListTypes.FirstOrDefault(l => string.Equals(Name(l), s, StringComparison.OrdinalIgnoreCase));
-            if (named != null) return named;
+            var named = es.ListTypes.Where(l => string.Equals(Name(l), s, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (named.Count > 0) return OneOf(es, named);
             var elem = Resolve(es, s[..^" List".Length]);
-            var list = es.ListTypes.FirstOrDefault(l => ReferenceEquals(l.ElementType, elem) || string.Equals(Name(l.ElementType), Name(elem), StringComparison.Ordinal));
-            return list ?? es.GetOrCreateListType(elem);   // cria a lista se ainda nao existe (respostas REST em array, variaveis de lista)
+            var lists = es.ListTypes.Where(l => ReferenceEquals(l.ElementType, elem) || string.Equals(Name(l.ElementType), Name(elem), StringComparison.Ordinal)).ToList();
+            return lists.Count > 0 ? OneOf(es, lists) : es.GetOrCreateListType(elem);   // cria a lista se ainda nao existe (respostas REST em array, variaveis de lista)
         }
         var rec = s.EndsWith(" Record", StringComparison.OrdinalIgnoreCase) ? s[..^" Record".Length].Trim() : s;
         var entity = FindEntitySignature(es, rec);
@@ -59,6 +59,20 @@ public static class TypeResolver
             .FirstOrDefault(x => string.Equals(Name(x), rec, StringComparison.OrdinalIgnoreCase));
         if (common is ITypeSignature commonType) return commonType;
         throw new KeyNotFoundException($"unknown type: {spec}");
+    }
+
+    /// <summary>The list type a name gives when the module has it more than once. ODC Studio 1.7.29 (model 13.1451) adds the list
+    /// types of its new system records (Agent*) to a module it loads beside the ones the module keeps, so a module that had a
+    /// Text List has two, both the list of Text: one type, and the platform's own (GetOrCreateListType of that element, which
+    /// creates nothing when the list exists) answers, on every load the same. Lists whose elements differ keep the first, as
+    /// before.</summary>
+    private static IListType OneOf(IESpace es, List<IListType> lists)
+    {
+        if (lists.Count == 1) return lists[0];
+        var element = lists[0].ElementType;
+        if (element == null || !lists.All(l => ReferenceEquals(l.ElementType, element))) return lists[0];
+        var platform = es.GetOrCreateListType(element);
+        return lists.FirstOrDefault(l => ReferenceEquals(l, platform)) ?? lists[0];
     }
 
     public static IBasicType? Basic(IESpace es, string s) => s.Replace(" ", "").ToLowerInvariant() switch

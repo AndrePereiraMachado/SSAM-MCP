@@ -109,7 +109,7 @@ test('malformed patches are PATCH_INVALID with the operation index', () => {
   // patch-por-nome: a path without the leading / is the same path (a path by name reads as one)
   assert.deepEqual(applyJobPatch(JOB, [{ op: 'replace', path: 'ops/0/name', value: 'x' }]), applyJobPatch(JOB, [{ op: 'replace', path: '/ops/0/name', value: 'x' }]));
   const many = Array.from({ length: PATCH_MAX_OPS + 1 }, () => ({ op: 'test', path: '/ops/0/op', value: 'create' }));
-  assert.match(thrown(() => applyJobPatch(JOB, many)).message, /at most 50/);
+  assert.match(thrown(() => applyJobPatch(JOB, many)).message, /at most 500/);
   assert.doesNotThrow(() => applyJobPatch(JOB, many.slice(1)));
   // the result is still a job: ops left, each an object
   assert.match(thrown(() => applyJobPatch(JOB, [0, 1, 2].map(() => ({ op: 'remove', path: '/ops/0' })))).message, /no ops left/);
@@ -220,7 +220,9 @@ test('the provenance goes to the journal only; the patched job carries none of i
   const journalDir = path.join(s.base, '.local', 'journal');
   const patched = resolvePatchedJob({ patch: [{ op: 'remove', path: '/ops/2' }], basedOn: { job: s.job, sha256: sha256(s.bytes()) } },
     { inlineDir: s.inlineDir, uuid: s.uuid, journalDir, tool: 'o11_job', now: () => new Date('2026-10-03T12:00:00Z') });
-  const lines = fs.readFileSync(path.join(journalDir, 'job-patch.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  // F7: every journal line also names its session (correlationId; operationId inside a call); the provenance is unchanged.
+  const lines = fs.readFileSync(path.join(journalDir, 'job-patch.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    .map(({ correlationId, operationId, ...line }) => { assert.match(correlationId, /^[0-9a-f-]{36}$/); return line; });
   assert.deepEqual(lines, [{ at: '2026-10-03T12:00:00.000Z', event: 'patch', tool: 'o11_job', job: patched.path, jobSha256: patched.sha256,
     basedOn: { job: s.job, sha256: sha256(s.bytes()) }, patchOps: 1 }]);
   const written = fs.readFileSync(patched.path, 'utf8');
@@ -297,10 +299,10 @@ test('jobIdentity names an array job (jobShape), whose patch paths are /<i>/...'
 });
 
 test('the JSON Schemas of patch and basedOn match the zod shape the tools declare', () => {
-  // A written patch (at most 50), or "verified": every verified patch of the refusal of that job.
+  // A written patch (at most 500 since 20/10/2026, meta item 4), or "verified": every verified patch of the refusal of that job.
   const written = patchJsonSchema.anyOf.find(x => x.type === 'array');
   assert.deepEqual(patchJsonSchema.anyOf.find(x => x.type === 'string').enum, ['verified']);
-  assert.equal(written.maxItems, 50); assert.deepEqual(written.items.properties.op.enum, ['add', 'remove', 'replace', 'test']);
+  assert.equal(written.maxItems, 500); assert.equal(PATCH_MAX_OPS, 500); assert.deepEqual(written.items.properties.op.enum, ['add', 'remove', 'replace', 'test']);
   assert.equal(written.items.additionalProperties, false); assert.deepEqual(written.items.required, ['op', 'path']);
   assert.deepEqual(basedOnJsonSchema.anyOf.map(s => s.required), [['job', 'sha256'], ['taskId']]);
   assert.ok(basedOnJsonSchema.anyOf.every(s => s.additionalProperties === false));

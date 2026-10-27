@@ -11,6 +11,19 @@ Ferramentas: `o11_service_center_session/read/write` (O11) e `odc_read`, `odc_wr
 
 O SSAM nunca abre a janela de login do Studio nem um navegador.
 
+Para preparar credenciais do Service Center mesmo com o Studio aberto, use
+`o11_service_center_session {action:"sign-in", host:"<host>", session:"vault"}`.
+A janela privada permite selecionar ou adicionar um perfil compatível com o usuário
+autenticado no Studio. `CREDENTIAL_SELECTION_PENDING` significa que a janela está
+aberta; repita a mesma chamada após salvar. `authPrompt:"never"` impede a abertura.
+O retorno confirma a credencial guardada, não a autenticação no Service Center;
+a leitura seguinte confirma o acesso. Nenhuma sessão do Studio é fechada ou alterada.
+
+Algumas versões O11 devolvem a página autenticada ainda na URL `Login.aspx` após
+o POST de login. Nessa resposta específica, o adaptador aceita a página somente
+com controle de logout e sem formulário de senha nem layout de login. As leituras
+protegidas seguintes mantêm a detecção estrita de sessão expirada.
+
 ## Primeira chamada sem credencial
 
 - **O11:** abre a janela `windows-o11-credential.ps1 -Mode bootstrap` ("Service Center login for <host>").

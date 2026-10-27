@@ -5,6 +5,58 @@ another) and to anyone on the team. Read them before generating or changing O11 
 
 ## 1. How to work
 
+### Traditional official components from the first delivery
+
+UI task packets (a UI text route, a first direct match that is UI, or a screen request) expose `uiCatalog` in the room
+they have left. Data/logic/operation packets keep their budget for the requested code; the same explicit lookup is always available.
+Use `ssam_discover {lane, expand:"osui:<appType>"}`: o11-traditional includes OutSystemsUIWeb AND RichWidgets;
+o11-reactive/o11-mobile use the compatible OutSystemsUI catalog, and odc-reactive/odc-mobile use the ODC revision.
+Expand a component for its inputs, placeholders and native instance recipe; `osui:o11-traditional/actions:Feedback_Message`
+returns the action contract (not the similarly named block). Catalog/fixture presence is not browser or task-behavior proof.
+For any language, interpret the user's meaning, negations and context before choosing components. Keyword results are
+suggestions, never a capability gate. With `traditionalTask`, provide `resolution:[{pattern,evidence}]`, where evidence
+is an exact excerpt of the original request. This records the agent's interpretation; it is not an automatic language
+detector. A request without keyword matches returns the resolution route, not a denial of support.
+
+Task-level authoring: use the Traditional packet's `taskPlan` for the requested behaviors, not a generic gallery.
+`ssam_reference` kind `recipe`, query `{traditionalTask: "the user's UI request"}` returns contracts and integration steps.
+Its `bind` form builds native component ops from resolved parameters; `implement` compiles pagination, success-feedback,
+informational modal, tabs or accordion behavior from resolved bindings. Read `plan.compile` for the contract and limits.
+Tabs/accordion currently accept expression content; they do not compile arbitrary nested forms or their save flows. Other patterns remain
+guided authoring; never call their presence in the catalog proof of a working task. Merge all screen/action/data changes
+in the same module delivery and keep planned, generated, native-verified, published and browser-tested status separate.
+
+Reuse the module's official layout/theme and its placeholders; do not build a second shell or menu inside MainContent.
+Read the installed OutSystemsUIWeb/RichWidgets contract before composing UI. Prefer compatible official components
+for dialogs, feedback, paging and sorting. A custom overlay is not the default substitute for a missing recipe.
+Never offer Reactive OutSystemsUI/IPopup examples for a WebResponsive module.
+
+For an explicitly requested RichWidgets.Popup_Editor: use a named Navigate link, LinkOrButtonWidgetId=Link.Id,
+a separate screen with OutSystemsUIWeb.LayoutPopup, Popup_Editor_Notify followed by Popup_Editor_Close on success,
+and OnNotify in the parent to fetch changed data and Ajax Refresh. Refresh the trigger and popup instance together.
+Native action references are IReference:Producer/IServerActionSignature:Action; Method/Validation belong to OnClick.
+Check the installed component's deprecation/device restrictions: Popup_Editor 5404 is deprecated and unsupported on
+mobile, so choose the supported responsive Modal for new responsive UI unless compatibility is explicitly required.
+For requested browser acceptance, include first load and post-Ajax controls, close/cancel, validation, data refresh,
+desktop/narrow layout and actual served CSS. Publication alone does not establish usable UI.
+
+### Traditional Web interaction methods
+
+Traditional HTML supports creation plus keyed reading/editing: `ssam_map {lane:"o11",target,view:"html",screen}`
+returns the native source with `k` and `basedOn`. Submit complete changed elements through the `html` op in one
+`o11_deliver` job; retain the children that must survive. Block inputs are `:Input`, typed handlers are `@Event`,
+legacy handlers use `onnotify`, and calls carry named argument expressions. Keep the returned native event properties
+(`os-onclick.Method`, `os-onclick.Validation`), data bindings and guards. Unknown `os-opaque` kinds retain their subtree.
+The HTML editor is not an unrestricted HTML/JavaScript importer.
+
+Use Navigate for a screen/URL and Ajax Submit for same-screen interactions (tabs, modal open/close, filters and
+pagination). Ajax does not rerun the screen Preparation: fetch changed data, update bound state, then Ajax Refresh
+the affected persistent container around the conditional content. Refreshing markup is not refreshing data.
+Use validation=None for navigation controls; keep server authorization and business validation on writes.
+Keep native upload/download on Submit. The Model API exposes Method on ILinkWidget/OnClick; a document button
+with explicit method becomes a styled native link. Preserve event arguments, guards, ordering and captions on edits.
+Test methods separately after publication; a clean publish is not evidence that an Ajax interaction ran in a browser.
+
 - **Validation only when asked.** Behavior tests, reviews and checks in the browser run only when the person asks for
   them. Do not add validation rounds on your own.
 - **An error goes back to the model.** When a delivery tool returns verifier errors (TrueChange), it delivers nothing.
@@ -25,6 +77,14 @@ another) and to anyone on the team. Read them before generating or changing O11 
   written by the development setup. Never commit your values in `tenants.json`.
 - **No long runs.** No hours-long flows nor full suites repeated without need. Prefer the smallest test that answers the
   question and say beforehand how long it takes.
+
+### O11 Reactive/Mobile: role checks run on the server
+
+A native role action such as `CheckApproverRole` cannot be called directly as a node in a client/screen flow. Native
+verification can accept the link, then merge clears its destination. Use a server action that checks `GetUserId()` and
+returns the permission; load it through a Data Action. Keep an independent server-side permission check on every
+business write. `ROLE_ACTION_REQUIRES_SERVER` refuses a direct client call before delivery. The example
+`pat-role-check-screen` shows the complete composition.
 
 ### Jobs in a file (local) and inline (hosted)
 
@@ -117,9 +177,21 @@ Inside the loop, `ListFilter(GetOrdersWithLines.List, OrderLine.OrderId = GetOrd
   delivery over a base that does not compile compiles.
 - **AGGREGATES_MERGEABLE (HIGH warning)**: two or more aggregates in the same flow or on the same screen, over the same
   entity or entities linked by a reference attribute, used together. The warning names the aggregates, the relation
-  (`Entity.Attribute -> Entity`) and suggests the single aggregate (sources + join + filters). A03: it does not block,
+  (`Entity.Attribute -> Entity`) for semantic review; it does not emit replacement operations. A relationship alone does
+  not prove equivalence of authorization, transaction locks, intervening calls/writes, dependent filters, independent
+  pagination/counts or join cardinality. Preserve the queries until those semantics are proved. A03: it does not block,
   but it comes first in `warnings` and also in `highWarnings`, in the compact answer of `studio_deliver`, `o11_deliver`,
   `ssam_job` and `o11_job`. On different screens it does not count.
+
+### Explicit exception for screen JavaScript
+
+New JavaScript normally belongs in an isolated, named client action. An explicitly authorized exception can be
+declared on a `logic`, `create`, `duplicate` or `move` op as `allowScreenJavaScript` with `module`, `screen`,
+`actions` (a nonempty list of exact action names) and `why` (at least 15 characters). The loaded module and the
+action's owner must match the scope. It is recorded as `FLOW_SCREEN_JAVASCRIPT_ALLOWED` in `highWarnings`.
+It does not allow server JavaScript or suppress native verification. Use this for an explicit request such as
+calling a screen's existing actions through `$actions` in a JavaScript click wrapper; preserve parameters and
+completion/error handling. Full example: `docs/TEXTO-LOGICA.md`.
 
 ### Approved prototype: port it 1:1
 

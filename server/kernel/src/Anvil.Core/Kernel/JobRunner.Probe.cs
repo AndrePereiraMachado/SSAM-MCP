@@ -335,6 +335,9 @@ public static partial class JobRunner
             // What the refusal already says (a problem no patch fixes, found again), and what only leaving a text out made
             // fail, is not news, nor the patch's fault.
             if (said.Contains(Signature(p)) || probe.Dropped.Any(name => Word(name).IsMatch(p["message"]?.ToString() ?? ""))) continue;
+            // T16 rule 1: in a create collision's create and dependents, the round ran the other choice (the patch that uses the
+            // existing element): what it finds there is conditional on it, or the job's own when the first round found it too.
+            if (SplitByChoice(listed, p, Signature, added)) continue;
             if (cause != null)
             {
                 if (op is { } o) broken.TryAdd(o, cause);
@@ -382,8 +385,9 @@ public static partial class JobRunner
         {
             var lines = new List<string> { preflight.Message };
             lines.AddRange(added.Select(JobPreflight.Text));
+            // The code too: a multi-phase refusal keeps the primary code of its lone coded apply failure (JobRunner.Diagnosis).
             var merged = new JobPreflightException(string.Join(Environment.NewLine, lines), problems, preflight.Warnings, preflight.InnerException)
-                { VerifyRan = verifyRan, VerifyReason = verifyReason, Phases = phases };
+                { Code = preflight.Code, VerifyRan = verifyRan, VerifyReason = verifyReason, Phases = phases };
             // The normalizations of the job (lentidao 2026-10-12) stay with the refusal the round rewrote.
             Errors.AttachNormalizations(merged, normalizations);
             return merged;

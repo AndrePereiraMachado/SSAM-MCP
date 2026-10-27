@@ -114,8 +114,11 @@ public sealed partial class ModelSession
     {
         var names = new HashSet<string>(shells.Select(s => s!.ToString()), StringComparer.OrdinalIgnoreCase);
         var filled = new JsonArray();
-        for (var k = _applyIndex + 1; k < _applyOps!.Count; k++)
+        // F5: every logic op that has not run yet (after this op as written, or written before it and run after it by the
+        // composition, JobComposition).
+        for (var k = 0; k < _applyOps!.Count; k++)
         {
+            if (k == _applyIndex || (_ranOps.Contains(k) || _ranOps.Count == 0 && k < _applyIndex)) continue;
             if (_applyOps[k] is not JsonObject later || later["op"]?.ToString() != "logic" || later["data"]?["actions"] is not JsonArray declared) continue;
             foreach (var action in declared.OfType<JsonObject>())
             {
@@ -241,8 +244,14 @@ public sealed partial class ModelSession
         }
         else css = css.TrimEnd().Length == 0 ? block + "\n" : css.TrimEnd() + "\n\n" + block + "\n";
         css = TopImports(css, report);
-        if (sheet != null) ThemeCss.WriteAuthor(sheet, css); else theme.StyleSheet = css;
+        // T18: an absolute url to an OutSystems environment host the block brings (one the theme did not have) is refused.
+        var before = sheet != null ? ThemeCss.Author(sheet) : theme.StyleSheet ?? "";
+        if (ThemeCss.Introduced(before, css, $"html {blockKey}: the theme {TypeResolver.Name(theme)}") is { } refusal) throw refusal;
+        // The author's CSS of a reactive theme: the one write path (a theme with Theme Editor CSS also selects in the canvas).
+        if (sheet != null) ThemeCss.WriteAuthor(sheet, css, canvas: true); else ThemeCss.Write(theme, css);
         report["installed"] = true; report["scopedChars"] = scopedCss.Length;
+        // The basedOn of the theme now: a css op later in the same job names it.
+        report["basedOn"] = ThemeCss.BasedOn(theme);
         if (sheet != null && ThemeCss.IsSplit(sheet)) report["half"] = "UserStyleSheet";
         // What the recomposition of a split theme changed in the author CSS around the block (C23, C35), said here too.
         if (sheet != null && ThemeCss.Changed(sheet) is { } changed)
@@ -257,16 +266,11 @@ public sealed partial class ModelSession
     /// the browser ignores an @import after a rule. The text itself when they already are there, once.</summary>
     private static string TopImports(string css, JsonObject report)
     {
-        var (imports, rest) = CssCompat.Imports(css);
-        if (imports.Count == 0) return css;
-        var distinct = imports.Select(x => x.Statement).Distinct(StringComparer.Ordinal).ToList();
-        if (!imports.Any(x => x.AfterRule) && distinct.Count == imports.Count) return css;
-        var body = rest.TrimStart();
-        var charset = "";
-        if (body.StartsWith("@charset", StringComparison.OrdinalIgnoreCase) && body.IndexOf(';') is var semi and > 0)
-        { charset = body[..(semi + 1)] + "\n"; body = body[(semi + 1)..].TrimStart(); }
-        report["cssImportsHoisted"] = new JsonArray(imports.Where(x => x.AfterRule).Select(x => x.Statement).Distinct(StringComparer.Ordinal).Select(s => (JsonNode)s).ToArray());
-        return charset + string.Join("\n", distinct) + "\n" + body;
+        // T18: the import stage of the one pipeline (CssPipeline.TopImports); the theme write settles through the rest of it.
+        var (written, hoisted, merged, _) = CssPipeline.TopImports(css);
+        if (written == css) return css;
+        report["cssImportsHoisted"] = new JsonArray(hoisted.Select(x => x.Statement).Distinct(StringComparer.Ordinal).Select(s => (JsonNode)s).ToArray());
+        return written;
     }
 
     private static IEnumerable<object> Sequence(object? value, string property) => value != null && ModelHost.Prop(value, property) is IEnumerable sequence ? sequence.Cast<object>() : [];

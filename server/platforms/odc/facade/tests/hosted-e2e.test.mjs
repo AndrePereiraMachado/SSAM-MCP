@@ -87,7 +87,15 @@ const stdio = await ssam.createSsamServer({ ...ssam.servedLanes(), profile: 'all
   await local.close(); await stdio.close();
 
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'hosted-e2e-'));
-  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  // One teardown, in reverse order of setup: every closer runs even when another fails (node:test stops at the first after
+  // hook that throws, which left the server open and the process alive), and the folder goes last, with retries for a file
+  // Windows still holds for a moment after its process ended.
+  const closers = [];
+  const defer = close => closers.push(close);
+  t.after(async () => {
+    for (const close of closers.reverse()) { try { await close(); } catch { /* the next closer still runs */ } }
+    fs.rmSync(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  });
   const dir = path.join(base, 'server');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'kernel.json'), JSON.stringify({ o11: '11.55.91', odc: '1.7.28', odcBridge: ODC_BRIDGE }));
@@ -122,7 +130,7 @@ const stdio = await ssam.createSsamServer({ ...ssam.servedLanes(), profile: 'all
   process.env.SSAM_READER_CACHE_ROOT = path.join(base, 'readers');
   const port = await freePort();
   const handle = await ssam.runServed(['--port', String(port)]);
-  t.after(() => handle.close());
+  defer(() => handle.close());
   const url = `http://127.0.0.1:${port}/mcp`;
   const store = createTokenStore(dir);
   const issued = store.issue({ customer: 'E2E' });
@@ -146,14 +154,14 @@ const stdio = await ssam.createSsamServer({ ...ssam.servedLanes(), profile: 'all
     }
     return { ok: false, error: 'fake bridge: ' + command };
   });
-  t.after(() => pipe.close());
+  defer(() => pipe.close());
   // The agent's o11.connect probes the thin Anvil bridge (protocol 2, authenticated, flavor thin) already serving this pid:
   // reused, no attach.
   const bridge = await fakeBridge(request => request.method === 'ping' ? { success: true, data: { bridge: 'anvil', flavor: 'thin', pid: o11Pid, version: '11.55.91.65012' } }
     : request.method === 'bridge_manifest' ? { success: true, data: { bridge: 'anvil', flavor: 'thin', protocolVersion: 2, authentication: true } }
     : request.method === 'ui_alive' ? { success: true, data: { alive: true } }
     : { success: true, data: { method: request.method, modules: [], active: null, errors: [], windows: [] } });
-  t.after(() => bridge.close());
+  defer(() => bridge.close());
 
   const agentEvents = [];
   async function startAgent(credential, { odcVersion = '1.7.28.4021', root = agentRoot } = {}) {
@@ -176,7 +184,7 @@ const stdio = await ssam.createSsamServer({ ...ssam.servedLanes(), profile: 'all
       icacls: async () => ({ ok: true }),
     } });
     const running = Promise.resolve((agent.run ?? agent.start).call(agent));
-    t.after(async () => { await (agent.stop ?? agent.close)?.call(agent); await running.catch(() => {}); });
+    defer(async () => { await (agent.stop ?? agent.close)?.call(agent); await running.catch(() => {}); });
     return { agent, running };
   }
   const connect = async token => {
@@ -187,7 +195,7 @@ const stdio = await ssam.createSsamServer({ ...ssam.servedLanes(), profile: 'all
 
   const { running } = await startAgent(issued.agentCredential);
   const client = await connect(issued.token);
-  t.after(() => client.close().catch(() => {}));
+  defer(() => client.close().catch(() => {}));
   const call = (name, args = {}) => client.callTool({ name, arguments: args });
 
   // tools/list equals stdio; the doctor shows the agent.
@@ -220,7 +228,7 @@ const stdio = await ssam.createSsamServer({ ...ssam.servedLanes(), profile: 'all
   const other = store.issue({ customer: 'E2E-Other' });
   await startAgent(other.agentCredential, { odcVersion: '1.7.27.10846', root: path.join(base, 'SSAM-Agent-2') });
   const otherClient = await connect(other.token);
-  t.after(() => otherClient.close().catch(() => {}));
+  defer(() => otherClient.close().catch(() => {}));
   const mismatch = await waitFor(async () => { const r = (await otherClient.callTool({ name: 'studio_status', arguments: {} })).structuredContent; return r?.code === 'STUDIO_VERSION_MISMATCH' ? r : null; }, 15000);
   assert.ok(mismatch, 'version mismatch refused');
   // A-M1 (the build identity, 01ac9596): one refusal by direction, both builds named; the older Studio is to be updated.
@@ -253,4 +261,7 @@ const stdio = await ssam.createSsamServer({ ...ssam.servedLanes(), profile: 'all
   const top = fs.readdirSync(dir).filter(name => !['customers', 'tokens.json', 'kernel.json', 'machine-pins.json', 'access-alerts.jsonl'].includes(name) && !/^(audit|quality)-\d{8}\.jsonl$/.test(name) && !/^tokens\.json\..*\.tmp$/.test(name));
   assert.deepEqual(top, [], 'the server folder holds only tokens, kernel.json, machine pins, audit, quality and customers');
   for (const name of fs.readdirSync(dir).filter(n => /^quality-\d{8}\.jsonl$/.test(n))) assert.equal(fs.readFileSync(path.join(dir, name), 'utf8').includes(moduleName), false, 'no module name in ' + name);
+  // a11-b: the snapshot started no detached index warm-up (module-map.mjs prefetchIndex is off hosted): no prefetch reader
+  // cache (its prefetch.jsonl named the workspace capture) and no resident reader left under this run's folder.
+  assert.equal(fs.existsSync(path.join(base, 'readers-prefetch')), false, 'no detached prefetch on the hosted server');
 });

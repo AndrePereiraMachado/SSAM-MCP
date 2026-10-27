@@ -2565,22 +2565,27 @@
   {
    "tool": "studio_deliver",
    "path": "patch",
-   "reason": "patch over the job of basedOn: a JSON Patch array, or \"verified\" (every verified patch a refusal kept beside that job); an argument of the job, not a tool verb"
-  },
-  {
-   "tool": "o11_job",
-   "path": "patch",
-   "reason": "patch over the job of basedOn: a JSON Patch array, or \"verified\" (every verified patch a refusal kept beside that job); an argument of the job, not a tool verb"
-  },
-  {
-   "tool": "ssam_job",
-   "path": "patch",
-   "reason": "patch over the job of basedOn: a JSON Patch array, or \"verified\" (every verified patch a refusal kept beside that job); an argument of the job, not a tool verb"
+   "reason": "\"verified\" applies every verified patch of the refusal (its verifiedPatch.call); a value of the patch argument, not a tool verb"
   },
   {
    "tool": "ssam_code",
    "path": "patch",
-   "reason": "patch over the job of basedOn: a JSON Patch array, or \"verified\" (every verified patch a refusal kept beside that job); an argument of the job, not a tool verb"
+   "reason": "\"verified\" applies every verified patch of the refusal (its verifiedPatch.call); a value of the patch argument, not a tool verb"
+  },
+  {
+   "tool": "o11_job",
+   "path": "patch",
+   "reason": "\"verified\" applies every verified patch of the refusal (its verifiedPatch.call); a value of the patch argument, not a tool verb"
+  },
+  {
+   "tool": "ssam_job",
+   "path": "patch",
+   "reason": "\"verified\" applies every verified patch of the refusal (its verifiedPatch.call); a value of the patch argument, not a tool verb"
+  },
+  {
+   "tool": "ssam_preview",
+   "path": "relation",
+   "reason": "comparison relationship, not a preview command"
   },
   {
    "tool": "ssam_code",
@@ -2797,6 +2802,10 @@
   {
    "path": "producerKind",
    "reason": "producer identity disambiguation"
+  },
+  {
+   "path": "patch",
+   "reason": "verified selects a verified correction from the prior receipt, not a tool verb"
   },
   {
    "path": "patch[].op",
@@ -3128,6 +3137,26 @@
    "verbParam": "action",
    "verbSelector": "enum",
    "verbs": {
+    "accept": {
+     "effect": "read",
+     "when": "Accept a complete migration component/state matrix only when all comparison receipts and their files match SHA-256 and both deployed asset revisions were verified. Missing, stale or failed scenarios prevent acceptance.",
+     "args": { "action": "accept", "compare": { "contract": { "schema": "ssam-migration-acceptance/1", "components": [{"id":"<screen-component>","kind":"screen"}], "cases": [{"id":"<scenario>","component":"<screen-component>","state":"loaded"}], "revisions":{"reference":"<sha256>","candidate":"<sha256>"}}, "evidence": [] } },
+     "triggers": [["aceitar", "migracao"], ["validar", "matriz", "migracao"], ["accept", "migration"]],
+     "intents": {"pt":["validar matriz completa da migracao"],"en":["accept migration validation matrix"]},
+     "field":"action", "value":"accept", "selector":"enum",
+     "preconditions":["versioned component inventory and comparison receipts from ssam_preview compare"],
+     "next":"inspect accepted, missing states, revision mismatches and evidence hashes"
+    },
+    "compare": {
+     "effect": "read",
+     "triggers": [["comparar", "visual"], ["compare", "browser"], ["validar", "layout", "navegador"]],
+     "when": "Compare two existing verified browser preview tabs: selected DOM geometry and control state, viewport screenshots, or pagination records and counter. No navigation or backend writes.",
+     "args": { "action": "compare", "compare": { "scenario": "<scenario>", "reference": { "tabId": "<source-tab>", "origin": "<origin>" }, "candidate": { "tabId": "<target-tab>", "origin": "<origin>" }, "selectors": [{ "key": "main", "selector": "main" }] } },
+     "intents": { "pt": ["comparar visual de duas abas no Chrome", "validar layout de migracao no navegador"], "en": ["compare migration browser tabs"] },
+     "field": "action", "value": "compare", "selector": "enum",
+     "preconditions": ["both tabs already open in verified CodexBrowserPreview profile"],
+     "next": "inspect differences and evidence; a pass covers selected elements and the current viewport only"
+    },
     "list": {
      "effect": "read",
      "when": "List prepared O11/ODC profiles, their screens, renderer and live-update limits.",
@@ -7535,11 +7564,11 @@
      "field": "action",
      "value": "sign-in",
      "selector": "enum",
-     "when": "Verify the connected Studio identity or an existing compatible private profile; surface=lifetime checks an existing private token. No dialog is opened.",
+     "when": "Verify the connected Studio identity. With session=vault, select a compatible private profile or open the private Windows credential form even while Studio is open; pending selection is resumable. surface=lifetime checks its separate token.",
      "preconditions": [
       "Service Studio open and connected on the O11 lane (ssam_connect {lane:\"o11\"})"
      ],
-     "next": "read/write after authentication is verified; otherwise follow the typed refusal",
+     "next": "With session=vault repeat after CREDENTIAL_SELECTION_PENDING, then read Service Center to verify authentication; otherwise follow the typed refusal",
      "args": {
       "action": "sign-in",
       "host": "<env-host>",
@@ -16121,21 +16150,22 @@
   },
   "ssam_app_url": {
    "effect": "read",
-   "lane": "odc",
+   "lane": "both",
    "group": "environment",
    "kind": "operations",
    "title": "App home and screen URLs",
    "when": "App home and screen URLs to hand to the user after app/screen work (does not verify publication).",
    "preconditions": [
-    "environment/tenant explicit, or the module connected in ODC Studio"
+    "environment/tenant explicit, or the app open in a connected Studio"
    ],
    "next": "give the link to the user",
    "args": {
     "app": "<App>",
     "screen": "<Screen (optional)>",
+    "lane": "<o11|odc (optional)>",
     "environment": "<runtime origin (optional)>"
    },
-   "cli": "ssam app <App> [Screen] --lane odc",
+   "cli": "ssam app <App> [Screen] [--lane o11|odc]",
    "triggers": [
     [
      "@url",
@@ -28428,11 +28458,35 @@
      "triggers": [["ssam_code", "plan"], ["dividir", "trabalho"], ["subagentes", "paralelo"], ["plan", "subagents"]],
      "intents": { "pt": ["dividir trabalho entre subagentes em paralelo", "ssam_code plan do módulo"], "en": ["plan parallel subagents for module changes", "ssam_code plan for the module"] }
     },
+    "draft": {
+     "effect": "read",
+     "field": "action",
+     "value": "draft",
+     "selector": "enum",
+     "when": "Incremental write: open a draft of the module (draft.id, 30 min renewed by each part), then send each part with action part as soon as it is written and deliver them all with write {draft}; with draft (the id) instead of module, the status: parts, pending problems and the ready write.",
+     "next": "ssam_code part {draft, part, text} for each action, screen or data text as it is written; then write {draft}",
+     "args": { "lane": "<lane>", "action": "draft", "module": "<Module>" },
+     "triggers": [["ssam_code", "draft"], ["@abrir", "rascunho"], ["open", "draft"], ["@abrir", "rascunho", "@modulo"], ["open", "draft", "@modulo"], ["estado", "rascunho"], ["status", "draft"],
+      ["rascunho", "ssam_code"], ["escrita", "incremental"], ["incremental", "write"], ["incremental", "write", "ssam_code"], ["incremental", "ssam_code"], ["draft", "code"]],
+     "intents": { "pt": ["abrir um rascunho do módulo para escrever por partes", "escrita incremental pelo ssam_code", "estado do rascunho do ssam_code"], "en": ["open a draft of the module to write part by part", "incremental writing of the module with ssam_code", "status of the ssam_code draft"] }
+    },
+    "part": {
+     "effect": "read",
+     "field": "action",
+     "value": "part",
+     "selector": "enum",
+     "when": "Add one part to an open draft (an action, a screen or block, a data text, raw ops, or edits of a read element): it is checked at once (the write's composition, and check with the parts already accepted when the module has a local capture) and its problems come back with their fix; the same name replaces a part, element alone drops it. Nothing reaches the Studio.",
+     "next": "a refused part -> correct it and send it again (same name); every part accepted -> ssam_code write {draft}",
+     "args": { "lane": "<lane>", "action": "part", "draft": "<draft id>", "part": "<ddl|logic|html>", "text": "<one action, screen or data text>" },
+     "triggers": [["ssam_code", "part"], ["acrescentar", "parte"], ["add", "part"], ["mandar", "rascunho"], ["enviar", "rascunho"], ["send", "draft"], ["action", "rascunho"], ["action", "draft"],
+      ["parte", "rascunho", "ssam_code"], ["part", "draft", "ssam_code"]],
+     "intents": { "pt": ["mandar uma action ao rascunho e ver os problemas na hora", "acrescentar uma parte ao rascunho do ssam_code"], "en": ["send one action to the draft and see its problems at once", "add a part to the ssam_code draft"] }
+    },
     "write": {
      "field": "action",
      "value": "write",
      "selector": "enum",
-     "when": "Write a part as code, delivered by the lane's own delivery (one call, validated before any change): new statements, actions or screens without keys; changed ones with their keys and basedOn (a changed action WHOLE as read: a line left out is deleted); files:[paths] sends the parts subagents wrote (.flow with several actions, .ddl, .html, .json ops) in the same call; edits:[{replace|after|before|delete:\"@id\"}] with element and basedOn changes only the lines named.",
+     "when": "Write a part as code, delivered by the lane's own delivery (one call, validated before any change): new statements, actions or screens without keys; changed ones with their keys and basedOn (a changed action WHOLE as read: a line left out is deleted); files:[paths] sends the parts subagents wrote (.flow with several actions, .ddl, .html, .json ops) in the same call; edits:[{replace|after|before|delete:\"@id\"}] with element and basedOn changes only the lines named. write {draft} delivers the accepted parts of a draft (action draft, then part) in one delivery.",
      "next": "\"delivered\"; a refusal -> patch + basedOn {job, sha256}; publish with the user's words",
      "args": {
       "lane": "<lane>",
@@ -28963,6 +29017,34 @@
     ]
    },
    "verbs": {
+    "delivery-kpi": {
+     "effect": "read",
+     "field": "view",
+     "value": "delivery-kpi",
+     "selector": "enum",
+     "when": "Delivery KPIs computed read-only from the local queue and the kernel receipts: first-try acceptance, attempts per accepted delivery, repeated refusal codes, reads per accepted delivery, 25 s continuations, wall time, refusals after the native build and kernel time, per ISO week and lane.",
+     "next": "none",
+     "args": { "view": "delivery-kpi" },
+     "triggers": [["@friction", "kpi"], ["kpi", "entregas"], ["kpi", "deliveries"]],
+     "intents": {
+      "pt": ["kpi das entregas", "quantas entregas passaram de primeira", "tentativas por entrega", "leituras por entrega aceita"],
+      "en": ["delivery kpi", "first-try acceptance of deliveries", "attempts per delivery", "reads per accepted delivery"]
+     }
+    },
+    "reports": {
+     "effect": "read",
+     "field": "view",
+     "value": "reports",
+     "selector": "enum",
+     "when": "Read every manual friction report with stable offset/limit pagination; follow continuation until next is null.",
+     "next": "follow continuation for the remaining reports",
+     "args": { "view": "reports", "offset": 0, "limit": 100 },
+     "triggers": [["@friction", "relatos"], ["@friction", "reports"]],
+     "intents": {
+      "pt": ["listar todos os relatos de fricção", "paginar os relatos de fricção"],
+      "en": ["list all friction reports", "paginate friction reports"]
+     }
+    },
     "issues": {
      "effect": "read",
      "field": "view",
@@ -29018,9 +29100,9 @@
      "field": "view",
      "value": "task",
      "selector": "enum",
-     "when": "Timing and failures of one correlated task.",
+     "when": "Timing and failures of one delivery or task: its operationId, kernel or facade task id, an explicit taskId, or a session correlationId.",
      "preconditions": [
-      "an explicitly correlated taskId"
+      "an operationId, a kernel or facade task id, a taskId or a correlationId"
      ],
      "next": "none",
      "args": {
@@ -29052,6 +29134,38 @@
        "task timing",
        "how long did the task take",
        "failures of task X"
+      ]
+     }
+    },
+    "timeline": {
+     "effect": "read",
+     "field": "view",
+     "value": "timeline",
+     "selector": "enum",
+     "when": "The timeline of this session (session \"all\" or a correlationId for others): each operation with start, end, tool time, queue wait and the gap since the previous one, with totals.",
+     "next": "none",
+     "args": {
+      "view": "timeline"
+     },
+     "triggers": [
+      [
+       "@tempo",
+       "sessao"
+      ],
+      [
+       "timeline"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "linha do tempo da sessão",
+       "quanto foi ferramenta e quanto foi espera",
+       "custo de tempo da sessão"
+      ],
+      "en": [
+       "session timeline",
+       "how much was tool time and how much was waiting",
+       "time cost of this session"
       ]
      }
     },

@@ -16,6 +16,7 @@
 // words and the owner request are kept only as the sha256 of their normalized form.
 // Root: SSAM_DESTRUCTIVE_ROOT, else %USERPROFILE%\.ssam-hybrid\destructive (outside the MSIX %LOCALAPPDATA%, like the
 // Service Center journal): previews\, operations\, backups\<operationId>\, seen-words\<host>.jsonl.
+import { appendJsonLine } from './correlation.mjs';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -421,7 +422,7 @@ export function noteWords({ host, tool, words, now, root } = {}) {
   const file = path.join(seenDir(host, root), dayOf(at) + '.jsonl');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const line = { at: iso(at), tool: text(tool), sha256: wordsSha256(words) };
-  fs.appendFileSync(file, JSON.stringify(line) + '\n');
+  appendJsonLine(file, line);
   try { pruneSeen(host, root, at); } catch { /* the next note prunes */ }
   return line.sha256;
 }

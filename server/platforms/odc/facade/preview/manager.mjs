@@ -5,10 +5,27 @@ import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { atomicJson, readJson, loadProfile, publicProfile, check, fail } from './profile.mjs';
+import { compareBrowserPages } from './compare.mjs';
+import { acceptMigration } from './acceptance.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const validId = id => /^[a-z0-9][a-z0-9-]{0,79}$/.test(id ?? '');
+
+// Meta de 20/10/2026, item 18 (relatos 2f39462f, 162de9b2, 48783193: three sessions found profiles:[] and had nothing to
+// do with it). A list without a profile for the target says who prepares one and how, and the route that exists now:
+// the published screen in the person's browser (ssam_app_url), which SSAM does not capture.
+function withPrepare(args, answer) {
+  if (answer.profiles.length > 0) return answer;
+  const target = { ...(args.lane ? { lane: args.lane } : {}), ...(args.app ? { app: args.app } : {}), ...(args.tenant ? { tenant: args.tenant } : {}) };
+  return { ...answer, prepare: {
+    by: 'integrator', why: 'no prepared local preview matches this target; an app session never prepares one (no shell, no profile installation)',
+    api: 'platforms/odc/facade/preview/prepare.mjs prepareProfile({directory, id, lane, target:{app, tenant}, screens, limitations, hostConfig, watcherConfig?, port})',
+    doc: 'docs/PREVIEW-LOCAL.md',
+    meanwhile: { tool: 'ssam_app_url', arguments: { app: args.app ?? '<app>', screen: '<screen>', ...(args.lane ? { lane: args.lane } : {}) },
+      why: "the published screen opens in the person's browser; SSAM does not capture or compare it" },
+    target } };
+}
 export function control(endpoint, action, timeoutMs = 2500) {
   check(endpoint && endpoint.host === '127.0.0.1' && Number.isInteger(endpoint.port), 'PREVIEW_CONTROL_ENDPOINT');
   return new Promise((resolve, reject) => {
@@ -105,7 +122,9 @@ export function createPreviewManager({ workspace, env = process.env, spawnProces
   return async function preview(args = {}) {
     try {
       const action = args.action || 'list';
-      if (action === 'list') return { ok:true, experimental:true, profiles:profiles().filter(({profile:p})=>(!args.lane||args.lane===p.lane)&&(!args.app||args.app===p.target.app)&&(!args.tenant||args.tenant===p.target.tenant)&&(!args.profile||args.profile===p.id)).map(v=>publicProfile(v.profile)), installationRequired:!fs.existsSync(catalogFile), note:'Only explicitly prepared profiles are available. ODC uses an O11-adapted renderer; it is not native ODC runtime equivalence.' };
+      if (action === 'compare') return await compareBrowserPages(args, { workspace });
+      if (action === 'accept') return acceptMigration(args, { workspace });
+      if (action === 'list') return withPrepare(args, { ok:true, experimental:true, profiles:profiles().filter(({profile:p})=>(!args.lane||args.lane===p.lane)&&(!args.app||args.app===p.target.app)&&(!args.tenant||args.tenant===p.target.tenant)&&(!args.profile||args.profile===p.id)).map(v=>publicProfile(v.profile)), installationRequired:!fs.existsSync(catalogFile), note:'Only explicitly prepared profiles are available. ODC uses an O11-adapted renderer; it is not native ODC runtime equivalence.' });
       if (action === 'open') return await open(args);
       check(['status','refresh','stop'].includes(action), 'PREVIEW_ACTION');
       const id = args.sessionId || choose(args).profile.id;

@@ -59,7 +59,10 @@ const jobResult = put(path.join(kernel, '.local', 'lane-odc', 'jobs', 'probe.res
 const studioReceipt = put(path.join(kernel, '.local', 'work', 'receipts', 'studio-publish-Orders_UI-20260916.json'), { module: 'Orders_UI', published: true, state: 'CompletedWithSuccess', elapsedMs: 12940 });
 const secrets = put(path.join(kernel, '.local', 'data', 'requests', 'r1.json'), {
   operation: 'insert', authorization: 'sim, pode inserir', authorize: 'palavras do usuario',
-  connection: { host: 'h', password: 'hunter2', apiKey: 'k-123', token: 'tok-abc', Cookie: 'sid=1', outputTokens: 42, authorized: true },
+  connection: { host: 'h', password: 'hunter2', apiKey: 'k-123', token: 'tok-abc', access_token: 'tok-def', accessToken: 'tok-ghi', 'X-Token': 'tok-jkl', tokenValue: 'tok-mno', Cookie: 'sid=1', outputTokens: 42, authorized: true },
+  // Goal list of 2026-10-20, item 9 (reports 1c11796d, 67ffe9af): the usage counters of an o11_data read are texts under keys that
+  // name tokens; they are counts, never credentials.
+  usage: { InputTokens: '1203', OutputTokens: '87', ReservedInputTokens: '0', TokenLimit: '8000', SpentTokens: '1290', tokens: { prompt: 10, completion: 20 }, max_tokens: '4096', tokenCount: '30' },
   header: 'Bearer abcdefghijklmnopqrstuvwxyz123456', note: 'plain text',
 });
 put(path.join(outside, 'secret.json'), { password: 'outside' });
@@ -189,11 +192,15 @@ test('secrets are redacted before any filter, including the user words; numbers 
   const value = read({ file: secrets, budgetBytes: 4000 });
   assert.equal(value.ok, true);
   const text = JSON.stringify(value);
-  for (const secret of ['hunter2', 'k-123', 'tok-abc', 'sid=1', 'sim, pode inserir', 'palavras do usuario', 'abcdefghijklmnop']) assert.ok(!text.includes(secret), secret);
+  for (const secret of ['hunter2', 'k-123', 'tok-abc', 'tok-def', 'tok-ghi', 'tok-jkl', 'tok-mno', 'sid=1', 'sim, pode inserir', 'palavras do usuario', 'abcdefghijklmnop']) assert.ok(!text.includes(secret), secret);
+  // A counter of tokens with a plain number stays readable; anything else under a token key is redacted as before the
+  // Traditional port, an object too (review of 3ab12209, M5: the redaction is a superset of the candidate's).
+  assert.deepEqual(value.value.usage, { InputTokens: '1203', OutputTokens: '87', ReservedInputTokens: '0', TokenLimit: '8000', SpentTokens: '1290', tokens: '[redacted]', max_tokens: '4096', tokenCount: '30' }, 'token counters are not credentials');
+  assert.equal(read({ file: secrets, pointer: '/usage/OutputTokens' }).value, '87');
   assert.equal(value.value.connection.password, '[redacted]');
   assert.equal(value.value.connection.outputTokens, 42); assert.equal(value.value.connection.authorized, true);
   assert.equal(value.value.note, 'plain text');
-  assert.equal(value.redacted, 7);
+  assert.equal(value.redacted, 12, 'the seven of before, the four token credential keys and the tokens object; no token counter with a plain number');
   // a where clause cannot probe a secret
   assert.equal(read({ file: secrets, deep: true, where: 'password~hunter', max: 0 }).total, 0);
   assert.equal(read({ file: secrets, deep: true, where: '~hunter2', max: 0 }).total, 0);

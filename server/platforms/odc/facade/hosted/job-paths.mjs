@@ -133,12 +133,22 @@ export function jobTextPointers(name, args) {
 // verified-patch.mjs readVerifiedPatch), so the job it would build is one the gate cannot check. The pointer of such a
 // patch in a call (/patch of the four job tools, /query/patch of ssam_reference check-job), or null. The gate refuses it
 // (policy.mjs verifiedPatchUnavailable), and confineJobs refuses any patch it cannot apply itself.
+// servidor/fase4-27 a11: fix "apply" (o11_deliver, studio_deliver, ssam_code) is the same family: the handler applies the
+// patches a refusal of the job of basedOn kept on the server (job-patch.mjs saveRefusalFixes and proposedPatch, under
+// <lane>/jobs/fixes, the verified patch among them), files the gate never reads either. THE list of such forms, as
+// [key, value] of the object that holds the patch; a form the product adds joins this list, never a rule of its own.
+// a12: the value null names any value sent: fix is refused whatever it holds (the gate never leans on the schema's const).
+export const UNREAD_PATCH_FORMS = Object.freeze([['patch', 'verified'], ['fix', null]]);
+const formWord = value => (typeof value === 'string' ? value.trim().toLowerCase() : null);
+const formMatches = (holder, [key, value]) => (value === null ? holder[key] !== undefined : formWord(holder[key]) === value);
+// -> {at, key, value}: the pointer of such a form in a call (/patch or /fix of the four job tools and of ssam_code,
+// /query/patch of ssam_reference check-job), or null.
 export function namesVerifiedPatch(name, args) {
   if (!isObject(args)) return null;
-  const slot = jobSlot(name, args);
+  const slot = name === CODE_TOOL ? { holder: args, at: '' } : jobSlot(name, args);
   if (!slot || !isObject(slot.holder)) return null;
-  const patch = slot.holder.patch;
-  return typeof patch === 'string' && patch.trim().toLowerCase() === 'verified' ? slot.at + '/patch' : null;
+  const form = UNREAD_PATCH_FORMS.find(entry => formMatches(slot.holder, entry));
+  return form ? { at: slot.at + '/' + form[0], key: form[0], value: form[1] } : null;
 }
 // {holder, at, key}: the object that holds the job (key) and its basedOn and patch, with the pointer of that object.
 function jobSlot(name, args) {
@@ -273,7 +283,7 @@ const unchecked = (pointer, why) => new PathRefusal('JOB_PATHS_UNCHECKED', `The 
 // PatchError code when its functions refused it; fields: its at and candidates, as the handler answers them).
 const unbuilt = (pointer, code, why, error = null) => {
   const refusal = new PathRefusal(code, `The gate could not build and check the job this call makes over basedOn (${why}), so nothing ran.`, pointer,
-    'send basedOn {job, sha256} as a refusal returned them (nextBasedOn) with patch: the JSON Patch operations themselves (at most 50), or a partial job as job; the gate checks the job they make');
+    'send basedOn {job, sha256} as a refusal returned them (nextBasedOn) with patch: the JSON Patch operations themselves (at most 500), or a partial job as job; the gate checks the job they make');
   if (error instanceof PatchError) refusal.fields = patchErrorFields(error);
   return refusal;
 };

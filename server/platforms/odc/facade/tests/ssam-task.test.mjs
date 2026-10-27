@@ -67,7 +67,8 @@ test('the ssam_task tool lists at most 20, newest first, and reads one', async t
   const tool = (await client.listTools()).tools.find(x => x.name === 'ssam_task');
   // close {reason} with id closes a delivery task (C15): the tool is not read-only; reading never repeats anything.
   assert.equal(tool.annotations.readOnlyHint, false);
-  assert.deepEqual(Object.keys(tool.inputSchema.properties), ['id', 'stop', 'close']);
+  // F7: session widens the listing of this session ("all" or a correlationId).
+  assert.deepEqual(Object.keys(tool.inputSchema.properties), ['id', 'stop', 'close', 'session']);
   const list = (await client.callTool({ name: 'ssam_task', arguments: {} })).structuredContent;
   assert.equal(list.tasks.length, 20);
   assert.equal(list.tasks[0].summary.module, 'M22'); assert.equal(list.tasks[19].summary.module, 'M3');

@@ -250,16 +250,17 @@ test('past the limit, the changed texts of one list are one replace of that list
   const base = writeJob(t, { ops: [{ op: 'logic', data: { flow: [texts[0], { text: texts[1], basedOn: 'abcdefabcdef0123' }, texts[2]] } }] });
   const edit = n => ({ element: n, edits: [{ find: 'assign X = 1', with: `assign X = ${n}` }] });
   const model = n => Array.from({ length: n }, () => ({ op: 'test', path: '/ops/0/op', value: 'logic' }));
-  // 3 texts + 47 = 50: one replace per text.
-  const fits = corrected(base, { ...edit('A'), also: [edit('B'), edit('C')], patch: model(47) });
+  // The limit is PATCH_MAX_OPS (job-patch.mjs). 3 texts + (PATCH_MAX_OPS - 3): one replace per text.
+  const fits = corrected(base, { ...edit('A'), also: [edit('B'), edit('C')], patch: model(PATCH_MAX_OPS - 3) });
   assert.deepEqual(fits.input.patch.slice(0, 3).map(p => p.path), ['/ops/0/data/flow/0', '/ops/0/data/flow/1/text', '/ops/0/data/flow/2']);
-  // 3 texts + 48 = 51: the list is one replace (1 + 48 = 49), with every other field of its items kept.
-  const joined = corrected(base, { ...edit('A'), also: [edit('B'), edit('C')], patch: model(48) });
-  assert.equal(joined.input.patch.length, 49);
+  // 3 texts + (PATCH_MAX_OPS - 2) = one past the limit: the list is one replace (1 + PATCH_MAX_OPS - 2), with every other
+  // field of its items kept.
+  const joined = corrected(base, { ...edit('A'), also: [edit('B'), edit('C')], patch: model(PATCH_MAX_OPS - 2) });
+  assert.equal(joined.input.patch.length, PATCH_MAX_OPS - 1);
   assert.deepEqual(joined.input.patch[0], { op: 'replace', path: '/ops/0/data/flow', value: [texts[0].replace('X = 1', 'X = A'), { text: texts[1].replace('X = 1', 'X = B'), basedOn: 'abcdefabcdef0123' }, texts[2].replace('X = 1', 'X = C')] });
   assert.deepEqual(joined.job.ops[0].data.flow, joined.input.patch[0].value);
-  const over = jobTextEdits(write(base, { ...edit('A'), also: [edit('B'), edit('C')], patch: model(50) }));
-  assert.match(over.problems[0].error, /needs 1 replace\(s\), the texts of each list joined, \+ 50 operation\(s\) of patch = 51/);
+  const over = jobTextEdits(write(base, { ...edit('A'), also: [edit('B'), edit('C')], patch: model(PATCH_MAX_OPS) }));
+  assert.ok(over.problems[0].error.includes(`needs 1 replace(s), the texts of each list joined, + ${PATCH_MAX_OPS} operation(s) of patch = ${PATCH_MAX_OPS + 1}`), over.problems[0].error);
 });
 
 test('edits without effect are accepted (R5): the patch only tests the text, and resolvePatchedJob writes the corrected job', t => {

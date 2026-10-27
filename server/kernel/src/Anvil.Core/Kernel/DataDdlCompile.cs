@@ -86,22 +86,39 @@ public sealed class DdlCompiler
     // a new element of that type (Decimal is Decimal(37,8)); every other property is what the text says.
     private readonly HashSet<DdlElement> fresh;
 
-    private DdlCompiler(DdlDocument edit, DdlDocument? @base, string lane, string prefix, string text, IEnumerable<DdlElement>? fresh)
+    // The type a property of a kept element has in the model (the session's, by the element's key; null when unknown): two
+    // values are compared in the form the module stores them (DdlValues), never as written.
+    private readonly Func<DdlElement, string, Type?>? stored;
+
+    private DdlCompiler(DdlDocument edit, DdlDocument? @base, string lane, string prefix, string text, IEnumerable<DdlElement>? fresh, Func<DdlElement, string, Type?>? stored)
     {
-        this.edit = edit; this.@base = @base; this.lane = lane; this.prefix = prefix; this.text = text;
+        this.edit = edit; this.@base = @base; this.lane = lane; this.prefix = prefix; this.text = text; this.stored = stored;
         this.fresh = new HashSet<DdlElement>(fresh ?? [], ReferenceEqualityComparer.Instance);
         if (@base != null) foreach (var element in @base.All()) if (element.Key.Length > 0) baseByKey.TryAdd(element.Key, element);
     }
 
     // The ops of an edited text against the module's own text (base); without a base, only what the text creates (the
     // static checks of a job read that before any model is loaded). `text` is the edit as written (the corrected text of a
-    // certain fix is built from it); `prefix` names the $aliases of this compile.
-    public static DdlCompilation Compile(DdlDocument edit, DdlDocument? @base, string lane, string prefix = "$ddl", string text = "", IEnumerable<DdlElement>? fresh = null)
+    // certain fix is built from it); `prefix` names the $aliases of this compile; `stored` gives the model's type of a property
+    // of a kept element (ModelSession: by its key), so a value written in another form the module stores the same is no change.
+    public static DdlCompilation Compile(DdlDocument edit, DdlDocument? @base, string lane, string prefix = "$ddl", string text = "", IEnumerable<DdlElement>? fresh = null,
+        Func<DdlElement, string, Type?>? stored = null)
     {
-        var compiler = new DdlCompiler(edit, @base, lane, prefix, text, fresh);
+        var compiler = new DdlCompiler(edit, @base, lane, prefix, text, fresh, stored);
         compiler.Run();
         return compiler.result;
     }
+
+    // The model's type of a property of an element (kept: by its key; new: by its kind); null when the session gives none.
+    private Type? Stored(DdlElement element, string property) => stored?.Invoke(element, property);
+
+    // A property of an element kept by key: the module's value and the text's the same in the form the module stores them.
+    private bool Same(DdlElement element, string property, string? a, string? b) =>
+        DdlValues.Same(element.Kind, property, a, b, Stored(element, property));
+
+    // A flag the text writes on an element, read as the set verb reads it for the property's type (DdlValues.Flag).
+    private bool? Flag(DdlElement element, string property) => DdlValues.Flag(element.Props.GetValueOrDefault(property), Stored(element, property));
+    private bool IsSet(DdlElement element, string property) => Flag(element, property) == true;
 
     // The names the edit gives elements it keeps by key (old name -> new name), by kind of reference: types (entities, static
     // entities, structures), the records of each static entity (by its new name), and site properties, client and session
@@ -355,8 +372,9 @@ public sealed class DdlCompiler
         foreach (var property in was.Props.Keys.Union(now.Props.Keys).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)) {
             if (Special.Contains(property) || typeChanged && property == "DefaultValue") continue;
             var a = before.Value(property); var b = after.Value(property);
-            // An attribute is named by its identity: renamed in the same statement, it is the same attribute.
-            if (AttributeRefs.Contains(property) ? Identity(was, a) == Identity(now, b) : DdlRules.Same(a, b)) continue;
+            // An attribute is named by its identity: renamed in the same statement, it is the same attribute. Any other value is
+            // compared in the form the module stores it (a schedule, an enum, a flag or a number written otherwise is no change).
+            if (AttributeRefs.Contains(property) ? Identity(was, a) == Identity(now, b) : Same(now, property, a, b)) continue;
             Set(AttributeRefs.Contains(property) ? RefPhase(Owner(now), b) : sets, now, target, property, b, a);
         }
         if (typed) Type(was, now, target, typeChanged);
@@ -401,7 +419,7 @@ public sealed class DdlCompiler
         // new type has its own; the reading after the apply sets any the platform keeps otherwise).
         foreach (var size in new[] { "Length", "Decimals" }) {
             var value = now.Props.GetValueOrDefault(size);
-            var differs = !DdlRules.Same(was.Props.GetValueOrDefault(size), value);
+            var differs = !Same(now, size, was.Props.GetValueOrDefault(size), value);
             if (typeChanged ? value != null : fresh.Contains(now) ? value != null && differs : differs)
                 Step(sets, now, Op("set", ("target", target), ("prop", size), ("value", value)));
         }
@@ -544,8 +562,8 @@ public sealed class DdlCompiler
                 continue;
             }
             if (before.Name != index.Name) Rename(before, index);
-            if (!DdlRules.Same(before.Props.GetValueOrDefault("Unique"), index.Props.GetValueOrDefault("Unique")))
-                Step(sets, index, new JsonObject { ["op"] = "set", ["target"] = "@" + index.Key, ["prop"] = "Unique", ["value"] = index.Props.GetValueOrDefault("Unique") == "True" });
+            if (IsSet(before, "Unique") != IsSet(index, "Unique"))
+                Step(sets, index, new JsonObject { ["op"] = "set", ["target"] = "@" + index.Key, ["prop"] = "Unique", ["value"] = IsSet(index, "Unique") });
             Properties(before, index);
         }
     }
@@ -622,7 +640,7 @@ public sealed class DdlCompiler
         }
         var alias = Alias(index);
         Step(indexCreates, index, new JsonObject { ["op"] = "create", ["parent"] = parent, ["type"] = "EntityIndex", ["name"] = index.Name, ["as"] = alias,
-            ["args"] = new JsonObject { ["unique"] = index.Props.GetValueOrDefault("Unique") == "True", ["attributes"] = columns } });
+            ["args"] = new JsonObject { ["unique"] = IsSet(index, "Unique"), ["attributes"] = columns } });
         result.Created.Add(index);
     }
 
@@ -673,8 +691,12 @@ public sealed class DdlCompiler
         if (specAttributes.Count > 0) entry["attributes"] = specAttributes;
         if (specId) {
             // What the spec writes on its Id (AutoNumber on the server, none on the client) and the text may say otherwise.
-            var auto = id!.Props.GetValueOrDefault("IsAutoNumber") is "Yes" or "True";
-            if (auto != (entity.Kind == "ServerEntity")) Step(sets, id, Op("set", ("target", "$" + entity.Name + ".Id"), ("prop", "IsAutoNumber"), ("value", auto ? "Yes" : "No")));
+            var auto = IsSet(id!, "IsAutoNumber");
+            // A value that is no flag of the type is written as the text says: the set refuses it, naming the property.
+            if (id.Props.GetValueOrDefault("IsAutoNumber") is { } written && Flag(id, "IsAutoNumber") == null)
+                Step(sets, id, Op("set", ("target", "$" + entity.Name + ".Id"), ("prop", "IsAutoNumber"), ("value", written)));
+            else if (auto != (entity.Kind == "ServerEntity"))
+                Step(sets, id, Op("set", ("target", "$" + entity.Name + ".Id"), ("prop", "IsAutoNumber"), ("value", DdlValues.FlagText(auto, Stored(id, "IsAutoNumber"), "Yes"))));
             foreach (var property in id.Props.Keys.Where(p => p is not ("DataType" or "IsAutoNumber" or "IsMandatory")).Order(StringComparer.Ordinal))
                 Set(sets, id, "$" + entity.Name + ".Id", property, id.Props[property], null);
         }
@@ -685,7 +707,7 @@ public sealed class DdlCompiler
             if (entity.Kind != "ServerEntity") { NewIndex(index, entity, "$" + entity.Name); continue; }
             var missing = index.Columns.FirstOrDefault(c => attributes.All(a => a.Name != c));
             if (missing != null) { Unknown(index, "column", missing, entity); continue; }
-            indexes.Add(new JsonObject { ["name"] = index.Name, ["unique"] = index.Props.GetValueOrDefault("Unique") == "True",
+            indexes.Add(new JsonObject { ["name"] = index.Name, ["unique"] = IsSet(index, "Unique"),
                 ["attributes"] = new JsonArray(index.Columns.Select(c => (JsonNode)c).ToArray()), ["_line"] = index.Line });
             Residual(index, "$" + entity.Name + "/" + index.Name, ["Unique"]);
             result.Created.Add(index);
@@ -780,12 +802,12 @@ public sealed class DdlCompiler
             var property = SpecProperty(key);
             if (!element.Props.TryGetValue(property, out var value) || value == null) continue;
             entry[key] = key switch {
-                "public" or "restrictedInQueries" => value is "True" or "Yes" ? JsonValue.Create(true) : null,
+                "public" or "restrictedInQueries" => IsSet(element, property) ? JsonValue.Create(true) : null,
                 "updateBehavior" => value,
                 _ => value };
             if (entry[key] == null) entry.Remove(key);
         }
-        if (element.Kind == "ServerEntity" && element.Props.GetValueOrDefault("Public") == "True" && element.Props.GetValueOrDefault("ExposeReadOnly") is "False")
+        if (element.Kind == "ServerEntity" && IsSet(element, "Public") && Flag(element, "ExposeReadOnly") == false)
             entry["readOnly"] = false;
         return entry;
     }
@@ -813,7 +835,7 @@ public sealed class DdlCompiler
         var taken = new HashSet<string>(StringComparer.Ordinal) { "DataType", "Description" };
         foreach (var (key, property) in new[] { ("length", "Length"), ("decimals", "Decimals") })
             if (props.GetValueOrDefault(property) is { } size && int.TryParse(size, out var number) && number >= 0) { entry[key] = number; taken.Add(property); }
-        if (props.GetValueOrDefault("IsMandatory") == "True") { entry["mandatory"] = true; taken.Add("IsMandatory"); }
+        if (IsSet(attribute, "IsMandatory")) { entry["mandatory"] = true; taken.Add("IsMandatory"); }
         if (props.GetValueOrDefault("DefaultValue") is { } value) { entry["default"] = value; taken.Add("DefaultValue"); }
         if (props.GetValueOrDefault("Description") is { } description) entry["description"] = description;
         if (props.TryGetValue("Label", out var label) && label != null) { entry["label"] = label; taken.Add("Label"); }

@@ -42,6 +42,10 @@ public static class DocumentNameRules
         public ScreenDocFacts Facts { get; init; } = null!;
         /// <summary>The document of an element edit of an existing root (the edit names it; the job text has no document).</summary>
         public bool Existing { get; init; }
+        /// <summary>Element edits only: the k of the elements the edits wrote. An element of the reading outside them (and
+        /// outside a written ancestor) is the Studio's own text and is never judged: the live refusal of 20/10 named
+        /// 'SelectedValue' of an untouched RangeSlider's @OnChange (a parameter of the producer's event the index does not hold).</summary>
+        public IReadOnlySet<string>? Touched { get; init; }
     }
 
     public sealed class LogicAction
@@ -83,7 +87,7 @@ public static class DocumentNameRules
     private static readonly HashSet<string> SystemRoles = new(StringComparer.OrdinalIgnoreCase) { "Anonymous", "Registered" };
     // The attributes whose value is an expression in ssam-html/1 (the rest is text, a literal of the Model API or a name).
     private static readonly HashSet<string> ExpressionAttributes = new(StringComparer.OrdinalIgnoreCase) { "if", "list", "bind", "value", "show", "enabled", "default", "options", "label", "visible" };
-    private static readonly Regex Header = new(@"^(server action|service action|client action|data action|action)[ \t]+(?:([\w/]+)\.)?([A-Za-z_]\w*)", RegexOptions.Compiled);
+    private static readonly Regex Header = new(@"^(server action|service action|client action|data action|preparation|action)[ \t]+(?:([\w/]+)\.)?([A-Za-z_]\w*)", RegexOptions.Compiled);
     private static readonly Regex Parameter = new(@"^\s+(in|out|local)\s+([A-Za-z_]\w*)\s*:\s*([^@\n=]+?)\s*(?:=.*?)?(?:\s@\w+)?\s*$", RegexOptions.Compiled);
     private static readonly Regex Assignment = new(@"^\s*(?:assign\s+)?([A-Za-z_]\w*)(?:\.[A-Za-z_][\w.]*)?\s*=(?!=)", RegexOptions.Compiled);
 
@@ -100,7 +104,7 @@ public static class DocumentNameRules
         Read(context);
         var problems = new List<JsonObject>();
         foreach (var rule in new Rule[] { Blocks, Events, ScreenActions, Expressions, References, Roles, Roots, LogicScopes }.Concat(more ?? []))
-            try { problems.AddRange(rule(context)); }
+            try { problems.AddRange(rule(context).Where(p => p["untouched"] == null)); }
             catch (Exception error) { skipped.Add(new JsonObject { ["class"] = rule.Method.Name, ["reason"] = "the rule failed: " + error.Message }); }
         return problems;
     }
@@ -172,7 +176,8 @@ public static class DocumentNameRules
                 var applied = HtmlElementEdits.Apply(reading, edits, keys);
                 if (applied.Problems.Count > 0) continue;   // the preflight says them
                 if (ScreenDocFacts.Of(new JsonObject { ["op"] = "html", ["data"] = new JsonObject { ["html"] = applied.Document } }, i) is { } made)
-                    c.Documents.Add(new Document { Op = i, Pointer = At(c, i, "/data/edits"), Name = made.Name, Kind = made.Kind, Source = applied.Document, Text = made.Text, Facts = made, Existing = true });
+                    c.Documents.Add(new Document { Op = i, Pointer = At(c, i, "/data/edits"), Name = made.Name, Kind = made.Kind, Source = applied.Document, Text = made.Text, Facts = made, Existing = true,
+                        Touched = new HashSet<string>(applied.Touched, StringComparer.Ordinal) });
                 continue;
             }
             if (kind == "html" && op["data"] is JsonObject old && old["edit"] != null)
@@ -229,7 +234,21 @@ public static class DocumentNameRules
         if (at != null) problem["element"] = Clip(TagOf(d, at));
         if (candidates != null && candidates.Any()) problem["candidates"] = new JsonArray(candidates.Select(x => (JsonNode)x).ToArray());
         if (edit != null && !d.Existing) problem["edit"] = edit;
+        if (at != null && !Judged(d, at)) problem["untouched"] = true;   // dropped by the runner: the Studio's own text
         return problem;
+    }
+
+    // Element edits: an element the edits wrote (its k in Touched), one under such an element, or a new one (no k). Any
+    // other element is the reading's own text, already accepted by the Studio.
+    private static bool Judged(Document d, HtmlText.Element at)
+    {
+        if (d.Touched == null) return true;
+        for (var e = at; e != null; e = e.Parent) {
+            var k = e.Get("k");
+            if (k == null) { if (ReferenceEquals(e, at)) return true; continue; }
+            if (d.Touched.Contains(k)) return true;
+        }
+        return false;
     }
 
     private static JsonObject Problem(Context c, LogicAction a, string code, string message, string fix, string basis)
@@ -367,7 +386,9 @@ public static class DocumentNameRules
                     var start = a.ValueStart + a.Value.IndexOf(target, StringComparison.Ordinal);
                     yield return Problem(c, d, e, ScreenHtmlEdit.NameUnknown, $"{a.Name}=\"{target}\": no screen action of actions= and no screen is named '{target}'",
                         certain != null ? $"{a.Name}=\"{certain}\"" : $"list it in actions= and write action {d.Name}.{target} in a logic text of this job, or name a screen",
-                        "job+module-index", absence: c.Facts.HasIndex, certain == null || start < a.ValueStart ? null : EditOf(d, e, start, start + target.Length, certain),
+                        // absence: a name the basis lacks (a warning unless the index is the module the job is applied to, Problem). Before
+                        // 20/10/2026 this passed HasIndex, so WITHOUT an index the problem was an error: the opposite of the skip note.
+                        "job+module-index", absence: true, certain == null || start < a.ValueStart ? null : EditOf(d, e, start, start + target.Length, certain),
                         ScreenHtmlEdit.Closest(target, actions.Concat(screens)));
                 }
         }
@@ -380,12 +401,15 @@ public static class DocumentNameRules
         c.Checked.Add("S4");
         foreach (var d in c.Documents) {
             var root = c.Facts.Root(d.Name, d.Kind == "block");
-            var existing = root?.Children.Where(x => x.Key.Contains("Action", StringComparison.Ordinal)).SelectMany(x => x.Value).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+            var existing = root?.Children.Where(x => x.Key.Contains("Action", StringComparison.Ordinal) || x.Key.Contains("Preparation", StringComparison.Ordinal)).SelectMany(x => x.Value).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
             foreach (var (list, data) in new[] { (d.Facts.Actions, false), (d.Facts.DataActions, true) })
                 foreach (var name in list) {
                     var written = c.Actions.Any(a => (a.Kind == "data action") == data && a.Name.Equals(name, StringComparison.OrdinalIgnoreCase) && string.Equals(a.Owner, d.Name, StringComparison.OrdinalIgnoreCase))
                         || c.Job.Actions.Any(a => a.Name.Equals(name, StringComparison.OrdinalIgnoreCase) && a.Owner.EndsWith(":" + d.Name, StringComparison.OrdinalIgnoreCase))
-                        || c.Ops.OfType<JsonObject>().Any(o => o["op"]?.ToString() == "create" && string.Equals(o["name"]?.ToString(), name, StringComparison.OrdinalIgnoreCase));
+                        || c.Ops.OfType<JsonObject>().Any(o => o["op"]?.ToString() == "create" && string.Equals(o["name"]?.ToString(), name, StringComparison.OrdinalIgnoreCase))
+                        // The Preparation of a Traditional screen: its text names the screen (`preparation Screen`), not the action.
+                        || name.Equals("Preparation", StringComparison.OrdinalIgnoreCase) && c.Actions.Any(a => a.Kind == "preparation"
+                            && (a.Name.Equals(d.Name, StringComparison.OrdinalIgnoreCase) || string.Equals(a.Owner, d.Name, StringComparison.OrdinalIgnoreCase)));
                     if (written || existing.Contains(name)) continue;
                     var attribute = d.Facts.Root.Find(data ? "data-actions" : "actions");
                     yield return Problem(c, d, d.Facts.Root, ScreenHtmlEdit.NameUnknown,

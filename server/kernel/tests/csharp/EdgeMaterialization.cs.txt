@@ -1,0 +1,82 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Anvil.Authoring;
+
+namespace EdgeMaterialization;
+
+public enum Stage { Pending = 10, Working = 40, Done = 90 }
+
+[Entity]
+public sealed record Item(
+    Id<Item> Id,
+    string Code,
+    int Rank,
+    long Big,
+    decimal Amount,
+    DateTime Stamp,
+    bool Flag,
+    int? Optional,
+    decimal? Price,
+    string? Note,
+    DateTime? When,
+    Stage Stage,
+    Stage? Previous);
+
+public sealed record Inner(string Code, int Rank);
+public sealed record Outer(long Key, Inner Inner);
+public sealed record Mixed(string? Note, int Rank, int? Optional, string Code);
+public sealed record Widened(long Rank, decimal Amount, decimal? Price);
+public sealed record Twice(string A, string B);
+public sealed record Staged(Stage Stage, Stage? Previous);
+public sealed record Stamped(DateTime Stamp, DateTime? When);
+
+public static class EdgeQueries
+{
+    [ServerAction] public static List<int> Ranks(IDataSession data) => data.Query<Item>().OrderBy(x => x.Rank).Select(x => x.Rank).ToList();
+    [ServerAction] public static List<long> Bigs(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => x.Big).ToList();
+    [ServerAction] public static List<decimal> Amounts(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => x.Amount).ToList();
+    [ServerAction] public static List<DateTime> Stamps(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => x.Stamp).ToList();
+    [ServerAction] public static List<bool> Flags(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => x.Flag).ToList();
+    [ServerAction] public static List<int?> Optionals(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => x.Optional).ToList();
+    [ServerAction] public static List<decimal?> Prices(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => x.Price).ToList();
+    [ServerAction] public static List<DateTime?> Whens(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => x.When).ToList();
+    [ServerAction] public static List<int?> LiftedRanks(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => (int?)x.Rank).ToList();
+    [ServerAction] public static List<Stage> Stages(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => x.Stage).ToList();
+    [ServerAction] public static List<Stage?> Previouses(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => x.Previous).ToList();
+    [ServerAction] public static List<Item> Whole(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).ToList();
+    [ServerAction] public static List<Item> Empty(IDataSession data) => data.Query<Item>().Take(0).ToList();
+    [ServerAction] public static List<Outer> Nested(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => new Outer(x.Id.Value, new Inner(x.Code, x.Rank))).ToList();
+    [ServerAction] public static List<Mixed> Mixes(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => new Mixed(x.Note, x.Rank, x.Optional, x.Code)).ToList();
+    [ServerAction] public static List<Widened> Widens(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => new Widened(x.Rank, x.Rank, x.Optional)).ToList();
+    [ServerAction] public static List<Twice> Twices(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => new Twice(x.Code, x.Code)).ToList();
+    [ServerAction] public static List<Staged> Stageds(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => new Staged(x.Stage, x.Previous)).ToList();
+    [ServerAction] public static List<Stamped> Stampeds(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => new Stamped(x.Stamp, x.When)).ToList();
+    [ServerAction] public static List<string> Codes(IDataSession data) => data.Query<Item>().OrderBy(x => x.Code).Select(x => x.Code).ToList();
+    [ServerAction] public static List<string?> Notes(IDataSession data) => data.Query<Item>().OrderBy(x => x.Id).Select(x => x.Note).ToList();
+    [ServerAction] public static int InLoop(IDataSession data, int times)
+    {
+        var count = 0;
+        for (var i = 0; i < times; i++)
+        {
+            var rows = data.Query<Item>().Where(x => x.Rank > i).Select(x => x.Optional).ToList();
+            count += rows.Count;
+            foreach (var row in rows) if (row.HasValue) count += row.Value;
+        }
+        return count;
+    }
+    [ServerAction] public static int SumOrDefault(IDataSession data)
+    {
+        var rows = data.Query<Item>().OrderBy(x => x.Id).Select(x => x.Optional).ToList();
+        var total = 0;
+        foreach (var row in rows) total += (row ?? 0);
+        return total;
+    }
+    [ServerAction] public static string Joined(IDataSession data)
+    {
+        var rows = data.Query<Item>().OrderBy(x => x.Id).Select(x => new Mixed(x.Note, x.Rank, x.Optional, x.Code)).ToList();
+        var text = "";
+        foreach (var row in rows) text = text + row.Code + ":" + (row.Note ?? "-") + ":" + (row.Optional.HasValue ? "y" : "n") + ";";
+        return text;
+    }
+}

@@ -1,6 +1,7 @@
 // Tracked live proof driver (R17): one declarative script over either public surface, `ssam mcp`
 // (MCP stdio, ssam_debug_server|client) or `ssam debug <runtime> --stdio --lane <lane>` (JSON lines).
 // It binds the observed stop tokens, never evaluates or replays, and audits requests by hash only.
+import { appendJsonLine } from './correlation.mjs';
 import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -310,7 +311,7 @@ export async function runSurfaceProof({ script: raw, transport, root, entry, out
     owner: null, ownerTerminatedWithLiveSession: null, ownerClosing: [], terminal: { observed: false, state: null, source: null }, runResult: null, sessionReceipt: null,
     flags: null, surfaceCriteriaPassed: false, error: null, cleanupError: null, auditPath };
   const save = () => { fs.writeFileSync(auditPath + '.tmp', JSON.stringify(audit, null, 2)); fs.renameSync(auditPath + '.tmp', auditPath); };
-  const record = row => { if (transcript) fs.appendFileSync(transcriptPath, JSON.stringify(row) + '\n'); };
+  const record = row => { if (transcript) appendJsonLine(transcriptPath, row); };
   save();
   let debug, tools, session = null, initial = null, last = null, final = null, source = null;
   let stopRequested = false, stopSent = false, pauseSent = false;

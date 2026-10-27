@@ -30,6 +30,11 @@ public sealed class NativePerformanceCapture : IDisposable
         ? new Measurement(capture, phase, cpu) : NoMeasurement.Instance;
     internal static IDisposable MeasureVerb(string verb) => Ambient.Value is { } capture
         ? new Measurement(capture, "verb." + verb, false) : NoMeasurement.Instance;
+    /// <summary>Batch lab: the preparation of a set (the value converted for the property), by native type and property, and
+    /// all of them under "set.prepare", on one clock.</summary>
+    internal static IDisposable MeasureSetPreparation(Type nativeType, string property) => Ambient.Value is { } capture
+        ? new Measurement(capture, "set.prepare/" + (nativeType.FullName ?? nativeType.Name) + "/" + property, false, "set.prepare")
+        : NoMeasurement.Instance;
     // Use runtime type metadata and API property names only: never instance names,
     // source expressions, business values, credentials or paths.
     internal static IDisposable MeasureSet(Type nativeType, string property, string route) => Ambient.Value is { } capture
@@ -40,11 +45,12 @@ public sealed class NativePerformanceCapture : IDisposable
     {
         private NativePerformanceCapture? owner;
         private readonly string phase;
+        private readonly string? totalPhase;
         private readonly long started;
         private readonly long? cpuStarted;
-        internal Measurement(NativePerformanceCapture owner, string phase, bool cpu)
+        internal Measurement(NativePerformanceCapture owner, string phase, bool cpu, string? totalPhase = null)
         {
-            this.owner = owner; this.phase = phase;
+            this.owner = owner; this.phase = phase; this.totalPhase = totalPhase;
             cpuStarted = cpu ? CpuNow() : null;
             started = Stopwatch.GetTimestamp();
         }
@@ -54,7 +60,9 @@ public sealed class NativePerformanceCapture : IDisposable
             if (capture == null) return;
             var elapsed = Stopwatch.GetTimestamp() - started;
             var cpuFinished = cpuStarted.HasValue ? CpuNow() : null;
-            capture.Record(phase, elapsed, cpuStarted.HasValue && cpuFinished.HasValue ? cpuFinished.Value - cpuStarted.Value : null);
+            var cpu = cpuStarted.HasValue && cpuFinished.HasValue ? cpuFinished.Value - cpuStarted.Value : (long?)null;
+            capture.Record(phase, elapsed, cpu);
+            if (totalPhase != null) capture.Record(totalPhase, elapsed, cpu);
         }
     }
 

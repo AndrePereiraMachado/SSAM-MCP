@@ -80,7 +80,7 @@ const SHAPES = {
   // module: the consumer (the active module when absent); producers: reference names or producer keys (all when absent).
   // fix-ext-refs: add (the elements to add, by producer, as a job's reference op names them) and published (bring each named
   // producer to its published signature) run the Studio's own Manage Dependencies (bridge capability refresh_references:add).
-  'refresh-references': { module: name.optional(), producers: z.array(name).min(1).max(64).optional(), timeoutSeconds: int(10, 1800, 600),
+  'refresh-references': { module: name.optional(), environment: host.optional(), producers: z.array(name).min(1).max(64).optional(), timeoutSeconds: int(10, 1800, 600),
     add: z.array(z.object({ producer: name, elements: z.array(name).max(200).default([]) }).strict()).min(1).max(64).optional(), published: z.boolean().optional() },
   // C22: the tab of a module, by name (module is the alias) and, when two tabs share it, by key.
   'close-module': { name, moduleKey: name.optional() },
@@ -420,12 +420,13 @@ export async function refreshAllReferences(bridge, { module, key, environment, a
 // about ten tabs the Studio moves some into a second window and the bridge's active module is the selected tab of the
 // FIRST window (2026-10-07, a client session: o11_publish answered MODULE_NOT_ACTIVE right after open-module said alreadyOpen). A bridge
 // whose calls target module_key (merge_from_oml:module_key, C41) goes on by key. {tab, listed} | {ambiguous} | {} (none).
-export async function moduleTab(bridge, module, { listed } = {}) {
+export async function moduleTab(bridge, module, { listed, environment } = {}) {
   let listing = listed;
   // A bridge that cannot list its tabs has no tab to address by key: the caller answers as before.
   if (!listing) try { listing = await bridge.ok('list_open_modules', {}, { timeoutMs: 10000 }); } catch (error) { if (abortsWait(error)) throw error; return {}; }
   const tabs = (listing?.modules ?? []).filter(m => m && m.hasESpace !== false && m.hasOpenedActiveESpace !== false
-    && typeof m.key === 'string' && m.key && sameName(m.name, module));
+    && typeof m.key === 'string' && m.key && sameName(m.name, module)
+    && (!environment || sameName(m.environment, environment)));
   if (tabs.length > 1) return { ambiguous: tabs.map(m => ({ name: m.name, key: m.key, ...(Number.isInteger(m.window) ? { window: m.window } : {}) })) };
   if (tabs.length === 1 && await bridgeOffers(bridge, MODULE_KEY_CAPABILITY)) return { tab: { ...tabs[0], byKey: true }, listed: listing };
   return {};
@@ -502,12 +503,32 @@ const CHECKS = {
 // the Studio's Refresh References, a model change) only when that lock is free at that moment (ctx.exclusive, queue 0);
 // otherwise the dialog is listed with its next call and the write that holds the Studio answers it (UI freeze of
 // 2026-10-08, pattern 4: a status refreshing references beside another agent's merge).
+// The hosts the Studio is signed in to (sc_session.signedInHosts), and, when no open module has an environment and no host
+// is signed in, the fact that explains it: every environment read (deliveries, publish, ssam_app_url) needs the sign-in,
+// which the person does in the Studio (login opens its own sign-in dialog).
+function signedInFields(session, modules) {
+  if (session?.status !== 'fulfilled') return {};
+  const value = session.value?.result ?? session.value;
+  const hosts = Array.isArray(value?.signedInHosts) ? [...new Set(value.signedInHosts.filter(h => typeof h === 'string' && h).map(h => h.toLowerCase()))] : null;
+  if (!hosts) return {};
+  const out = { signedInHosts: hosts };
+  const open = Array.isArray(modules) ? modules.filter(m => m && m.hasESpace !== false) : [];
+  if (!hosts.length && open.length && open.every(m => !m.environment)) {
+    out.signedIn = false;
+    out.environmentUnknown = { why: 'the Studio is not signed in to any environment: its open modules report no environment, and environment reads, deliveries, publications and ssam_app_url need the sign-in',
+      next: { tool: 'o11_studio', arguments: { command: 'login', args: { host: '<environment host>' } }, why: 'opens the Studio own sign-in; the person types the password or completes SSO there' } };
+  }
+  return out;
+}
+
 async function status(bridge, args, ctx) {
   // CX14 follow-up: the manifest shared with the pre-probe and bridgeOffers (one read per Studio) when the client has it.
   const manifestRead = typeof bridge?.manifest === 'function'
     ? bridge.manifest({ timeoutMs: 5000 }).then(read => { if (read?.ok) return read.data; throw read?.error; }) : bridge.ok('bridge_manifest');
-  const [ping, manifest, list, active, alive] = await Promise.allSettled([bridge.ok('ping'), manifestRead,
-    bridge.ok('list_open_modules'), bridge.ok('get_active_module'), bridge.ok('ui_alive', { timeout_ms: 1000 })]);
+  // Meta de 20/10/2026 (ssam_app_url live): the Studio had lost its environment sign-in overnight and status showed only
+  // environment:null on every module; sc_session (an older bridge has none) says which hosts the Studio is signed in to.
+  const [ping, manifest, list, active, alive, session] = await Promise.allSettled([bridge.ok('ping'), manifestRead,
+    bridge.ok('list_open_modules'), bridge.ok('get_active_module'), bridge.ok('ui_alive', { timeout_ms: 1000 }), bridge.ok('sc_session', {})]);
   if (ping.status === 'rejected') throw ping.reason;
   if (ping.value?.bridge !== 'anvil') return notConnected();
   for (const r of [list, active, alive]) if (r.status === 'rejected' && abortsWait(r.reason)) throw r.reason;
@@ -544,6 +565,7 @@ async function status(bridge, args, ctx) {
     openModules: modules ? modules.filter(m => m.hasESpace !== false).map(m => ({ name: m.name, modified: m.isModified === true, environment: m.environment ?? null,
       ...(Number.isInteger(m.window) ? { window: m.window } : {}) })) : null,
     environments: list.status === 'fulfilled' ? list.value.environments ?? [] : null,
+    ...signedInFields(session, modules),
     // C22 (bridge capability list_open_modules:window): each Studio window and the tabs it holds; a second window is visible here.
     ...(Array.isArray(listed?.windows) ? { windows: listed.windows.map(w => ({ index: w.index, ...(w.title ? { title: w.title } : {}), ...(w.environment ? { environment: w.environment } : {}),
       modules: Array.isArray(w.modules) ? w.modules : [] })) } : {}),
@@ -744,7 +766,23 @@ const elementOf = e => (e ? { ...(e.name ? { name: e.name } : {}), ...(e.key ? {
   ...(e.path ? { path: e.path } : {}), ...(e.ambiguous ? { ambiguous: e.ambiguous } : {}) } : undefined);
 
 // Pure: what to do after a failed publication, an MCP call that points at the element to fix (or the full log).
+// An assertion in the server's module generator is not a diagnosis of an Entry,
+// widget or reference. Keep it separate from element-level compiler errors.
+export function publishCompilerDiagnosis(log) {
+  const error = (log?.messages ?? []).find(m => m?.type === 'Error'
+    && /\bESpace\.Dump\s*\(/.test([m.text, m.detail, m.extraInfo].filter(Boolean).join('\n')));
+  return error ? { code: 'COMPILER_ESPACE_DUMP', phase: 'server-code-generation', causeKnown: false,
+    localVerifyProvesCompilation: false,
+    evidenceNeeded: ['failing-module-capture', 'server-compiler-error-detail', 'comparison-with-compiling-capture'] } : null;
+}
+
 export function publishFixContinuation(log, module) {
+  if (publishCompilerDiagnosis(log)) return {
+    tool: 'o11_service_center_read',
+    arguments: { action: 'logs', kind: 'error', source: 'CompilerService', message: 'Invalid compiler output', limit: 20,
+      ...(log?.environment ? { host: log.environment } : {}) },
+    why: 'ESpace.Dump failed during server code generation; the cause is not identified. Preserve the failing module capture and publication receipt, read the server error detail, and compare against a compiling capture. CompilerService errors may have no module attribution. Local Verify is not a compilation proof; do not recreate the module or repeat unchanged publication as a guessed repair.'
+  };
   const first = (log?.messages ?? []).find(m => m?.type === 'Error');
   const target = log?.module ?? module;
   const where = first?.element?.name ? ' in ' + first.element.name : '';
@@ -781,7 +819,11 @@ export function publishLogView(data, { module } = {}) {
       ...(m.element ? { element: elementOf(m.element) } : {}), ...(m.extraInfo ? { extraInfo: m.extraInfo } : {}), ...(m.id ? { id: m.id } : {}),
       ...(m.shownAt ? { shownAt: m.shownAt } : {}) })),
     ...(data.omitted ? { omitted: data.omitted } : {}) };
-  if (data.status === 'failed') value.continuation = publishFixContinuation(data, module);
+  if (data.status === 'failed') {
+    value.continuation = publishFixContinuation(data, module);
+    const diagnosis = publishCompilerDiagnosis(data);
+    if (diagnosis) value.diagnosis = diagnosis;
+  }
   return value;
 }
 
@@ -921,13 +963,13 @@ async function login(bridge, args, ctx) {
 const OLD_REFRESH = /^(\w+Exception:\s*)?Unknown method: refresh_references/;
 async function refreshReferences(bridge, args, ctx) {
   if (args.module) {
-    const opened = await openModule(bridge, { name: args.module, timeoutSeconds: 120 }, ctx); if (!opened.ok) return opened;
+    const opened = await openModule(bridge, { name: args.module, environment: args.environment, timeoutSeconds: 120 }, ctx); if (!opened.ok) return opened;
     args = { ...args, module: opened.name ?? args.module };
   }
   let active = await bridge.ok('get_active_module');
-  if (args.module && String(active.name).toLowerCase() !== args.module.toLowerCase()) {
+  if (args.module && (!sameName(active.name, args.module) || args.environment && !sameName(active.environment, args.environment))) {
     // A tab of the Studio's second window is never the active module: refreshed by its key (merge_from_oml:module_key).
-    const found = await moduleTab(bridge, args.module);
+    const found = await moduleTab(bridge, args.module, { environment: args.environment });
     if (found.ambiguous) return tabAmbiguous(args.module, found.ambiguous);
     if (!found.tab) return { ok: false, code: 'MODULE_NOT_ACTIVE', module: args.module, active: active.name, continuation: { ...call('open-module', { name: args.module }), why: 'select the module before the refresh' } };
     active = { name: found.tab.name, key: found.tab.key, environment: found.tab.environment ?? null };
@@ -1030,6 +1072,22 @@ async function closeModule(bridge, args) {
     throw error;
   }
   return { ok: true, module: data?.name ?? args.name, closed: data?.closed !== false, ...(data?.alreadyClosed ? { alreadyClosed: true } : {}) };
+}
+
+// The open modules of the connected Service Studio, read only: ping and list_open_modules, never a dialog answered and never
+// a write (ssam_app_url reads the environment of an open module with it; o11_studio status may answer the dependencies
+// dialog, which a read must never do).
+export async function o11OpenModules({ bridge, lane = o11Lane.lane, root = anvilRoot, env = process.env } = {}) {
+  let target;
+  try { target = typeof bridge === 'function' ? bridge() : bridge ?? o11Bridge(bridgeTarget({ lane, root, env })); } catch { return notConnected(); }
+  let ping, list;
+  try {
+    ping = await target.ok('ping', {}, { timeoutMs: 3000 });
+    if (ping?.bridge !== 'anvil') return notConnected();
+    list = await target.ok('list_open_modules', {}, { timeoutMs: 5000 });
+  } catch { return notConnected(); }
+  return { ok: true, pid: ping.pid ?? null, openModules: (list?.modules ?? []).filter(m => m && m.hasESpace !== false).map(m => ({ name: m.name, environment: m.environment ?? null })),
+    environments: list?.environments ?? [] };
 }
 
 const HANDLERS = { status, wait, 'open-module': openModule, 'close-module': closeModule, snapshot, errors, 'publish-log': publishLog, windows,

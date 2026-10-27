@@ -224,18 +224,23 @@ for (const lane of ['odc', 'o11']) {
     assert.equal(ids.includes('read.inspect'), false);
     assert.equal(index.identity.descriptor.shared.fragments.length, 3);
     for (const t of ['OutSystems.Model.Logic.Nodes.IAssignNode', 'ServiceStudio.Plugin.NRWidgets.IButton']) assert.equal(index.nativeRuntime[t]?.found, true, t);
-    const answer = await discover({ lane, intent: 'm0probebutton m0probeassign', sources: probe, budgetBytes: 12000 });
+    // The probe fragments are a mechanism fixture with no proof (not a coverage claim): the app-kind filter (family F4) never
+    // offers a UI capability proven on no kind of its lane, so the mechanism is read with the filter off (kindFilter:false),
+    // and with it on the probe button is left out.
+    const filtered = await discover({ lane, intent: 'm0probebutton m0probeassign', sources: probe, budgetBytes: 12000 });
+    assert.deepEqual(filtered.matches.filter(m => m.via === 'match').map(m => m.id), ['logic.m0-probe-assign']);
+    const answer = await discover({ lane, intent: 'm0probebutton m0probeassign', sources: probe, budgetBytes: 12000, kindFilter: false });
     assert.equal(answer.ok, true);
     assert.deepEqual(answer.matches.filter(m => m.via === 'match').map(m => m.id).sort(), ['logic.m0-probe-assign', 'ui.m0-probe-button']);
     assert.ok(wireBytes(answer, { budgetBytes: 12000 }) <= 12000);
     // The anchored keyword reaches the index as written and counts only with its context.
     const directOf = a => a.matches.filter(m => m.via === 'match');
-    const alone = await discover({ lane, intent: 'm0probeanchored m0probebutton', sources: probe, budgetBytes: 12000 });
+    const alone = await discover({ lane, intent: 'm0probeanchored m0probebutton', sources: probe, budgetBytes: 12000, kindFilter: false });
     assert.deepEqual(directOf(alone).map(m => m.id), ['ui.m0-probe-button']);
-    const anchored = await discover({ lane, intent: 'm0probeanchored m0probecontext m0probebutton', sources: probe, budgetBytes: 12000 });
+    const anchored = await discover({ lane, intent: 'm0probeanchored m0probecontext m0probebutton', sources: probe, budgetBytes: 12000, kindFilter: false });
     // why names the form and the with-term said, in tokens as every why does ("-ed" is stemmed).
     assert.deepEqual(directOf(anchored).find(m => m.id === 'logic.m0-probe-assign')?.why, ['m0probeanchor [m0probecontext]'], JSON.stringify(directOf(anchored)));
-    const excluded = await discover({ lane, intent: 'm0probeanchored m0probecontext m0probeexclusion m0probebutton', sources: probe, budgetBytes: 12000 });
+    const excluded = await discover({ lane, intent: 'm0probeanchored m0probecontext m0probeexclusion m0probebutton', sources: probe, budgetBytes: 12000, kindFilter: false });
     assert.deepEqual(directOf(excluded).map(m => m.id), ['ui.m0-probe-button']);
     // An anchored keyword whose term keeps no word after tokenization (a stopword) refuses the build, as the pure check
     // does, naming the fragment capability and, with it, its pointer that does not resolve in the lane CLI. A broken

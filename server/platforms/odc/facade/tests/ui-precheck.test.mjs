@@ -26,7 +26,9 @@ import { fakeAnvil } from './fixtures/fake-anvil.mjs';
 import { fakeBridge } from './fixtures/fake-o11-bridge.mjs';
 import { fakeO11Worker } from './fixtures/fake-o11-worker.mjs';
 import { moduleIndex } from './fixtures/module-index.mjs';
+import { DIGEST_EXTRACTOR } from '../module-digest.mjs';
 import envelopes from './fixtures/o11-cycle-envelopes.json' with { type: 'json' };
+import { STORE_GENERATION } from '../store-generation.mjs';
 
 const sha = text => createHash('sha256').update(text).digest('hex');
 const bytes = value => Buffer.byteLength(JSON.stringify(value), 'utf8');
@@ -94,10 +96,10 @@ function sandbox(t) {
 // The index of a capture in the store, with its digest (section "module": the references of the module).
 function storeIndex(store, lane, text, { adapter = lane === 'odc' ? 'builder' : 'kernel', libraries = ['OutSystemsUI', 'Shop_CS'], digest = true, module = 'Shop_UI' } = {}) {
   const sourceSha256 = sha(text);
-  const dir = path.join(store, 'v1', lane); fs.mkdirSync(dir, { recursive: true });
+  const dir = path.join(store, STORE_GENERATION, lane); fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, sourceSha256 + '.' + adapter + '.json');
   fs.writeFileSync(file, JSON.stringify(moduleIndex({ lane, sourceSha256, overrides: { adapter } })));
-  if (digest) fs.writeFileSync(path.join(dir, sourceSha256 + '.kernel.digest.json'), JSON.stringify({ schema: 'ssam-digest/1', extractor: 3, lane, adapter: 'kernel', sourceSha256,
+  if (digest) fs.writeFileSync(path.join(dir, sourceSha256 + '.kernel.digest.e' + DIGEST_EXTRACTOR + '.json'), JSON.stringify({ schema: 'ssam-digest/1', extractor: DIGEST_EXTRACTOR, lane, adapter: 'kernel', sourceSha256,
     module: { name: module, key: 'Ua3', kind: 'CrossDevice' }, sections: [{ id: 'module', title: 'module and references', count: libraries.length + 1,
       blocks: [{ key: 'Ua3', kind: 'ESpace', name: module, text: 'ssam-digest/1 module=' + module }, ...libraries.map(name => ({ key: 'R' + name, kind: 'Reference', name,
         text: 'reference ' + name + ' @R' + name + ' (ReactiveLibrary)\n  Block: Card' }))] }] }));

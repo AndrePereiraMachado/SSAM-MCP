@@ -423,7 +423,7 @@ expectedSourceSha256?}` no servidor `ssam` (as duas faixas; o O11 também, pelo 
 producer, kind, chave, ambiente, atestação e elementos (paginados por `offset`/`limit`). `capture` sem `out` grava em
 `<.local da faixa>\dependencies\<producer>-<sha8 dos elementos>.avsig` e devolve `out`.
 
-**Armazenamento e identidade.** `<raiz>\.local\module-index\v1\<faixa>\<sha256>.<adaptador>.json`
+**Armazenamento e identidade.** `<raiz>\.local\module-index\v1-i<extrator do índice>f<extrator do fluxo>\<faixa>\<sha256>.<adaptador>.json`
 (`SSAM_MODULE_INDEX_ROOT` muda a raiz; a fachada a resolve e a entrega absoluta a cada leitor que inicia, então
 leitor e mapa usam a mesma pasta mesmo com os leitores fora da área de trabalho). `sha256` é o dos bytes da OML;
 o adaptador é `builder` (leitor ODC) ou
@@ -575,7 +575,7 @@ do modelo. Mudanças normais na instalação/runtime iniciam outra geração. Is
 verificação criptográfica integral de todos os arquivos da instalação.
 Cada geração executa uma cópia própria dos binários do leitor; nenhuma DLL carregada no Studio
 é substituída. O serviço escuta somente no loopback, exige a autoridade local do Hybrid e recusa
-comandos de edição. Não compartilha objetos com o worker de escrita.
+comandos de edição. Não compartilha objetos com o worker de escrita (que lê sobre o seu próprio spare: abaixo).
 
 Há uma captura por processo, até 128 respostas e 16 MiB de respostas memorizadas
 (máximo de 4 MiB por resposta). Alternar entre OMLs diferentes exige nova carga.
@@ -584,6 +584,27 @@ Gerações antigas podem coexistir até esse encerramento. Arquivos de evidênci
 journal: esta mudança não implementa a política de limpeza de `lab` ou dos journals.
 `SSAM_READER_CACHE_ROOT` permite isolar uma sessão de leitura ou benchmark; cada raiz mantém
 seus próprios processos. A prova usa essa opção para não disputar a captura de outras tarefas.
+
+### Leitura pelo worker de escrita (spare do módulo)
+
+`view:"flow"` e `view:"digest"` são respondidas antes pelo worker de escrita da lane quando ele está de pé, livre e guarda
+um spare do mesmo modelo (verbo `hot-read`, S14): o mesmo código do leitor sobre o spare, lido no lugar e sem tomá-lo, com
+`cache.via:"worker"`. Worker ocupado, com fila, preparando um spare ou sem spare desse modelo: a fachada lê frio, como acima.
+
+O spare acompanha o módulo (L3b, 24/10/2026):
+- Depois de uma entrega com `delivered`, a captura entregue é o módulo agora. O11: o kernel que entregou no worker pede o spare
+  dela (`nextSpare` no resultado da entrega) e deixa de preparar o modelo de antes do merge; se a entrega rodou fria, a fachada
+  pede com o verbo `warm`. ODC: o `afterSnapshot` do merge da bridge vira snapshot conhecido (`<módulo>-<sha256>.oml` com o
+  `.json`, `source:"after-merge"`) e o worker ODC recebe `warm` com o autor e a identidade de conteúdo da captura.
+- No arranque (atrás de `SSAM_NO_WARM`), depois que o worker de cada lane sobe, o servidor pede o spare das capturas
+  conhecidas dos módulos abertos no Studio (sem Studio: as 3 mais recentes; ODC: os 3 snapshots mais recentes, um pedido por
+  autor). O `ssam_doctor` responde na hora e diz por lane `spares {asked, ready, held, warming}`.
+- O preparo é ocioso e cancelável: um pedido que não usa o spare o cancela e nunca espera por ele; um apply do mesmo modelo
+  espera só aquele preparo; um spare incompleto nunca é entregue.
+
+Medido num módulo O11 de cliente (3,5 MB): leitura `flow` de 2 actions logo depois do merge 7,5 s → 0,15 s; segunda entrega `loadMs`
+677 → 12; primeira leitura depois de subir o worker 7,2 s → 0,3 s com o pré-aquecimento pronto. Limite: uma leitura que chega
+durante o preparo (cerca de 2 s depois do merge, 6 s depois do arranque) ainda lê fria.
 
 Consultar pelo nome de módulo continua obtendo um snapshot novo no Studio em toda chamada.
 Os ganhos de leituras repetidas de arquivo não eliminam o custo dessa captura viva.

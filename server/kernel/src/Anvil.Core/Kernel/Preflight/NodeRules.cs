@@ -43,6 +43,15 @@ public static class NodeRules
         // ESpaceType: Mobile/MobileLibrary, CrossDevice/ReactiveLibrary (Reactive), WebResponsive/WebResponsiveLibrary (Traditional).
         var mobile = moduleType is "Mobile" or "MobileLibrary";
         var clientRuntime = moduleType is "Mobile" or "MobileLibrary" or "CrossDevice" or "ReactiveLibrary";
+        if (moduleType is "WebResponsive" or "WebResponsiveLibrary")
+            for (var i = 0; i < ops.Count; i++)
+                if (ops[i] is JsonObject op && op["op"]?.ToString() == "set" && op["prop"]?.ToString() == "DefaultScreen"
+                    && !string.IsNullOrEmpty(op["value"]?.ToString()))
+                    problems.Add(JobPreflight.Problem(i, prefix == null ? null : $"{prefix}/{i}/value",
+                        "TRADITIONAL_DEFAULT_SCREEN_NOT_MERGEABLE", "error",
+                        "The native Traditional merge drops ESpace.DefaultScreen even when Verify accepts it.",
+                        "Use the Traditional IEntry: link it to the requested Web Screen and set IsDefault=true. Preserve existing entries and select the intended entry explicitly. This is a proven merge limitation, not a diagnosis of ESpace.Dump.",
+                        null, "model"));
         var taken = new HashSet<string>(job.Actions.Select(a => a.Name), StringComparer.OrdinalIgnoreCase);
         string? helper = null; var helperAdded = false;
         foreach (var action in job.Actions)

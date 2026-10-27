@@ -122,6 +122,18 @@ public abstract class ModelReader<T> where T : class
     // set is computed by the platform; the data text's fixed point compares every property that can. Unknown: settable.
     protected virtual bool Writable(T node, string property) => true;
     internal bool IsWritable(T node, string property) => Writable(node, property);
+    // The members of the native enumeration a property holds (F2: the values an edit may write on it), null when it holds no
+    // enumeration or the adapter cannot tell.
+    protected virtual IReadOnlyList<string>? Members(T node, string property) => null;
+    internal IReadOnlyList<string>? MembersOf(T node, string property) => Members(node, property);
+    // Whether Properties(node) lists every property the node's type has (the Model API's, by reflection), so that a name it does
+    // not list is no property of the node; false for a reader that lists only the values a node holds.
+    protected internal virtual bool ListsEveryProperty => false;
+    // The type of fact a property holds by its declared type, whatever value a node holds (F2: the property model is the type's,
+    // never the first node's): 't' text, 'b' boolean, 'e' expression, 'r' reference, 'l' list of references, 'v' an enumeration or
+    // a number, '-' a value the page has no text for (binary data); null when the declared type does not say (object).
+    protected virtual char? DeclaredFactType(T node, string name) => null;
+    internal char? DeclaredFactTypeOf(T node, string name) => DeclaredFactType(node, name);
     // Tree with --properties Name: true when the Name property projects exactly to Name(node), false when the node has
     // no Name property (propertiesMissing), null when only the model can reproduce the answer.
     internal bool? NameProjection(T node, string modelName)

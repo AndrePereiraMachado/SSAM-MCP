@@ -189,6 +189,9 @@ Resposta `ssam-packet/1` (`platforms/odc/facade/work-packet.mjs`), seções nest
   (categorias dos matches fortes, palavras da intenção; tópico raro pesa mais) e por palavra de técnica (json, visible,
   lambda...). Lição "O11:" só no O11; AR1 só no O11. Nunca o texto inteiro.
 - `next`: entregar com `o11_deliver`/`studio_deliver`; corrigir com `patch` + `basedOn`; as operações roteadas, por nome.
+- R4 (24/10/2026, `packet-scope.mjs`): `scope`, logo depois de `module`, nomeia com `@key` o que a mudança pode usar (do digest) e
+  traz o dono lido com o pacote (flow com `@ids` e `textSha`, ou tela com `k`); `scope.basedOn` dá campo e valor de cada `basedOn`,
+  que a chamada pronta já leva. `needsReading`/`readingWhy`/`read` dizem se uma leitura vem antes da entrega; os cortes viram uma recuperação só.
 
 Tamanho: até 38.912 bytes (o teto da resposta menos a folga do moldador); um `budgetBytes` menor vale. Cada seção tem
 uma parte da sala (`SHARES`); o que ela não usa passa para a seguinte, na ordem. Dentro da seção ficam os itens mais
@@ -340,7 +343,7 @@ contexto, tipos nativos qualificados e o estatuto de cada operação daquela fai
 traz só as rotas da faixa; nada do descritor ODC é herdado — uma intenção fora do recorte devolve `matches: []` e o
 `coverage` da faixa. O índice O11 lê os resultados carimbados que a suíte O11 (`JobTests`) deixa em
 `kernel/.local/test-work` para os jobs de `tests/provenance-o11.json`, a identidade do Service Studio pelo novo
-`anvil verify-catalog`, e os contratos nativos de cada tipo pelo `api --op native --type` (runtime instalado, não o
+`anvil verify-catalog`, e os contratos nativos de cada tipo pelo `api --op native --type` (ou `--types A,B,...` num processo so, L3a; runtime instalado, não o
 catálogo). Cada resposta de uma capacidade partilhada traz `focus` (papel e operação nomeados pela intenção),
 `operations` (por operação: rota, pré-condições, resumo da cobertura da família e uma declaração POR PAPEL do
 elemento — estatuto, evidência calculada só sobre o tipo nativo desse papel nesta faixa, escopo da prova, recusas,

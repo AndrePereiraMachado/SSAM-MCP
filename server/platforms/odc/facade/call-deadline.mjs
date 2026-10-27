@@ -1,5 +1,4 @@
 // One deadline for every externally served tool. Internal calls keep the same async scope.
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,9 +9,24 @@ import { isMutation, declareToolClassification, classifyTool, phaseOfCall } from
 import { taskStepOfCall, tokensOfCall } from './destructive-operations.mjs';
 import { WORDS_MARKER } from './next-steps.mjs';
 import { RESULT, resultIs } from './result-values.mjs';
+import { callScope, traceOfRequest, traceFields } from './correlation.mjs';
 
 export const CALL_DEADLINE_MS = 25000;
-export const callScope = new AsyncLocalStorage();
+// The 25 s hand-off (plan of 2026-10-24, section 3): a delivery, a publication and ssam_code write wait up to the client's limit
+// (50 s by default in Claude Code; SSAM_CALL_DEADLINE_MS, at most 10 min) before they hand off; with an accepted delivery's
+// p90 of 57 s most of them end in the first call. The long reads below wait as long; every other tool keeps 25 s. A
+// continuation waits as long as its tool.
+export const WRITE_DEADLINE_MS = 50000;
+const WRITE_DEADLINE_MAX = 600000;
+const WRITE_TOOLS = new Set(['o11_deliver', 'studio_deliver', 'o11_publish', 'studio_publish']);
+export const waitsForWrite = (tool, args) => WRITE_TOOLS.has(tool) || (tool === 'ssam_code' && args?.action === 'write');
+// S14 (24/10/2026): the long reads wait as long as the writes. In the task store of the main checkout, 57 of the 65 reads of
+// these tools that handed off at 25 s ended within 50 s (ssam_map 31, o11_environment 25, studio_inspect 10; p50 31.8 s,
+// p90 52.8 s): at 50 s most of them end in the first call. They stay reads (isMutation decides that, not the wait).
+const LONG_READ_TOOLS = new Set(['ssam_map', 'o11_inspect', 'studio_inspect', 'o11_environment']);
+export const waitsLong = (tool, args) => waitsForWrite(tool, args) || LONG_READ_TOOLS.has(tool);
+// F7: the scope lives in correlation.mjs, which reads the trace of the live call from it (traceFields).
+export { callScope };
 const liveTasks = new Map();
 const liveKey = (dir, id) => dir.toLowerCase() + ':' + id.toLowerCase();
 export const isLiveTask = (id, dir) => !!liveTasks.get(liveKey(dir, id));
@@ -64,11 +78,21 @@ export function stopOperation(ids, { dir = tasksDir() } = {}) {
   const entry = liveTaskOfOperation(ids, { dir });
   return entry ? stopTask(entry.id, { dir }) : null;
 }
-export function callDeadlineMs(env = process.env) {
+// The wait of one call of tool (args: its arguments, for ssam_code's action): 25 s, or for a write tool and a long read
+// SSAM_CALL_DEADLINE_MS (1 s to 10 min), else 50 s.
+export function callDeadlineMs(env = process.env, { tool = null, args = null } = {}) {
+  if (!waitsLong(tool, args)) return CALL_DEADLINE_MS;
   const raw = env.SSAM_CALL_DEADLINE_MS;
-  if (raw == null || !/^\d+$/.test(String(raw))) return CALL_DEADLINE_MS;
-  return Math.min(CALL_DEADLINE_MS, Math.max(1000, Number(raw)));
+  if (raw == null || !/^\d+$/.test(String(raw))) return WRITE_DEADLINE_MS;
+  return Math.min(WRITE_DEADLINE_MAX, Math.max(1000, Number(raw)));
 }
+// R1 (plano 24/10): what a model repeats beside continueTask because the announced schema keeps it (action of ssam_code,
+// lane, module, until) or because the original call carried it (authorize). Each one equal to the original call's (kept
+// in call.echo; authorize is never kept and always dropped) is ignored and said in normalizations, never INPUT_INVALID.
+const ECHOED = ['action', 'lane', 'module', 'until'];
+const TOLERATED = new Set([...ECHOED, 'authorize']);
+const echoOf = args => Object.fromEntries(ECHOED.filter(k => typeof args?.[k] === 'string').map(k => [k, args[k]]));
+const seconds = ms => Math.max(1, Math.round(ms / 1000));
 export const CONTINUE_TASK_SCHEMA = { type: 'string' };
 export function continuationSchema(config) {
   const schema = config?.inputSchema;
@@ -79,8 +103,8 @@ export function continuationSchema(config) {
 }
 const valueOf = answer => { if (answer?.structuredContent !== undefined) return answer.structuredContent; try { return JSON.parse(answer?.content?.find(c => c.type === 'text')?.text); } catch { return answer; } };
 const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value.ok === false ? { isError: true } : {}) });
-const why = 'Cancelling the wait does not stop the work; use ssam_task {id,stop:true} or ssam_doctor {task:{id,stop:true}}. It goes on in the server; this call waits up to 25 s and returns the result as soon as it ends; never repeat the original call nor sleep';
-const next = task => ({ tool: task.tool, arguments: { continueTask: task.id, ...(task.continuationLane ? { lane: task.continuationLane } : {}) }, why });
+const why = ms => 'Cancelling the wait does not stop the work; use ssam_task {id,stop:true} or ssam_doctor {task:{id,stop:true}}. It goes on in the server; this call waits up to ' + seconds(ms) + ' s and returns the result as soon as it ends; never repeat the original call nor sleep';
+const next = task => ({ tool: task.tool, arguments: { continueTask: task.id, ...(task.continuationLane ? { lane: task.continuationLane } : {}) }, why: why(task.deadlineMs ?? callDeadlineMs(process.env, { tool: task.tool })) });
 const refusal = (code, error, extra = {}) => reply({ ok: false, code, error, ...extra });
 // fix/no-internals round 6 (D15): a refusal of a continuation that never reached the call or its task (an extra field,
 // another tool, an unknown id) carries this mark, so the exposure gate (ssam.mjs exposeHandler) never takes it for the end of
@@ -132,13 +156,31 @@ function annotate(answer, fields) {
 }
 // The fields of a replayed or joined answer next to its own (ssam.mjs: resumedFrom of a replay).
 export const annotateAnswer = (answer, fields) => annotate(answer, fields);
+// The fields a continuation ignored, appended to the answer's own normalizations (a refusal that never reached the task
+// stays as it is).
+export function noted(answer, notes) {
+  const value = valueOf(answer);
+  if (answer?.[CONTINUATION_REFUSED] || !value || typeof value !== 'object' || Array.isArray(value) || value === answer) return answer;
+  const updated = { ...value, normalizations: [...(Array.isArray(value.normalizations) ? value.normalizations : []), ...notes] };
+  let changed = false;
+  const content = (answer.content ?? []).map(block => { if (block.type !== 'text' || changed) return block; changed = true; return { ...block, text: JSON.stringify(updated) }; });
+  if (!changed) content.unshift({ type: 'text', text: JSON.stringify(updated) });
+  return { ...answer, ...(answer.structuredContent !== undefined ? { structuredContent: updated } : {}), content };
+}
 // answerOrigin(tool, args) -> {tool, kind?} | null (fix/no-internals round 4, a licensee's server): whose answer the final
 // answer of a call is, kept with it (answer-size.mjs keepAnswer), so ssam_evidence reads it back as that tool's answer.
+// timeoutMs given: the wait of every tool (tests scale it), else 25 s and the write tools' and long reads' callDeadlineMs;
+// writeTimeoutMs given: the wait of the write tools and the long reads alone (a delivery or a creation that runs to its end
+// is kept past it: runsToEnd).
 // inputsOf(tool, args) -> undefined (a call outside the run-to-end family: CX12 as before) | {key, print, replay} (print: the
 // sha256 of its normalized arguments and of the files it reads, null when one cannot be read for sure; replay false: its
 // final answer is never given to a later identical call); replay-store.mjs createReplay.
-export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = callDeadlineMs(), env = process.env, notify, hasTool = () => true, defaultLane = 'o11', persistTask = mergeTask, saveAnswer = keepAnswer, answerOrigin = null, inputsOf = null } = {}) {
+// F7: caller () -> the hosted caller (createSsamServer passes the exposure meter's caller on a licensee's server, null for the
+// owner).
+export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = null, writeTimeoutMs = null, env = process.env, notify, hasTool = () => true, defaultLane = 'o11', persistTask = mergeTask, saveAnswer = keepAnswer, answerOrigin = null, inputsOf = null,
+  caller = null } = {}) {
   const originOf = (tool, args) => { try { return answerOrigin?.(tool, args) ?? null; } catch { return null; } };
+  const deadlineOf = (tool, args) => (waitsLong(tool, args) ? writeTimeoutMs ?? timeoutMs ?? callDeadlineMs(env, { tool, args }) : timeoutMs ?? CALL_DEADLINE_MS);
   const scope = folderKey(dir);
   const entries = scopedMap(callsByKey, scope), byId = scopedMap(callsById, scope);
   try { ensureTaskIndexes(dir); } catch {}
@@ -147,7 +189,8 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
   let detached = 0;
   const changed = () => { if (env.SSAM_RELAY_CHILD === '1') Promise.resolve(notify?.({ method: 'notifications/ssam/detached_tasks', params: { running: detached } })).catch(() => {}); };
   const owner = { up: () => { detached++; changed(); }, down: () => { detached--; changed(); } };
-  const persist = (entry, fields) => (entry.persistTask ?? persistTask)(dir, { id: entry.id, tool: entry.tool, pid: process.pid, startedAt: new Date(entry.started).toISOString(), state: 'running', call: entry.call, continuationLane: entry.continuationLane, isWrite: entry.isWrite, cancelled: entry.cancelled === true, ...fields });
+  // F7: the record carries the trace of the call that created it (mergeTask never changes it afterwards).
+  const persist = (entry, fields) => (entry.persistTask ?? persistTask)(dir, { id: entry.id, tool: entry.tool, pid: process.pid, startedAt: new Date(entry.started).toISOString(), state: 'running', call: entry.call, continuationLane: entry.continuationLane, deadlineMs: entry.deadlineMs, isWrite: entry.isWrite, cancelled: entry.cancelled === true, ...(entry.trace ? traceFields(entry.trace) : {}), ...fields });
   // M6 adjustment 6: a destructive execution still running also names the record of its operation (taskStepOfCall).
   const recordOf = entry => entry.step ? { destructiveRecord: entry.step, ...(entry.previewIds.length > 1 ? { previewIds: entry.previewIds } : {}) } : {};
   const running = (entry, joined = false) => reply({ state: 'running', task: { id: entry.id, tool: entry.tool, elapsedMs: Date.now() - entry.started }, continuation: next(entry), ...recordOf(entry), ...(joined ? { joined: true } : {}) });
@@ -218,7 +261,7 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
     try {
       const elapsed = new Promise(resolve => {
         if (entry.exempt && original) return;
-        timer = setTimeout(() => { if ((original || joined) && entry.runsToEnd) keep(entry, original); else resolve(false); }, timeoutMs);
+        timer = setTimeout(() => { if ((original || joined) && entry.runsToEnd) keep(entry, original); else resolve(false); }, entry.deadlineMs ?? deadlineOf(entry.tool, null));
       });
       const cancelled = new Promise((_, reject) => { abort = () => { if (original) cancelOriginal(entry); reject(Object.assign(new Error('Continuation cancelled'), { code: 'CANCELLED' })); }; if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true }); });
       const finished = await Promise.race([entry.promise.then(() => true), elapsed, cancelled]);
@@ -230,7 +273,7 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
     let task = readTask(args.continueTask, { dir });
     if (!task) return notReached(refusal('TASK_NOT_FOUND', 'No task ' + args.continueTask));
     if (task.tool !== tool) return notReached(refusal('TASK_TOOL_MISMATCH', 'This task belongs to ' + task.tool, { continuation: next(task) }));
-    const started = Date.now();
+    const started = Date.now(), limit = task.deadlineMs ?? deadlineOf(tool, null);
     while (true) {
       if (task.answer) {
         try {
@@ -254,7 +297,7 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
         return refusal('TASK_ORPHANED', 'The server that ran this task stopped before its final answer.', { ...(task.isWrite !== false ? { outcome: 'uncertain', close: evidenceNext(task, true) } : {}), continuation: hasTool(continuation.tool) ? continuation : evidenceNext(task) });
       }
       if (signal?.aborted) throw Object.assign(new Error('Continuation cancelled'), { code: 'CANCELLED' });
-      const left = timeoutMs - (Date.now() - started);
+      const left = limit - (Date.now() - started);
       if (left <= 0) return running({ ...task, started: Date.parse(task.startedAt) });
       await new Promise((resolve, reject) => {
         const timer = setTimeout(done, Math.min(250, left));
@@ -271,10 +314,27 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
       const signal = ctx?.mcpReq?.signal;
       if (Object.hasOwn(args, 'continueTask')) {
         const extras = Object.keys(args).filter(k => k !== 'continueTask' && k !== 'lane');
-        if (extras.length) return notReached(refusal('INPUT_INVALID', 'A continuation accepts only continueTask and lane.', { violations: extras.map(k => ({ path: '/' + k, message: 'Unexpected continuation field', accepted: ['continueTask', 'lane'] })), continuation: { tool, arguments: { continueTask: args.continueTask, ...(args.lane ? { lane: args.lane } : {}) }, why: 'remove all extra fields' } }));
         const entry = byId.get(args.continueTask);
+        let ignored = [];
+        if (extras.length) {
+          // Goal list of 2026-10-20, item 10: the announced schema of a tool keeps its required fields (ssam_code: action), so a
+          // model repeats the original arguments beside continueTask. The original call repeated exactly (its canonical
+          // hash is the task's) is the same continuation, the extras ignored; anything else is still refused.
+          const { continueTask, ...rest } = args;
+          const call = entry?.call ?? readTask(args.continueTask, { dir })?.call;
+          const original = call?.argsSha256;
+          const repeated = typeof original === 'string' && createHash('sha256').update(canonicalArguments(rest)).digest('hex') === original;
+          // R1: action, lane, module and until equal to the original call's (any value when the record kept none) and
+          // authorize are ignored, each said in normalizations.
+          const echo = call?.echo ?? null;
+          const tolerated = k => TOLERATED.has(k) && (k === 'authorize' || !echo || !Object.hasOwn(echo, k) || echo[k] === args[k]);
+          const left = extras.filter(k => !tolerated(k));
+          if (!repeated && left.length) return notReached(refusal('INPUT_INVALID', 'A continuation accepts only continueTask and lane (action, module, until and authorize repeated from the original call are ignored).', { violations: left.map(k => ({ path: '/' + k, message: TOLERATED.has(k) ? 'Differs from the original call of this task' : 'Unexpected continuation field', accepted: ['continueTask', 'lane'] })), continuation: { tool, arguments: { continueTask: args.continueTask, ...(args.lane ? { lane: args.lane } : {}) }, why: 'remove all extra fields' } }));
+          if (!repeated) ignored = extras.map(k => ({ rule: 'continuation-field', at: '/' + k, note: k + ' is ignored: a continuation takes continueTask (and lane) only' }));
+        }
         if (entry && entry.tool !== tool) return notReached(refusal('TASK_TOOL_MISMATCH', 'This task belongs to ' + entry.tool, { continuation: next(entry) }));
-        return entry ? wait(entry, signal) : fromDisk(tool, args, signal);
+        const answer = await (entry ? wait(entry, signal) : fromDisk(tool, args, signal));
+        return ignored.length ? noted(answer, ignored) : answer;
       }
       // Elicitation may require the still-open request: propose must never detach.
       const hash = createHash('sha256').update(canonicalArguments(args)).digest('hex');
@@ -326,9 +386,11 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = cal
       const abort = () => controller.abort(signal.reason);
       if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
       const previewIds = phase === 'execute' ? tokensOfCall(args) : [];
-      entry = { id: randomUUID(), dir, tool, key, exempt, started: Date.now(), continuationLane: args.lane, call: { argsSha256: hash, lane: args.lane ?? (/^o11_/.test(tool) ? 'o11' : /^(studio_|odc_|hybrid_)/.test(tool) ? 'odc' : defaultLane), ...(previewIds.length ? { previewIds } : {}), ...(inputs?.print ? { inputsSha256: inputs.print } : {}) }, isWrite: mutation, deliveries: 0, controller, inputs,
+      entry = { id: randomUUID(), dir, tool, key, exempt, started: Date.now(), continuationLane: args.lane, deadlineMs: deadlineOf(tool, args), call: { argsSha256: hash, echo: echoOf(args), lane: args.lane ?? (/^o11_/.test(tool) ? 'o11' : /^(studio_|odc_|hybrid_)/.test(tool) ? 'odc' : defaultLane), ...(previewIds.length ? { previewIds } : {}), ...(inputs?.print ? { inputsSha256: inputs.print } : {}) }, isWrite: mutation, deliveries: 0, controller, inputs,
         phase, previewIds, step: phase === 'execute' ? taskStepOfCall(args) : null, owner, persistTask, parent: callScope.getStore() ?? null,
         removeAbort: () => signal?.removeEventListener('abort', abort) };
+      // F7: the ids of this call (a nested call keeps the outer call's), read by every record writer inside it.
+      entry.trace = traceOfRequest(ctx, { env, parent: entry.parent?.trace ?? null, caller });
       const notifyOriginal = ctx?.mcpReq?.notify;
       const context = ctx?.mcpReq ? { ...ctx, mcpReq: { ...ctx.mcpReq, signal: controller.signal, notify: (...params) => entry.detached && !entry.holding ? Promise.resolve() : notifyOriginal?.(...params) } } : ctx;
       if (!nested) entries.set(key, entry);

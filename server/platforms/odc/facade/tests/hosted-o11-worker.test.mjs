@@ -632,7 +632,12 @@ test('hosted, createWorkerFirstRunner sends each customer\'s command to that cus
   assert.equal(ca.spec.local, path.join(a.workspace, 'o11', 'tmp', 'o11-worker'));
   assert.equal(ca.spec.cli, runWithExecutor(a, () => o11LaneOf('ss4').cli), 'the server\'s CLI');
   assert.equal(ca.spec.studioDir, a.o11.studioDir);
-  assert.deepEqual(ca.argv, ['deliver', '--module', 'M']); assert.deepEqual(ca.options, { timeoutMs: 3600000 }); assert.deepEqual(cb.options, {});
+  // F7 (correlation.mjs withTraceArgs): a deliver carries the call's correlation (and call) id after its own arguments.
+  const traced = ca.argv.slice(3);
+  assert.deepEqual(ca.argv.slice(0, 3), ['deliver', '--module', 'M']);
+  assert.equal(traced[0], '--correlation-id'); assert.match(traced[1], /^[0-9a-f-]{36}$/);
+  assert.ok(traced.length === 2 || (traced[2] === '--call-id' && /^[0-9a-f-]{36}$/.test(traced[3]) && traced.length === 4), JSON.stringify(ca.argv));
+  assert.deepEqual(ca.options, { timeoutMs: 3600000 }); assert.deepEqual(cb.options, {});
   assert.deepEqual(runWithExecutor(a, () => hostedWorkerSpec({ env: {} })), ca.spec);
   // The customer's spec carries no memory variable: the pool adds its profile when it launches (hostedWorkerEnv).
   assert.ok(HOSTED_O11_WORKER_VARIABLES.every(name => !(name in ca.spec.env)));
