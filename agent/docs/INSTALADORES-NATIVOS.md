@@ -92,3 +92,19 @@ O run `40601229512` passou os testes do Mac e abriu o aplicativo empacotado
 com dados sob a nova Library. O mesmo teste do aplicativo empacotado passou
 no Windows com dados sob Roaming; o verificador de integridade passou.
 Windows SHA-256: `b39088fe3270140aabd6dae363e98c27170bc8a37b9e629b70d0b9d2fb0826bc`.
+
+## Candidato 0.1.3: ativação e conexão
+
+O painel agora exibe conexão/desconexão/checagem, sem cards de logs ou updates.
+O endereço de produção é fixo em `https://mcp.ssam.pro`. O token é informado na
+ativação inicial: após o instalador Windows abrir o app, ou na primeira abertura
+do app copiado pelo DMG. Não há token embutido no instalador. Uma substituição
+de token continua disponível para rotação de credenciais.
+
+O ícone é um círculo preto maior com S vermelho de traço arredondado e espesso,
+com margem superior e inferior. O gerador mantém app e bandeja consistentes.
+Os testes do app empacotado passam no Windows e no run Mac `40603627395`,
+incluindo colar o token no Mac, saúde indisponível, recuperação e desconexão.
+A checagem consulta `/health` e combina o resultado com o estado recente do
+canal autenticado; não apresenta apenas um diagnóstico local como conectividade.
+Windows final SHA-256: `dc6b03f5b7a006adfabe16d82e7f4fbad4d24f53bec99c4e91c6b55aaa3baf75`.
