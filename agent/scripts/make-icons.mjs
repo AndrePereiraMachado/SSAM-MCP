@@ -56,12 +56,12 @@ const stroke = curves.flatMap(points => Array.from({ length: 41 }, (_, i) => {
 }));
 const sMark = (colour, cx = .5, cy = .5, scale = 1) => (x, y) => {
   const u = (x-cx)/scale+.5, v = (y-cy)/scale+.5;
-  if (u < .28 || u > .72 || v < .18 || v > .83) return null;
+  if (u < .25 || u > .75 || v < .15 || v > .85) return null;
   for (let i=1; i<stroke.length; i++) {
     const [ax,ay]=stroke[i-1], [bx,by]=stroke[i];
     const dx=bx-ax, dy=by-ay;
     const t=Math.max(0,Math.min(1,((u-ax)*dx+(v-ay)*dy)/(dx*dx+dy*dy || 1)));
-    if ((u-ax-t*dx)**2+(v-ay-t*dy)**2 <= .048**2) return colour;
+    if ((u-ax-t*dx)**2+(v-ay-t*dy)**2 <= .063**2) return colour;
   }
   return null;
 };
