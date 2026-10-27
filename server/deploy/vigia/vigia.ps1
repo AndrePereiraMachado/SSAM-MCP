@@ -1,7 +1,25 @@
-param([Parameter(Mandatory)][string]$Config,[switch]$DryRun)
+param(
+ [Parameter(Mandatory)][string]$Config,
+ [switch]$DryRun,
+ [string]$Approve,
+ [string]$Reject,
+ [string]$Reason,
+ [string]$Retry,
+ [switch]$NoUpdate
+)
+# Entry point of the Studio versions watcher (README.md). The scheduled task runs it with -Config only.
 $ErrorActionPreference='Stop'
-$node=if($env:SSAM_NODE){$env:SSAM_NODE}else{Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'}
+# node: SSAM_NODE, else "node" in the configuration, else the Codex runtime of this user, else node on PATH.
+$node=$env:SSAM_NODE
+if(-not $node){try{$node=(Get-Content -LiteralPath $Config -Raw | ConvertFrom-Json).node}catch{$node=$null}}
+if(-not $node){$candidate=Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe';if(Test-Path -LiteralPath $candidate){$node=$candidate}}
+if(-not $node){$found=Get-Command node -ErrorAction SilentlyContinue;if($found){$node=$found.Source}}
+if(-not $node -or -not (Test-Path -LiteralPath $node)){throw 'node.exe not found: set "node" in the watcher configuration or SSAM_NODE.'}
 $argsList=@((Join-Path $PSScriptRoot 'vigia.mjs'),'--config',$Config)
 if($DryRun){$argsList+='--dry-run'}
+if($Approve){$argsList+=@('--approve',$Approve)}
+if($Reject){$argsList+=@('--reject',$Reject);if($Reason){$argsList+=@('--reason',$Reason)}}
+if($Retry){$argsList+=@('--retry',$Retry)}
+if($NoUpdate){$argsList+='--no-update'}
 & $node @argsList
 exit $LASTEXITCODE

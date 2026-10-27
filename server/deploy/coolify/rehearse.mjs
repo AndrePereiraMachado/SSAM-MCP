@@ -3,6 +3,7 @@ import {createOutbox} from '../../../agent/agent/lib/outbox.mjs';
 import {toolListingBytes} from '../../platforms/odc/facade/tool-listing.mjs';
 import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {spawnSync,spawn} from 'node:child_process';import assert from 'node:assert/strict';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
+const budget=JSON.parse(fs.readFileSync(path.join(root,'deploy/coolify/listing-budget.json'),'utf8'));
 const out=path.resolve(process.env.SSAM_REHEARSAL_DIR??'C:/t/multiver-impl/etapa2/rehearsal');
 const docker=process.env.DOCKER_EXE??'C:/Program Files/Docker/Docker/resources/bin/docker.exe';
 const prefix='ssam-multiver-'+Date.now(),containers=[];const checks=[];
@@ -63,9 +64,9 @@ try{
   const listed=await post('/mcp',token,{jsonrpc:'2.0',id:2,method:'tools/list',params:{}},{'mcp-session-id':sid});assert.equal(listed.status,200);
   const data=listed.text.split('\n').find(x=>x.startsWith('data:'));const payload=JSON.parse(data?data.slice(5):listed.text);
   const tools=payload.result.tools;
-  const core=new Set(['ssam_doctor','ssam_connect','ssam_discover','ssam_map','ssam_code','ssam_reference','ssam_evidence','ssam_task','o11_inspect','o11_deliver','o11_publish','o11_studio','studio_deliver','studio_inspect','studio_status']);
+  const core=new Set(budget.core);
   const totalBytes=tools.reduce((n,t)=>n+toolListingBytes(t),0),coreBytes=tools.filter(t=>core.has(t.name)).reduce((n,t)=>n+toolListingBytes(t),0);
-  assert.equal(tools.length,92);assert.ok(totalBytes<=261330&&coreBytes<=34097,'Hosted listing must not grow');
+  assert.equal(tools.length,budget.tools);assert.ok(totalBytes<=budget.totalBytes&&coreBytes<=budget.coreBytes,'Hosted listing must not grow');
   checks.push({name:'tools/list v'+(index+1),ok:true,count:tools.length,responseBytes:Buffer.byteLength(listed.text),totalBytes,coreBytes});
  }
  await Promise.all(Array.from({length:20},(_,i)=>post('/mcp',i%2?a.token:b.token,{jsonrpc:'2.0',id:i+2,method:'tools/call',params:{name:'ssam_doctor',arguments:{}}},{'mcp-session-id':i%2?sa.sid:sb.sid})).map(async p=>assert.equal((await p).status,200)));checks.push({name:'concurrent MCP calls',ok:true,count:20});
